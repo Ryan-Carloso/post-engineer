@@ -1,0 +1,53 @@
+# Engine CPU on the VPS — ffmpeg/TTS/render only (no GPU).
+# InfiniteTalk/H200 stays on Modal and is reached over HTTP.
+#
+# Secrets come from .env next to this file (never committed):
+#   MONEYPRINT_API_SECRET                     -> shared auth secret (web proxy + publish-back)
+#   MPT_UPLOAD_API_BASE_URL                   -> public engine URL
+#
+# config.toml (no real secrets) is mounted read-only from ./config.toml.
+
+services:
+  engine:
+    image: mpt-engine-cpu:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mpt-engine-cpu
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    env_file:
+      - .env
+    environment:
+      MPT_STATE_BACKEND: memory
+      MPT_STORAGE_DIR: /app/storage
+      TZ: UTC
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - engine_storage:/app/storage
+      - ./config.toml:/app/config.toml:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4g
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/docs', timeout=4).status < 500 else 1)"
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+volumes:
+  engine_storage:

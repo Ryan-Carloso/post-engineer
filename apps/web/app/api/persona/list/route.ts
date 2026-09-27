@@ -1,0 +1,77 @@
+import { NextResponse } from 'next/server';
+import { requireSupabaseSession } from '@/lib/request-auth';
+import { createSupabaseServiceClient } from '@/lib/supabase/service';
+import { isScopedApiKey } from '@/lib/api-keys';
+
+//---------------
+// GET /api/persona/list — the logged-in user's personas.
+// Auth = Supabase session (cookie) OR personal API key (Bearer/x-api-key, MCP).
+// Foto e amostra de voz saem como signed URLs (bucket privado).
+//---------------
+
+const SIGNED_URL_EXPIRES_SECONDS = 60 * 60; // 1h
+
+export async function GET(request: Request): Promise<NextResponse> {
+  const { auth, error: authError } = await requireSupabaseSession(request);
+  if (authError || !auth) {
+    return NextResponse.json(
+      { authenticated: false, personas: [], message: 'Authentication required.' },
+      { status: 401 },
+    );
+  }
+
+  const supabase = createSupabaseServiceClient();
+  let query = supabase
+    .from('personas')
+    .select(
+      'id, name, photo_path, avatar_url, voice_id, voice_audio_path, created_at, language, video_aspect, script_prompt, paragraph_number, niche, face_mix_percent, face_quality',
+    )
+    .eq('user_id', auth.userId);
+
+  // A key with explicit scope only sees the authorized personas.
+  if (isScopedApiKey(auth)) {
+    query = query.in('id', auth.personaIds ?? []);
+  }
+
+  const { data, error } = await query.order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('[api/persona/list] query failed', { error });
+    return NextResponse.json(
+      { success: false, error: 'Failed to list personas.' },
+      { status: 500 },
+    );
+  }
+
+  const personas = await Promise.all(
+    (data ?? []).map(async (record) => ({
+      id: record.id as string,
+      name: record.name as string,
+      createdAt: record.created_at as string,
+      avatarUrl: (record.avatar_url as string | null) ?? undefined,
+      photoUrl: await signedUrl(supabase, record.photo_path as string | null),
+      voiceId: (record.voice_id as string | null) ?? undefined,
+      voiceAudioUrl: await signedUrl(supabase, record.voice_audio_path as string | null),
+      language: (record.language as string | null) ?? undefined,
+      videoAspect: (record.video_aspect as string | null) ?? undefined,
+      scriptPrompt: (record.script_prompt as string | null) ?? undefined,
+      paragraphNumber: (record.paragraph_number as number | null) ?? undefined,
+      niche: (record.niche as string | null) ?? undefined,
+      faceMixPercent: (record.face_mix_percent as number | null) ?? undefined,
+      faceQuality: (record.face_quality as string | null) ?? undefined,
+    })),
+  );
+
+  return NextResponse.json({ authenticated: true, personas });
+}
+
+async function signedUrl(
+  supabase: ReturnType<typeof createSupabaseServiceClient>,
+  path: string | null,
+): Promise<string | undefined> {
+  if (!path) return undefined;
+  const { data } = await supabase.storage
+    .from('personas')
+    .createSignedUrl(path, SIGNED_URL_EXPIRES_SECONDS);
+  return data?.signedUrl;
+}

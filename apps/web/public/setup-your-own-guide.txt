@@ -1,0 +1,461 @@
+Post Engineer API - AGENTS IMPLEMENTATION GUIDE
+================================================
+
+QUICK START FOR AI AGENTS
+-------------------------
+
+1. READ COMPLETE API DOCS: https://your-domain.com/api-documentation.txt
+2. AUTHENTICATION: Protected routes require "Authorization: Bearer post-engineer_..."
+3. STRICT VALIDATION: All fields required, NO fallbacks
+4. ERROR HANDLING: Use logId from all responses for debugging
+5. SECURITY: Never commit .env or logs/ — tokens live encrypted in Supabase
+
+API BASE URL: https://your-domain.com
+DEV URL: http://localhost:3000
+
+================================================================================
+ARCHITECTURE (v3.0.0) — WHAT CHANGED
+================================================================================
+
+The old token.json local-file storage has been REMOVED.
+
+Current model:
+- OAuth tokens are encrypted (AES-256-GCM) and stored in Supabase
+  (table `social_accounts`, column `encrypted_tokens`)
+- Web users log in via Supabase (GitHub OAuth)
+- API clients authenticate with App API Keys (post-engineer_...)
+- Token auto-refresh happens server-side; refreshed tokens are re-encrypted
+  and persisted back to Supabase automatically
+
+DO NOT create, read, or write token.json. It does not exist anymore.
+
+================================================================================
+COMPLETE API ENDPOINTS - AI READY
+================================================================================
+
+AUTHENTICATION (web session users)
+----------------------------------
+
+GET /api/google-oauth/start
+→ Returns auth_url for user to authorize
+→ Callback persists tokens ENCRYPTED in Supabase
+
+GET /api/google-oauth/callback?code=AUTH_CODE
+→ Handles Google OAuth callback
+→ Auto-saves encrypted tokens to Supabase social_accounts
+
+GET /api/instagram-auth/start
+GET /api/instagram-auth/callback?code=AUTH_CODE
+→ Instagram Login direto (long-lived token, perfil Business/Creator)
+
+APP API KEYS (required for API clients)
+---------------------------------------
+
+POST /api/app-api-keys
+→ Generates a new post-engineer_... key for the logged-in user
+→ Raw key is shown only once
+
+GET /api/app-api-keys?key=post-engineer_...
+→ Validates a key → { "success": true, "valid": true }
+
+DELETE /api/app-api-keys
+→ Body: { "key": "post-engineer_..." }
+
+UPLOAD (Main Functionality — requires API key)
+----------------------------------------------
+
+POST /api/upload
+Content-Type: multipart/form-data
+Authorization: Bearer post-engineer_...
+
+REQUIRED FIELDS (no defaults, no fallbacks):
+- video: File (max 2GB, video/*)
+- title: String (non-empty, trimmed)
+- description: String (non-empty, trimmed)
+- tags: String (comma-separated, min 1 tag)
+- privacyStatus: Enum ("public"|"private"|"unlisted")
+- accountId: String (channelId of a connected YouTube account)
+
+Example AI Implementation:
+```javascript
+const formData = new FormData();
+formData.append('video', videoFile);
+formData.append('title', 'My Video Title');  // REQUIRED
+formData.append('description', 'Video description here');  // REQUIRED
+formData.append('tags', 'tag1,tag2,tag3');  // REQUIRED, min 1 tag
+formData.append('privacyStatus', 'public');  // REQUIRED
+formData.append('accountId', 'UCxxxxxxxxxxxx');  // REQUIRED
+
+const response = await fetch('/api/upload', {
+  method: 'POST',
+  headers: { 'Authorization': 'Bearer post-engineer_xxxxxxxxxxxx' },
+  body: formData
+});
+
+const result = await response.json();
+// Use result.logId for any debugging
+```
+
+curl example:
+```bash
+curl -X POST http://localhost:3000/api/upload \
+  -H "Authorization: Bearer post-engineer_xxxxxxxxxxxx" \
+  -F "video=@meu-video.mp4" \
+  -F "title=My Video Title" \
+  -F "description=Video description" \
+  -F "tags=tag1,tag2" \
+  -F "privacyStatus=public" \
+  -F "accountId=UCxxxxxxxxxxxx"
+```
+
+SUCCESS RESPONSE:
+{
+  "success": true,
+  "videoId": "dQw4w9WgXcQ",
+  "videoUrl": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+  "uploadDuration": "45.23s",
+  "logId": "2024-08-09_143030_jkl012",
+  "accountId": "UCxxxxxxxxxxxx"
+}
+
+SYSTEM MONITORING
+-----------------
+
+GET /api/health
+→ Supabase-based health check (connection, tables, account counts)
+→ Works headless in background mode — no web UI needed
+→ "status": "ok" means Supabase is reachable and tables are intact
+
+================================================================================
+ERROR HANDLING - AI IMPLEMENTATION REQUIREMENTS
+================================================================================
+
+STANDARD ERROR FORMAT (All errors):
+{
+  "success": false,
+  "error": "Human readable error message",
+  "errorType": "SpecificErrorClass",
+  "logId": "YYYY-MM-DD_HHMMSS_randomString",  // USE THIS FOR DEBUGGING
+  "suggestions": ["Recovery suggestion 1", "Recovery suggestion 2"]
+}
+
+ERROR TYPES AGENTS MUST HANDLE:
+-------------------------------
+
+ValidationError (400):
+- Missing required fields
+- Invalid field values
+- File validation failures
+→ Action: Validate input before retry
+
+AuthError (401):
+- Missing/invalid API key
+- Account not found for the API key owner
+- Token refresh failures
+→ Action: Check the Bearer key; restart OAuth flow via /api/google-oauth/start
+
+TimeoutError (408):
+- Upload exceeded 30 minutes
+→ Action: Retry with smaller file or better connection
+
+UploadError (500):
+- Network issues during upload
+- API communication failures
+→ Action: Retry with better network conditions
+
+YouTubeApiError (500):
+- YouTube Data API errors
+→ Action: Check YouTube API status, permissions
+
+NetworkError (500):
+- Connection failures
+→ Action: Retry with better network
+
+AI AGENT ERROR HANDLING STRATEGY:
+----------------------------------
+
+1. ALWAYS check response.success
+2. If false, use logId for debugging
+3. Implement specific handling per errorType
+4. Follow suggestions array for recovery
+5. Log all errors with logId for tracking
+
+================================================================================
+STRICT VALIDATION - AI IMPLEMENTATION RULES
+================================================================================
+
+NO FALLBACKS, NO DEFAULT VALUES, NO EXCEPTIONS
+All fields are MANDATORY with specific validation rules:
+
+VIDEO FILE VALIDATION:
+- Must exist and be valid
+- Max size: 2GB (strict YouTube limit)
+- Content type: must start with "video/"
+- Error if fails: ValidationError
+
+TITLE VALIDATION:
+- Must not be empty or whitespace only
+- Trim before validation
+- Error if fails: ValidationError("Título do vídeo é obrigatório")
+
+DESCRIPTION VALIDATION:
+- Must not be empty or whitespace only
+- Trim before validation
+- NO fallback to empty string
+- Error if fails: ValidationError("Descrição do vídeo é obrigatória")
+
+TAGS VALIDATION:
+- Must be provided (no default empty array)
+- Split by commas, trim each tag
+- Filter out empty tags
+- Must have at least 1 valid tag after processing
+- Error if fails: ValidationError("Tags do vídeo são obrigatórias")
+
+PRIVACY STATUS VALIDATION:
+- Must be exactly: "public", "private", or "unlisted"
+- NO default value
+- Error if fails: ValidationError("Status de privacidade inválido")
+
+ACCOUNT ID VALIDATION:
+- Must be a YouTube account connected by the API key owner
+- Error if fails: AuthError("Conta não encontrada...")
+
+AI AGENT VALIDATION CHECKLIST:
+------------------------------
+
+☑️ All required fields present (including accountId)
+☑️ Bearer API key in the Authorization header
+☑️ No empty or whitespace-only strings
+☑️ File size under 2GB limit
+☑️ File type is video/*
+☑️ At least 1 valid tag
+☑️ Privacy status is valid enum value
+☑️ No fallback values applied
+
+================================================================================
+TOKEN MANAGEMENT - SUPABASE-BACKED (AI AGENT REQUIREMENTS)
+================================================================================
+
+There is NO local token file. Never implement file-based token storage.
+
+Current implementation (server-side):
+```typescript
+import { getSocialAccountTokens, updateSocialAccountTokens } from '@/lib/social-accounts';
+import { createSupabaseServiceClient } from '@/lib/supabase/service';
+import { resolveAppApiKey } from '@/lib/app-api-key-manager';
+
+async function getAuthenticatedClient(apiKey: string, accountId: string) {
+  // 1. Resolve the API key → owner user_id
+  const keyInfo = await resolveAppApiKey(apiKey);
+  if (!keyInfo) throw new AuthError('API key inválida', 'invalid_api_key');
+
+  const supabase = createSupabaseServiceClient();
+
+  // 2. Fetch + decrypt tokens (AES-256-GCM) from Supabase
+  const { tokens } = await getSocialAccountTokens(
+    supabase, keyInfo.userId, 'youtube', accountId
+  );
+
+  const oauth2Client = await createOAuth2Client();
+  oauth2Client.setCredentials(tokens);
+
+  // 3. Auto-refresh if expired — refreshed tokens go back ENCRYPTED
+  if (tokens.expiry_date && tokens.expiry_date < Date.now()) {
+    const { credentials } = await oauth2Client.refreshAccessToken();
+
+    const updatedTokens = {
+      access_token: credentials.access_token,
+      refresh_token: credentials.refresh_token || tokens.refresh_token,
+      token_type: credentials.token_type || tokens.token_type || 'Bearer',
+      expiry_date: credentials.expiry_date ?? undefined,
+    };
+
+    await updateSocialAccountTokens(
+      supabase, keyInfo.userId, 'youtube', accountId, updatedTokens
+    );
+    oauth2Client.setCredentials(updatedTokens);
+  }
+
+  return oauth2Client;
+}
+```
+
+Key invariants:
+- encryptTokens()/decryptTokens() (lib/token-crypto.ts) — AES-256-GCM,
+  key from TOKEN_ENCRYPTION_KEY env (base64, 32 bytes), no fallback
+- Tokens never touch the filesystem
+- Tokens are never returned to any client
+- RLS policies restrict social_accounts rows to their owner
+
+================================================================================
+SECURITY REQUIREMENTS - AI AGENT COMPLIANCE
+================================================================================
+
+NEVER COMMIT THESE FILES (Security Risk):
+- .env (contains API secrets)
+- logs/ (may contain sensitive info)
+- uploads/ (temporary files)
+
+FILE PERMISSIONS (Production):
+- .env: 600 (owner read/write only)
+- logs/: 700 (owner read/write/execute only)
+
+API KEY SECURITY:
+- Store post-engineer_... keys in a secrets manager, never in code
+- Keys are stored server-side as sha256 hashes (key_hash)
+- Rotate keys via the App API Key tab if compromised
+
+TOKEN SECURITY:
+- AES-256-GCM encryption at rest in Supabase
+- Never expose SUPABASE_SERVICE_ROLE_KEY to the client
+- Never implement local token.json storage (removed architecture)
+
+AI AGENT SECURITY CHECKLIST:
+-----------------------------
+
+☑️ No sensitive data in version control
+☑️ Proper file permissions set
+☑️ HTTPS enforced in production
+☑️ API keys sent only via Authorization/X-API-Key headers
+☑️ No local token storage
+☑️ Security logging enabled
+
+================================================================================
+CLI UPLOAD SCRIPT - SUPABASE-BACKED
+================================================================================
+
+Usage:
+```bash
+ts-node upload.ts <video-path> --api-key <post-engineer_...> [--account-id <channelId>]
+```
+
+Or via environment variable:
+```bash
+VIDEO_TITLE="My Video" \
+VIDEO_DESCRIPTION="Description" \
+VIDEO_TAGS="tag1,tag2" \
+VIDEO_PRIVACY="public" \
+APP_API_KEY=post-engineer_xxx \
+ts-node upload.ts ./videos/meu-video.mp4 --account-id UCxxxx
+```
+
+Script flow:
+1. Resolves the API key in Supabase (owner lookup)
+2. Decrypts tokens from social_accounts
+3. Auto-refreshes expired tokens and persists them re-encrypted
+4. Without --account-id, uses the owner's most recent YouTube account
+5. Strict validation (same rules as the API)
+6. Upload with progress bar and 30-minute timeout
+
+================================================================================
+IMPLEMENTATION CHECKLIST - AI AGENT VALIDATION
+================================================================================
+
+AUTHENTICATION:
+☑️ Bearer API key on all protected routes
+☑️ accountId passed on upload requests
+☑️ API key stored securely (secrets manager)
+
+VALIDATION:
+☑️ All required fields validated
+☑️ No fallback values used
+☑️ File size and type validation
+☑️ Specific error messages
+
+ERROR HANDLING:
+☑️ All error types handled
+☑️ logId used for debugging
+☑️ Suggestions followed
+☑️ Retry logic implemented
+
+TOKENS:
+☑️ No local token storage (token.json removed)
+☑️ Server handles refresh in Supabase (encrypted)
+☑️ Tokens never exposed to clients
+
+SECURITY:
+☑️ Environment variables secured (no fallbacks)
+☑️ HTTPS in production
+☑️ Service role key server-only
+
+================================================================================
+COMMON IMPLEMENTATION PITFALLS - AVOID THESE
+================================================================================
+
+❌ AUTH MISTAKE:
+Calling /api/upload without "Authorization: Bearer post-engineer_..."
+✅ CORRECT: Generate a key in the App API Key tab and send the header
+
+❌ MISSING FIELD MISTAKE:
+Omitting the accountId form field
+✅ CORRECT: Every upload must target a connected account (accountId)
+
+❌ TOKEN MISTAKE:
+Writing tokens to token.json (removed architecture)
+✅ CORRECT: Tokens live encrypted in Supabase; server refreshes them
+
+❌ VALIDATION MISTAKE:
+Adding fallback values for required fields
+✅ CORRECT: Reject requests with missing/invalid fields
+
+❌ ERROR HANDLING MISTAKE:
+Generic error handling without logId usage
+✅ CORRECT: Use logId for debugging, specific error handling
+
+❌ SECURITY MISTAKE:
+Committing sensitive files or exposing the service role key
+✅ CORRECT: Add .env and logs/ to .gitignore; keep service key server-only
+
+================================================================================
+AI AGENT SUPPORT AND TROUBLESHOOTING
+================================================================================
+
+WHEN IMPLEMENTATION FAILS:
+---------------------------
+
+1. Check the Authorization header and API key validity (most common issue)
+2. Verify accountId belongs to the API key owner
+3. Check logId from error responses
+4. Review logs for detailed error information
+5. Validate all required fields are provided
+6. Test with smaller files first
+7. Check network connectivity
+8. Verify Supabase env vars and TOKEN_ENCRYPTION_KEY
+
+DEBUGGING WITH LOG ID:
+---------------------
+
+Each error response includes a logId: "YYYY-MM_DD_HHMMSS_randomString"
+
+Use logId to:
+- Search in logs/combined.log for full error details
+- Track specific requests through the system
+- Correlate errors across different components
+- Monitor system performance and issues
+
+SUPPORT RESOURCES:
+-----------------
+
+- Complete API docs: https://your-domain.com/api-documentation.txt
+- Health check: https://your-domain.com/api/health
+- Error logs: Check server logs/ directory
+
+================================================================================
+END OF AGENTS IMPLEMENTATION GUIDE
+================================================================================
+
+This guide provides AI agents with all the critical information needed to implement,
+deploy, and maintain the Post Engineer API successfully.
+
+Key Points:
+1. Authenticate with "Authorization: Bearer post-engineer_..." on protected routes
+2. Pass accountId on every upload request
+3. Tokens are encrypted in Supabase — no local storage, ever
+4. Implement strict validation with no fallbacks
+5. Handle all error types with logId tracking
+
+For complete technical details, always reference:
+https://your-domain.com/api-documentation.txt
+
+Last Updated: August 2026
+Version: 3.0.0

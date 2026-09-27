@@ -1,0 +1,251 @@
+name: opencode-review
+
+# Automatic PR review with OpenCode (replaces CodeRabbit).
+#
+# How it works:
+# - Runs on GitHub-hosted runners — no VPS needed.
+# - Installs a pinned OpenCode CLI release (version + sha256 checksum against
+#   the official sst/opencode artifacts), then runs `opencode run` directly —
+#   no third-party GitHub Action wrapper, no floating install script.
+#   (Verified against the installed CLI: there is no --standalone flag;
+#   `run` is already the non-interactive command for scripts/CI.)
+# - Tries the z.ai GLM Coding Plan first, then retries against z.ai's standard
+#   API endpoint if that review fails. Both use the same ZAI_API_KEY secret.
+# - Posts the review as a new PR comment on every push (the header carries
+#   the head SHA), so each review round stays visible instead of overwriting
+#   the previous one.
+#
+# Setup:
+# 1. Add the `ZAI_API_KEY` secret (usable with both z.ai API endpoints).
+#    Until the secret exists, the review steps are skipped.
+# 2. If your Coding Plan uses a different model id, change OPENCODE_MODEL below.
+# 3. If needed, change ZAI_STANDARD_MODEL to a model available on z.ai's
+#    standard API.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+# Cancel a superseded review when new pushes arrive.
+concurrency:
+  group: opencode-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  # Primary and fallback models, in provider/model form. Each provider id must
+  # match the one configured before its corresponding review attempt.
+  OPENCODE_MODEL: zai-coding-plan/glm-5.3-flash
+  ZAI_STANDARD_MODEL: glm-5.3-flash
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Check for z.ai API key
+        id: check
+        env:
+          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ZAI_API_KEY:-}" ]; then
+            echo "has_key=false" >> "$GITHUB_OUTPUT"
+            echo "ZAI_API_KEY secret is not set — skipping OpenCode review."
+          else
+            echo "has_key=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install OpenCode (pinned release)
+        if: steps.check.outputs.has_key == 'true'
+        env:
+          OPENCODE_VERSION: "1.18.32"
+          # sha256 of opencode-linux-x64.tar.gz for the release above, taken
+          # from the official sst/opencode GitHub release. Bump both together;
+          # never go back to a floating install script (an unpinned script's
+          # download source has pointed at third-party forks).
+          OPENCODE_SHA256: "3046e0404fdc60fb80307e7a47824ba07477364178a4d09baa8548496dd6d43b"
+        run: |
+          set -euo pipefail
+          URL="https://github.com/sst/opencode/releases/download/v${OPENCODE_VERSION}/opencode-linux-x64.tar.gz"
+          curl -fsSL "$URL" -o /tmp/opencode.tar.gz
+          echo "${OPENCODE_SHA256}  /tmp/opencode.tar.gz" | sha256sum -c -
+          mkdir -p "$HOME/.opencode/bin"
+          tar -xzf /tmp/opencode.tar.gz -C "$HOME/.opencode/bin"
+          echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
+          rm -f /tmp/opencode.tar.gz
+          echo "Installed OpenCode v${OPENCODE_VERSION} (checksum verified)."
+
+      - name: Verify OpenCode install
+        if: steps.check.outputs.has_key == 'true'
+        run: opencode --version
+
+      - name: Configure z.ai Coding Plan provider
+        if: steps.check.outputs.has_key == 'true'
+        run: |
+          set -euo pipefail
+          MODEL_ID="${OPENCODE_MODEL#*/}"
+          python3 - "$MODEL_ID" <<'EOF'
+          import json, sys
+          model_id = sys.argv[1]
+          config = {
+              "$schema": "https://opencode.ai/config.json",
+              "provider": {
+                  "zai-coding-plan": {
+                      "npm": "@ai-sdk/openai-compatible",
+                      "name": "Z.AI GLM Coding Plan",
+                      "options": {
+                          "baseURL": "https://api.z.ai/api/coding/paas/v4",
+                          "apiKey": "{env:ZAI_API_KEY}",
+                      },
+                      "models": {model_id: {"name": model_id}},
+                  }
+              },
+          }
+          with open("opencode.json", "w") as f:
+              json.dump(config, f, indent=2)
+          print("wrote opencode.json for model", model_id)
+          EOF
+
+      - name: Collect PR diff
+        if: steps.check.outputs.has_key == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          # Real secrets are never committed (see AGENTS.md env policy).
+          # Scrub any .env / key material from the working tree before the
+          # agent runs, in case one was left behind accidentally.
+          find . -path ./.git -prune -o -type f \( -name '.env*' -o -name '*.pem' -o -name '*.key' \) -exec rm -f {} +
+          find . -path ./.git -prune -o -type d \( -name secrets -o -name private \) -prune -exec rm -rf {} +
+          gh pr diff "$PR_NUMBER" --patch > pr.diff
+          # Keep the diff within a sane size for the model context.
+          MAX_BYTES=200000
+          SIZE=$(wc -c < pr.diff)
+          if [ "$SIZE" -gt "$MAX_BYTES" ]; then
+            head -c "$MAX_BYTES" pr.diff > pr.diff.truncated
+            printf '\n\n[... diff truncated at %s bytes ...]\n' "$MAX_BYTES" >> pr.diff.truncated
+            mv pr.diff.truncated pr.diff
+          fi
+          wc -c pr.diff
+
+      - name: Run OpenCode review with Coding Plan, then standard API fallback
+        if: steps.check.outputs.has_key == 'true'
+        env:
+          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+          # PR title/number are attacker-controlled; they reach this script
+          # only as environment variables (never interpolated by GitHub) so
+          # they cannot break out of the shell.
+          {
+            printf 'You are reviewing GitHub pull request #%s: "%s".\n' "$PR_NUMBER" "$PR_TITLE"
+            cat <<'EOF'
+          A unified diff of the PR is attached to this message.
+
+          Rules:
+          - This is a READ-ONLY review. Do not modify, create, or delete any files. Do not run any command that changes state.
+          - Write the entire review in English.
+          - NEVER read, open, or quote `.env*`, `*.pem`, `*.key` files, or `**/secrets/**` / `**/private/**` paths.
+          - Focus on: real bugs, security issues (especially secret leakage into logs, error messages, or client bundles), broken error handling, and type-safety violations (this repo forbids `any` and requires strict TypeScript).
+          - This is a TDD repo: flag new or changed production logic that ships without test coverage.
+          - Be concrete: file paths with line numbers, why it matters, and a suggested fix. Skip style nits.
+          - Rate each finding as CRITICAL, MAJOR, or MINOR. If nothing material is wrong, say so briefly instead of inventing issues.
+          - Output ONLY the review as markdown, with no preamble about your process.
+          EOF
+          } > prompt.md
+          if timeout 12m opencode run \
+            --model "$OPENCODE_MODEL" \
+            --file pr.diff \
+            --title "PR #$PR_NUMBER review" \
+            "$(cat prompt.md)" > review.md && [ -s review.md ]; then
+            echo "Review completed with z.ai Coding Plan."
+          else
+            echo "Coding Plan review failed; retrying with z.ai standard API."
+            MODEL_ID="$ZAI_STANDARD_MODEL" python3 <<'EOF'
+          import json, os
+          model_id = os.environ["MODEL_ID"]
+          config = {
+              "$schema": "https://opencode.ai/config.json",
+              "provider": {
+                  "zai-standard": {
+                      "npm": "@ai-sdk/openai-compatible",
+                      "name": "Z.AI Standard API",
+                      "options": {
+                          "baseURL": "https://api.z.ai/api/paas/v4",
+                          "apiKey": "{env:ZAI_API_KEY}",
+                      },
+                      "models": {model_id: {"name": model_id}},
+                  }
+              },
+          }
+          with open("opencode.json", "w") as f:
+              json.dump(config, f, indent=2)
+          print("wrote opencode.json for standard z.ai model", model_id)
+          EOF
+            timeout 12m opencode run \
+              --model "zai-standard/$ZAI_STANDARD_MODEL" \
+              --file pr.diff \
+              --title "PR #$PR_NUMBER review" \
+              "$(cat prompt.md)" > review.md
+            if [ ! -s review.md ]; then
+              echo "OpenCode produced no output from either endpoint" >&2
+              exit 1
+            fi
+          fi
+          wc -c review.md
+
+      - name: Scrub secrets from review output
+        if: steps.check.outputs.has_key == 'true'
+        env:
+          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+        run: |
+          set -euo pipefail
+          # Prompt-injection guard: the review is LLM output over
+          # attacker-controlled PR title/diff. Mask the key in all subsequent
+          # logs, then scrub any occurrence of the key value from review.md
+          # before it becomes a permanent public PR comment.
+          echo "::add-mask::${ZAI_API_KEY}"
+          python3 - <<'EOF'
+          import os
+          key = os.environ.get("ZAI_API_KEY", "")
+          path = "review.md"
+          text = open(path, encoding="utf-8").read()
+          if key and key in text:
+              open(path, "w", encoding="utf-8").write(text.replace(key, "***REDACTED***"))
+              print("scrubbed ZAI_API_KEY occurrence from review.md")
+          else:
+              print("no secret material found in review.md")
+          EOF
+
+      - name: Post review as a new PR comment
+        if: steps.check.outputs.has_key == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          HEAD_SHORT="${HEAD_SHA:0:7}"
+          MARKER="<!-- opencode-review -->"
+          # A new comment per push (never updated in place): each review round
+          # stays visible as its own comment, with the head SHA in the header
+          # so it is clear which push the review covers.
+          {
+            echo "$MARKER"
+            echo "## OpenCode review (z.ai) — ${HEAD_SHORT}"
+            echo ""
+            cat review.md
+          } > comment.md
+          gh pr comment "$PR_NUMBER" --body-file comment.md
+          echo "Posted new review comment for ${HEAD_SHORT}"

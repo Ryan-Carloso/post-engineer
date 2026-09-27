@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# pre-commit — bloqueia commits diretos em branches protegidas. LOCAL.
+# Sem escapes por variavel de ambiente (agente pode setar). Fixo.
+set -u
+PROTECTED="main master prod"
+
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+[ -n "$branch" ] || exit 0
+
+for b in $PROTECTED; do
+  if [ "$branch" = "$b" ]; then
+    echo "[git-protect] BLOCKED: commit direto na branch '$branch' e proibido."
+    echo "[git-protect] Crie uma branch de trabalho e faca merge/PR depois:"
+    echo "[git-protect]     git switch -c feat/xyz"
+    exit 1
+  fi
+done
+exit 0

@@ -1,0 +1,28 @@
+{
+  "all": false,
+  "include": [
+    "app/**/*.{ts,tsx}",
+    "components/**/*.{ts,tsx}",
+    "lib/api.ts",
+    "lib/hooks.ts",
+    "lib/store.ts",
+    "lib/ui.tsx",
+    "lib/i18n/**/*.{ts,tsx}"
+  ],
+  "exclude": [
+    "node_modules/**",
+    "cypress/**",
+    "coverage/**",
+    "**/__tests__/**",
+    "**/*.test.{ts,tsx}",
+    "**/*.cy.{ts,tsx}",
+    "app/api/**",
+    "lib/rate-limit.ts",
+    "lib/app-api-key-manager.ts",
+    "lib/media/**",
+    "lib/oauth/instagram-handler.ts",
+    "lib/oauth/google-handler.ts",
+    "lib/supabase/**"
+  ],
+  "reporter": ["html", "json-summary", "lcov"]
+}

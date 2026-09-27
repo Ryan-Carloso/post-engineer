@@ -1,0 +1,85 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { computeVideoTokens, toFiniteNumber, type FaceQuality } from '@/lib/tokens';
+
+export async function checkAndDeductTokens(
+  supabase: SupabaseClient,
+  userId: string,
+  generationId: string,
+  faceMixPercent: number,
+  faceQuality: FaceQuality,
+): Promise<
+  | { ok: true; cost: number }
+  | { ok: false; error: string; statusCode: number; freeExhausted: boolean }
+> {
+  const cost = computeVideoTokens(faceMixPercent, faceQuality);
+
+  // Lazy one-time grant: every account gets 3 free tokens on first use.
+  // Best-effort — if the RPC does not exist yet (pending migration), the flow continues.
+  let grantOk = false;
+  let grantedFree = 0;
+  try {
+    const { data: grantData, error: grantError } = await supabase.rpc('grant_signup_bonus', {
+      p_user_id: userId,
+    });
+    if (grantError) {
+      console.error('[token-check] signup bonus grant failed', { userId, error: grantError });
+    } else if (isRecord(grantData)) {
+      grantOk = grantData.granted === true || grantData.already === true;
+      grantedFree = toFiniteNumber(grantData.free_balance, 0);
+    }
+  } catch (grantException) {
+    console.error('[token-check] signup bonus grant threw', { userId, error: grantException });
+    grantOk = false;
+  }
+
+  const { data, error } = await supabase.rpc('spend_tokens', {
+    p_user_id: userId,
+    p_amount: cost,
+    p_generation_id: generationId,
+    p_reason: `Video generation (${faceQuality})`,
+  });
+
+  if (error) {
+    console.error('[token-check] atomic spend failed', { userId, generationId, error });
+    return { ok: false, error: 'Failed to process tokens. Please try again.', statusCode: 500, freeExhausted: false };
+  }
+
+  if (!isRecord(data) || data.spent !== true) {
+    const freeBalance = toFiniteNumber(isRecord(data) ? data.free_balance : grantedFree, grantedFree);
+    const freeExhausted = grantOk && freeBalance <= 0;
+    return {
+      ok: false,
+      error: freeExhausted
+        ? `INSUFFICIENT_TOKENS_FREE_EXHAUSTED: Required: ${cost}. Buy more tokens to keep generating.`
+        : `INSUFFICIENT_TOKENS: Required: ${cost}.`,
+      statusCode: 402,
+      freeExhausted,
+    };
+  }
+
+  return { ok: true, cost };
+}
+
+export async function refundTokens(
+  supabase: SupabaseClient,
+  userId: string,
+  generationId: string,
+  reason = 'Generation failed; tokens refunded',
+): Promise<boolean> {
+  const { data, error } = await supabase.rpc('refund_generation_tokens', {
+    p_user_id: userId,
+    p_generation_id: generationId,
+    p_reason: reason,
+  });
+
+  if (error) {
+    console.error('[token-check] refund failed', { userId, generationId, error });
+    return false;
+  }
+
+  return isRecord(data) && data.refunded === true;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}

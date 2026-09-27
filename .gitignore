@@ -1,0 +1,69 @@
+# Dependencies
+node_modules/
+.venv/
+
+# Next.js
+.next/
+out/
+dist/
+
+# Build / test artifacts
+coverage/
+coverage-unit/
+.nyc_output/
+.npm/
+.pnpm-store/
+apps/web/cypress/screenshots/
+apps/web/cypress/videos/
+apps/web/cypress/downloads/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+
+# Engine runtime data
+apps/engine/storage/
+apps/engine/logs/
+apps/engine/resource/__DEBUG__/output/
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+
+# Editors
+.vscode/
+.idea/
+*.key
+*.pem
+secrets/
+private/
+
+# Secrets / env files — NEVER commit real values
+.env
+.env.*
+!.env.example
+.deploy.env
+apps/web/cypress.env.json
+apps/engine/config.toml
+
+# Supabase CLI cache — contains local project refs / pooler URLs
+apps/web/supabase/.temp/
+
+# Keep examples
+!*.example
+
+# Codegraph / misc
+.codegraph/
+*.db
+*.sqlite3
+# Rota de API do debug mode (não é a pasta debug/ local)
+.playwright-mcp/
+
+# Nx
+.nx/

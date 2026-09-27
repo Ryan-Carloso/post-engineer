@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# pre-push — branch protection is now enforced on the GitHub side (branch rulesets).
+set -u
+exit 0

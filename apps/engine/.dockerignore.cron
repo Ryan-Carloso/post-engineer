@@ -1,0 +1,44 @@
+# Fly.io Cron Deployment
+fly.toml
+Dockerfile.cron
+cron_entrypoint.sh
+requirements-cron.txt
+FLY_DEPLOYMENT.md
+fly_quick_start.sh
+
+# Existing gitignores
+.DS_Store
+/storage/
+/app/services/__pycache__
+/*/__pycache__/*
+.vscode
+/**/.streamlit
+__pycache__
+logs/
+node_modules
+/sites/docs/.vuepress/.temp
+/sites/docs/.vuepress/.cache
+/sites/docs/.vuepress/dist
+/models/
+./models/*
+debug/
+debug_*.py
+test_*.py
+streamlit.log
+.codegraph
+/docs/superpowers
+.understand-anything
+
+# Additional ignore for cron deployment
+.git/
+.github/
+.gitignore
+docker-compose*.yml
+Dockerfile
+Dockerfile.gpu
+webui.sh
+webui.bat
+scripts/
+docs/
+*.md
+!FLY_DEPLOYMENT.md

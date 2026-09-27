@@ -1,0 +1,59 @@
+{
+  "name": "engine",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "root": "apps/engine",
+  "targets": {
+    "sync": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/engine",
+        "command": "uv sync"
+      }
+    },
+    "dev": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/engine",
+        "command": "uv run python main.py"
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/engine",
+        "command": "uv run python main.py"
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/engine",
+        "command": "uv run ruff check app cli.py scripts test"
+      },
+      "cache": true
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/engine",
+        "command": "uv run python -m compileall -q app cli.py main.py"
+      },
+      "cache": true
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/engine",
+        "command": "uv run pytest -q"
+      },
+      "cache": true
+    },
+    "smoke": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/engine",
+        "command": "RUN_H200=false ./scripts/smoke_persona_api.sh"
+      }
+    }
+  }
+}

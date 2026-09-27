@@ -1,0 +1,6 @@
+# Caddy terminates HTTPS and forwards the public hostname to the local API.
+# DNS A/AAAA for api.your-domain.example must point to this server.
+
+api.your-domain.example {
+    reverse_proxy 127.0.0.1:8000
+}

@@ -1,0 +1,105 @@
+# Notes:
+# 1. pyproject.toml is the single source of truth for main dependencies.
+# 2. The runtime environment is pinned via uv.lock so different machines
+#    resolve the same dependency set.
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "moneyprinterturbo"
+version = "1.3.0"
+description = "Generate short videos from prompts, local assets, subtitles, and TTS."
+readme = "README-en.md"
+requires-python = ">=3.11,<3.13"
+license = { text = "MIT" }
+dependencies = [
+    "toml==0.10.2",
+    "moviepy==2.2.1",
+    "edge-tts==7.2.7",
+    "fastapi==0.136.3",
+    "starlette==1.3.1",
+    "cryptography==50.0.1",
+    "uvicorn==0.32.1",
+    "pillow==12.3.0",
+    "openai==2.24.0",
+    "faster-whisper==1.1.0",
+    "loguru==0.7.3",
+    "google-generativeai==0.8.6",
+    "dashscope==1.20.14",
+    "azure-cognitiveservices-speech==1.41.1",
+    "redis==5.2.0",
+    "python-multipart==0.0.32",
+    "pyyaml==6.0.3",
+    "requests==2.33.1",
+    "socksio==1.0.0",
+    "pydub==0.25.1",
+    "litellm==1.86.2",
+    "modal>=1.5.5",
+    "opencv-python-headless==4.12.0.88",
+    "sentry-sdk[fastapi]>=2.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+g4f = [
+    "g4f==0.5.2.2",
+]
+# Optional TwelveLabs (https://twelvelabs.io) video-understanding/embedding
+# integration. Only needed when `twelvelabs_api_keys` is configured; install
+# with `uv sync --extra twelvelabs`.
+twelvelabs = [
+    "twelvelabs>=1.2.8",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.uv]
+# The project is primarily an application, not a publishable Python package.
+package = false
+# moviepy 2.2.1 caps pillow at <12.0, but it only uses modern Pillow APIs
+# (Image.Resampling, ImageFont.truetype) that are stable in Pillow 12.
+# Override the transitive cap so the patched Pillow 12.3.0 resolves.
+override-dependencies = [
+    "pillow==12.3.0",
+]
+
+[dependency-groups]
+dev = [
+    "coverage>=7.6.0",
+    "httpx>=0.28.1",
+    "mutmut>=3.3.1",
+    "pre-commit>=4.0.0",
+    "pytest>=9.1.1",
+    "ruff>=0.11.0",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+extend-exclude = ["storage", "logs", "build", "dist"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+[tool.coverage.run]
+source = ["app"]
+
+[tool.coverage.report]
+fail_under = 60
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+norecursedirs = ["mutants"]
+
+[tool.mutmut]
+source_paths = [
+    "app/services/upload_publisher.py",
+    "app/models/publish.py",
+]
+pytest_add_cli_args_test_selection = [
+    "test/services/test_upload_publisher_contract.py",
+    "test/services/test_upload_publisher_client.py",
+    "test/models/test_publish_params.py",
+]

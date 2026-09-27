@@ -1,0 +1,30 @@
+{
+  "name": "post-engineer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Post Engineer monorepo: Next.js web + video generation engine",
+  "packageManager": "pnpm@10.22.0",
+  "scripts": {
+    "prepare": "husky",
+    "dev:web": "pnpm exec nx dev web",
+    "dev:engine": "pnpm exec nx serve engine",
+    "build": "pnpm exec nx build web",
+    "test": "pnpm exec nx run-many -t test",
+    "lint": "pnpm exec nx run-many -t lint",
+    "lint:fix": "pnpm exec nx run web:lint:fix && pnpm exec nx run-many -t lint typecheck",
+    "typecheck": "pnpm exec nx run-many -t typecheck",
+    "graph": "pnpm exec nx graph"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "nx": "^21.0.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "postcss": "^8.5.23",
+      "minimatch": "^9.0.7",
+      "uuid": "^11.1.1",
+      "@eslint/eslintrc>minimatch": "3.1.5"
+    }
+  }
+}

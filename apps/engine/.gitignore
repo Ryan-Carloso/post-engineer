@@ -1,0 +1,37 @@
+.DS_Store
+/storage/
+/app/services/__pycache__
+/*/__pycache__/*
+.vscode
+/**/.streamlit
+__pycache__
+
+node_modules
+# VuePress 默认临时文件目录
+/sites/docs/.vuepress/.temp
+# VuePress 默认缓存目录
+/sites/docs/.vuepress/.cache
+# VuePress 默认构建生成的静态文件目录
+/sites/docs/.vuepress/dist
+# 模型目录
+/models/
+./models/*
+
+# API keys and sensitive data
+project.md
+*.key
+secrets/
+private/
+debug/
+debug_*.py
+test_*.py
+!test/services/test_*.py
+!test/test_modal_cpu_app.py
+streamlit.log
+/docs/superpowers
+.understand-anything
+/omniroute-data/call_logs/
+/mutants/
+
+
+/resource/

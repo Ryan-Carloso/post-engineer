@@ -1,0 +1,43 @@
+# Keep the build context minimal; never bake secrets, caches or local data.
+.git
+.env
+.env.*
+*.env
+config.toml
+config.toml.example
+
+# Storage and runtime artifacts
+storage/
+tasks/
+logs/
+cache_videos/
+omniroute-data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+mutants/
+
+# Dev tooling and docs
+node_modules/
+.project.json
+Makefile
+AGENTS.md
+README*
+*.md
+scripts/
+test/
+webui/
+.dockerignore
+Dockerfile

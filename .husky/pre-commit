@@ -1,0 +1,13 @@
+# Block direct commits to main/master/prod (mirrors .githooks/pre-commit)
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+case "$branch" in main|master|prod)
+  echo "[git-protect] BLOCKED: direct commit to '$branch' is forbidden."
+  echo "[git-protect] Create a working branch and merge/PR afterwards."
+  exit 1 ;;
+esac
+
+export PATH="$HOME/.local/bin:$PATH"
+pnpm lint:fix
+lint_status=$?
+
+exit $lint_status

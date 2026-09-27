@@ -1,0 +1,33 @@
+# robots.txt - Post Engineer
+
+User-agent: *
+Allow: /$
+Disallow: /api/
+Disallow: /logs/
+Disallow: /uploads/
+Disallow: /docs/
+Disallow: /admin/
+Disallow: /secret/
+Disallow: /.git/
+Disallow: /node_modules/
+Disallow: /.next/
+Disallow: /test/
+Disallow: /.env
+Disallow: /.env*
+
+Crawl-delay: 1
+
+# social preview bots
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: LinkedInBot
+Allow: /
+
+User-agent: WhatsApp
+Allow: /
+
+# Sitemap: https://your-domain.example/sitemap.xml

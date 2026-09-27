@@ -1,0 +1,25 @@
+# MoneyPrinterTurbo — seed topics
+# One topic per line. Lines starting with '#' are ignored.
+# Successfully generated topics are recorded in scripts/topics.done.log
+# and skipped on subsequent runs.
+
+# --- Personal finance ---
+The compound effect of saving daily
+How to build an emergency fund from zero
+Why index funds beat stock picking
+The 50/30/20 budget rule explained in 60 seconds
+How credit card interest actually works
+
+# --- Productivity ---
+The two-minute rule that kills procrastination
+Why deep work beats busy work
+How to build a morning routine that sticks
+The science of taking better notes
+Time blocking for people who hate schedules
+
+# --- Mindset ---
+Why most people give up right before a breakthrough
+The difference between goals and systems
+How to stop comparing yourself to others
+What stoicism teaches about modern anxiety
+The habit loop explained in one minute

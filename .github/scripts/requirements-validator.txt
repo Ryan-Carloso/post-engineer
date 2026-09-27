@@ -1,0 +1,7 @@
+# Pinned dependencies for the CI `review-workflows` job, which runs
+# .github/scripts/validate-*.py and the validator self-tests.
+# Exact pins (not floating, not ranges): a new PyYAML/pytest release cannot
+# change this CI guard's behavior without a repo change. Also used as the
+# pip cache key.
+pyyaml==6.0.3
+pytest==9.1.1
