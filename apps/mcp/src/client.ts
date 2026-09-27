@@ -58,18 +58,25 @@ const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_ERROR_BODY_CHARS = 200;
 
 // The bearer key is sent to this URL, so fail fast on a malformed or
-// non-http(s) override instead of silently targeting it.
+// non-https override instead of silently targeting it. Loopback http is
+// allowed for local staging; anything else must be https so the key never
+// travels in cleartext.
 function resolveBaseUrl(override: string | undefined): string {
   const raw = override ?? PRODUCTION_API_URL;
-  let protocol: string;
+  let url: URL;
   try {
-    protocol = new URL(raw).protocol;
+    url = new URL(raw);
   } catch {
-    throw new Error(`Invalid POST_ENGINEER_API_URL: ${raw}`);
+    throw new Error('Invalid POST_ENGINEER_API_URL: not an absolute URL (use https:)');
   }
-  if (protocol !== 'https:' && protocol !== 'http:') {
-    throw new Error(`Invalid POST_ENGINEER_API_URL (must be http(s)): ${raw}`);
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+    throw new Error(`Invalid POST_ENGINEER_API_URL: protocol "${url.protocol}" is not allowed (use https:)`);
   }
+  const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1';
+  if (url.protocol === 'http:' && !loopback) {
+    throw new Error('Invalid POST_ENGINEER_API_URL: http: is only allowed for loopback hosts (use https:)');
+  }
+  // Never echo the raw value: it may embed credentials (userinfo/query).
   return raw;
 }
 
@@ -104,7 +111,14 @@ export class PostEngineerClient {
       throw new Error(`Failed to ${action}: ${response.status} ${errorText.slice(0, MAX_ERROR_BODY_CHARS)}`);
     }
 
-    return response.json();
+    // Some endpoints answer 204 No Content: response.json() would throw a
+    // misleading SyntaxError on the empty body even though the call succeeded.
+    if (response.status === 204) return undefined;
+    try {
+      return await response.json();
+    } catch {
+      return undefined;
+    }
   }
 
   async createPersona(input: CreatePersonaInput): Promise<unknown> {

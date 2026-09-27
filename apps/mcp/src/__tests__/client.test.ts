@@ -620,6 +620,39 @@ describe('PostEngineerClient configuration', () => {
     );
   });
 
+  it('rejects non-loopback http: base URLs (bearer key would travel in cleartext)', () => {
+    expect(() => new PostEngineerClient({ apiKey: 'k', baseUrl: 'http://staging.example.com' })).toThrow(
+      /POST_ENGINEER_API_URL/
+    );
+    // Loopback http is fine for local staging.
+    expect(() => new PostEngineerClient({ apiKey: 'k', baseUrl: 'http://localhost:3000' })).not.toThrow();
+    expect(() => new PostEngineerClient({ apiKey: 'k', baseUrl: 'http://127.0.0.1:8080' })).not.toThrow();
+  });
+
+  it('never echoes credentials embedded in a rejected base URL', () => {
+    let message = '';
+    try {
+      new PostEngineerClient({ apiKey: 'k', baseUrl: 'javascript://user:s3cret@example.com/x' });
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toMatch(/POST_ENGINEER_API_URL/);
+    expect(message).not.toContain('s3cret');
+  });
+
+  it('cancelSchedule resolves undefined on 204 No Content instead of a JSON SyntaxError', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 204,
+      json: async () => {
+        throw new SyntaxError('Unexpected end of JSON input');
+      },
+    });
+
+    const c = new PostEngineerClient({ apiKey: 'k' });
+    await expect(c.cancelSchedule('sched-123')).resolves.toBeUndefined();
+  });
+
   it('sends an abort signal so hung requests cannot block forever', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
