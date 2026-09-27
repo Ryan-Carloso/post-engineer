@@ -107,6 +107,50 @@ notices.
   reviewer). Read reviewer feedback before requesting merge; address findings
   in focused follow-up commits.
 
+## Web/API review learnings (standing rules, distilled 2026-09-28)
+
+Recurring findings from OpenCode/OCR review of the persona image library
+(`apps/web/`). Follow these so the same issues don't come back:
+
+- **Never fail silently on mutations.** Upload/save/delete surface errors to
+  the user and log them; non-2xx, non-JSON, and `success:false` responses
+  are never treated as success. Invalidate caches only on real success.
+- **New stateful UI ships with behavioral tests.** A component with editing,
+  pending, or error state gets component tests, not just lib tests.
+- **Reuse the single primary-swap helper.** `setPrimaryLibraryImage` is the
+  only code that unsets/sets the primary flag; PATCH reuses it and a failed
+  unset is a 500, never a confusing unique-index violation.
+- **Log storage cleanup failures.** A failed storage remove on DELETE is
+  logged, never swallowed — orphaned files stay diagnosable.
+- **Library images need a face.** Faceless personas (`face_mix_percent = 0`)
+  reject library image adds, matching the creation rule.
+- **No `instanceof File`.** Use a structural guard (`isFileLike`): the
+  undici `File` constructor differs from the test env's.
+- **Unknown `image_id` is always 404.** Even for an empty library — never a
+  silent fallback to the legacy photo. Empty-string and non-string `image_id`
+  are 400; silent coercion hides broken integrations.
+- **Explicit overrides are not rotation picks.** A pinned `image_id` never
+  touches the anti-repeat history.
+- **Selection is pure; history is a post-gate write.** `resolveVideoImage`
+  never touches `recent_image_ids`. The caller records via
+  `recordRecentImageId` only after the token gate passes — a rejected
+  request must not mark an image as used.
+- **History writes are atomic.** `record_persona_image_use` (SQL) prepends,
+  dedupes, and caps the window in one UPDATE; app-side read-modify-write
+  loses concurrent updates.
+- **An unsignable selected image is a 503.** Never silently fall back to a
+  different face when the resolved library image can't be signed.
+- **Score with the full video context.** Image selection gets topic, niche,
+  AND the persona `script_prompt`, not just topic/niche.
+- **Service-role bypasses RLS.** Every service-client handler re-checks
+  ownership explicitly; say so in a comment at each call site.
+- **Rollback failures are loud.** Creation rollback logs persona-delete and
+  photo-remove failures instead of discarding them.
+- **Keep SQL literals coupled.** The `10` in `persona-images.sql` mirrors
+  `MAX_PERSONA_IMAGES`; the coupling is documented in both places.
+- **Sync editor state with refetches.** Local editor copies re-sync from
+  props when not editing; in-progress edits are never clobbered.
+
 ## MCP review learnings (standing rules, distilled 2026-09-27)
 
 Recurring findings from 11 rounds of review on the MCP server (`apps/mcp/`).
