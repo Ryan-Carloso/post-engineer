@@ -88,6 +88,19 @@ describe('MCP Tool Handlers', () => {
     expect(textOf(response)).toContain('task-789');
   });
 
+  it('handleGenerateVideo renders the ok sentinel instead of "undefined" for empty-body success', async () => {
+    vi.mocked(mockClient.generateVideoJob).mockResolvedValue({ ok: true });
+
+    const response = await handleGenerateVideo(mockClient, {
+      personaId: 'persona-123',
+      scriptPrompt: 'Top 3 AI coding assistants in 2026',
+    });
+
+    const text = textOf(response);
+    expect(text).toContain('"ok": true');
+    expect(text).not.toContain('undefined');
+  });
+
   it('handleGenerateVideo passes audioUrl through to the client', async () => {
     vi.mocked(mockClient.generateVideoJob).mockResolvedValue({
       success: true,

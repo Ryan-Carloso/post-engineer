@@ -124,9 +124,10 @@ export class PostEngineerClient {
     // Some endpoints answer 204 No Content. An empty or non-JSON body on any
     // other status is a real failure: surfacing it beats reporting success
     // with an undefined payload (e.g. a paid video job the agent thinks started).
-    if (response.status === 204) return undefined;
+    // The { ok: true } sentinel keeps handlers from rendering "undefined".
+    if (response.status === 204) return { ok: true };
     const successText = await response.text();
-    if (successText.length === 0) return undefined;
+    if (successText.length === 0) return { ok: true };
     try {
       return JSON.parse(successText) as unknown;
     } catch {
@@ -221,13 +222,16 @@ export class PostEngineerClient {
       );
     } catch (error) {
       // The upstream error body may echo the request payload: never let the
-      // app password surface in agent-visible error text, raw or encoded.
+      // app password surface in agent-visible error text — raw, percent-encoded,
+      // or JSON-escaped.
       const message = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        appPassword.length > 0
-          ? message.replaceAll(appPassword, '[redacted]').replaceAll(encodeURIComponent(appPassword), '[redacted]')
-          : message
-      );
+      if (appPassword.length === 0) throw new Error(message);
+      const variants = [
+        appPassword,
+        encodeURIComponent(appPassword),
+        JSON.stringify(appPassword).slice(1, -1),
+      ];
+      throw new Error(variants.reduce((text, variant) => text.replaceAll(variant, '[redacted]'), message));
     }
   }
 

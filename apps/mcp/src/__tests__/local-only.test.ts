@@ -48,14 +48,19 @@ describe('local-only transport', () => {
     // Launch through a symlink, like the published npx .bin entry, to prove
     // isMainModule() resolves the real path instead of comparing raw strings.
     // mkdtempSync keeps parallel workers from racing on a fixed path.
+    // Windows needs elevated privileges for symlinks: spawn the entry directly
+    // there (the no-port-bind assertion still holds; only the symlink path is skipped).
     const linkDir = mkdtempSync(path.join(tmpdir(), 'pe-mcp-local-only-'));
     const linkEntry = path.join(linkDir, 'mcp-link.mjs');
-    symlinkSync(entry, linkEntry);
+    const spawnEntry = process.platform === 'win32' ? entry : linkEntry;
+    if (process.platform !== 'win32') {
+      symlinkSync(entry, linkEntry);
+    }
     const testPort = await reserveEphemeralPort();
     let child: ChildProcess | undefined;
     let spawnError: unknown;
     try {
-      child = spawn(process.execPath, [linkEntry, '--http'], {
+      child = spawn(process.execPath, [spawnEntry, '--http'], {
         env: {
           ...process.env,
           MCP_PORT: String(testPort),

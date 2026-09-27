@@ -662,6 +662,23 @@ describe('PostEngineerClient configuration', () => {
     expect((error as Error).message).toContain('[redacted]');
   });
 
+  it('never echoes the JSON-escaped Bluesky app password either', async () => {
+    const password = 'p@ss"word\\123';
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: async () => `{"error":"bad value '${JSON.stringify(password).slice(1, -1)}'"}`,
+    });
+
+    const c = new PostEngineerClient({ apiKey: 'k' });
+    const error = await c.connectBlueskyAccount('user.bsky.social', password).catch((e) => e);
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).not.toContain(JSON.stringify(password).slice(1, -1));
+    expect((error as Error).message).not.toContain(password);
+    expect((error as Error).message).toContain('[redacted]');
+  });
+
   it('rejects a non-http(s) POST_ENGINEER_API_URL override', () => {
     expect(() => new PostEngineerClient({ apiKey: 'k', baseUrl: 'javascript:alert(1)' })).toThrow(
       /POST_ENGINEER_API_URL/
@@ -691,7 +708,7 @@ describe('PostEngineerClient configuration', () => {
     expect(message).not.toContain('s3cret');
   });
 
-  it('cancelSchedule resolves undefined on 204 No Content instead of a JSON SyntaxError', async () => {
+  it('cancelSchedule resolves an ok sentinel on 204 No Content instead of undefined', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 204,
@@ -699,7 +716,18 @@ describe('PostEngineerClient configuration', () => {
     });
 
     const c = new PostEngineerClient({ apiKey: 'k' });
-    await expect(c.cancelSchedule('sched-123')).resolves.toBeUndefined();
+    await expect(c.cancelSchedule('sched-123')).resolves.toEqual({ ok: true });
+  });
+
+  it('resolves an ok sentinel on 200 with an empty body', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => '',
+    });
+
+    const c = new PostEngineerClient({ apiKey: 'k' });
+    await expect(c.listPersonas()).resolves.toEqual({ ok: true });
   });
 
   it('rejects a 200 response with a non-JSON body instead of reporting success', async () => {
