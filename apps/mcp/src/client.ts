@@ -57,12 +57,28 @@ const REQUEST_TIMEOUT_MS = 30_000;
 // Bound how much of an upstream error body can flow into agent-visible output.
 const MAX_ERROR_BODY_CHARS = 200;
 
+// The bearer key is sent to this URL, so fail fast on a malformed or
+// non-http(s) override instead of silently targeting it.
+function resolveBaseUrl(override: string | undefined): string {
+  const raw = override ?? PRODUCTION_API_URL;
+  let protocol: string;
+  try {
+    protocol = new URL(raw).protocol;
+  } catch {
+    throw new Error(`Invalid POST_ENGINEER_API_URL: ${raw}`);
+  }
+  if (protocol !== 'https:' && protocol !== 'http:') {
+    throw new Error(`Invalid POST_ENGINEER_API_URL (must be http(s)): ${raw}`);
+  }
+  return raw;
+}
+
 export class PostEngineerClient {
   private readonly baseUrl: string;
   private readonly apiKey?: string;
 
   constructor(options: PostEngineerClientOptions = {}) {
-    this.baseUrl = options.baseUrl ?? process.env.POST_ENGINEER_API_URL ?? PRODUCTION_API_URL;
+    this.baseUrl = resolveBaseUrl(options.baseUrl ?? process.env.POST_ENGINEER_API_URL);
     this.apiKey = options.apiKey;
   }
 

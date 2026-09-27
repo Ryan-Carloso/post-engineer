@@ -611,6 +611,15 @@ describe('PostEngineerClient configuration', () => {
     void c;
   });
 
+  it('rejects a non-http(s) POST_ENGINEER_API_URL override', () => {
+    expect(() => new PostEngineerClient({ apiKey: 'k', baseUrl: 'javascript:alert(1)' })).toThrow(
+      /POST_ENGINEER_API_URL/
+    );
+    expect(() => new PostEngineerClient({ apiKey: 'k', baseUrl: 'not-a-url' })).toThrow(
+      /POST_ENGINEER_API_URL/
+    );
+  });
+
   it('sends an abort signal so hung requests cannot block forever', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
