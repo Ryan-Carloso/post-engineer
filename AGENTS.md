@@ -106,3 +106,40 @@ notices.
 - PRs are reviewed by CI workflows in `.github/workflows/` (including an AI
   reviewer). Read reviewer feedback before requesting merge; address findings
   in focused follow-up commits.
+
+## MCP review learnings (standing rules, distilled 2026-09-27)
+
+Recurring findings from 11 rounds of review on the MCP server (`apps/mcp/`).
+Follow these so the same issues don't come back:
+
+- **Secrets never surface.** Bearer <redacted>, app passwords, and base-URL userinfo
+  must never appear in error messages, logs, or agent-visible output. Redact
+  raw, percent-encoded, and JSON-escaped forms; cap upstream error bodies
+  (200 chars); fail fast on a missing key without logging it.
+- **HTTPS or loopback only.** Remote API URLs must be https; http is allowed
+  only for loopback hosts (`localhost`, `127.0.0.1`, `::1`, `[::1]`). Validate
+  the URL and use the normalized form (`origin + pathname`), never the raw
+  string — userinfo credentials must not ride along silently.
+- **Validate OAuth URLs.** An `auth_url` handed to an agent must be https:
+  `z.string().url()` accepts any scheme, including `javascript:`.
+- **Empty responses are explicit.** A 204/empty-body success resolves
+  `{ ok: true }`, never `undefined` — handlers must not render "undefined"
+  to agents (e.g. "task started: undefined" for a paid job).
+- **Non-JSON success bodies are errors.** A 200 with a malformed body must
+  reject loudly, never resolve as success.
+- **Single source of truth for tool schemas.** Define each shape once in
+  `tools.ts`, register it in `index.ts`, and pin every registration with an
+  invariant test — no inline `{}` that can drift.
+- **No test-only seams on production interfaces.** Inject clocks/config via
+  options (e.g. `now: () => Date`), never via `_fieldForTesting` on input
+  types.
+- **Network calls time out.** Every fetch gets an `AbortSignal` timeout so a
+  hung request can't block the agent session forever.
+- **Tests must not pass vacuously.** Assert the spawned process is actually
+  alive; use ephemeral ports and `mkdtempSync`, never fixed ports/paths;
+  skip symlink tricks on Windows (needs elevated privileges).
+- **Engines must cover the newest syntax used.** Import attributes
+  (`with: { type: 'json' }`) need Node >= 20.10, not just >= 20.
+- **Commit messages describe the implementation**, not the process
+  ("redact encoded app password, inject clock via options", never
+  "review 11 findings").
