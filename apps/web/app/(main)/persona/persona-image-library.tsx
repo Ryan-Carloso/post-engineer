@@ -255,6 +255,16 @@ function LibraryImageCard({
   const [description, setDescription] = useState(image.description ?? '');
   const [cardError, setCardError] = useState<string | null>(null);
 
+  // The card keeps local copies for the inline editor. Sync them when the
+  // library refetches (mutation invalidation) so a later edit starts from
+  // fresh data — but never clobber an in-progress edit.
+  useEffect(() => {
+    if (!editing) {
+      setTag(image.tag ?? '');
+      setDescription(image.description ?? '');
+    }
+  }, [editing, image.tag, image.description]);
+
   const save = async (): Promise<void> => {
     setCardError(null);
     try {

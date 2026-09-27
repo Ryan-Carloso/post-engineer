@@ -201,4 +201,41 @@ describe('PersonaImageLibrarySection', () => {
     const card = screen.getByText('tag-img-1').closest('div') as HTMLElement;
     expect(within(card).getByText('tag-img-1')).toBeInTheDocument();
   });
+
+  it('starts the editor with fresh tag/description after the library refetches', async () => {
+    apiMocks.images = [makeImage('img-1')];
+    const { rerender } = render(
+      <QueryClientProvider client={new QueryClient()}>
+        <PersonaImageLibrarySection personaId="persona-1" />
+      </QueryClientProvider>,
+    );
+    // The server value changes (e.g. trimmed by a save elsewhere) and the
+    // list refetches before the user opens the editor.
+    apiMocks.images = [{ ...makeImage('img-1'), tag: 'fresh-tag' }];
+    rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <PersonaImageLibrarySection personaId="persona-1" />
+      </QueryClientProvider>,
+    );
+    await userEvent.click(screen.getByRole('button', { name: '✎' }));
+    expect(screen.getByDisplayValue('fresh-tag')).toBeInTheDocument();
+  });
+
+  it('does not clobber an in-progress edit when the library refetches', async () => {
+    apiMocks.images = [makeImage('img-1')];
+    const { rerender } = render(
+      <QueryClientProvider client={new QueryClient()}>
+        <PersonaImageLibrarySection personaId="persona-1" />
+      </QueryClientProvider>,
+    );
+    await userEvent.click(screen.getByRole('button', { name: '✎' }));
+    await userEvent.type(screen.getByDisplayValue('tag-img-1'), '-draft');
+    apiMocks.images = [{ ...makeImage('img-1'), tag: 'fresh-tag' }];
+    rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <PersonaImageLibrarySection personaId="persona-1" />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByDisplayValue('tag-img-1-draft')).toBeInTheDocument();
+  });
 });
