@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -8,7 +9,17 @@ import { fileURLToPath } from 'node:url';
 
 // The MCP server is local-only: it speaks stdio and must never open a
 // network port, even if someone passes the legacy --http flag.
-const TEST_PORT = 32147;
+
+async function reserveEphemeralPort(): Promise<number> {
+  // Bind port 0 and read back the assigned port instead of hard-coding one:
+  // a fixed port can be occupied by an unrelated process on the runner.
+  const server = createServer();
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  const port = typeof address === 'object' && address !== null ? address.port : 0;
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  return port;
+}
 
 async function isHttpListening(port: number): Promise<boolean> {
   try {
@@ -36,18 +47,18 @@ describe('local-only transport', () => {
     }
     // Launch through a symlink, like the published npx .bin entry, to prove
     // isMainModule() resolves the real path instead of comparing raw strings.
-    const linkDir = path.join(tmpdir(), 'pe-mcp-local-only-test');
+    // mkdtempSync keeps parallel workers from racing on a fixed path.
+    const linkDir = mkdtempSync(path.join(tmpdir(), 'pe-mcp-local-only-'));
     const linkEntry = path.join(linkDir, 'mcp-link.mjs');
-    mkdirSync(linkDir, { recursive: true });
-    rmSync(linkEntry, { force: true });
     symlinkSync(entry, linkEntry);
+    const testPort = await reserveEphemeralPort();
     let child: ChildProcess | undefined;
     let spawnError: unknown;
     try {
       child = spawn(process.execPath, [linkEntry, '--http'], {
         env: {
           ...process.env,
-          MCP_PORT: String(TEST_PORT),
+          MCP_PORT: String(testPort),
           POST_ENGINEER_API_KEY: 'test-local-only-key',
         },
         // stdin must be an open pipe (not 'ignore'): the stdio server sits on
@@ -64,10 +75,10 @@ describe('local-only transport', () => {
       // The server must actually be running: otherwise "no port bound" would
       // pass vacuously on a startup crash.
       expect(child.exitCode).toBeNull();
-      expect(await isHttpListening(TEST_PORT)).toBe(false);
+      expect(await isHttpListening(testPort)).toBe(false);
     } finally {
       child?.kill('SIGKILL');
-      rmSync(linkEntry, { force: true });
+      rmSync(linkDir, { recursive: true, force: true });
     }
   }, 15000);
 });

@@ -611,6 +611,21 @@ describe('PostEngineerClient configuration', () => {
     void c;
   });
 
+  it('never echoes the Bluesky app password when the API error body reflects the payload', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: async () => `{"error":"invalid appPassword value 'hunter2-secret'"}`,
+    });
+
+    const c = new PostEngineerClient({ apiKey: 'k' });
+    const error = await c.connectBlueskyAccount('user.bsky.social', 'hunter2-secret').catch((e) => e);
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).not.toContain('hunter2-secret');
+    expect((error as Error).message).toContain('[redacted]');
+  });
+
   it('rejects a non-http(s) POST_ENGINEER_API_URL override', () => {
     expect(() => new PostEngineerClient({ apiKey: 'k', baseUrl: 'javascript:alert(1)' })).toThrow(
       /POST_ENGINEER_API_URL/

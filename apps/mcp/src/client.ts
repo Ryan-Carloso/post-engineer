@@ -208,11 +208,18 @@ export class PostEngineerClient {
   }
 
   async connectBlueskyAccount(handle: string, appPassword: string): Promise<unknown> {
-    return this.request(
-      '/api/bluesky-connect',
-      { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ handle, appPassword }) },
-      'connect Bluesky account'
-    );
+    try {
+      return await this.request(
+        '/api/bluesky-connect',
+        { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ handle, appPassword }) },
+        'connect Bluesky account'
+      );
+    } catch (error) {
+      // The upstream error body may echo the request payload: never let the
+      // app password surface in agent-visible error text.
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(appPassword.length > 0 ? message.replaceAll(appPassword, '[redacted]') : message);
+    }
   }
 
   async listSchedules(): Promise<unknown> {
