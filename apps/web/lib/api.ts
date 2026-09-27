@@ -270,6 +270,122 @@ export function usePersonaListQuery() {
 }
 
 //---------------
+// Persona image library — up to 10 tagged images per persona used for
+// deterministic per-video image selection.
+//---------------
+
+export interface PersonaImageRecord {
+  id: string;
+  image_path: string;
+  tag: string | null;
+  description: string | null;
+  is_primary: boolean;
+  created_at: string;
+  image_url: string | null;
+}
+
+async function fetchPersonaImages(personaId: string): Promise<PersonaImageRecord[]> {
+  const response = await fetch(
+    `/api/persona/images?personaId=${encodeURIComponent(personaId)}`,
+  );
+  if (!response.ok) {
+    throw new Error(`Persona images request failed with status ${response.status}`);
+  }
+  const data: { success: boolean; images: PersonaImageRecord[] } = await response.json();
+  return data.images;
+}
+
+export function usePersonaImagesQuery(personaId: string | null) {
+  return useQuery<PersonaImageRecord[]>({
+    queryKey: ['persona-images', personaId],
+    queryFn: () => fetchPersonaImages(personaId as string),
+    enabled: personaId !== null,
+    staleTime: 30_000,
+  });
+}
+
+export interface UploadPersonaImageInput {
+  file: File;
+  tag?: string;
+  description?: string;
+  isPrimary?: boolean;
+}
+
+export async function uploadPersonaImage(
+  personaId: string,
+  input: UploadPersonaImageInput,
+): Promise<{ success: boolean; error?: string; image?: PersonaImageRecord }> {
+  const formData = new FormData();
+  formData.append('personaId', personaId);
+  formData.append('image', input.file);
+  if (input.tag) formData.append('tag', input.tag);
+  if (input.description) formData.append('description', input.description);
+  if (input.isPrimary !== undefined) formData.append('isPrimary', String(input.isPrimary));
+  const response = await fetch('/api/persona/images', { method: 'POST', body: formData });
+  return response.json();
+}
+
+export interface UpdatePersonaImageInput {
+  id: string;
+  tag?: string;
+  description?: string;
+  isPrimary?: boolean;
+}
+
+export async function updatePersonaImage(
+  input: UpdatePersonaImageInput,
+): Promise<{ success: boolean; error?: string }> {
+  const response = await fetch('/api/persona/images', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  return response.json();
+}
+
+export async function deletePersonaImage(
+  id: string,
+): Promise<{ success: boolean; error?: string }> {
+  const response = await fetch(
+    `/api/persona/images?id=${encodeURIComponent(id)}`,
+    { method: 'DELETE' },
+  );
+  return response.json();
+}
+
+function useInvalidatePersonaImages(personaId: string | null) {
+  const queryClient = useQueryClient();
+  return () => {
+    void queryClient.invalidateQueries({ queryKey: ['persona-images', personaId] });
+  };
+}
+
+export function useUploadPersonaImageMutation(personaId: string | null) {
+  const invalidate = useInvalidatePersonaImages(personaId);
+  return useMutation({
+    mutationFn: (input: UploadPersonaImageInput) =>
+      uploadPersonaImage(personaId as string, input),
+    onSuccess: invalidate,
+  });
+}
+
+export function useUpdatePersonaImageMutation(personaId: string | null) {
+  const invalidate = useInvalidatePersonaImages(personaId);
+  return useMutation({
+    mutationFn: updatePersonaImage,
+    onSuccess: invalidate,
+  });
+}
+
+export function useDeletePersonaImageMutation(personaId: string | null) {
+  const invalidate = useInvalidatePersonaImages(personaId);
+  return useMutation({
+    mutationFn: deletePersonaImage,
+    onSuccess: invalidate,
+  });
+}
+
+//---------------
 // Supabase session — authenticated user's session
 //----------------
 

@@ -798,3 +798,124 @@ describe('PostEngineerClient error truncation', () => {
     }
   });
 });
+
+describe('PostEngineerClient persona image library', () => {
+  let client: PostEngineerClient;
+  const baseUrl = 'https://post-engineer.com';
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    client = new PostEngineerClient({ apiKey: 'test-token-123' });
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+    });
+  });
+
+  async function writeTempImage(name: string): Promise<string> {
+    const { writeFile } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const path = join(tmpdir(), `pe-mcp-test-${Date.now()}-${name}`);
+    await writeFile(path, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+    return path;
+  }
+
+  function formDataOf(): FormData {
+    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
+    return request?.body as FormData;
+  }
+
+  it('createPersona uploads library images with parallel tags and descriptions', async () => {
+    const first = await writeTempImage('a.jpg');
+    const second = await writeTempImage('b.png');
+    await client.createPersona({
+      name: 'Tech Creator',
+      avatarUrl: 'https://example.com/avatar.png',
+      images: [
+        { path: first, tag: 'casual', description: 'smiling at the beach' },
+        { path: second, tag: 'formal' },
+      ],
+      imagePrimaryIndex: 1,
+    });
+
+    const formData = formDataOf();
+    expect(formData.getAll('images')).toHaveLength(2);
+    expect(JSON.parse(String(formData.get('imageTags')))).toEqual(['casual', 'formal']);
+    expect(JSON.parse(String(formData.get('imageDescriptions')))).toEqual(['smiling at the beach', '']);
+    expect(formData.get('imagePrimaryIndex')).toBe('1');
+  });
+
+  it('createPersona rejects more than 10 library images', async () => {
+    const images = Array.from({ length: 11 }, (_, i) => ({ path: `/tmp/img-${i}.jpg` }));
+    await expect(
+      client.createPersona({ name: 'X', avatarUrl: 'https://example.com/a.png', images })
+    ).rejects.toThrow(/At most 10 library images/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('createPersona rejects library images without an avatar (persona mode required)', async () => {
+    await expect(
+      client.createPersona({ name: 'X', images: [{ path: '/tmp/img.jpg' }] })
+    ).rejects.toThrow(/require a persona avatar/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('generateVideoJob sends image_id when provided', async () => {
+    await client.generateVideoJob({ personaId: 'p-1', imageId: 'img-123' });
+    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
+    const body = JSON.parse(String(request?.body));
+    expect(body.image_id).toBe('img-123');
+    expect(body.personaId).toBe('p-1');
+  });
+
+  it('generateVideoJob omits image_id when not provided', async () => {
+    await client.generateVideoJob({ personaId: 'p-1' });
+    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
+    const body = JSON.parse(String(request?.body));
+    expect('image_id' in body).toBe(false);
+  });
+
+  it('listPersonaImages hits the library endpoint', async () => {
+    await client.listPersonaImages('p-1');
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/persona/images?personaId=p-1`,
+      expect.objectContaining({ method: 'GET' })
+    );
+  });
+
+  it('addPersonaImage uploads a single image as multipart', async () => {
+    const path = await writeTempImage('c.webp');
+    await client.addPersonaImage('p-1', { path, tag: 'gym', description: 'training', isPrimary: true });
+
+    const request = vi.mocked(global.fetch).mock.calls[0];
+    expect(request?.[0]).toBe(`${baseUrl}/api/persona/images`);
+    expect(request?.[1]).toMatchObject({ method: 'POST' });
+    const formData = request?.[1]?.body as FormData;
+    expect(formData.get('personaId')).toBe('p-1');
+    expect(formData.getAll('image')).toHaveLength(1);
+    expect(formData.get('tag')).toBe('gym');
+    expect(formData.get('description')).toBe('training');
+    expect(formData.get('isPrimary')).toBe('true');
+  });
+
+  it('updatePersonaImage sends a PATCH with the metadata', async () => {
+    await client.updatePersonaImage({ id: 'img-1', tag: 'casual', isPrimary: true });
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/persona/images`,
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ id: 'img-1', tag: 'casual', isPrimary: true }),
+      })
+    );
+  });
+
+  it('deletePersonaImage sends a DELETE with the id query', async () => {
+    await client.deletePersonaImage('img-1');
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/persona/images?id=img-1`,
+      expect.objectContaining({ method: 'DELETE' })
+    );
+  });
+});

@@ -18,6 +18,10 @@ import {
   GenerateVideoShape,
   GetVideoStatusShape,
   ScheduleVideoShape,
+  ListPersonaImagesShape,
+  AddPersonaImageShape,
+  UpdatePersonaImageShape,
+  RemovePersonaImageShape,
 } from '../tools.js';
 import type { PostEngineerClient } from '../client.js';
 
@@ -36,6 +40,10 @@ const EXPECTED_TOOLS = [
   'generate_video_from_persona',
   'get_video_status',
   'schedule_video',
+  'list_persona_images',
+  'add_persona_image',
+  'update_persona_image',
+  'remove_persona_image',
 ];
 
 async function listServerToolNames(server: ReturnType<typeof createPostEngineerMcpServer>) {
@@ -154,6 +162,10 @@ describe('registered tool schemas (single source of truth)', () => {
       generate_video_from_persona: GenerateVideoShape,
       get_video_status: GetVideoStatusShape,
       schedule_video: ScheduleVideoShape,
+      list_persona_images: ListPersonaImagesShape,
+      add_persona_image: AddPersonaImageShape,
+      update_persona_image: UpdatePersonaImageShape,
+      remove_persona_image: RemovePersonaImageShape,
     };
     expect(schemas.size).toBe(Object.keys(expected).length);
     for (const [name, shape] of Object.entries(expected)) {

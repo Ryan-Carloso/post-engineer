@@ -22,6 +22,7 @@ import { parsePersonaForm, personaFormSchema } from '@/lib/persona-schema';
 import { openUpgradeDialogIfInsufficient } from '@/lib/upgrade-dialog-store';
 import { useI18n } from '@/lib/i18n/provider';
 import { PersonaTokensSection } from './persona-tokens';
+import { PersonaImageLibrarySection } from './persona-image-library';
 import { scrollToErrorField } from '@/lib/scroll-to-error';
 import type { TranslationKey } from '@/lib/i18n';
 import { DEFAULT_PERSONA_FACE_IDS } from '@/lib/persona-faces';
@@ -57,7 +58,12 @@ export default function PersonaPage() {
 
 const PersonaPageContent = () => {
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const editId = searchParams.get('edit');
+  // Same edit-id resolution as PersonaSubmit: ?edit= or the legacy
+  // /personas/<id>/edit path. The image library needs a persisted persona.
+  const editMatch = pathname.match(/^\/personas\/([^/]+)\/edit$/);
+  const editingPersonaId = editMatch?.[1] ?? editId;
   const personasQuery = usePersonaListQuery();
   const editingPersona = useMemo(
     () => (editId ? personasQuery.data?.find((item) => item.id === editId) : undefined),
@@ -67,9 +73,9 @@ const PersonaPageContent = () => {
   const sampleLanguagesQuery = useVoiceSampleLanguagesQuery();
   const personaMode = usePersonaStore((s) => s.personaMode);
 
-  // RHF: campos de texto validam no onBlur com o MESMO zod do server
-  // (lib/persona-schema.ts) e bloqueiam o submit. O zustand continua
-  // sendo a persistência (buildPersonaFormData lê da store).
+  // RHF: text fields validate onBlur with the SAME server zod schema
+  // (lib/persona-schema.ts) and block submit. Zustand remains
+  // the persistence layer (buildPersonaFormData reads from the store).
   const methods = useForm({
     mode: 'onBlur',
     resolver: zodResolver(personaFormSchema),
@@ -117,7 +123,10 @@ const PersonaPageContent = () => {
             <PersonaModeSelector />
             <PersonaNameField />
             {personaMode === 'persona' ? <PersonaAvatarSection /> : null}
-            {/* Faceless: sem avatar — voz ainda é obrigatória, vídeo sai 100% stock. */}
+            {personaMode === 'persona' && editingPersonaId ? (
+              <PersonaImageLibrarySection personaId={editingPersonaId} />
+            ) : null}
+            {/* Faceless: no avatar — voice is still required, video is 100% stock. */}
             {/* Mix + qualidade + custo: habilita no modo persona, trava em 0% no faceless. */}
             <PersonaTokensSection />
           </section>
@@ -136,9 +145,9 @@ const PersonaPageContent = () => {
 }
 
 //---------------
-// PersonaFormSync — espelha os campos do RHF para a zustand store
-// (apenas quando o campo está dirty, para não sobrescrever a store
-// no mount nem no fluxo de edição).
+// PersonaFormSync — mirrors RHF fields into the zustand store
+// (only when the field is dirty, so the store is not overwritten
+// on mount or in the edit flow).
 //---------------
 const PersonaFormSync = () => {
   const { formState: { dirtyFields } } = useFormContext();
@@ -218,9 +227,9 @@ const PersonaPageError = () => {
 };
 
 //---------------
-// PersonaHeader — título e subtítulo da tela de persona, com badge de
-// debug mode quando destravado (10 cliques no logo).
-// Em modo edição mostra os textos de edição em vez dos de criação.
+// PersonaHeader — persona screen title and subtitle, with a debug mode
+// badge when unlocked (10 clicks on the logo).
+// In edit mode it shows the edit copy instead of the create copy.
 //---------------
 const PersonaHeader = ({ editing }: { editing: boolean }) => {
   const { t } = useI18n();
@@ -329,7 +338,8 @@ const PersonaModeSelector = () => {
 };
 
 //---------------
-// PersonaAvatarSection — escolha da identidade visual: gerar por IA ou enviar foto
+//---------------
+// PersonaAvatarSection — visual identity choice: AI-generated or photo upload
 //---------------
 const PersonaAvatarSection = () => {
   const [source, setSource] = useState<'characters' | 'upload'>('characters');
@@ -367,7 +377,7 @@ const PersonaAvatarSection = () => {
 };
 
 //---------------
-// SourceTab — botão de aba da origem da foto (IA ou upload)
+// SourceTab — photo source tab button (AI or upload)
 //---------------
 const SourceTab = ({
   active,
@@ -395,7 +405,7 @@ const SourceTab = ({
 );
 
 //---------------
-// PersonaCharacterPicker — seleção de um personagem pronto
+// PersonaCharacterPicker — ready-made character selection
 //---------------
 const PersonaCharacterPicker = () => {
   const avatarUrl = usePersonaStore((s) => s.avatarUrl);
@@ -406,9 +416,9 @@ const PersonaCharacterPicker = () => {
     ? personasQuery.data?.find((persona) => persona.id === editId)?.avatarUrl
     : undefined;
   const selectedAvatarUrl = avatarUrl ?? editingAvatarUrl ?? null;
-  // Índice inicial fixo (só no mount): mudar o `opts` recriaria o carousel
-  // e reiniciaria o autoplay, desfazendo o stop() na seleção. O carousel
-  // fica onde o usuário deixou — sem reset de posição.
+  // Fixed start index (mount only): changing `opts` would recreate the
+  // carousel and restart autoplay, undoing the stop() on selection. The
+  // carousel stays where the user left it — no position reset.
   const startIndexRef = useRef(getCharacterIndex(avatarUrl ?? editingAvatarUrl ?? null));
   const autoplay = useRef(Autoplay({ delay: editId ? 1_000_000 : 5000, stopOnInteraction: true }));
   const { t } = useI18n();
@@ -564,9 +574,9 @@ const PersonaNameField = () => {
 };
 
 //---------------
-// PersonaVoiceSection — escolha de voz entre as vozes da casa.
-// Em edição, o idioma da amostra inicia com o idioma salvo da persona
-// em vez do padrão pt-br.
+// PersonaVoiceSection — voice choice among the house voices.
+// In edit mode, the sample language starts from the persona's saved language
+// instead of the pt-br default.
 //---------------
 const PersonaVoiceSection = ({ personaLanguage }: { personaLanguage?: string }) => {
   const result = usePersonaStore((s) => s.result);
@@ -584,9 +594,9 @@ const PersonaVoiceSection = ({ personaLanguage }: { personaLanguage?: string }) 
 };
 
 //---------------
-// matchSampleLanguage — escolhe o código de amostra de voz mais próximo do
-// idioma da persona: exato ('es' → 'es') ou por prefixo ('pt' → 'pt-br').
-// Retorna undefined quando não há correspondência.
+// matchSampleLanguage — picks the voice sample code closest to the
+// persona language: exact ('es' → 'es') or by prefix ('pt' → 'pt-br').
+// Returns undefined when there is no match.
 //---------------
 const matchSampleLanguage = (
   personaLanguage: string,
@@ -604,13 +614,13 @@ const matchSampleLanguage = (
 };
 
 //---------------
-// PersonaHouseVoicePicker — grade de vozes disponíveis da casa
+// PersonaHouseVoicePicker — house voice grid
 //---------------
 const PersonaHouseVoicePicker = ({ personaLanguage }: { personaLanguage?: string }) => {
   const voicesQuery = useVoicesQuery();
   const sampleLanguagesQuery = useVoiceSampleLanguagesQuery();
   const voiceId = usePersonaStore((s) => s.voiceId);
-  // Escolha manual do usuário (null = ainda não tocou): vence o default.
+  // Manual user choice (null = not touched yet): wins over the default.
   const [sampleLanguage, setSampleLanguage] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const lastPickedVoiceRef = useRef<string | null>(null);
@@ -642,7 +652,7 @@ const PersonaHouseVoicePicker = ({ personaLanguage }: { personaLanguage?: string
 
   const handleSampleLanguageChange = (language: string) => {
     setSampleLanguage(language);
-    // Trocou o idioma depois de escutar um sample? Reinicia o áudio no novo idioma.
+    // Switched language after listening to a sample? Restart the audio in the new language.
     const lastPickedVoice = lastPickedVoiceRef.current;
     if (lastPickedVoice) {
       playVoiceSample(lastPickedVoice, language);
@@ -710,7 +720,7 @@ const PersonaHouseVoicePicker = ({ personaLanguage }: { personaLanguage?: string
 };
 
 //---------------
-// PersonaPreferencesSection — defaults opcionais de conteúdo da persona
+// PersonaPreferencesSection — optional persona content defaults
 //---------------
 const PersonaPreferencesSection = () => {
   const videoAspect = usePersonaStore((s) => s.videoAspect);
@@ -773,9 +783,10 @@ const PersonaPreferencesSection = () => {
 };
 
 //---------------
-// PersonaDebugSubmit — submit alternativo do debug mode: gera o vídeo pelo
-// fluxo REAL (/api/persona/video-job branch debug, com moderação e cobrança
-// de tokens) sem criar persona/agenda, e libera o download ao terminar.
+// PersonaDebugSubmit — alternative debug-mode submit: generates the video
+// through the REAL flow (/api/persona/video-job debug branch, with
+// moderation and token charging) without creating a persona/schedule,
+// and unlocks the download when done.
 //---------------
 const PersonaDebugSubmit = () => {
   const { t, locale } = useI18n();
@@ -903,10 +914,10 @@ const readDebugError = (value: unknown): string => {
 };
 
 //---------------
-// PersonaSubmit — validação e submit da persona (criação/edição).
-// Criação: POST /api/persona (persona sozinha — agendamento é outro fluxo,
-// em /schedule). Sucesso → /schedule?personaId= para agendar em seguida.
-// Em edição o botão mostra os textos de salvar em vez dos de criar.
+// PersonaSubmit — persona validation and submit (create/edit).
+// Create: POST /api/persona (persona alone — scheduling is a separate flow,
+// at /schedule). Success → /schedule?personaId= to schedule right after.
+// In edit mode the button shows the save copy instead of the create copy.
 //---------------
 const PersonaSubmit = ({ editId }: { editId: string | null }) => {
   const { t, locale } = useI18n();
@@ -922,8 +933,8 @@ const PersonaSubmit = ({ editId }: { editId: string | null }) => {
     return <PersonaDebugSubmit />;
   }
 
-  // Mesma página serve criação e edição: o id vem do ?edit= (rota atual)
-  // ou do legado /personas/<id>/edit.
+  // Same page serves create and edit: the id comes from ?edit= (current route)
+  // or the legacy /personas/<id>/edit.
   const editMatch = pathname.match(/^\/personas\/([^/]+)\/edit$/);
   const editingPersonaId = editMatch?.[1] ?? editId;
   const isEditing = Boolean(editingPersonaId);
@@ -1010,7 +1021,7 @@ const PersonaSubmit = ({ editId }: { editId: string | null }) => {
 };
 
 //---------------
-// PersonaFeedback — resultado da criação (sucesso ou erro)
+// PersonaFeedback — creation result (success or error)
 //---------------
 const PersonaFeedback = () => {
   const result = usePersonaStore((s) => s.result);
@@ -1024,8 +1035,8 @@ const PersonaFeedback = () => {
   if (!result) return null;
 
   //---------------
-  // Limpa a store E os campos RHF: sem o reset() os inputs continuam
-  // mostrando o texto antigo enquanto a store já está vazia.
+  // Clears the store AND the RHF fields: without reset() the inputs keep
+  // showing the old text while the store is already empty.
   //---------------
   const handleCreateAnother = () => {
     reset({ name: '', niche: '', scriptPrompt: '' });
@@ -1073,8 +1084,8 @@ const PersonaFeedback = () => {
 };
 
 //---------------
-// PersonaErrorDialog — erro de criação/atualização em modal, para o usuário
-// não perder a mensagem (antes ficava numa caixa no fim da página).
+// PersonaErrorDialog — create/update error in a modal, so the user does
+// not lose the message (it used to sit in a box at the page bottom).
 //---------------
 const PersonaErrorDialog = () => {
   const result = usePersonaStore((s) => s.result);
@@ -1116,14 +1127,14 @@ const PersonaErrorDialog = () => {
 };
 
 //---------------
-// InlineFieldError — erro de validação próximo ao campo inválido.
+// InlineFieldError — validation error next to the invalid field.
 //---------------
 const InlineFieldError = ({ message }: { message: string }) => (
   <p role="alert" className="mt-2 text-sm font-medium text-red-700">{message}</p>
 );
 
 //---------------
-// SectionDivider — divisória com rótulo
+// SectionDivider — divider with label
 //---------------
 const SectionDivider = ({ label }: { label: string }) => (
   <div className="flex items-center gap-3">
@@ -1134,7 +1145,7 @@ const SectionDivider = ({ label }: { label: string }) => (
 
 //---------------
 // getCharacterIndex — encontra o avatar salvo no carrossel sem executar scroll.
-// Retorna o primeiro item quando a imagem não é um personagem disponível.
+// Returns the first item when the image is not an available character.
 //---------------
 const getCharacterIndex = (avatarUrl: string | null): number => {
   const match = avatarUrl?.match(/\/file-(\d+)\.png$/);

@@ -9,6 +9,7 @@ import { isPersonaAllowed, isScopedApiKey } from '@/lib/api-keys';
 import { attachGenerationTask, gateGeneration, recordGenerationStart, recordGenerationUpdate, refundFailedGeneration, startEngineVideoTask, uploadEngineTempAsset } from '@/lib/generation/video-generation';
 import { buildJobPayload, hasNonEmptyString, type JobPersona } from '@/lib/generation/video-job-payload';
 import { parsePersonaForm, VALID_VIDEO_ASPECTS } from '@/lib/persona-schema';
+import { resolveVideoImage } from '@/lib/persona-images';
 import { normalizeDebugTaskResponse } from '@/lib/debug-video';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
@@ -241,6 +242,21 @@ export async function POST(request: Request): Promise<NextResponse> {
     };
   }
   delete requestBody.audioUrl;
+
+  // Per-video library image override: accepts image_id (snake) or imageId
+  // (camel); resolved against the persona's image library in the persona
+  // branch below. Deleted there before the payload is built so it never
+  // reaches the engine as a loose field.
+  if (
+    requestBody.image_id === undefined &&
+    typeof requestBody.imageId === 'string'
+  ) {
+    requestBody = {
+      ...requestBody,
+      image_id: requestBody.imageId,
+    };
+  }
+  delete requestBody.imageId;
 
   let customAudioUrl: string | undefined;
   if (requestBody.audio_url !== undefined) {
@@ -503,7 +519,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     const { data: persona, error: personaError } = await supabase
       .from('personas')
-      .select('id, name, photo_path, avatar_url, voice_id, voice_audio_path, language, video_aspect, script_prompt, paragraph_number, niche, face_mix_percent, face_quality')
+      .select('id, name, photo_path, avatar_url, voice_id, voice_audio_path, language, video_aspect, script_prompt, paragraph_number, niche, face_mix_percent, face_quality, recent_image_ids')
       .eq('id', personaId)
       .eq('user_id', user.id)
       .single();
@@ -646,7 +662,44 @@ export async function POST(request: Request): Promise<NextResponse> {
     // photo is legitimate.
     const avatarUrl = persona.avatar_url as string | null;
     const photoPath = persona.photo_path as string | null;
-    const photoUrl = avatarUrl ?? (await signedUrl(supabase, photoPath));
+    let photoUrl = avatarUrl ?? (await signedUrl(supabase, photoPath));
+
+    // Persona image library: deterministic per-video selection (explicit
+    // image_id override, then tag/description keyword match excluding
+    // recently used images, then primary/first). The engine still receives
+    // a single resolved photo URL, so no engine changes are needed.
+    // Legacy personas (empty library) keep the behavior above untouched.
+    const requestedImageId =
+      typeof requestBody.image_id === 'string' ? requestBody.image_id : null;
+    delete requestBody.image_id;
+    if (requestedImageId !== null && requestedImageId.trim().length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'image_id must be a non-empty string.' },
+        { status: 400 },
+      );
+    }
+    const librarySelection = await resolveVideoImage(
+      supabase,
+      personaId,
+      (persona.recent_image_ids as string[] | null) ?? [],
+      {
+        topic: typeof requestBody.video_subject === 'string' ? requestBody.video_subject : null,
+        niche: personaNiche,
+        imageId: requestedImageId,
+      },
+    );
+    if (!librarySelection.ok) {
+      return NextResponse.json(
+        { success: false, error: librarySelection.error },
+        { status: librarySelection.status },
+      );
+    }
+    if (librarySelection.image) {
+      const libraryUrl = await signedUrl(supabase, librarySelection.image.image_path);
+      // A signing failure falls back to the legacy photo; the 503 guard
+      // below still classifies an unloadable face the same way.
+      if (libraryUrl) photoUrl = libraryUrl;
+    }
     const faceMix = persona.face_mix_percent as number | null;
     // A legacy persona with face_mix_percent: null is face-requiring by the
     // historical default the mix field was added on top of: an unsignable photo

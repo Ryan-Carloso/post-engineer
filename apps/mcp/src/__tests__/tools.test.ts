@@ -1,7 +1,11 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   getErrorMessage,
   handleCreatePersona,
+  handleListPersonaImages,
+  handleAddPersonaImage,
+  handleUpdatePersonaImage,
+  handleRemovePersonaImage,
   handleGenerateVideo,
   handleListVoices,
   handleListFaces,
@@ -17,6 +21,11 @@ import {
   ScheduleVideoSchema,
   CreatePersonaSchema,
   UpdatePersonaSchema,
+  GenerateVideoSchema,
+  ListPersonaImagesSchema,
+  AddPersonaImageSchema,
+  UpdatePersonaImageSchema,
+  RemovePersonaImageSchema,
 } from '../tools.js';
 import type { PostEngineerClient } from '../client.js';
 import type { McpToolResponse } from '../tools.js';
@@ -431,5 +440,107 @@ describe('getErrorMessage', () => {
     expect(getErrorMessage(42)).toBe('42');
     expect(getErrorMessage(null)).toBe('null');
     expect(getErrorMessage(undefined)).toBe('undefined');
+  });
+});
+
+describe('persona image library tools', () => {
+  const mockClient = {
+    createPersona: vi.fn(),
+    generateVideoJob: vi.fn(),
+    listPersonaImages: vi.fn(),
+    addPersonaImage: vi.fn(),
+    updatePersonaImage: vi.fn(),
+    deletePersonaImage: vi.fn(),
+  } as unknown as PostEngineerClient;
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('create_persona accepts images and imagePrimaryIndex', async () => {
+    vi.mocked(mockClient.createPersona).mockResolvedValue({ success: true, personaId: 'p-1' });
+    const args = CreatePersonaSchema.parse({
+      name: 'Alex AI',
+      avatarUrl: 'https://example.com/alex.png',
+      images: [
+        { path: '/tmp/a.jpg', tag: 'casual', description: 'at the beach' },
+        { path: '/tmp/b.png' },
+      ],
+      imagePrimaryIndex: 1,
+    });
+    const response = await handleCreatePersona(mockClient, args);
+    expect(mockClient.createPersona).toHaveBeenCalledWith(
+      expect.objectContaining({ imagePrimaryIndex: 1, images: expect.any(Array) })
+    );
+    expect(textOf(response)).toContain('p-1');
+  });
+
+  it('create_persona rejects more than 10 images at the schema level', () => {
+    const images = Array.from({ length: 11 }, (_, i) => ({ path: `/tmp/img-${i}.jpg` }));
+    expect(() =>
+      CreatePersonaSchema.parse({ name: 'X', avatarUrl: 'https://example.com/a.png', images })
+    ).toThrow();
+  });
+
+  it('generate_video_from_persona passes imageId through', async () => {
+    vi.mocked(mockClient.generateVideoJob).mockResolvedValue({ success: true, taskId: 't-1' });
+    const response = await handleGenerateVideo(
+      mockClient,
+      GenerateVideoSchema.parse({ personaId: 'p-1', imageId: 'img-123' })
+    );
+    expect(mockClient.generateVideoJob).toHaveBeenCalledWith(
+      expect.objectContaining({ imageId: 'img-123' })
+    );
+    expect(textOf(response)).toContain('t-1');
+  });
+
+  it('list_persona_images returns the library', async () => {
+    vi.mocked(mockClient.listPersonaImages).mockResolvedValue({ images: [] });
+    const response = await handleListPersonaImages(
+      mockClient,
+      ListPersonaImagesSchema.parse({ personaId: 'p-1' })
+    );
+    expect(mockClient.listPersonaImages).toHaveBeenCalledWith('p-1');
+    expect(textOf(response)).toContain('images');
+  });
+
+  it('add_persona_image forwards path, tag, description, isPrimary', async () => {
+    vi.mocked(mockClient.addPersonaImage).mockResolvedValue({ success: true, id: 'img-1' });
+    const response = await handleAddPersonaImage(
+      mockClient,
+      AddPersonaImageSchema.parse({ personaId: 'p-1', path: '/tmp/a.jpg', tag: 'gym', isPrimary: true })
+    );
+    expect(mockClient.addPersonaImage).toHaveBeenCalledWith(
+      'p-1',
+      expect.objectContaining({ path: '/tmp/a.jpg', tag: 'gym', isPrimary: true })
+    );
+    expect(textOf(response)).toContain('img-1');
+  });
+
+  it('update_persona_image forwards metadata', async () => {
+    vi.mocked(mockClient.updatePersonaImage).mockResolvedValue({ success: true });
+    await handleUpdatePersonaImage(
+      mockClient,
+      UpdatePersonaImageSchema.parse({ id: 'img-1', tag: 'formal', isPrimary: true })
+    );
+    expect(mockClient.updatePersonaImage).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'img-1', tag: 'formal', isPrimary: true })
+    );
+  });
+
+  it('remove_persona_image forwards the id', async () => {
+    vi.mocked(mockClient.deletePersonaImage).mockResolvedValue({ success: true });
+    await handleRemovePersonaImage(mockClient, RemovePersonaImageSchema.parse({ id: 'img-1' }));
+    expect(mockClient.deletePersonaImage).toHaveBeenCalledWith('img-1');
+  });
+
+  it('library handlers surface client errors as isError', async () => {
+    vi.mocked(mockClient.listPersonaImages).mockRejectedValue(new Error('boom'));
+    const response = await handleListPersonaImages(
+      mockClient,
+      ListPersonaImagesSchema.parse({ personaId: 'p-1' })
+    );
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('boom');
   });
 });

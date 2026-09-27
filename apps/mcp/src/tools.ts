@@ -26,6 +26,12 @@ export function missingProviderAccountIds(args: {
 
 // Single source of truth: index.ts registers these shapes directly with the
 // MCP server, so field definitions (and their descriptions) live here only.
+const PersonaLibraryImageInputShape = z.object({
+  path: z.string().min(1).describe('Local file path to the image (JPG, PNG, or WebP, max 10MB)'),
+  tag: z.string().max(100).optional().describe('Short tag for deterministic per-video matching (e.g. casual, formal, gym)'),
+  description: z.string().max(500).optional().describe('Description of the photo for tag/keyword matching (e.g. smiling at the beach at sunset)'),
+});
+
 export const CreatePersonaShape = {
   name: z.string().min(1, 'Name is required').describe('Name of the persona'),
   avatarUrl: z.string().url().optional().nullable().describe('Public URL to the persona avatar image (use list_faces for stock face URLs)'),
@@ -37,6 +43,8 @@ export const CreatePersonaShape = {
   niche: z.string().optional().default('General').describe('Content niche topic'),
   faceMixPercent: z.number().min(0).max(100).default(50),
   faceQuality: z.enum(['ok', 'very_good']).default('very_good'),
+  images: z.array(PersonaLibraryImageInputShape).max(10).optional().describe('Up to 10 local image files of the same person for the persona image library. Each video deterministically picks the best-matching image by tag. Requires avatarUrl.'),
+  imagePrimaryIndex: z.number().int().min(0).max(9).optional().describe('Index into images[] marking the primary library image (default: first)'),
 };
 
 export const CreatePersonaSchema = z.object(CreatePersonaShape);
@@ -104,9 +112,41 @@ export const GenerateVideoShape = {
   personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona to generate video with'),
   scriptPrompt: z.string().optional().describe('Optional specific prompt override for this video'),
   audioUrl: z.string().url('audioUrl must be a valid URL').optional().describe('Optional public URL of custom audio for this video (overrides the persona voice)'),
+  imageId: z.string().optional().describe('Optional library image ID to use for this video (overrides the deterministic per-video image selection; see list_persona_images)'),
 };
 
 export const GenerateVideoSchema = z.object(GenerateVideoShape);
+
+export const ListPersonaImagesShape = {
+  personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona whose image library to list'),
+};
+
+export const ListPersonaImagesSchema = z.object(ListPersonaImagesShape);
+
+export const AddPersonaImageShape = {
+  personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona to add the image to'),
+  path: z.string().min(1).describe('Local file path to the image (JPG, PNG, or WebP, max 10MB)'),
+  tag: z.string().max(100).optional().describe('Short tag for deterministic per-video matching (e.g. casual, formal, gym)'),
+  description: z.string().max(500).optional().describe('Description of the photo for tag/keyword matching'),
+  isPrimary: z.boolean().optional().describe('Mark this image as the primary library image'),
+};
+
+export const AddPersonaImageSchema = z.object(AddPersonaImageShape);
+
+export const UpdatePersonaImageShape = {
+  id: z.string().min(1, 'id is required').describe('The library image ID to update'),
+  tag: z.string().max(100).optional().describe('New tag (empty string clears it)'),
+  description: z.string().max(500).optional().describe('New description (empty string clears it)'),
+  isPrimary: z.boolean().optional().describe('Set true to mark this image as the primary library image'),
+};
+
+export const UpdatePersonaImageSchema = z.object(UpdatePersonaImageShape);
+
+export const RemovePersonaImageShape = {
+  id: z.string().min(1, 'id is required').describe('The library image ID to remove'),
+};
+
+export const RemovePersonaImageSchema = z.object(RemovePersonaImageShape);
 
 export const GetVideoStatusShape = {
   taskId: z.string().min(1, 'taskId is required').describe('The video generation task ID'),
@@ -518,6 +558,124 @@ export async function handleGenerateVideo(
         {
           type: 'text',
           text: `Error generating video: ${getErrorMessage(error)}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+export async function handleListPersonaImages(
+  client: PostEngineerClient,
+  args: z.infer<typeof ListPersonaImagesSchema>
+): Promise<McpToolResponse> {
+  try {
+    const result = await client.listPersonaImages(args.personaId);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error listing persona images: ${getErrorMessage(error)}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+export async function handleAddPersonaImage(
+  client: PostEngineerClient,
+  args: z.infer<typeof AddPersonaImageSchema>
+): Promise<McpToolResponse> {
+  try {
+    const result = await client.addPersonaImage(args.personaId, {
+      path: args.path,
+      tag: args.tag,
+      description: args.description,
+      isPrimary: args.isPrimary,
+    });
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Persona image added successfully: ${JSON.stringify(result, null, 2)}`,
+        },
+      ],
+    };
+  } catch (error) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error adding persona image: ${getErrorMessage(error)}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+export async function handleUpdatePersonaImage(
+  client: PostEngineerClient,
+  args: z.infer<typeof UpdatePersonaImageSchema>
+): Promise<McpToolResponse> {
+  try {
+    const result = await client.updatePersonaImage({
+      id: args.id,
+      tag: args.tag,
+      description: args.description,
+      isPrimary: args.isPrimary,
+    });
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Persona image updated successfully: ${JSON.stringify(result, null, 2)}`,
+        },
+      ],
+    };
+  } catch (error) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error updating persona image: ${getErrorMessage(error)}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+export async function handleRemovePersonaImage(
+  client: PostEngineerClient,
+  args: z.infer<typeof RemovePersonaImageSchema>
+): Promise<McpToolResponse> {
+  try {
+    const result = await client.deletePersonaImage(args.id);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Persona image removed successfully: ${JSON.stringify(result, null, 2)}`,
+        },
+      ],
+    };
+  } catch (error) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error removing persona image: ${getErrorMessage(error)}`,
         },
       ],
       isError: true,

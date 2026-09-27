@@ -1,10 +1,22 @@
 import { validateScheduleAdvance } from './validator.js';
+import { readFile } from 'node:fs/promises';
+import { basename, extname } from 'node:path';
 
 export interface PostEngineerClientOptions {
   apiKey?: string;
   baseUrl?: string;
   /** Clock override used by schedule validation (tests); defaults to the real clock. */
   now?: () => Date;
+}
+
+/** One image for a persona's image library, read from a local file. */
+export interface PersonaLibraryImageInput {
+  /** Local file path (JPG, PNG, or WebP, max 10MB). */
+  path: string;
+  /** Short tag for deterministic per-video matching (e.g. casual, formal). */
+  tag?: string;
+  /** Description of the photo for keyword matching. */
+  description?: string;
 }
 
 export interface CreatePersonaInput {
@@ -18,12 +30,18 @@ export interface CreatePersonaInput {
   niche?: string;
   faceMixPercent?: number;
   faceQuality?: 'ok' | 'very_good';
+  /** Up to 10 local images of the same person for the image library. */
+  images?: PersonaLibraryImageInput[];
+  /** Index into images[] marking the primary library image. */
+  imagePrimaryIndex?: number;
 }
 
 export interface GenerateVideoJobInput {
   personaId: string;
   scriptPrompt?: string;
   audioUrl?: string;
+  /** Library image ID overriding the deterministic per-video selection. */
+  imageId?: string;
 }
 
 export interface UpdatePersonaInput {
@@ -57,6 +75,19 @@ const PRODUCTION_API_URL = 'https://post-engineer.com';
 const REQUEST_TIMEOUT_MS = 30_000;
 // Bound how much of an upstream error body can flow into agent-visible output.
 const MAX_ERROR_BODY_CHARS = 200;
+const MAX_LIBRARY_IMAGES = 10;
+
+function mimeTypeForImagePath(path: string): string {
+  const extension = extname(path).toLowerCase();
+  if (extension === '.png') return 'image/png';
+  if (extension === '.webp') return 'image/webp';
+  return 'image/jpeg';
+}
+
+async function imageFormFile(path: string): Promise<Blob> {
+  const buffer = await readFile(path);
+  return new Blob([buffer], { type: mimeTypeForImagePath(path) });
+}
 
 // The bearer key is sent to this URL, so fail fast on a malformed or
 // non-https override instead of silently targeting it. Loopback http is
@@ -149,6 +180,27 @@ export class PostEngineerClient {
     formData.set('niche', input.niche ?? 'General');
     formData.set('faceMixPercent', String(hasAvatar ? input.faceMixPercent ?? 50 : 0));
     formData.set('faceQuality', hasAvatar ? input.faceQuality ?? 'very_good' : 'ok');
+    const images = input.images ?? [];
+    if (images.length > 0) {
+      if (!hasAvatar) {
+        throw new Error('Library images require a persona avatar: provide avatarUrl together with images.');
+      }
+      if (images.length > MAX_LIBRARY_IMAGES) {
+        throw new Error(`At most ${MAX_LIBRARY_IMAGES} library images are allowed per persona.`);
+      }
+      const tags: string[] = [];
+      const descriptions: string[] = [];
+      for (const image of images) {
+        formData.append('images', await imageFormFile(image.path), basename(image.path));
+        tags.push(image.tag ?? '');
+        descriptions.push(image.description ?? '');
+      }
+      formData.set('imageTags', JSON.stringify(tags));
+      formData.set('imageDescriptions', JSON.stringify(descriptions));
+      if (input.imagePrimaryIndex !== undefined) {
+        formData.set('imagePrimaryIndex', String(input.imagePrimaryIndex));
+      }
+    }
     return this.request(
       '/api/persona',
       { method: 'POST', headers: this.getHeaders(false), body: formData },
@@ -277,6 +329,7 @@ export class PostEngineerClient {
           personaId: input.personaId,
           video_script_prompt: input.scriptPrompt,
           audio_url: input.audioUrl,
+          image_id: input.imageId,
         }),
       },
       'generate video job'
@@ -288,6 +341,56 @@ export class PostEngineerClient {
       `/api/persona/video-status/${encodeURIComponent(taskId)}`,
       { method: 'GET', headers: this.getHeaders() },
       'get video status'
+    );
+  }
+
+  async listPersonaImages(personaId: string): Promise<unknown> {
+    return this.request(
+      `/api/persona/images?personaId=${encodeURIComponent(personaId)}`,
+      { method: 'GET', headers: this.getHeaders() },
+      'list persona images'
+    );
+  }
+
+  async addPersonaImage(
+    personaId: string,
+    image: PersonaLibraryImageInput & { isPrimary?: boolean }
+  ): Promise<unknown> {
+    const formData = new FormData();
+    formData.set('personaId', personaId);
+    formData.append('image', await imageFormFile(image.path), basename(image.path));
+    if (image.tag !== undefined) formData.set('tag', image.tag);
+    if (image.description !== undefined) formData.set('description', image.description);
+    if (image.isPrimary !== undefined) formData.set('isPrimary', String(image.isPrimary));
+    return this.request(
+      '/api/persona/images',
+      { method: 'POST', headers: this.getHeaders(false), body: formData },
+      'add persona image'
+    );
+  }
+
+  async updatePersonaImage(input: {
+    id: string;
+    tag?: string;
+    description?: string;
+    isPrimary?: boolean;
+  }): Promise<unknown> {
+    return this.request(
+      '/api/persona/images',
+      {
+        method: 'PATCH',
+        headers: this.getHeaders(),
+        body: JSON.stringify(input),
+      },
+      'update persona image'
+    );
+  }
+
+  async deletePersonaImage(id: string): Promise<unknown> {
+    return this.request(
+      `/api/persona/images?id=${encodeURIComponent(id)}`,
+      { method: 'DELETE', headers: this.getHeaders() },
+      'delete persona image'
     );
   }
 

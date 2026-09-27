@@ -12,12 +12,19 @@ import {
   photoExtensionOf,
   VALID_VIDEO_ASPECTS,
 } from '@/lib/persona-schema';
+import {
+  addLibraryImages,
+  setPrimaryLibraryImage,
+  validateImageFile,
+  MAX_PERSONA_IMAGES,
+  type LibraryImageInput,
+} from '@/lib/persona-images';
 
 //---------------
-// POST /api/persona — cria persona do usuário:
-// sobe foto/áudio para o bucket privado 'personas' no Supabase e
-// insere o registro na tabela public.personas (RLS por user_id).
-// Validação = schema zod compartilhado (lib/persona-schema.ts).
+// POST /api/persona — creates the user's persona:
+// uploads photo/audio to the private 'personas' bucket on Supabase and
+// inserts the record into public.personas (RLS by user_id).
+// Validation = shared zod schema (lib/persona-schema.ts).
 //---------------
 
 function errorResponse(status: number, error: string): NextResponse {
@@ -64,6 +71,27 @@ export async function POST(request: Request): Promise<NextResponse> {
     return errorResponse(400, voiceError);
   }
 
+  // Optional image library at creation: `images` (files) with parallel
+  // `imageTags` / `imageDescriptions` JSON arrays and an optional
+  // `imagePrimaryIndex`. Pre-validated here so a bad file fails before any
+  // upload or insert happens.
+  const libraryFiles = formData
+    .getAll('images')
+    .filter((value): value is File => value instanceof File && value.size > 0);
+  const libraryInputs: LibraryImageInput[] = libraryFiles.map((file, index) => ({
+    file,
+    tag: parseJsonStringArray(formData.get('imageTags'))[index] ?? '',
+    description: parseJsonStringArray(formData.get('imageDescriptions'))[index] ?? '',
+  }));
+  const libraryError = validateLibraryInputs(
+    body.values.personaMode,
+    body.values.faceMixPercent,
+    libraryInputs,
+  );
+  if (libraryError) {
+    return errorResponse(400, libraryError);
+  }
+
   const photoPath =
     body.photo && body.photoExtension
       ? await uploadFile(supabase, user.id, body.photo, body.photoExtension)
@@ -96,7 +124,80 @@ export async function POST(request: Request): Promise<NextResponse> {
     return errorResponse(500, 'Failed to create persona.');
   }
 
-  return NextResponse.json({ success: true, personaId: persona.id });
+  let libraryImageIds: string[] = [];
+  if (libraryInputs.length > 0) {
+    const added = await addLibraryImages(supabase, user.id, persona.id, libraryInputs);
+    if ('error' in added) {
+      // Roll back the whole creation so a half-written persona never survives.
+      await supabase.from('personas').delete().eq('id', persona.id);
+      if (photoPath) {
+        await supabase.storage.from('personas').remove([photoPath]);
+      }
+      return errorResponse(added.status, added.error);
+    }
+    libraryImageIds = added.images.map((image) => image.id);
+    const primaryIndex = parsePrimaryIndex(formData.get('imagePrimaryIndex'));
+    if (primaryIndex !== null && primaryIndex < added.images.length) {
+      const primaryError = await setPrimaryLibraryImage(
+        supabase,
+        persona.id,
+        added.images[primaryIndex].id,
+      );
+      if (primaryError) {
+        console.error('[api/persona] set primary library image failed', {
+          error: primaryError.error,
+        });
+      }
+    }
+  }
+
+  return NextResponse.json({ success: true, personaId: persona.id, imageIds: libraryImageIds });
+}
+
+//---------------
+// parseJsonStringArray — reads an optional JSON array of strings from a
+// multipart field (e.g. imageTags). Returns [] on missing/invalid input.
+//---------------
+function parseJsonStringArray(value: FormDataEntryValue | null): string[] {
+  if (typeof value !== 'string' || value.trim() === '') return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed)
+      ? parsed.filter((entry): entry is string => typeof entry === 'string')
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function parsePrimaryIndex(value: FormDataEntryValue | null): number | null {
+  if (typeof value !== 'string' || value.trim() === '') return null;
+  const index = Number.parseInt(value, 10);
+  return Number.isInteger(index) && index >= 0 ? index : null;
+}
+
+//---------------
+// validateLibraryInputs — library rules at creation:
+// - faceless personas (or faceMixPercent 0) accept no images at all;
+// - at most MAX_PERSONA_IMAGES files, each a valid image.
+//---------------
+function validateLibraryInputs(
+  personaMode: 'persona' | 'faceless',
+  faceMixPercent: number | null,
+  inputs: LibraryImageInput[],
+): string | null {
+  if (inputs.length === 0) return null;
+  if (personaMode === 'faceless' || faceMixPercent === 0) {
+    return 'Faceless persona must not include library images.';
+  }
+  if (inputs.length > MAX_PERSONA_IMAGES) {
+    return `Image library accepts at most ${MAX_PERSONA_IMAGES} images.`;
+  }
+  for (const input of inputs) {
+    const validated = validateImageFile(input.file);
+    if ('error' in validated) return validated.error;
+  }
+  return null;
 }
 
 export async function PATCH(request: Request): Promise<NextResponse> {
@@ -185,8 +286,8 @@ export async function PATCH(request: Request): Promise<NextResponse> {
 }
 
 //---------------
-// parsePatchBody — todos os campos são opcionais na edição; retorna
-// null para os que não vieram no multipart.
+// parsePatchBody — all fields are optional on edit; returns
+// null for the ones missing from the multipart body.
 //---------------
 interface PersonaPatchBody {
   name: string | null;
@@ -308,8 +409,8 @@ export async function DELETE(request: Request): Promise<NextResponse> {
 }
 
 //---------------
-// isFilePart — os arquivos vêm do runtime do servidor (undici), cujo File
-// não é o mesmo construtor do ambiente de testes; checagem estrutural.
+// isFilePart — files come from the server runtime (undici), whose File
+// is not the same constructor as the test environment's; structural check.
 //---------------
 function isFilePart(value: FormDataEntryValue | null): value is File {
   if (typeof value !== 'object' || value === null) return false;
@@ -332,7 +433,7 @@ function optionalString(value: FormDataEntryValue | null): string | null {
 }
 
 //---------------
-// uploadFile — sobe o arquivo no bucket 'personas' sob a pasta do usuário.
+// uploadFile — uploads the file to the 'personas' bucket under the user's folder.
 // Exportada para reuso por outras rotas de persona.
 //---------------
 export async function uploadFile(

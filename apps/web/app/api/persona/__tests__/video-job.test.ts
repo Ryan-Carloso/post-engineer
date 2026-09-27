@@ -77,7 +77,7 @@ type SessionResult = Promise<{
   error: null;
 }>;
 
-function mockSupabase(persona: Record<string, unknown> | null, opts?: { noSession?: boolean; noToken?: boolean }) {
+function mockSupabase(persona: Record<string, unknown> | null, opts?: { noSession?: boolean; noToken?: boolean; libraryImages?: Array<Record<string, unknown>> }) {
   const getUser = vi.fn<() => AuthResult>(async () =>
     opts?.noSession
       ? { data: { user: null }, error: null }
@@ -93,7 +93,20 @@ function mockSupabase(persona: Record<string, unknown> | null, opts?: { noSessio
       getUser,
       getSession,
     },
-    from: vi.fn(() => ({
+    from: vi.fn((table: string) => {
+      // Persona image library: deterministic selection reads the library
+      // ordered by creation. Default is empty so legacy behavior is tested
+      // unless opts.libraryImages overrides it.
+      if (table === 'persona_images') {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              order: vi.fn(async () => ({ data: opts?.libraryImages ?? [], error: null })),
+            })),
+          })),
+        };
+      }
+      return {
       select: vi.fn(() => ({
         eq: vi.fn(() => ({
           eq: vi.fn(() => ({
@@ -109,7 +122,7 @@ function mockSupabase(persona: Record<string, unknown> | null, opts?: { noSessio
           eq: vi.fn().mockResolvedValue({ error: null }),
         })),
       })),
-    })),
+    }}),
     storage: {
       from: vi.fn(() => ({
         createSignedUrl: vi.fn(async (path: string) => ({
@@ -2052,6 +2065,96 @@ describe('POST /api/persona/video-job', () => {
         startSpy.mockRestore();
         updateSpy.mockRestore();
       }
+    });
+  });
+
+  //---------------
+  // Persona image library: deterministic per-video selection.
+  //---------------
+
+  describe('image library selection', () => {
+    const LIBRARY = [
+      {
+        id: 'img-casual',
+        image_path: `${USER_ID}/lib/casual.png`,
+        tag: 'casual',
+        description: 'relaxed weekend look',
+        is_primary: true,
+      },
+      {
+        id: 'img-formal',
+        image_path: `${USER_ID}/lib/formal.png`,
+        tag: 'formal',
+        description: 'business suit at the office',
+        is_primary: false,
+      },
+    ];
+
+    function forwardedPhotoUrl(): string | undefined {
+      const forwarded = JSON.parse(
+        (fetchMock.mock.calls[0]?.[1]?.body ?? '{}') as string,
+      ) as { persona: { photo_url?: string } };
+      return forwarded.persona.photo_url;
+    }
+
+    function engineOk(): void {
+      fetchMock.mockResolvedValue(
+        new Response(JSON.stringify({ status: 200, data: { task_id: 't-1' } }), { status: 200 }),
+      );
+    }
+
+    it('selects the library image matching the topic over the legacy photo', async () => {
+      mockSupabase(PERSONA, { libraryImages: LIBRARY });
+      engineOk();
+
+      const res = await POST(
+        jsonRequest({ personaId: 'p-1', video_subject: 'business office meeting' }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(forwardedPhotoUrl()).toBe(
+        `https://supabase.test/signed/${USER_ID}/lib/formal.png`,
+      );
+    });
+
+    it('honors an explicit image_id (and the imageId camelCase alias)', async () => {
+      mockSupabase(PERSONA, { libraryImages: LIBRARY });
+      engineOk();
+
+      const res = await POST(
+        jsonRequest({ personaId: 'p-1', video_subject: 'business office meeting', imageId: 'img-casual' }),
+      );
+
+      expect(res.status).toBe(200);
+      // image_id wins even though the topic matches the formal image.
+      expect(forwardedPhotoUrl()).toBe(
+        `https://supabase.test/signed/${USER_ID}/lib/casual.png`,
+      );
+    });
+
+    it('returns 404 for an image_id outside the persona library', async () => {
+      mockSupabase(PERSONA, { libraryImages: LIBRARY });
+
+      const res = await POST(
+        jsonRequest({ personaId: 'p-1', video_subject: 'business office meeting', image_id: 'nope' }),
+      );
+
+      expect(res.status).toBe(404);
+      const body = (await res.json()) as { success: boolean; error: string };
+      expect(body.error).toContain('image library');
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('keeps the legacy photo when the library is empty', async () => {
+      mockSupabase(PERSONA);
+      engineOk();
+
+      const res = await POST(
+        jsonRequest({ personaId: 'p-1', video_subject: 'business office meeting' }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(forwardedPhotoUrl()).toBe('https://supabase.test/signed/user-uuid-1/foto.png');
     });
   });
 });
