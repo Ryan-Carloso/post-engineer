@@ -26,6 +26,7 @@
     "test": {
       "cache": true,
       "executor": "nx:run-commands",
+      "dependsOn": ["build"],
       "options": {
         "command": "pnpm test",
         "cwd": "apps/mcp"

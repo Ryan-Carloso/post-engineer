@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { spawn, type ChildProcess } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,11 +30,17 @@ describe('local-only transport', () => {
       'dist',
       'index.js',
     );
+    if (!existsSync(entry)) {
+      throw new Error(`dist/index.js not found — run 'pnpm build' before 'pnpm test' (got ${entry})`);
+    }
     let child: ChildProcess | undefined;
     try {
       child = spawn(process.execPath, [entry, '--http'], {
         env: { ...process.env, MCP_PORT: String(TEST_PORT) },
         stdio: 'ignore',
+      });
+      child.on('error', (err) => {
+        throw err;
       });
       // Give the process time to bind the port, if it were going to.
       await delay(2000);

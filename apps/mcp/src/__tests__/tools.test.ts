@@ -13,6 +13,9 @@ import {
   handleScheduleVideo,
   handleConnectAccount,
   ListPostsSchema,
+  ScheduleVideoSchema,
+  CreatePersonaSchema,
+  UpdatePersonaSchema,
 } from '../tools.js';
 import type { PostEngineerClient } from '../client.js';
 
@@ -306,5 +309,71 @@ describe('MCP Tool Handlers', () => {
     const text = (response.content[0] as { text: string }).text;
     expect(text).toMatch(/Invalid handle or app password/);
     expect(text).not.toContain('super-secret-password');
+  });
+});
+
+describe('schedule account validation', () => {
+  const baseArgs = {
+    personaId: 'persona-123',
+    providers: ['youtube'] as const,
+    scheduledAt: '2026-10-18T12:00:00.000Z',
+  };
+
+  it('ScheduleVideoSchema rejects a provider with no account IDs', () => {
+    const result = ScheduleVideoSchema.safeParse({
+      ...baseArgs,
+      providers: ['youtube'],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('ScheduleVideoSchema accepts a provider with account IDs', () => {
+    const result = ScheduleVideoSchema.safeParse({
+      ...baseArgs,
+      providers: ['youtube'],
+      youtubeAccountIds: ['yt-1'],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('handleScheduleVideo fails fast without calling the API when account IDs are missing', async () => {
+    const client = { createSchedule: vi.fn() } as unknown as PostEngineerClient;
+    const response = await handleScheduleVideo(client, {
+      personaId: 'persona-123',
+      providers: ['youtube'],
+      scheduledAt: '2026-10-18T12:00:00.000Z',
+    } as never);
+
+    expect(response.isError).toBe(true);
+    expect((response.content[0] as { text: string }).text).toMatch(/youtube.*account|account.*youtube/i);
+    expect(client.createSchedule).not.toHaveBeenCalled();
+  });
+});
+
+describe('schema bounds', () => {
+  it('CreatePersonaSchema accepts paragraphNumber up to 10 (matches the API)', () => {
+    const result = CreatePersonaSchema.safeParse({
+      name: 'x',
+      paragraphNumber: 10,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('UpdatePersonaSchema rejects avatarUrl: null (clearing is not supported)', () => {
+    const result = UpdatePersonaSchema.safeParse({
+      personaId: 'p1',
+      avatarUrl: null,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('handleConnectAccount errors clearly when the response has no auth_url', async () => {
+    const client = { getOAuthConnectUrl: vi.fn() } as unknown as PostEngineerClient;
+    vi.mocked(client.getOAuthConnectUrl).mockResolvedValue({ success: true });
+
+    const response = await handleConnectAccount(client, { provider: 'youtube' });
+
+    expect(response.isError).toBe(true);
+    expect((response.content[0] as { text: string }).text).toMatch(/auth_url/i);
   });
 });

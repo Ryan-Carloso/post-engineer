@@ -4,6 +4,26 @@ import type { PostEngineerClient } from './client.js';
 
 export type McpToolResponse = CallToolResult;
 
+export function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+// Each provider in `providers` must map to a non-empty account-ID list.
+export function missingProviderAccountIds(args: {
+  providers: string[];
+  youtubeAccountIds?: string[];
+  instagramAccountIds?: string[];
+  linkedinAccountIds?: string[];
+}): string[] {
+  const idsByProvider: Record<string, string[] | undefined> = {
+    youtube: args.youtubeAccountIds,
+    instagram: args.instagramAccountIds,
+    linkedin: args.linkedinAccountIds,
+  };
+  return args.providers.filter((provider) => (idsByProvider[provider] ?? []).length === 0);
+}
+
 export const CreatePersonaSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   avatarUrl: z.string().url().optional().nullable(),
@@ -11,7 +31,7 @@ export const CreatePersonaSchema = z.object({
   language: z.string().default('en-US'),
   videoAspect: z.enum(['9:16', '16:9']).default('9:16'),
   scriptPrompt: z.string().optional().default(''),
-  paragraphNumber: z.number().int().min(1).max(5).default(1),
+  paragraphNumber: z.number().int().min(1).max(10).default(1),
   niche: z.string().optional().default('General'),
   faceMixPercent: z.number().min(0).max(100).default(50),
   faceQuality: z.enum(['ok', 'very_good']).default('very_good'),
@@ -26,7 +46,8 @@ export const ListFacesSchema = z.object({});
 export const UpdatePersonaSchema = z.object({
   personaId: z.string().min(1, 'personaId is required'),
   name: z.string().min(1).optional(),
-  avatarUrl: z.string().url().optional().nullable(),
+  // No .nullable(): the API has no "clear avatar" sentinel — null would be silently ignored.
+  avatarUrl: z.string().url().optional(),
   voiceId: z.string().optional(),
   language: z.string().optional(),
   videoAspect: z.enum(['9:16', '16:9']).optional(),
@@ -65,19 +86,23 @@ export const GetVideoStatusSchema = z.object({
   taskId: z.string().min(1, 'taskId is required'),
 });
 
-export const ScheduleVideoSchema = z.object({
-  personaId: z.string().min(1, 'personaId is required'),
-  providers: z.array(z.enum(['youtube', 'instagram', 'linkedin'])).min(1, 'At least one provider required'),
-  youtubeAccountIds: z.array(z.string()).optional().default([]),
-  instagramAccountIds: z.array(z.string()).optional().default([]),
-  linkedinAccountIds: z.array(z.string()).optional().default([]),
-  scheduledAt: z.string().describe('Target ISO date time for scheduling. Must be between 24h and 30 days in the future.'),
-  daysOfWeek: z.array(z.number().int().min(0).max(6)).optional(),
-  startHour: z.number().int().min(0).max(23).optional(),
-  endHour: z.number().int().min(0).max(23).optional(),
-  postsPerDay: z.number().int().min(1).max(10).optional(),
-  timezone: z.string().optional().default('UTC'),
-});
+export const ScheduleVideoSchema = z
+  .object({
+    personaId: z.string().min(1, 'personaId is required'),
+    providers: z.array(z.enum(['youtube', 'instagram', 'linkedin'])).min(1, 'At least one provider required'),
+    youtubeAccountIds: z.array(z.string()).optional().default([]),
+    instagramAccountIds: z.array(z.string()).optional().default([]),
+    linkedinAccountIds: z.array(z.string()).optional().default([]),
+    scheduledAt: z.string().describe('Target ISO date time for scheduling. Must be between 24h and 30 days in the future.'),
+    daysOfWeek: z.array(z.number().int().min(0).max(6)).optional(),
+    startHour: z.number().int().min(0).max(23).optional(),
+    endHour: z.number().int().min(0).max(23).optional(),
+    postsPerDay: z.number().int().min(1).max(10).optional(),
+    timezone: z.string().optional().default('UTC'),
+  })
+  .refine((args) => missingProviderAccountIds(args).length === 0, (args) => ({
+    message: `Each provider requires at least one account ID — missing for: ${missingProviderAccountIds(args).join(', ')}. Discover them with list_social_accounts first.`,
+  }));
 
 export async function handleCreatePersona(
   client: PostEngineerClient,
@@ -98,7 +123,7 @@ export async function handleCreatePersona(
       content: [
         {
           type: 'text',
-          text: `Error creating persona: ${(error as Error).message}`,
+          text: `Error creating persona: ${getErrorMessage(error)}`,
         },
       ],
       isError: true,
@@ -124,7 +149,7 @@ export async function handleListPersonas(
       content: [
         {
           type: 'text',
-          text: `Error listing personas: ${(error as Error).message}`,
+          text: `Error listing personas: ${getErrorMessage(error)}`,
         },
       ],
       isError: true,
@@ -150,7 +175,7 @@ export async function handleListVoices(
       content: [
         {
           type: 'text',
-          text: `Error listing voices: ${(error as Error).message}`,
+          text: `Error listing voices: ${getErrorMessage(error)}`,
         },
       ],
       isError: true,
@@ -177,7 +202,7 @@ export async function handleListFaces(
       content: [
         {
           type: 'text',
-          text: `Error listing faces: ${(error as Error).message}`,
+          text: `Error listing faces: ${getErrorMessage(error)}`,
         },
       ],
       isError: true,
@@ -204,7 +229,7 @@ export async function handleUpdatePersona(
       content: [
         {
           type: 'text',
-          text: `Error updating persona: ${(error as Error).message}`,
+          text: `Error updating persona: ${getErrorMessage(error)}`,
         },
       ],
       isError: true,
@@ -230,7 +255,7 @@ export async function handleListSocialAccounts(
       content: [
         {
           type: 'text',
-          text: `Error listing social accounts: ${(error as Error).message}`,
+          text: `Error listing social accounts: ${getErrorMessage(error)}`,
         },
       ],
       isError: true,
@@ -269,7 +294,7 @@ export async function handleConnectAccount(
         content: [
           {
             type: 'text',
-            text: `Error connecting Bluesky account: ${(error as Error).message}`,
+            text: `Error connecting Bluesky account: ${getErrorMessage(error)}`,
           },
         ],
         isError: true,
@@ -278,7 +303,19 @@ export async function handleConnectAccount(
   }
 
   try {
-    const result = (await client.getOAuthConnectUrl(args.provider)) as { auth_url?: string };
+    const parsed = z.object({ auth_url: z.string().url() }).safeParse(await client.getOAuthConnectUrl(args.provider));
+    if (!parsed.success) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: 'Error: the connect endpoint did not return an auth_url.',
+          },
+        ],
+        isError: true,
+      };
+    }
+    const result = parsed.data;
     return {
       content: [
         {
@@ -295,7 +332,7 @@ export async function handleConnectAccount(
       content: [
         {
           type: 'text',
-          text: `Error getting OAuth connect URL: ${(error as Error).message}`,
+          text: `Error getting OAuth connect URL: ${getErrorMessage(error)}`,
         },
       ],
       isError: true,
@@ -321,7 +358,7 @@ export async function handleListSchedules(
       content: [
         {
           type: 'text',
-          text: `Error listing schedules: ${(error as Error).message}`,
+          text: `Error listing schedules: ${getErrorMessage(error)}`,
         },
       ],
       isError: true,
@@ -348,7 +385,7 @@ export async function handleListPosts(
       content: [
         {
           type: 'text',
-          text: `Error listing posts: ${(error as Error).message}`,
+          text: `Error listing posts: ${getErrorMessage(error)}`,
         },
       ],
       isError: true,
@@ -375,7 +412,7 @@ export async function handleCancelSchedule(
       content: [
         {
           type: 'text',
-          text: `Error cancelling schedule: ${(error as Error).message}`,
+          text: `Error cancelling schedule: ${getErrorMessage(error)}`,
         },
       ],
       isError: true,
@@ -401,7 +438,7 @@ export async function handleGetTokenBalance(
       content: [
         {
           type: 'text',
-          text: `Error getting token balance: ${(error as Error).message}`,
+          text: `Error getting token balance: ${getErrorMessage(error)}`,
         },
       ],
       isError: true,
@@ -428,7 +465,7 @@ export async function handleGenerateVideo(
       content: [
         {
           type: 'text',
-          text: `Error generating video: ${(error as Error).message}`,
+          text: `Error generating video: ${getErrorMessage(error)}`,
         },
       ],
       isError: true,
@@ -455,7 +492,7 @@ export async function handleGetVideoStatus(
       content: [
         {
           type: 'text',
-          text: `Error fetching video status: ${(error as Error).message}`,
+          text: `Error fetching video status: ${getErrorMessage(error)}`,
         },
       ],
       isError: true,
@@ -467,6 +504,18 @@ export async function handleScheduleVideo(
   client: PostEngineerClient,
   args: z.infer<typeof ScheduleVideoSchema>
 ): Promise<McpToolResponse> {
+  const missing = missingProviderAccountIds(args);
+  if (missing.length > 0) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error: each provider requires at least one account ID — missing for: ${missing.join(', ')}. Discover them with list_social_accounts first.`,
+        },
+      ],
+      isError: true,
+    };
+  }
   try {
     const result = await client.createSchedule(args);
     return {
@@ -482,7 +531,7 @@ export async function handleScheduleVideo(
       content: [
         {
           type: 'text',
-          text: `Error scheduling video: ${(error as Error).message}`,
+          text: `Error scheduling video: ${getErrorMessage(error)}`,
         },
       ],
       isError: true,

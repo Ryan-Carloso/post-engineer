@@ -543,3 +543,68 @@ describe('PostEngineerClient', () => {
     ).rejects.toThrow(/Failed to connect Bluesky account: 400/);
   });
 });
+
+describe('PostEngineerClient configuration', () => {
+  it('uses the default production URL when no override is given', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true }),
+    });
+    const c = new PostEngineerClient({ apiKey: 'k' });
+    await c.listPersonas();
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://post-engineer.com/api/persona/list',
+      expect.anything()
+    );
+  });
+
+  it('accepts a baseUrl override via options', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true }),
+    });
+    const c = new PostEngineerClient({ apiKey: 'k', baseUrl: 'https://staging.example.test' });
+    await c.listPersonas();
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://staging.example.test/api/persona/list',
+      expect.anything()
+    );
+  });
+
+  it('accepts a baseUrl override via POST_ENGINEER_API_URL', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true }),
+    });
+    const c = new PostEngineerClient({ apiKey: 'k' });
+    const prev = process.env.POST_ENGINEER_API_URL;
+    process.env.POST_ENGINEER_API_URL = 'https://env.example.test';
+    try {
+      const c2 = new PostEngineerClient({ apiKey: 'k' });
+      await c2.listPersonas();
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://env.example.test/api/persona/list',
+        expect.anything()
+      );
+    } finally {
+      if (prev === undefined) delete process.env.POST_ENGINEER_API_URL;
+      else process.env.POST_ENGINEER_API_URL = prev;
+    }
+    void c;
+  });
+
+  it('sends an abort signal so hung requests cannot block forever', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true }),
+    });
+    const c = new PostEngineerClient({ apiKey: 'k' });
+    await c.listPersonas();
+    const init = vi.mocked(global.fetch).mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+  });
+});

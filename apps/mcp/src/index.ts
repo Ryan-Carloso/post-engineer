@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
@@ -20,11 +22,19 @@ import {
   handleScheduleVideo,
 } from './tools.js';
 
+export function requireApiKey(env: NodeJS.ProcessEnv = process.env): string {
+  const apiKey = env.POST_ENGINEER_API_KEY;
+  if (!apiKey) {
+    throw new Error('POST_ENGINEER_API_KEY is required');
+  }
+  return apiKey;
+}
+
 export function createPostEngineerMcpServer(client?: PostEngineerClient): McpServer {
   const apiClient = client ?? new PostEngineerClient({ apiKey: process.env.POST_ENGINEER_API_KEY });
   const server = new McpServer({
     name: 'post-engineer-mcp',
-    version: '1.1.0',
+    version: '1.2.0',
   });
 
   server.tool(
@@ -37,7 +47,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
       language: z.string().default('en-US').describe('Language code (e.g. pt-BR, en-US)'),
       videoAspect: z.enum(['9:16', '16:9']).default('9:16').describe('Video aspect ratio'),
       scriptPrompt: z.string().optional().default('').describe('System prompt instructions for video scripts'),
-      paragraphNumber: z.number().int().min(1).max(5).default(1).describe('Number of paragraphs'),
+      paragraphNumber: z.number().int().min(1).max(10).default(1).describe('Number of paragraphs'),
       niche: z.string().optional().default('General').describe('Content niche topic'),
       faceMixPercent: z.number().min(0).max(100).default(50),
        faceQuality: z.enum(['ok', 'very_good']).default('very_good'),
@@ -80,7 +90,8 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
     {
       personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona to update'),
       name: z.string().min(1).optional().describe('New name for the persona'),
-      avatarUrl: z.string().url().optional().nullable().describe('New public avatar image URL'),
+      // No .nullable(): the API has no "clear avatar" sentinel — null would be silently ignored.
+      avatarUrl: z.string().url().optional().describe('New public avatar image URL'),
       voiceId: z.string().optional().describe('New voice ID (see list_voices)'),
       language: z.string().optional().describe('New language code (e.g. pt-BR, en-US)'),
       videoAspect: z.enum(['9:16', '16:9']).optional().describe('New video aspect ratio'),
@@ -208,14 +219,21 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
   return server;
 }
 
-import { fileURLToPath } from 'url';
-
 export function isMainModule(): boolean {
-  return process.argv[1] === fileURLToPath(import.meta.url);
+  const entry = process.argv[1];
+  if (!entry) return false;
+  try {
+    // Compare real paths: the published bin is launched through a symlinked .bin entry.
+    return realpathSync(entry) === fileURLToPath(import.meta.url);
+  } catch {
+    return false;
+  }
 }
 
 async function main() {
-  const server = createPostEngineerMcpServer();
+  // Fail fast: without a key every tool call would fail with an opaque 401.
+  const apiKey = requireApiKey();
+  const server = createPostEngineerMcpServer(new PostEngineerClient({ apiKey }));
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

@@ -2,6 +2,7 @@ import { validateScheduleAdvance } from './validator.js';
 
 export interface PostEngineerClientOptions {
   apiKey?: string;
+  baseUrl?: string;
 }
 
 export interface CreatePersonaInput {
@@ -26,7 +27,7 @@ export interface GenerateVideoJobInput {
 export interface UpdatePersonaInput {
   personaId: string;
   name?: string;
-  avatarUrl?: string | null;
+  avatarUrl?: string;
   voiceId?: string;
   language?: string;
   videoAspect?: '9:16' | '16:9';
@@ -51,13 +52,15 @@ export interface CreateScheduleInput {
 }
 
 const PRODUCTION_API_URL = 'https://post-engineer.com';
+// Hung requests must not block the stdio tool call (and the agent session) forever.
+const REQUEST_TIMEOUT_MS = 30_000;
 
 export class PostEngineerClient {
   private readonly baseUrl: string;
   private readonly apiKey?: string;
 
   constructor(options: PostEngineerClientOptions = {}) {
-    this.baseUrl = PRODUCTION_API_URL;
+    this.baseUrl = options.baseUrl ?? process.env.POST_ENGINEER_API_URL ?? PRODUCTION_API_URL;
     this.apiKey = options.apiKey;
   }
 
@@ -72,8 +75,21 @@ export class PostEngineerClient {
     return headers;
   }
 
+  private async request(path: string, init: RequestInit, action: string): Promise<unknown> {
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      ...init,
+      signal: init.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to ${action}: ${response.status} ${errorText}`);
+    }
+
+    return response.json();
+  }
+
   async createPersona(input: CreatePersonaInput): Promise<unknown> {
-    const url = `${this.baseUrl}/api/persona`;
     const formData = new FormData();
     const hasAvatar = input.avatarUrl !== undefined && input.avatarUrl !== null && input.avatarUrl.length > 0;
     formData.set('name', input.name);
@@ -87,230 +103,132 @@ export class PostEngineerClient {
     formData.set('niche', input.niche ?? 'General');
     formData.set('faceMixPercent', String(hasAvatar ? input.faceMixPercent ?? 50 : 0));
     formData.set('faceQuality', hasAvatar ? input.faceQuality ?? 'very_good' : 'ok');
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: this.getHeaders(false),
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to create persona: ${response.status} ${errorText}`);
-    }
-
-    return response.json();
+    return this.request(
+      '/api/persona',
+      { method: 'POST', headers: this.getHeaders(false), body: formData },
+      'create persona'
+    );
   }
 
   async listPersonas(): Promise<unknown> {
-    const url = `${this.baseUrl}/api/persona/list`;
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: this.getHeaders(),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to list personas: ${response.status} ${errorText}`);
-    }
-
-    return response.json();
+    return this.request(
+      '/api/persona/list',
+      { method: 'GET', headers: this.getHeaders() },
+      'list personas'
+    );
   }
 
   async listVoices(): Promise<unknown> {
-    const url = `${this.baseUrl}/api/persona/voices`;
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: this.getHeaders(),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to list voices: ${response.status} ${errorText}`);
-    }
-
-    return response.json();
+    return this.request(
+      '/api/persona/voices',
+      { method: 'GET', headers: this.getHeaders() },
+      'list voices'
+    );
   }
 
   async listFaces(): Promise<unknown> {
-    const url = `${this.baseUrl}/api/persona/faces`;
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: this.getHeaders(),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to list faces: ${response.status} ${errorText}`);
-    }
-
-    return response.json();
+    return this.request(
+      '/api/persona/faces',
+      { method: 'GET', headers: this.getHeaders() },
+      'list faces'
+    );
   }
 
   async updatePersona(input: UpdatePersonaInput): Promise<unknown> {
-    const url = `${this.baseUrl}/api/persona?personaId=${encodeURIComponent(input.personaId)}`;
     const formData = new FormData();
     if (input.name !== undefined) formData.set('name', input.name);
-    if (input.avatarUrl !== undefined && input.avatarUrl !== null) formData.set('avatarUrl', input.avatarUrl);
+    if (input.avatarUrl !== undefined) formData.set('avatarUrl', input.avatarUrl);
     if (input.voiceId !== undefined) formData.set('voiceId', input.voiceId);
     if (input.language !== undefined) formData.set('language', input.language);
     if (input.videoAspect !== undefined) formData.set('videoAspect', input.videoAspect);
     if (input.scriptPrompt !== undefined) formData.set('scriptPrompt', input.scriptPrompt);
     if (input.paragraphNumber !== undefined) formData.set('paragraphNumber', String(input.paragraphNumber));
     if (input.niche !== undefined) formData.set('niche', input.niche);
-    const response = await fetch(url, {
-      method: 'PATCH',
-      headers: this.getHeaders(false),
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to update persona: ${response.status} ${errorText}`);
-    }
-
-    return response.json();
+    return this.request(
+      `/api/persona?personaId=${encodeURIComponent(input.personaId)}`,
+      { method: 'PATCH', headers: this.getHeaders(false), body: formData },
+      'update persona'
+    );
   }
 
   async listSocialAccounts(): Promise<unknown> {
-    const url = `${this.baseUrl}/api/account`;
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: this.getHeaders(),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to list social accounts: ${response.status} ${errorText}`);
-    }
-
-    return response.json();
+    return this.request(
+      '/api/account',
+      { method: 'GET', headers: this.getHeaders() },
+      'list social accounts'
+    );
   }
 
   async getOAuthConnectUrl(provider: string): Promise<unknown> {
-    const url = `${this.baseUrl}/api/account/connect-url`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify({ provider }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to get OAuth connect URL: ${response.status} ${errorText}`);
-    }
-
-    return response.json();
+    return this.request(
+      '/api/account/connect-url',
+      { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ provider }) },
+      'get OAuth connect URL'
+    );
   }
 
   async connectBlueskyAccount(handle: string, appPassword: string): Promise<unknown> {
-    const url = `${this.baseUrl}/api/bluesky-connect`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify({ handle, appPassword }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to connect Bluesky account: ${response.status} ${errorText}`);
-    }
-
-    return response.json();
+    return this.request(
+      '/api/bluesky-connect',
+      { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ handle, appPassword }) },
+      'connect Bluesky account'
+    );
   }
 
   async listSchedules(): Promise<unknown> {
-    const url = `${this.baseUrl}/api/schedule`;
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: this.getHeaders(),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to list schedules: ${response.status} ${errorText}`);
-    }
-
-    return response.json();
+    return this.request(
+      '/api/schedule',
+      { method: 'GET', headers: this.getHeaders() },
+      'list schedules'
+    );
   }
 
   async listPosts(limit = 20): Promise<unknown> {
-    const url = `${this.baseUrl}/api/schedule/status?limit=${encodeURIComponent(String(limit))}`;
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: this.getHeaders(),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to list posts: ${response.status} ${errorText}`);
-    }
-
-    return response.json();
+    return this.request(
+      `/api/schedule/status?limit=${encodeURIComponent(String(limit))}`,
+      { method: 'GET', headers: this.getHeaders() },
+      'list posts'
+    );
   }
 
   async cancelSchedule(scheduleId: string): Promise<unknown> {
-    const url = `${this.baseUrl}/api/schedule?id=${encodeURIComponent(scheduleId)}`;
-    const response = await fetch(url, {
-      method: 'DELETE',
-      headers: this.getHeaders(),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to cancel schedule: ${response.status} ${errorText}`);
-    }
-
-    return response.json();
+    return this.request(
+      `/api/schedule?id=${encodeURIComponent(scheduleId)}`,
+      { method: 'DELETE', headers: this.getHeaders() },
+      'cancel schedule'
+    );
   }
 
   async getTokenBalance(): Promise<unknown> {
-    const url = `${this.baseUrl}/api/billing/tokens`;
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: this.getHeaders(),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to get token balance: ${response.status} ${errorText}`);
-    }
-
-    return response.json();
+    return this.request(
+      '/api/billing/tokens',
+      { method: 'GET', headers: this.getHeaders() },
+      'get token balance'
+    );
   }
 
   async generateVideoJob(input: GenerateVideoJobInput): Promise<unknown> {
-    const url = `${this.baseUrl}/api/persona/video-job`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify({
-        personaId: input.personaId,
-        video_script_prompt: input.scriptPrompt,
-        audio_url: input.audioUrl,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to generate video job: ${response.status} ${errorText}`);
-    }
-
-    return response.json();
+    return this.request(
+      '/api/persona/video-job',
+      {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          personaId: input.personaId,
+          video_script_prompt: input.scriptPrompt,
+          audio_url: input.audioUrl,
+        }),
+      },
+      'generate video job'
+    );
   }
 
   async getVideoStatus(taskId: string): Promise<unknown> {
-    const url = `${this.baseUrl}/api/persona/video-status/${encodeURIComponent(taskId)}`;
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: this.getHeaders(),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to get video status: ${response.status} ${errorText}`);
-    }
-
-    return response.json();
+    return this.request(
+      `/api/persona/video-status/${encodeURIComponent(taskId)}`,
+      { method: 'GET', headers: this.getHeaders() },
+      'get video status'
+    );
   }
 
   async createSchedule(input: CreateScheduleInput): Promise<unknown> {
@@ -321,30 +239,26 @@ export class PostEngineerClient {
       }
     }
 
-    const url = `${this.baseUrl}/api/schedule`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify({
-        personaId: input.personaId,
-        providers: input.providers,
-        youtubeAccountIds: input.youtubeAccountIds ?? [],
-        instagramAccountIds: input.instagramAccountIds ?? [],
-        linkedinAccountIds: input.linkedinAccountIds ?? [],
-        scheduledAt: input.scheduledAt,
-        daysOfWeek: input.daysOfWeek,
-        startHour: input.startHour,
-        endHour: input.endHour,
-        postsPerDay: input.postsPerDay,
-        timezone: input.timezone ?? 'UTC',
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to create schedule: ${response.status} ${errorText}`);
-    }
-
-    return response.json();
+    return this.request(
+      '/api/schedule',
+      {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          personaId: input.personaId,
+          providers: input.providers,
+          youtubeAccountIds: input.youtubeAccountIds ?? [],
+          instagramAccountIds: input.instagramAccountIds ?? [],
+          linkedinAccountIds: input.linkedinAccountIds ?? [],
+          scheduledAt: input.scheduledAt,
+          daysOfWeek: input.daysOfWeek,
+          startHour: input.startHour,
+          endHour: input.endHour,
+          postsPerDay: input.postsPerDay,
+          timezone: input.timezone ?? 'UTC',
+        }),
+      },
+      'create schedule'
+    );
   }
 }

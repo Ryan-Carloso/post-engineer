@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { createPostEngineerMcpServer, isMainModule } from '../index.js';
+import { createPostEngineerMcpServer, isMainModule, requireApiKey } from '../index.js';
 import type { PostEngineerClient } from '../client.js';
 
 const EXPECTED_TOOLS = [
@@ -65,5 +65,30 @@ describe('createPostEngineerMcpServer', () => {
 describe('isMainModule', () => {
   it('returns a boolean', () => {
     expect(typeof isMainModule()).toBe('boolean');
+  });
+});
+
+describe('server version', () => {
+  it('advertises the same version as package.json', async () => {
+    const { default: pkg } = await import('../../package.json', { with: { type: 'json' } });
+    const server = createPostEngineerMcpServer({} as unknown as PostEngineerClient);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'test-client', version: '0.0.0' });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      expect(client.getServerVersion()?.version).toBe(pkg.version);
+    } finally {
+      await client.close();
+    }
+  });
+});
+
+describe('requireApiKey', () => {
+  it('throws when POST_ENGINEER_API_KEY is missing', () => {
+    expect(() => requireApiKey({})).toThrow('POST_ENGINEER_API_KEY is required');
+  });
+
+  it('returns the key when set', () => {
+    expect(requireApiKey({ POST_ENGINEER_API_KEY: 'k' })).toBe('k');
   });
 });
