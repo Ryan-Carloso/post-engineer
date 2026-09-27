@@ -3,6 +3,8 @@ import { validateScheduleAdvance } from './validator.js';
 export interface PostEngineerClientOptions {
   apiKey?: string;
   baseUrl?: string;
+  /** Clock override used by schedule validation (tests); defaults to the real clock. */
+  now?: () => Date;
 }
 
 export interface CreatePersonaInput {
@@ -48,7 +50,6 @@ export interface CreateScheduleInput {
   endHour?: number;
   postsPerDay?: number;
   timezone?: string;
-  _nowForTesting?: Date;
 }
 
 const PRODUCTION_API_URL = 'https://post-engineer.com';
@@ -81,17 +82,21 @@ function resolveBaseUrl(override: string | undefined): string {
     throw new Error('Invalid POST_ENGINEER_API_URL: http: is only allowed for loopback hosts (use https:)');
   }
   // Never echo the raw value: it may embed credentials (userinfo/query).
-  // Strip trailing slashes so `${baseUrl}${path}` never yields `//api/...`.
-  return raw.replace(/\/+$/, '');
+  // Return the normalized form so the validated value and the used value are
+  // identical: origin drops userinfo, trailing slashes are stripped so
+  // `${baseUrl}${path}` never yields `//api/...`.
+  return url.origin + url.pathname.replace(/\/+$/, '');
 }
 
 export class PostEngineerClient {
   private readonly baseUrl: string;
   private readonly apiKey?: string;
+  private readonly now: () => Date;
 
   constructor(options: PostEngineerClientOptions = {}) {
     this.baseUrl = resolveBaseUrl(options.baseUrl ?? process.env.POST_ENGINEER_API_URL);
     this.apiKey = options.apiKey;
+    this.now = options.now ?? (() => new Date());
   }
 
   private getHeaders(includeContentType = true): Record<string, string> {
@@ -216,9 +221,13 @@ export class PostEngineerClient {
       );
     } catch (error) {
       // The upstream error body may echo the request payload: never let the
-      // app password surface in agent-visible error text.
+      // app password surface in agent-visible error text, raw or encoded.
       const message = error instanceof Error ? error.message : String(error);
-      throw new Error(appPassword.length > 0 ? message.replaceAll(appPassword, '[redacted]') : message);
+      throw new Error(
+        appPassword.length > 0
+          ? message.replaceAll(appPassword, '[redacted]').replaceAll(encodeURIComponent(appPassword), '[redacted]')
+          : message
+      );
     }
   }
 
@@ -280,7 +289,7 @@ export class PostEngineerClient {
 
   async createSchedule(input: CreateScheduleInput): Promise<unknown> {
     if (input.scheduledAt) {
-      const validation = validateScheduleAdvance(input.scheduledAt, input._nowForTesting);
+      const validation = validateScheduleAdvance(input.scheduledAt, this.now());
       if (!validation.isValid) {
         throw new Error(validation.error);
       }

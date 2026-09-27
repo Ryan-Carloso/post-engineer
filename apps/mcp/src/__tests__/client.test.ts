@@ -437,18 +437,38 @@ describe('PostEngineerClient', () => {
     expect(result).toEqual(mockStatus);
   });
 
+  it('accepts an injected clock for schedule validation instead of a test-only input field', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true, scheduleId: 'sched-1' }),
+    });
+    const now = new Date('2026-09-18T09:00:00.000Z');
+    const clientWithClock = new PostEngineerClient({ apiKey: 'k', now: () => now });
+
+    // 2026-09-20 is >= 24h after the injected now, but in the past relative
+    // to the real clock: only the injected clock can make this call succeed.
+    await clientWithClock.createSchedule({
+      personaId: 'persona-123',
+      providers: ['youtube'],
+      youtubeAccountIds: ['yt-1'],
+      scheduledAt: new Date('2026-09-20T10:00:00.000Z').toISOString(),
+    });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects schedule if target slot is less than 24h away without calling API', async () => {
     global.fetch = vi.fn();
     const now = new Date('2026-09-18T09:00:00.000Z');
     const tooSoon = new Date('2026-09-18T18:00:00.000Z').toISOString();
+    const clockClient = new PostEngineerClient({ apiKey: 'k', now: () => now });
 
     await expect(
-      client.createSchedule({
+      clockClient.createSchedule({
         personaId: 'persona-123',
         providers: ['youtube'],
         youtubeAccountIds: ['yt-1'],
         scheduledAt: tooSoon,
-        _nowForTesting: now,
       })
     ).rejects.toThrow(/at least 24 hours/i);
 
@@ -465,13 +485,13 @@ describe('PostEngineerClient', () => {
 
     const now = new Date('2026-09-18T09:00:00.000Z');
     const validTime = new Date('2026-09-20T10:00:00.000Z').toISOString();
+    const clockClient = new PostEngineerClient({ apiKey: 'k', now: () => now });
 
-    const result = await client.createSchedule({
+    const result = await clockClient.createSchedule({
       personaId: 'persona-123',
       providers: ['youtube'],
       youtubeAccountIds: ['yt-1'],
       scheduledAt: validTime,
-      _nowForTesting: now,
     });
 
     expect(global.fetch).toHaveBeenCalledWith(
@@ -626,6 +646,22 @@ describe('PostEngineerClient configuration', () => {
     expect((error as Error).message).toContain('[redacted]');
   });
 
+  it('never echoes the percent-encoded Bluesky app password either', async () => {
+    const password = 'p@ss word/123';
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: async () => `{"error":"bad value '${encodeURIComponent(password)}'"}`,
+    });
+
+    const c = new PostEngineerClient({ apiKey: 'k' });
+    const error = await c.connectBlueskyAccount('user.bsky.social', password).catch((e) => e);
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).not.toContain(encodeURIComponent(password));
+    expect((error as Error).message).toContain('[redacted]');
+  });
+
   it('rejects a non-http(s) POST_ENGINEER_API_URL override', () => {
     expect(() => new PostEngineerClient({ apiKey: 'k', baseUrl: 'javascript:alert(1)' })).toThrow(
       /POST_ENGINEER_API_URL/
@@ -675,6 +711,18 @@ describe('PostEngineerClient configuration', () => {
 
     const c = new PostEngineerClient({ apiKey: 'k' });
     await expect(c.cancelSchedule('sched-123')).rejects.toThrow(/not valid JSON/);
+  });
+
+  it('drops credentials embedded in the base URL userinfo', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ ok: true }),
+    });
+
+    const c = new PostEngineerClient({ apiKey: 'k', baseUrl: 'https://user:pass@api.example.com/' });
+    await c.listPersonas();
+    expect(global.fetch).toHaveBeenCalledWith('https://api.example.com/api/persona/list', expect.anything());
   });
 
   it('strips a trailing slash from the base URL override', async () => {
