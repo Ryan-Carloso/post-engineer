@@ -72,12 +72,17 @@ function resolveBaseUrl(override: string | undefined): string {
   if (url.protocol !== 'https:' && url.protocol !== 'http:') {
     throw new Error(`Invalid POST_ENGINEER_API_URL: protocol "${url.protocol}" is not allowed (use https:)`);
   }
-  const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1';
+  const loopback =
+    url.hostname === 'localhost' ||
+    url.hostname === '127.0.0.1' ||
+    url.hostname === '::1' ||
+    url.hostname === '[::1]';
   if (url.protocol === 'http:' && !loopback) {
     throw new Error('Invalid POST_ENGINEER_API_URL: http: is only allowed for loopback hosts (use https:)');
   }
   // Never echo the raw value: it may embed credentials (userinfo/query).
-  return raw;
+  // Strip trailing slashes so `${baseUrl}${path}` never yields `//api/...`.
+  return raw.replace(/\/+$/, '');
 }
 
 export class PostEngineerClient {
@@ -111,13 +116,16 @@ export class PostEngineerClient {
       throw new Error(`Failed to ${action}: ${response.status} ${errorText.slice(0, MAX_ERROR_BODY_CHARS)}`);
     }
 
-    // Some endpoints answer 204 No Content: response.json() would throw a
-    // misleading SyntaxError on the empty body even though the call succeeded.
+    // Some endpoints answer 204 No Content. An empty or non-JSON body on any
+    // other status is a real failure: surfacing it beats reporting success
+    // with an undefined payload (e.g. a paid video job the agent thinks started).
     if (response.status === 204) return undefined;
+    const successText = await response.text();
+    if (successText.length === 0) return undefined;
     try {
-      return await response.json();
+      return JSON.parse(successText) as unknown;
     } catch {
-      return undefined;
+      throw new Error(`Failed to ${action}: response was not valid JSON (status ${response.status}).`);
     }
   }
 

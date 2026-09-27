@@ -20,7 +20,7 @@ describe('PostEngineerClient', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => mockResponse,
+      text: async () => JSON.stringify(mockResponse),
     });
 
     const result = await client.createPersona({
@@ -57,7 +57,7 @@ describe('PostEngineerClient', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ success: true, personaId: 'persona-123' }),
+      text: async () => JSON.stringify(({ success: true, personaId: 'persona-123' })),
     });
 
     await client.createPersona({ name: 'Faceless Creator' });
@@ -81,7 +81,7 @@ describe('PostEngineerClient', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => mockList,
+      text: async () => JSON.stringify(mockList),
     });
 
     const result = await client.listPersonas();
@@ -105,7 +105,7 @@ describe('PostEngineerClient', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => mockVoices,
+      text: async () => JSON.stringify(mockVoices),
     });
 
     const result = await client.listVoices();
@@ -151,7 +151,7 @@ describe('PostEngineerClient', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => mockFaces,
+      text: async () => JSON.stringify(mockFaces),
     });
 
     const result = await client.listFaces();
@@ -181,7 +181,7 @@ describe('PostEngineerClient', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ success: true }),
+      text: async () => JSON.stringify(({ success: true })),
     });
 
     const result = await client.updatePersona({ personaId: 'persona-123', voiceId: 'energetic' });
@@ -208,7 +208,7 @@ describe('PostEngineerClient', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ success: true }),
+      text: async () => JSON.stringify(({ success: true })),
     });
 
     const result = await client.updatePersona({ personaId: 'persona-123', avatarUrl: '' });
@@ -240,7 +240,7 @@ describe('PostEngineerClient', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => mockAccounts,
+      text: async () => JSON.stringify(mockAccounts),
     });
 
     const result = await client.listSocialAccounts();
@@ -262,7 +262,7 @@ describe('PostEngineerClient', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => mockSchedules,
+      text: async () => JSON.stringify(mockSchedules),
     });
 
     const result = await client.listSchedules();
@@ -283,7 +283,7 @@ describe('PostEngineerClient', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => mockPosts,
+      text: async () => JSON.stringify(mockPosts),
     });
 
     const result = await client.listPosts();
@@ -303,7 +303,7 @@ describe('PostEngineerClient', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ success: true, upcoming: [], recent: [] }),
+      text: async () => JSON.stringify(({ success: true, upcoming: [], recent: [] })),
     });
 
     await client.listPosts(50);
@@ -327,7 +327,7 @@ describe('PostEngineerClient', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ success: true }),
+      text: async () => JSON.stringify(({ success: true })),
     });
 
     await client.cancelSchedule('sched-1');
@@ -343,7 +343,7 @@ describe('PostEngineerClient', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => mockBalance,
+      text: async () => JSON.stringify(mockBalance),
     });
 
     const result = await client.getTokenBalance();
@@ -363,7 +363,7 @@ describe('PostEngineerClient', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => mockJob,
+      text: async () => JSON.stringify(mockJob),
     });
 
     const result = await client.generateVideoJob({
@@ -393,7 +393,7 @@ describe('PostEngineerClient', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => mockJob,
+      text: async () => JSON.stringify(mockJob),
     });
 
     const result = await client.generateVideoJob({
@@ -424,7 +424,7 @@ describe('PostEngineerClient', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => mockStatus,
+      text: async () => JSON.stringify(mockStatus),
     });
 
     const result = await client.getVideoStatus('task-abc-123');
@@ -460,7 +460,7 @@ describe('PostEngineerClient', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => mockSchedule,
+      text: async () => JSON.stringify(mockSchedule),
     });
 
     const now = new Date('2026-09-18T09:00:00.000Z');
@@ -492,7 +492,7 @@ describe('PostEngineerClient', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => mockResponse,
+      text: async () => JSON.stringify(mockResponse),
     });
 
     const result = await client.getOAuthConnectUrl('instagram');
@@ -528,7 +528,7 @@ describe('PostEngineerClient', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => mockResponse,
+      text: async () => JSON.stringify(mockResponse),
     });
 
     const result = await client.connectBlueskyAccount('user.bsky.social', 'app-password-123');
@@ -564,7 +564,7 @@ describe('PostEngineerClient configuration', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ ok: true }),
+      text: async () => JSON.stringify(({ ok: true })),
     });
     const c = new PostEngineerClient({ apiKey: 'k' });
     await c.listPersonas();
@@ -578,7 +578,7 @@ describe('PostEngineerClient configuration', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ ok: true }),
+      text: async () => JSON.stringify(({ ok: true })),
     });
     const c = new PostEngineerClient({ apiKey: 'k', baseUrl: 'https://staging.example.test' });
     await c.listPersonas();
@@ -592,7 +592,7 @@ describe('PostEngineerClient configuration', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ ok: true }),
+      text: async () => JSON.stringify(({ ok: true })),
     });
     const c = new PostEngineerClient({ apiKey: 'k' });
     const prev = process.env.POST_ENGINEER_API_URL;
@@ -644,20 +644,44 @@ describe('PostEngineerClient configuration', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 204,
-      json: async () => {
-        throw new SyntaxError('Unexpected end of JSON input');
-      },
+      text: async () => '',
     });
 
     const c = new PostEngineerClient({ apiKey: 'k' });
     await expect(c.cancelSchedule('sched-123')).resolves.toBeUndefined();
   });
 
+  it('rejects a 200 response with a non-JSON body instead of reporting success', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => '<html>proxy error page</html>',
+    });
+
+    const c = new PostEngineerClient({ apiKey: 'k' });
+    await expect(c.cancelSchedule('sched-123')).rejects.toThrow(/not valid JSON/);
+  });
+
+  it('strips a trailing slash from the base URL override', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ ok: true }),
+    });
+
+    const c = new PostEngineerClient({ apiKey: 'k', baseUrl: 'https://staging.example.com/' });
+    await c.listPersonas();
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://staging.example.com/api/persona/list',
+      expect.anything()
+    );
+  });
+
   it('sends an abort signal so hung requests cannot block forever', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ ok: true }),
+      text: async () => JSON.stringify(({ ok: true })),
     });
     const c = new PostEngineerClient({ apiKey: 'k' });
     await c.listPersonas();
