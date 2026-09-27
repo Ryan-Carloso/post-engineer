@@ -2,6 +2,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import {
+  recordRecentImageId,
   resolveVideoImage,
   validateImageFile,
 } from '../persona-images';
@@ -108,7 +109,7 @@ describe('resolveVideoImage', () => {
   });
 
   it('matches tags against the video topic and excludes recent images', async () => {
-    const { calls, client } = mockClient();
+    const { client } = mockClient();
     const result = await resolveVideoImage(
       client,
       'persona-1',
@@ -118,7 +119,6 @@ describe('resolveVideoImage', () => {
     expect(result.ok).toBe(true);
     // img-formal would win on tags but was used recently: falls to img-casual.
     if (result.ok) expect(result.image?.id).toBe('img-casual');
-    expect(calls.historyUpdates[0].recent[0]).toBe('img-casual');
   });
 
   it('returns 500 when the library cannot be loaded', async () => {
@@ -131,11 +131,29 @@ describe('resolveVideoImage', () => {
     });
   });
 
-  it('still resolves when the history write fails (best-effort)', async () => {
-    const { client } = mockClient({ historyError: { message: 'db down' } });
+  it('never touches the rotation history (the caller records after the gate)', async () => {
+    const { calls, client } = mockClient();
     const result = await resolveVideoImage(client, 'persona-1', [], { topic: 'business' });
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.image?.id).toBe('img-formal');
+    expect(calls.historyUpdates).toHaveLength(0);
+  });
+});
+
+describe('recordRecentImageId', () => {
+  it('pushes the image id onto the rotation history', async () => {
+    const { calls, client } = mockClient();
+    await recordRecentImageId(client, 'persona-1', ['img-casual'], 'img-formal');
+    expect(calls.historyUpdates).toEqual([
+      { id: 'persona-1', recent: ['img-formal', 'img-casual'] },
+    ]);
+  });
+
+  it('never throws when the history write fails (best-effort)', async () => {
+    const { calls, client } = mockClient({ historyError: { message: 'db down' } });
+    await expect(
+      recordRecentImageId(client, 'persona-1', [], 'img-formal'),
+    ).resolves.toBeUndefined();
+    expect(calls.historyUpdates).toHaveLength(1);
   });
 });
 

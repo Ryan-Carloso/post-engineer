@@ -9,7 +9,7 @@ import { isPersonaAllowed, isScopedApiKey } from '@/lib/api-keys';
 import { attachGenerationTask, gateGeneration, recordGenerationStart, recordGenerationUpdate, refundFailedGeneration, startEngineVideoTask, uploadEngineTempAsset } from '@/lib/generation/video-generation';
 import { buildJobPayload, hasNonEmptyString, type JobPersona } from '@/lib/generation/video-job-payload';
 import { parsePersonaForm, VALID_VIDEO_ASPECTS } from '@/lib/persona-schema';
-import { resolveVideoImage } from '@/lib/persona-images';
+import { recordRecentImageId, resolveVideoImage } from '@/lib/persona-images';
 import { normalizeDebugTaskResponse } from '@/lib/debug-video';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
@@ -438,6 +438,13 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   let jobPersona: JobPersona;
   let recordPersonaId: string | null;
+  // Rotation-history write deferred until after the token gate: a request
+  // rejected before the gate must not mark an image as used.
+  let libraryHistory: {
+    personaId: string;
+    recentImageIds: string[];
+    imageId: string;
+  } | null = null;
 
   if (faceless) {
     // A persona-scoped API key names explicit personas; a faceless job uses
@@ -699,6 +706,15 @@ export async function POST(request: Request): Promise<NextResponse> {
       // A signing failure falls back to the legacy photo; the 503 guard
       // below still classifies an unloadable face the same way.
       if (libraryUrl) photoUrl = libraryUrl;
+      // An explicit override is the caller's pinned choice, not a rotation
+      // pick: it must not pollute the anti-repeat history.
+      if (requestedImageId === null) {
+        libraryHistory = {
+          personaId,
+          recentImageIds: (persona.recent_image_ids as string[] | null) ?? [],
+          imageId: librarySelection.image.id,
+        };
+      }
     }
     const faceMix = persona.face_mix_percent as number | null;
     // A legacy persona with face_mix_percent: null is face-requiring by the
@@ -770,6 +786,17 @@ export async function POST(request: Request): Promise<NextResponse> {
     faceQuality: effectiveFaceQuality,
   });
   if (!gate.ok) return gate.response;
+
+  // Record the rotation pick now that the request is paid for: a request
+  // rejected by the token gate must never mark an image as used.
+  if (libraryHistory) {
+    await recordRecentImageId(
+      supabase,
+      libraryHistory.personaId,
+      libraryHistory.recentImageIds,
+      libraryHistory.imageId,
+    );
+  }
 
   // Snapshot the generation for the History page right after the token
   // gate: persona name/subject are denormalized so the row renders even if

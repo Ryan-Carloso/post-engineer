@@ -2156,5 +2156,72 @@ describe('POST /api/persona/video-job', () => {
       expect(res.status).toBe(200);
       expect(forwardedPhotoUrl()).toBe('https://supabase.test/signed/user-uuid-1/foto.png');
     });
+
+    function personasUpdateCalls(client: unknown): unknown[][] {
+      const fromMock = (client as { from: ReturnType<typeof vi.fn> }).from;
+      const calls: unknown[][] = [];
+      fromMock.mock.calls.forEach((call: unknown[], index: number) => {
+        if (call[0] !== 'personas') return;
+        const updateMock = fromMock.mock.results[index].value.update as ReturnType<
+          typeof vi.fn
+        >;
+        calls.push(...updateMock.mock.calls);
+      });
+      return calls;
+    }
+
+    function historyWrites(client: unknown): unknown[][] {
+      return personasUpdateCalls(client).filter(
+        (call) =>
+          typeof call[0] === 'object' &&
+          call[0] !== null &&
+          'recent_image_ids' in (call[0] as Record<string, unknown>),
+      );
+    }
+
+    it('records the rotation history only after the token gate passes', async () => {
+      const client = mockSupabase(PERSONA, { libraryImages: LIBRARY });
+      engineOk();
+
+      const res = await POST(
+        jsonRequest({ personaId: 'p-1', video_subject: 'business office meeting' }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(historyWrites(client)).toEqual([[{ recent_image_ids: ['img-formal'] }]]);
+    });
+
+    it('does not touch the rotation history when the token gate rejects', async () => {
+      const client = mockSupabase(PERSONA, { libraryImages: LIBRARY });
+      vi.mocked(checkAndDeductTokens).mockResolvedValueOnce({
+        ok: false,
+        error: 'Insufficient tokens.',
+        statusCode: 402,
+        freeExhausted: false,
+      });
+
+      const res = await POST(
+        jsonRequest({ personaId: 'p-1', video_subject: 'business office meeting' }),
+      );
+
+      expect(res.status).toBe(402);
+      expect(historyWrites(client)).toHaveLength(0);
+    });
+
+    it('does not touch the rotation history for an explicit image_id', async () => {
+      const client = mockSupabase(PERSONA, { libraryImages: LIBRARY });
+      engineOk();
+
+      const res = await POST(
+        jsonRequest({
+          personaId: 'p-1',
+          video_subject: 'business office meeting',
+          imageId: 'img-casual',
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(historyWrites(client)).toHaveLength(0);
+    });
   });
 });

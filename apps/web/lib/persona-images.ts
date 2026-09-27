@@ -182,15 +182,37 @@ export async function setPrimaryLibraryImage(
 }
 
 //---------------
+// recordRecentImageId — appends an image to the persona's rotation history.
+// Best-effort: a failed write is logged and never fails the generation.
+// Call AFTER the token gate: a request rejected before the gate must not
+// mark an image as used.
+//---------------
+export async function recordRecentImageId(
+  supabase: SupabaseClient,
+  personaId: string,
+  recentImageIds: string[],
+  imageId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('personas')
+    .update({ recent_image_ids: pushRecentImageId(recentImageIds, imageId) })
+    .eq('id', personaId);
+  if (error) {
+    console.error('[persona-images] recent-image history update failed', { error });
+  }
+}
+
+//---------------
 // resolveVideoImage — deterministic per-video library image resolution.
 //
 // Priority: explicit image_id override > tag/description keyword match
 // (excluding recently used images) > primary/first image. Empty library
 // resolves to null so the caller falls back to the legacy photo/avatar.
 // An unknown image_id is a 404, not a silent fallback — even for an empty
-// library. The recent-use history update is best-effort: it never fails the
-// generation. Explicit image_id overrides skip the history write: a pinned
-// choice is not a rotation pick.
+// library. Explicit image_id overrides skip the rotation history: a pinned
+// choice is not a rotation pick. This function never touches
+// recent_image_ids — the caller records the pick via recordRecentImageId
+// after the token gate.
 //---------------
 export async function resolveVideoImage(
   supabase: SupabaseClient,
@@ -224,19 +246,5 @@ export async function resolveVideoImage(
 
   const selected = selectPersonaImage(library, input, recentImageIds);
   if (!selected) return { ok: true, image: null };
-
-  // An explicit override is the caller's pinned choice, not a rotation pick:
-  // it must not pollute the anti-repeat history.
-  if (!input.imageId) {
-    const { error: historyError } = await supabase
-      .from('personas')
-      .update({ recent_image_ids: pushRecentImageId(recentImageIds, selected.id) })
-      .eq('id', personaId);
-    if (historyError) {
-      console.error('[persona-images] recent-image history update failed', {
-        error: historyError,
-      });
-    }
-  }
   return { ok: true, image: selected };
 }
