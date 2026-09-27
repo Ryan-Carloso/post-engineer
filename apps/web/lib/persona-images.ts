@@ -3,7 +3,6 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import {
   MAX_PERSONA_IMAGES,
-  pushRecentImageId,
   selectPersonaImage,
   type ImageSelectionInput,
   type PersonaLibraryImage,
@@ -183,6 +182,8 @@ export async function setPrimaryLibraryImage(
 
 //---------------
 // recordRecentImageId — appends an image to the persona's rotation history.
+// The write goes through the record_persona_image_use SQL function so it is
+// atomic: app-side read-modify-write could lose concurrent updates.
 // Best-effort: a failed write is logged and never fails the generation.
 // Call AFTER the token gate: a request rejected before the gate must not
 // mark an image as used.
@@ -190,13 +191,12 @@ export async function setPrimaryLibraryImage(
 export async function recordRecentImageId(
   supabase: SupabaseClient,
   personaId: string,
-  recentImageIds: string[],
   imageId: string,
 ): Promise<void> {
-  const { error } = await supabase
-    .from('personas')
-    .update({ recent_image_ids: pushRecentImageId(recentImageIds, imageId) })
-    .eq('id', personaId);
+  const { error } = await supabase.rpc('record_persona_image_use', {
+    p_persona_id: personaId,
+    p_image_id: imageId,
+  });
   if (error) {
     console.error('[persona-images] recent-image history update failed', { error });
   }

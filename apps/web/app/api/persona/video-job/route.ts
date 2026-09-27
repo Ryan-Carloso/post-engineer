@@ -437,7 +437,6 @@ export async function POST(request: Request): Promise<NextResponse> {
   // rejected before the gate must not mark an image as used.
   let libraryHistory: {
     personaId: string;
-    recentImageIds: string[];
     imageId: string;
   } | null = null;
 
@@ -727,7 +726,6 @@ export async function POST(request: Request): Promise<NextResponse> {
       if (requestedImageId === null) {
         libraryHistory = {
           personaId,
-          recentImageIds: (persona.recent_image_ids as string[] | null) ?? [],
           imageId: librarySelection.image.id,
         };
       }
@@ -809,7 +807,6 @@ export async function POST(request: Request): Promise<NextResponse> {
     await recordRecentImageId(
       supabase,
       libraryHistory.personaId,
-      libraryHistory.recentImageIds,
       libraryHistory.imageId,
     );
   }

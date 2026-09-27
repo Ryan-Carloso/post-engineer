@@ -94,3 +94,20 @@ begin
   end if;
 end
 $$;
+
+-- 5. Atomic rotation-history update: read-modify-write from the app can
+--    lose concurrent updates (two generations racing the same window).
+--    This function prepends the image id, dedupes, and caps the window at
+--    3 — mirroring pushRecentImageId in
+--    apps/web/lib/persona-image-select.ts — in a single UPDATE, so the
+--    write is race-free. Called by the web app via the service-role
+--    client (recordRecentImageId in apps/web/lib/persona-images.ts).
+create or replace function public.record_persona_image_use(p_persona_id uuid, p_image_id uuid)
+returns void
+language sql
+as $$
+  update public.personas
+  set recent_image_ids =
+    (array[p_image_id] || array_remove(coalesce(recent_image_ids, '{}'), p_image_id))[1:3]
+  where id = p_persona_id;
+$$;

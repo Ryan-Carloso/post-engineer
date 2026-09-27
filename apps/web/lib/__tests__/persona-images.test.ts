@@ -39,7 +39,7 @@ function mockClient(options: {
   libraryError?: { message: string } | null;
   historyError?: { message: string } | null;
 } = {}) {
-  const calls = { historyUpdates: [] as Array<{ id: string; recent: string[] }> };
+  const calls = { rpcCalls: [] as Array<{ fn: string; args: unknown }> };
   const client = {
     from: vi.fn((table: string) => {
       if (table === 'persona_images') {
@@ -48,14 +48,11 @@ function mockClient(options: {
           error: options.libraryError ?? null,
         });
       }
-      return {
-        update: vi.fn((values: { recent_image_ids: string[] }) => ({
-          eq: vi.fn((_column: string, id: string) => {
-            calls.historyUpdates.push({ id, recent: values.recent_image_ids });
-            return terminal({ error: options.historyError ?? null });
-          }),
-        })),
-      };
+      throw new Error(`unexpected table: ${table}`);
+    }),
+    rpc: vi.fn(async (fn: string, args: unknown) => {
+      calls.rpcCalls.push({ fn, args });
+      return { data: null, error: options.historyError ?? null };
     }),
   };
   return { calls, client: client as never };
@@ -70,7 +67,7 @@ describe('resolveVideoImage', () => {
     const { calls, client } = mockClient({ library: [] });
     const result = await resolveVideoImage(client, 'persona-1', [], { topic: 'business' });
     expect(result).toEqual({ ok: true, image: null });
-    expect(calls.historyUpdates).toHaveLength(0);
+    expect(calls.rpcCalls).toHaveLength(0);
   });
 
   it('returns 404 for an image_id outside the library', async () => {
@@ -95,7 +92,7 @@ describe('resolveVideoImage', () => {
     if (result.ok) expect(result.image?.id).toBe('img-formal');
     // A pinned override is not a rotation pick: the anti-repeat history is
     // left alone.
-    expect(calls.historyUpdates).toHaveLength(0);
+    expect(calls.rpcCalls).toHaveLength(0);
   });
 
   it('returns 404 for an image_id when the library is empty', async () => {
@@ -135,25 +132,28 @@ describe('resolveVideoImage', () => {
     const { calls, client } = mockClient();
     const result = await resolveVideoImage(client, 'persona-1', [], { topic: 'business' });
     expect(result.ok).toBe(true);
-    expect(calls.historyUpdates).toHaveLength(0);
+    expect(calls.rpcCalls).toHaveLength(0);
   });
 });
 
 describe('recordRecentImageId', () => {
-  it('pushes the image id onto the rotation history', async () => {
+  it('calls the atomic history function with the persona and image ids', async () => {
     const { calls, client } = mockClient();
-    await recordRecentImageId(client, 'persona-1', ['img-casual'], 'img-formal');
-    expect(calls.historyUpdates).toEqual([
-      { id: 'persona-1', recent: ['img-formal', 'img-casual'] },
+    await recordRecentImageId(client, 'persona-1', 'img-formal');
+    expect(calls.rpcCalls).toEqual([
+      {
+        fn: 'record_persona_image_use',
+        args: { p_persona_id: 'persona-1', p_image_id: 'img-formal' },
+      },
     ]);
   });
 
   it('never throws when the history write fails (best-effort)', async () => {
     const { calls, client } = mockClient({ historyError: { message: 'db down' } });
     await expect(
-      recordRecentImageId(client, 'persona-1', [], 'img-formal'),
+      recordRecentImageId(client, 'persona-1', 'img-formal'),
     ).resolves.toBeUndefined();
-    expect(calls.historyUpdates).toHaveLength(1);
+    expect(calls.rpcCalls).toHaveLength(1);
   });
 });
 

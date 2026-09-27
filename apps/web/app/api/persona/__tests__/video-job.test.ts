@@ -131,6 +131,7 @@ function mockSupabase(persona: Record<string, unknown> | null, opts?: { noSessio
         })),
       })),
     },
+    rpc: vi.fn(async () => ({ data: null, error: null })),
   };
   vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
   vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
@@ -2205,26 +2206,13 @@ describe('POST /api/persona/video-job', () => {
       );
     });
 
-    function personasUpdateCalls(client: unknown): unknown[][] {
-      const fromMock = (client as { from: ReturnType<typeof vi.fn> }).from;
-      const calls: unknown[][] = [];
-      fromMock.mock.calls.forEach((call: unknown[], index: number) => {
-        if (call[0] !== 'personas') return;
-        const updateMock = fromMock.mock.results[index].value.update as ReturnType<
-          typeof vi.fn
-        >;
-        calls.push(...updateMock.mock.calls);
-      });
-      return calls;
+    function historyRpcCalls(client: unknown): unknown[][] {
+      const rpcMock = (client as { rpc: ReturnType<typeof vi.fn> }).rpc;
+      return rpcMock.mock.calls;
     }
 
     function historyWrites(client: unknown): unknown[][] {
-      return personasUpdateCalls(client).filter(
-        (call) =>
-          typeof call[0] === 'object' &&
-          call[0] !== null &&
-          'recent_image_ids' in (call[0] as Record<string, unknown>),
-      );
+      return historyRpcCalls(client);
     }
 
     it('records the rotation history only after the token gate passes', async () => {
@@ -2236,7 +2224,9 @@ describe('POST /api/persona/video-job', () => {
       );
 
       expect(res.status).toBe(200);
-      expect(historyWrites(client)).toEqual([[{ recent_image_ids: ['img-formal'] }]]);
+      expect(historyWrites(client)).toEqual([
+        ['record_persona_image_use', { p_persona_id: 'p-1', p_image_id: 'img-formal' }],
+      ]);
     });
 
     it('does not touch the rotation history when the token gate rejects', async () => {
