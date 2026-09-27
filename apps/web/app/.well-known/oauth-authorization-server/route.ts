@@ -2,9 +2,8 @@ import { NextResponse } from 'next/server';
 import { getIssuer } from '@/lib/oauth/config';
 
 //---------------
-// GET /.well-known/oauth-authorization-server — metadata do authorization
-// server (RFC 8414). É o que o ChatGPT/Codex busca após ler o discovery do
-// MCP em mcp.post-engineer.com. Rota pública, sem sessão.
+// GET /.well-known/oauth-authorization-server — authorization server
+// metadata (RFC 8414). Public route, no session.
 //---------------
 
 export function authorizationServerMetadata() {

@@ -16,7 +16,7 @@ import {
 // persisted in the database. Each type carries `token_use` so an authorization
 // code is never accepted as an access token and vice versa.
 //
-// - access: 1h, aud = resource (e.g. https://mcp.post-engineer.com)
+// - access: 1h, aud = resource (e.g. https://api.post-engineer.com)
 // - authorization code: 10min, binds client_id + redirect_uri + PKCE
 // - refresh: 30d, rotated on every use (requires the offline_access scope)
 // - consent: 10min, carries the authorize request to the consent screen

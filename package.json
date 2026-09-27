@@ -2,7 +2,7 @@
   "name": "post-engineer",
   "version": "1.0.0",
   "private": true,
-  "description": "Post Engineer monorepo: Next.js web + video generation engine",
+  "description": "Post Engineer monorepo: Next.js web + video generation engine + MCP server",
   "packageManager": "pnpm@10.22.0",
   "scripts": {
     "prepare": "husky",
@@ -13,7 +13,8 @@
     "lint": "pnpm exec nx run-many -t lint",
     "lint:fix": "pnpm exec nx run web:lint:fix && pnpm exec nx run-many -t lint typecheck",
     "typecheck": "pnpm exec nx run-many -t typecheck",
-    "graph": "pnpm exec nx graph"
+    "graph": "pnpm exec nx graph",
+    "typecheck:global": "pnpm exec nx run-many -t typecheck"
   },
   "devDependencies": {
     "husky": "^9.1.7",
