@@ -13,7 +13,8 @@
     "lint": "pnpm exec nx run-many -t lint",
     "lint:fix": "pnpm exec nx run web:lint:fix && pnpm exec nx run-many -t lint typecheck",
     "typecheck": "pnpm exec nx run-many -t typecheck",
-    "graph": "pnpm exec nx graph"
+    "graph": "pnpm exec nx graph",
+    "typecheck:global": "pnpm exec nx run-many -t typecheck"
   },
   "devDependencies": {
     "husky": "^9.1.7",

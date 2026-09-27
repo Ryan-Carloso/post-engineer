@@ -177,5 +177,8 @@ jobs:
       - name: Lint
         run: uv run ruff check app cli.py scripts test
 
+      - name: Typecheck
+        run: uv run python -m compileall -q app cli.py main.py
+
       - name: Tests
         run: uv run pytest -q
