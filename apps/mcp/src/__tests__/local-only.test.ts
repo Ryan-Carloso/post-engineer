@@ -34,16 +34,18 @@ describe('local-only transport', () => {
       throw new Error(`dist/index.js not found — run 'pnpm build' before 'pnpm test' (got ${entry})`);
     }
     let child: ChildProcess | undefined;
+    let spawnError: unknown;
     try {
       child = spawn(process.execPath, [entry, '--http'], {
         env: { ...process.env, MCP_PORT: String(TEST_PORT) },
         stdio: 'ignore',
       });
       child.on('error', (err) => {
-        throw err;
+        spawnError = err;
       });
       // Give the process time to bind the port, if it were going to.
       await delay(2000);
+      expect(spawnError).toBeUndefined();
       expect(await isHttpListening(TEST_PORT)).toBe(false);
     } finally {
       child?.kill('SIGKILL');

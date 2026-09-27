@@ -69,11 +69,14 @@ pnpm build
 pnpm start
 ```
 
-Set your API key locally (the API URL is built in and always points to production):
+Set your API key locally (defaults to the production API; override with `POST_ENGINEER_API_URL` for staging/self-hosted):
 
 ```bash
 export POST_ENGINEER_API_KEY="<MY_API_KEY>"
+# optional: export POST_ENGINEER_API_URL=https://staging.example.com
 ```
+
+The `Authorization: Bearer` API key header is sent to the configured base URL, so only point `POST_ENGINEER_API_URL` at a server you trust.
 ## Tools
 
 - `list_personas`: list existing personas.

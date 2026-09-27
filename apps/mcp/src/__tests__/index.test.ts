@@ -92,3 +92,15 @@ describe('requireApiKey', () => {
     expect(requireApiKey({ POST_ENGINEER_API_KEY: 'k' })).toBe('k');
   });
 });
+
+describe('createPostEngineerMcpServer without injected client', () => {
+  it('throws when POST_ENGINEER_API_KEY is missing', () => {
+    const prev = process.env.POST_ENGINEER_API_KEY;
+    delete process.env.POST_ENGINEER_API_KEY;
+    try {
+      expect(() => createPostEngineerMcpServer()).toThrow('POST_ENGINEER_API_KEY is required');
+    } finally {
+      if (prev !== undefined) process.env.POST_ENGINEER_API_KEY = prev;
+    }
+  });
+});

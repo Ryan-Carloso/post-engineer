@@ -31,7 +31,7 @@ export function requireApiKey(env: NodeJS.ProcessEnv = process.env): string {
 }
 
 export function createPostEngineerMcpServer(client?: PostEngineerClient): McpServer {
-  const apiClient = client ?? new PostEngineerClient({ apiKey: process.env.POST_ENGINEER_API_KEY });
+  const apiClient = client ?? new PostEngineerClient({ apiKey: requireApiKey() });
   const server = new McpServer({
     name: 'post-engineer-mcp',
     version: '1.2.0',

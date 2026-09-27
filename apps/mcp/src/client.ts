@@ -54,6 +54,8 @@ export interface CreateScheduleInput {
 const PRODUCTION_API_URL = 'https://post-engineer.com';
 // Hung requests must not block the stdio tool call (and the agent session) forever.
 const REQUEST_TIMEOUT_MS = 30_000;
+// Bound how much of an upstream error body can flow into agent-visible output.
+const MAX_ERROR_BODY_CHARS = 200;
 
 export class PostEngineerClient {
   private readonly baseUrl: string;
@@ -83,7 +85,7 @@ export class PostEngineerClient {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Failed to ${action}: ${response.status} ${errorText}`);
+      throw new Error(`Failed to ${action}: ${response.status} ${errorText.slice(0, MAX_ERROR_BODY_CHARS)}`);
     }
 
     return response.json();

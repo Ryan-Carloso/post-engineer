@@ -608,3 +608,21 @@ describe('PostEngineerClient configuration', () => {
     expect(init?.signal).toBeInstanceOf(AbortSignal);
   });
 });
+
+describe('PostEngineerClient error truncation', () => {
+  it('truncates long upstream error bodies', async () => {
+    const longBody = 'x'.repeat(5000);
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: async () => longBody,
+    });
+    const c = new PostEngineerClient({ apiKey: 'k' });
+    await expect(c.listPersonas()).rejects.toThrow(/Failed to list personas: 500 /);
+    try {
+      await c.listPersonas();
+    } catch (error) {
+      expect((error as Error).message.length).toBeLessThan(1000);
+    }
+  });
+});
