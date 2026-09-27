@@ -29,6 +29,10 @@ import {
   handleScheduleVideo,
 } from './tools.js';
 
+// The server advertises the package version: import it so a version bump in
+// package.json flows through without touching this file.
+const { default: pkg } = await import('../package.json', { with: { type: 'json' } });
+
 export function requireApiKey(env: NodeJS.ProcessEnv = process.env): string {
   const apiKey = env.POST_ENGINEER_API_KEY;
   if (!apiKey) {
@@ -41,7 +45,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
   const apiClient = client ?? new PostEngineerClient({ apiKey: requireApiKey() });
   const server = new McpServer({
     name: 'post-engineer-mcp',
-    version: '1.2.0',
+    version: pkg.version,
   });
 
   server.tool(
@@ -177,9 +181,9 @@ export function isMainModule(): boolean {
   const entry = process.argv[1];
   if (!entry) return false;
   try {
-    // Compare real paths on both sides: the published bin is launched through
-    // a symlinked .bin entry, and Node keeps the symlink path in
-    // import.meta.url, so only one side must not be realpathed.
+    // Realpath both sides: the published bin is launched through a symlinked
+    // .bin entry, and Node may keep the symlink path in either argv[1] or
+    // import.meta.url — realpathing both makes the comparison robust either way.
     return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url));
   } catch {
     return false;

@@ -16,6 +16,7 @@
     "strictFunctionTypes": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
+    "resolveJsonModule": true,
     "declaration": true,
     "sourceMap": true
   },

@@ -204,6 +204,21 @@ describe('PostEngineerClient', () => {
     expect(result).toEqual({ success: true });
   });
 
+  it('updatePersona omits empty-string avatarUrl (consistent with createPersona faceless mode)', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true }),
+    });
+
+    const result = await client.updatePersona({ personaId: 'persona-123', avatarUrl: '' });
+
+    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
+    const formData = request?.body as FormData;
+    expect(formData.has('avatarUrl')).toBe(false);
+    expect(result).toEqual({ success: true });
+  });
+
   it('throws when updating persona fails', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: false,

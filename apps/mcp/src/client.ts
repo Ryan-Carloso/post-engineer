@@ -139,7 +139,7 @@ export class PostEngineerClient {
   async updatePersona(input: UpdatePersonaInput): Promise<unknown> {
     const formData = new FormData();
     if (input.name !== undefined) formData.set('name', input.name);
-    if (input.avatarUrl !== undefined) formData.set('avatarUrl', input.avatarUrl);
+    if (input.avatarUrl !== undefined && input.avatarUrl.length > 0) formData.set('avatarUrl', input.avatarUrl);
     if (input.voiceId !== undefined) formData.set('voiceId', input.voiceId);
     if (input.language !== undefined) formData.set('language', input.language);
     if (input.videoAspect !== undefined) formData.set('videoAspect', input.videoAspect);
