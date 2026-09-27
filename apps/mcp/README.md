@@ -15,7 +15,7 @@ Public MCP (Model Context Protocol) server for [Post Engineer](https://post-engi
 
 ## Requirements
 
-- Node.js 20+
+- Node.js 20.10+
 - API key generated at https://post-engineer.com/api-keys
 
 ## Use

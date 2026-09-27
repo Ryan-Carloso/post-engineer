@@ -6,8 +6,14 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { PostEngineerClient } from './client.js';
 import {
   CreatePersonaShape,
+  ListPersonasShape,
+  ListVoicesShape,
+  ListFacesShape,
   UpdatePersonaShape,
+  ListSocialAccountsShape,
   ConnectAccountShape,
+  ListSchedulesShape,
+  GetTokenBalanceShape,
   ListPostsShape,
   CancelScheduleShape,
   GenerateVideoShape,
@@ -60,7 +66,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
   server.tool(
     'list_personas',
     'List all existing personas for the authenticated user.',
-    {},
+    ListPersonasShape,
     async () => {
       return handleListPersonas(apiClient);
     }
@@ -69,7 +75,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
   server.tool(
     'list_voices',
     'List all available persona voices (voiceId options) for the authenticated user.',
-    {},
+    ListVoicesShape,
     async () => {
       return handleListVoices(apiClient);
     }
@@ -78,7 +84,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
   server.tool(
     'list_faces',
     'List default/stock persona faces (avatar options). Each face includes id, url, name, gender, age (single number, not a range), ethnicity, hair, and description in English so you can pick without seeing the photo. Pass a face url as avatarUrl when calling create_persona.',
-    {},
+    ListFacesShape,
     async () => {
       return handleListFaces(apiClient);
     }
@@ -96,7 +102,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
   server.tool(
     'list_social_accounts',
     'List connected social accounts (YouTube, Instagram, LinkedIn) with the account IDs needed for schedule_video.',
-    {},
+    ListSocialAccountsShape,
     async () => {
       return handleListSocialAccounts(apiClient);
     }
@@ -114,7 +120,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
   server.tool(
     'list_schedules',
     'List all automation schedules for the authenticated user.',
-    {},
+    ListSchedulesShape,
     async () => {
       return handleListSchedules(apiClient);
     }
@@ -141,7 +147,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
   server.tool(
     'get_token_balance',
     'Get the prepaid token wallet balance. Check before triggering video generation, which costs tokens.',
-    {},
+    GetTokenBalanceShape,
     async () => {
       return handleGetTokenBalance(apiClient);
     }

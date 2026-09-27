@@ -2,7 +2,23 @@ import { describe, it, expect } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createPostEngineerMcpServer, isMainModule, requireApiKey } from '../index.js';
-import { CreatePersonaSchema, ScheduleVideoShape } from '../tools.js';
+import {
+  CreatePersonaSchema,
+  CreatePersonaShape,
+  ListPersonasShape,
+  ListVoicesShape,
+  ListFacesShape,
+  UpdatePersonaShape,
+  ListSocialAccountsShape,
+  ConnectAccountShape,
+  ListSchedulesShape,
+  ListPostsShape,
+  CancelScheduleShape,
+  GetTokenBalanceShape,
+  GenerateVideoShape,
+  GetVideoStatusShape,
+  ScheduleVideoShape,
+} from '../tools.js';
 import type { PostEngineerClient } from '../client.js';
 
 const EXPECTED_TOOLS = [
@@ -121,6 +137,30 @@ describe('registered tool schemas (single source of truth)', () => {
     }
   }
 
+  it('registers every tool with its tools.ts shape fields (no registration drift)', async () => {
+    const schemas = await listServerTools(createPostEngineerMcpServer(mockClient));
+    const expected: Record<string, Record<string, unknown>> = {
+      create_persona: CreatePersonaShape,
+      list_personas: ListPersonasShape,
+      list_voices: ListVoicesShape,
+      list_faces: ListFacesShape,
+      update_persona: UpdatePersonaShape,
+      list_social_accounts: ListSocialAccountsShape,
+      connect_account: ConnectAccountShape,
+      list_schedules: ListSchedulesShape,
+      list_posts: ListPostsShape,
+      cancel_schedule: CancelScheduleShape,
+      get_token_balance: GetTokenBalanceShape,
+      generate_video_from_persona: GenerateVideoShape,
+      get_video_status: GetVideoStatusShape,
+      schedule_video: ScheduleVideoShape,
+    };
+    expect(schemas.size).toBe(Object.keys(expected).length);
+    for (const [name, shape] of Object.entries(expected)) {
+      expect(Object.keys(schemas.get(name)?.properties ?? {}).sort()).toEqual(Object.keys(shape).sort());
+    }
+  });
+
   it('registers create_persona with the tools.ts schema (paragraphNumber max 10)', async () => {
     const schemas = await listServerTools(createPostEngineerMcpServer(mockClient));
     const inputSchema = schemas.get('create_persona');
@@ -134,12 +174,5 @@ describe('registered tool schemas (single source of truth)', () => {
     const schemas = await listServerTools(createPostEngineerMcpServer(mockClient));
     const avatarUrl = schemas.get('update_persona')?.properties.avatarUrl;
     expect(avatarUrl?.anyOf).toBeUndefined();
-  });
-
-  it('registers schedule_video with the tools.ts shape fields', async () => {
-    const schemas = await listServerTools(createPostEngineerMcpServer(mockClient));
-    expect(Object.keys(schemas.get('schedule_video')?.properties ?? {}).sort()).toEqual(
-      Object.keys(ScheduleVideoShape).sort()
-    );
   });
 });

@@ -41,11 +41,17 @@ export const CreatePersonaShape = {
 
 export const CreatePersonaSchema = z.object(CreatePersonaShape);
 
-export const ListPersonasSchema = z.object({});
+export const ListPersonasShape = {};
 
-export const ListVoicesSchema = z.object({});
+export const ListPersonasSchema = z.object(ListPersonasShape);
 
-export const ListFacesSchema = z.object({});
+export const ListVoicesShape = {};
+
+export const ListVoicesSchema = z.object(ListVoicesShape);
+
+export const ListFacesShape = {};
+
+export const ListFacesSchema = z.object(ListFacesShape);
 
 export const UpdatePersonaShape = {
   personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona to update'),
@@ -62,7 +68,9 @@ export const UpdatePersonaShape = {
 
 export const UpdatePersonaSchema = z.object(UpdatePersonaShape);
 
-export const ListSocialAccountsSchema = z.object({});
+export const ListSocialAccountsShape = {};
+
+export const ListSocialAccountsSchema = z.object(ListSocialAccountsShape);
 
 export const ConnectAccountShape = {
   provider: z.enum(['youtube', 'instagram', 'linkedin', 'bluesky']).describe('The social platform to connect'),
@@ -72,7 +80,9 @@ export const ConnectAccountShape = {
 
 export const ConnectAccountSchema = z.object(ConnectAccountShape);
 
-export const ListSchedulesSchema = z.object({});
+export const ListSchedulesShape = {};
+
+export const ListSchedulesSchema = z.object(ListSchedulesShape);
 
 export const ListPostsShape = {
   limit: z.number().int().min(1).max(500).default(20).describe('Max number of upcoming and past posts to return (each list). Default 20, max 500.'),
@@ -86,7 +96,9 @@ export const CancelScheduleShape = {
 
 export const CancelScheduleSchema = z.object(CancelScheduleShape);
 
-export const GetTokenBalanceSchema = z.object({});
+export const GetTokenBalanceShape = {};
+
+export const GetTokenBalanceSchema = z.object(GetTokenBalanceShape);
 
 export const GenerateVideoShape = {
   personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona to generate video with'),
