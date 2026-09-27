@@ -24,18 +24,22 @@ export function missingProviderAccountIds(args: {
   return args.providers.filter((provider) => (idsByProvider[provider] ?? []).length === 0);
 }
 
-export const CreatePersonaSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  avatarUrl: z.string().url().optional().nullable(),
-  voiceId: z.string().default('alloy'),
-  language: z.string().default('en-US'),
-  videoAspect: z.enum(['9:16', '16:9']).default('9:16'),
-  scriptPrompt: z.string().optional().default(''),
-  paragraphNumber: z.number().int().min(1).max(10).default(1),
-  niche: z.string().optional().default('General'),
+// Single source of truth: index.ts registers these shapes directly with the
+// MCP server, so field definitions (and their descriptions) live here only.
+export const CreatePersonaShape = {
+  name: z.string().min(1, 'Name is required').describe('Name of the persona'),
+  avatarUrl: z.string().url().optional().nullable().describe('Public URL to the persona avatar image (use list_faces for stock face URLs)'),
+  voiceId: z.string().default('alloy').describe('Voice ID to use (e.g. alloy, echo)'),
+  language: z.string().default('en-US').describe('Language code (e.g. pt-BR, en-US)'),
+  videoAspect: z.enum(['9:16', '16:9']).default('9:16').describe('Video aspect ratio'),
+  scriptPrompt: z.string().optional().default('').describe('System prompt instructions for video scripts'),
+  paragraphNumber: z.number().int().min(1).max(10).default(1).describe('Number of paragraphs'),
+  niche: z.string().optional().default('General').describe('Content niche topic'),
   faceMixPercent: z.number().min(0).max(100).default(50),
   faceQuality: z.enum(['ok', 'very_good']).default('very_good'),
-});
+};
+
+export const CreatePersonaSchema = z.object(CreatePersonaShape);
 
 export const ListPersonasSchema = z.object({});
 
@@ -43,63 +47,86 @@ export const ListVoicesSchema = z.object({});
 
 export const ListFacesSchema = z.object({});
 
-export const UpdatePersonaSchema = z.object({
-  personaId: z.string().min(1, 'personaId is required'),
-  name: z.string().min(1).optional(),
+export const UpdatePersonaShape = {
+  personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona to update'),
+  name: z.string().min(1).optional().describe('New name for the persona'),
   // No .nullable(): the API has no "clear avatar" sentinel — null would be silently ignored.
-  avatarUrl: z.string().url().optional(),
-  voiceId: z.string().optional(),
-  language: z.string().optional(),
-  videoAspect: z.enum(['9:16', '16:9']).optional(),
-  scriptPrompt: z.string().optional(),
-  paragraphNumber: z.number().int().min(1).max(10).optional(),
-  niche: z.string().max(300).optional(),
-});
+  avatarUrl: z.string().url().optional().describe('New public avatar image URL'),
+  voiceId: z.string().optional().describe('New voice ID (see list_voices)'),
+  language: z.string().optional().describe('New language code (e.g. pt-BR, en-US)'),
+  videoAspect: z.enum(['9:16', '16:9']).optional().describe('New video aspect ratio'),
+  scriptPrompt: z.string().optional().describe('New system prompt instructions for video scripts'),
+  paragraphNumber: z.number().int().min(1).max(10).optional().describe('New number of paragraphs'),
+  niche: z.string().max(300).optional().describe('New content niche topic'),
+};
+
+export const UpdatePersonaSchema = z.object(UpdatePersonaShape);
 
 export const ListSocialAccountsSchema = z.object({});
 
-export const ConnectAccountSchema = z.object({
-  provider: z.enum(['youtube', 'instagram', 'linkedin', 'bluesky']),
-  handle: z.string().min(1).optional(),
-  appPassword: z.string().min(1).optional(),
-});
+export const ConnectAccountShape = {
+  provider: z.enum(['youtube', 'instagram', 'linkedin', 'bluesky']).describe('The social platform to connect'),
+  handle: z.string().min(1).optional().describe('Bluesky handle (e.g. user.bsky.social). Required only for bluesky.'),
+  appPassword: z.string().min(1).optional().describe('Bluesky app password (Settings > App passwords). Required only for bluesky. Never shared or logged.'),
+};
+
+export const ConnectAccountSchema = z.object(ConnectAccountShape);
 
 export const ListSchedulesSchema = z.object({});
 
-export const ListPostsSchema = z.object({
-  limit: z.number().int().min(1).max(500).default(20),
-});
+export const ListPostsShape = {
+  limit: z.number().int().min(1).max(500).default(20).describe('Max number of upcoming and past posts to return (each list). Default 20, max 500.'),
+};
 
-export const CancelScheduleSchema = z.object({
-  scheduleId: z.string().min(1, 'scheduleId is required'),
-});
+export const ListPostsSchema = z.object(ListPostsShape);
+
+export const CancelScheduleShape = {
+  scheduleId: z.string().min(1, 'scheduleId is required').describe('The ID of the schedule to cancel'),
+};
+
+export const CancelScheduleSchema = z.object(CancelScheduleShape);
 
 export const GetTokenBalanceSchema = z.object({});
 
-export const GenerateVideoSchema = z.object({
-  personaId: z.string().min(1, 'personaId is required'),
-  scriptPrompt: z.string().optional(),
-  audioUrl: z.string().url('audioUrl must be a valid URL').optional().describe('Public URL of custom audio for this video (overrides the persona voice)'),
-});
+export const GenerateVideoShape = {
+  personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona to generate video with'),
+  scriptPrompt: z.string().optional().describe('Optional specific prompt override for this video'),
+  audioUrl: z.string().url('audioUrl must be a valid URL').optional().describe('Optional public URL of custom audio for this video (overrides the persona voice)'),
+};
 
-export const GetVideoStatusSchema = z.object({
-  taskId: z.string().min(1, 'taskId is required'),
-});
+export const GenerateVideoSchema = z.object(GenerateVideoShape);
 
+export const GetVideoStatusShape = {
+  taskId: z.string().min(1, 'taskId is required').describe('The video generation task ID'),
+};
+
+export const GetVideoStatusSchema = z.object(GetVideoStatusShape);
+
+export const ScheduleVideoShape = {
+  personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona'),
+  providers: z
+    .array(z.enum(['youtube', 'instagram', 'linkedin']))
+    .min(1, 'At least one provider required')
+    .describe('Target social platforms'),
+  youtubeAccountIds: z.array(z.string()).optional().default([]),
+  instagramAccountIds: z.array(z.string()).optional().default([]),
+  linkedinAccountIds: z.array(z.string()).optional().default([]),
+  scheduledAt: z
+    .string()
+    .describe('Target ISO date time for scheduling. Must be between 24h and 30 days in the future.'),
+  daysOfWeek: z.array(z.number().int().min(0).max(6)).optional(),
+  startHour: z.number().int().min(0).max(23).optional(),
+  endHour: z.number().int().min(0).max(23).optional(),
+  postsPerDay: z.number().int().min(1).max(10).optional(),
+  timezone: z.string().optional().default('UTC'),
+};
+
+// The cross-field "each provider needs account IDs" rule cannot live in the
+// MCP registration (the SDK only accepts raw shapes, not refined schemas), so
+// it stays here for handler-level validation and handleScheduleVideo enforces
+// it fail-fast before any API call.
 export const ScheduleVideoSchema = z
-  .object({
-    personaId: z.string().min(1, 'personaId is required'),
-    providers: z.array(z.enum(['youtube', 'instagram', 'linkedin'])).min(1, 'At least one provider required'),
-    youtubeAccountIds: z.array(z.string()).optional().default([]),
-    instagramAccountIds: z.array(z.string()).optional().default([]),
-    linkedinAccountIds: z.array(z.string()).optional().default([]),
-    scheduledAt: z.string().describe('Target ISO date time for scheduling. Must be between 24h and 30 days in the future.'),
-    daysOfWeek: z.array(z.number().int().min(0).max(6)).optional(),
-    startHour: z.number().int().min(0).max(23).optional(),
-    endHour: z.number().int().min(0).max(23).optional(),
-    postsPerDay: z.number().int().min(1).max(10).optional(),
-    timezone: z.string().optional().default('UTC'),
-  })
+  .object(ScheduleVideoShape)
   .refine((args) => missingProviderAccountIds(args).length === 0, (args) => ({
     message: `Each provider requires at least one account ID — missing for: ${missingProviderAccountIds(args).join(', ')}. Discover them with list_social_accounts first.`,
   }));
@@ -316,6 +343,19 @@ export async function handleConnectAccount(
       };
     }
     const result = parsed.data;
+    // Never echo a non-https URL as a "open in your browser" authorization
+    // link: z.string().url() accepts any scheme, including javascript:.
+    if (new URL(result.auth_url).protocol !== 'https:') {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: 'Error: the connect endpoint returned a non-https auth_url.',
+          },
+        ],
+        isError: true,
+      };
+    }
     return {
       content: [
         {

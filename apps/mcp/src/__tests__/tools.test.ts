@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
+  getErrorMessage,
   handleCreatePersona,
   handleGenerateVideo,
   handleListVoices,
@@ -18,6 +19,13 @@ import {
   UpdatePersonaSchema,
 } from '../tools.js';
 import type { PostEngineerClient } from '../client.js';
+import type { McpToolResponse } from '../tools.js';
+
+function textOf(response: McpToolResponse): string {
+  const block = response.content[0];
+  if (!block || block.type !== 'text') throw new Error('expected a text content block');
+  return block.text;
+}
 
 describe('MCP Tool Handlers', () => {
   const mockClient = {
@@ -44,19 +52,22 @@ describe('MCP Tool Handlers', () => {
       personaId: 'persona-123',
     });
 
-    const response = await handleCreatePersona(mockClient, {
-      name: 'Alex AI',
-      avatarUrl: 'https://example.com/alex.png',
-      voiceId: 'alloy',
-      language: 'en-US',
-      videoAspect: '9:16',
-      scriptPrompt: 'Explain AI concepts',
-    });
+    const response = await handleCreatePersona(
+      mockClient,
+      CreatePersonaSchema.parse({
+        name: 'Alex AI',
+        avatarUrl: 'https://example.com/alex.png',
+        voiceId: 'alloy',
+        language: 'en-US',
+        videoAspect: '9:16',
+        scriptPrompt: 'Explain AI concepts',
+      })
+    );
 
     expect(mockClient.createPersona).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'Alex AI' })
     );
-    expect(response.content[0].text).toContain('persona-123');
+    expect(textOf(response)).toContain('persona-123');
   });
 
   it('handleGenerateVideo triggers job and returns taskId', async () => {
@@ -74,7 +85,7 @@ describe('MCP Tool Handlers', () => {
       personaId: 'persona-123',
       scriptPrompt: 'Top 3 AI coding assistants in 2026',
     });
-    expect(response.content[0].text).toContain('task-789');
+    expect(textOf(response)).toContain('task-789');
   });
 
   it('handleGenerateVideo passes audioUrl through to the client', async () => {
@@ -92,7 +103,7 @@ describe('MCP Tool Handlers', () => {
       personaId: 'persona-123',
       audioUrl: 'https://cdn.example.com/narracao.mp3',
     });
-    expect(response.content[0].text).toContain('task-audio-2');
+    expect(textOf(response)).toContain('task-audio-2');
   });
 
   it('handleListVoices returns the voice catalog', async () => {
@@ -103,7 +114,7 @@ describe('MCP Tool Handlers', () => {
     const response = await handleListVoices(mockClient);
 
     expect(mockClient.listVoices).toHaveBeenCalledOnce();
-    expect(response.content[0].text).toContain('calm');
+    expect(textOf(response)).toContain('calm');
   });
 
 
@@ -115,7 +126,7 @@ describe('MCP Tool Handlers', () => {
     const response = await handleListFaces(mockClient);
 
     expect(mockClient.listFaces).toHaveBeenCalledOnce();
-    expect(response.content[0].text).toContain('file-1');
+    expect(textOf(response)).toContain('file-1');
   });
 
   it('handleUpdatePersona updates only provided fields', async () => {
@@ -132,7 +143,7 @@ describe('MCP Tool Handlers', () => {
       voiceId: 'energetic',
       niche: 'Finanças',
     });
-    expect(response.content[0].text).toContain('updated successfully');
+    expect(textOf(response)).toContain('updated successfully');
   });
 
   it('handleUpdatePersona returns error when the API fails', async () => {
@@ -141,7 +152,7 @@ describe('MCP Tool Handlers', () => {
     const response = await handleUpdatePersona(mockClient, { personaId: 'missing' });
 
     expect(response.isError).toBe(true);
-    expect(response.content[0].text).toContain('Persona not found');
+    expect(textOf(response)).toContain('Persona not found');
   });
 
   it('handleListSocialAccounts returns connected accounts', async () => {
@@ -153,7 +164,7 @@ describe('MCP Tool Handlers', () => {
     const response = await handleListSocialAccounts(mockClient);
 
     expect(mockClient.listSocialAccounts).toHaveBeenCalledOnce();
-    expect(response.content[0].text).toContain('chan-1');
+    expect(textOf(response)).toContain('chan-1');
   });
 
   it('handleListSchedules returns schedules', async () => {
@@ -165,7 +176,7 @@ describe('MCP Tool Handlers', () => {
     const response = await handleListSchedules(mockClient);
 
     expect(mockClient.listSchedules).toHaveBeenCalledOnce();
-    expect(response.content[0].text).toContain('sched-1');
+    expect(textOf(response)).toContain('sched-1');
   });
 
   it('ListPostsSchema defaults limit to 20 and caps it at 500', () => {
@@ -186,8 +197,8 @@ describe('MCP Tool Handlers', () => {
     const response = await handleListPosts(mockClient, { limit: 20 });
 
     expect(mockClient.listPosts).toHaveBeenCalledWith(20);
-    expect(response.content[0].text).toContain('up-1');
-    expect(response.content[0].text).toContain('re-1');
+    expect(textOf(response)).toContain('up-1');
+    expect(textOf(response)).toContain('re-1');
     expect(response.isError).toBeUndefined();
   });
 
@@ -197,7 +208,7 @@ describe('MCP Tool Handlers', () => {
     const response = await handleListPosts(mockClient, { limit: 20 });
 
     expect(response.isError).toBe(true);
-    expect(response.content[0].text).toContain('Error listing posts: boom');
+    expect(textOf(response)).toContain('Error listing posts: boom');
   });
 
   it('handleCancelSchedule cancels by id', async () => {
@@ -206,7 +217,7 @@ describe('MCP Tool Handlers', () => {
     const response = await handleCancelSchedule(mockClient, { scheduleId: 'sched-1' });
 
     expect(mockClient.cancelSchedule).toHaveBeenCalledWith('sched-1');
-    expect(response.content[0].text).toContain('cancelled successfully');
+    expect(textOf(response)).toContain('cancelled successfully');
   });
 
   it('handleGetTokenBalance returns the wallet balance', async () => {
@@ -215,7 +226,7 @@ describe('MCP Tool Handlers', () => {
     const response = await handleGetTokenBalance(mockClient);
 
     expect(mockClient.getTokenBalance).toHaveBeenCalledOnce();
-    expect(response.content[0].text).toContain('8');
+    expect(textOf(response)).toContain('8');
   });
 
   it('handleScheduleVideo returns error when < 24h constraint violated', async () => {
@@ -223,15 +234,18 @@ describe('MCP Tool Handlers', () => {
       new Error('Scheduled time must be at least 24 hours in advance.')
     );
 
-    const response = await handleScheduleVideo(mockClient, {
-      personaId: 'persona-123',
-      providers: ['youtube'],
-      youtubeAccountIds: ['yt-1'],
-      scheduledAt: '2026-09-18T12:00:00.000Z',
-    });
+    const response = await handleScheduleVideo(
+      mockClient,
+      ScheduleVideoSchema.parse({
+        personaId: 'persona-123',
+        providers: ['youtube'],
+        youtubeAccountIds: ['yt-1'],
+        scheduledAt: '2026-09-18T12:00:00.000Z',
+      })
+    );
 
     expect(response.isError).toBe(true);
-    expect(response.content[0].text).toMatch(/at least 24 hours/i);
+    expect(textOf(response)).toMatch(/at least 24 hours/i);
   });
 
   it('handleConnectAccount returns the OAuth authorization URL with instructions', async () => {
@@ -244,11 +258,23 @@ describe('MCP Tool Handlers', () => {
 
     expect(mockClient.getOAuthConnectUrl).toHaveBeenCalledWith('instagram');
     expect(response.isError).toBeUndefined();
-    const text = (response.content[0] as { text: string }).text;
+    const text = textOf(response);
     expect(text).toContain('https://www.instagram.com/oauth/authorize?state=abc');
     expect(text).toMatch(/open/i);
     expect(text).toMatch(/authorize/i);
     expect(text).toContain('list_social_accounts');
+  });
+
+  it('handleConnectAccount rejects non-https auth_url schemes', async () => {
+    vi.mocked(mockClient.getOAuthConnectUrl).mockResolvedValue({
+      success: true,
+      auth_url: 'javascript:alert(1)',
+    });
+
+    const response = await handleConnectAccount(mockClient, { provider: 'instagram' });
+
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).not.toContain('javascript:');
   });
 
   it('handleConnectAccount returns an error when the connect-url request fails', async () => {
@@ -259,7 +285,7 @@ describe('MCP Tool Handlers', () => {
     const response = await handleConnectAccount(mockClient, { provider: 'youtube' });
 
     expect(response.isError).toBe(true);
-    expect((response.content[0] as { text: string }).text).toMatch(/Failed to get OAuth connect URL/);
+    expect(textOf(response)).toMatch(/Failed to get OAuth connect URL/);
   });
 
   it('handleConnectAccount connects Bluesky directly without echoing the app password', async () => {
@@ -280,7 +306,7 @@ describe('MCP Tool Handlers', () => {
       'super-secret-password'
     );
     expect(response.isError).toBeUndefined();
-    const text = (response.content[0] as { text: string }).text;
+    const text = textOf(response);
     expect(text).toMatch(/connected/i);
     expect(text).not.toContain('super-secret-password');
   });
@@ -290,7 +316,7 @@ describe('MCP Tool Handlers', () => {
     const response = await handleConnectAccount(mockClient, { provider: 'bluesky' });
 
     expect(response.isError).toBe(true);
-    expect((response.content[0] as { text: string }).text).toMatch(/handle.*appPassword|appPassword.*handle/i);
+    expect(textOf(response)).toMatch(/handle.*appPassword|appPassword.*handle/i);
     expect(mockClient.connectBlueskyAccount).not.toHaveBeenCalled();
   });
 
@@ -306,7 +332,7 @@ describe('MCP Tool Handlers', () => {
     });
 
     expect(response.isError).toBe(true);
-    const text = (response.content[0] as { text: string }).text;
+    const text = textOf(response);
     expect(text).toMatch(/Invalid handle or app password/);
     expect(text).not.toContain('super-secret-password');
   });
@@ -341,11 +367,15 @@ describe('schedule account validation', () => {
     const response = await handleScheduleVideo(client, {
       personaId: 'persona-123',
       providers: ['youtube'],
+      youtubeAccountIds: [],
+      instagramAccountIds: [],
+      linkedinAccountIds: [],
       scheduledAt: '2026-10-18T12:00:00.000Z',
-    } as never);
+      timezone: 'UTC',
+    });
 
     expect(response.isError).toBe(true);
-    expect((response.content[0] as { text: string }).text).toMatch(/youtube.*account|account.*youtube/i);
+    expect(textOf(response)).toMatch(/youtube.*account|account.*youtube/i);
     expect(client.createSchedule).not.toHaveBeenCalled();
   });
 });
@@ -374,6 +404,19 @@ describe('schema bounds', () => {
     const response = await handleConnectAccount(client, { provider: 'youtube' });
 
     expect(response.isError).toBe(true);
-    expect((response.content[0] as { text: string }).text).toMatch(/auth_url/i);
+    expect(textOf(response)).toMatch(/auth_url/i);
+  });
+});
+
+describe('getErrorMessage', () => {
+  it('returns the message for Error instances', () => {
+    expect(getErrorMessage(new Error('boom'))).toBe('boom');
+  });
+
+  it('stringifies non-Error thrown values', () => {
+    expect(getErrorMessage('plain string')).toBe('plain string');
+    expect(getErrorMessage(42)).toBe('42');
+    expect(getErrorMessage(null)).toBe('null');
+    expect(getErrorMessage(undefined)).toBe('undefined');
   });
 });
