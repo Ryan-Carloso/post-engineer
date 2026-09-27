@@ -245,17 +245,12 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   // Per-video library image override: accepts image_id (snake) or imageId
   // (camel); resolved against the persona's image library in the persona
-  // branch below. Deleted there before the payload is built so it never
-  // reaches the engine as a loose field.
-  if (
-    requestBody.image_id === undefined &&
-    typeof requestBody.imageId === 'string'
-  ) {
-    requestBody = {
-      ...requestBody,
-      image_id: requestBody.imageId,
-    };
-  }
+  // branch below. Deleted here so it never reaches the engine as a loose
+  // field. An empty string or a non-string is a client bug: rejected with
+  // 400 in the persona branch instead of being silently ignored.
+  const rawImageId =
+    requestBody.image_id === undefined ? requestBody.imageId : requestBody.image_id;
+  delete requestBody.image_id;
   delete requestBody.imageId;
 
   let customAudioUrl: string | undefined;
@@ -676,9 +671,19 @@ export async function POST(request: Request): Promise<NextResponse> {
     // recently used images, then primary/first). The engine still receives
     // a single resolved photo URL, so no engine changes are needed.
     // Legacy personas (empty library) keep the behavior above untouched.
-    const requestedImageId =
-      typeof requestBody.image_id === 'string' ? requestBody.image_id : null;
-    delete requestBody.image_id;
+    // An empty string is a client bug (reject it); a non-string is too —
+    // silently ignoring it would hide a broken integration.
+    const requestedImageId = typeof rawImageId === 'string' ? rawImageId : null;
+    if (
+      rawImageId !== undefined &&
+      rawImageId !== null &&
+      requestedImageId === null
+    ) {
+      return NextResponse.json(
+        { success: false, error: 'image_id must be a string.' },
+        { status: 400 },
+      );
+    }
     if (requestedImageId !== null && requestedImageId.trim().length === 0) {
       return NextResponse.json(
         { success: false, error: 'image_id must be a non-empty string.' },
@@ -692,6 +697,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       {
         topic: typeof requestBody.video_subject === 'string' ? requestBody.video_subject : null,
         niche: personaNiche,
+        script: typeof persona.script_prompt === 'string' ? persona.script_prompt : null,
         imageId: requestedImageId,
       },
     );
@@ -703,9 +709,19 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
     if (librarySelection.image) {
       const libraryUrl = await signedUrl(supabase, librarySelection.image.image_path);
-      // A signing failure falls back to the legacy photo; the 503 guard
-      // below still classifies an unloadable face the same way.
-      if (libraryUrl) photoUrl = libraryUrl;
+      // The library image was explicitly resolved for this video: a signing
+      // failure must not silently fall back to a different face. Fail loud
+      // with 503, before the token gate, like the legacy photo path below.
+      if (!libraryUrl) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'The selected persona image could not be loaded. Please try again.',
+          },
+          { status: 503 },
+        );
+      }
+      photoUrl = libraryUrl;
       // An explicit override is the caller's pinned choice, not a rotation
       // pick: it must not pollute the anti-repeat history.
       if (requestedImageId === null) {

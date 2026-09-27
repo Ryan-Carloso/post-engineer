@@ -2157,6 +2157,54 @@ describe('POST /api/persona/video-job', () => {
       expect(forwardedPhotoUrl()).toBe('https://supabase.test/signed/user-uuid-1/foto.png');
     });
 
+    it('rejects a non-string image_id with 400', async () => {
+      mockSupabase(PERSONA, { libraryImages: LIBRARY });
+
+      const res = await POST(
+        jsonRequest({ personaId: 'p-1', video_subject: 'business office meeting', image_id: 5 }),
+      );
+
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { success: boolean; error: string };
+      expect(body.error).toContain('image_id');
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('returns 503 when the selected library image cannot be signed', async () => {
+      const client = mockSupabase(PERSONA, { libraryImages: LIBRARY });
+      vi.mocked(client.storage.from).mockReturnValue({
+        createSignedUrl: vi.fn(async () => ({ data: null, error: { message: 'boom' } })),
+      } as never);
+
+      const res = await POST(
+        jsonRequest({ personaId: 'p-1', video_subject: 'business office meeting' }),
+      );
+
+      expect(res.status).toBe(503);
+      const body = (await res.json()) as { success: boolean; error: string };
+      expect(body.error).toContain('selected persona image');
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('scores library images with the persona script prompt', async () => {
+      mockSupabase(
+        { ...PERSONA, script_prompt: 'relaxed weekend beach vlog with coffee' },
+        { libraryImages: LIBRARY },
+      );
+      engineOk();
+
+      const res = await POST(
+        jsonRequest({ personaId: 'p-1', video_subject: 'office tour' }),
+      );
+
+      expect(res.status).toBe(200);
+      // The topic alone matches the formal image; the script prompt matches
+      // the casual image harder, so the casual image wins.
+      expect(forwardedPhotoUrl()).toBe(
+        `https://supabase.test/signed/${USER_ID}/lib/casual.png`,
+      );
+    });
+
     function personasUpdateCalls(client: unknown): unknown[][] {
       const fromMock = (client as { from: ReturnType<typeof vi.fn> }).from;
       const calls: unknown[][] = [];
