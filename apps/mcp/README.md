@@ -1,6 +1,6 @@
 # Post Engineer MCP Server
 
-Public MCP (Model Context Protocol) server for [Post Engineer](https://post-engineer.com/). It lets AI agents (Claude, Cursor, Codex, OpenCode, and ChatGPT) create personas, generate videos, check generation status, and schedule posts directly on your Post Engineer account.
+Public MCP (Model Context Protocol) server for [Post Engineer](https://post-engineer.com/). It lets AI agents (Claude, Cursor, Codex, and OpenCode) create personas, generate videos, check generation status, and schedule posts directly on your Post Engineer account.
 
 ## What is https://post-engineer.com/?
 
@@ -74,55 +74,6 @@ Set your API key locally (the API URL is built in and always points to productio
 ```bash
 export POST_ENGINEER_API_KEY="<MY_API_KEY>"
 ```
-
-## Remote HTTP mode for ChatGPT
-
-HTTP mode exposes a stateless Streamable HTTP MCP endpoint at `/`. Deploy this service behind HTTPS. There is no global Post Engineer API key: each request must carry the API key of the user making the request.
-
-Configure this server environment variable:
-
-```bash
-MCP_PORT="3000"
-```
-
-Optional OAuth-discovery overrides (defaults shown):
-
-```bash
-MCP_PUBLIC_URL="https://mcp.post-engineer.com"
-MCP_AUTHORIZATION_SERVERS="https://post-engineer.com"
-MCP_ALLOWED_ORIGINS=""
-```
-
-Start the remote server:
-
-```bash
-pnpm build
-pnpm start:http
-```
-
-The endpoint is `https://mcp.post-engineer.com/`. ChatGPT clients should use OAuth discovery; clients without OAuth may send `Authorization: Bearer <USER_POST_ENGINEER_API_KEY>`. The credential is read per request and is never stored by the MCP server. Keep the endpoint behind a provider that supports HTTPS. `/health` is available for deployment health checks.
-
-Public service documentation is available at:
-
-- `https://mcp.post-engineer.com/docs`
-- `https://mcp.post-engineer.com/docs.md`
-- `https://mcp.post-engineer.com/health`
-- `https://mcp.post-engineer.com/health.md`
-
-Validate a deployed service without exposing an API key:
-
-```bash
-curl -i https://mcp.post-engineer.com/health
-curl -i https://mcp.post-engineer.com/health.md
-curl -i https://mcp.post-engineer.com/docs
-curl -i https://mcp.post-engineer.com/docs.md
-curl -i https://mcp.post-engineer.com/.well-known/oauth-protected-resource
-```
-
-In ChatGPT, enable Developer mode under **Settings -> Security and login**, open **Apps/Plugins**, choose **Add**, enter `https://mcp.post-engineer.com/`, and complete the OAuth consent flow. Then open a new chat and select the app with `@` or `+`.
-
-Never put the user's API key in the URL. Revoke the key in Post Engineer if it is exposed.
-
 ## Tools
 
 - `list_personas`: list existing personas.
