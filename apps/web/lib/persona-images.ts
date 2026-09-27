@@ -29,10 +29,26 @@ export interface LibraryImageInput {
   description?: string;
 }
 
+//---------------
+// isFileLike — files come from the server runtime (undici), whose File is
+// not the same constructor as the test environment's; structural check.
+// Exported for route handlers that must not use `instanceof File`.
+//---------------
+export function isFileLike(value: unknown): value is File {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.name === 'string' &&
+    typeof candidate.type === 'string' &&
+    typeof candidate.size === 'number' &&
+    candidate.arrayBuffer instanceof Function
+  );
+}
+
 export function validateImageFile(
   file: unknown,
 ): { file: File; extension: string } | { error: string } {
-  if (!(file instanceof File) || file.size === 0) {
+  if (!isFileLike(file) || file.size === 0) {
     return { error: 'An image file is required.' };
   }
   if (!file.type.startsWith('image/')) {
@@ -171,8 +187,10 @@ export async function setPrimaryLibraryImage(
 // Priority: explicit image_id override > tag/description keyword match
 // (excluding recently used images) > primary/first image. Empty library
 // resolves to null so the caller falls back to the legacy photo/avatar.
-// An unknown image_id is a 404, not a silent fallback. The recent-use
-// history update is best-effort: it never fails the generation.
+// An unknown image_id is a 404, not a silent fallback — even for an empty
+// library. The recent-use history update is best-effort: it never fails the
+// generation. Explicit image_id overrides skip the history write: a pinned
+// choice is not a rotation pick.
 //---------------
 export async function resolveVideoImage(
   supabase: SupabaseClient,
@@ -193,8 +211,8 @@ export async function resolveVideoImage(
     return { ok: false, error: 'Failed to load persona image library.', status: 500 };
   }
   const library = (data ?? []) as PersonaLibraryImage[];
-  if (library.length === 0) return { ok: true, image: null };
-
+  // An explicit image_id is a 404 even when the library is empty — never a
+  // silent fallback to the legacy photo.
   if (input.imageId && !library.some((image) => image.id === input.imageId)) {
     return {
       ok: false,
@@ -202,18 +220,23 @@ export async function resolveVideoImage(
       status: 404,
     };
   }
+  if (library.length === 0) return { ok: true, image: null };
 
   const selected = selectPersonaImage(library, input, recentImageIds);
   if (!selected) return { ok: true, image: null };
 
-  const { error: historyError } = await supabase
-    .from('personas')
-    .update({ recent_image_ids: pushRecentImageId(recentImageIds, selected.id) })
-    .eq('id', personaId);
-  if (historyError) {
-    console.error('[persona-images] recent-image history update failed', {
-      error: historyError,
-    });
+  // An explicit override is the caller's pinned choice, not a rotation pick:
+  // it must not pollute the anti-repeat history.
+  if (!input.imageId) {
+    const { error: historyError } = await supabase
+      .from('personas')
+      .update({ recent_image_ids: pushRecentImageId(recentImageIds, selected.id) })
+      .eq('id', personaId);
+    if (historyError) {
+      console.error('[persona-images] recent-image history update failed', {
+        error: historyError,
+      });
+    }
   }
   return { ok: true, image: selected };
 }

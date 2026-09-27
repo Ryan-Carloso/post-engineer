@@ -44,6 +44,9 @@ as $$
 begin
   -- Lock the parent persona row: concurrent inserts for the same persona
   -- serialize here instead of racing on the count below.
+  -- NOTE: the limit literal below mirrors MAX_PERSONA_IMAGES in
+  -- apps/web/lib/persona-images.ts. SQL has no import of that constant, so
+  -- keep the two in sync manually when the limit ever changes.
   perform 1 from public.personas where id = new.persona_id for update;
   if (select count(*) from public.persona_images where persona_id = new.persona_id) > 10 then
     raise exception 'persona image library is limited to 10 images';

@@ -82,7 +82,7 @@ describe('resolveVideoImage', () => {
     });
   });
 
-  it('honors an explicit image_id and records it in the history', async () => {
+  it('honors an explicit image_id without touching the rotation history', async () => {
     const { calls, client } = mockClient();
     const result = await resolveVideoImage(
       client,
@@ -92,7 +92,19 @@ describe('resolveVideoImage', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.image?.id).toBe('img-formal');
-    expect(calls.historyUpdates).toEqual([{ id: 'persona-1', recent: ['img-formal', 'img-casual'] }]);
+    // A pinned override is not a rotation pick: the anti-repeat history is
+    // left alone.
+    expect(calls.historyUpdates).toHaveLength(0);
+  });
+
+  it('returns 404 for an image_id when the library is empty', async () => {
+    const { client } = mockClient({ library: [] });
+    const result = await resolveVideoImage(client, 'persona-1', [], { imageId: 'nope' });
+    expect(result).toEqual({
+      ok: false,
+      error: "image_id not found in this persona's image library.",
+      status: 404,
+    });
   });
 
   it('matches tags against the video topic and excludes recent images', async () => {
@@ -140,6 +152,17 @@ describe('validateImageFile', () => {
       const result = validateImageFile(png(name, type));
       expect('error' in result).toBe(false);
     }
+  });
+
+  it('accepts a structural file (undici File is a different constructor)', () => {
+    const undiciLike = {
+      name: 'server.png',
+      type: 'image/png',
+      size: 2048,
+      arrayBuffer: async () => new ArrayBuffer(8),
+    };
+    const result = validateImageFile(undiciLike);
+    expect('error' in result).toBe(false);
   });
 
   it('rejects non-images, oversized files, and unsupported extensions', () => {

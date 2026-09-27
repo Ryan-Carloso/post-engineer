@@ -4,6 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { isPersonaAllowed } from '@/lib/api-keys';
 import {
   addLibraryImages,
+  isFileLike,
   MAX_DESCRIPTION_LENGTH,
   MAX_TAG_LENGTH,
   setPrimaryLibraryImage,
@@ -39,6 +40,11 @@ async function getAuth(request: Request): Promise<
   if (authError || !auth) {
     return { response: errorResponse(401, 'Authentication required.') };
   }
+  // NOTE: for API-key callers this is the service-role client, which bypasses
+  // RLS. Ownership below is enforced by the application-level helpers
+  // (assertPersonaOwned / getOwnedImage) — every handler in this file must
+  // scope through one of them and must never query persona_images or storage
+  // without it.
   const supabase =
     auth.isApiKey === true
       ? createSupabaseServiceClient()
@@ -174,8 +180,20 @@ export async function POST(request: Request): Promise<NextResponse> {
   const ownershipError = await assertPersonaOwned(supabase, auth, personaId);
   if (ownershipError) return ownershipError;
 
+  // Creation rejects library images for faceless personas; the same rule
+  // applies here so images cannot be added backdoor after creation. Stored
+  // facelessness is face_mix_percent = 0 (there is no persona_mode column).
+  const { data: personaRow } = await supabase
+    .from('personas')
+    .select('face_mix_percent')
+    .eq('id', personaId)
+    .single();
+  if ((personaRow as { face_mix_percent: number | null } | null)?.face_mix_percent === 0) {
+    return errorResponse(400, 'Faceless persona must not include library images.');
+  }
+
   const file = formData.get('image');
-  if (!(file instanceof File) || file.size === 0) {
+  if (!isFileLike(file) || file.size === 0) {
     return errorResponse(400, 'An image file is required.');
   }
   const tag = formData.get('tag');
@@ -242,12 +260,27 @@ export async function PATCH(request: Request): Promise<NextResponse> {
   }
 
   if (updates.is_primary === true) {
+    // Reuse the shared helper (with its error checks) instead of
+    // reimplementing the unset-others swap inline.
     const personaId = (image as unknown as { persona_id: string }).persona_id;
-    await supabase
+    const primaryError = await setPrimaryLibraryImage(supabase, personaId, id);
+    if (primaryError) return errorResponse(500, primaryError.error);
+    delete updates.is_primary;
+  }
+  if (Object.keys(updates).length === 0) {
+    // The primary flag was the only change and is already applied.
+    const { data: current, error: fetchError } = await supabase
       .from('persona_images')
-      .update({ is_primary: false })
-      .eq('persona_id', personaId)
-      .neq('id', id);
+      .select('id, image_path, tag, description, is_primary, created_at')
+      .eq('id', id)
+      .single();
+    if (fetchError || !current) {
+      console.error('[api/persona/images] refetch after primary update failed', {
+        error: fetchError,
+      });
+      return errorResponse(500, 'Failed to update image.');
+    }
+    return NextResponse.json({ success: true, image: current });
   }
 
   const { data: updated, error: updateError } = await supabase
@@ -281,6 +314,16 @@ export async function DELETE(request: Request): Promise<NextResponse> {
     console.error('[api/persona/images] delete failed', { error: deleteError });
     return errorResponse(500, 'Failed to delete image.');
   }
-  await supabase.storage.from('personas').remove([image.image_path]);
+  // Best-effort storage cleanup: the DB row is the source of truth, but a
+  // failed remove must not go silently — otherwise orphaned objects pile up.
+  const { error: storageError } = await supabase.storage
+    .from('personas')
+    .remove([image.image_path]);
+  if (storageError) {
+    console.error('[api/persona/images] storage cleanup failed', {
+      imagePath: image.image_path,
+      error: storageError,
+    });
+  }
   return NextResponse.json({ success: true });
 }

@@ -129,9 +129,24 @@ export async function POST(request: Request): Promise<NextResponse> {
     const added = await addLibraryImages(supabase, user.id, persona.id, libraryInputs);
     if ('error' in added) {
       // Roll back the whole creation so a half-written persona never survives.
-      await supabase.from('personas').delete().eq('id', persona.id);
+      // Rollback failures are logged loudly: an invisible failed rollback is
+      // worse than a loud one.
+      const { error: rollbackError } = await supabase
+        .from('personas')
+        .delete()
+        .eq('id', persona.id);
+      if (rollbackError) {
+        console.error('[api/persona] creation rollback failed', { error: rollbackError });
+      }
       if (photoPath) {
-        await supabase.storage.from('personas').remove([photoPath]);
+        const { error: photoRollbackError } = await supabase.storage
+          .from('personas')
+          .remove([photoPath]);
+        if (photoRollbackError) {
+          console.error('[api/persona] photo rollback failed', {
+            error: photoRollbackError,
+          });
+        }
       }
       return errorResponse(added.status, added.error);
     }

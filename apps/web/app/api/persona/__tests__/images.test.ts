@@ -38,12 +38,16 @@ const IMAGE_ROW = {
 };
 
 interface DbState {
-  persona: { id: string } | null;
+  persona: { id: string; face_mix_percent?: number } | null;
   imageCount: number;
   imageRow: typeof IMAGE_ROW | null;
   listRows: unknown[];
   insertedRow: unknown | null;
   updatedRow: unknown | null;
+  /** Makes the first persona_images UPDATE fail (unset-primary error path). */
+  failFirstUpdate?: boolean;
+  /** Makes the storage remove() call fail (orphan-file logging path). */
+  storageRemoveError?: { message: string } | null;
 }
 
 function terminal(result: unknown): Record<string, unknown> {
@@ -69,6 +73,9 @@ function mockClient(state: Partial<DbState> = {}) {
   const calls = { unsetPrimary: 0, removedPaths: [] as string[] };
   const updateMock = vi.fn(() => {
     calls.unsetPrimary += 1;
+    if (full.failFirstUpdate === true && calls.unsetPrimary === 1) {
+      return terminal({ data: null, error: { message: 'unset failed' } });
+    }
     return terminal({ data: full.updatedRow, error: null });
   });
   const client = {
@@ -101,7 +108,7 @@ function mockClient(state: Partial<DbState> = {}) {
         upload: vi.fn(async () => ({ error: null })),
         remove: vi.fn(async (paths: string[]) => {
           calls.removedPaths.push(...paths);
-          return { error: null };
+          return { error: full.storageRemoveError ?? null };
         }),
         createSignedUrl: vi.fn(async (path: string) => ({
           data: { signedUrl: `https://supabase.test/signed/${path}` },
@@ -232,6 +239,17 @@ describe('POST /api/persona/images', () => {
     expect(body.success).toBe(true);
     expect(body.image.id).toBe(IMAGE_ROW.id);
   });
+
+  it('rejects library images for a faceless persona', async () => {
+    mockAuth({ userId: USER_ID });
+    mockClient({ persona: { id: PERSONA_ID, face_mix_percent: 0 } });
+    const res = await POST(
+      postForm({ personaId: PERSONA_ID, image: imageFile() }),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('Faceless');
+  });
 });
 
 describe('PATCH /api/persona/images', () => {
@@ -275,6 +293,15 @@ describe('PATCH /api/persona/images', () => {
     // One update for unsetting the others, one for the row itself.
     expect(calls.unsetPrimary).toBe(2);
   });
+
+  it('returns 500 when the unset-primary update fails', async () => {
+    mockAuth({ userId: USER_ID });
+    mockClient({ imageRow: IMAGE_ROW, updatedRow: IMAGE_ROW, failFirstUpdate: true });
+    const res = await PATCH(patchRequest({ id: IMAGE_ROW.id, isPrimary: true }));
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as { success: boolean; error: string };
+    expect(body.success).toBe(false);
+  });
 });
 
 describe('DELETE /api/persona/images', () => {
@@ -293,5 +320,25 @@ describe('DELETE /api/persona/images', () => {
     );
     expect(res.status).toBe(200);
     expect(calls.removedPaths).toEqual([IMAGE_ROW.image_path]);
+  });
+
+  it('still succeeds when the storage cleanup fails, but logs it', async () => {
+    mockAuth({ userId: USER_ID });
+    mockClient({ imageRow: IMAGE_ROW, storageRemoveError: { message: 'bucket down' } });
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const res = await DELETE(
+        new Request(`http://localhost/api/persona/images?id=${IMAGE_ROW.id}`),
+      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { success: boolean };
+      expect(body.success).toBe(true);
+      expect(errorSpy).toHaveBeenCalledWith(
+        '[api/persona/images] storage cleanup failed',
+        expect.objectContaining({ imagePath: IMAGE_ROW.image_path }),
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });
