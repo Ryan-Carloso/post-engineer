@@ -1,7 +1,6 @@
 //---------------
-// schedule-window — valid window for schedules with a target date/time.
-// Product rule (mirrors the public MCP server in
-// github.com/Ryan-Carloso/post-engineer-mcp, src/validator.ts):
+// schedule-window — valid window for target date/time scheduling.
+// Product rule (mirrors the MCP server in apps/mcp/src/validator.ts):
 // minimum 24h in advance, maximum 30 days ahead.
 //---------------
 

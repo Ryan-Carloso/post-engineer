@@ -1,0 +1,43 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "mcp",
+  "root": "apps/mcp",
+  "targets": {
+    "build": {
+      "cache": true,
+      "executor": "nx:run-commands",
+      "inputs": [
+        "production",
+        "^production"
+      ],
+      "options": {
+        "command": "pnpm build",
+        "cwd": "apps/mcp"
+      }
+    },
+    "lint": {
+      "cache": true,
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm lint",
+        "cwd": "apps/mcp"
+      }
+    },
+    "test": {
+      "cache": true,
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm test",
+        "cwd": "apps/mcp"
+      }
+    },
+    "typecheck": {
+      "cache": true,
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm exec tsc --noEmit",
+        "cwd": "apps/mcp"
+      }
+    }
+  }
+}
