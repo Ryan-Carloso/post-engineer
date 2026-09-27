@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import {
   useDeletePersonaImageMutation,
@@ -12,6 +12,10 @@ import {
 import { useI18n } from '@/lib/i18n/provider';
 
 const MAX_LIBRARY_IMAGES = 10;
+// Mirrors the server-side limits in apps/web/lib/persona-images.ts. The
+// server stays authoritative; this only keeps the picker honest.
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const ACCEPTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 interface PendingImage {
   id: string;
@@ -35,23 +39,60 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Tracks live preview URLs so they can be revoked if the component
+  // unmounts while items are still pending.
+  const livePreviewsRef = useRef<Set<string>>(new Set());
 
   const images = imagesQuery.data ?? [];
   const full = images.length >= MAX_LIBRARY_IMAGES;
 
+  // Revoke any previews still alive on unmount (navigation away mid-queue).
+  useEffect(() => {
+    const live = livePreviewsRef.current;
+    return () => {
+      for (const preview of live) URL.revokeObjectURL(preview);
+      live.clear();
+    };
+  }, []);
+
+  const trackPreview = (preview: string): void => {
+    livePreviewsRef.current.add(preview);
+  };
+
+  const dropPreview = (preview: string): void => {
+    livePreviewsRef.current.delete(preview);
+    URL.revokeObjectURL(preview);
+  };
+
   const onPickFiles = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    const files = Array.from(event.target.files ?? []).filter((file) =>
-      file.type.startsWith('image/'),
+    setError(null);
+    const room = MAX_LIBRARY_IMAGES - images.length - pending.length;
+    const picked = Array.from(event.target.files ?? []).filter(
+      (file) =>
+        file.type.startsWith('image/') &&
+        ACCEPTED_IMAGE_TYPES.has(file.type) &&
+        file.size > 0 &&
+        file.size <= MAX_IMAGE_BYTES,
     );
+    const accepted = picked.slice(0, Math.max(room, 0));
+    if (picked.length > accepted.length) {
+      // Either the library is full or the picker selection overflowed the
+      // remaining room — the server re-validates on upload either way.
+      setError(t('persona.libraryLimitReached'));
+    }
     setPending((prev) => [
       ...prev,
-      ...files.map((file, index) => ({
-        id: `${file.name}-${file.size}-${prev.length + index}`,
-        file,
-        preview: URL.createObjectURL(file),
-        tag: '',
-        description: '',
-      })),
+      ...accepted.map((file) => {
+        const preview = URL.createObjectURL(file);
+        trackPreview(preview);
+        return {
+          id: crypto.randomUUID(),
+          file,
+          preview,
+          tag: '',
+          description: '',
+        };
+      }),
     ]);
     event.target.value = '';
   };
@@ -59,7 +100,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
   const removePending = (id: string): void => {
     setPending((prev) => {
       const target = prev.find((item) => item.id === id);
-      if (target) URL.revokeObjectURL(target.preview);
+      if (target) dropPreview(target.preview);
       return prev.filter((item) => item.id !== id);
     });
   };
@@ -71,20 +112,31 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
   const uploadPending = async (): Promise<void> => {
     setError(null);
     setUploading(true);
+    const uploadedIds = new Set<string>();
     try {
       for (const item of pending) {
-        const result = await uploadMutation.mutateAsync({
-          file: item.file,
-          tag: item.tag.trim() || undefined,
-          description: item.description.trim() || undefined,
-        });
+        let result: { success: boolean; error?: string };
+        try {
+          result = await uploadMutation.mutateAsync({
+            file: item.file,
+            tag: item.tag.trim() || undefined,
+            description: item.description.trim() || undefined,
+          });
+        } catch (uploadError) {
+          console.error('[persona-image-library] upload failed', { error: uploadError });
+          setError(t('persona.libraryUploadError'));
+          break;
+        }
         if (!result.success) {
           setError(result.error ?? t('persona.libraryUploadError'));
-          return;
+          break;
         }
-        URL.revokeObjectURL(item.preview);
+        uploadedIds.add(item.id);
+        dropPreview(item.preview);
       }
-      setPending([]);
+      // On partial failure the already-uploaded items leave the queue; only
+      // the failed (and not-yet-tried) items stay so the user can retry.
+      setPending((prev) => prev.filter((item) => !uploadedIds.has(item.id)));
     } finally {
       setUploading(false);
     }
@@ -175,7 +227,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
               disabled={uploading}
               className="mt-3 rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
             >
-              {uploading ? t('persona.libraryUploading') : t('persona.libraryAdd')}
+              {uploading ? t('persona.libraryUploading') : t('persona.libraryUpload')}
             </button>
           ) : null}
         </div>
@@ -201,19 +253,39 @@ function LibraryImageCard({
   const [editing, setEditing] = useState(false);
   const [tag, setTag] = useState(image.tag ?? '');
   const [description, setDescription] = useState(image.description ?? '');
+  const [cardError, setCardError] = useState<string | null>(null);
 
   const save = async (): Promise<void> => {
-    const result = await updateMutation.mutateAsync({
-      id: image.id,
-      tag: tag.trim(),
-      description: description.trim(),
-    });
-    if (result.success) setEditing(false);
+    setCardError(null);
+    try {
+      const result = await updateMutation.mutateAsync({
+        id: image.id,
+        tag: tag.trim(),
+        description: description.trim(),
+      });
+      if (result.success) {
+        setEditing(false);
+      } else {
+        setCardError(result.error ?? t('persona.libraryUpdateError'));
+      }
+    } catch (saveError) {
+      console.error('[persona-image-library] update failed', { error: saveError });
+      setCardError(t('persona.libraryUpdateError'));
+    }
   };
 
   const remove = async (): Promise<void> => {
     if (!window.confirm(t('persona.libraryRemoveConfirm'))) return;
-    await deleteMutation.mutateAsync(image.id);
+    setCardError(null);
+    try {
+      const result = await deleteMutation.mutateAsync(image.id);
+      if (!result.success) {
+        setCardError(result.error ?? t('persona.libraryDeleteError'));
+      }
+    } catch (deleteError) {
+      console.error('[persona-image-library] delete failed', { error: deleteError });
+      setCardError(t('persona.libraryDeleteError'));
+    }
   };
 
   return (
@@ -230,6 +302,7 @@ function LibraryImageCard({
         </span>
       ) : null}
       <div className="space-y-1 p-2">
+        {cardError ? <p className="text-xs text-red-600">{cardError}</p> : null}
         {editing ? (
           <>
             <input

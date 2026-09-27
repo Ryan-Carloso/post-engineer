@@ -291,14 +291,22 @@ async function fetchPersonaImages(personaId: string): Promise<PersonaImageRecord
   if (!response.ok) {
     throw new Error(`Persona images request failed with status ${response.status}`);
   }
-  const data: { success: boolean; images: PersonaImageRecord[] } = await response.json();
+  const data: { success: boolean; images: PersonaImageRecord[] } | null = await response
+    .json()
+    .catch(() => null);
+  if (!data || data.success !== true || !Array.isArray(data.images)) {
+    throw new Error('Persona images request returned an unexpected payload.');
+  }
   return data.images;
 }
 
 export function usePersonaImagesQuery(personaId: string | null) {
   return useQuery<PersonaImageRecord[]>({
     queryKey: ['persona-images', personaId],
-    queryFn: () => fetchPersonaImages(personaId as string),
+    queryFn: () => {
+      if (personaId === null) throw new Error('personaId is required.');
+      return fetchPersonaImages(personaId);
+    },
     enabled: personaId !== null,
     staleTime: 30_000,
   });
@@ -311,10 +319,37 @@ export interface UploadPersonaImageInput {
   isPrimary?: boolean;
 }
 
+interface ImageMutationResult {
+  success: boolean;
+  error?: string;
+  image?: PersonaImageRecord;
+}
+
+/**
+ * Reads a mutation-style JSON payload defensively: a non-2xx status, a
+ * non-JSON body, or a success:false payload all surface as
+ * { success: false } instead of throwing on .json() or resolving as success.
+ */
+async function parseImageMutationResult(
+  response: Response,
+): Promise<ImageMutationResult> {
+  const data: ImageMutationResult | null = await response.json().catch(() => null);
+  if (!response.ok || !data || data.success !== true) {
+    return {
+      success: false,
+      error:
+        (data && typeof data.error === 'string' && data.error) ||
+        `Request failed with status ${response.status}.`,
+      ...(data?.image ? { image: data.image } : {}),
+    };
+  }
+  return { success: true, image: data.image };
+}
+
 export async function uploadPersonaImage(
   personaId: string,
   input: UploadPersonaImageInput,
-): Promise<{ success: boolean; error?: string; image?: PersonaImageRecord }> {
+): Promise<ImageMutationResult> {
   const formData = new FormData();
   formData.append('personaId', personaId);
   formData.append('image', input.file);
@@ -322,7 +357,7 @@ export async function uploadPersonaImage(
   if (input.description) formData.append('description', input.description);
   if (input.isPrimary !== undefined) formData.append('isPrimary', String(input.isPrimary));
   const response = await fetch('/api/persona/images', { method: 'POST', body: formData });
-  return response.json();
+  return parseImageMutationResult(response);
 }
 
 export interface UpdatePersonaImageInput {
@@ -334,23 +369,21 @@ export interface UpdatePersonaImageInput {
 
 export async function updatePersonaImage(
   input: UpdatePersonaImageInput,
-): Promise<{ success: boolean; error?: string }> {
+): Promise<ImageMutationResult> {
   const response = await fetch('/api/persona/images', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   });
-  return response.json();
+  return parseImageMutationResult(response);
 }
 
-export async function deletePersonaImage(
-  id: string,
-): Promise<{ success: boolean; error?: string }> {
+export async function deletePersonaImage(id: string): Promise<ImageMutationResult> {
   const response = await fetch(
     `/api/persona/images?id=${encodeURIComponent(id)}`,
     { method: 'DELETE' },
   );
-  return response.json();
+  return parseImageMutationResult(response);
 }
 
 function useInvalidatePersonaImages(personaId: string | null) {
@@ -363,9 +396,15 @@ function useInvalidatePersonaImages(personaId: string | null) {
 export function useUploadPersonaImageMutation(personaId: string | null) {
   const invalidate = useInvalidatePersonaImages(personaId);
   return useMutation({
-    mutationFn: (input: UploadPersonaImageInput) =>
-      uploadPersonaImage(personaId as string, input),
-    onSuccess: invalidate,
+    mutationFn: (input: UploadPersonaImageInput) => {
+      if (personaId === null) throw new Error('personaId is required.');
+      return uploadPersonaImage(personaId, input);
+    },
+    // Only refresh the library when the server actually accepted the change;
+    // a success:false payload must not look like a completed mutation.
+    onSuccess: (result) => {
+      if (result.success) invalidate();
+    },
   });
 }
 
@@ -373,7 +412,9 @@ export function useUpdatePersonaImageMutation(personaId: string | null) {
   const invalidate = useInvalidatePersonaImages(personaId);
   return useMutation({
     mutationFn: updatePersonaImage,
-    onSuccess: invalidate,
+    onSuccess: (result) => {
+      if (result.success) invalidate();
+    },
   });
 }
 
@@ -381,7 +422,9 @@ export function useDeletePersonaImageMutation(personaId: string | null) {
   const invalidate = useInvalidatePersonaImages(personaId);
   return useMutation({
     mutationFn: deletePersonaImage,
-    onSuccess: invalidate,
+    onSuccess: (result) => {
+      if (result.success) invalidate();
+    },
   });
 }
 
