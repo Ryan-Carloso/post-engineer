@@ -119,13 +119,13 @@ function mockAuth(auth: { userId: string; isApiKey?: boolean; personaIds?: strin
     auth === null
       ? ({ auth: null, error: new Response('unauthorized', { status: 401 }) } as never)
       : ({
-          auth: {
-            userId: auth.userId,
-            isApiKey: auth.isApiKey ?? false,
-            personaIds: auth.personaIds ?? null,
-          },
-          error: null,
-        } as never),
+        auth: {
+          userId: auth.userId,
+          isApiKey: auth.isApiKey ?? false,
+          personaIds: auth.personaIds ?? null,
+        },
+        error: null,
+      } as never),
   );
 }
 

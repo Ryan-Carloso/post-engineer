@@ -107,22 +107,22 @@ function mockSupabase(persona: Record<string, unknown> | null, opts?: { noSessio
         };
       }
       return {
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
+        select: vi.fn(() => ({
           eq: vi.fn(() => ({
-            single: vi.fn(async () => ({
-              data: persona ? { ...persona } : null,
-              error: persona ? null : { message: 'not found' },
+            eq: vi.fn(() => ({
+              single: vi.fn(async () => ({
+                data: persona ? { ...persona } : null,
+                error: persona ? null : { message: 'not found' },
+              })),
             })),
           })),
         })),
-      })),
-      update: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          eq: vi.fn().mockResolvedValue({ error: null }),
+        update: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            eq: vi.fn().mockResolvedValue({ error: null }),
+          })),
         })),
-      })),
-    }}),
+      }}),
     storage: {
       from: vi.fn(() => ({
         createSignedUrl: vi.fn(async (path: string) => ({
