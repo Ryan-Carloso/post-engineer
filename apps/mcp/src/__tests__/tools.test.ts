@@ -494,6 +494,12 @@ describe('persona image library tools', () => {
     expect(textOf(response)).toContain('t-1');
   });
 
+  it('generate_video_from_persona rejects an empty imageId', () => {
+    expect(() =>
+      GenerateVideoSchema.parse({ personaId: 'p-1', imageId: '' })
+    ).toThrow();
+  });
+
   it('list_persona_images returns the library', async () => {
     vi.mocked(mockClient.listPersonaImages).mockResolvedValue({ images: [] });
     const response = await handleListPersonaImages(

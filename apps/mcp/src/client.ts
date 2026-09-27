@@ -1,5 +1,5 @@
 import { validateScheduleAdvance } from './validator.js';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
 
 export interface PostEngineerClientOptions {
@@ -77,16 +77,31 @@ const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_ERROR_BODY_CHARS = 200;
 const MAX_LIBRARY_IMAGES = 10;
 
+const MAX_LIBRARY_IMAGE_BYTES = 10 * 1024 * 1024;
+
 function mimeTypeForImagePath(path: string): string {
   const extension = extname(path).toLowerCase();
   if (extension === '.png') return 'image/png';
   if (extension === '.webp') return 'image/webp';
-  return 'image/jpeg';
+  if (extension === '.jpg' || extension === '.jpeg') return 'image/jpeg';
+  throw new Error(
+    `Unsupported image extension "${extension || '(none)'}": use JPG, PNG, or WebP.`,
+  );
 }
 
 async function imageFormFile(path: string): Promise<Blob> {
+  // Validate before reading: the API rejects the file anyway, so an
+  // oversized or unsupported image fails fast locally instead of wasting an
+  // upload.
+  const mimeType = mimeTypeForImagePath(path);
+  const size = (await stat(path)).size;
+  if (size > MAX_LIBRARY_IMAGE_BYTES) {
+    throw new Error(
+      `Image "${basename(path)}" is larger than 10MB (max library image size).`,
+    );
+  }
   const buffer = await readFile(path);
-  return new Blob([buffer], { type: mimeTypeForImagePath(path) });
+  return new Blob([buffer], { type: mimeType });
 }
 
 // The bearer key is sent to this URL, so fail fast on a malformed or
@@ -198,6 +213,11 @@ export class PostEngineerClient {
       formData.set('imageTags', JSON.stringify(tags));
       formData.set('imageDescriptions', JSON.stringify(descriptions));
       if (input.imagePrimaryIndex !== undefined) {
+        if (input.imagePrimaryIndex < 0 || input.imagePrimaryIndex >= images.length) {
+          throw new Error(
+            `imagePrimaryIndex ${input.imagePrimaryIndex} is out of range: ${images.length} images provided.`,
+          );
+        }
         formData.set('imagePrimaryIndex', String(input.imagePrimaryIndex));
       }
     }

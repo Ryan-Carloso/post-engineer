@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { PostEngineerClient } from '../client.js';
 
 describe('PostEngineerClient', () => {
@@ -802,6 +802,7 @@ describe('PostEngineerClient error truncation', () => {
 describe('PostEngineerClient persona image library', () => {
   let client: PostEngineerClient;
   const baseUrl = 'https://post-engineer.com';
+  const tempDirs: string[] = [];
 
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -813,12 +814,20 @@ describe('PostEngineerClient persona image library', () => {
     });
   });
 
-  async function writeTempImage(name: string): Promise<string> {
+  afterEach(async () => {
+    const { rm } = await import('node:fs/promises');
+    await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  });
+
+  async function writeTempImage(name: string, size = 4): Promise<string> {
+    const { mkdtempSync } = await import('node:fs');
     const { writeFile } = await import('node:fs/promises');
     const { tmpdir } = await import('node:os');
     const { join } = await import('node:path');
-    const path = join(tmpdir(), `pe-mcp-test-${Date.now()}-${name}`);
-    await writeFile(path, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+    const dir = mkdtempSync(join(tmpdir(), 'pe-mcp-test-'));
+    tempDirs.push(dir);
+    const path = join(dir, name);
+    await writeFile(path, Buffer.alloc(size, 0xff));
     return path;
   }
 
@@ -859,6 +868,45 @@ describe('PostEngineerClient persona image library', () => {
     await expect(
       client.createPersona({ name: 'X', images: [{ path: '/tmp/img.jpg' }] })
     ).rejects.toThrow(/require a persona avatar/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('createPersona rejects an out-of-range imagePrimaryIndex', async () => {
+    const path = await writeTempImage('a.jpg');
+    await expect(
+      client.createPersona({
+        name: 'X',
+        avatarUrl: 'https://example.com/a.png',
+        images: [{ path }],
+        imagePrimaryIndex: 1,
+      })
+    ).rejects.toThrow(/out of range/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('createPersona rejects library images larger than 10MB', async () => {
+    const path = await writeTempImage('big.jpg', 11 * 1024 * 1024);
+    await expect(
+      client.createPersona({
+        name: 'X',
+        avatarUrl: 'https://example.com/a.png',
+        images: [{ path }],
+      })
+    ).rejects.toThrow(/10MB/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('addPersonaImage rejects unsupported file extensions', async () => {
+    const path = await writeTempImage('x.bmp');
+    await expect(client.addPersonaImage('p-1', { path })).rejects.toThrow(
+      /JPG, PNG, or WebP/
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('addPersonaImage rejects library images larger than 10MB', async () => {
+    const path = await writeTempImage('big.png', 11 * 1024 * 1024);
+    await expect(client.addPersonaImage('p-1', { path })).rejects.toThrow(/10MB/);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 

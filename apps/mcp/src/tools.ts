@@ -112,7 +112,7 @@ export const GenerateVideoShape = {
   personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona to generate video with'),
   scriptPrompt: z.string().optional().describe('Optional specific prompt override for this video'),
   audioUrl: z.string().url('audioUrl must be a valid URL').optional().describe('Optional public URL of custom audio for this video (overrides the persona voice)'),
-  imageId: z.string().optional().describe('Optional library image ID to use for this video (overrides the deterministic per-video image selection; see list_persona_images)'),
+  imageId: z.string().min(1, 'imageId is required').optional().describe('Optional library image ID to use for this video (overrides the deterministic per-video image selection; see list_persona_images)'),
 };
 
 export const GenerateVideoSchema = z.object(GenerateVideoShape);
