@@ -26,6 +26,7 @@ from app.services import (
 )
 from app.services import state as sm
 from app.services import task_publish
+from app.services import task_webhook
 from app.services.bgm_history import history_repository
 from app.services.notify import safe_reason, send_discord, task_failed_msg
 from app.utils import file_security, ssrf, utils
@@ -120,6 +121,34 @@ def _task_already_failed(task_id: str) -> bool:
     return bool(task) and task.get("state") == const.TASK_STATE_FAILED
 
 
+def _first_http_url(paths: object) -> str | None:
+    """First http(s) URL in ``paths`` (local artifact paths are not URLs)."""
+    if not isinstance(paths, (list, tuple)):
+        return None
+    for item in paths:
+        if isinstance(item, str) and item.startswith(("http://", "https://")):
+            return item
+    return None
+
+
+def _complete_task(
+    task_id: str,
+    params: VideoParams,
+    video_url: str | None = None,
+    **kwargs: object,
+) -> None:
+    """Mark a task COMPLETE and fire the terminal webhook (once per task)."""
+    sm.state.update_task(
+        task_id, state=const.TASK_STATE_COMPLETE, progress=100, **kwargs
+    )
+    task_webhook.notify_terminal_task(
+        task_id,
+        status="completed",
+        webhook_url=getattr(params, "webhook_url", None),
+        video_url=video_url,
+    )
+
+
 def _fail_task(
     task_id: str,
     error: str,
@@ -154,6 +183,14 @@ def _fail_task(
         sm.state.update_task(task_id, state=const.TASK_STATE_FAILED, **kwargs)
     else:
         sm.state.update_task(task_id, state=const.TASK_STATE_FAILED, error=error, **kwargs)
+    # Terminal webhook (at most once per task, deduped inside): a failing
+    # delivery only logs, it never changes the task outcome.
+    task_webhook.notify_terminal_task(
+        task_id,
+        status="failed",
+        webhook_url=getattr(params, "webhook_url", None),
+        error=error,
+    )
     if not _should_send_failure_alert(task_id):
         return
     subject = params.video_subject if params and params.video_subject else ""
@@ -817,9 +854,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         sm.state.update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=10)
 
         if stop_at == "script":
-            sm.state.update_task(
-                task_id, state=const.TASK_STATE_COMPLETE, progress=100, script=video_script
-            )
+            _complete_task(task_id, params, script=video_script)
             return {"script": video_script}
 
         # 2. Generate terms
@@ -835,9 +870,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         save_script_data(task_id, video_script, video_terms, params)
 
         if stop_at == "terms":
-            sm.state.update_task(
-                task_id, state=const.TASK_STATE_COMPLETE, progress=100, terms=video_terms
-            )
+            _complete_task(task_id, params, terms=video_terms)
             return {"script": video_script, "terms": video_terms}
 
         sm.state.update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=20)
@@ -872,10 +905,8 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         sm.state.update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=30)
 
         if stop_at == "audio":
-            sm.state.update_task(
-                task_id,
-                state=const.TASK_STATE_COMPLETE,
-                progress=100,
+            _complete_task(
+                task_id, params, video_url=_first_http_url([audio_file]),
                 audio_file=audio_file,
             )
             return {"audio_file": audio_file, "audio_duration": audio_duration}
@@ -887,12 +918,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         _mark("subtitle")
 
         if stop_at == "subtitle":
-            sm.state.update_task(
-                task_id,
-                state=const.TASK_STATE_COMPLETE,
-                progress=100,
-                subtitle_path=subtitle_path,
-            )
+            _complete_task(task_id, params, subtitle_path=subtitle_path)
             return {"subtitle_path": subtitle_path}
 
         sm.state.update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=40)
@@ -908,12 +934,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             return
 
         if stop_at == "materials":
-            sm.state.update_task(
-                task_id,
-                state=const.TASK_STATE_COMPLETE,
-                progress=100,
-                materials=downloaded_videos,
-            )
+            _complete_task(task_id, params, materials=downloaded_videos)
             return {"materials": downloaded_videos}
 
         sm.state.update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=50)
@@ -1006,8 +1027,10 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             "music_mood": music_mood,
             "cross_post_results": cross_post_results if cross_post_results else None,
         }
-        sm.state.update_task(
-            task_id, state=const.TASK_STATE_COMPLETE, progress=100, **kwargs
+        _complete_task(
+            task_id, params,
+            video_url=_first_http_url(final_video_paths),
+            **kwargs,
         )
         try:
             cleanup_task_intermediates(task_id, final_video_paths + combined_video_paths)

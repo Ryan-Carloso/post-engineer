@@ -1,9 +1,10 @@
 import warnings
 from enum import Enum
 from typing import Any, List, Optional, Union
+from urllib.parse import urlparse
 
 import pydantic
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.config import config
 from app.models import publish as publish_models
@@ -262,6 +263,19 @@ class BaseResponse(BaseModel):
 
 class TaskVideoRequest(VideoParams, BaseModel):
     publish: Optional[publish_models.PublishParams] = None
+    # Optional callback fired once when the task reaches a terminal state
+    # (completed/failed). Must be http(s); delivery is fire-and-forget.
+    webhook_url: Optional[str] = None
+
+    @field_validator("webhook_url")
+    @classmethod
+    def _validate_webhook_url(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        scheme = urlparse(value).scheme.lower()
+        if scheme not in {"http", "https"}:
+            raise ValueError("webhook_url must be an http(s) URL")
+        return value
 
 
 PublishParams = publish_models.PublishParams
