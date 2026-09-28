@@ -1,12 +1,7 @@
 import glob
-import json
 import os
 import pathlib
-import sqlite3
 import shutil
-import threading
-import time
-from datetime import datetime, timezone
 from typing import Union
 
 from fastapi import BackgroundTasks, Depends, Path, Query, Request, UploadFile
@@ -21,7 +16,6 @@ from app.controllers.manager.memory_manager import InMemoryTaskManager
 from app.controllers.manager.redis_manager import RedisTaskManager
 from app.controllers.v1.base import new_router
 from app.models.exception import HttpException
-from app.models import const
 from app.models.schema import (
     AudioRequest,
     BgmRetrieveResponse,
@@ -38,11 +32,6 @@ from app.models.schema import (
 )
 from app.services import state as sm
 from app.services import task as tm
-from app.services.persona_batch_queue import (
-    DailyPersonaBatchScheduler,
-    PersonaBatchQueue,
-    PersonaBatchQueueFullError,
-)
 from app.utils import file_security, upload_limits, utils
 
 # Upload size caps: the handlers stream uploads in chunks instead of
@@ -61,12 +50,6 @@ _redis_db = config.app.get("redis_db", 0)
 _redis_password = config.app.get("redis_password", None)
 _max_concurrent_tasks = config.app.get("max_concurrent_tasks", 5)
 _max_queued_tasks = config.app.get("max_queued_tasks", 100)
-_persona_batch_enabled = os.getenv(
-    "MPT_PERSONA_BATCH_ENABLED",
-    "true",
-).lower() not in {"0", "false", "no"}
-_persona_batch_queue_limit = int(config.app.get("max_persona_queued_tasks", 100))
-_persona_batch_cutoff_hour = int(config.app.get("persona_batch_cutoff_hour_utc", 6))
 
 redis_url = f"redis://:{_redis_password}@{_redis_host}:{_redis_port}/{_redis_db}"
 # Select the task manager according to the configuration
@@ -81,17 +64,6 @@ else:
         max_concurrent_tasks=_max_concurrent_tasks,
         max_queued_tasks=_max_queued_tasks,
     )
-
-_persona_batch_queue: PersonaBatchQueue | None = None
-if _persona_batch_enabled:
-    _persona_batch_queue = PersonaBatchQueue(
-        pathlib.Path(utils.storage_dir(create=True)) / "persona_batch_queue.sqlite3",
-        cutoff_hour_utc=_persona_batch_cutoff_hour,
-    )
-# Public alias for fill_schedule (asgi.py) — same queue, 1 batch/cold start.
-fill_schedule_queue = _persona_batch_queue
-_persona_batch_scheduler: DailyPersonaBatchScheduler | None = None
-_persona_batch_thread: threading.Thread | None = None
 
 
 def _sanitize_upload_filename(filename: str, request_id: str) -> str:
@@ -166,15 +138,6 @@ def create_video(
     return create_task(request, body, stop_at="video")
 
 
-def _use_daily_persona_batch(params: TaskVideoRequest) -> bool:
-    # The 6am UTC batch exists to amortize the InfiniteTalk model load on Modal
-    # GPUs: one warm batch per day is far cheaper than a cold load per video.
-    # Faceless personas never touch InfiniteTalk (no face to animate), so they
-    # generate immediately. Bigger projects can disable the batch entirely
-    # (MPT_PERSONA_BATCH_ENABLED=0) or run it more often.
-    return _persona_batch_enabled and tm.persona_lipsync_active(params)
-
-
 @router.post(
     "/persona-videos",
     response_model=TaskResponse,
@@ -214,9 +177,7 @@ def create_persona_video(
         paragraph_number=None,
         video_script_prompt=persona_prompt,
     )
-    return create_task(
-        request, params, stop_at="video", daily_batch=_use_daily_persona_batch(params)
-    )
+    return create_task(request, params, stop_at="video")
 
 
 @router.post("/subtitle", response_model=TaskResponse, summary="Generate subtitle only")
@@ -237,7 +198,6 @@ def create_task(
     request: Request,
     body: Union[TaskVideoRequest, SubtitleRequest, AudioRequest],
     stop_at: str,
-    daily_batch: bool = False,
 ):
     task_id = utils.get_uuid()
     request_id = base.get_task_id(request)
@@ -249,31 +209,11 @@ def create_task(
             "params": body.model_dump(),
             "user_id": auth.user_id,
         }
-        if daily_batch:
-            if _persona_batch_queue is None:
-                raise RuntimeError("persona batch queue is not enabled")
-            _persona_batch_queue.enqueue(
-                task_id,
-                body.model_dump_json(),
-                datetime.now(timezone.utc),
-                max_waiting_tasks=_persona_batch_queue_limit,
-            )
-            try:
-                sm.state.update_task(
-                    task_id,
-                    state=const.TASK_STATE_QUEUED,
-                    status="queued_for_daily_batch",
-                    user_id=auth.user_id,
-                )
-            except Exception:
-                _persona_batch_queue.delete(task_id)
-                raise
-        else:
-            sm.state.update_task(task_id, user_id=auth.user_id)
-            task_manager.add_task(tm.start, task_id=task_id, params=body, stop_at=stop_at)
+        sm.state.update_task(task_id, user_id=auth.user_id)
+        task_manager.add_task(tm.start, task_id=task_id, params=body, stop_at=stop_at)
         logger.success(f"Task created: task_id={task_id}")
         return utils.get_response(200, task)
-    except (TaskQueueFullError, PersonaBatchQueueFullError) as e:
+    except TaskQueueFullError as e:
         sm.state.delete_task(task_id)
         logger.warning(
             f"reject task because queue is full, request_id: {request_id}, task_id: {task_id}"
@@ -285,60 +225,7 @@ def create_task(
         raise HttpException(
             task_id=task_id, status_code=400, message=f"{request_id}: {str(e)}"
         )
-    except sqlite3.Error as e:
-        if daily_batch and _persona_batch_queue is not None:
-            _persona_batch_queue.delete(task_id)
-        sm.state.delete_task(task_id)
-        raise HttpException(
-            task_id=task_id,
-            status_code=503,
-            message=f"{request_id}: persona batch queue temporarily unavailable: {str(e)}",
-        )
 
-
-def _dispatch_persona_batch_task(task_id: str, payload_json: str) -> None:
-    params = TaskVideoRequest.model_validate(json.loads(payload_json))
-    tm.start(task_id=task_id, params=params, stop_at="video")
-    task = sm.state.get_task(task_id)
-    if _persona_batch_queue is None:
-        raise RuntimeError("persona batch queue is not enabled")
-    if task is not None and task.get("state") == const.TASK_STATE_COMPLETE:
-        _persona_batch_queue.finish(task_id)
-    else:
-        _persona_batch_queue.finish(task_id, str(task.get("error", "task failed")) if task else "task state missing")
-
-
-def _persona_batch_loop() -> None:
-    while True:
-        try:
-            now = datetime.now(timezone.utc)
-            if _persona_batch_scheduler is None:
-                raise RuntimeError("persona batch scheduler is not initialized")
-            if now.hour >= _persona_batch_cutoff_hour:
-                _persona_batch_scheduler.run_once(now, f"batch-{now.date().isoformat()}")
-        except Exception:
-            logger.exception("persona batch scheduler iteration failed")
-        time.sleep(30)
-
-
-def start_persona_batch_scheduler() -> None:
-    global _persona_batch_scheduler, _persona_batch_thread
-    if not _persona_batch_enabled:
-        return
-    if _persona_batch_thread is not None and _persona_batch_thread.is_alive():
-        return
-    if _persona_batch_queue is None:
-        raise RuntimeError("persona batch queue is not initialized")
-    _persona_batch_queue.requeue_claimed()
-    _persona_batch_scheduler = DailyPersonaBatchScheduler(
-        _persona_batch_queue,
-        _dispatch_persona_batch_task,
-        cutoff_hour_utc=_persona_batch_cutoff_hour,
-    )
-    _persona_batch_thread = threading.Thread(
-        target=_persona_batch_loop, name="persona-batch-scheduler", daemon=True
-    )
-    _persona_batch_thread.start()
 
 @router.get("/tasks", response_model=TaskQueryResponse, summary="Get all tasks")
 def get_all_tasks(request: Request, page: int = Query(1, ge=1), page_size: int = Query(10, ge=1)):
@@ -398,8 +285,6 @@ def delete_video(request: Request, task_id: str = Path(..., description="Task ID
     auth = base.get_auth_context(request)
     task = sm.state.get_task(task_id, user_id=auth.user_id)
     if task:
-        if task.get("state") == const.TASK_STATE_QUEUED and _persona_batch_queue is not None:
-            _persona_batch_queue.delete(task_id)
         tasks_dir = utils.task_dir()
         current_task_dir = os.path.join(tasks_dir, task_id)
         if os.path.exists(current_task_dir):

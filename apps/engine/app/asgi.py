@@ -13,10 +13,6 @@ from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
 
 from app.config import config
-from app.controllers.v1.video import (
-    fill_schedule_queue,
-    start_persona_batch_scheduler,
-)
 from app.models.exception import HttpException
 from app.router import root_api_router
 from app.services.fill_schedule import (
@@ -98,16 +94,9 @@ def start_fill_schedule_scheduler() -> None:
     and the scheduler is skipped with a log, without breaking boot.
     """
 
-    if fill_schedule_queue is None:
-        logger.warning(
-            "fill schedule scheduler skipped: persona batch queue is disabled "
-            "(MPT_PERSONA_BATCH_ENABLED=false)"
-        )
-        return
     try:
         scheduler = FillScheduleScheduler(
             store=ScheduleStore(),
-            queue=fill_schedule_queue,
             task_state=sm.state,
         )
     except RuntimeError as exc:
@@ -170,5 +159,4 @@ def shutdown_event():
 @app.on_event("startup")
 def startup_event():
     logger.info("startup event")
-    start_persona_batch_scheduler()
     start_fill_schedule_scheduler()

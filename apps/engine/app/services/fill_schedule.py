@@ -19,8 +19,9 @@ Pipeline (100% agentic once the user enables the schedule):
    ``/api/upload-content`` (own pipeline — same contract as
    ``upload_publisher``, authenticated by ``MONEYPRINT_API_SECRET``).
 
-Runs in-process in the engine (daemon thread, same pattern as
-``DailyPersonaBatchScheduler``); the VPS needs no external cron.
+Runs in-process in the engine (daemon thread). Generation starts
+immediately when a slot becomes due — there is no batch queue; each due
+slot spawns its own pipeline thread. The VPS needs no external cron.
 """
 
 from __future__ import annotations
@@ -42,7 +43,7 @@ from app.services import upload_publisher
 DAYS_AHEAD = 7
 GENERATION_HORIZON_HOURS = 24
 TICK_SECONDS = 60
-SIGNED_URL_EXPIRES_SECONDS = 24 * 3600  # max gap until the 06h cutoff
+SIGNED_URL_EXPIRES_SECONDS = 24 * 3600  # max gap until generation
 
 SLOT_PENDING = "pending"
 SLOT_GENERATING = "generating"
@@ -435,7 +436,6 @@ class FillScheduleScheduler:
     def __init__(
         self,
         store: ScheduleStore,
-        queue: Any,
         task_state: Any,
         publish_video: Any = upload_publisher.publish_video,
         generate_topic_fn: Any = generate_topic,
@@ -444,7 +444,6 @@ class FillScheduleScheduler:
         auto_generate: bool | None = None,
     ) -> None:
         self.store = store
-        self.queue = queue
         self.task_state = task_state
         self.publish_video = publish_video
         self.generate_topic_fn = generate_topic_fn
@@ -537,7 +536,7 @@ class FillScheduleScheduler:
         return created
 
     def generate(self, now: datetime) -> int:
-        """Queue videos (06h batch) for pending slots within the horizon.
+        """Start video generation immediately for pending slots in the horizon.
 
         Batch slots (kind='batch') are user-requested and prepaid: they always
         generate, using the slot's stored topic with no LLM call and no token
@@ -603,7 +602,7 @@ class FillScheduleScheduler:
                         raise RuntimeError("Insufficient tokens for scheduled video generation")
                 task_id = self._new_task_id(slot)
                 try:
-                    self.queue.enqueue(task_id, request.model_dump_json(), now)
+                    self._dispatch_generation(task_id, request, user_id)
                 except Exception:
                     if is_batch:
                         # Refund just this video's prepaid cost; the batch id
@@ -613,13 +612,13 @@ class FillScheduleScheduler:
                             generation_id,
                             f"{generation_id}:slot:{slot['id']}",
                             cost,
-                            "Batch generation could not be queued",
+                            "Batch generation could not be dispatched",
                         )
                     else:
                         self.store.refund_tokens(
                             user_id,
                             generation_id,
-                            "Scheduled generation could not be queued",
+                            "Scheduled generation could not be dispatched",
                         )
                     raise
                 self.store.update_slot(
@@ -640,6 +639,27 @@ class FillScheduleScheduler:
         if enqueued:
             self._safe_notify(notify_module.generation_batch_msg(enqueued, enqueued_topics))
         return enqueued
+
+    def _dispatch_generation(
+        self, task_id: str, request: TaskVideoRequest, user_id: str
+    ) -> None:
+        """Start the video pipeline immediately for a due slot.
+
+        This is the same immediate path the /persona-videos route uses:
+        create the task state first (so ``reconcile()`` can observe it),
+        then run the pipeline in a daemon thread so the tick never blocks
+        on a long generation.
+        """
+        from app.services import task as tm
+
+        self.task_state.update_task(task_id, user_id=user_id)
+        thread = threading.Thread(
+            target=tm.start,
+            kwargs={"task_id": task_id, "params": request, "stop_at": "video"},
+            name=f"fill-schedule-generate-{task_id}",
+            daemon=True,
+        )
+        thread.start()
 
     def reconcile(self, now: datetime) -> int:
         """Slots whose generating tasks finished become ready/failed."""
@@ -823,9 +843,9 @@ class FillScheduleScheduler:
 
     def _new_task_id(self, slot: dict[str, Any]) -> str:
         """Deterministic task id per slot (uuid5) — M4: if the engine crashes
-        between enqueue and update_slot(generating), the next tick's re-enqueue
-        generates the SAME id and collides on the queue PK, instead of creating
-        a second orphan task (duplicate GPU cost in the 06h batch)."""
+        between dispatch and update_slot(generating), the next tick's
+        re-dispatch generates the SAME id instead of creating a second
+        orphan task (duplicate GPU cost)."""
         return str(uuid.uuid5(uuid.NAMESPACE_URL, f"fill-schedule:{slot['id']}"))
 
     def _metadata_for(self, provider: str, topic: str, schedule: dict[str, Any]):

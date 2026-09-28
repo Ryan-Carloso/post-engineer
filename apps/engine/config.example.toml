@@ -416,18 +416,10 @@ default_video_script_prompt = "Use a storytelling style. For each script, choose
 # 并发任务已满后的最大排队任务数，超过后接口返回 429，避免匿名请求无限堆积
 max_queued_tasks = 100
 
-# Persona batch queue limit; requests above this limit receive HTTP 429.
-max_persona_queued_tasks = 100
-
-# Persona videos are submitted to InfiniteTalk in a persistent daily batch at
-# the configured UTC cutoff. Requests received after the cutoff wait for the next day.
-persona_batch_cutoff_hour_utc = 6
-
 # Fill Schedule: how many hours ahead of "now" a pending slot gets its video
-# generated (enqueued into the daily 06h UTC persona batch). Keep the default
-# 24: generation is quantized to the 06h UTC cutoff, so lower values risk a
-# slot missing its batch and posting AFTER the scheduled time. Higher values
-# generate earlier without changing the daily batch cadence. Must be 1..168.
+# generated. Generation starts immediately when a slot falls inside the
+# horizon — there is no batch queue. Keep the default 24 so generation has
+# enough lead time before the slot's scheduled publish time. Must be 1..168.
 fill_schedule_generation_horizon_hours = 24
 
 

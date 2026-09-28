@@ -1,7 +1,7 @@
 """Automatic Fill Schedule tests (app/services/fill_schedule.py).
 
 Slots are computed with pure timezone arithmetic; the scheduler stages
-are tested with fake injected store/queue/state, no network.
+are tested with fake injected store/state, no network.
 """
 
 import os
@@ -179,9 +179,9 @@ class BatchScheduleTests(unittest.TestCase):
             },
         }
 
-    def _scheduler(self, store, queue, generate_topic_fn=None, auto_generate=True):
+    def _scheduler(self, store, generate_topic_fn=None, auto_generate=True):
         return fs.FillScheduleScheduler(
-            store=store, queue=queue, task_state=None,
+            store=store, task_state=MagicMock(),
             publish_video=MagicMock(),
             generate_topic_fn=generate_topic_fn or MagicMock(return_value="LLM topic"),
             auto_generate=auto_generate,
@@ -223,51 +223,58 @@ class BatchScheduleTests(unittest.TestCase):
         slot = self._batch_slot()
         store = _FakeStore()
         store.pending_slots = lambda now: [slot]
-        queue = MagicMock()
         generate_topic_fn = MagicMock(return_value="LLM topic")
-        scheduler = self._scheduler(store, queue, generate_topic_fn)
+        scheduler = self._scheduler(store, generate_topic_fn)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
-        enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        with patch.object(
+            scheduler, "_dispatch_generation"
+        ) as dispatch_generation:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
 
         self.assertEqual(enqueued, 1)
         generate_topic_fn.assert_not_called()
         self.assertEqual(store.spent, [])
-        queue.enqueue.assert_called_once()
-        _task_id, payload_json, _ = queue.enqueue.call_args.args
-        self.assertIn("Batch topic one", payload_json)
-        self.assertNotIn("LLM topic", payload_json)
+        dispatch_generation.assert_called_once()
+        task_id, request, user_id = dispatch_generation.call_args.args
+        self.assertEqual(user_id, "user-1")
+        self.assertIn("Batch topic one", request.model_dump_json())
+        self.assertNotIn("LLM topic", request.model_dump_json())
         update = dict(store.updates[0][1])
         self.assertEqual(update["status"], "generating")
         self.assertEqual(update["topic"], "Batch topic one")
+        self.assertEqual(update["task_id"], task_id)
 
     def test_generate_batch_slot_without_topic_fails(self):
         slot = self._batch_slot(topic="   ")
         store = _FakeStore()
         store.pending_slots = lambda now: [slot]
-        queue = MagicMock()
-        scheduler = self._scheduler(store, queue)
+        scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
-        enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        with patch.object(
+            scheduler, "_dispatch_generation"
+        ) as dispatch_generation:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
 
         self.assertEqual(enqueued, 0)
-        queue.enqueue.assert_not_called()
+        dispatch_generation.assert_not_called()
         self.assertEqual(store.spent, [])
         self.assertEqual(store.updates[0][1]["status"], "failed")
 
-    def test_generate_batch_enqueue_failure_refunds_single_video(self):
+    def test_generate_batch_dispatch_failure_refunds_single_video(self):
         slot = self._batch_slot()
         store = _FakeStore()
         store.pending_slots = lambda now: [slot]
         store.refund_batch_calls = []
         store.refund_batch_tokens = lambda *args: store.refund_batch_calls.append(args) or True
-        queue = MagicMock()
-        queue.enqueue.side_effect = RuntimeError("queue down")
-        scheduler = self._scheduler(store, queue)
+        scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
-        enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        with patch.object(
+            scheduler, "_dispatch_generation", side_effect=RuntimeError("dispatch down")
+        ):
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
 
         self.assertEqual(enqueued, 0)
         # One prepaid video refunded under the batch generation id; the rest
@@ -286,36 +293,42 @@ class BatchScheduleTests(unittest.TestCase):
         del slot["topic"]
         store = _FakeStore()
         store.pending_slots = lambda now: [slot]
-        queue = MagicMock()
         generate_topic_fn = MagicMock(return_value="LLM topic")
-        scheduler = self._scheduler(store, queue, generate_topic_fn)
+        scheduler = self._scheduler(store, generate_topic_fn)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
-        enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        with patch.object(
+            scheduler, "_dispatch_generation"
+        ) as dispatch_generation:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
 
         self.assertEqual(enqueued, 1)
         generate_topic_fn.assert_called_once()
         self.assertEqual(len(store.spent), 1)
-        _task_id, payload_json, _ = queue.enqueue.call_args.args
-        self.assertIn("LLM topic", payload_json)
+        dispatch_generation.assert_called_once()
+        _task_id, request, _user_id = dispatch_generation.call_args.args
+        self.assertIn("LLM topic", request.model_dump_json())
 
     def test_generate_batch_slot_runs_with_auto_generate_off(self):
         # Manual batches are user-requested and prepaid: they always
         # generate, even when recurring auto-generation is disabled.
         store = _FakeStore()
         store.pending_slots = lambda now: [self._batch_slot()]
-        queue = MagicMock()
         generate_topic_fn = MagicMock(return_value="LLM topic")
-        scheduler = self._scheduler(store, queue, generate_topic_fn, auto_generate=False)
+        scheduler = self._scheduler(store, generate_topic_fn, auto_generate=False)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
-        enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        with patch.object(
+            scheduler, "_dispatch_generation"
+        ) as dispatch_generation:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
 
         self.assertEqual(enqueued, 1)
         generate_topic_fn.assert_not_called()
         self.assertEqual(len(store.spent), 0)
-        _task_id, payload_json, _ = queue.enqueue.call_args.args
-        self.assertIn("Batch topic one", payload_json)
+        dispatch_generation.assert_called_once()
+        _task_id, request, _user_id = dispatch_generation.call_args.args
+        self.assertIn("Batch topic one", request.model_dump_json())
 
     def test_generate_recurring_slot_skipped_with_auto_generate_off(self):
         slot = self._batch_slot()
@@ -323,16 +336,46 @@ class BatchScheduleTests(unittest.TestCase):
         del slot["topic"]
         store = _FakeStore()
         store.pending_slots = lambda now: [slot]
-        queue = MagicMock()
         generate_topic_fn = MagicMock(return_value="LLM topic")
-        scheduler = self._scheduler(store, queue, generate_topic_fn, auto_generate=False)
+        scheduler = self._scheduler(store, generate_topic_fn, auto_generate=False)
 
-        enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        with patch.object(
+            scheduler, "_dispatch_generation"
+        ) as dispatch_generation:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
 
         self.assertEqual(enqueued, 0)
         generate_topic_fn.assert_not_called()
-        queue.enqueue.assert_not_called()
+        dispatch_generation.assert_not_called()
         self.assertEqual(len(store.spent), 0)
+
+    def test_dispatch_generation_updates_state_and_starts_pipeline_thread(self):
+        # _dispatch_generation is the immediate path: task state is created
+        # first (so reconcile() sees the task), then tm.start runs in a
+        # daemon thread — the tick itself never blocks on the pipeline.
+        from app.models.schema import TaskVideoRequest
+
+        store = _FakeStore()
+        scheduler = self._scheduler(store)
+        request = TaskVideoRequest(video_subject="Batch topic one")
+
+        with (
+            patch("app.services.task.start") as mock_start,
+            patch("app.services.fill_schedule.threading.Thread") as mock_thread,
+        ):
+            scheduler._dispatch_generation("task-1", request, "user-1")
+
+        scheduler.task_state.update_task.assert_called_once_with(
+            "task-1", user_id="user-1"
+        )
+        mock_thread.assert_called_once()
+        _, kwargs = mock_thread.call_args
+        self.assertTrue(kwargs["daemon"])
+        # Run the thread target inline to prove the wiring.
+        kwargs["target"](**kwargs["kwargs"])
+        mock_start.assert_called_once_with(
+            task_id="task-1", params=request, stop_at="video"
+        )
 
 
 class PlanTests(unittest.TestCase):
@@ -351,7 +394,7 @@ class PlanTests(unittest.TestCase):
             ]
         )
         scheduler = fs.FillScheduleScheduler(
-            store=store, queue=None, task_state=None,
+            store=store, task_state=None,
             publish_video=MagicMock(), generate_topic_fn=MagicMock(),
         )
         count = scheduler.plan(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
@@ -374,7 +417,7 @@ class PlanTests(unittest.TestCase):
         )
         store.deactivate_schedule = MagicMock()
         scheduler = fs.FillScheduleScheduler(
-            store=store, queue=None, task_state=None,
+            store=store, task_state=None,
             publish_video=MagicMock(), generate_topic_fn=MagicMock(),
         )
 
@@ -408,7 +451,7 @@ class PlanTests(unittest.TestCase):
         )
         store.deactivate_schedule = MagicMock()
         scheduler = fs.FillScheduleScheduler(
-            store=store, queue=None, task_state=None,
+            store=store, task_state=None,
             publish_video=MagicMock(), generate_topic_fn=MagicMock(),
         )
 
@@ -419,9 +462,9 @@ class PlanTests(unittest.TestCase):
 
 
 class GenerateTests(unittest.TestCase):
-    def _scheduler(self, store, queue, auto_generate=True):
+    def _scheduler(self, store, auto_generate=True):
         return fs.FillScheduleScheduler(
-            store=store, queue=queue, task_state=None,
+            store=store, task_state=None,
             publish_video=MagicMock(),
             generate_topic_fn=MagicMock(return_value="Tokyo coffee guide"),
             auto_generate=auto_generate,
@@ -451,16 +494,18 @@ class GenerateTests(unittest.TestCase):
         }
         store = _FakeStore()
         store.pending_slots = lambda now: [slot]
-        queue = MagicMock()
-        scheduler = self._scheduler(store, queue)
+        scheduler = self._scheduler(store)
 
-        # signed_url usado dentro de build_persona_params
+        # signed_url is used inside build_persona_params
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
-        enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        with patch.object(scheduler, "_dispatch_generation") as dispatch_generation:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
         self.assertEqual(enqueued, 1)
-        queue.enqueue.assert_called_once()
-        task_id, payload_json, _ = queue.enqueue.call_args.args
+        dispatch_generation.assert_called_once()
+        task_id, request, user_id = dispatch_generation.call_args.args
+        self.assertEqual(user_id, "user-1")
+        payload_json = request.model_dump_json()
         self.assertIn("Tokyo coffee guide", payload_json)
         self.assertIn("photo_url", payload_json)
         update = dict(store.updates[0][1])
@@ -477,7 +522,7 @@ class GenerateTests(unittest.TestCase):
         store = _FakeStore()
         store.pending_slots = lambda now: [slot]
         scheduler = fs.FillScheduleScheduler(
-            store=store, queue=MagicMock(), task_state=None,
+            store=store, task_state=None,
             publish_video=MagicMock(),
             generate_topic_fn=MagicMock(side_effect=RuntimeError("boom")),
             auto_generate=True,
@@ -497,7 +542,7 @@ class GenerateTests(unittest.TestCase):
         store = _FakeStore()
         store.pending_slots = lambda now: [slot]
         scheduler = self._scheduler(
-            store, MagicMock(),
+            store,
             # fail inside generate: generate_topic_fn raising hits the per-slot handler
         )
         scheduler.generate_topic_fn = MagicMock(side_effect=RuntimeError("boom"))
@@ -517,7 +562,7 @@ class GenerateTests(unittest.TestCase):
 
     def test_invalid_publish_plan_fails_slot_before_spending(self):
         # Invalid plan (youtube with no accounts) fails the slot BEFORE
-        # generating a topic or queueing video - no tokens/money spent.
+        # generating a topic or dispatching video - no tokens/money spent.
         slot = {
             "id": "slot-preflight",
             "slot_at": "2026-09-07T12:00:00+00:00",
@@ -531,17 +576,17 @@ class GenerateTests(unittest.TestCase):
         store = _FakeStore()
         store.pending_slots = lambda now: [slot]
         generate_topic_fn = MagicMock(return_value="Tokyo coffee guide")
-        queue = MagicMock()
         scheduler = fs.FillScheduleScheduler(
-            store=store, queue=queue, task_state=None,
+            store=store, task_state=None,
             publish_video=MagicMock(),
             generate_topic_fn=generate_topic_fn,
             auto_generate=True,
         )
-        enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        with patch.object(scheduler, "_dispatch_generation") as dispatch_generation:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
         self.assertEqual(enqueued, 0)
         generate_topic_fn.assert_not_called()
-        queue.enqueue.assert_not_called()
+        dispatch_generation.assert_not_called()
         self.assertEqual(store.updates[0][1]["status"], "failed")
 
 
@@ -553,7 +598,7 @@ class ReconcileTests(unittest.TestCase):
         state = MagicMock()
         state.get_task.return_value = {"state": 1}
         scheduler = fs.FillScheduleScheduler(
-            store=store, queue=None, task_state=state,
+            store=store, task_state=state,
             publish_video=MagicMock(), generate_topic_fn=MagicMock(),
         )
         self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
@@ -566,7 +611,7 @@ class ReconcileTests(unittest.TestCase):
         state = MagicMock()
         state.get_task.return_value = {"state": -1, "error": "gpu exploded"}
         scheduler = fs.FillScheduleScheduler(
-            store=store, queue=None, task_state=state,
+            store=store, task_state=state,
             publish_video=MagicMock(), generate_topic_fn=MagicMock(),
         )
         self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
@@ -592,7 +637,7 @@ class ReconcileTests(unittest.TestCase):
         state = MagicMock()
         state.get_task.return_value = {"state": -1, "error": "gpu exploded"}
         scheduler = fs.FillScheduleScheduler(
-            store=store, queue=None, task_state=state,
+            store=store, task_state=state,
             publish_video=MagicMock(), generate_topic_fn=MagicMock(),
         )
         self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
@@ -620,7 +665,7 @@ class ReconcileTests(unittest.TestCase):
         state = MagicMock()
         state.get_task.return_value = {"state": -1, "error": "gpu exploded"}
         scheduler = fs.FillScheduleScheduler(
-            store=store, queue=None, task_state=state,
+            store=store, task_state=state,
             publish_video=MagicMock(), generate_topic_fn=MagicMock(),
         )
         self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
@@ -649,7 +694,7 @@ class PublishDueTests(unittest.TestCase):
         state.get_task.return_value = {"state": 1, "videos": [self.video_path]}
         publish = MagicMock()
         scheduler = fs.FillScheduleScheduler(
-            store=store, queue=None, task_state=state,
+            store=store, task_state=state,
             publish_video=publish, generate_topic_fn=MagicMock(),
         )
         scheduler.base_url = "https://post-engineer.com"
@@ -671,7 +716,7 @@ class PublishDueTests(unittest.TestCase):
         state = MagicMock()
         state.get_task.return_value = {"state": 1, "videos": [self.video_path]}
         scheduler = fs.FillScheduleScheduler(
-            store=store, queue=None, task_state=state,
+            store=store, task_state=state,
             publish_video=MagicMock(), generate_topic_fn=MagicMock(),
         )
         scheduler.base_url = "https://post-engineer.com"
@@ -690,7 +735,7 @@ class PublishDueTests(unittest.TestCase):
         state = MagicMock()
         state.get_task.return_value = {"state": 1, "videos": [self.video_path]}
         scheduler = fs.FillScheduleScheduler(
-            store=store, queue=None, task_state=state,
+            store=store, task_state=state,
             publish_video=MagicMock(), generate_topic_fn=MagicMock(),
         )
         scheduler.base_url = "https://post-engineer.com"
@@ -712,7 +757,7 @@ class PublishDueTests(unittest.TestCase):
         state.get_task.return_value = {"state": 1, "videos": [self.video_path]}
         publish = MagicMock(side_effect=PublishError("boom"))
         scheduler = fs.FillScheduleScheduler(
-            store=store, queue=None, task_state=state,
+            store=store, task_state=state,
             publish_video=publish, generate_topic_fn=MagicMock(),
         )
         scheduler.base_url = "https://post-engineer.com"
@@ -727,7 +772,7 @@ class NotifyIntegrationTests(unittest.TestCase):
 
     def _scheduler(self, store, **kwargs):
         defaults = dict(
-            store=store, queue=None, task_state=None,
+            store=store, task_state=MagicMock(),
             publish_video=MagicMock(), generate_topic_fn=MagicMock(),
             auto_generate=True,
         )
@@ -749,10 +794,11 @@ class NotifyIntegrationTests(unittest.TestCase):
         store.pending_slots = lambda now: [slot]
         notify = MagicMock()
         scheduler = self._scheduler(
-            store, queue=MagicMock(), notify=notify,
+            store, notify=notify,
             generate_topic_fn=MagicMock(return_value="Tokyo coffee guide"),
         )
-        scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        with patch.object(scheduler, "_dispatch_generation"):
+            scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
         notify.assert_called_once()
         message = notify.call_args.args[0]
         self.assertIn("Tokyo coffee guide", message)
@@ -775,7 +821,7 @@ class NotifyIntegrationTests(unittest.TestCase):
         store.pending_slots = lambda now: [slot]
         notify = MagicMock()
         scheduler = self._scheduler(
-            store, queue=MagicMock(), notify=notify,
+            store, notify=notify,
             generate_topic_fn=MagicMock(side_effect=RuntimeError("llm down")),
         )
         scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
@@ -798,7 +844,7 @@ class NotifyIntegrationTests(unittest.TestCase):
         notify = MagicMock()
         generate_topic_fn = MagicMock(return_value="topic")
         scheduler = self._scheduler(
-            store, queue=MagicMock(), notify=notify,
+            store, notify=notify,
             generate_topic_fn=generate_topic_fn,
         )
         scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
@@ -893,11 +939,12 @@ class NotifyIntegrationTests(unittest.TestCase):
         store.pending_slots = lambda now: [slot]
         notify = MagicMock(side_effect=RuntimeError("discord exploded"))
         scheduler = self._scheduler(
-            store, queue=MagicMock(), notify=notify,
+            store, notify=notify,
             generate_topic_fn=MagicMock(return_value="topic"),
         )
         # notify raising must not interrupt the stage nor mark an error
-        enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        with patch.object(scheduler, "_dispatch_generation"):
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
         self.assertEqual(enqueued, 1)
         self.assertEqual(store.updates[0][1]["status"], "generating")
 
@@ -933,7 +980,7 @@ class CoverageGapTests(unittest.TestCase):
 
     def _scheduler(self, store, **kwargs):
         defaults = dict(
-            store=store, queue=None, task_state=None,
+            store=store, task_state=MagicMock(),
             publish_video=MagicMock(), generate_topic_fn=MagicMock(),
             auto_generate=True,
         )
@@ -1007,7 +1054,7 @@ class CoverageGapTests(unittest.TestCase):
     # -- publish_due sem env configurada --------------------------------------
     def test_publish_due_skips_without_base_url(self):
         scheduler = fs.FillScheduleScheduler(
-            store=MagicMock(), queue=None, task_state=None,
+            store=MagicMock(), task_state=None,
             publish_video=MagicMock(), generate_topic_fn=MagicMock(),
         )
         scheduler.base_url = ""
@@ -1016,7 +1063,7 @@ class CoverageGapTests(unittest.TestCase):
 
     def test_publish_due_skips_without_api_secret(self):
         scheduler = fs.FillScheduleScheduler(
-            store=MagicMock(), queue=None, task_state=None,
+            store=MagicMock(), task_state=None,
             publish_video=MagicMock(), generate_topic_fn=MagicMock(),
         )
         scheduler.base_url = "https://post-engineer.com"
@@ -1032,7 +1079,7 @@ class CoverageGapTests(unittest.TestCase):
         state = MagicMock()
         state.get_task.return_value = {"state": 1, "videos": []}
         scheduler = fs.FillScheduleScheduler(
-            store=store, queue=None, task_state=state,
+            store=store, task_state=state,
             publish_video=MagicMock(), generate_topic_fn=MagicMock(),
         )
         scheduler.base_url = "https://post-engineer.com"
@@ -1048,7 +1095,7 @@ class CoverageGapTests(unittest.TestCase):
         state = MagicMock()
         state.get_task.return_value = None
         scheduler = fs.FillScheduleScheduler(
-            store=store, queue=None, task_state=state,
+            store=store, task_state=state,
             publish_video=MagicMock(), generate_topic_fn=MagicMock(),
         )
         self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 0)
@@ -1075,7 +1122,7 @@ class CoverageGapTests(unittest.TestCase):
         store.generating_slots = lambda: []
         store.ready_due_slots = lambda now: []
         scheduler = fs.FillScheduleScheduler(
-            store=store, queue=None, task_state=MagicMock(),
+            store=store, task_state=MagicMock(),
             publish_video=MagicMock(), generate_topic_fn=MagicMock(),
         )
         scheduler.base_url = "https://post-engineer.com"
@@ -1088,7 +1135,7 @@ class CoverageGapTests(unittest.TestCase):
     # -- helpers ---------------------------------------------------------------
     def test_persona_for_raises_without_embed(self):
         scheduler = fs.FillScheduleScheduler(
-            store=MagicMock(), queue=None, task_state=None,
+            store=MagicMock(), task_state=None,
             publish_video=MagicMock(), generate_topic_fn=MagicMock(),
         )
         with self.assertRaises(RuntimeError) as ctx:
@@ -1097,7 +1144,7 @@ class CoverageGapTests(unittest.TestCase):
 
     def test_metadata_for_bluesky_truncates_caption(self):
         scheduler = fs.FillScheduleScheduler(
-            store=MagicMock(), queue=None, task_state=None,
+            store=MagicMock(), task_state=None,
             publish_video=MagicMock(), generate_topic_fn=MagicMock(),
         )
         metadata = scheduler._metadata_for(
@@ -1112,7 +1159,7 @@ class CoverageGapTests(unittest.TestCase):
 
     def test_metadata_for_unsupported_provider_raises(self):
         scheduler = fs.FillScheduleScheduler(
-            store=MagicMock(), queue=None, task_state=None,
+            store=MagicMock(), task_state=None,
             publish_video=MagicMock(), generate_topic_fn=MagicMock(),
         )
         with self.assertRaises(RuntimeError) as ctx:
@@ -1122,7 +1169,7 @@ class CoverageGapTests(unittest.TestCase):
     # -- _validate_publish_plan com bluesky+linkedin (caminho completo) --------
     def test_validate_publish_plan_accepts_all_providers(self):
         scheduler = fs.FillScheduleScheduler(
-            store=MagicMock(), queue=None, task_state=None,
+            store=MagicMock(), task_state=None,
             publish_video=MagicMock(), generate_topic_fn=MagicMock(),
         )
         schedule = {
@@ -1137,7 +1184,7 @@ class CoverageGapTests(unittest.TestCase):
 
     def test_validate_publish_plan_rejects_bluesky_without_accounts(self):
         scheduler = fs.FillScheduleScheduler(
-            store=MagicMock(), queue=None, task_state=None,
+            store=MagicMock(), task_state=None,
             publish_video=MagicMock(), generate_topic_fn=MagicMock(),
         )
         with self.assertRaises(ValueError) as ctx:
@@ -1264,15 +1311,15 @@ class CoverageGapTests(unittest.TestCase):
         }
         store = _FakeStore()
         store.pending_slots = lambda now: [slot]
-        queue = MagicMock()
         scheduler = self._scheduler(
-            store, queue=queue,
+            store,
             generate_topic_fn=MagicMock(return_value="topic"),
         )
-        scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
-        task_id, _, _ = queue.enqueue.call_args.args
-        # deterministic slot uuid → re-enqueue after a crash collides on the
-        # queue (PK) instead of creating a second orphan task.
+        with patch.object(scheduler, "_dispatch_generation") as dispatch_generation:
+            scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        task_id, _, _ = dispatch_generation.call_args.args
+        # deterministic slot uuid → re-dispatch after a crash reuses the same
+        # task id instead of creating a second orphan task.
         self.assertEqual(
             task_id, scheduler._new_task_id({"id": "slot-1"})
         )
