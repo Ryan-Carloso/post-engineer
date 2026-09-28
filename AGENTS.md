@@ -569,3 +569,32 @@ Follow these so the same issues don't come back:
 - **Answer "already covered" with the test name.** The SQL sync test from
   round 8 (parses persona-images.sql, asserts literals vs TS constants)
   is the proof — cite it, don't re-argue.
+
+## Web/API review learnings, round 13 (2026-09-28)
+- **stat() before readFile for local uploads.** The MCP read the whole
+  file before the size check — a multi-GB misnamed file OOM'd the stdio
+  process. stat() first bounds memory; the TOCTOU window is benign
+  because the authoritative check still runs on the buffer. Derive the
+  display size (MB) from the constant, never hardcode it.
+- **Trim on every metadata path, not just add.** updatePersonaImage sent
+  tag/description verbatim while add trimmed — an untrimmed tag can never
+  match keyword selection. Share the normalization or apply it at each
+  entry point.
+- **Document undefined-vs-empty-string conventions.** JSON.stringify
+  drops undefined keys; the server treats empty string as "clear". A
+  comment on the payload builder saves programmatic callers from
+  guessing.
+- **Migrate old handlers to new wrappers, or document the split.**
+  handleLibraryCall covered only new handlers; 12 old ones kept inline
+  try/catch. Migrated the simple ones; the two with pre-validation keep
+  inline (documented on the wrapper).
+- **Name the failed file in queue errors.** A generic "upload failed"
+  for a 5-file queue doesn't say which card to fix. Append the filename
+  to both the catch and !success paths.
+- **No bare glyph buttons.** The ✎ edit button had no accessible name
+  and bypassed i18n. Use a translated label with aria-label.
+- **Retry storage cleanup on DELETE.** The POST rollback retried; DELETE
+  only logged. One retry for symmetry, then loud logging.
+- **Share warning codes as constants.** 'primary_swap_failed' /
+  'metadata_save_failed' were string literals in 3 producers + 1 mapper.
+  PERSONA_IMAGE_WARNING_CODES (as const) makes typos a build error.
