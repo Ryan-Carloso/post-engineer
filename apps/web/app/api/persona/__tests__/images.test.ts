@@ -351,8 +351,8 @@ describe('POST /api/persona/images', () => {
           call[0].includes('left storage files behind') &&
           typeof call[1] === 'object' &&
           call[1] !== null &&
-          Array.isArray((call[1] as { leftoverPaths?: unknown }).leftoverPaths) &&
-          ((call[1] as { leftoverPaths: unknown[] }).leftoverPaths.length > 0),
+          Array.isArray((call[1] as { orphanPaths?: unknown }).orphanPaths) &&
+          ((call[1] as { orphanPaths: unknown[] }).orphanPaths.length > 0),
       );
       expect(leftoverLogged).toBe(true);
     } finally {
