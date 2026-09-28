@@ -3,6 +3,7 @@ import { oauthPopupResponse } from '@/lib/oauth-utils';
 import { resolveOAuthCallbackAuth } from '@/lib/oauth-connect';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
+import { logger } from '@/lib/logger';
 
 //---------------
 // getSessionUserId — session user_id or null
@@ -70,6 +71,7 @@ export async function GET(request: NextRequest) {
     expiresIn = token.expires_in;
   } catch (tokenErr) {
     const msg = tokenErr instanceof Error ? tokenErr.message : String(tokenErr);
+    logger.error('[linkedin-auth/callback] token exchange failed', tokenErr);
     return oauthPopupResponse('linkedin-oauth-error', {
       error: `Failed to obtain LinkedIn token: ${msg}`,
     });
@@ -85,6 +87,7 @@ export async function GET(request: NextRequest) {
     memberName = profile.name;
   } catch (profileErr) {
     const msg = profileErr instanceof Error ? profileErr.message : String(profileErr);
+    logger.error('[linkedin-auth/callback] profile fetch failed', profileErr);
     return oauthPopupResponse('linkedin-oauth-error', {
       error: `Failed to fetch LinkedIn profile: ${msg}`,
     });
@@ -97,7 +100,7 @@ export async function GET(request: NextRequest) {
     organizations = await fetchLinkedInAdminOrganizations(accessToken);
   } catch (orgsErr) {
     const msg = orgsErr instanceof Error ? orgsErr.message : String(orgsErr);
-    console.error('[linkedin-auth/callback] orgs fetch failed (non-blocking)', msg);
+    logger.error('[linkedin-auth/callback] orgs fetch failed (non-blocking)', msg);
   }
 
   // Step 6: persist member + organizations
@@ -144,6 +147,7 @@ export async function GET(request: NextRequest) {
     }
   } catch (dbErr) {
     const msg = dbErr instanceof Error ? dbErr.message : String(dbErr);
+    logger.error('[linkedin-auth/callback] account save failed', dbErr);
     return oauthPopupResponse('linkedin-oauth-error', {
       error: `Failed to save account to database: ${msg}`,
     });

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { listDefaultPersonaFaces } from '@/lib/persona-faces';
+import { logger } from '@/lib/logger';
 
 //---------------
 // GET /api/persona/faces — default house character/face catalog
@@ -25,7 +26,7 @@ export async function GET(request?: Request): Promise<NextResponse> {
   try {
     baseUrl = appBaseUrl();
   } catch (error) {
-    console.error('[api/persona/faces] env missing', { error });
+    logger.error('[api/persona/faces] env missing', error);
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : 'Configuration error.' },
       { status: 500 },

@@ -1,51 +1,114 @@
 //---------------
-// Console-only logger — no filesystem, no winston dependencies
+// Central application logger.
+//
+// Development/test: console only.
+// Production: errors and warnings are also reported to Bugsink
+// (Sentry-compatible) so handled failures show up as issues there,
+// not only in Vercel logs. info/debug stay console-only in every
+// environment to keep Bugsink free of noise.
 //---------------
 
-interface LogEntry {
-  timestamp: string;
-  type: 'ERROR' | 'INFO' | 'WARN' | 'DEBUG';
-  logId: string;
-  endpoint: string;
-  method: string;
-  message: string;
-  error?: Error;
-  metadata?: Record<string, unknown>;
-  userId?: string;
-  ip?: string;
-  duration?: number;
+import * as Sentry from '@sentry/nextjs';
+
+//---------------
+// Environment routing (read at call time so tests can stub it)
+//---------------
+
+function isProduction(): boolean {
+  return process.env.NODE_ENV === 'production';
 }
 
 //---------------
-// Helper function for consistent console output
+// Supabase/PostgREST failures arrive as plain objects
+// ({ message, code, details, hint }), not Error instances.
+// Normalize them so Bugsink groups issues with a useful message.
 //---------------
 
-function consoleLog(level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG', message: string, metadata?: Record<string, unknown>, error?: Error): string {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function safeJson(value: unknown): string {
+  try {
+    const text = JSON.stringify(value) ?? '[unserializable]';
+    return text.length > 500 ? `${text.slice(0, 500)}...` : text;
+  } catch {
+    return '[unserializable]';
+  }
+}
+
+function toError(cause: unknown): Error {
+  if (cause instanceof Error) return cause;
+  if (isRecord(cause) && typeof cause.message === 'string' && cause.message.length > 0) {
+    return new Error(cause.message);
+  }
+  if (cause === undefined || cause === null) return new Error('Unknown error');
+  return new Error(`Non-error value reported: ${safeJson(cause)}`);
+}
+
+//---------------
+// Bugsink reporters — production only, and never allowed to throw.
+// Telemetry must never break the request path.
+//---------------
+
+function reportErrorToBugsink(message: string, cause: unknown, metadata?: Record<string, unknown>): void {
+  if (!isProduction()) return;
+  try {
+    // Keep the raw failure (e.g. the PostgREST { message, code, details, hint }
+    // object) in extra so the Bugsink issue shows the real database error.
+    const extra: Record<string, unknown> = { message, ...metadata };
+    if (!(cause instanceof Error) && cause !== undefined) extra.cause = cause;
+    Sentry.captureException(toError(cause), { extra });
+  } catch {
+    // Telemetry must never break the request path.
+  }
+}
+
+function reportWarningToBugsink(message: string, metadata?: Record<string, unknown>): void {
+  if (!isProduction()) return;
+  try {
+    Sentry.captureMessage(message, { level: 'warning', extra: metadata });
+  } catch {
+    // Telemetry must never break the request path.
+  }
+}
+
+//---------------
+// Console output (kept in production too: Vercel logs stay the raw trail).
+//
+// The call shape mirrors a direct console.* call on purpose: the message is
+// always the first argument, metadata and the error follow as separate
+// arguments. Route tests were written against that shape (e.g.
+// toHaveBeenCalledWith(msg, expect.objectContaining(...))), so the logger
+// must not merge everything into one prefixed string.
+//---------------
+
+function writeConsole(
+  level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG',
+  message: string,
+  metadata?: Record<string, unknown>,
+  error?: Error,
+): string {
   const timestamp = new Date().toISOString();
   const logId = `${timestamp.slice(0, 10)}_${timestamp.slice(11, 19).replace(/:/g, '')}_${Math.random().toString(36).substring(2, 8)}`;
-  const logEntry: LogEntry = {
-    timestamp,
-    type: level,
-    logId,
-    endpoint: metadata?.endpoint as string || 'unknown',
-    method: metadata?.method as string || 'GET',
-    message,
-    error,
-    metadata,
-  };
 
-  const prefix = `[${level}] [${logEntry.logId}]`;
-  const metaString = metadata ? ` ${JSON.stringify(metadata)}` : '';
-  const errorString = error ? ` ${error.message}${error.stack ? `\n${error.stack}` : ''}` : '';
+  const args: unknown[] = [message];
+  if (metadata !== undefined) args.push(metadata);
+  if (error !== undefined) args.push(error);
 
-   
-  console.log(prefix, message + metaString + errorString);
+  if (level === 'ERROR') {
+    console.error(...args);
+  } else if (level === 'WARN') {
+    console.warn(...args);
+  } else {
+    console.log(...args);
+  }
 
   return logId;
 }
 
 //---------------
-// Logger class with identical public API
+// Logger class
 //---------------
 
 class Logger {
@@ -66,57 +129,59 @@ class Logger {
   //---------------
 
   info(message: string, metadata?: Record<string, unknown>): string {
-    return consoleLog('INFO', message, metadata);
-  }
-
-  error(message: string, error: Error, metadata?: Record<string, unknown>): string {
-    return consoleLog('ERROR', message, metadata, error);
-  }
-
-  warn(message: string, metadata?: Record<string, unknown>): string {
-    return consoleLog('WARN', message, metadata);
+    return writeConsole('INFO', message, metadata);
   }
 
   debug(message: string, metadata?: Record<string, unknown>): string {
-    return consoleLog('DEBUG', message, metadata);
+    return writeConsole('DEBUG', message, metadata);
+  }
+
+  warn(message: string, metadata?: Record<string, unknown>): string {
+    const logId = writeConsole('WARN', message, metadata);
+    reportWarningToBugsink(message, metadata);
+    return logId;
+  }
+
+  error(message: string, cause?: unknown, metadata?: Record<string, unknown>): string {
+    // Only attach the error to the console call when a cause was actually
+    // given: toHaveBeenCalledWith(msg, meta) assertions require the exact
+    // argument list.
+    const logId = writeConsole('ERROR', message, metadata, cause === undefined ? undefined : toError(cause));
+    reportErrorToBugsink(message, cause, metadata);
+    return logId;
   }
 
   //---------------
-  // Public API: specialized logging methods (void return, drop-in compatible)
+  // Public API: specialized logging methods (void return, drop-in compatible).
+  // Console format is unchanged; error variants also report to Bugsink.
   //---------------
 
   logUploadStart(logId: string, metadata: Record<string, unknown>): void {
-     
     console.log('[INFO] [UPLOAD_START]', messageWithLogId(logId, 'Upload started'), metadata);
   }
 
   logUploadProgress(logId: string, progress: { uploadedBytes: number; totalBytes: number; percentage: number }): void {
-     
     console.log('[DEBUG] [UPLOAD_PROGRESS]', messageWithLogId(logId, `Upload progress: ${progress.percentage}%`), progress);
   }
 
   logUploadSuccess(logId: string, result: { videoId: string; videoUrl: string; duration: number }): void {
-     
     console.log('[INFO] [UPLOAD_SUCCESS]', messageWithLogId(logId, 'Upload completed successfully'), result);
   }
 
   logUploadError(logId: string, error: Error, metadata: Record<string, unknown>): void {
-     
     console.error('[ERROR] [UPLOAD_ERROR]', messageWithLogId(logId, 'Upload error'), metadata, error);
+    reportErrorToBugsink('Upload error', error, { logId, ...metadata });
   }
 
   logOAuthStart(logId: string): void {
-     
     console.log('[INFO] [OAUTH_START]', messageWithLogId(logId, 'OAuth flow started'));
   }
 
   logOAuthCallback(logId: string, code?: string): void {
-     
     console.log('[INFO] [OAUTH_CALLBACK]', messageWithLogId(logId, 'OAuth callback received'), { hasCode: !!code });
   }
 
   logOAuthSuccess(logId: string, tokens: { access_token?: string; refresh_token?: string }): void {
-     
     console.log('[INFO] [OAUTH_SUCCESS]', messageWithLogId(logId, 'OAuth completed successfully'), {
       hasAccessToken: !!tokens.access_token,
       hasRefreshToken: !!tokens.refresh_token,
@@ -124,43 +189,38 @@ class Logger {
   }
 
   logOAuthError(logId: string, error: Error): void {
-     
     console.error('[ERROR] [OAUTH_ERROR]', messageWithLogId(logId, 'OAuth flow error'), error);
+    reportErrorToBugsink('OAuth flow error', error, { logId });
   }
 
   logInstagramAuthStart(logId: string): void {
-     
     console.log('[INFO] [INSTAGRAM_OAUTH_START]', messageWithLogId(logId, 'Instagram OAuth flow started'));
   }
 
   logInstagramAuthCallback(logId: string, code?: string): void {
-     
     console.log('[INFO] [INSTAGRAM_OAUTH_CALLBACK]', messageWithLogId(logId, 'Instagram OAuth callback received'), { hasCode: !!code });
   }
 
   logInstagramAuthSuccess(logId: string): void {
-     
     console.log('[INFO] [INSTAGRAM_OAUTH_SUCCESS]', messageWithLogId(logId, 'Instagram OAuth completed successfully'));
   }
 
   logInstagramAuthError(logId: string, error: Error): void {
-     
     console.error('[ERROR] [INSTAGRAM_OAUTH_ERROR]', messageWithLogId(logId, 'Instagram OAuth flow error'), error);
+    reportErrorToBugsink('Instagram OAuth flow error', error, { logId });
   }
 
   logInstagramPostStart(logId: string, igUserId: string): void {
-     
     console.log('[INFO] [INSTAGRAM_POST_START]', messageWithLogId(logId, 'Starting Instagram post'), { igUserId });
   }
 
   logInstagramPostSuccess(logId: string, postId: string): void {
-     
     console.log('[INFO] [INSTAGRAM_POST_SUCCESS]', messageWithLogId(logId, 'Instagram post created successfully'), { postId });
   }
 
   logInstagramPostError(logId: string, error: Error): void {
-     
     console.error('[ERROR] [INSTAGRAM_POST_ERROR]', messageWithLogId(logId, 'Error creating Instagram post'), error);
+    reportErrorToBugsink('Error creating Instagram post', error, { logId });
   }
 }
 

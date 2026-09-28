@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
+import { logger } from '@/lib/logger';
 
 //---------------
-// Health Check — verifica apenas se o Supabase está acessível.
-// API interna: exige sessão Supabase (usuário logado no app).
+// Health Check — only verifies that Supabase is reachable.
+// Internal API: requires a Supabase session (user logged into the app).
 //---------------
 
 const START_TIME = Date.now();
@@ -23,7 +24,8 @@ export async function GET() {
       status: error ? 'degraded' : 'ok',
       uptimeSeconds: Math.floor((Date.now() - START_TIME) / 1000),
     });
-  } catch {
+  } catch (error) {
+    logger.error('[api/health] health check failed', error);
     return NextResponse.json({ status: 'error' }, { status: 500 });
   }
 }

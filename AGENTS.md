@@ -987,3 +987,29 @@ Follow these so the same issues don't come back:
   with `fail-on-error: 'false'` (that input only downgrades *upload* errors,
   e.g. Code Quality not enabled). The coverage-generation step must actually
   produce the file, or CI goes red.
+
+## Test quirks (vitest 4.1)
+
+- **Don't `mockReset()`/`mockClear()` a `vi.stubGlobal`'d fetch in
+  `beforeEach` when a test makes it throw.** Observed 2026-09-28
+  (lib/__tests__/token-balance-real.test.ts): with the reset in place, a
+  throwing fetch mock surfaces as a phantom `Error` attributed to the test
+  even though the code under test catches it and behaves correctly
+  (verified: right return value, logger.warn called once). Without the
+  reset, the same test passes. Arm the mock explicitly in each test instead
+  of resetting the stubbed global.
+
+## Logger migration rule (2026-09-28)
+- When migrating a direct `console.warn/error(msg, obj)` call to
+  `logger.warn/error(...)`, the logger's console emission must preserve the
+  EXACT call shape (message first, metadata/error as separate args).
+  Pre-existing route tests pin it with
+  `toHaveBeenCalledWith(msg, expect.objectContaining(...))` — adding a
+  `[WARN] [logId]` prefix arg or JSON-stringifying metadata into the message
+  breaks them (10 tests went red this way; the fix was a shape-preserving
+  passthrough in `writeConsole`). The logger adds Bugsink routing and returns
+  the logId; it must not reshape the console call.
+- Same reason: don't "improve" the metadata at a migrated call site
+  (`console.warn(msg, err)` -> `logger.warn(msg, { err })` is NOT faithful
+  when a test expects the raw object as 2nd arg). Migrate the shape as-is;
+  split cause/metadata only where no test pins the old shape.

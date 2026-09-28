@@ -18,6 +18,7 @@ import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
+import { logger } from '@/lib/logger';
 
 //---------------
 // /api/persona/images — persona image library.
@@ -100,7 +101,7 @@ async function assertPersonaOwned(
     if (error.code === 'PGRST116') {
       return { response: errorResponse(404, 'Persona not found.') };
     }
-    console.error('[api/persona/images] persona ownership lookup failed', { personaId, error });
+    logger.error('[api/persona/images] persona ownership lookup failed', error, { personaId });
     return { response: errorResponse(500, 'Failed to load persona.') };
   }
   if (!data) return { response: errorResponse(404, 'Persona not found.') };
@@ -124,7 +125,7 @@ async function fetchImageRow(
     .eq('id', id)
     .single();
   if (error || !data) {
-    console.error('[api/persona/images] image refetch failed', { error });
+    logger.error('[api/persona/images] image refetch failed', error);
     return null;
   }
   return data as Record<string, unknown>;
@@ -178,7 +179,7 @@ async function getOwnedImage(
     if (error.code === 'PGRST116') {
       return { image: null, error: errorResponse(404, 'Image not found.') };
     }
-    console.error('[api/persona/images] image lookup failed', { imageId, error });
+    logger.error('[api/persona/images] image lookup failed', error, { imageId });
     return { image: null, error: errorResponse(500, 'Failed to load image.') };
   }
   if (!image) {
@@ -194,10 +195,7 @@ async function getOwnedImage(
     if (personaError.code === 'PGRST116') {
       return { image: null, error: errorResponse(404, 'Image not found.') };
     }
-    console.error('[api/persona/images] image ownership lookup failed', {
-      imageId,
-      error: personaError,
-    });
+    logger.error('[api/persona/images] image ownership lookup failed', personaError, { imageId });
     return { image: null, error: errorResponse(500, 'Failed to load image.') };
   }
   if (!persona) {
@@ -222,12 +220,12 @@ async function signImageUrl(
       .from(IMAGE_BUCKET)
       .createSignedUrl(imagePath, IMAGE_URL_TTL_SECONDS);
     if (error || !data?.signedUrl) {
-      console.warn('[api/persona/images] failed to sign storage URL', { imagePath, error });
+      logger.warn('[api/persona/images] failed to sign storage URL', { imagePath, error });
       return null;
     }
     return data.signedUrl;
   } catch (error) {
-    console.warn('[api/persona/images] failed to sign storage URL', { imagePath, error });
+    logger.warn('[api/persona/images] failed to sign storage URL', { imagePath, error });
     return null;
   }
 }
@@ -252,7 +250,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     .order('created_at', { ascending: true })
     .order('id', { ascending: true });
   if (error) {
-    console.error('[api/persona/images] list failed', { error });
+    logger.error('[api/persona/images] list failed', error);
     return errorResponse(500, 'Failed to list images.');
   }
   // The bucket is private: the UI needs signed URLs to render thumbnails.
@@ -363,7 +361,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     // surviving rows, and deleting their files would dangle those rows.
     // Log row-backed leftovers loudly — they need manual cleanup.
     if (rowBackedPaths.length > 0) {
-      console.error('[api/persona/images] upload rollback left row-backed image paths', {
+      logger.error('[api/persona/images] upload rollback left row-backed image paths', undefined, {
         personaId,
         rowBackedPaths,
       });
@@ -386,9 +384,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     // stable codes, not English copy: the UI maps them through i18n.
     const primaryError = await setPrimaryLibraryImage(supabase, personaId, image.id, auth.userId);
     if (primaryError) {
-      console.error('[api/persona/images] primary flag after upload failed', {
-        error: primaryError.error,
-      });
+      logger.error('[api/persona/images] primary flag after upload failed', primaryError.error);
       warnings.push(PERSONA_IMAGE_WARNING_CODES.PRIMARY_SWAP_FAILED);
     } else {
       image.is_primary = true;
@@ -501,7 +497,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     .select(IMAGE_ROW_COLUMNS)
     .single();
   if (updateError || !updated) {
-    console.error('[api/persona/images] update failed', { error: updateError });
+    logger.error('[api/persona/images] update failed', updateError);
     // PGRST116 = the row vanished between the ownership check and the
     // update (concurrent delete): report 404, not 500.
     const rowGone = updateError?.code === 'PGRST116';
@@ -540,7 +536,7 @@ export async function DELETE(request: Request): Promise<NextResponse> {
     .delete()
     .eq('id', id);
   if (deleteError) {
-    console.error('[api/persona/images] delete failed', { error: deleteError });
+    logger.error('[api/persona/images] delete failed', deleteError);
     return errorResponse(500, 'Failed to delete image.');
   }
   // Deleting the primary image intentionally leaves the library with zero
@@ -556,7 +552,7 @@ export async function DELETE(request: Request): Promise<NextResponse> {
   if (storageError) {
     const retry = await supabase.storage.from(IMAGE_BUCKET).remove([image.image_path]);
     if (retry.error) {
-      console.error('[api/persona/images] storage cleanup failed', {
+      logger.error('[api/persona/images] storage cleanup failed', undefined, {
         imagePath: image.image_path,
         error: retry.error,
       });

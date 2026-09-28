@@ -4,6 +4,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { refundTokens } from '@/lib/billing/token-check';
 import { recordGenerationUpdate } from '@/lib/generation/video-generation';
 import { categorizeGenerationError } from '@/lib/generation/generation-errors';
+import { logger } from '@/lib/logger';
 
 //---------------
 // GET /api/persona/video-status/:taskId — engine status proxy.
@@ -100,7 +101,7 @@ export async function GET(
     }
     return NextResponse.json(rewriteVideoUrls(body, taskId, baseUrl), { status: response.ok ? 200 : 502 });
   } catch (error) {
-    console.error('[api/persona/video-status] upstream unavailable', { error });
+    logger.error('[api/persona/video-status] upstream unavailable', error);
     return NextResponse.json({ success: false, error: 'Video service is unavailable.' }, { status: 502 });
   }
 }

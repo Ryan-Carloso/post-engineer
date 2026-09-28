@@ -3,6 +3,7 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { generateRawApiKey, hashApiKey, extractKeyPrefix } from '@/lib/api-keys';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { logger } from '@/lib/logger';
 
 interface CreateKeyBody {
   name?: unknown;
@@ -36,6 +37,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     .order('created_at', { ascending: false });
 
   if (error) {
+    logger.error('[api/api-keys] list failed', error);
     return NextResponse.json(
       { success: false, error: 'Failed to list API keys.' },
       { status: 500 },
@@ -128,6 +130,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     .single();
 
   if (error || !data) {
+    logger.error('[api/api-keys] create failed', error);
     return NextResponse.json(
       { success: false, error: 'Failed to create API key.' },
       { status: 500 },

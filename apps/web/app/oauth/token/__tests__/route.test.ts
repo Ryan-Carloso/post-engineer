@@ -10,7 +10,17 @@ vi.mock('@/lib/supabase/service', () => ({
   createSupabaseServiceClient: vi.fn(),
 }));
 
+vi.mock('@/lib/logger', () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  },
+}));
+
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
+import { logger } from '@/lib/logger';
 
 //---------------
 // In-memory stand-in for the 0026 migration RPCs, mirroring their SQL
@@ -113,6 +123,22 @@ async function freshCode(): Promise<string> {
 }
 
 describe('POST /oauth/token', () => {
+  it('logs when the OAuth signing keys are unavailable', async () => {
+    const saved = process.env.MCP_OAUTH_PRIVATE_KEY_PEM;
+    delete process.env.MCP_OAUTH_PRIVATE_KEY_PEM;
+    clearOAuthKeysCache();
+    try {
+      const response = await POST(form({ grant_type: 'client_credentials' }));
+      expect(response.status).toBe(500);
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('keys unavailable'),
+      );
+    } finally {
+      if (saved !== undefined) process.env.MCP_OAUTH_PRIVATE_KEY_PEM = saved;
+      clearOAuthKeysCache();
+    }
+  });
+
   it('exchanges a code+PKCE for access and refresh tokens', async () => {
     const response = await POST(
       form({

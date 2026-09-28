@@ -6,6 +6,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { InstagramService } from '@/lib/instagram';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { logger } from '@/lib/logger';
 
 //---------------
 // instagramPictureUrlExpired — as URLs de mídia do Instagram CDN são assinadas
@@ -68,7 +69,7 @@ async function refreshInstagramAccountPicture(
     metadata
   );
 
-  console.log('[ACCOUNT] Foto de perfil do Instagram renovada', {
+  logger.info('[ACCOUNT] Foto de perfil do Instagram renovada', {
     recordId: record.id,
     igUserId: record.providerAccountId,
   });
@@ -104,20 +105,14 @@ export async function GET(request?: Request) {
         try {
           effectiveRecord = await refreshInstagramAccountPicture(supabase, userId, record);
         } catch (error) {
-          console.error(
-            '[ACCOUNT] Falha ao renovar foto de perfil do Instagram, seguindo com a salva',
-            { recordId: record.id, error: error instanceof Error ? error.message : error }
-          );
+          logger.error('[ACCOUNT] Falha ao renovar foto de perfil do Instagram, seguindo com a salva', error instanceof Error ? error.message : error, { recordId: record.id });
         }
       }
       const mapped = toPublicAccountSafe(effectiveRecord);
       if (mapped) {
         accounts.push(mapped);
       } else {
-        console.error(
-          '[ACCOUNT] Registro com provider desconhecido ignorado',
-          { recordId: record.id, provider: record.provider }
-        );
+        logger.error('[ACCOUNT] Registro com provider desconhecido ignorado', undefined, { recordId: record.id, provider: record.provider });
       }
     }
 
@@ -128,7 +123,7 @@ export async function GET(request?: Request) {
     });
   } catch (error) {
     // Mensagem genérica pro client: detalhes internos ficam só no servidor
-    console.error('[ACCOUNT] Erro ao listar contas', error instanceof Error ? error.message : error);
+    logger.error('[ACCOUNT] Erro ao listar contas', error instanceof Error ? error.message : error);
     return NextResponse.json(
       { authenticated: false, accounts: [], message: 'Failed to list accounts.', error: 'LIST_ERROR' },
       { status: 500 }
@@ -177,7 +172,7 @@ export async function DELETE(request: Request): Promise<NextResponse> {
     await deleteSocialAccount(supabase, auth.userId, provider as SocialProvider, providerAccountId);
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('[ACCOUNT] Erro ao desconectar conta', error instanceof Error ? error.message : error);
+    logger.error('[ACCOUNT] Erro ao desconectar conta', error instanceof Error ? error.message : error);
     return NextResponse.json(
       { success: false, message: 'Failed to disconnect account.', error: 'DELETE_ERROR' },
       { status: 500 }

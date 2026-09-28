@@ -8,9 +8,19 @@ vi.mock('@/lib/supabase/service', () => ({
   createSupabaseServiceClient: vi.fn(),
 }));
 
+vi.mock('@/lib/logger', () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  },
+}));
+
 import { GET } from '@/app/api/health/route';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
+import { logger } from '@/lib/logger';
 import { NextResponse } from 'next/server';
 
 describe('GET /api/health', () => {
@@ -69,5 +79,17 @@ describe('GET /api/health', () => {
     expect(res.status).toBe(500);
     const body = (await res.json()) as { status: string };
     expect(body.status).toBe('error');
+  });
+
+  it('logs when the health check throws', async () => {
+    vi.mocked(createSupabaseServiceClient).mockImplementation(() => {
+      throw new Error('boom');
+    });
+
+    await GET();
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('health check failed'),
+      expect.objectContaining({ message: 'boom' }),
+    );
   });
 });

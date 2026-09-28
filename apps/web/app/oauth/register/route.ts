@@ -3,6 +3,7 @@ import { randomBytes } from 'crypto';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { validateDcrMetadata } from '@/lib/oauth/clients';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { logger } from '@/lib/logger';
 
 //---------------
 // POST /oauth/register — Dynamic Client Registration (RFC 7591).
@@ -36,6 +37,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   });
 
   if (error) {
+    logger.error('[oauth/register] client registration failed', error);
     return NextResponse.json({ error: 'Failed to register client.' }, { status: 500 });
   }
 

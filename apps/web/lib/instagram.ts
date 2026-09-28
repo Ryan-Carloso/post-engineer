@@ -112,7 +112,7 @@ export class InstagramService {
         }
       }
 
-      console.error('[instagram] API ERROR', {
+      logger.error('[instagram] API ERROR', undefined, {
         context,
         status: axiosError.response?.status,
         message,
@@ -124,7 +124,7 @@ export class InstagramService {
       });
       throw new InstagramApiError(message, axiosError.response?.status ?? 500, asError);
     }
-    console.error('[instagram] NON-AXIOS ERROR', { context, message: asError.message });
+    logger.error('[instagram] NON-AXIOS ERROR', undefined, { context, message: asError.message });
     logger.error(`Instagram API error (${context})`, asError);
     throw new InstagramApiError(asError.message, 500, asError);
   }
@@ -387,7 +387,7 @@ export class InstagramService {
       const axiosData = error && typeof error === 'object' && 'response' in error
         ? (error as { response?: { status?: number; data?: unknown } })
         : undefined;
-      console.error('[instagram] publishMedia failed', {
+      logger.error('[instagram] publishMedia failed', undefined, {
         igUserId,
         mediaType,
         mediaUrlHash: crypto.createHash('sha256').update(mediaUrl).digest('hex').slice(0, 12),
@@ -415,12 +415,12 @@ export class InstagramService {
         const status = (response.data as { status_code?: string }).status_code;
         if (status === 'FINISHED') return;
         if (status === 'ERROR') {
-          console.error('[instagram] waitForContainer IG error', { creationId, attempt, status, data: response.data });
+          logger.error('[instagram] waitForContainer IG error', undefined, { creationId, attempt, status, data: response.data });
           throw new InstagramApiError('Instagram media processing failed', 400);
         }
       } catch (error) {
         if (error instanceof InstagramApiError) throw error;
-        console.error('[instagram] waitForContainer polling failed', { creationId, attempt, error: error instanceof Error ? error.message : String(error) });
+        logger.error('[instagram] waitForContainer polling failed', error instanceof Error ? error.message : String(error), { creationId, attempt });
         this.handleApiError(error, 'waitForContainer');
       }
       await new Promise((resolve) => setTimeout(resolve, 2000));

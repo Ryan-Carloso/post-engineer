@@ -9,6 +9,7 @@ import { useI18n } from '@/lib/i18n/provider';
 import { LOCALES } from '@/lib/i18n';
 import { BoltIcon } from '@/lib/ui';
 import { ArrowRight, CalendarDays, ChartBar } from 'lucide-react';
+import { logger } from '@/lib/logger';
 
 export default function Login() {
   return (
@@ -113,7 +114,7 @@ const GithubLogin = () => {
     });
 
     if (error) {
-      console.error(`${provider} OAuth error:`, error);
+      logger.error(`${provider} OAuth error:`, error);
       setPending(false);
     }
   };

@@ -15,6 +15,7 @@ import type {
   SocialProvider,
   VoiceOption,
 } from '@/lib/types';
+import { logger } from '@/lib/logger';
 
 //---------------
 // API — typed fetch clients
@@ -50,7 +51,7 @@ async function fetchServerAccounts(): Promise<ServerAccountPayload> {
     const data: ServerAccountPayload = await response.json();
     return data;
   } catch (error) {
-    console.error('[api/account] network request failed', { error });
+    logger.error('[api/account] network request failed', error);
     throw error;
   }
 }

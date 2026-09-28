@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
+import { logger } from '@/lib/logger';
 
 //---------------
 // GET /api/persona/video-generations — the user's video generation history
@@ -59,7 +60,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     .limit(limit);
 
   if (error) {
-    console.error('[api/persona/video-generations] list failed', { error });
+    logger.error('[api/persona/video-generations] list failed', error);
     return NextResponse.json(
       { success: false, error: 'Could not load generation history.' },
       { status: 500 },

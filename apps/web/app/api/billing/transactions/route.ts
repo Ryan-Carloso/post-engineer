@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { toFiniteNumber } from '@/lib/tokens';
 import type { TokenTransaction } from '@/lib/token-transactions';
+import { logger } from '@/lib/logger';
 
 //---------------
 // GET /api/billing/transactions — the current user's token ledger,
@@ -116,7 +117,7 @@ export async function GET(request?: Request): Promise<NextResponse> {
       offset,
     });
   } catch (queryError) {
-    console.error('[api/billing/transactions] ledger query failed', { userId, error: queryError });
+    logger.error('[api/billing/transactions] ledger query failed', queryError, { userId });
     return NextResponse.json(
       { success: false, error: 'Could not load token transactions.' },
       { status: 500 },

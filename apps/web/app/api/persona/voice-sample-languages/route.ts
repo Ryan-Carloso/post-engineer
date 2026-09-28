@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
+import { logger } from '@/lib/logger';
 
 //---------------
 // GET /api/persona/voice-sample-languages — proxy da lista de idiomas
@@ -22,7 +23,7 @@ export async function GET(): Promise<NextResponse> {
   try {
     baseUrl = moneyPrintBaseUrl();
   } catch (error) {
-    console.error('[api/persona/voice-sample-languages] env missing', { error });
+    logger.error('[api/persona/voice-sample-languages] env missing', error);
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : 'Configuration error.' },
       { status: 500 },
@@ -36,7 +37,7 @@ export async function GET(): Promise<NextResponse> {
     });
 
     if (!upstream.ok) {
-      console.error('[api/persona/voice-sample-languages] money-print error', {
+      logger.error('[api/persona/voice-sample-languages] money-print error', undefined, {
         status: upstream.status,
       });
       return NextResponse.json(
@@ -65,7 +66,7 @@ export async function GET(): Promise<NextResponse> {
 
     return NextResponse.json({ languages: data });
   } catch (error) {
-    console.error('[api/persona/voice-sample-languages] money-print unreachable', { error });
+    logger.error('[api/persona/voice-sample-languages] money-print unreachable', error);
     return NextResponse.json(
       { success: false, error: 'Sample languages service unreachable.' },
       { status: 502 },

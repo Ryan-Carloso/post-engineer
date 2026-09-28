@@ -5,7 +5,17 @@ vi.mock('@/lib/supabase/service', () => ({
   createSupabaseServiceClient: vi.fn(),
 }));
 
+vi.mock('@/lib/logger', () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  },
+}));
+
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
+import { logger } from '@/lib/logger';
 
 function serviceClient(insertResult: { error: unknown }) {
   const insert = vi.fn().mockResolvedValue(insertResult);
@@ -58,6 +68,24 @@ describe('POST /oauth/register', () => {
       body: JSON.stringify({ redirect_uris: ['https://chatgpt.com/connector/callback'] }),
     });
     expect((await POST(request)).status).toBe(500);
+  });
+
+  it('logs when the client insert fails', async () => {
+    const dbError = new Error('db down');
+    const supabase = serviceClient({ error: dbError });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(
+      supabase as unknown as ReturnType<typeof createSupabaseServiceClient>,
+    );
+    const request = new Request('https://post-engineer.com/oauth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ redirect_uris: ['https://chatgpt.com/connector/callback'] }),
+    });
+    expect((await POST(request)).status).toBe(500);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('registration failed'),
+      dbError,
+    );
   });
 });
 

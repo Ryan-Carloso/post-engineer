@@ -5,6 +5,7 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { encryptTokens } from '@/lib/token-crypto';
 import { BlueskyError, loginToBluesky } from '@/lib/bluesky';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { logger } from '@/lib/logger';
 
 //---------------
 // POST /api/bluesky-connect — connects a Bluesky account via app password.
@@ -107,10 +108,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       .single();
 
     if (insertError || !inserted) {
-      console.error('[api/bluesky-connect] insert failed', {
-        error: insertError?.message,
-        userId: auth.userId,
-      });
+      logger.error('[api/bluesky-connect] insert failed', insertError?.message, { userId: auth.userId });
       return errorResponse(500, 'Could not save the Bluesky account.');
     }
 
@@ -123,7 +121,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       return errorResponse(401, 'Invalid Bluesky handle or app password.');
     }
     const message = error instanceof Error ? error.message : 'Unknown error.';
-    console.error('[api/bluesky-connect] failed', { userId: auth.userId, message });
+    logger.error('[api/bluesky-connect] failed', undefined, { userId: auth.userId, message });
     return errorResponse(500, 'Could not connect the Bluesky account.');
   }
 }

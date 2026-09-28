@@ -9,9 +9,19 @@ vi.mock('@/lib/billing/token-check', () => ({
   checkAndDeductTokens: vi.fn(),
 }));
 
+vi.mock('@/lib/logger', () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  },
+}));
+
  
 import { checkAndDeductTokens } from '@/lib/billing/token-check';
 import { POST } from '@/app/api/billing/check-tokens/route';
+import { logger } from '@/lib/logger';
 
 function makePostRequest(body: unknown, headers?: Record<string, string>): NextRequest {
   return new NextRequest('http://localhost/api/billing/check-tokens', {
@@ -35,6 +45,15 @@ describe('POST /api/billing/check-tokens', () => {
     delete process.env.MONEYPRINT_API_SECRET;
     const res = await POST(makePostRequest({ userId: 'u1' }));
     expect(res.status).toBe(500);
+  });
+
+  it('logs the missing-secret misconfiguration via logger.error', async () => {
+    delete process.env.MONEYPRINT_API_SECRET;
+    await POST(makePostRequest({ userId: 'u1' }));
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('engine secret not configured'),
+      expect.anything(),
+    );
   });
 
   it('retorna 401 quando secret não confere', async () => {

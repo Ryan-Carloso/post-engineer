@@ -17,6 +17,7 @@ import {
   type PersonaImageWarningCode,
   type PersonaLibraryImage,
 } from './persona-image-select';
+import { logger } from '@/lib/logger';
 
 export {
   ALLOWED_IMAGE_MIME_TYPES,
@@ -170,7 +171,7 @@ export async function countLibraryImages(
     .select('id', { count: 'exact', head: true })
     .eq('persona_id', personaId);
   if (error) {
-    console.error('[persona-images] count failed', { error });
+    logger.error('[persona-images] count failed', error);
     return null;
   }
   return count ?? 0;
@@ -264,7 +265,7 @@ export async function addLibraryImages(
       .from(IMAGE_BUCKET)
       .upload(path, bytes, { contentType: mime });
     if (uploadError) {
-      console.error('[persona-images] storage upload failed', { path, error: uploadError });
+      logger.error('[persona-images] storage upload failed', uploadError, { path });
       return fail('Failed to upload image.', 500);
     }
     storedPaths.push(path);
@@ -282,7 +283,7 @@ export async function addLibraryImages(
       .select('id, image_path, tag, description, is_primary, created_at')
       .single();
     if (insertError || !data) {
-      console.error('[persona-images] insert failed', { error: insertError });
+      logger.error('[persona-images] insert failed', insertError);
       // Two concurrent requests can both pass the app-level count check;
       // the loser hits the enforce_persona_image_limit trigger. A full
       // library is a client-input problem (the app 400s it in the
@@ -316,7 +317,7 @@ async function rollbackLibraryImages(
       .delete()
       .in('id', added.map((image) => image.id));
     if (deleteError) {
-      console.error('[persona-images] rollback row delete failed', { error: deleteError });
+      logger.error('[persona-images] rollback row delete failed', deleteError);
       // The rows survive, so their storage files are not orphaned yet.
       // Retry the row delete once: if it succeeds the paths become true
       // orphans; if it still fails, split the return so callers never
@@ -336,16 +337,13 @@ async function rollbackLibraryImages(
           .from(IMAGE_BUCKET)
           .remove(rowlessPaths);
         if (rowlessError) {
-          console.error('[persona-images] rollback rowless storage remove failed', {
-            error: rowlessError,
-            rowlessPaths,
-          });
+          logger.error('[persona-images] rollback rowless storage remove failed', rowlessError, { rowlessPaths });
         } else {
           orphanPaths = [];
         }
       }
       if (retryError) {
-        console.error('[persona-images] rollback row delete retry failed', { error: retryError });
+        logger.error('[persona-images] rollback row delete retry failed', retryError);
         return { orphanPaths, rowBackedPaths: [...rowPaths] };
       }
     }
@@ -353,10 +351,7 @@ async function rollbackLibraryImages(
   if (storedPaths.length > 0) {
     const { error: removeError } = await supabase.storage.from(IMAGE_BUCKET).remove(storedPaths);
     if (removeError) {
-      console.error('[persona-images] rollback storage remove failed', {
-        error: removeError,
-        storedPaths,
-      });
+      logger.error('[persona-images] rollback storage remove failed', removeError, { storedPaths });
       return { orphanPaths: storedPaths, rowBackedPaths: [] };
     }
   }
@@ -380,7 +375,7 @@ export async function removeOrphanedUploadPaths(
   if (orphanPaths.length === 0) return;
   const { error } = await supabase.storage.from(IMAGE_BUCKET).remove(orphanPaths);
   if (error) {
-    console.error('[persona-images] orphaned upload storage paths could not be removed', {
+    logger.error('[persona-images] orphaned upload storage paths could not be removed', undefined, {
       ...logContext,
       orphanPaths,
       removeError: error,
@@ -408,7 +403,7 @@ export async function setPrimaryLibraryImage(
     p_user_id: userId,
   });
   if (error) {
-    console.error('[persona-images] set primary failed', { error });
+    logger.error('[persona-images] set primary failed', error);
     // P0002 is raised by the function when the image row vanished between
     // the route's ownership pre-check and the swap (e.g. a concurrent
     // delete): that's a 404, not a 500.
@@ -442,7 +437,7 @@ export async function recordRecentImageId(
     p_user_id: userId,
   });
   if (error) {
-    console.error('[persona-images] recent-image history update failed', { error });
+    logger.error('[persona-images] recent-image history update failed', error);
   }
 }
 
@@ -483,7 +478,7 @@ export async function resolveVideoImage(
     .order('created_at', { ascending: true })
     .order('id', { ascending: true });
   if (error) {
-    console.error('[persona-images] library fetch failed', { error });
+    logger.error('[persona-images] library fetch failed', error);
     return { ok: false, error: 'Failed to load persona image library.', status: 500 };
   }
   const library = (data ?? []) as PersonaLibraryImage[];

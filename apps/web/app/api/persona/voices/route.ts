@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
+import { logger } from '@/lib/logger';
 
 //---------------
 // GET /api/persona/voices — proxy do catálogo de vozes da casa para o
@@ -24,7 +25,7 @@ export async function GET(request?: Request): Promise<NextResponse> {
   try {
     baseUrl = moneyPrintBaseUrl();
   } catch (error) {
-    console.error('[api/persona/voices] env missing', { error });
+    logger.error('[api/persona/voices] env missing', error);
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : 'Configuration error.' },
       { status: 500 },
@@ -38,7 +39,7 @@ export async function GET(request?: Request): Promise<NextResponse> {
     });
 
     if (!upstream.ok) {
-      console.error('[api/persona/voices] money-print error', { status: upstream.status });
+      logger.error('[api/persona/voices] money-print error', undefined, { status: upstream.status });
       return NextResponse.json(
         { success: false, error: 'Voices unavailable.' },
         { status: 502 },
@@ -66,7 +67,7 @@ export async function GET(request?: Request): Promise<NextResponse> {
       voices: data.map(({ id }) => ({ id })),
     });
   } catch (error) {
-    console.error('[api/persona/voices] money-print unreachable', { error });
+    logger.error('[api/persona/voices] money-print unreachable', error);
     return NextResponse.json(
       { success: false, error: 'Voices service unreachable.' },
       { status: 502 },

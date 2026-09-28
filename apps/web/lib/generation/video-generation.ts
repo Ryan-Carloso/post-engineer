@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { engineAuthHeaders } from '@/lib/request-auth';
 import { checkAndDeductTokens, refundTokens } from '@/lib/billing/token-check';
 import type { FaceQuality } from '@/lib/tokens';
+import { logger } from '@/lib/logger';
 
 //---------------
 // Shared video-generation core — used by the real flow
@@ -84,7 +85,7 @@ export async function startEngineVideoTask(
       body: JSON.stringify(payload),
     });
   } catch (error) {
-    console.error('[generation] engine unreachable', { error });
+    logger.error('[generation] engine unreachable', error);
     return {
       ok: false,
       response: NextResponse.json(
@@ -96,7 +97,7 @@ export async function startEngineVideoTask(
 
   const body: unknown = await upstream.json().catch(() => null);
   if (!upstream.ok) {
-    console.error('[generation] engine error', { status: upstream.status, body });
+    logger.error('[generation] engine error', undefined, { status: upstream.status, body });
     return {
       ok: false,
       response: NextResponse.json(
@@ -131,7 +132,7 @@ export async function attachGenerationTask(
     .eq('type', 'video_generation');
 
   if (error) {
-    console.error('[generation] failed to attach engine task', { generationId, taskId, error });
+    logger.error('[generation] failed to attach engine task', error, { generationId, taskId });
   }
 }
 
@@ -148,7 +149,7 @@ export async function uploadEngineTempAsset(
 ): Promise<string | undefined> {
   const rawUrl = process.env.MONEYPRINT_API_URL;
   if (!rawUrl) {
-    console.error('[generation] MONEYPRINT_API_URL is not defined');
+    logger.error('[generation] MONEYPRINT_API_URL is not defined');
     return undefined;
   }
 
@@ -163,13 +164,13 @@ export async function uploadEngineTempAsset(
       body: formData,
     });
   } catch (error) {
-    console.error('[generation] engine unreachable for temp asset upload', { error });
+    logger.error('[generation] engine unreachable for temp asset upload', error);
     return undefined;
   }
 
   const body: unknown = await upstream.json().catch(() => null);
   if (!upstream.ok) {
-    console.error('[generation] temp asset upload failed', { status: upstream.status, body });
+    logger.error('[generation] temp asset upload failed', undefined, { status: upstream.status, body });
     return undefined;
   }
 
@@ -221,16 +222,10 @@ export async function recordGenerationStart(input: RecordGenerationStartInput): 
       status: 'pending',
     });
     if (error) {
-      console.error('[generation] failed to record generation start', {
-        generationId: input.generationId,
-        error,
-      });
+      logger.error('[generation] failed to record generation start', error, { generationId: input.generationId });
     }
   } catch (error) {
-    console.error('[generation] failed to record generation start', {
-      generationId: input.generationId,
-      error,
-    });
+    logger.error('[generation] failed to record generation start', error, { generationId: input.generationId });
   }
 }
 
@@ -266,17 +261,9 @@ export async function recordGenerationUpdate(input: RecordGenerationUpdateInput)
       .update(patch)
       .eq('generation_id', input.generationId);
     if (error) {
-      console.error('[generation] failed to record generation update', {
-        generationId: input.generationId,
-        status: input.status,
-        error,
-      });
+      logger.error('[generation] failed to record generation update', error, { generationId: input.generationId, status: input.status });
     }
   } catch (error) {
-    console.error('[generation] failed to record generation update', {
-      generationId: input.generationId,
-      status: input.status,
-      error,
-    });
+    logger.error('[generation] failed to record generation update', error, { generationId: input.generationId, status: input.status });
   }
 }

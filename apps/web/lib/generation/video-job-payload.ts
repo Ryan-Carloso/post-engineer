@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 //---------------
 // buildJobPayload — SINGLE assembly of the engine (money-print) payload.
 // Used by the normal flow (DB persona) and by debug (virtual persona from
@@ -88,9 +89,7 @@ export function buildJobPayload(
     // which would otherwise let an authenticated caller forge log lines.
     const shown = droppedKeys.slice(0, 10).map((key) => JSON.stringify(key)).join(', ');
     const remainder = droppedKeys.length > 10 ? ` (+${droppedKeys.length - 10} more)` : '';
-    console.warn(
-      `[video-job] dropping ${droppedKeys.length} unknown request field(s): ${shown}${remainder}`,
-    );
+    logger.warn(`[video-job] dropping ${droppedKeys.length} unknown request field(s): ${shown}${remainder}`);
   }
   const personaRecord: Record<string, unknown> = { ...persona };
   const jobPayload = applyPersonaPreferences(
