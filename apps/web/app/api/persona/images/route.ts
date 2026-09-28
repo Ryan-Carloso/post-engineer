@@ -274,6 +274,16 @@ export async function PATCH(request: Request): Promise<NextResponse> {
       if (typeof patch.isPrimary !== 'boolean') {
         return errorResponse(400, 'isPrimary must be a boolean.');
       }
+      // Demoting to false is rejected: with no demote-only target the
+      // library would end up with zero primary images, and every consumer
+      // would fall back to nondeterministic selection. Set isPrimary: true
+      // on the new image instead — the swap atomically demotes the old one.
+      if (patch.isPrimary === false) {
+        return errorResponse(
+          400,
+          'isPrimary cannot be set to false. Mark another image as primary instead.',
+        );
+      }
       updates.is_primary = patch.isPrimary;
     }
   }
@@ -336,6 +346,9 @@ export async function DELETE(request: Request): Promise<NextResponse> {
     console.error('[api/persona/images] delete failed', { error: deleteError });
     return errorResponse(500, 'Failed to delete image.');
   }
+  // Deleting the primary image intentionally leaves the library with zero
+  // primaries: persona-image-select.ts falls back deterministically
+  // (newest row first), and there is no safe implicit successor to promote.
   // Best-effort storage cleanup: the DB row is the source of truth, but a
   // failed remove must not go silently — otherwise orphaned objects pile up.
   const { error: storageError } = await supabase.storage

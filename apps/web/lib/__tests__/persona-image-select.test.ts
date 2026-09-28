@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import {
   MAX_PERSONA_IMAGES,
   PERSONA_IMAGE_HISTORY_LIMIT,
-  pushRecentImageId,
   selectPersonaImage,
   type PersonaLibraryImage,
 } from '../persona-image-select';
@@ -96,18 +95,6 @@ describe('selectPersonaImage', () => {
       [],
     );
     expect(picked?.id).toBe('img-beach');
-  });
-});
-
-describe('pushRecentImageId', () => {
-  it('prepends the chosen id and caps at the history limit', () => {
-    const recent = pushRecentImageId(['a', 'b', 'c'], 'd');
-    expect(recent).toEqual(['d', 'a', 'b']);
-    expect(recent.length).toBeLessThanOrEqual(PERSONA_IMAGE_HISTORY_LIMIT);
-  });
-
-  it('dedupes an id that is already in the history', () => {
-    expect(pushRecentImageId(['a', 'b'], 'b')).toEqual(['b', 'a']);
   });
 
   it('exposes the documented limits', () => {

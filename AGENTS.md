@@ -255,3 +255,59 @@ Follow these so the same issues don't come back:
 - **Verify the doc claim against the code.** The imagePrimaryIndex doc said
   "default: first" but no primary was set when omitted — docs must describe
   what the code does, not what it should do.
+
+## Web/API review learnings, round 4 (2026-09-28)
+- **Magic bytes at the server boundary, not just declared MIME.** The MIME
+  allowlist still trusts the client-supplied `file.type`, which API-key
+  callers can spoof (GIF bytes declared as image/png passed). validate the
+  real bytes with detectMagicMimeType in addLibraryImages and the
+  creation pre-check; extended the detector with WebP and GIF.
+- **Row first, storage second on deletes.** DELETE /api/persona removed
+  storage objects BEFORE the persona row: a DB failure then destroyed
+  files still referenced by a surviving row. Delete the row first; storage
+  cleanup after is best-effort with loud logging.
+- **Rollback leftovers must retry before the cascade.** addLibraryImages'
+  internal rollback ignored storage remove() results; the creation
+  rollback then deleted the persona (cascade erasing the rows), making the
+  orphaned files unrecoverable. Surface leftoverPaths from the helper and
+  retry the remove BEFORE the cascade delete.
+- **A failed primary swap on creation is a warning, not a 500.** The
+  persona and images are already committed — return 200 with a warnings
+  array so the client knows no image is primary.
+- **UI gating must read persisted state, not create-flow state.** The
+  persona page showed the image library based on the unhydrated zustand
+  personaMode, so editing a persisted faceless persona rendered uploads
+  the server would always reject. Gate on
+  editingPersona.faceMixPercent !== 0.
+- **Pending queues must survive refetches.** The pending upload queue
+  unmounted when a refetch filled the library, hiding queued items (with
+  their upload button) while previews stayed alive. Render the queue
+  outside the full/partial conditional.
+- **PATCH isPrimary:false is rejected — primary is swap-only.** A
+  demote-only PATCH would leave zero primaries and push every consumer
+  onto the deterministic fallback; set isPrimary:true on the new image
+  instead. Deleting the primary image is documented as intentionally
+  leaving zero primaries (selector falls back deterministically).
+- **Malformed metadata arrays are 400, never silent [].** imageTags/
+  imageDescriptions with invalid JSON or non-string entries used to
+  default to []; the call site now throws and the route returns 400.
+- **Keep zero-byte files through validation.** Filtering empty files
+  before index-aligned pairing shifted tags onto the wrong images; keep
+  them so validateImageFile emits the clear error for the right index.
+- **Unused i18n keys are a smell.** libraryTag/libraryDescription existed
+  in both locales but were never rendered — wired as aria-labels on the
+  pending inputs instead of deleting them.
+- **Faceless video jobs reject image_id with 400.** A valid image_id on a
+  faceless request was silently ignored; now it fails loudly. Persona
+  image_id values are trimmed before the exact-match lookup.
+
+## MCP review learnings, round 4 (2026-09-28)
+- **Reject zero-byte files locally with a filename-specific error.** A
+  0-byte file passed the local gate but desynchronized the server's
+  index-aligned tag pairing; fail fast with the basename in the message.
+- **imagePrimaryIndex without images is a caller bug.** Fail fast with a
+  clear message instead of a silent successful creation with no primary.
+- **Encode domain rules in the zod schema.** "At least one of
+  tag/description/isPrimary" lived only in the handler guard; a
+  .refine() on UpdatePersonaImageSchema makes the contract
+  machine-checkable at parse time.

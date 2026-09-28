@@ -137,7 +137,11 @@ const PersonaPageContent = () => {
             <PersonaModeSelector />
             <PersonaNameField />
             {personaMode === 'persona' ? <PersonaAvatarSection /> : null}
-            {personaMode === 'persona' && editingPersonaId ? (
+            {/* The server decides facelessness from the stored face_mix_percent
+                (see POST /api/persona/images), not from the create-flow store:
+                an editing persona whose face_mix_percent is 0 must not show
+                the library, or every upload would be rejected. */}
+            {personaMode === 'persona' && editingPersonaId && editingPersona?.faceMixPercent !== 0 ? (
               <PersonaImageLibrarySection personaId={editingPersonaId} />
             ) : null}
             {/* Faceless: no avatar — voice is still required, video is 100% stock. */}

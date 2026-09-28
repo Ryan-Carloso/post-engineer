@@ -91,12 +91,3 @@ export function selectPersonaImage(
   }
   return best;
 }
-
-/** Prepends the chosen id, dedupes, and caps the history window. */
-export function pushRecentImageId(
-  recentIds: string[],
-  imageId: string,
-  limit: number = PERSONA_IMAGE_HISTORY_LIMIT,
-): string[] {
-  return [imageId, ...recentIds.filter((id) => id !== imageId)].slice(0, limit);
-}

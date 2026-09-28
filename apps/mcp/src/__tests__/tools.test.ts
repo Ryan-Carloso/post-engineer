@@ -534,6 +534,17 @@ describe('persona image library tools', () => {
     );
   });
 
+  it('update_persona_image rejects a no-op update with only an id', async () => {
+    // The refine encodes the domain rule "at least one of tag/description/
+    // isPrimary" in the schema: an id-only call must fail at parse time,
+    // before any client call.
+    vi.clearAllMocks();
+    expect(() => UpdatePersonaImageSchema.parse({ id: 'img-1' })).toThrow(
+      /At least one of tag, description, or isPrimary/
+    );
+    expect(mockClient.updatePersonaImage).not.toHaveBeenCalled();
+  });
+
   it('remove_persona_image forwards the id', async () => {
     vi.mocked(mockClient.deletePersonaImage).mockResolvedValue({ success: true });
     await handleRemovePersonaImage(mockClient, RemovePersonaImageSchema.parse({ id: 'img-1' }));

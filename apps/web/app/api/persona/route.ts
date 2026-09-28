@@ -14,8 +14,10 @@ import {
 } from '@/lib/persona-schema';
 import {
   addLibraryImages,
+  IMAGE_BUCKET,
   isFileLike,
   setPrimaryLibraryImage,
+  validateImageContent,
   validateImageFile,
   MAX_PERSONA_IMAGES,
   type LibraryImageInput,
@@ -76,17 +78,22 @@ export async function POST(request: Request): Promise<NextResponse> {
   // `imageTags` / `imageDescriptions` JSON arrays and an optional
   // `imagePrimaryIndex`. Pre-validated here so a bad file fails before any
   // upload or insert happens.
-  // Structural check on purpose: the undici File constructor in the server
-  // runtime can differ from the global File, and `instanceof File` would
-  // silently drop every library image in that case (isFileLike, imported
-  // from lib/persona-images — one shared structural guard, no local copy).
+  // Keep every file-like entry (even empty ones): validateImageFile rejects
+  // size-0 files with a clear error. Dropping them here would shift the
+  // index-aligned imageTags/imageDescriptions onto the wrong images.
   const libraryFiles = formData
     .getAll('images')
-    .filter((value): value is File => isFileLike(value) && value.size > 0);
+    .filter((value): value is File => isFileLike(value));
   // Parsed once: parseJsonStringArray is pure JSON parsing, no need to
-  // re-parse per file inside the map below.
-  const imageTags = parseJsonStringArray(formData.get('imageTags'));
-  const imageDescriptions = parseJsonStringArray(formData.get('imageDescriptions'));
+  // re-parse per file inside the map below. Malformed JSON is a 400 here.
+  let imageTags: string[];
+  let imageDescriptions: string[];
+  try {
+    imageTags = parseJsonStringArray(formData.get('imageTags'));
+    imageDescriptions = parseJsonStringArray(formData.get('imageDescriptions'));
+  } catch (error) {
+    return errorResponse(400, error instanceof Error ? error.message : 'Invalid imageTags/imageDescriptions.');
+  }
   // Tags/descriptions are matched to files by index: a non-empty array that
   // does not cover every file is a client bug, not a silent default.
   if (
@@ -100,7 +107,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     tag: imageTags[index] ?? '',
     description: imageDescriptions[index] ?? '',
   }));
-  const libraryError = validateLibraryInputs(
+  const libraryError = await validateLibraryInputs(
     body.values.personaMode,
     body.values.faceMixPercent,
     libraryInputs,
@@ -146,12 +153,26 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   let libraryImageIds: string[] = [];
+  const warnings: string[] = [];
   if (libraryInputs.length > 0) {
     const added = await addLibraryImages(supabase, user.id, persona.id, libraryInputs);
     if ('error' in added) {
       // Roll back the whole creation so a half-written persona never survives.
       // Rollback failures are logged loudly: an invisible failed rollback is
       // worse than a loud one.
+      // Leftover library storage paths retry BEFORE the persona delete: its
+      // cascade erases the image rows, making failed removals unrecoverable.
+      if (added.leftoverPaths && added.leftoverPaths.length > 0) {
+        const { error: leftoverError } = await supabase.storage
+          .from(IMAGE_BUCKET)
+          .remove(added.leftoverPaths);
+        if (leftoverError) {
+          console.error('[api/persona] leftover library storage remove failed', {
+            error: leftoverError,
+            leftoverPaths: added.leftoverPaths,
+          });
+        }
+      }
       const { error: rollbackError } = await supabase
         .from('personas')
         .delete()
@@ -175,6 +196,8 @@ export async function POST(request: Request): Promise<NextResponse> {
     // Defensive: addLibraryImages rolls back partial work and returns exactly
     // one row per input, so the up-front range check guarantees this index is
     // in range — there is no partial-success path to skip here.
+    // A failed primary swap is surfaced as a warning, not a 500: the persona
+    // and its images are already committed.
     if (primaryIndex !== null && primaryIndex < added.images.length) {
       const primaryError = await setPrimaryLibraryImage(
         supabase,
@@ -185,11 +208,17 @@ export async function POST(request: Request): Promise<NextResponse> {
         console.error('[api/persona] set primary library image failed', {
           error: primaryError.error,
         });
+        warnings.push('Primary image could not be set; no image is marked as primary.');
       }
     }
   }
 
-  return NextResponse.json({ success: true, personaId: persona.id, imageIds: libraryImageIds });
+  return NextResponse.json({
+    success: true,
+    personaId: persona.id,
+    imageIds: libraryImageIds,
+    ...(warnings.length > 0 ? { warnings } : {}),
+  });
 }
 
 //---------------
@@ -198,14 +227,18 @@ export async function POST(request: Request): Promise<NextResponse> {
 //---------------
 function parseJsonStringArray(value: FormDataEntryValue | null): string[] {
   if (typeof value !== 'string' || value.trim() === '') return [];
+  // Malformed JSON is a client bug, not a silent default: throwing here
+  // becomes a 400 at the call site instead of empty tags/descriptions.
+  let parsed: unknown;
   try {
-    const parsed: unknown = JSON.parse(value);
-    return Array.isArray(parsed)
-      ? parsed.filter((entry): entry is string => typeof entry === 'string')
-      : [];
+    parsed = JSON.parse(value);
   } catch {
-    return [];
+    throw new Error('imageTags/imageDescriptions must be a JSON array of strings.');
   }
+  if (!Array.isArray(parsed) || parsed.some((entry) => typeof entry !== 'string')) {
+    throw new Error('imageTags/imageDescriptions must be a JSON array of strings.');
+  }
+  return parsed;
 }
 
 function parsePrimaryIndex(value: FormDataEntryValue | null): number | null {
@@ -219,11 +252,11 @@ function parsePrimaryIndex(value: FormDataEntryValue | null): number | null {
 // - faceless personas (or faceMixPercent 0) accept no images at all;
 // - at most MAX_PERSONA_IMAGES files, each a valid image.
 //---------------
-function validateLibraryInputs(
+async function validateLibraryInputs(
   personaMode: 'persona' | 'faceless',
   faceMixPercent: number | null,
   inputs: LibraryImageInput[],
-): string | null {
+): Promise<string | null> {
   if (inputs.length === 0) return null;
   if (personaMode === 'faceless' || faceMixPercent === 0) {
     return 'Faceless persona must not include library images.';
@@ -234,10 +267,13 @@ function validateLibraryInputs(
   // Intentional second per-file validation: validateImageFile also runs
   // inside addLibraryImages, but this route-level check fails BEFORE any
   // upload or persona insert happens, so a bad file never creates partial
-  // state the rollback then has to clean up.
+  // state the rollback then has to clean up. The magic-byte check reads the
+  // real bytes: declared MIME type and extension are client-controlled.
   for (const input of inputs) {
     const validated = validateImageFile(input.file);
     if ('error' in validated) return validated.error;
+    const contentError = await validateImageContent(validated.file);
+    if (contentError) return contentError;
   }
   return null;
 }
@@ -448,14 +484,11 @@ export async function DELETE(request: Request): Promise<NextResponse> {
       paths.push(row.image_path);
     }
   }
-  if (paths.length > 0) {
-    const { error: storageError } = await supabase.storage.from('personas').remove(paths);
-    if (storageError) {
-      console.error('[api/persona] storage cleanup failed', { error: storageError });
-      return errorResponse(500, 'Failed to remove persona files.');
-    }
-  }
 
+  // Row first, storage second: if the row delete fails, nothing is lost; if
+  // the storage remove fails afterwards, the persona is already gone and the
+  // orphaned files are cleanable — never destroy data still referenced by a
+  // surviving row.
   const { error: deleteError } = await supabase
     .from('personas')
     .delete()
@@ -464,6 +497,15 @@ export async function DELETE(request: Request): Promise<NextResponse> {
   if (deleteError) {
     console.error('[api/persona] delete failed', { error: deleteError });
     return errorResponse(500, 'Failed to delete persona.');
+  }
+  if (paths.length > 0) {
+    const { error: storageError } = await supabase.storage.from('personas').remove(paths);
+    if (storageError) {
+      console.error('[api/persona] storage cleanup failed after delete', {
+        error: storageError,
+        paths,
+      });
+    }
   }
   return NextResponse.json({ success: true });
 }

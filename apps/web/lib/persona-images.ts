@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { detectMagicMimeType } from './media/magic-bytes';
 import {
   MAX_PERSONA_IMAGES,
   selectPersonaImage,
@@ -24,7 +25,7 @@ export const ALLOWED_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp']);
 export const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 export const MAX_TAG_LENGTH = 100;
 export const MAX_DESCRIPTION_LENGTH = 500;
-const IMAGE_BUCKET = 'personas';
+export const IMAGE_BUCKET = 'personas';
 
 export interface LibraryImageInput {
   file: File;
@@ -67,6 +68,40 @@ export function validateImageFile(
   return { file, extension };
 }
 
+/**
+ * Verifies image bytes against the declared MIME type. The declared type and
+ * extension are client-controlled and spoofable; the magic bytes are not.
+ * Returns an error message, or null when the content checks out.
+ */
+export function validateImageBuffer(buffer: Buffer, declaredType: string): string | null {
+  const detected = detectMagicMimeType(buffer);
+  if (!detected) {
+    return 'Could not verify the image content: the file is not a recognized image.';
+  }
+  if (!ALLOWED_IMAGE_MIME_TYPES.has(detected)) {
+    return 'Only JPG, PNG, or WebP images are accepted.';
+  }
+  if (detected !== declaredType) {
+    return 'The image content does not match its declared file type.';
+  }
+  return null;
+}
+
+/**
+ * Reads the file and verifies its actual bytes against its declared MIME
+ * type. Call this at the server boundary (addLibraryImages does) — never
+ * trust the MCP/API caller's declared type alone.
+ */
+export async function validateImageContent(file: File): Promise<string | null> {
+  let buffer: Buffer;
+  try {
+    buffer = Buffer.from(await file.arrayBuffer());
+  } catch {
+    return 'Could not read the image file.';
+  }
+  return validateImageBuffer(buffer, file.type);
+}
+
 export async function countLibraryImages(
   supabase: SupabaseClient,
   personaId: string,
@@ -86,6 +121,12 @@ export interface LibraryImagesError {
   error: string;
   /** 400 for bad input (invalid file, full library), 500 for storage/DB failures. */
   status: 400 | 500;
+  /**
+   * Storage paths the best-effort rollback could not remove. Callers that
+   * are about to cascade-delete the persona_images rows (making the paths
+   * unrecoverable) should retry removal before that delete.
+   */
+  leftoverPaths?: string[];
 }
 
 /**
@@ -120,14 +161,18 @@ export async function addLibraryImages(
   const added: PersonaLibraryImage[] = [];
   const storedPaths: string[] = [];
   const fail = async (error: string, status: 400 | 500): Promise<LibraryImagesError> => {
-    await rollbackLibraryImages(supabase, added, storedPaths);
-    return { error, status };
+    const leftoverPaths = await rollbackLibraryImages(supabase, added, storedPaths);
+    return { error, status, leftoverPaths };
   };
   for (const input of inputs) {
     const validated = validateImageFile(input.file);
     if ('error' in validated) return fail(validated.error, 400);
     const path = `${userId}/${randomUUID()}.${validated.extension}`;
     const bytes = new Uint8Array(await validated.file.arrayBuffer());
+    // Magic-byte check on the real bytes (single read, reused for upload):
+    // the declared MIME type and extension are client-controlled.
+    const contentError = validateImageBuffer(Buffer.from(bytes), validated.file.type);
+    if (contentError) return fail(contentError, 400);
     const { error: uploadError } = await supabase.storage
       .from(IMAGE_BUCKET)
       .upload(path, bytes, { contentType: validated.file.type });
@@ -157,17 +202,36 @@ export async function addLibraryImages(
   return { images: added };
 }
 
+/**
+ * Best-effort rollback of already-stored rows and files. Returns the storage
+ * paths that could NOT be removed so the caller can retry before any
+ * cascade makes them unrecoverable.
+ */
 async function rollbackLibraryImages(
   supabase: SupabaseClient,
   added: PersonaLibraryImage[],
   storedPaths: string[],
-): Promise<void> {
+): Promise<string[]> {
   if (added.length > 0) {
-    await supabase.from('persona_images').delete().in('id', added.map((image) => image.id));
+    const { error: deleteError } = await supabase
+      .from('persona_images')
+      .delete()
+      .in('id', added.map((image) => image.id));
+    if (deleteError) {
+      console.error('[persona-images] rollback row delete failed', { error: deleteError });
+    }
   }
   if (storedPaths.length > 0) {
-    await supabase.storage.from(IMAGE_BUCKET).remove(storedPaths);
+    const { error: removeError } = await supabase.storage.from(IMAGE_BUCKET).remove(storedPaths);
+    if (removeError) {
+      console.error('[persona-images] rollback storage remove failed', {
+        error: removeError,
+        storedPaths,
+      });
+      return storedPaths;
+    }
   }
+  return [];
 }
 
 /** Marks one library image as primary and unsets the flag on the others. */

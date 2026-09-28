@@ -898,6 +898,31 @@ describe('PostEngineerClient persona image library', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  it('createPersona rejects imagePrimaryIndex when no images are supplied', async () => {
+    // A lone index with no images is a caller bug: fail fast instead of a
+    // silent successful creation with no primary image.
+    await expect(
+      client.createPersona({
+        name: 'X',
+        avatarUrl: 'https://example.com/a.png',
+        imagePrimaryIndex: 0,
+      })
+    ).rejects.toThrow(/requires images/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('createPersona rejects zero-byte image files with a filename-specific error', async () => {
+    const path = await writeTempImage('empty.jpg', 0);
+    await expect(
+      client.createPersona({
+        name: 'X',
+        avatarUrl: 'https://example.com/a.png',
+        images: [{ path }],
+      })
+    ).rejects.toThrow(/empty\.jpg.*empty/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it('createPersona rejects library images larger than 10MB', async () => {
     const path = await writeTempImage('big.jpg', 11 * 1024 * 1024);
     await expect(

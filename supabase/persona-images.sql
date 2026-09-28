@@ -98,10 +98,11 @@ $$;
 -- 5. Atomic rotation-history update: read-modify-write from the app can
 --    lose concurrent updates (two generations racing the same window).
 --    This function prepends the image id, dedupes, and caps the window at
---    3 — mirroring pushRecentImageId in
---    apps/web/lib/persona-image-select.ts — in a single UPDATE, so the
---    write is race-free. Called by the web app via the service-role
---    client (recordRecentImageId in apps/web/lib/persona-images.ts).
+--    3 (PERSONA_IMAGE_HISTORY_LIMIT in apps/web/lib/persona-image-select.ts)
+--    in a single UPDATE, so the write is race-free. This is the only write
+--    path for the history — the old app-side helper was removed. Called by
+--    the web app via the service-role client (recordRecentImageId in
+--    apps/web/lib/persona-images.ts).
 create or replace function public.record_persona_image_use(p_persona_id uuid, p_image_id uuid)
 returns void
 language sql

@@ -143,7 +143,12 @@ export const UpdatePersonaImageShape = {
   isPrimary: z.boolean().optional().describe('Set true to mark this image as the primary library image'),
 };
 
-export const UpdatePersonaImageSchema = z.object(UpdatePersonaImageShape);
+export const UpdatePersonaImageSchema = z
+  .object(UpdatePersonaImageShape)
+  .refine(
+    (v) => v.tag !== undefined || v.description !== undefined || v.isPrimary !== undefined,
+    { message: 'At least one of tag, description, or isPrimary is required.' },
+  );
 
 export const RemovePersonaImageShape = {
   id: z.string().min(1, 'id is required').describe('The library image ID to remove'),

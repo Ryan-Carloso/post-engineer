@@ -108,6 +108,13 @@ async function imageFormFile(path: string): Promise<Blob> {
   } catch (error) {
     throw new Error(`Failed to read image "${path}": ${errorMessage(error)}`);
   }
+  if (buffer.length === 0) {
+    // A 0-byte file would pass the local gate but desynchronize the
+    // index-aligned imageTags/imageDescriptions on the server (the server
+    // filters empty files before pairing), so reject it here with a clear
+    // message instead of a confusing server 400.
+    throw new Error(`Image "${basename(path)}" is empty.`);
+  }
   if (buffer.length > MAX_LIBRARY_IMAGE_BYTES) {
     throw new Error(
       `Image "${basename(path)}" is larger than ${MAX_LIBRARY_IMAGE_BYTES / (1024 * 1024)}MB (max library image size).`,
@@ -213,6 +220,12 @@ export class PostEngineerClient {
     formData.set('faceMixPercent', String(hasAvatar ? input.faceMixPercent ?? 50 : 0));
     formData.set('faceQuality', hasAvatar ? input.faceQuality ?? 'very_good' : 'ok');
     const images = input.images ?? [];
+    // An imagePrimaryIndex without images is a caller bug (typo'd `images`
+    // or a lone index): fail fast instead of a silent successful creation
+    // with no primary image.
+    if (input.imagePrimaryIndex !== undefined && images.length === 0) {
+      throw new Error('imagePrimaryIndex requires images: provide at least one library image.');
+    }
     if (images.length > 0) {
       if (!hasAvatar) {
         throw new Error('Library images require a persona avatar: provide avatarUrl together with images.');

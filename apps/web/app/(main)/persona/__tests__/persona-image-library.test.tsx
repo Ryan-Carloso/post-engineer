@@ -128,9 +128,48 @@ describe('PersonaImageLibrarySection', () => {
       expect(screen.getByText('storage full')).toBeInTheDocument();
     });
     // Only the failed item remains pending.
-    const pendingRows = container.querySelectorAll('input[type="file"] ~ div');
     expect(apiMocks.uploadMutateAsync).toHaveBeenCalledTimes(2);
-    expect(pendingRows.length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByPlaceholderText('persona.libraryTagPlaceholder'),
+    ).toHaveLength(1);
+  });
+
+  it('keeps the pending queue visible when a refetch fills the library', async () => {
+    // A refetch that makes the library full used to unmount the whole
+    // pending queue (queued items + upload button) while their previews
+    // stayed alive. The queue now renders outside the full/partial
+    // conditional: pending items and the upload button survive.
+    const { container, rerender } = render(
+      <QueryClientProvider client={new QueryClient()}>
+        <PersonaImageLibrarySection personaId="persona-1" />
+      </QueryClientProvider>,
+    );
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    await pickFiles(input, [new File(['a'], 'a.jpg', { type: 'image/jpeg' })]);
+    await waitFor(() => {
+      expect(
+        screen.getAllByPlaceholderText('persona.libraryTagPlaceholder'),
+      ).toHaveLength(1);
+    });
+
+    // The library refetches and is now full.
+    apiMocks.images = Array.from({ length: 10 }, (_, i) => makeImage(`img-${i}`));
+    rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <PersonaImageLibrarySection personaId="persona-1" />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('persona.libraryLimitReached')).toBeInTheDocument();
+    });
+    // The pending item and its upload button are still there.
+    expect(
+      screen.getAllByPlaceholderText('persona.libraryTagPlaceholder'),
+    ).toHaveLength(1);
+    expect(
+      screen.getByRole('button', { name: 'persona.libraryUpload' }),
+    ).toBeInTheDocument();
   });
 
   it('keeps the card in editing mode and shows an error when save fails', async () => {

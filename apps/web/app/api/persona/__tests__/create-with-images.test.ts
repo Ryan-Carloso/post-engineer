@@ -34,7 +34,7 @@ function terminal(result: unknown): Record<string, unknown> {
   return chain;
 }
 
-function mockClient() {
+function mockClient(options: { failPrimarySwap?: boolean } = {}) {
   const calls = {
     personaInserts: 0,
     personaDeletes: 0,
@@ -45,7 +45,12 @@ function mockClient() {
   let imageSeq = 0;
   const client = {
     rpc: vi.fn((fn: string, args: Record<string, unknown>) => {
-      if (fn === 'set_primary_persona_image') calls.primarySwaps.push(args);
+      if (fn === 'set_primary_persona_image') {
+        calls.primarySwaps.push(args);
+        if (options.failPrimarySwap) {
+          return Promise.resolve({ data: null, error: { message: 'swap boom' } });
+        }
+      }
       return Promise.resolve({ data: null, error: null });
     }),
     from: vi.fn((table: string) => {
@@ -101,8 +106,13 @@ function mockClient() {
   return calls;
 }
 
-const png = (name: string, size = 1024): File =>
-  new File([new Uint8Array(size)], name, { type: 'image/png' });
+const png = (name: string, size = 1024): File => {
+  // Real PNG magic bytes: the server validates content, not just the
+  // declared MIME type.
+  const bytes = new Uint8Array(size);
+  if (size >= 8) bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  return new File([bytes], name, { type: 'image/png' });
+};
 
 function createRequest(fields: Record<string, string>, images: File[] = []): Request {
   const form = new FormData();
@@ -213,7 +223,13 @@ describe('POST /api/persona with image library', () => {
       name: 'a.png',
       type: 'image/png',
       size: 1024,
-      arrayBuffer: async () => new ArrayBuffer(1024),
+      arrayBuffer: async () => {
+        // Real PNG magic bytes: the server validates content, not just the
+        // declared MIME type.
+        const bytes = new Uint8Array(1024);
+        bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+        return bytes.buffer;
+      },
     };
     expect(structuralFile).not.toBeInstanceOf(File);
     class StubFormData extends FormData {
@@ -234,5 +250,135 @@ describe('POST /api/persona with image library', () => {
     expect(body.success).toBe(true);
     expect(body.imageIds).toHaveLength(1);
     expect(calls.imageInserts).toHaveLength(1);
+  });
+
+  it('rejects malformed imageTags JSON with a 400 instead of silently defaulting to []', async () => {
+    const calls = mockClient();
+    const res = await POST(
+      createRequest({ ...BASE_FIELDS, imageTags: 'not-json[' }, [png('a.png')]),
+    );
+    expect(res.status).toBe(400);
+    expect(calls.personaInserts).toBe(0);
+  });
+
+  it('rejects non-string entries in imageTags/imageDescriptions with a 400', async () => {
+    const calls = mockClient();
+    const res = await POST(
+      createRequest(
+        { ...BASE_FIELDS, imageTags: JSON.stringify(['casual', 42]) },
+        [png('a.png'), png('b.png')],
+      ),
+    );
+    expect(res.status).toBe(400);
+    expect(calls.personaInserts).toBe(0);
+  });
+
+  it('returns a warnings field when the primary swap fails after creation', async () => {
+    mockClient({ failPrimarySwap: true });
+    const res = await POST(
+      createRequest({ ...BASE_FIELDS, imagePrimaryIndex: '0' }, [png('a.png')]),
+    );
+    // The persona and images are already committed: the response stays 200
+    // and the failed primary intent is surfaced as a warning, not a 500.
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { success: boolean; warnings?: string[] };
+    expect(body.success).toBe(true);
+    expect(body.warnings).toHaveLength(1);
+    expect(body.warnings?.[0]).toContain('Primary');
+  });
+
+  it('rejects a zero-byte library image with a clear error instead of shifting tags', async () => {
+    const calls = mockClient();
+    const res = await POST(
+      createRequest(
+        {
+          ...BASE_FIELDS,
+          imageTags: JSON.stringify(['first', 'second']),
+        },
+        [png('a.png'), png('empty.png', 0)],
+      ),
+    );
+    expect(res.status).toBe(400);
+    expect(calls.personaInserts).toBe(0);
+  });
+
+  it('rejects spoofed content: GIF bytes declared as image/png', async () => {
+    // The declared MIME type and extension pass the allowlist, but the
+    // magic bytes say GIF. The server must read the real bytes.
+    const calls = mockClient();
+    const gifBytes = new Uint8Array(1024);
+    gifBytes.set([0x47, 0x49, 0x46, 0x38, 0x39, 0x61]); // GIF89a
+    const spoofed = new File([gifBytes], 'a.png', { type: 'image/png' });
+    const res = await POST(createRequest(BASE_FIELDS, [spoofed]));
+    expect(res.status).toBe(400);
+    expect(calls.personaInserts).toBe(0);
+  });
+
+  it('retries leftover library storage paths BEFORE the persona cascade delete', async () => {
+    // addLibraryImages fails on the second insert; its rollback delete of
+    // rows succeeds but the storage remove fails, so leftover paths are
+    // surfaced. The creation rollback must retry the storage remove BEFORE
+    // deleting the persona row — the cascade erases the image rows, making
+    // a later retry unrecoverable.
+    const events: string[] = [];
+    let imageSeq = 0;
+    let removeCalls = 0;
+    const client = {
+      rpc: vi.fn(async () => ({ data: null, error: null })),
+      from: vi.fn((table: string) => {
+        if (table === 'personas') {
+          return {
+            insert: vi.fn(() => terminal({ data: { id: PERSONA_ID }, error: null })),
+            delete: vi.fn(() => {
+              events.push('persona-delete');
+              return terminal({ error: null });
+            }),
+          };
+        }
+        return {
+          select: vi.fn(() => terminal({ count: 0, error: null })),
+          insert: vi.fn(() => {
+            imageSeq += 1;
+            if (imageSeq === 2) return terminal({ data: null, error: { message: 'insert boom' } });
+            return terminal({
+              data: { id: `img-${imageSeq}`, image_path: `user/img-${imageSeq}.png` },
+              error: null,
+            });
+          }),
+          delete: vi.fn(() => ({ in: vi.fn(() => terminal({ error: null })) })),
+        };
+      }),
+      storage: {
+        from: vi.fn(() => ({
+          upload: vi.fn(async () => ({ error: null })),
+          remove: vi.fn(async (paths: string[]) => {
+            removeCalls += 1;
+            events.push(`remove#${removeCalls}:${paths.length}`);
+            return { error: removeCalls === 1 ? { message: 'remove boom' } : null };
+          }),
+        })),
+      },
+    };
+    vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: USER_ID, accessToken: 'cookie-token' },
+      error: null,
+    } as never);
+
+    const res = await POST(
+      createRequest(BASE_FIELDS, [png('a.png'), png('b.png')]),
+    );
+    expect(res.status).toBe(500);
+    // The retry (remove#2, all stored paths) runs before the cascade delete.
+    // (remove#3 is the main photo rollback, which runs after the persona row
+    // is gone — existing behavior, unrelated to the library paths.)
+    expect(events).toEqual([
+      'remove#1:2',
+      'remove#2:2',
+      'persona-delete',
+      'remove#3:1',
+    ]);
+    // The ordering that matters: retry before cascade.
+    expect(events.indexOf('remove#2:2')).toBeLessThan(events.indexOf('persona-delete'));
   });
 });

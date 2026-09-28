@@ -228,3 +228,103 @@ describe('validateImageFile', () => {
     });
   });
 });
+
+describe('addLibraryImages', () => {
+  const pngFile = (name: string, size = 1024): File => {
+    // Real PNG magic bytes: addLibraryImages validates content, not just
+    // the declared MIME type.
+    const bytes = new Uint8Array(size);
+    if (size >= 8) bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    return new File([bytes], name, { type: 'image/png' });
+  };
+
+  function rollbackClient(options: { failInsertOn?: number; failRemove?: boolean }) {
+    let inserts = 0;
+    const removedPaths: string[][] = [];
+    const client = {
+      from: vi.fn((table: string) => {
+        if (table !== 'persona_images') throw new Error(`unexpected table: ${table}`);
+        return {
+          select: vi.fn(() => terminal({ count: 0, error: null })),
+          insert: vi.fn(() => {
+            inserts += 1;
+            const id = `img-${inserts}`;
+            if (options.failInsertOn === inserts) {
+              return { select: vi.fn(() => ({ single: vi.fn(async () => ({ data: null, error: { message: 'insert boom' } })) })) };
+            }
+            const data = { id, image_path: `user/img-${inserts}.png`, tag: '', description: '', is_primary: false, created_at: '' };
+            return { select: vi.fn(() => ({ single: vi.fn(async () => ({ data, error: null })) })) };
+          }),
+          delete: vi.fn(() => ({ in: vi.fn(() => terminal({ error: null })) })),
+        };
+      }),
+      storage: {
+        from: vi.fn(() => ({
+          upload: vi.fn(async () => ({ error: null })),
+          remove: vi.fn(async (paths: string[]) => {
+            removedPaths.push(paths);
+            return { error: options.failRemove ? { message: 'remove boom' } : null };
+          }),
+        })),
+      },
+    };
+    return { client: client as never, removedPaths };
+  }
+
+  it('surfaces leftover storage paths when the rollback remove fails', async () => {
+    const { addLibraryImages } = await import('../persona-images');
+    const { client } = rollbackClient({ failInsertOn: 2, failRemove: true });
+    const result = await addLibraryImages(client, 'user-1', 'persona-1', [
+      { file: pngFile('a.png') },
+      { file: pngFile('b.png') },
+    ]);
+    // Rollback removes the STORED upload paths (both uploads happened before
+    // the insert failed), and both failed removes are surfaced.
+    const leftover = (result as { leftoverPaths: string[] }).leftoverPaths;
+    expect(leftover).toHaveLength(2);
+    expect(leftover.every((p) => p.startsWith('user-1/'))).toBe(true);
+  });
+
+  it('keeps a zero-byte file so validation emits the right error and tags stay index-aligned', async () => {
+    const { addLibraryImages } = await import('../persona-images');
+    const { client } = rollbackClient({});
+    const result = await addLibraryImages(client, 'user-1', 'persona-1', [
+      { file: pngFile('a.png'), tag: 'first' },
+      { file: pngFile('empty.png', 0), tag: 'second' },
+      { file: pngFile('c.png'), tag: 'third' },
+    ]);
+    // The zero-byte file must not be silently dropped (which would shift
+    // 'third' onto the second image): it fails validation with a clear error.
+    expect(result).toMatchObject({ status: 400 });
+    expect((result as { error: string }).error).toContain('required');
+  });
+});
+
+describe('validateImageBuffer', () => {
+  const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+  const GIF_MAGIC = Buffer.from('GIF89a........', 'ascii');
+  const ZEROS = Buffer.alloc(12);
+
+  it('accepts bytes whose magic matches the declared type', async () => {
+    const { validateImageBuffer } = await import('../persona-images');
+    expect(validateImageBuffer(PNG_MAGIC, 'image/png')).toBeNull();
+  });
+
+  it('rejects content whose magic does not match the declared type', async () => {
+    // JPEG bytes with a spoofed image/png type: the magic is allowed, but
+    // the declared type lies.
+    const { validateImageBuffer } = await import('../persona-images');
+    const jpegMagic = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    expect(validateImageBuffer(jpegMagic, 'image/png')).toContain('does not match');
+  });
+
+  it('rejects recognized-but-not-allowed content (GIF)', async () => {
+    const { validateImageBuffer } = await import('../persona-images');
+    expect(validateImageBuffer(GIF_MAGIC, 'image/gif')).toContain('Only JPG, PNG, or WebP');
+  });
+
+  it('rejects unrecognized content', async () => {
+    const { validateImageBuffer } = await import('../persona-images');
+    expect(validateImageBuffer(ZEROS, 'image/png')).toContain('not a recognized image');
+  });
+});

@@ -47,4 +47,16 @@ describe('detectMagicMimeType', () => {
   it('returns null for empty buffer', () => {
     expect(detectMagicMimeType(Buffer.alloc(0))).toBeNull();
   });
+
+  it('detects WebP', () => {
+    const buf = Buffer.alloc(12);
+    buf.write('RIFF', 0, 'ascii');
+    buf.write('WEBP', 8, 'ascii');
+    expect(detectMagicMimeType(buf)).toBe('image/webp');
+  });
+
+  it('detects GIF (for precise mismatch reporting, not as an accepted type)', () => {
+    const buf = Buffer.from('GIF89a........', 'ascii');
+    expect(detectMagicMimeType(buf)).toBe('image/gif');
+  });
 });

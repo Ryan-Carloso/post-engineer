@@ -140,7 +140,12 @@ function mockAuth(auth: { userId: string; isApiKey?: boolean; personaIds?: strin
 }
 
 function imageFile(name = 'photo.png', type = 'image/png', size = 1024): File {
-  return new File([new Uint8Array(size)], name, { type });
+  // Real magic bytes matching the declared type: the server validates
+  // content, not just the declared MIME type.
+  const bytes = new Uint8Array(size);
+  if (type === 'image/png') bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  if (type === 'image/jpeg') bytes.set([0xff, 0xd8, 0xff, 0xe0]);
+  return new File([bytes], name, { type });
 }
 
 function postForm(fields: Record<string, string | File>): Request {
@@ -343,6 +348,19 @@ describe('PATCH /api/persona/images', () => {
     expect(res.status).toBe(500);
     const body = (await res.json()) as { success: boolean; error: string };
     expect(body.success).toBe(false);
+  });
+
+  it('rejects isPrimary:false — primary is swap-only, never demote-only', async () => {
+    // A demote-only PATCH would leave the library with zero primary images
+    // and push every consumer onto the deterministic fallback. To change the
+    // primary, set isPrimary:true on the new image instead.
+    mockAuth({ userId: USER_ID });
+    mockClient({ imageRow: IMAGE_ROW, updatedRow: IMAGE_ROW });
+    const res = await PATCH(patchRequest({ id: IMAGE_ROW.id, isPrimary: false }));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { success: boolean; error: string };
+    expect(body.success).toBe(false);
+    expect(body.error).toContain('cannot be set to false');
   });
 
   it('rejects an over-length tag instead of truncating it', async () => {

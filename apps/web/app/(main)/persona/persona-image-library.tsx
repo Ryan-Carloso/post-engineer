@@ -184,6 +184,9 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
         <p className="mt-3 text-sm text-neutral-500">{t('persona.libraryEmpty')}</p>
       )}
 
+      {/* The pending queue renders outside the full/partial conditional: a
+          refetch that fills the library must not silently hide queued items
+          (with their upload button) while their previews stay alive. */}
       {full ? (
         <p className="mt-3 text-sm text-amber-700">{t('persona.libraryLimitReached')}</p>
       ) : (
@@ -203,6 +206,10 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
           >
             {t('persona.libraryAdd')}
           </button>
+        </div>
+      )}
+      {pending.length > 0 ? (
+        <div className="mt-3 space-y-3">
           {pending.map((item) => (
             <div key={item.id} className="mt-3 flex gap-3 rounded-lg border border-neutral-200 p-3">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -216,6 +223,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
                   value={item.tag}
                   onChange={(event) => updatePending(item.id, { tag: event.target.value })}
                   placeholder={t('persona.libraryTagPlaceholder')}
+                  aria-label={t('persona.libraryTag')}
                   maxLength={100}
                   className="w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm"
                 />
@@ -223,6 +231,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
                   value={item.description}
                   onChange={(event) => updatePending(item.id, { description: event.target.value })}
                   placeholder={t('persona.libraryDescriptionPlaceholder')}
+                  aria-label={t('persona.libraryDescription')}
                   maxLength={500}
                   className="w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm"
                 />
@@ -236,18 +245,16 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
               </button>
             </div>
           ))}
-          {pending.length > 0 ? (
-            <button
-              type="button"
-              onClick={uploadPending}
-              disabled={uploading}
-              className="mt-3 rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            >
-              {uploading ? t('persona.libraryUploading') : t('persona.libraryUpload')}
-            </button>
-          ) : null}
+          <button
+            type="button"
+            onClick={uploadPending}
+            disabled={uploading}
+            className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          >
+            {uploading ? t('persona.libraryUploading') : t('persona.libraryUpload')}
+          </button>
         </div>
-      )}
+      ) : null}
     </section>
   );
 }

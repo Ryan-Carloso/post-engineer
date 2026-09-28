@@ -25,9 +25,9 @@ vi.mock('embla-carousel-react', () => ({
 }));
 
 //---------------
-// Testes da tela de criação de persona via interface pública.
-// Usa o store REAL (zustand é colaborador interno, não boundary);
-// apenas a rede (lib/api) é mockada.
+// Tests for the persona creation screen via its public interface.
+// Uses the REAL store (zustand is an internal collaborator, not a boundary);
+// only the network (lib/api) is mocked.
 //---------------
 
 vi.mock('next/image', () => ({
@@ -660,5 +660,36 @@ describe('app/(main)/persona/page — sample language', () => {
     expect(created).toHaveLength(1);
     expect(created[0].url).toBe('/voice-samples/calm-en-uk.mp3');
     vi.unstubAllGlobals();
+  });
+
+  it('hides the image library when the edited persona is persisted as faceless', async () => {
+    // The library gate reads the persisted faceMixPercent, not the
+    // create-flow store: an editing persona with face_mix_percent 0 must not
+    // show the library, or every upload would be rejected by the server.
+    searchParams.value = new URLSearchParams('edit=p-1');
+    vi.mocked(usePersonaListQuery).mockReturnValue({
+      data: [{ id: 'p-1', name: 'Faceless editor', faceMixPercent: 0 }],
+      isLoading: false,
+    } as never);
+
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(screen.queryByText('persona.libraryLabel')).not.toBeInTheDocument();
+    });
+  });
+
+  it('shows the image library when the edited persona has a non-zero face mix', async () => {
+    searchParams.value = new URLSearchParams('edit=p-1');
+    vi.mocked(usePersonaListQuery).mockReturnValue({
+      data: [{ id: 'p-1', name: 'Persona editor', faceMixPercent: 50 }],
+      isLoading: false,
+    } as never);
+
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(screen.getByText('persona.libraryLabel')).toBeInTheDocument();
+    });
   });
 });

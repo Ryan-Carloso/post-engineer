@@ -464,6 +464,16 @@ export async function POST(request: Request): Promise<NextResponse> {
       );
     }
 
+    // image_id is persona-scoped: on a faceless job there is no library it
+    // could resolve against, so a provided id is a caller bug — reject
+    // loudly instead of silently discarding it.
+    if (rawImageId !== undefined) {
+      return NextResponse.json(
+        { success: false, error: 'image_id requires a personaId: faceless videos have no image library.' },
+        { status: 400 },
+      );
+    }
+
     // voice_id is a route-level voice source like audio_url (consumed here,
     // never forwarded as a loose engine field): type-guard it the same way
     // so a mistyped value fails fast instead of surfacing as the opaque 502.
@@ -681,8 +691,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     // a single resolved photo URL, so no engine changes are needed.
     // Legacy personas (empty library) keep the behavior above untouched.
     // rawImageId is pre-validated above (non-empty, non-whitespace string
-    // when defined); the split two-stage check is gone.
-    const requestedImageId = typeof rawImageId === 'string' ? rawImageId : null;
+    // when defined); trimmed so ' abc123 ' doesn't 404 in the exact-match
+    // lookup with a confusing "not found" error.
+    const requestedImageId = typeof rawImageId === 'string' ? rawImageId.trim() : null;
     const librarySelection = await resolveVideoImage(
       supabase,
       personaId,
