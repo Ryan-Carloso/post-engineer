@@ -193,6 +193,83 @@ function extractTaskId(body: unknown): string | undefined {
   return typeof taskId === 'string' ? taskId : undefined;
 }
 
+export type EngineBatchResult =
+  | { ok: true; taskIds?: string[]; body: unknown }
+  | { ok: false; response: NextResponse; upstreamStatus?: number; upstreamBody?: unknown };
+
+//---------------
+// extractTaskIds — the batch endpoint answers 202 with
+// { status: 202, data: { task_ids: [...] } }; tolerant extraction.
+//---------------
+function extractTaskIds(body: unknown): string[] | undefined {
+  if (typeof body !== 'object' || body === null) return undefined;
+  const data = (body as { data?: unknown }).data;
+  if (typeof data !== 'object' || data === null) return undefined;
+  const taskIds = (data as { task_ids?: unknown }).task_ids;
+  if (!Array.isArray(taskIds)) return undefined;
+  const ids = taskIds.filter((id): id is string => typeof id === 'string');
+  return ids.length === taskIds.length ? ids : undefined;
+}
+
+//---------------
+// startEngineVideoBatch — POST /api/v1/persona-videos/batch on money-print.
+// The engine bills all N videos upfront and runs them sequentially; billing
+// stays engine-side, so the caller must NOT gateGeneration (no double
+// charge). Returns the raw body; each route normalizes the task ids.
+//---------------
+export async function startEngineVideoBatch(
+  userId: string,
+  payload: object,
+): Promise<EngineBatchResult> {
+  const rawUrl = process.env.MONEYPRINT_API_URL;
+  if (!rawUrl) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { success: false, error: 'MONEYPRINT_API_URL is not defined' },
+        { status: 500 },
+      ),
+    };
+  }
+
+  let upstream: Response;
+  try {
+    upstream = await fetch(`${rawUrl.replace(/\/+$/, '')}/api/v1/persona-videos/batch`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...engineAuthHeaders(userId),
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    logger.error('[generation] engine unreachable (batch)', error);
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { success: false, error: 'Video service is unavailable.' },
+        { status: 502 },
+      ),
+    };
+  }
+
+  const body: unknown = await upstream.json().catch(() => null);
+  if (!upstream.ok) {
+    logger.error('[generation] engine batch error', undefined, { status: upstream.status, body });
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { success: false, error: 'Video service rejected the batch.' },
+        { status: 502 },
+      ),
+      upstreamStatus: upstream.status,
+      upstreamBody: body,
+    };
+  }
+
+  return { ok: true, taskIds: extractTaskIds(body), body };
+}
+
 export type GenerationHistoryStatus = 'pending' | 'running' | 'completed' | 'failed';
 
 //---------------
