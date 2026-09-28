@@ -166,6 +166,15 @@ def create_video(
     return create_task(request, body, stop_at="video")
 
 
+def _use_daily_persona_batch(params: TaskVideoRequest) -> bool:
+    # The 6am UTC batch exists to amortize the InfiniteTalk model load on Modal
+    # GPUs: one warm batch per day is far cheaper than a cold load per video.
+    # Faceless personas never touch InfiniteTalk (no face to animate), so they
+    # generate immediately. Bigger projects can disable the batch entirely
+    # (MPT_PERSONA_BATCH_ENABLED=0) or run it more often.
+    return _persona_batch_enabled and tm.persona_lipsync_active(params)
+
+
 @router.post(
     "/persona-videos",
     response_model=TaskResponse,
@@ -205,7 +214,9 @@ def create_persona_video(
         paragraph_number=None,
         video_script_prompt=persona_prompt,
     )
-    return create_task(request, params, stop_at="video", daily_batch=_persona_batch_enabled)
+    return create_task(
+        request, params, stop_at="video", daily_batch=_use_daily_persona_batch(params)
+    )
 
 
 @router.post("/subtitle", response_model=TaskResponse, summary="Generate subtitle only")
