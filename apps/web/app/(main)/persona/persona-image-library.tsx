@@ -10,6 +10,7 @@ import {
   type ImageMutationResult,
   type PersonaImageRecord,
 } from '@/lib/api';
+import type { TranslationKey } from '@/lib/i18n';
 import { useI18n } from '@/lib/i18n/provider';
 
 const MAX_LIBRARY_IMAGES = 10;
@@ -34,7 +35,6 @@ interface PendingImage {
 // Map server warning codes to localized messages; unknown codes pass
 // through raw so new server warnings are never silently dropped. Shared by
 // the upload flow and the card flows so a new code is added in one place.
-import type { TranslationKey } from '@/lib/i18n';
 
 export function mapPersonaImageWarnings(
   codes: string[],

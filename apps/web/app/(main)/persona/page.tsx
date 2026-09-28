@@ -149,8 +149,8 @@ const PersonaPageContent = () => {
                 hide the library for a persona-mode persona if the user last
                 used faceless mode). */}
             {editingPersonaId &&
-            editingPersona !== undefined &&
-            editingPersona.faceMixPercent !== 0 ? (
+              editingPersona !== undefined &&
+              editingPersona.faceMixPercent !== 0 ? (
                 <PersonaImageLibrarySection personaId={editingPersonaId} />
               ) : null}
             {/* Faceless: no avatar — voice is still required, video is 100% stock. */}

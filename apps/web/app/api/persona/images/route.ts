@@ -115,6 +115,21 @@ async function fetchImageRow(
   return data as Record<string, unknown>;
 }
 
+// Shared mutation-response shape: refetch the row and project it without
+// image_path. Used by the primary-swap-only and metadata-partial-failure
+// paths so the response shape can't drift apart.
+function respondWithCurrentRow(
+  current: Record<string, unknown> | null,
+  warnings?: string[],
+): NextResponse {
+  if (!current) return errorResponse(500, 'Failed to update image.');
+  return NextResponse.json({
+    success: true,
+    image: withoutImagePath(current),
+    ...(warnings ? { warnings } : {}),
+  });
+}
+
 /** Loads one library image and confirms it belongs to the caller. */
 async function getOwnedImage(
   supabase: SupabaseClient,
@@ -185,24 +200,34 @@ export async function GET(request: Request): Promise<NextResponse> {
     .from('persona_images')
     .select(IMAGE_ROW_COLUMNS)
     .eq('persona_id', personaId)
-    .order('created_at', { ascending: true });
+    // Tie-break on id: rows inserted in the same transaction can share a
+    // created_at, and the deterministic "oldest first" fallback must match
+    // resolveVideoImage's order exactly.
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true });
   if (error) {
     console.error('[api/persona/images] list failed', { error });
     return errorResponse(500, 'Failed to list images.');
   }
   // The bucket is private: the UI needs signed URLs to render thumbnails.
   // Project only the fields the UI needs; the internal storage path
-  // (image_path) is not exposed to the browser.
+  // (image_path) is not exposed to the browser. A failed sign is surfaced
+  // as a warning so the UI can distinguish "no URL" from a transient
+  // signing failure and show a retryable error state.
   const images = await Promise.all(
     ((data ?? []) as Array<{ image_path: string } & Record<string, unknown>>).map(
-      async (row) => ({
-        id: row.id,
-        tag: row.tag,
-        description: row.description,
-        is_primary: row.is_primary,
-        created_at: row.created_at,
-        image_url: await signImageUrl(supabase, row.image_path),
-      }),
+      async (row) => {
+        const image_url = await signImageUrl(supabase, row.image_path);
+        return {
+          id: row.id,
+          tag: row.tag,
+          description: row.description,
+          is_primary: row.is_primary,
+          created_at: row.created_at,
+          image_url,
+          ...(image_url === null ? { image_url_error: true as const } : {}),
+        };
+      },
     ),
   );
   return NextResponse.json({ success: true, images });
@@ -236,8 +261,11 @@ export async function POST(request: Request): Promise<NextResponse> {
   // Creation rejects library images for faceless personas; the same rule
   // applies here so images cannot be added backdoor after creation. Stored
   // facelessness is face_mix_percent = 0 (there is no persona_mode column).
+  // NULL is treated as faceless too: legacy rows created before the
+  // insert-time coercion can still carry NULL, and letting them attach
+  // library images would reintroduce the backdoor.
   // The row rides along from assertPersonaOwned — no second personas query.
-  if (owned.persona.face_mix_percent === 0) {
+  if (owned.persona.face_mix_percent === 0 || owned.persona.face_mix_percent === null) {
     return errorResponse(400, 'Faceless persona must not include library images.');
   }
 
@@ -404,8 +432,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     // image_url from a mutation payload. Signing here would pay a storage
     // round-trip per edit for nothing.
     const current = await fetchImageRow(supabase, id);
-    if (!current) return errorResponse(500, 'Failed to update image.');
-    return NextResponse.json({ success: true, image: withoutImagePath(current) });
+    return respondWithCurrentRow(current);
   }
 
   const { data: updated, error: updateError } = await supabase
@@ -424,13 +451,9 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     // instead, mirroring the POST best-effort path — retrying the metadata
     // update is safe.
     const current = await fetchImageRow(supabase, id);
-    if (!current) return errorResponse(500, 'Failed to update image.');
-    return NextResponse.json({
-      success: true,
-      image: withoutImagePath(current),
-      // Stable code, not English copy: the UI maps it through i18n.
-      warnings: ['metadata_save_failed'],
-    });
+    // Stable code, not English copy: the UI maps it through i18n.
+    return respondWithCurrentRow(current, ['metadata_save_failed']);
+  }
   }
   return NextResponse.json({ success: true, image: withoutImagePath(updated) });
 }

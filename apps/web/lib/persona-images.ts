@@ -92,7 +92,11 @@ export function validateImageBuffer(
   if (!ALLOWED_IMAGE_MIME_TYPES.has(detected)) {
     return { error: 'Only JPG/JPEG, PNG, or WebP images are accepted.' };
   }
-  if (detected !== declaredType) {
+  // Normalize the common-but-nonstandard 'image/jpg' alias before comparing:
+  // some cameras, older browsers, and HTTP clients declare JPEG bytes this
+  // way, and rejecting them would be a misleading "mismatch" error.
+  const declared = declaredType === 'image/jpg' ? 'image/jpeg' : declaredType;
+  if (detected !== declared) {
     return { error: 'The image content does not match its declared file type.' };
   }
   return { mime: detected };

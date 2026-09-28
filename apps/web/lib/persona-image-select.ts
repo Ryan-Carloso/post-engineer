@@ -38,6 +38,9 @@ function tokenize(text: string): Set<string> {
   // Unicode-aware: personas may be created in non-Latin scripts (Cyrillic,
   // Greek, CJK). A Latin-only class would silently degrade scoring to
   // primary/first for those personas.
+  // Note: CJK text has no word separators, so an entire topic becomes one
+  // token and rarely matches a tag/description token exactly — scoring
+  // degrades to primary/first for those users.
   const words = text
     .toLowerCase()
     .split(/[^\p{L}\p{N}]+/u)

@@ -96,9 +96,7 @@ function mimeTypeForImagePath(path: string): string {
   // extension but no name; reject it so the fail-fast promise holds.
   const base = basename(path);
   if (base === extension) {
-    throw new Error(
-      `Unsupported image extension "${extension || '(none)'}": use JPG/JPEG, PNG, or WebP.`,
-    );
+    throw new Error(`Missing image file name: "${path}" has an extension but no base name.`);
   }
   if (extension === '.png') return 'image/png';
   if (extension === '.webp') return 'image/webp';
@@ -143,6 +141,30 @@ async function imageFormFile(path: string): Promise<Blob> {
 // non-https override instead of silently targeting it. Loopback http is
 // allowed for local staging; anything else must be https so the key never
 // travels in cleartext.
+
+// Normalize library metadata: trim and drop whitespace-only values so both
+// upload paths share the "empty metadata is dropped" invariant. Lengths are
+// checked here so an oversized tag fails before the multipart upload, not
+// server-side after all bytes transfer. The label (e.g. filename) is
+// included in the error when available.
+function normalizeLibraryMetadata(
+  image: { tag?: string; description?: string },
+  label?: string,
+): { tag: string; description: string } {
+  const tag = image.tag?.trim() ?? '';
+  const description = image.description?.trim() ?? '';
+  const where = label ? ` for "${label}"` : '';
+  if (tag.length > MAX_LIBRARY_TAG_LENGTH) {
+    throw new Error(`Image tag${where} exceeds ${MAX_LIBRARY_TAG_LENGTH} characters.`);
+  }
+  if (description.length > MAX_LIBRARY_DESCRIPTION_LENGTH) {
+    throw new Error(
+      `Image description${where} exceeds ${MAX_LIBRARY_DESCRIPTION_LENGTH} characters.`,
+    );
+  }
+  return { tag, description };
+}
+
 function resolveBaseUrl(override: string | undefined): string {
   const raw = override ?? PRODUCTION_API_URL;
   let url: URL;
@@ -268,22 +290,7 @@ export class PostEngineerClient {
       // upload time is dominated by network transfer anyway. Order is
       // preserved, so tags/descriptions stay aligned with the entries.
       for (const image of images) {
-        // Normalize like addPersonaImage: trim and drop whitespace-only
-        // values so both upload paths share the "empty metadata is dropped"
-        // invariant. Check lengths locally so an oversized tag fails before
-        // the multipart upload, not server-side after all bytes transfer.
-        const tag = image.tag?.trim() ?? '';
-        const description = image.description?.trim() ?? '';
-        if (tag.length > MAX_LIBRARY_TAG_LENGTH) {
-          throw new Error(
-            `Image tag for "${basename(image.path)}" exceeds ${MAX_LIBRARY_TAG_LENGTH} characters.`,
-          );
-        }
-        if (description.length > MAX_LIBRARY_DESCRIPTION_LENGTH) {
-          throw new Error(
-            `Image description for "${basename(image.path)}" exceeds ${MAX_LIBRARY_DESCRIPTION_LENGTH} characters.`,
-          );
-        }
+        const { tag, description } = normalizeLibraryMetadata(image, basename(image.path));
         formData.append('images', await imageFormFile(image.path), basename(image.path));
         tags.push(tag);
         descriptions.push(description);
@@ -452,18 +459,8 @@ export class PostEngineerClient {
     formData.append('image', await imageFormFile(image.path), basename(image.path));
     // Empty/whitespace-only metadata is dropped: the server stores it
     // verbatim and an empty tag can never match the deterministic keyword
-    // selection. Lengths are checked locally like createPersona so an
-    // oversized tag fails before the upload, not server-side after.
-    const tag = image.tag?.trim();
-    const description = image.description?.trim();
-    if ((tag?.length ?? 0) > MAX_LIBRARY_TAG_LENGTH) {
-      throw new Error(`Image tag exceeds ${MAX_LIBRARY_TAG_LENGTH} characters.`);
-    }
-    if ((description?.length ?? 0) > MAX_LIBRARY_DESCRIPTION_LENGTH) {
-      throw new Error(
-        `Image description exceeds ${MAX_LIBRARY_DESCRIPTION_LENGTH} characters.`,
-      );
-    }
+    // selection.
+    const { tag, description } = normalizeLibraryMetadata(image);
     if (tag) formData.set('tag', tag);
     if (description) formData.set('description', description);
     // isPrimary is typed as `true` only (swap-only, symmetric with

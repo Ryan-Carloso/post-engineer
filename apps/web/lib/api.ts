@@ -284,6 +284,9 @@ export interface PersonaImageRecord {
   /** Signed URL. Only GET /api/persona/images populates this; mutations
       return ImageMutationResult (no image row), so this type is GET-only. */
   image_url: string | null;
+  /** True when signing failed transiently; the UI can show a retryable
+      error state instead of a silently broken thumbnail. */
+  image_url_error?: true;
 }
 
 async function fetchPersonaImages(personaId: string): Promise<PersonaImageRecord[]> {
@@ -320,7 +323,10 @@ export interface UploadPersonaImageInput {
   file: File;
   tag?: string;
   description?: string;
-  isPrimary?: boolean;
+  /** Swap-only, like UpdatePersonaImageInput: false is meaningless on upload
+      (new images default to is_primary:false; the server only promotes on
+      'true'). */
+  isPrimary?: true;
 }
 
 export interface ImageMutationResult {
@@ -432,6 +438,9 @@ function usePersonaImageMutation<TInput>(
       if (personaId === null) throw new Error('personaId is required.');
       return mutationFn(personaId, input);
     },
+    // NOTE: server rejections resolve as { success: false } rather than
+    // throwing — consumers MUST check result.success / result.error;
+    // mutation.isError will never be true for these hooks.
     // Only refresh the library when the server actually accepted the change;
     // a success:false payload must not look like a completed mutation.
     onSuccess: (result) => {
