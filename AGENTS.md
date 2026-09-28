@@ -1077,3 +1077,12 @@ Follow these so the same issues don't come back:
   `_batch_task_failed` returns False on a read exception so the batch
   survives, but the exception is logged — otherwise a skipped refund
   leaves no trail at all.
+
+## PR #14 review learnings (2026-09-28, OpenCode — evaluated and declined)
+- OpenCode MINOR suggested replacing `hasattr(module, name)` with
+  `assertNotIn(name, dir(module))` in `test_batch_machinery_is_gone` as
+  "more robust". Declined: the module defines no module-level
+  `__getattr__` (verified by grep), so for plain module attributes the
+  two checks are functionally equivalent — the suggestion is stylistic,
+  not a robustness gap. Reviewer suggestions about "more robust"
+  checks still get verified against the actual module before any change.
