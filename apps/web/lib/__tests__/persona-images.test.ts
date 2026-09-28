@@ -156,6 +156,19 @@ describe('resolveVideoImage', () => {
     });
   });
 
+  it('returns 404 for an empty-string image_id (explicit id takes the exact-match path)', async () => {
+    // '' is falsy: a truthiness gate would skip the 404 check and fall
+    // through to the legacy photo fallback. Every provided id — even
+    // '' — must hit the exact-match check.
+    const { client } = mockClient();
+    const result = await resolveVideoImage(client, 'persona-1', 'user-1', [], { imageId: '' });
+    expect(result).toEqual({
+      ok: false,
+      error: "image_id not found in this persona's image library.",
+      status: 404,
+    });
+  });
+
   it('matches tags against the video topic and excludes recent images', async () => {
     const { client } = mockClient();
     const result = await resolveVideoImage(

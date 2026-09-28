@@ -497,8 +497,14 @@ export async function resolveVideoImage(
   }
   const library = (data ?? []) as PersonaLibraryImage[];
   // An explicit image_id is a 404 even when the library is empty — never a
-  // silent fallback to the legacy photo.
-  if (input.imageId && !library.some((image) => image.id === input.imageId)) {
+  // silent fallback to the legacy photo. The check is spelled out (not
+  // truthiness) so an empty-string id also lands here instead of falling
+  // through to the legacy fallback.
+  if (
+    input.imageId !== undefined &&
+    input.imageId !== null &&
+    !library.some((image) => image.id === input.imageId)
+  ) {
     return {
       ok: false,
       error: "image_id not found in this persona's image library.",

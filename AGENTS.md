@@ -795,6 +795,15 @@ Follow these so the same issues don't come back:
   (needs two independent failures; the error contract stays
   {success, error} and the server logs loudly).
 
+## Web/API review learnings, round 22 (2026-09-28)
+- **Fix the pattern at every level, not just the quoted one.** Round 21
+  fixed the truthiness check in `selectPersonaImage`, but the identical
+  `if (input.imageId && ...)` gate lived one level up in
+  `resolveVideoImage` — an empty-string id skipped the 404 and fell
+  through to the legacy photo fallback. OpenCode caught the sibling.
+  When a finding names a pattern, grep callers AND callees before
+  declaring it fixed.
+
 ## Web/API review learnings, round 21 (2026-09-28)
 - **Falsy is not absent for explicit-id params.** selectPersonaImage
   used `if (input.imageId)`: an empty-string id fell through to
