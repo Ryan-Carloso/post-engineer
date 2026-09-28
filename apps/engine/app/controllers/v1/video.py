@@ -259,7 +259,11 @@ def _batch_task_failed(task_id: str) -> bool:
     """True when the task reached the terminal FAILED state."""
     try:
         task = sm.state.get_task(task_id)
-    except Exception:  # noqa: BLE001 — a failed read must not hide the failure
+    except Exception:  # noqa: BLE001 — a failed read must not kill the batch
+        # Fail closed (no refund attempted on an unreadable state) but loud:
+        # without this log a failed read would silently skip a refund the
+        # user is owed.
+        logger.exception("persona batch could not read terminal state for task %s", task_id)
         return False
     return bool(task) and task.get("state") == const.TASK_STATE_FAILED
 

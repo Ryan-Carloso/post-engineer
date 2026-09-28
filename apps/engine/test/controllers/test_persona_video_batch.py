@@ -385,3 +385,20 @@ class BatchFailureRefundTest(unittest.TestCase):
                 for call in log_error.call_args_list
             )
         )
+
+    def test_unreadable_task_state_logs_and_skips_refund(self):
+        # A state read that throws must not kill the batch (fail closed on
+        # the refund) and must not vanish silently either.
+        with (
+            patch.object(
+                video_controller.sm.state, "get_task", side_effect=RuntimeError("store down")
+            ),
+            patch.object(video_controller.logger, "exception") as log_exc,
+        ):
+            self.assertFalse(video_controller._batch_task_failed("task-1"))
+        self.assertTrue(
+            any(
+                "could not read terminal state" in str(call.args[0])
+                for call in log_exc.call_args_list
+            )
+        )
