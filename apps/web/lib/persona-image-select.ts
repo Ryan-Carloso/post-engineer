@@ -97,12 +97,14 @@ export function selectPersonaImage(
 ): PersonaLibraryImage | null {
   if (images.length === 0) return null;
 
-  if (input.imageId) {
+  if (input.imageId !== undefined && input.imageId !== null) {
     const explicit = images.find((image) => image.id === input.imageId);
     // An explicit id that matches nothing is a hard stop: silently
     // substituting another photo would put a face in the video the user
-    // didn't pick. The sole caller (resolveVideoImage) already returns 404
-    // for unknown ids, so this guards future direct callers.
+    // didn't pick. The check is spelled out (not truthiness) so an
+    // empty-string id also lands here instead of falling through to
+    // automatic selection. The sole caller (resolveVideoImage) already
+    // returns 404 for unknown ids, so this guards future direct callers.
     return explicit ?? null;
   }
 

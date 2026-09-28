@@ -58,6 +58,18 @@ describe('selectPersonaImage', () => {
     expect(picked).toBeNull();
   });
 
+  it('empty-string imageId returns null instead of falling through to automatic selection', () => {
+    // '' is falsy, so a truthiness check treats it as "no override" and
+    // silently substitutes a face. A provided id — even an empty one —
+    // must go through the exact-match path like any other id.
+    const picked = selectPersonaImage(
+      LIBRARY,
+      { topic: 'business meeting at the office', imageId: '' },
+      [],
+    );
+    expect(picked).toBeNull();
+  });
+
   it('picks the image whose tag matches the topic keywords', () => {
     const picked = selectPersonaImage(
       LIBRARY,

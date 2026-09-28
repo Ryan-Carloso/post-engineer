@@ -5,6 +5,7 @@ import { isPersonaAllowed } from '@/lib/api-keys';
 import {
   addLibraryImages,
   IMAGE_BUCKET,
+  IMAGE_URL_TTL_SECONDS,
   isFileLike,
   MAX_DESCRIPTION_LENGTH,
   MAX_TAG_LENGTH,
@@ -209,9 +210,6 @@ async function getOwnedImage(
   }
   return { image, error: null };
 }
-
-/** Signed URL TTL (seconds): thumbnails are refetched on every library invalidation. */
-export const IMAGE_URL_TTL_SECONDS = 3600;
 
 /** Signs one library image path; null when signing fails (never throws). */
 async function signImageUrl(

@@ -36,6 +36,8 @@ export const ALLOWED_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp']);
 export const MAX_TAG_LENGTH = 100;
 export const MAX_DESCRIPTION_LENGTH = 500;
 export const IMAGE_BUCKET = 'personas';
+/** Signed URL TTL (seconds): thumbnails are refetched on every library invalidation. */
+export const IMAGE_URL_TTL_SECONDS = 3600;
 /**
  * Stable SQLSTATE raised by the enforce_persona_image_limit trigger
  * (supabase/persona-images.sql). The app maps this code — not the English

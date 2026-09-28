@@ -795,6 +795,18 @@ Follow these so the same issues don't come back:
   (needs two independent failures; the error contract stays
   {success, error} and the server logs loudly).
 
+## Web/API review learnings, round 21 (2026-09-28)
+- **Falsy is not absent for explicit-id params.** selectPersonaImage
+  used `if (input.imageId)`: an empty-string id fell through to
+  automatic selection, silently substituting a face. Spell out
+  `!== undefined && !== null` so every provided id — even '' — takes
+  the exact-match path and returns null on no match (the round-6
+  "never silently substitute" rule, extended to the empty string).
+- **Route modules export only handlers.** IMAGE_URL_TTL_SECONDS was
+  exported from `images/route.ts`; App Router route files officially
+  support only HTTP-method/segment-config exports. Shared constants
+  live in the lib leaf next to their siblings (IMAGE_BUCKET).
+
 ## Web/API review learnings, round 20 (2026-09-28)
 - **Align sibling boundaries on the same input class.** Round 10 rejected
   bare-extension filenames (".png") in the MCP fail-fast path, but the
