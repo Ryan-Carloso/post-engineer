@@ -684,3 +684,65 @@ Follow these so the same issues don't come back:
   the session client. Signature changes need `drop function if exists`
   for the old arity first: CREATE OR REPLACE does not replace a changed
   argument list. The SQL-literals sync test pins the guard's presence.
+
+## Web/API/MCP review learnings, round 16 (2026-09-28)
+- **An ownership guard that doesn't stop execution is advisory, not
+  enforcing.** set_primary_persona_image's `perform ... for update` with
+  the user_id check found zero rows on mismatch but execution FELL
+  THROUGH to the persona_id-scoped UPDATEs — a service-role caller with
+  a wrong/omitted p_user_id would corrupt another tenant's rows. Both
+  RPCs now `raise exception ... using errcode = 'P0002'` when the
+  ownership-checked statement matches no row (record_persona_image_use
+  converted from `language sql` to plpgsql for the check). The sync test
+  pins both raises.
+- **Distinguish "not found" from "DB is down" at every .single().**
+  assertPersonaOwned/getOwnedImage collapsed every error into 404 with
+  no logging — a Supabase outage looked like "not found" and told the
+  client to stop retrying. PGRST116 (zero rows) is 404; anything else is
+  a logged 500. Same for the PATCH metadata update: a concurrently
+  deleted row (PGRST116) is 404, and the update is re-scoped with
+  `.eq('persona_id', ...)` to make the TOCTOU window explicit.
+- **Never render raw English server errors in the localized UI.**
+  `result.error` strings were shown verbatim (pt-BR users got English
+  failure copy). mapPersonaImageError maps known failure classes (full,
+  faceless, content mismatch, too-long, not found — dynamic ones by
+  regex so limit changes still match) to i18n keys; unknown errors fall
+  back to the generic localized message, never the raw string.
+- **Non-file entries in an index-aligned multipart field are a 400,
+  not a silent filter.** A stray string in `images` was dropped while
+  imageTags/imageDescriptions matched by index — every subsequent
+  tag/description shifted onto the wrong image. Reject the request.
+- **Fail-fast guards belong on every mutation path, not just the happy
+  one.** The MCP updatePersonaImage trimmed metadata but never checked
+  MAX_LIBRARY_TAG_LENGTH/DESCRIPTION_LENGTH (the add/create paths did);
+  the length check is now a shared checkLibraryMetadataLengths used by
+  both normalizeLibraryMetadata and the update path.
+- **Verify the reviewer's premise before applying the suggestion.**
+  OCR claimed `.PNG` (hidden file) slipped past the `base === extension`
+  check via case — but Node's extname('.PNG') is '' (a leading dot with
+  no other dots is not an extension), so the check was dead code that
+  could never match in ANY case. Removed it; dotfiles are rejected by
+  the unsupported-extension branch, now pinned by a test.
+- **One derived constant for user-facing numbers.** The MB divisor was
+  written three ways across the MCP (`/ (1024 * 1024)`, `/ 1024 / 1024`);
+  MAX_LIBRARY_IMAGE_MB now lives in a tiny limits.ts (avoids a
+  client<->errors import cycle) and every description/error string uses
+  it. ImageTooLargeError dropped its redundant maxBytes param.
+- **Defer blob-URL revocation past the state commit.** dropPreview ran
+  synchronously after setPending — React may not have committed the
+  removal yet, flashing a broken image. queueMicrotask defers it.
+- **Shared cleanup orchestration lives next to the rollback logic.**
+  The orphanPaths retry-once remove was duplicated between POST
+  /api/persona and POST /api/persona/images with subtly different
+  ordering rules; removeOrphanedUploadPaths in lib/persona-images.ts
+  owns the retry semantics now (row-backed orchestration stays at the
+  call site — it genuinely differs per route).
+- **Narrow untrusted arrays field-by-field, but keep the valid entries.**
+  toStringArray discarded a whole mixed array; it now filters
+  non-strings (a partially malformed warnings payload must not swallow
+  real partial-success notes). fetchPersonaImages drops malformed image
+  records (id/image_url narrowed) instead of passing them to the UI.
+- **Hoist the TTL, name the nested ternary.** The 3600s signed-URL TTL
+  is now IMAGE_URL_TTL_SECONDS; the face-mix insert coercion is
+  resolveStoredFaceMixPercent in persona-schema.ts (no nested ternary);
+  the empty-state conditional is a named showEmptyState.
