@@ -536,6 +536,27 @@ describe('POST /api/persona — mix faceless/face (híbrido) e qualidade', () =>
     expect(res.status).toBe(200);
     expect(inserted[0]).toMatchObject({ face_mix_percent: 0, photo_path: null });
   });
+
+  it('faceless with an explicit faceMixPercent is coerced to 0 (backdoor closed)', async () => {
+    // A direct API caller can send personaMode=faceless with an explicit
+    // faceMixPercent=80. Without coercion, 80 is stored and the images
+    // route (which treats the stored mix as the facelessness source)
+    // would accept library uploads — re-opening the backdoor. The
+    // faceless branch is unconditional at the write boundary.
+    const { inserted } = mockSupabase();
+
+    const res = await POST(
+      formRequest({
+        name: 'Canal Ninja',
+        personaMode: 'faceless',
+        faceMixPercent: '80',
+        voiceId: 'voz-1',
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(inserted[0]).toMatchObject({ face_mix_percent: 0 });
+  });
 });
 
 //---------------
