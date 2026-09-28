@@ -138,7 +138,7 @@ export const GenerateVideoShape = {
   // runs fully faceless with face_mix_percent 0). Faceless generation then
   // requires videoSubject plus a voice source (audioUrl or voiceId) — the
   // web API has no stored persona to fall back to.
-  personaId: z.string().min(1, 'personaId is required').optional().describe('The ID of the persona to generate video with. Omit for faceless generation.'),
+  personaId: z.string().min(1, 'personaId must be a non-empty string').optional().describe('The ID of the persona to generate video with. Omit for faceless generation.'),
   videoSubject: z.string().min(1).optional().describe('Video subject/topic. Required for faceless generation (no persona).'),
   voiceId: z.string().min(1).optional().describe('Voice ID for faceless generation. Required when no audioUrl is given and no persona.'),
   scriptPrompt: z.string().optional().describe('Optional specific prompt override for this video'),

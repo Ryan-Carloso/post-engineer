@@ -18,7 +18,6 @@ import {
   handleGetTokenBalance,
   handleScheduleVideo,
   handleConnectAccount,
-  GenerateVideoSchema,
   ListPostsSchema,
   ScheduleVideoSchema,
   CreatePersonaSchema,
