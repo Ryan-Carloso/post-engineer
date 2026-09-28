@@ -11,6 +11,7 @@ import {
   validateVoiceSource,
   photoExtensionOf,
   VALID_VIDEO_ASPECTS,
+  DEFAULT_FACE_MIX_PERCENT,
 } from '@/lib/persona-schema';
 import {
   addLibraryImages,
@@ -157,10 +158,17 @@ export async function POST(request: Request): Promise<NextResponse> {
       // passing the POST /api/persona/images `=== 0` faceless check — a
       // backdoor for library images on faceless personas. Coerce to 0 so
       // the stored state matches the creation-time rule.
+      // Persona-mode creations without an explicit mix are coerced to the
+      // shared default for the same reason: a stored NULL is treated as
+      // faceless by the images route and the page gate, which would
+      // permanently write-lock the library for a persona the creation
+      // accepted as face-requiring. No new row stores NULL, so NULL keeps
+      // meaning "legacy faceless-mode row" everywhere.
       face_mix_percent:
-        body.values.personaMode === 'faceless' &&
-        (body.values.faceMixPercent === null || body.values.faceMixPercent === undefined)
-          ? 0
+        body.values.faceMixPercent === null || body.values.faceMixPercent === undefined
+          ? body.values.personaMode === 'faceless'
+            ? 0
+            : DEFAULT_FACE_MIX_PERCENT
           : body.values.faceMixPercent,
       face_quality: body.values.faceQuality,
     })

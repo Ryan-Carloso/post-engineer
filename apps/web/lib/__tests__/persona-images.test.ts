@@ -67,8 +67,32 @@ describe('resolveVideoImage', () => {
   it('resolves to null for an empty library (legacy fallback)', async () => {
     const { calls, client } = mockClient({ library: [] });
     const result = await resolveVideoImage(client, 'persona-1', 'user-1', [], { topic: 'business' });
-    expect(result).toEqual({ ok: true, image: null });
-    expect(calls.rpcCalls).toHaveLength(0);
+    expect(result).toEqual({ ok: true, image: null });    expect(calls.rpcCalls).toHaveLength(0);
+  });
+
+  it('orders the library by created_at then id: same-transaction ties resolve deterministically', async () => {
+    // The GET list documents "must match resolveVideoImage's order
+    // exactly" with a created_at+id tie-break; without the id tie-break
+    // here, rows sharing a created_at (fast sequential inserts share
+    // now()) can disagree with the UI about which image is "first".
+    const orderCalls: Array<{ column: string; ascending: boolean }> = [];
+    const chain: Record<string, unknown> = {};
+    chain.select = vi.fn(() => chain);
+    chain.eq = vi.fn(() => chain);
+    chain.order = vi.fn((column: string, options: { ascending: boolean }) => {
+      orderCalls.push({ column, ascending: options.ascending });
+      return chain;
+    });
+    chain.then = (resolve: (value: unknown) => void): Promise<unknown> =>
+      Promise.resolve({ data: [], error: null }).then(resolve);
+    const client = { from: vi.fn(() => chain) };
+
+    await resolveVideoImage(client as never, 'persona-1', 'user-1', [], { topic: 'x' });
+
+    expect(orderCalls).toEqual([
+      { column: 'created_at', ascending: true },
+      { column: 'id', ascending: true },
+    ]);
   });
 
   it('returns 404 for an image_id outside the library', async () => {

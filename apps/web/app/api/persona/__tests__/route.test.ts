@@ -22,6 +22,7 @@ vi.mock('@/lib/request-auth', () => ({
 }));
 
 import { POST, PATCH, DELETE } from '../route';
+import { DEFAULT_FACE_MIX_PERCENT } from '@/lib/persona-schema';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
@@ -430,6 +431,17 @@ describe('POST /api/persona — mix faceless/face (híbrido) e qualidade', () =>
     });
   });
 
+  it('faceless sem faceMixPercent persiste 0 (sem backdoor do NULL)', async () => {
+    const { inserted } = mockSupabase();
+
+    const res = await POST(
+      formRequest({ name: 'Ninja', personaMode: 'faceless', voiceId: 'voz-1' }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(inserted[0]).toMatchObject({ face_mix_percent: 0 });
+  });
+
   it('rejeita foto quando o mix é 0 (sem face)', async () => {
     mockSupabase();
 
@@ -493,14 +505,19 @@ describe('POST /api/persona — mix faceless/face (híbrido) e qualidade', () =>
     expect(body.error).toContain('faceQuality');
   });
 
-  it('persona without mix (legacy) keeps null columns — backward compat', async () => {
+  it('persona without mix stores the shared default — no new row keeps NULL', async () => {
+    // A persona-mode creation that omitted faceMixPercent used to store
+    // NULL, which the images route treats as faceless — permanently
+    // write-locking the library for a persona the creation accepted as
+    // face-requiring. New rows are coerced to the UI store's default so
+    // NULL keeps meaning "legacy faceless-mode row" everywhere.
     const { inserted } = mockSupabase();
 
     const res = await POST(formRequest({ name: 'Ana', voiceId: 'voz-1' }, [photo()]));
 
     expect(res.status).toBe(200);
     expect(inserted[0]).toMatchObject({
-      face_mix_percent: null,
+      face_mix_percent: DEFAULT_FACE_MIX_PERCENT,
       face_quality: null,
     });
   });

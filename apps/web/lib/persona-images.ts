@@ -438,7 +438,12 @@ export async function resolveVideoImage(
     .select('id, image_path, tag, description, is_primary')
     .eq('persona_id', personaId)
     .eq('user_id', userId)
-    .order('created_at', { ascending: true });
+    // Tie-break on id, matching the GET list's documented order exactly:
+    // rows inserted in the same transaction can share a created_at, and
+    // the deterministic "oldest first" fallback must agree with the UI's
+    // displayed order about which image is "first".
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true });
   if (error) {
     console.error('[persona-images] library fetch failed', { error });
     return { ok: false, error: 'Failed to load persona image library.', status: 500 };

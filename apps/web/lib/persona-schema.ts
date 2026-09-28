@@ -9,6 +9,11 @@ import { z } from 'zod';
 export const VALID_VIDEO_ASPECTS = ['9:16', '16:9', '1:1'] as const;
 export const PERSONA_MODES = ['persona', 'faceless'] as const;
 export const FACE_QUALITIES = ['ok', 'very_good'] as const;
+// Default face mix for persona-mode creations that omit the field (the UI
+// always sends it; raw API callers may not). Shared so the insert
+// coercion and the UI store can't drift apart: no new row may store NULL,
+// so NULL keeps meaning "legacy faceless-mode row" everywhere.
+export const DEFAULT_FACE_MIX_PERCENT = 100;
 
 export const PHOTO_EXTENSIONS: Record<string, string> = {
   'image/png': 'png',

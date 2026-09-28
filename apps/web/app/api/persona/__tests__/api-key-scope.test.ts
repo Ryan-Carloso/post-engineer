@@ -88,13 +88,18 @@ function mockPersonaDb(personaId: string): void {
   });
   const eqInner = vi.fn().mockReturnValue({
     single,
-    // The image-library query chains .order() instead of a second .eq().
-    order: vi.fn().mockResolvedValue({ data: [], error: null }),
+    // The image-library query chains .order().order() (created_at + id
+    // tie-break) instead of a second .eq().
+    order: vi.fn().mockReturnValue({
+      order: vi.fn().mockResolvedValue({ data: [], error: null }),
+    }),
   });
   const eqOuter = vi.fn().mockReturnValue({
     eq: eqInner,
-    // The image-library query chains .order() after a single .eq().
-    order: vi.fn().mockResolvedValue({ data: [], error: null }),
+    // The image-library query chains .order() after two .eq() calls.
+    order: vi.fn().mockReturnValue({
+      order: vi.fn().mockResolvedValue({ data: [], error: null }),
+    }),
   });
   const select = vi.fn().mockReturnValue({ eq: eqOuter });
   vi.mocked(createSupabaseServiceClient).mockReturnValue({

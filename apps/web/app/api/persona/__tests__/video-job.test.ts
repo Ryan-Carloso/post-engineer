@@ -98,13 +98,16 @@ function mockSupabase(persona: Record<string, unknown> | null, opts?: { noSessio
       // ordered by creation. Default is empty so legacy behavior is tested
       // unless opts.libraryImages overrides it.
       if (table === 'persona_images') {
+        // Terminal for the awaited query; the first .order() returns the
+        // chain so the created_at+id tie-break (.order().order()) resolves.
+        const terminal = vi.fn(async () => ({ data: opts?.libraryImages ?? [], error: null }));
         return {
           select: vi.fn(() => ({
             eq: vi.fn(() => ({
               // Mirrors resolveVideoImage's defense-in-depth chain:
-              // .eq('persona_id', …).eq('user_id', …).order(…)
+              // .eq('persona_id', …).eq('user_id', …).order(…).order(…)
               eq: vi.fn(() => ({
-                order: vi.fn(async () => ({ data: opts?.libraryImages ?? [], error: null })),
+                order: vi.fn(() => ({ order: terminal })),
               })),
             })),
           })),
