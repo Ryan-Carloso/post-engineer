@@ -63,23 +63,55 @@ interface OwnedRow extends PersonaLibraryImage {
   persona_id: string;
 }
 
-/** Confirms the persona exists and belongs to the caller. */
+interface OwnedPersona {
+  id: string;
+  face_mix_percent: number | null;
+}
+
+/** Confirms the persona exists and belongs to the caller; returns the row. */
 async function assertPersonaOwned(
   supabase: SupabaseClient,
   auth: Authed,
   personaId: string,
-): Promise<NextResponse | null> {
+): Promise<{ response: NextResponse } | { persona: OwnedPersona }> {
   if (!isPersonaAllowed(auth.personaIds, personaId)) {
-    return errorResponse(403, 'This API key does not have access to this persona.');
+    return {
+      response: errorResponse(403, 'This API key does not have access to this persona.'),
+    };
   }
+  // face_mix_percent rides along so POST can run its faceless check on the
+  // same row — one round-trip for ownership + facelessness.
   const { data, error } = await supabase
     .from('personas')
-    .select('id')
+    .select('id, face_mix_percent')
     .eq('id', personaId)
     .eq('user_id', auth.userId)
     .single();
-  if (error || !data) return errorResponse(404, 'Persona not found.');
-  return null;
+  if (error || !data) return { response: errorResponse(404, 'Persona not found.') };
+  return { persona: data as OwnedPersona };
+}
+
+/** Columns returned for a single library image row (GET list, PATCH, POST). */
+const IMAGE_ROW_COLUMNS = 'id, image_path, tag, description, is_primary, created_at';
+
+/**
+ * Refetches one library image row. Shared by the PATCH primary-swap path
+ * and the metadata-update path so the selected columns can't drift apart.
+ */
+async function fetchImageRow(
+  supabase: SupabaseClient,
+  id: string,
+): Promise<Record<string, unknown> | null> {
+  const { data, error } = await supabase
+    .from('persona_images')
+    .select(IMAGE_ROW_COLUMNS)
+    .eq('id', id)
+    .single();
+  if (error || !data) {
+    console.error('[api/persona/images] image refetch failed', { error });
+    return null;
+  }
+  return data as Record<string, unknown>;
 }
 
 /** Loads one library image and confirms it belongs to the caller. */
@@ -141,8 +173,8 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   const personaId = new URL(request.url).searchParams.get('personaId');
   if (!personaId) return errorResponse(400, 'personaId is required.');
-  const ownershipError = await assertPersonaOwned(supabase, auth, personaId);
-  if (ownershipError) return ownershipError;
+  const owned = await assertPersonaOwned(supabase, auth, personaId);
+  if ('response' in owned) return owned.response;
 
   const { data, error } = await supabase
     .from('persona_images')
@@ -181,22 +213,14 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (typeof personaId !== 'string' || personaId.length === 0) {
     return errorResponse(400, 'personaId is required.');
   }
-  const ownershipError = await assertPersonaOwned(supabase, auth, personaId);
-  if (ownershipError) return ownershipError;
+  const owned = await assertPersonaOwned(supabase, auth, personaId);
+  if ('response' in owned) return owned.response;
 
   // Creation rejects library images for faceless personas; the same rule
   // applies here so images cannot be added backdoor after creation. Stored
   // facelessness is face_mix_percent = 0 (there is no persona_mode column).
-  const { data: personaRow, error: facelessError } = await supabase
-    .from('personas')
-    .select('face_mix_percent')
-    .eq('id', personaId)
-    .single();
-  if (facelessError) {
-    console.error('[api/persona/images] faceless check failed', { error: facelessError });
-    return errorResponse(500, 'Failed to verify persona.');
-  }
-  if (personaRow?.face_mix_percent === 0) {
+  // The row rides along from assertPersonaOwned — no second personas query.
+  if (owned.persona.face_mix_percent === 0) {
     return errorResponse(400, 'Faceless persona must not include library images.');
   }
 
@@ -250,6 +274,11 @@ export async function PATCH(request: Request): Promise<NextResponse> {
   if ('response' in authed) return authed.response;
   const { auth, supabase } = authed;
 
+  // Faceless personas may still carry library images from before they were
+  // switched to faceless — PATCH/DELETE stay available so those images can
+  // be edited or removed. Only POST (adding new images) is blocked for
+  // faceless personas.
+
   const body: unknown = await request.json().catch(() => null);
   const id =
     typeof body === 'object' && body !== null && 'id' in body
@@ -301,12 +330,17 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     return errorResponse(400, 'Nothing to update.');
   }
 
+  // The warning-style success below is only honest when a primary swap
+  // actually committed in this PATCH. A metadata-only failure keeps the
+  // original 500 — claiming "Primary image was updated" then would be a lie.
+  let primarySwapCommitted = false;
   if (updates.is_primary === true) {
     // Reuse the shared helper (with its error checks) instead of
     // reimplementing the unset-others swap inline.
     const personaId = image.persona_id;
     const primaryError = await setPrimaryLibraryImage(supabase, personaId, id);
-    if (primaryError) return errorResponse(500, primaryError.error);
+    if (primaryError) return errorResponse(primaryError.status, primaryError.error);
+    primarySwapCommitted = true;
     delete updates.is_primary;
   }
   if (Object.keys(updates).length === 0) {
@@ -316,17 +350,8 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     // success and refetches the signed GET shape, so no consumer reads
     // image_url from a mutation payload. Signing here would pay a storage
     // round-trip per edit for nothing.
-    const { data: current, error: fetchError } = await supabase
-      .from('persona_images')
-      .select('id, image_path, tag, description, is_primary, created_at')
-      .eq('id', id)
-      .single();
-    if (fetchError || !current) {
-      console.error('[api/persona/images] refetch after primary update failed', {
-        error: fetchError,
-      });
-      return errorResponse(500, 'Failed to update image.');
-    }
+    const current = await fetchImageRow(supabase, id);
+    if (!current) return errorResponse(500, 'Failed to update image.');
     return NextResponse.json({ success: true, image: current });
   }
 
@@ -334,11 +359,24 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     .from('persona_images')
     .update(updates)
     .eq('id', id)
-    .select('id, image_path, tag, description, is_primary, created_at')
+    .select(IMAGE_ROW_COLUMNS)
     .single();
   if (updateError || !updated) {
     console.error('[api/persona/images] update failed', { error: updateError });
-    return errorResponse(500, 'Failed to update image.');
+    if (!primarySwapCommitted) {
+      return errorResponse(500, 'Failed to update image.');
+    }
+    // The primary swap above already committed atomically: a 500 here would
+    // hide that from the caller. Report the true row state with a warning
+    // instead, mirroring the POST best-effort path — retrying the metadata
+    // update is safe.
+    const current = await fetchImageRow(supabase, id);
+    if (!current) return errorResponse(500, 'Failed to update image.');
+    return NextResponse.json({
+      success: true,
+      image: current,
+      warnings: ['Primary image was updated, but the tag/description could not be saved.'],
+    });
   }
   return NextResponse.json({ success: true, image: updated });
 }
@@ -347,6 +385,9 @@ export async function DELETE(request: Request): Promise<NextResponse> {
   const authed = await getAuth(request);
   if ('response' in authed) return authed.response;
   const { auth, supabase } = authed;
+
+  // Same faceless exemption as PATCH: images that predate the switch to
+  // faceless must remain deletable. Only POST is blocked for faceless.
 
   const id = new URL(request.url).searchParams.get('id');
   if (!id) return errorResponse(400, 'id is required.');
@@ -362,8 +403,9 @@ export async function DELETE(request: Request): Promise<NextResponse> {
     return errorResponse(500, 'Failed to delete image.');
   }
   // Deleting the primary image intentionally leaves the library with zero
-  // primaries: persona-image-select.ts falls back deterministically
-  // (newest row first), and there is no safe implicit successor to promote.
+  // primaries: persona-image-select.ts falls back deterministically (oldest
+  // row first — resolveVideoImage orders by created_at ascending), and there
+  // is no safe implicit successor to promote.
   // Best-effort storage cleanup: the DB row is the source of truth, but a
   // failed remove must not go silently — otherwise orphaned objects pile up.
   const { error: storageError } = await supabase.storage

@@ -359,3 +359,32 @@ Follow these so the same issues don't come back:
 - **Zod messages must match optional semantics.** 'imageId is required'
   on an optional field misleads the agent; 'imageId must be a non-empty
   string' says what actually failed.
+
+## Web/API review learnings, round 6 (2026-09-28)
+- **Dedup helpers into a leaf module, not across an existing edge.**
+  Moving MCP's getErrorMessage into tools.ts while tools.ts already
+  imported client.ts constants created a client↔tools cycle. Shared
+  helpers go in a new leaf module (errors.ts) imported by both sides.
+- **Partial-success responses must track what actually committed.** PATCH
+  returned the warning-style success after ANY metadata failure; now a
+  primarySwapCommitted flag gates it, and metadata-only failures keep
+  the honest 500.
+- **Strict numeric parsing for form/query params.** parseInt('3x') === 3
+  coerces; /^\d+$/ plus an explicit 400 rejects malformed
+  imagePrimaryIndex instead of silently dropping the pinned primary.
+- **user-event upload honors the input's accept attribute.** A .bmp never
+  reaches the change handler in tests, so rejection+limit co-occurrence
+  must be exercised with an accepted-type-but-oversized file.
+- **Report co-occurring user-facing errors together.** The limit notice
+  used to overwrite the type/size rejection notice — join both messages
+  instead of else-if.
+- **Explicit-ID selectors return null on no match.** selectPersonaImage
+  fell through to automatic selection for unknown ids; a pinned choice
+  must never silently substitute a different face.
+- **Sequential I/O loops get a why-comment.** addLibraryImages (bounded
+  memory, deterministic rollback) and the UI upload queue (stop at first
+  failure, retryable remainder) are sequential on purpose — say so or
+  every review round re-flags them.
+- **Document faceless exemptions at the handler.** PATCH/DELETE stay
+  available for images that predate a switch to faceless; only POST is
+  blocked. The comment lives on both handlers.

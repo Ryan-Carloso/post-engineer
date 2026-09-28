@@ -46,6 +46,13 @@ interface DbState {
   updatedRow: unknown | null;
   /** Makes the set_primary_persona_image RPC fail (primary-swap error path). */
   failPrimarySwap?: boolean;
+  /**
+   * Makes the set_primary_persona_image RPC fail with code P0002 (the image
+   * row vanished between the ownership check and the swap).
+   */
+  failPrimarySwapGone?: boolean;
+  /** Makes the persona_images metadata UPDATE fail (partial-commit path). */
+  failUpdate?: boolean;
   /** Makes the storage remove() call fail (orphan-file logging path). */
   storageRemoveError?: { message: string } | null;
 }
@@ -71,11 +78,21 @@ function mockClient(state: Partial<DbState> = {}) {
     ...state,
   };
   const calls = { primarySwaps: [] as Array<Record<string, unknown>>, removedPaths: [] as string[] };
-  const updateMock = vi.fn(() => terminal({ data: full.updatedRow, error: null }));
+  const updateMock = vi.fn(() =>
+    full.failUpdate === true
+      ? terminal({ data: null, error: { message: 'update failed' } })
+      : terminal({ data: full.updatedRow, error: null }),
+  );
   const client = {
     rpc: vi.fn((fn: string, args: Record<string, unknown>) => {
       if (fn === 'set_primary_persona_image') {
         calls.primarySwaps.push(args);
+        if (full.failPrimarySwapGone === true) {
+          return Promise.resolve({
+            data: null,
+            error: { message: 'image gone', code: 'P0002' },
+          });
+        }
         if (full.failPrimarySwap === true) {
           return Promise.resolve({ data: null, error: { message: 'swap failed' } });
         }
@@ -301,13 +318,19 @@ describe('POST /api/persona/images', () => {
 
   it('rejects library images for a faceless persona', async () => {
     mockAuth({ userId: USER_ID });
-    mockClient({ persona: { id: PERSONA_ID, face_mix_percent: 0 } });
+    const { client } = mockClient({ persona: { id: PERSONA_ID, face_mix_percent: 0 } });
     const res = await POST(
       postForm({ personaId: PERSONA_ID, image: imageFile() }),
     );
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
     expect(body.error).toContain('Faceless');
+    // Ownership and the faceless check share one personas query — the owned
+    // row from assertPersonaOwned carries face_mix_percent, no second fetch.
+    const personaQueries = client.from.mock.calls.filter(
+      ([table]) => table === 'personas',
+    );
+    expect(personaQueries).toHaveLength(1);
   });
 });
 
@@ -362,6 +385,46 @@ describe('PATCH /api/persona/images', () => {
     expect(res.status).toBe(500);
     const body = (await res.json()) as { success: boolean; error: string };
     expect(body.success).toBe(false);
+  });
+
+  it('returns 404 when the swap RPC reports the image vanished (P0002)', async () => {
+    // A concurrent delete can race the ownership pre-check: the SQL function
+    // raises with errcode P0002, which the route maps to 404 instead of a
+    // misleading 500.
+    mockAuth({ userId: USER_ID });
+    mockClient({ imageRow: IMAGE_ROW, updatedRow: IMAGE_ROW, failPrimarySwapGone: true });
+    const res = await PATCH(patchRequest({ id: IMAGE_ROW.id, isPrimary: true }));
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { success: boolean; error: string };
+    expect(body.error).toContain('not found');
+  });
+
+  it('returns a warning-style success when the metadata update fails after a swap', async () => {
+    // The primary swap already committed atomically: a 500 would hide that
+    // from the caller. Report the true row state with a warning instead,
+    // mirroring the POST best-effort path.
+    mockAuth({ userId: USER_ID });
+    mockClient({ imageRow: IMAGE_ROW, updatedRow: IMAGE_ROW, failUpdate: true });
+    const res = await PATCH(
+      patchRequest({ id: IMAGE_ROW.id, isPrimary: true, tag: 'formal' }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { success: boolean; warnings?: string[] };
+    expect(body.success).toBe(true);
+    expect(body.warnings?.[0]).toMatch(/tag\/description/);
+  });
+
+  it('returns 500 when a metadata-only update fails — no swap committed to warn about', async () => {
+    // The warning-style success exists only because a primary swap already
+    // committed atomically. With no swap in this PATCH, claiming "Primary
+    // image was updated" would be a lie: keep the honest 500.
+    mockAuth({ userId: USER_ID });
+    mockClient({ imageRow: IMAGE_ROW, updatedRow: IMAGE_ROW, failUpdate: true });
+    const res = await PATCH(patchRequest({ id: IMAGE_ROW.id, tag: 'formal' }));
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as { success: boolean; error: string; warnings?: string[] };
+    expect(body.success).toBe(false);
+    expect(body.warnings).toBeUndefined();
   });
 
   it('rejects isPrimary:false — primary is swap-only, never demote-only', async () => {

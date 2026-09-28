@@ -85,13 +85,19 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
       }
     }
     const accepted = picked.slice(0, Math.max(room, 0));
+    // Both conditions are reported when they co-occur: otherwise a user
+    // whose picks were dropped for type/size reasons only sees the limit
+    // message and gets no signal about the real problem.
+    const messages: string[] = [];
     if (picked.length > accepted.length) {
       // Either the library is full or the picker selection overflowed the
       // remaining room — the server re-validates on upload either way.
-      setError(t('persona.libraryLimitReached', { max: MAX_LIBRARY_IMAGES }));
-    } else if (rejectedCount > 0) {
-      setError(t('persona.libraryFilesRejected'));
+      messages.push(t('persona.libraryLimitReached', { max: MAX_LIBRARY_IMAGES }));
     }
+    if (rejectedCount > 0) {
+      messages.push(t('persona.libraryFilesRejected'));
+    }
+    if (messages.length > 0) setError(messages.join(' '));
     setPending((prev) => [
       ...prev,
       ...accepted.map((file) => {
@@ -130,6 +136,9 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
     setUploading(true);
     const uploadedIds = new Set<string>();
     try {
+      // Sequential on purpose: stop at the first failure so the user sees
+      // one actionable error instead of N parallel failures, and completed
+      // items can leave the queue while failed/untried ones stay retryable.
       for (const item of pending) {
         let result: { success: boolean; error?: string };
         try {

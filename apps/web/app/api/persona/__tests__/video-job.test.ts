@@ -101,7 +101,11 @@ function mockSupabase(persona: Record<string, unknown> | null, opts?: { noSessio
         return {
           select: vi.fn(() => ({
             eq: vi.fn(() => ({
-              order: vi.fn(async () => ({ data: opts?.libraryImages ?? [], error: null })),
+              // Mirrors resolveVideoImage's defense-in-depth chain:
+              // .eq('persona_id', …).eq('user_id', …).order(…)
+              eq: vi.fn(() => ({
+                order: vi.fn(async () => ({ data: opts?.libraryImages ?? [], error: null })),
+              })),
             })),
           })),
         };

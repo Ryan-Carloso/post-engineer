@@ -1005,6 +1005,16 @@ describe('PostEngineerClient persona image library', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  it('updatePersonaImage rejects isPrimary:false locally instead of a server 400', async () => {
+    // The server PATCH is swap-only: isPrimary:false always 400s there.
+    // Failing fast here keeps the message actionable and avoids the
+    // wasted round-trip.
+    await expect(
+      client.updatePersonaImage({ id: 'img-1', isPrimary: false })
+    ).rejects.toThrow(/cannot be false.*mark another image/i);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it('addPersonaImage wraps a missing file in an actionable error', async () => {
     await expect(
       client.addPersonaImage('p-1', { path: '/tmp/does-not-exist-a1b2c3.jpg' })

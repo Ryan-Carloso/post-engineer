@@ -244,6 +244,24 @@ describe('PersonaImageLibrarySection', () => {
     expect(screen.getByText('persona.libraryFilesRejected')).toBeInTheDocument();
   });
 
+  it('reports both the limit and the rejection reasons when they co-occur', async () => {
+    apiMocks.images = Array.from({ length: 9 }, (_, i) => makeImage(`img-${i}`));
+    const { container } = renderSection();
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    // One slot left, two valid picks (one overflows) plus one oversized file
+    // (passes the input's accept filter but fails the size check): the user
+    // must see both the limit notice and the rejection notice, otherwise
+    // the size drop goes unreported behind the limit message.
+    await pickFiles(input, [
+      new File(['a'], 'a.jpg', { type: 'image/jpeg' }),
+      new File(['b'], 'b.jpg', { type: 'image/jpeg' }),
+      new File([new Uint8Array(11 * 1024 * 1024)], 'big.jpg', { type: 'image/jpeg' }),
+    ]);
+
+    expect(screen.getByText(/persona.libraryLimitReached/)).toBeInTheDocument();
+    expect(screen.getByText(/persona.libraryFilesRejected/)).toBeInTheDocument();
+  });
+
   it('revokes pending preview URLs when the component unmounts', async () => {
     const { container, unmount } = renderSection();
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;

@@ -5,7 +5,9 @@
 // selector picks the photo that best fits that video:
 //
 //   1. Explicit `imageId` on the request wins (ownership is validated by the
-//      caller, not here).
+//      caller, not here). An unknown id selects nothing (null) — silently
+//      substituting another face would put a photo in the video the user
+//      didn't pick.
 //   2. Keyword overlap between the video context (topic/niche/script) and the
 //      image tag + description, excluding recently used images.
 //   3. Primary image (or first) when nothing matches.
@@ -59,12 +61,11 @@ export function selectPersonaImage(
 
   if (input.imageId) {
     const explicit = images.find((image) => image.id === input.imageId);
-    if (explicit) return explicit;
-    // Unreachable under the documented contract: the sole caller
-    // (resolveVideoImage) returns 404 for an unknown id before ever calling
-    // selectPersonaImage. The fall-through stays as a defensive last resort
-    // for any future caller that skips that check — automatic selection
-    // rather than a broken video job.
+    // An explicit id that matches nothing is a hard stop: silently
+    // substituting another photo would put a face in the video the user
+    // didn't pick. The sole caller (resolveVideoImage) already returns 404
+    // for unknown ids, so this guards future direct callers.
+    return explicit ?? null;
   }
 
   const recent = new Set(recentIds);

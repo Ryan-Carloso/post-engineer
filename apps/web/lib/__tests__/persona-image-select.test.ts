@@ -40,13 +40,17 @@ describe('selectPersonaImage', () => {
     expect(picked?.id).toBe('img-beach');
   });
 
-  it('unknown imageId falls through to automatic selection instead of failing', () => {
+  it('unknown imageId returns null instead of silently substituting another face', () => {
+    // The caller's pinned choice must never be quietly replaced by a
+    // different photo: a future direct caller that skips the route's 404
+    // check must get null (fail loudly) rather than a face the user
+    // didn't pick.
     const picked = selectPersonaImage(
       LIBRARY,
       { topic: 'business meeting at the office', imageId: 'nope' },
       [],
     );
-    expect(picked?.id).toBe('img-formal');
+    expect(picked).toBeNull();
   });
 
   it('picks the image whose tag matches the topic keywords', () => {

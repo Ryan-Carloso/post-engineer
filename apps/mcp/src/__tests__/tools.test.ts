@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
-  getErrorMessage,
   handleCreatePersona,
   handleListPersonaImages,
   handleAddPersonaImage,
@@ -430,19 +429,6 @@ describe('schema bounds', () => {
   });
 });
 
-describe('getErrorMessage', () => {
-  it('returns the message for Error instances', () => {
-    expect(getErrorMessage(new Error('boom'))).toBe('boom');
-  });
-
-  it('stringifies non-Error thrown values', () => {
-    expect(getErrorMessage('plain string')).toBe('plain string');
-    expect(getErrorMessage(42)).toBe('42');
-    expect(getErrorMessage(null)).toBe('null');
-    expect(getErrorMessage(undefined)).toBe('undefined');
-  });
-});
-
 describe('persona image library tools', () => {
   const mockClient = {
     createPersona: vi.fn(),
@@ -542,6 +528,16 @@ describe('persona image library tools', () => {
     expect(() => UpdatePersonaImageSchema.parse({ id: 'img-1' })).toThrow(
       /At least one of tag, description, or isPrimary/
     );
+    expect(mockClient.updatePersonaImage).not.toHaveBeenCalled();
+  });
+
+  it('update_persona_image rejects isPrimary:false at parse time', async () => {
+    // The server PATCH is swap-only and 400s isPrimary:false. The schema
+    // is z.literal(true) so an agent learns the constraint from the tool
+    // contract instead of a server error.
+    expect(() =>
+      UpdatePersonaImageSchema.parse({ id: 'img-1', isPrimary: false })
+    ).toThrow();
     expect(mockClient.updatePersonaImage).not.toHaveBeenCalled();
   });
 

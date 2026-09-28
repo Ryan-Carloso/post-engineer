@@ -323,28 +323,31 @@ export interface UploadPersonaImageInput {
 interface ImageMutationResult {
   success: boolean;
   error?: string;
-  image?: PersonaImageRecord;
 }
 
 /**
  * Reads a mutation-style JSON payload defensively: a non-2xx status, a
  * non-JSON body, or a success:false payload all surface as
  * { success: false } instead of throwing on .json() or resolving as success.
+ * The server row is intentionally NOT carried: mutations return the raw DB
+ * row (no signed image_url) and no consumer reads it — every mutation hook
+ * invalidates the library query and refetches the signed GET shape.
  */
 async function parseImageMutationResult(
   response: Response,
 ): Promise<ImageMutationResult> {
-  const data: ImageMutationResult | null = await response.json().catch(() => null);
+  const data: { success?: unknown; error?: unknown } | null = await response
+    .json()
+    .catch(() => null);
   if (!response.ok || !data || data.success !== true) {
     return {
       success: false,
       error:
         (data && typeof data.error === 'string' && data.error) ||
         `Request failed with status ${response.status}.`,
-      ...(data?.image ? { image: data.image } : {}),
     };
   }
-  return { success: true, image: data.image };
+  return { success: true };
 }
 
 export async function uploadPersonaImage(

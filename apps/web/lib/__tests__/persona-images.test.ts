@@ -38,7 +38,7 @@ function terminal(result: unknown): Record<string, unknown> {
 function mockClient(options: {
   library?: typeof LIBRARY | null;
   libraryError?: { message: string } | null;
-  historyError?: { message: string } | null;
+  historyError?: { message: string; code?: string } | null;
 } = {}) {
   const calls = { rpcCalls: [] as Array<{ fn: string; args: unknown }> };
   const client = {
@@ -66,14 +66,14 @@ beforeEach(() => {
 describe('resolveVideoImage', () => {
   it('resolves to null for an empty library (legacy fallback)', async () => {
     const { calls, client } = mockClient({ library: [] });
-    const result = await resolveVideoImage(client, 'persona-1', [], { topic: 'business' });
+    const result = await resolveVideoImage(client, 'persona-1', 'user-1', [], { topic: 'business' });
     expect(result).toEqual({ ok: true, image: null });
     expect(calls.rpcCalls).toHaveLength(0);
   });
 
   it('returns 404 for an image_id outside the library', async () => {
     const { client } = mockClient();
-    const result = await resolveVideoImage(client, 'persona-1', [], { imageId: 'nope' });
+    const result = await resolveVideoImage(client, 'persona-1', 'user-1', [], { imageId: 'nope' });
     expect(result).toEqual({
       ok: false,
       error: "image_id not found in this persona's image library.",
@@ -81,11 +81,37 @@ describe('resolveVideoImage', () => {
     });
   });
 
+  it('scopes the library query to the owning user', async () => {
+    // Defense in depth: with the service-role client (API-key callers) the
+    // route already verified ownership, but the query itself must not read
+    // another user's rows if a future caller skips that check.
+    const eqCalls: Array<[string, unknown]> = [];
+    const chain: Record<string, unknown> = {};
+    chain.select = vi.fn(() => chain);
+    chain.eq = vi.fn((column: string, value: unknown) => {
+      eqCalls.push([column, value]);
+      return chain;
+    });
+    chain.order = vi.fn(() => chain);
+    chain.then = (resolve: (value: unknown) => void): Promise<unknown> =>
+      Promise.resolve({ data: [], error: null }).then(resolve);
+    const client = { from: vi.fn(() => chain) };
+    const { resolveVideoImage } = await import('../persona-images');
+    await resolveVideoImage(client as never, 'persona-1', 'user-1', [], {
+      topic: null,
+      niche: null,
+      script: null,
+    });
+    expect(eqCalls).toContainEqual(['persona_id', 'persona-1']);
+    expect(eqCalls).toContainEqual(['user_id', 'user-1']);
+  });
+
   it('honors an explicit image_id without touching the rotation history', async () => {
     const { calls, client } = mockClient();
     const result = await resolveVideoImage(
       client,
       'persona-1',
+      'user-1',
       ['img-casual'],
       { topic: 'business', imageId: 'img-formal' },
     );
@@ -98,7 +124,7 @@ describe('resolveVideoImage', () => {
 
   it('returns 404 for an image_id when the library is empty', async () => {
     const { client } = mockClient({ library: [] });
-    const result = await resolveVideoImage(client, 'persona-1', [], { imageId: 'nope' });
+    const result = await resolveVideoImage(client, 'persona-1', 'user-1', [], { imageId: 'nope' });
     expect(result).toEqual({
       ok: false,
       error: "image_id not found in this persona's image library.",
@@ -111,6 +137,7 @@ describe('resolveVideoImage', () => {
     const result = await resolveVideoImage(
       client,
       'persona-1',
+      'user-1',
       ['img-formal'],
       { topic: 'business meeting at the office', niche: 'finance' },
     );
@@ -121,7 +148,7 @@ describe('resolveVideoImage', () => {
 
   it('returns 500 when the library cannot be loaded', async () => {
     const { client } = mockClient({ libraryError: { message: 'db down' } });
-    const result = await resolveVideoImage(client, 'persona-1', [], {});
+    const result = await resolveVideoImage(client, 'persona-1', 'user-1', [], {});
     expect(result).toEqual({
       ok: false,
       error: 'Failed to load persona image library.',
@@ -131,7 +158,7 @@ describe('resolveVideoImage', () => {
 
   it('never touches the rotation history (the caller records after the gate)', async () => {
     const { calls, client } = mockClient();
-    const result = await resolveVideoImage(client, 'persona-1', [], { topic: 'business' });
+    const result = await resolveVideoImage(client, 'persona-1', 'user-1', [], { topic: 'business' });
     expect(result.ok).toBe(true);
     expect(calls.rpcCalls).toHaveLength(0);
   });
@@ -174,7 +201,18 @@ describe('setPrimaryLibraryImage', () => {
   it('returns an error when the swap RPC fails', async () => {
     const { client } = mockClient({ historyError: { message: 'db down' } });
     const result = await setPrimaryLibraryImage(client, 'persona-1', 'img-2');
-    expect(result).toEqual({ error: 'Failed to update image.' });
+    expect(result).toEqual({ error: 'Failed to update image.', status: 500 });
+  });
+
+  it('returns 404 when the swap RPC reports the image vanished (P0002)', async () => {
+    const { client } = mockClient({
+      historyError: { message: 'image gone', code: 'P0002' },
+    });
+    const result = await setPrimaryLibraryImage(client, 'persona-1', 'img-2');
+    expect(result).toEqual({
+      error: "Image not found in this persona's image library.",
+      status: 404,
+    });
   });
 });
 
@@ -238,7 +276,7 @@ describe('addLibraryImages', () => {
     return new File([bytes], name, { type: 'image/png' });
   };
 
-  function rollbackClient(options: { failInsertOn?: number; failRemove?: boolean; failRowDelete?: boolean }) {
+  function rollbackClient(options: { failInsertOn?: number; failInsertWith?: string; failRemove?: boolean; failRowDelete?: boolean }) {
     let inserts = 0;
     const removedPaths: string[][] = [];
     const client = {
@@ -249,6 +287,16 @@ describe('addLibraryImages', () => {
           insert: vi.fn(() => {
             inserts += 1;
             const id = `img-${inserts}`;
+            if (options.failInsertWith !== undefined) {
+              return {
+                select: vi.fn(() => ({
+                  single: vi.fn(async () => ({
+                    data: null,
+                    error: { message: options.failInsertWith },
+                  })),
+                })),
+              };
+            }
             if (options.failInsertOn === inserts) {
               return { select: vi.fn(() => ({ single: vi.fn(async () => ({ data: null, error: { message: 'insert boom' } })) })) };
             }
@@ -299,6 +347,46 @@ describe('addLibraryImages', () => {
     const leftover = (result as { leftoverPaths: string[] }).leftoverPaths;
     expect(leftover).toEqual(['user/img-1.png']);
     expect(removedPaths).toHaveLength(0);
+  });
+
+  it('returns 400 when the file bytes cannot be read', async () => {
+    // A truncated multipart body makes arrayBuffer() reject: unlike the
+    // client-side validateImageContent path, the server read had no
+    // try/catch and the failure surfaced as an unstructured 500.
+    const { addLibraryImages } = await import('../persona-images');
+    const { client } = rollbackClient({});
+    const unreadable = {
+      name: 'a.png',
+      type: 'image/png',
+      size: 1024,
+      arrayBuffer: () => Promise.reject(new Error('truncated body')),
+    };
+    const result = await addLibraryImages(client, 'user-1', 'persona-1', [
+      { file: unreadable as unknown as File, tag: '', description: '' },
+    ]);
+    expect(result).toEqual({
+      error: 'Could not read the image file.',
+      status: 400,
+      leftoverPaths: [],
+    });
+  });
+
+  it('maps the DB limit-trigger violation to a 400 under concurrency', async () => {
+    // Two concurrent requests can both pass the app-level count check; the
+    // loser hits the enforce_persona_image_limit trigger. A full library is
+    // a client-input problem (the app 400s it in the non-racing case), so
+    // the trigger violation is recognized and mapped to 400, not a generic
+    // 500.
+    const { addLibraryImages } = await import('../persona-images');
+    const { client } = rollbackClient({
+      failInsertWith: 'persona image library is limited to 10 images',
+    });
+    const result = await addLibraryImages(client, 'user-1', 'persona-1', [
+      { file: pngFile('a.png'), tag: '', description: '' },
+    ]);
+    expect(result).toMatchObject({ status: 400 });
+    const body = result as { error: string };
+    expect(body.error).toMatch(/full/i);
   });
 
   it('derives the storage extension from the detected content, not the file name', async () => {

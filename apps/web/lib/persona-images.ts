@@ -178,10 +178,21 @@ export async function addLibraryImages(
     const leftoverPaths = await rollbackLibraryImages(supabase, added, storedPaths);
     return { error, status, leftoverPaths };
   };
+  // Sequential by design: each iteration reads at most one image (<=10MB)
+  // into memory, and a failure rolls back exactly the images added so far.
+  // Parallel reads would buffer up to 10 images at once and make the
+  // rollback order nondeterministic.
   for (const input of inputs) {
     const validated = validateImageFile(input.file);
     if ('error' in validated) return fail(validated.error, 400);
-    const bytes = new Uint8Array(await validated.file.arrayBuffer());
+    // A truncated multipart body makes arrayBuffer() reject: surface it as
+    // a 400 validation error, not an unstructured 500.
+    let bytes: Uint8Array;
+    try {
+      bytes = new Uint8Array(await validated.file.arrayBuffer());
+    } catch {
+      return fail('Could not read the image file.', 400);
+    }
     // Magic-byte check on the real bytes (single read, reused for upload):
     // the declared MIME type and extension are client-controlled. The
     // storage extension comes from the detected content type so the path
@@ -212,6 +223,14 @@ export async function addLibraryImages(
       .single();
     if (insertError || !data) {
       console.error('[persona-images] insert failed', { error: insertError });
+      // Two concurrent requests can both pass the app-level count check;
+      // the loser hits the enforce_persona_image_limit trigger. A full
+      // library is a client-input problem (the app 400s it in the
+      // non-racing case), so recognize the trigger violation instead of a
+      // generic 500.
+      if ((insertError as { message?: string } | null)?.message?.includes('limited to 10 images')) {
+        return fail(`Image library is full (${MAX_PERSONA_IMAGES} images max).`, 400);
+      }
       return fail('Failed to add image.', 500);
     }
     added.push(data as PersonaLibraryImage);
@@ -261,7 +280,7 @@ export async function setPrimaryLibraryImage(
   supabase: SupabaseClient,
   personaId: string,
   imageId: string,
-): Promise<{ error: string } | null> {
+): Promise<{ error: string; status: number } | null> {
   // The swap runs inside the set_primary_persona_image SQL function: it
   // locks the parent persona row and performs demote-then-promote
   // back-to-back, so concurrent swaps cannot interleave (two separate
@@ -272,7 +291,13 @@ export async function setPrimaryLibraryImage(
   });
   if (error) {
     console.error('[persona-images] set primary failed', { error });
-    return { error: 'Failed to update image.' };
+    // P0002 is raised by the function when the image row vanished between
+    // the route's ownership pre-check and the swap (e.g. a concurrent
+    // delete): that's a 404, not a 500.
+    if ((error as { code?: string }).code === 'P0002') {
+      return { error: "Image not found in this persona's image library.", status: 404 };
+    }
+    return { error: 'Failed to update image.', status: 500 };
   }
   return null;
 }
@@ -314,16 +339,21 @@ export async function recordRecentImageId(
 export async function resolveVideoImage(
   supabase: SupabaseClient,
   personaId: string,
+  userId: string,
   recentImageIds: string[],
   input: ImageSelectionInput,
 ): Promise<
   | { ok: true; image: PersonaLibraryImage | null }
   | { ok: false; error: string; status: number }
 > {
+  // The user_id predicate is defense in depth: the route already verified
+  // ownership, but with the service-role client this query must not read
+  // another user's rows if a future caller ever skips that check.
   const { data, error } = await supabase
     .from('persona_images')
     .select('id, image_path, tag, description, is_primary')
     .eq('persona_id', personaId)
+    .eq('user_id', userId)
     .order('created_at', { ascending: true });
   if (error) {
     console.error('[persona-images] library fetch failed', { error });

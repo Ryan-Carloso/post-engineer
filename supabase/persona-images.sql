@@ -105,11 +105,12 @@ $$;
 --    apps/web/lib/persona-images.ts).
 --    Trust boundary: this function performs no ownership check itself — it
 --    relies on RLS on public.personas (invoker rights) when called with a
---    user-scoped client. The app invokes it with both the service-role
---    client (API-key callers, after route-level ownership checks) and the
---    session client, so EXECUTE must stay granted to authenticated: the
---    safety net is the RLS policy on personas, which must keep covering
---    UPDATE for the row owner.
+--    user-scoped client. The app's only caller is recordRecentImageId
+--    (apps/web/lib/persona-images.ts), invoked from the video-job route,
+--    which always uses the service-role client: the safety net is the
+--    route's ownership check (persona user_id filter) before the call.
+--    EXECUTE stays granted so the function remains callable; do not add a
+--    direct PostgREST caller without an ownership check.
 create or replace function public.record_persona_image_use(p_persona_id uuid, p_image_id uuid)
 returns void
 language sql
@@ -149,7 +150,12 @@ begin
   set is_primary = true
   where id = p_image_id and persona_id = p_persona_id;
   if not found then
-    raise exception 'image % does not belong to persona %', p_image_id, p_persona_id;
+    -- P0002 (no_data_found) lets the app distinguish "the image row
+    -- vanished between the route's ownership pre-check and this swap"
+    -- (a 404) from a genuine failure (a 500). The exception rolls back
+    -- the demote above too.
+    raise exception 'image % does not belong to persona %', p_image_id, p_persona_id
+      using errcode = 'P0002';
   end if;
 end;
 $$;

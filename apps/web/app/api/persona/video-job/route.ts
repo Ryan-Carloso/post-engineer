@@ -708,6 +708,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const librarySelection = await resolveVideoImage(
       supabase,
       personaId,
+      auth.userId,
       (persona.recent_image_ids as string[] | null) ?? [],
       {
         topic: typeof requestBody.video_subject === 'string' ? requestBody.video_subject : null,

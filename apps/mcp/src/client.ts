@@ -1,4 +1,5 @@
 import { validateScheduleAdvance } from './validator.js';
+import { getErrorMessage } from './errors.js';
 import { readFile } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
 
@@ -94,10 +95,6 @@ function mimeTypeForImagePath(path: string): string {
   );
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 async function imageFormFile(path: string): Promise<Blob> {
   // Validate before uploading: the API rejects the file anyway, so an
   // oversized or unsupported image fails fast locally instead of wasting an
@@ -108,12 +105,12 @@ async function imageFormFile(path: string): Promise<Blob> {
   try {
     buffer = await readFile(path);
   } catch (error) {
-    throw new Error(`Failed to read image "${path}": ${errorMessage(error)}`);
+    throw new Error(`Failed to read image "${path}": ${getErrorMessage(error)}`);
   }
   if (buffer.length === 0) {
-    // A 0-byte file would pass the local gate but desynchronize the
-    // index-aligned imageTags/imageDescriptions on the server (the server
-    // filters empty files before pairing), so reject it here with a clear
+    // A 0-byte file would pass the local gate but shift the index-aligned
+    // imageTags/imageDescriptions (the server 400s when the tag/description
+    // counts don't match the file count), so reject it here with a clear
     // message instead of a confusing server 400.
     throw new Error(`Image "${basename(path)}" is empty.`);
   }
@@ -440,6 +437,13 @@ export class PostEngineerClient {
       input.isPrimary === undefined
     ) {
       throw new Error('updatePersonaImage requires at least one of tag, description, or isPrimary.');
+    }
+    // The server PATCH is swap-only: isPrimary:false always 400s there.
+    // Fail fast with an actionable message instead of the wasted round-trip.
+    if (input.isPrimary === false) {
+      throw new Error(
+        'updatePersonaImage: isPrimary cannot be false — mark another image as primary instead (the swap atomically demotes the old one).'
+      );
     }
     return this.request(
       '/api/persona/images',

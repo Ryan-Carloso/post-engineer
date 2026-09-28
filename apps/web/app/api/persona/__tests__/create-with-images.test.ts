@@ -201,6 +201,21 @@ describe('POST /api/persona with image library', () => {
     expect(calls.imageInserts).toHaveLength(0);
   });
 
+  it('rejects a non-numeric imagePrimaryIndex instead of silently dropping it', async () => {
+    // parsePrimaryIndex used to treat 'abc' as unset: a caller's pinned
+    // primary selection was silently lost. Like the sibling
+    // imageTags/imageDescriptions parser, malformed input is a 400.
+    const calls = mockClient();
+    const res = await POST(
+      createRequest({ ...BASE_FIELDS, imagePrimaryIndex: 'abc' }, [png('a.png'), png('b.png')]),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { success: boolean; error: string };
+    expect(body.success).toBe(false);
+    expect(body.error).toContain('imagePrimaryIndex');
+    expect(calls.personaInserts).toBe(0);
+  });
+
   it('rejects an out-of-range imagePrimaryIndex before creating anything', async () => {
     const calls = mockClient();
     const res = await POST(

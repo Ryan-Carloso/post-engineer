@@ -112,7 +112,15 @@ export async function POST(request: Request): Promise<NextResponse> {
     body.values.faceMixPercent,
     libraryInputs,
   );
-  const primaryIndex = parsePrimaryIndex(formData.get('imagePrimaryIndex'));
+  let primaryIndex: number | null;
+  try {
+    primaryIndex = parsePrimaryIndex(formData.get('imagePrimaryIndex'));
+  } catch (error) {
+    return errorResponse(
+      400,
+      error instanceof Error ? error.message : 'Invalid imagePrimaryIndex.',
+    );
+  }
   if (primaryIndex !== null && primaryIndex >= libraryFiles.length) {
     return errorResponse(400, 'imagePrimaryIndex is out of range for the provided images.');
   }
@@ -243,8 +251,14 @@ function parseJsonStringArray(value: FormDataEntryValue | null): string[] {
 
 function parsePrimaryIndex(value: FormDataEntryValue | null): number | null {
   if (typeof value !== 'string' || value.trim() === '') return null;
-  const index = Number.parseInt(value, 10);
-  return Number.isInteger(index) && index >= 0 ? index : null;
+  const trimmed = value.trim();
+  // A non-empty but non-numeric value is a client bug, not a silent
+  // default: silently dropping it would lose the caller's pinned primary
+  // selection. Strict digits only — parseInt('3x') === 3 would coerce.
+  if (!/^\d+$/.test(trimmed)) {
+    throw new Error('imagePrimaryIndex must be a non-negative integer.');
+  }
+  return Number.parseInt(trimmed, 10);
 }
 
 //---------------

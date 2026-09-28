@@ -2,13 +2,9 @@ import { z } from 'zod';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { PostEngineerClient } from './client.js';
 import { MAX_LIBRARY_IMAGES, MAX_LIBRARY_IMAGE_BYTES } from './client.js';
+import { getErrorMessage } from './errors.js';
 
 export type McpToolResponse = CallToolResult;
-
-export function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return String(error);
-}
 
 // Each provider in `providers` must map to a non-empty account-ID list.
 export function missingProviderAccountIds(args: {
@@ -139,9 +135,19 @@ export const AddPersonaImageSchema = z.object(AddPersonaImageShape);
 
 export const UpdatePersonaImageShape = {
   id: z.string().min(1, 'id is required').describe('The library image ID to update'),
-  tag: z.string().max(100).optional().describe('New tag (empty string clears it)'),
-  description: z.string().max(500).optional().describe('New description (empty string clears it)'),
-  isPrimary: z.boolean().optional().describe('Set true to mark this image as the primary library image'),
+  // Reuse the shared field definitions so tag/description limits can't drift
+  // from the create path; PATCH supports clearing via empty string, which the
+  // create schema's .min(1) path field doesn't need.
+  tag: LibraryImageFields.tag.describe('New tag (empty string clears it)'),
+  description: LibraryImageFields.description.describe('New description (empty string clears it)'),
+  // Swap-only: the server rejects isPrimary:false, so the schema accepts only
+  // true and surfaces the constraint at parse time instead of a server 400.
+  isPrimary: z
+    .literal(true)
+    .optional()
+    .describe(
+      'Set true to mark this image as the primary library image (the swap atomically demotes the old primary; false is rejected — mark another image instead)'
+    ),
 };
 
 export const UpdatePersonaImageSchema = z
