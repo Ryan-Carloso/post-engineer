@@ -286,13 +286,24 @@ def _run_persona_batch_sequential(specs: list, store, user_id: str) -> None:
             logger.exception("persona batch task escaped without terminalizing")
         if _batch_task_failed(task_id):
             try:
-                store.refund_tokens(
+                refunded = store.refund_tokens(
                     user_id, generation_id, "persona video batch: video failed"
                 )
             except Exception:
                 logger.exception(
                     "persona batch refund failed for task %s", task_id
                 )
+            else:
+                # refund_tokens returns False on soft failure (RPC answered
+                # but the charge was not actually refunded). That must be
+                # loud in Bugsink: silent here means lost tokens.
+                if refunded is not True:
+                    logger.error(
+                        "persona batch refund returned False for task %s "
+                        "(generation %s)",
+                        task_id,
+                        generation_id,
+                    )
 
 
 def process_persona_videos(

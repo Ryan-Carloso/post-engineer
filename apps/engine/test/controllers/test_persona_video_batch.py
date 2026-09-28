@@ -358,3 +358,30 @@ class BatchFailureRefundTest(unittest.TestCase):
             body, store, fake_start, lambda task_id: {"state": -1}
         )
         self.assertEqual(len(ran), 3)
+
+    def test_refund_returning_false_is_logged_and_does_not_cancel_the_rest(self):
+        body = _batch_request(2)
+        ran = []
+
+        def fake_start(task_id, params, stop_at):
+            ran.append(task_id)
+
+        store = types.SimpleNamespace(
+            spend_tokens=lambda *a, **k: True,
+            refund_tokens=lambda *a, **k: False,
+        )
+
+        with patch.object(video_controller.logger, "error") as log_error:
+            self._run_batch_inline(
+                body, store, fake_start, lambda task_id: {"state": -1}
+            )
+
+        # Both videos ran despite the soft refund failure; the failure was
+        # logged loudly instead of vanishing.
+        self.assertEqual(len(ran), 2)
+        self.assertTrue(
+            any(
+                "persona batch refund returned False" in str(call.args[0])
+                for call in log_error.call_args_list
+            )
+        )
