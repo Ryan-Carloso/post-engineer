@@ -959,6 +959,76 @@ describe('PostEngineerClient persona image library', () => {
     );
   });
 
+  it('updatePersonaImage throws client-side when no fields are provided', async () => {
+    await expect(client.updatePersonaImage({ id: 'img-1' })).rejects.toThrow(
+      /at least one of tag, description, or isPrimary/
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('addPersonaImage wraps a missing file in an actionable error', async () => {
+    await expect(
+      client.addPersonaImage('p-1', { path: '/tmp/does-not-exist-a1b2c3.jpg' })
+    ).rejects.toThrow(/Failed to read image "\/tmp\/does-not-exist-a1b2c3\.jpg"/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('createPersona uses the longer upload timeout for file-carrying requests', async () => {
+    const path = await writeTempImage('a.jpg');
+    const timeouts: number[] = [];
+    const realTimeout = AbortSignal.timeout;
+    const spy = vi
+      .spyOn(AbortSignal, 'timeout')
+      .mockImplementation((ms: number) => {
+        timeouts.push(ms);
+        return realTimeout(ms);
+      });
+    try {
+      await client.createPersona({
+        name: 'X',
+        avatarUrl: 'https://example.com/a.png',
+        images: [{ path }],
+      });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(timeouts).toContain(120_000);
+  });
+
+  it('createPersona always uses the upload timeout (multipart request)', async () => {
+    const timeouts: number[] = [];
+    const realTimeout = AbortSignal.timeout;
+    const spy = vi
+      .spyOn(AbortSignal, 'timeout')
+      .mockImplementation((ms: number) => {
+        timeouts.push(ms);
+        return realTimeout(ms);
+      });
+    try {
+      await client.createPersona({ name: 'X', avatarUrl: 'https://example.com/a.png' });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(timeouts).toEqual([120_000]);
+  });
+
+  it('listPersonas uses the default timeout', async () => {
+    const timeouts: number[] = [];
+    const realTimeout = AbortSignal.timeout;
+    const spy = vi
+      .spyOn(AbortSignal, 'timeout')
+      .mockImplementation((ms: number) => {
+        timeouts.push(ms);
+        return realTimeout(ms);
+      });
+    try {
+      await client.listPersonas();
+    } finally {
+      spy.mockRestore();
+    }
+    expect(timeouts).toEqual([30_000]);
+  });
+
   it('deletePersonaImage sends a DELETE with the id query', async () => {
     await client.deletePersonaImage('img-1');
     expect(global.fetch).toHaveBeenCalledWith(

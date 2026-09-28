@@ -1,5 +1,5 @@
 import { validateScheduleAdvance } from './validator.js';
-import { readFile, stat } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
 
 export interface PostEngineerClientOptions {
@@ -73,6 +73,9 @@ export interface CreateScheduleInput {
 const PRODUCTION_API_URL = 'https://post-engineer.com';
 // Hung requests must not block the stdio tool call (and the agent session) forever.
 const REQUEST_TIMEOUT_MS = 30_000;
+// Multipart uploads can legitimately exceed the default budget: up to 10
+// 10MB library images on one request.
+const UPLOAD_TIMEOUT_MS = 120_000;
 // Bound how much of an upstream error body can flow into agent-visible output.
 const MAX_ERROR_BODY_CHARS = 200;
 const MAX_LIBRARY_IMAGES = 10;
@@ -89,18 +92,27 @@ function mimeTypeForImagePath(path: string): string {
   );
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 async function imageFormFile(path: string): Promise<Blob> {
-  // Validate before reading: the API rejects the file anyway, so an
+  // Validate before uploading: the API rejects the file anyway, so an
   // oversized or unsupported image fails fast locally instead of wasting an
-  // upload.
+  // upload. A single read (no stat/read double check) avoids TOCTOU; any
+  // failure surfaces with the path for a consistent, actionable message.
   const mimeType = mimeTypeForImagePath(path);
-  const size = (await stat(path)).size;
-  if (size > MAX_LIBRARY_IMAGE_BYTES) {
+  let buffer: Buffer;
+  try {
+    buffer = await readFile(path);
+  } catch (error) {
+    throw new Error(`Failed to read image "${path}": ${errorMessage(error)}`);
+  }
+  if (buffer.length > MAX_LIBRARY_IMAGE_BYTES) {
     throw new Error(
-      `Image "${basename(path)}" is larger than 10MB (max library image size).`,
+      `Image "${basename(path)}" is larger than ${MAX_LIBRARY_IMAGE_BYTES / (1024 * 1024)}MB (max library image size).`,
     );
   }
-  const buffer = await readFile(path);
   return new Blob([buffer], { type: mimeType });
 }
 
@@ -156,10 +168,15 @@ export class PostEngineerClient {
     return headers;
   }
 
-  private async request(path: string, init: RequestInit, action: string): Promise<unknown> {
+  private async request(
+    path: string,
+    init: RequestInit,
+    action: string,
+    timeoutMs = REQUEST_TIMEOUT_MS,
+  ): Promise<unknown> {
     const response = await fetch(`${this.baseUrl}${path}`, {
       ...init,
-      signal: init.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: init.signal ?? AbortSignal.timeout(timeoutMs),
     });
 
     if (!response.ok) {
@@ -205,11 +222,14 @@ export class PostEngineerClient {
       }
       const tags: string[] = [];
       const descriptions: string[] = [];
-      for (const image of images) {
-        formData.append('images', await imageFormFile(image.path), basename(image.path));
+      // The reads are independent: load in parallel (order is preserved, so
+      // tags/descriptions stay aligned with the formData entries).
+      const blobs = await Promise.all(images.map((image) => imageFormFile(image.path)));
+      images.forEach((image, index) => {
+        formData.append('images', blobs[index], basename(image.path));
         tags.push(image.tag ?? '');
         descriptions.push(image.description ?? '');
-      }
+      });
       formData.set('imageTags', JSON.stringify(tags));
       formData.set('imageDescriptions', JSON.stringify(descriptions));
       if (input.imagePrimaryIndex !== undefined) {
@@ -224,7 +244,8 @@ export class PostEngineerClient {
     return this.request(
       '/api/persona',
       { method: 'POST', headers: this.getHeaders(false), body: formData },
-      'create persona'
+      'create persona',
+      UPLOAD_TIMEOUT_MS,
     );
   }
 
@@ -385,7 +406,8 @@ export class PostEngineerClient {
     return this.request(
       '/api/persona/images',
       { method: 'POST', headers: this.getHeaders(false), body: formData },
-      'add persona image'
+      'add persona image',
+      UPLOAD_TIMEOUT_MS,
     );
   }
 
@@ -395,6 +417,13 @@ export class PostEngineerClient {
     description?: string;
     isPrimary?: boolean;
   }): Promise<unknown> {
+    if (
+      input.tag === undefined &&
+      input.description === undefined &&
+      input.isPrimary === undefined
+    ) {
+      throw new Error('updatePersonaImage requires at least one of tag, description, or isPrimary.');
+    }
     return this.request(
       '/api/persona/images',
       {
