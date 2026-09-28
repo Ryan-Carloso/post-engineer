@@ -6,13 +6,16 @@ Pipeline (100% agentic once the user enables the schedule):
    Idempotent: unique (schedule_id, slot_at). Batch schedules (kind='batch')
    are skipped — their slots are pre-materialized with exact datetimes by
    POST /api/schedule/batch.
-2. Batch generation: ``pending`` slots within the horizon are queued in
-   ``PersonaBatchQueue`` — all videos come out at the 06h UTC cutoff,
-   a single Modal cold start. Manual batches (kind='batch') always generate:
-   they are user-requested and prepaid, using the slot's stored topic with
-   no LLM call and no token spend. Recurring slots only generate when
-   automatic video creation is explicitly enabled via
-   ``fill_schedule_auto_generate`` in config.toml [app] (default off).
+2. Immediate generation: ``pending`` slots inside the horizon are dispatched
+   right away — each due slot spawns its own pipeline thread via
+   ``_dispatch_generation`` (the same immediate path as POST
+   /persona-videos), so there is no batch queue and no 06h UTC cutoff.
+   Batch schedules (kind='batch') are user-requested and prepaid at
+   schedule creation (``batch:{scheduleId}``); they generate with the
+   slot's stored topic and no LLM call. Recurring slots spend
+   ``scheduled:{slotId}`` at dispatch and only generate when automatic
+   video creation is explicitly enabled via ``fill_schedule_auto_generate``
+   in config.toml [app] (default off).
 3. Reconciliation: ``generating`` slots whose task finished become ``ready``
    (or ``failed``).
 4. Publish tick: ``ready`` slots whose ``slot_at`` arrived are published via
