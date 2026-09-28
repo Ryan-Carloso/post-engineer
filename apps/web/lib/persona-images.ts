@@ -182,12 +182,12 @@ export interface LibraryImagesError {
   /**
    * Storage paths the best-effort rollback could not remove. Split so
    * callers never delete a file that a surviving row still references:
-   * - orphanPaths: no row references these; safe to storage.remove().
-   * - rowBackedPaths: rows still exist; retry the row delete (or a cascade)
-   *   BEFORE removing storage, or the rows dangle at deleted objects.
-   * Callers that are about to cascade-delete the persona_images rows
-   * (making the paths unrecoverable) should retry removal before that
-   * delete.
+   * - orphanPaths: no row references these; safe to storage.remove(), and
+   *   collect them before any cascade delete makes them unrecoverable.
+   * - rowBackedPaths: rows still exist. Never storage.remove() these while
+   *   the rows survive — only after the rows are gone (a row-delete retry
+   *   or a successful cascade delete of the parent persona), or surviving
+   *   rows dangle at deleted objects.
    */
   leftoverPaths?: { orphanPaths: string[]; rowBackedPaths: string[] };
 }

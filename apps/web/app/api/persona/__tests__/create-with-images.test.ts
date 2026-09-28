@@ -449,4 +449,147 @@ describe('POST /api/persona with image library', () => {
     // The ordering that matters: retry before cascade.
     expect(events.indexOf('remove#2:2')).toBeLessThan(events.indexOf('persona-delete'));
   });
+
+  it('removes row-backed library storage paths AFTER a successful persona cascade delete', async () => {
+    // addLibraryImages fails on the second insert and its rollback row
+    // delete fails on both attempts, so the first image's row survives
+    // with a live storage reference (rowBackedPaths). The cascade delete
+    // erases the row but NOT the storage object — the route must remove
+    // the file after the delete succeeds, or a private photo orphans in
+    // storage forever.
+    const events: string[] = [];
+    const uploadedPaths: string[] = [];
+    let imageSeq = 0;
+    const client = {
+      rpc: vi.fn(async () => ({ data: null, error: null })),
+      from: vi.fn((table: string) => {
+        if (table === 'personas') {
+          return {
+            insert: vi.fn(() => terminal({ data: { id: PERSONA_ID }, error: null })),
+            delete: vi.fn(() => {
+              events.push('persona-delete');
+              return terminal({ error: null });
+            }),
+          };
+        }
+        return {
+          select: vi.fn(() => terminal({ count: 0, error: null })),
+          // Echo the insert payload's image_path: production stores
+          // `path`, so the mock must echo it — a hardcoded path makes
+          // every stored path look "rowless" (round-7 lesson).
+          insert: vi.fn((values: Record<string, unknown>) => {
+            imageSeq += 1;
+            if (imageSeq === 2) return terminal({ data: null, error: { message: 'insert boom' } });
+            return terminal({
+              data: { id: `img-${imageSeq}`, image_path: values.image_path },
+              error: null,
+            });
+          }),
+          delete: vi.fn(() => ({
+            in: vi.fn(() => terminal({ error: { message: 'delete boom' } })),
+          })),
+        };
+      }),
+      storage: {
+        from: vi.fn((bucket: string) => ({
+          upload: vi.fn(async (path: string) => {
+            uploadedPaths.push(path);
+            return { error: null };
+          }),
+          remove: vi.fn(async (paths: string[]) => {
+            events.push(`remove:${bucket}:${paths.join('|')}`);
+            return { error: null };
+          }),
+        })),
+      },
+    };
+    vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: USER_ID, accessToken: 'cookie-token' },
+      error: null,
+    } as never);
+
+    const res = await POST(
+      createRequest(BASE_FIELDS, [png('a.png'), png('b.png')]),
+    );
+    expect(res.status).toBe(500);
+    // uploadedPaths: [photo, image1, image2]. Image 2 has no row (insert
+    // failed), so its path is a true orphan removed inside the helper's
+    // rollback; image 1's path is row-backed until the cascade delete.
+    const [, image1Path, image2Path] = uploadedPaths;
+    expect(events).toEqual([
+      `remove:personas:${image2Path}`,
+      'persona-delete',
+      `remove:personas:${image1Path}`,
+      `remove:personas:${uploadedPaths[0]}`,
+    ]);
+    // The row-backed remove runs only after the cascade delete.
+    expect(events.indexOf(`remove:personas:${image1Path}`)).toBeGreaterThan(
+      events.indexOf('persona-delete'),
+    );
+  });
+
+  it('never removes row-backed storage when the persona cascade delete fails', async () => {
+    // The persona delete fails: the cascade never ran, so the image rows
+    // still reference their storage files. Removing them would leave
+    // surviving rows pointing at deleted objects.
+    const events: string[] = [];
+    const uploadedPaths: string[] = [];
+    let imageSeq = 0;
+    const client = {
+      rpc: vi.fn(async () => ({ data: null, error: null })),
+      from: vi.fn((table: string) => {
+        if (table === 'personas') {
+          return {
+            insert: vi.fn(() => terminal({ data: { id: PERSONA_ID }, error: null })),
+            delete: vi.fn(() => {
+              events.push('persona-delete');
+              return terminal({ error: { message: 'cascade boom' } });
+            }),
+          };
+        }
+        return {
+          select: vi.fn(() => terminal({ count: 0, error: null })),
+          insert: vi.fn((values: Record<string, unknown>) => {
+            imageSeq += 1;
+            if (imageSeq === 2) return terminal({ data: null, error: { message: 'insert boom' } });
+            return terminal({
+              data: { id: `img-${imageSeq}`, image_path: values.image_path },
+              error: null,
+            });
+          }),
+          delete: vi.fn(() => ({
+            in: vi.fn(() => terminal({ error: { message: 'delete boom' } })),
+          })),
+        };
+      }),
+      storage: {
+        from: vi.fn((bucket: string) => ({
+          upload: vi.fn(async (path: string) => {
+            uploadedPaths.push(path);
+            return { error: null };
+          }),
+          remove: vi.fn(async (paths: string[]) => {
+            events.push(`remove:${bucket}:${paths.join('|')}`);
+            return { error: null };
+          }),
+        })),
+      },
+    };
+    vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: USER_ID, accessToken: 'cookie-token' },
+      error: null,
+    } as never);
+
+    const res = await POST(
+      createRequest(BASE_FIELDS, [png('a.png'), png('b.png')]),
+    );
+    expect(res.status).toBe(500);
+    const image1Path = uploadedPaths[1];
+    // The rowless orphan is still removed; the row-backed path is never
+    // touched while its row survives.
+    expect(events).not.toContain(`remove:personas:${image1Path}`);
+    expect(events).toContain('persona-delete');
+  });
 });

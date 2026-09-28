@@ -180,10 +180,13 @@ export async function POST(request: Request): Promise<NextResponse> {
       // Roll back the whole creation so a half-written persona never survives.
       // Rollback failures are logged loudly: an invisible failed rollback is
       // worse than a loud one.
-      // Leftover library storage paths retry BEFORE the persona delete: its
-      // cascade erases the image rows, making failed removals unrecoverable.
-      // Only orphanPaths are safe to remove here; rowBackedPaths still have
-      // surviving rows (the cascade delete below cleans those up).
+      // orphanPaths have no surviving row, so retry their removal BEFORE the
+      // persona delete: its cascade erases the image rows, making failed
+      // removals unrecoverable.
+      // rowBackedPaths still have surviving rows (a cascade erases rows, not
+      // storage objects), so their files must NOT be removed before the
+      // delete. After a successful delete the rows are gone and the files
+      // are true orphans — remove them then, and only then.
       const { orphanPaths, rowBackedPaths } = added.leftoverPaths ?? {
         orphanPaths: [],
         rowBackedPaths: [],
@@ -199,17 +202,38 @@ export async function POST(request: Request): Promise<NextResponse> {
           });
         }
       }
-      if (rowBackedPaths.length > 0) {
-        console.error('[api/persona] rollback left row-backed image paths; cascade delete will clean them', {
-          rowBackedPaths,
-        });
-      }
       const { error: rollbackError } = await supabase
         .from('personas')
         .delete()
         .eq('id', persona.id);
       if (rollbackError) {
         console.error('[api/persona] creation rollback failed', { error: rollbackError });
+        if (rowBackedPaths.length > 0) {
+          // Rows survive, so their storage files must survive too: removing
+          // them would leave rows pointing at deleted objects.
+          console.error(
+            '[api/persona] creation rollback failed; row-backed image files left in place',
+            { rowBackedPaths },
+          );
+        }
+      } else if (rowBackedPaths.length > 0) {
+        // The cascade erased the image rows: their storage files are now
+        // true orphans. One retry, then loud logging — the rows are gone,
+        // so this is the last recovery chance.
+        const { error: rowBackedRemoveError } = await supabase.storage
+          .from(IMAGE_BUCKET)
+          .remove(rowBackedPaths);
+        if (rowBackedRemoveError) {
+          const { error: rowBackedRetryError } = await supabase.storage
+            .from(IMAGE_BUCKET)
+            .remove(rowBackedPaths);
+          if (rowBackedRetryError) {
+            console.error(
+              '[api/persona] row-backed library storage remove failed after cascade delete',
+              { error: rowBackedRetryError, rowBackedPaths },
+            );
+          }
+        }
       }
       if (photoPath) {
         const { error: photoRollbackError } = await supabase.storage
