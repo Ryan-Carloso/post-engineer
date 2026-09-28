@@ -17,9 +17,9 @@ import {
   addLibraryImages,
   IMAGE_BUCKET,
   isFileLike,
+  readValidatedImage,
   removeOrphanedUploadPaths,
   setPrimaryLibraryImage,
-  validateImageContent,
   validateImageFile,
   MAX_PERSONA_IMAGES,
   PERSONA_IMAGE_WARNING_CODES,
@@ -128,14 +128,15 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (primaryIndex !== null && primaryIndex >= libraryFiles.length) {
     return errorResponse(400, 'imagePrimaryIndex is out of range for the provided images.');
   }
-  const libraryError = await validateLibraryInputs(
+  const libraryValidation = await validateLibraryInputs(
     body.values.personaMode,
     body.values.faceMixPercent,
     libraryInputs,
   );
-  if (libraryError) {
-    return errorResponse(400, libraryError);
+  if ('error' in libraryValidation) {
+    return errorResponse(400, libraryValidation.error);
   }
+  const validatedLibraryInputs = libraryValidation.inputs;
 
   const photoPath =
     body.photo && body.photoExtension
@@ -176,8 +177,8 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   let libraryImageIds: string[] = [];
   const warnings: string[] = [];
-  if (libraryInputs.length > 0) {
-    const added = await addLibraryImages(supabase, user.id, persona.id, libraryInputs);
+  if (validatedLibraryInputs.length > 0) {
+    const added = await addLibraryImages(supabase, user.id, persona.id, validatedLibraryInputs);
     if ('error' in added) {
       // Roll back the whole creation so a half-written persona never survives.
       // Rollback failures are logged loudly: an invisible failed rollback is
@@ -321,35 +322,40 @@ async function validateLibraryInputs(
   personaMode: 'persona' | 'faceless',
   faceMixPercent: number | null,
   inputs: LibraryImageInput[],
-): Promise<string | null> {
-  if (inputs.length === 0) return null;
+): Promise<{ inputs: LibraryImageInput[] } | { error: string }> {
+  if (inputs.length === 0) return { inputs: [] };
   if (personaMode === 'faceless' || faceMixPercent === 0) {
-    return 'Faceless persona must not include library images.';
+    return { error: 'Faceless persona must not include library images.' };
   }
   if (inputs.length > MAX_PERSONA_IMAGES) {
-    return `Image library accepts at most ${MAX_PERSONA_IMAGES} images.`;
+    return { error: `Image library accepts at most ${MAX_PERSONA_IMAGES} images.` };
   }
-  // Intentional second per-file validation: validateImageFile also runs
-  // inside addLibraryImages, but this route-level check fails BEFORE any
-  // upload or persona insert happens, so a bad file never creates partial
-  // state the rollback then has to clean up. The magic-byte check reads the
-  // real bytes: declared MIME type and extension are client-controlled.
+  // Intentional per-file validation BEFORE any upload or persona insert, so
+  // a bad file never creates partial state the rollback then has to clean
+  // up. The magic-byte check reads the real bytes (declared MIME type and
+  // extension are client-controlled); the validated bytes are passed through
+  // to addLibraryImages so the file is not read a second time.
   // Per-file errors carry the entry index and filename so a caller with
   // up to 10 files can tell which entry to fix. validateImageFile's own
   // messages stay stable (the UI's ERROR_CLASS_PATTERNS matches some of
   // them by shape); the context is appended here at the call site.
+  const validated: LibraryImageInput[] = [];
   for (let index = 0; index < inputs.length; index += 1) {
     const input = inputs[index] as LibraryImageInput;
-    const validated = validateImageFile(input.file);
-    if ('error' in validated) {
-      return withImageContext(validated.error, index, input.file.name);
+    const fileCheck = validateImageFile(input.file);
+    if ('error' in fileCheck) {
+      return { error: withImageContext(fileCheck.error, index, input.file.name) };
     }
-    const contentError = await validateImageContent(validated.file);
-    if (contentError) {
-      return withImageContext(contentError, index, input.file.name);
+    const content = await readValidatedImage(fileCheck.file);
+    if ('error' in content) {
+      return { error: withImageContext(content.error, index, input.file.name) };
     }
+    validated.push({
+      ...input,
+      validatedContent: { bytes: content.bytes, mime: content.mime },
+    });
   }
-  return null;
+  return { inputs: validated };
 }
 
 /**

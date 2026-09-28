@@ -47,6 +47,13 @@ export interface LibraryImageInput {
   file: File;
   tag?: string;
   description?: string;
+  /**
+   * Pre-validated content (bytes + detected MIME). When present,
+   * addLibraryImages reuses it instead of re-reading the file — the
+   * creation route validates upfront (fail-fast before any insert) and
+   * passes the bytes through, avoiding a second full read.
+   */
+  validatedContent?: { bytes: Uint8Array; mime: string };
 }
 
 //---------------
@@ -212,13 +219,15 @@ export async function addLibraryImages(
     description: (input.description ?? '').trim(),
   }));
   // Reject over-length input instead of truncating: silent truncation loses
-  // caller data with no signal, and PATCH already rejects with 400.
+  // caller data with no signal, and PATCH already rejects with 400. The
+  // wording matches the PATCH route's shape so the UI's error-class
+  // patterns classify both producers identically.
   for (const input of normalized) {
     if (input.tag.length > MAX_TAG_LENGTH) {
-      return { error: `Tag must be ${MAX_TAG_LENGTH} characters or fewer.`, status: 400 };
+      return { error: `tag must be at most ${MAX_TAG_LENGTH} characters.`, status: 400 };
     }
     if (input.description.length > MAX_DESCRIPTION_LENGTH) {
-      return { error: `Description must be ${MAX_DESCRIPTION_LENGTH} characters or fewer.`, status: 400 };
+      return { error: `description must be at most ${MAX_DESCRIPTION_LENGTH} characters.`, status: 400 };
     }
   }
   const existing = await countLibraryImages(supabase, personaId);
@@ -246,8 +255,9 @@ export async function addLibraryImages(
     // the declared MIME type and extension are client-controlled. The
     // storage extension and content type come from the detected content so
     // the stored object matches the real bytes even when the file name or
-    // declared type lies.
-    const content = await readValidatedImage(validated.file);
+    // declared type lies. When the caller pre-validated (creation route),
+    // reuse those bytes instead of reading the file a second time.
+    const content = input.validatedContent ?? (await readValidatedImage(validated.file));
     if ('error' in content) return fail(content.error, 400);
     const { bytes, mime } = content;
     const extension = DETECTED_MIME_TO_EXTENSION[mime] ?? validated.extension;

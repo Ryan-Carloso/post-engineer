@@ -192,6 +192,32 @@ describe('POST /api/persona with image library', () => {
     expect(body.error).toContain('(image 2: doc.pdf)');
   });
 
+  it('reads each library file once at creation (validated bytes are reused)', async () => {
+    // The creation route validates upfront (fail-fast) and passes the
+    // bytes to addLibraryImages via validatedContent; addLibraryImages
+    // must not re-read the file. We verify by spying on the file's
+    // arrayBuffer through the FormData round-trip.
+    const calls = mockClient();
+    // The route reads via request.formData(); spy on the File prototype
+    // so the spy survives any cloning.
+    let readCount = 0;
+    const originalArrayBuffer = File.prototype.arrayBuffer;
+    File.prototype.arrayBuffer = async function (this: File) {
+      if (this.name === 'a.png') readCount += 1;
+      return originalArrayBuffer.call(this);
+    };
+    try {
+      const res = await POST(
+        createRequest({ ...BASE_FIELDS, personaMode: 'persona' }, [png('a.png')]),
+      );
+      expect(res.status).toBe(200);
+      expect(calls.personaInserts).toBe(1);
+      expect(readCount).toBe(1);
+    } finally {
+      File.prototype.arrayBuffer = originalArrayBuffer;
+    }
+  });
+
   it('rejects library images in faceless mode', async () => {
     mockClient();
     const res = await POST(
@@ -211,6 +237,23 @@ describe('POST /api/persona with image library', () => {
     form.append('name', 'Ana');
     form.append('voiceId', 'voice-1');
     form.append('personaMode', 'faceless');
+    const res = await POST(new Request('http://localhost/api/persona', { method: 'POST', body: form }));
+    expect(res.status).toBe(200);
+    expect(calls.personaInsertValues?.face_mix_percent).toBe(0);
+  });
+
+  it('coerces an explicit faceMixPercent to 0 for faceless creations (backdoor closed)', async () => {
+    // A direct API caller can send personaMode=faceless with an explicit
+    // faceMixPercent=80. Without coercion, 80 is stored and the images
+    // route (which treats stored mix as the facelessness source) would
+    // accept library uploads — re-opening the backdoor. The faceless
+    // branch is unconditional at the write boundary.
+    const calls = mockClient();
+    const form = new FormData();
+    form.append('name', 'Ana');
+    form.append('voiceId', 'voice-1');
+    form.append('personaMode', 'faceless');
+    form.append('faceMixPercent', '80');
     const res = await POST(new Request('http://localhost/api/persona', { method: 'POST', body: form }));
     expect(res.status).toBe(200);
     expect(calls.personaInsertValues?.face_mix_percent).toBe(0);
