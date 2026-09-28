@@ -14,6 +14,9 @@ Guards the design decisions of the Alibaba OpenCodeReview workflow:
 - least-privilege permissions, superseded-run cancellation
 - the third-party action is SHA-pinned AND ocr_version is pinned (the action
   defaults to npm `latest`, which would float the reviewed binary)
+- primary + free-model fallback share one action pin; the fallback retries
+  with the permanently-free glm-4.7-flash on z.ai's standard endpoint when
+  the primary attempt fails (e.g. quota exhausted)
 - run steps use `shell: bash` + `set -euo pipefail`
 """
 from __future__ import annotations
@@ -251,8 +254,8 @@ def main(workflow: Path = WORKFLOW) -> int:
     )
     ocr_uses = [u for u in uses if u.startswith("alibaba/open-code-review@")]
     check(
-        "exactly one ocr action",
-        len(ocr_uses) == 1,
+        "ocr action invocations share one pin",
+        1 <= len(ocr_uses) <= 2 and len(set(ocr_uses)) == 1,
         f"uses={ocr_uses}",
     )
     ocr_version = str(as_str_dict(review_step.get("with")).get("ocr_version", ""))
@@ -267,6 +270,56 @@ def main(workflow: Path = WORKFLOW) -> int:
     check("z.ai coding endpoint configured", with_block.get("llm_url") == "https://api.z.ai/api/coding/paas/v4")
     check("model configured", str(with_block.get("llm_model", "")).startswith("glm-"))
     check("openai-compatible protocol", str(with_block.get("llm_use_anthropic")) == "false")
+
+    # Free-model fallback: when the primary attempt fails (e.g. quota
+    # exhausted), retry with the permanently-free glm-4.7-flash on z.ai's
+    # standard endpoint. Both invocations share one action pin (checked
+    # above); the fallback carries the same fail-closed gates plus the
+    # primary-failure condition.
+    fallback_step = next(
+        (s for s in steps if isinstance(s, dict) and s.get("id") == "ocr-fallback"),
+        None,
+    )
+    check("ocr free-model fallback step exists", fallback_step is not None)
+    if fallback_step is not None:
+        fb_cond = fallback_step.get("if", "")
+        fb_cond_str = fb_cond if isinstance(fb_cond, str) else ""
+        check(
+            "fallback gated on key-check",
+            "steps.key-check.outputs.present == 'true'" in fb_cond_str,
+            f"if={fb_cond}",
+        )
+        check(
+            "fallback gated on env-guard (fail-closed == 'false')",
+            "steps.env-guard.outputs.blocked == 'false'" in fb_cond_str,
+            f"if={fb_cond}",
+        )
+        check(
+            "fallback only runs when primary failed",
+            "steps.ocr-primary.outcome == 'failure'" in fb_cond_str,
+            f"if={fb_cond}",
+        )
+        fb_with = as_str_dict(fallback_step.get("with"))
+        check(
+            "fallback uses z.ai standard endpoint",
+            fb_with.get("llm_url") == "https://api.z.ai/api/paas/v4",
+            f"llm_url={fb_with.get('llm_url')!r}",
+        )
+        check(
+            "fallback uses permanently-free Flash model",
+            fb_with.get("llm_model") == "glm-4.7-flash",
+            f"llm_model={fb_with.get('llm_model')!r}",
+        )
+        check(
+            "fallback pins ocr_version",
+            bool(re.fullmatch(r"\d+\.\d+\.\d+", str(fb_with.get("ocr_version", "")))),
+            f"ocr_version={fb_with.get('ocr_version')!r}",
+        )
+        check(
+            "fallback uses openai-compatible protocol",
+            str(fb_with.get("llm_use_anthropic")) == "false",
+            f"llm_use_anthropic={fb_with.get('llm_use_anthropic')!r}",
+        )
 
     # Comment conventions
     check("ocr summary marker documented", "<!-- ocr-summary -->" in text)

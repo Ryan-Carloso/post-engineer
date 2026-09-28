@@ -78,7 +78,13 @@ def main() -> int:
     check("api key from ZAI_API_KEY env", '"{env:ZAI_API_KEY}"' in text)
     check("no ZHIPU_API_KEY references", "ZHIPU_API_KEY" not in text)
     check("OPENCODE_MODEL default set", "OPENCODE_MODEL: zai-coding-plan/" in text)
-    check("standard model default set", "ZAI_STANDARD_MODEL: glm-" in text)
+    check("free fallback model default set", "ZAI_FREE_MODEL: glm-" in text)
+    check(
+        "free fallback model is a permanently-free Flash model",
+        re.search(r"^\s*ZAI_FREE_MODEL:\s*glm-\S*flash\s*$", text, re.M) is not None,
+        "ZAI_FREE_MODEL must stay a free Flash model (e.g. glm-4.7-flash) "
+        "so the fallback survives quota exhaustion",
+    )
     check("standard API retry follows Coding Plan", "retrying with z.ai standard API" in text)
 
     # Secret gating must not rely on secrets.* inside job/step `if:`
