@@ -14,6 +14,7 @@ import {
   setPrimaryLibraryImage,
 } from '@/lib/persona-images';
 import { type PersonaLibraryImage } from '@/lib/persona-image-select';
+import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
@@ -285,6 +286,11 @@ function withoutImagePath(row: Record<string, unknown> | PersonaLibraryImage): R
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
+  // Gate the expensive upload surface (storage write + magic-byte read +
+  // row insert per request), mirroring upload-content and video-job.
+  const limited = await applyRateLimit(request, RATE_LIMITS.mediaUpload);
+  if (limited) return limited;
+
   const authed = await getAuth(request);
   if ('response' in authed) return authed.response;
   const { auth, supabase } = authed;

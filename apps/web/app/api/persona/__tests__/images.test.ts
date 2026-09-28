@@ -13,6 +13,17 @@ vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
 }));
 
+vi.mock('@/lib/rate-limit', async (importOriginal) => {
+  // Rate limiting is covered by the dedicated
+  // app/api/persona/__tests__/images-rate-limit.test.ts suite; these
+  // payload-behavior tests bypass it so every case reaches the handler.
+  const actual = await importOriginal<typeof import('@/lib/rate-limit')>();
+  return {
+    ...actual,
+    applyRateLimit: vi.fn().mockResolvedValue(null),
+  };
+});
+
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn(),
 }));

@@ -795,6 +795,26 @@ Follow these so the same issues don't come back:
   (needs two independent failures; the error contract stays
   {success, error} and the server logs loudly).
 
+## Web/API review learnings, round 27 (2026-09-28)
+- **"Every field the UI reads" means every field the UI renders.**
+  Round 26 extended fetchPersonaImages narrowing with is_primary and the
+  next verdict quoted the rule back: the card also renders tag/description
+  (`alt={image.tag ?? ''}`, `{image.tag || '—'}`). When a review closes a
+  gap in a guard, grep the consuming components for every field read
+  before calling it done — the verdict may only flag the first gap.
+- **Every new upload surface gets rate limiting by default.**
+  POST /api/persona/images was the only new upload endpoint without
+  applyRateLimit (mediaUpload profile: 10/min, mirrors upload-content).
+  Add it at the top of POST for any route that writes to storage —
+  payload-behavior tests then mock the limiter no-op (see
+  video-job.test.ts pattern) so a dedicated rate-limit suite owns the
+  real behavior.
+- **The in-memory limiter's shared bucket breaks multi-POST suites.**
+  Without the no-op mock, 12 existing POST tests sharing the fallback
+  'unknown' identifier would 429 on the 11th call. When adding a limiter
+  to an existing route, add the mock to every existing suite that hits
+  that method.
+
 ## Web/API review learnings, round 26 (2026-09-28)
 - **A schema refine that never runs on the tool path is a hollow claim.**
   UpdatePersonaImageSchema's "at least one of tag/description/isPrimary"

@@ -322,14 +322,21 @@ async function fetchPersonaImages(personaId: string): Promise<PersonaImageRecord
   if (!data || data.success !== true || !Array.isArray(data.images)) {
     throw new Error(serverError ?? 'Persona images request returned an unexpected payload.');
   }
-  // Narrow each record: the UI reads id/image_url directly and is_primary
-  // drives the primary badge/toggle, so a malformed entry must not flow
-  // through unchecked and break rendering downstream.
+  // Narrow each record: the UI reads id/image_url directly, is_primary
+  // drives the primary badge/toggle, and tag/description render as text,
+  // so a malformed entry must not flow through unchecked and break
+  // rendering downstream.
   return data.images.filter(
     (image): image is PersonaImageRecord =>
       typeof image?.id === 'string' &&
       (image.image_url === null || typeof image.image_url === 'string') &&
-      typeof image?.is_primary === 'boolean',
+      typeof image?.is_primary === 'boolean' &&
+      (image.tag === null ||
+        image.tag === undefined ||
+        typeof image.tag === 'string') &&
+      (image.description === null ||
+        image.description === undefined ||
+        typeof image.description === 'string'),
   );
 }
 
