@@ -1029,3 +1029,24 @@ Follow these so the same issues don't come back:
   the `error instanceof Error ? error.message : ...` pattern) was evaluated
   and DECLINED: no functional issue, and the churn would touch many files
   and their test expectations for zero behavioral benefit.
+
+## Reviewer findings: persona batch gating (2026-09-28, PR #13)
+- OpenCode's MAJOR ("`params.lipsync_enabled` never consulted by
+  `_use_daily_persona_batch`") was factually WRONG: the helper delegates to
+  `task.persona_lipsync_active(params)`, which checks
+  `not bool(params.lipsync_enabled)` in its guard (task.py). A face persona
+  with lipsync disabled already skipped the batch before the review. Verify
+  findings against the code before applying — this reviewer misread its own
+  cited function.
+- The MAJOR's actionable core WAS genuine: the test suite hardcoded
+  `lipsync_enabled=True`, so the disabled-lipsync path was unpinned. Fixed
+  with `test_face_with_lipsync_disabled_skips_daily_batch`.
+- The MAJOR's "consider an integration test for the route" was accepted too:
+  `PersonaBatchRouteTest` patches `create_task` and pins `daily_batch` at
+  the `/persona-videos` boundary, guarding against a future revert of the
+  one-line wiring. Route-level pinning is cheap when the fix IS the wiring.
+- MINOR rename (`_use_` -> `_should_use_`): DECLINED, pure churn, the
+  predicate name reads fine as a question.
+- MINOR gitignore note (`!test/controllers/test_*.py` "broad"): DECLINED,
+  the reviewer itself admitted it matches the existing
+  `!test/services/test_*.py` pattern and is intentional.
