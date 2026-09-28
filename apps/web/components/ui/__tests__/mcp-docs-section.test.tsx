@@ -71,7 +71,7 @@ describe('McpDocsSection', () => {
     expect(screen.queryByTestId('mcp-docs-help-cta')).toBeNull();
   });
 
-  it('renders the tools grid with all thirteen tools', () => {
+  it('renders the tools grid with all twenty tools', () => {
     render(<McpDocsSection />);
 
     const grid = screen.getByTestId('mcp-tools-grid');
@@ -84,8 +84,15 @@ describe('McpDocsSection', () => {
       'update_persona',
       'get_token_balance',
       'generate_video_from_persona',
+      'generate_persona_video_batch',
       'get_video_status',
+      'get_video_task_progress',
+      'list_persona_images',
+      'add_persona_image',
+      'update_persona_image',
+      'remove_persona_image',
       'list_social_accounts',
+      'connect_account',
       'schedule_video',
       'list_schedules',
       'list_posts',
@@ -112,6 +119,16 @@ describe('McpDocsSection', () => {
     expect(prompt).toContain('list_social_accounts');
     expect(prompt).toContain('get_token_balance');
     expect(prompt).toContain('cancel_schedule');
+    // Batch generation, per-video progress, image library, and account
+    // connect must be visible to the agent in the copied prompt.
+    expect(prompt).toContain('generate_persona_video_batch');
+    expect(prompt).toContain('get_video_task_progress');
+    expect(prompt).toContain('list_persona_images');
+    expect(prompt).toContain('add_persona_image');
+    expect(prompt).toContain('update_persona_image');
+    expect(prompt).toContain('remove_persona_image');
+    expect(prompt).toContain('connect_account');
+    expect(prompt).toContain('webhookUrl');
     // list_posts lets the agent show upcoming and past posts.
     expect(prompt).toContain('list_posts');
     expect(prompt).toContain('upcoming');
