@@ -304,17 +304,28 @@ export async function POST(request: Request): Promise<NextResponse> {
     },
   ]);
   if ('error' in added) {
-    const leftoverPaths = added.leftoverPaths ?? [];
-    if (leftoverPaths.length > 0) {
+    const { orphanPaths, rowBackedPaths } = added.leftoverPaths ?? {
+      orphanPaths: [],
+      rowBackedPaths: [],
+    };
+    // Only orphanPaths are safe to remove: rowBackedPaths still have
+    // surviving rows, and deleting their files would dangle those rows.
+    // Log row-backed leftovers loudly — they need manual cleanup.
+    if (rowBackedPaths.length > 0) {
+      console.error('[api/persona/images] upload rollback left row-backed image paths', {
+        personaId,
+        rowBackedPaths,
+      });
+    }
+    if (orphanPaths.length > 0) {
       // The internal rollback could not clean up: these storage objects are
-      // orphaned and this is the only record of them. Retry once — the rows
-      // are already rolled back, so these paths have no other recovery path
-      // before becoming permanent orphans — then log loudly if it still fails.
-      const retry = await supabase.storage.from(IMAGE_BUCKET).remove(leftoverPaths);
+      // orphaned and this is the only record of them. Retry once — then log
+      // loudly if it still fails.
+      const retry = await supabase.storage.from(IMAGE_BUCKET).remove(orphanPaths);
       if (retry.error) {
         console.error('[api/persona/images] upload rollback left storage files behind', {
           personaId,
-          leftoverPaths,
+          orphanPaths,
           retryError: retry.error,
         });
       }

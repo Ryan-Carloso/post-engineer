@@ -95,6 +95,11 @@ export function validateImageBuffer(
   // Normalize the common-but-nonstandard 'image/jpg' alias before comparing:
   // some cameras, older browsers, and HTTP clients declare JPEG bytes this
   // way, and rejecting them would be a misleading "mismatch" error.
+  // An absent declared type (API-key callers can omit it) gets its own
+  // message so the error stays actionable.
+  if (!declaredType) {
+    return { error: 'No image content type was declared for this file.' };
+  }
   const declared = declaredType === 'image/jpg' ? 'image/jpeg' : declaredType;
   if (detected !== declared) {
     return { error: 'The image content does not match its declared file type.' };
@@ -161,11 +166,16 @@ export interface LibraryImagesError {
   /** 400 for bad input (invalid file, full library), 500 for storage/DB failures. */
   status: 400 | 500;
   /**
-   * Storage paths the best-effort rollback could not remove. Callers that
-   * are about to cascade-delete the persona_images rows (making the paths
-   * unrecoverable) should retry removal before that delete.
+   * Storage paths the best-effort rollback could not remove. Split so
+   * callers never delete a file that a surviving row still references:
+   * - orphanPaths: no row references these; safe to storage.remove().
+   * - rowBackedPaths: rows still exist; retry the row delete (or a cascade)
+   *   BEFORE removing storage, or the rows dangle at deleted objects.
+   * Callers that are about to cascade-delete the persona_images rows
+   * (making the paths unrecoverable) should retry removal before that
+   * delete.
    */
-  leftoverPaths?: string[];
+  leftoverPaths?: { orphanPaths: string[]; rowBackedPaths: string[] };
 }
 
 /**
@@ -179,15 +189,25 @@ export async function addLibraryImages(
   personaId: string,
   inputs: LibraryImageInput[],
 ): Promise<{ images: PersonaLibraryImage[] } | LibraryImagesError> {
+  // The shared helper owns the contract: an empty batch is a caller bug,
+  // not a 200 no-op.
+  if (inputs.length === 0) {
+    return { error: 'At least one image file is required.', status: 400 };
+  }
+  // Normalize once: trim tag/description up front so the length checks and
+  // the insert below can't drift apart (two trim sites would).
+  const normalized = inputs.map((input) => ({
+    ...input,
+    tag: (input.tag ?? '').trim(),
+    description: (input.description ?? '').trim(),
+  }));
   // Reject over-length input instead of truncating: silent truncation loses
   // caller data with no signal, and PATCH already rejects with 400.
-  for (const input of inputs) {
-    const tag = (input.tag ?? '').trim();
-    const description = (input.description ?? '').trim();
-    if (tag.length > MAX_TAG_LENGTH) {
+  for (const input of normalized) {
+    if (input.tag.length > MAX_TAG_LENGTH) {
       return { error: `Tag must be ${MAX_TAG_LENGTH} characters or fewer.`, status: 400 };
     }
-    if (description.length > MAX_DESCRIPTION_LENGTH) {
+    if (input.description.length > MAX_DESCRIPTION_LENGTH) {
       return { error: `Description must be ${MAX_DESCRIPTION_LENGTH} characters or fewer.`, status: 400 };
     }
   }
@@ -207,7 +227,7 @@ export async function addLibraryImages(
   // into memory, and a failure rolls back exactly the images added so far.
   // Parallel reads would buffer up to 10 images at once and make the
   // rollback order nondeterministic.
-  for (const input of inputs) {
+  for (const input of normalized) {
     const validated = validateImageFile(input.file);
     if ('error' in validated) return fail(validated.error, 400);
     // A truncated multipart body makes arrayBuffer() reject: surface it as
@@ -236,8 +256,9 @@ export async function addLibraryImages(
         persona_id: personaId,
         user_id: userId,
         image_path: path,
-        tag: (input.tag ?? '').trim(),
-        description: (input.description ?? '').trim(),
+        // Already trimmed in the normalization step above.
+        tag: input.tag,
+        description: input.description,
         is_primary: false,
       })
       .select('id, image_path, tag, description, is_primary, created_at')
@@ -269,7 +290,8 @@ async function rollbackLibraryImages(
   supabase: SupabaseClient,
   added: PersonaLibraryImage[],
   storedPaths: string[],
-): Promise<string[]> {
+): Promise<{ orphanPaths: string[]; rowBackedPaths: string[] }> {
+  const empty = { orphanPaths: [] as string[], rowBackedPaths: [] as string[] };
   if (added.length > 0) {
     const { error: deleteError } = await supabase
       .from('persona_images')
@@ -277,14 +299,20 @@ async function rollbackLibraryImages(
       .in('id', added.map((image) => image.id));
     if (deleteError) {
       console.error('[persona-images] rollback row delete failed', { error: deleteError });
-      // The rows survive, so their storage files are not orphaned yet — but
-      // the caller must retry the row cleanup (or a cascade delete) before
-      // removing storage. Surface the paths instead of pretending the
-      // rollback finished cleanly. Uploaded paths WITHOUT a row (their
-      // insert failed) are true orphans — no row references them, so remove
-      // them now instead of dropping them from the leftovers.
+      // The rows survive, so their storage files are not orphaned yet.
+      // Retry the row delete once: if it succeeds the paths become true
+      // orphans; if it still fails, split the return so callers never
+      // storage.remove() a file a surviving row references.
+      const { error: retryError } = await supabase
+        .from('persona_images')
+        .delete()
+        .in('id', added.map((image) => image.id));
       const rowPaths = new Set(added.map((image) => image.image_path));
       const rowlessPaths = storedPaths.filter((path) => !rowPaths.has(path));
+      // Uploaded paths WITHOUT a row (their insert failed) are true orphans
+      // — no row references them, so remove them now instead of dropping
+      // them from the leftovers.
+      let orphanPaths = rowlessPaths;
       if (rowlessPaths.length > 0) {
         const { error: rowlessError } = await supabase.storage
           .from(IMAGE_BUCKET)
@@ -294,10 +322,14 @@ async function rollbackLibraryImages(
             error: rowlessError,
             rowlessPaths,
           });
-          return [...added.map((image) => image.image_path), ...rowlessPaths];
+        } else {
+          orphanPaths = [];
         }
       }
-      return added.map((image) => image.image_path);
+      if (retryError) {
+        console.error('[persona-images] rollback row delete retry failed', { error: retryError });
+        return { orphanPaths, rowBackedPaths: [...rowPaths] };
+      }
     }
   }
   if (storedPaths.length > 0) {
@@ -307,10 +339,10 @@ async function rollbackLibraryImages(
         error: removeError,
         storedPaths,
       });
-      return storedPaths;
+      return { orphanPaths: storedPaths, rowBackedPaths: [] };
     }
   }
-  return [];
+  return empty;
 }
 
 /** Marks one library image as primary and unsets the flag on the others. */
@@ -318,7 +350,7 @@ export async function setPrimaryLibraryImage(
   supabase: SupabaseClient,
   personaId: string,
   imageId: string,
-): Promise<{ error: string; status: number } | null> {
+): Promise<{ error: string; status: 404 | 500 } | null> {
   // The swap runs inside the set_primary_persona_image SQL function: it
   // locks the parent persona row and performs demote-then-promote
   // back-to-back, so concurrent swaps cannot interleave (two separate
@@ -382,7 +414,7 @@ export async function resolveVideoImage(
   input: ImageSelectionInput,
 ): Promise<
   | { ok: true; image: PersonaLibraryImage | null }
-  | { ok: false; error: string; status: number }
+  | { ok: false; error: string; status: 404 | 500 }
 > {
   // The user_id predicate is defense in depth: the route already verified
   // ownership, but with the service-role client this query must not read

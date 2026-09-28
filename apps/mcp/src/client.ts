@@ -137,11 +137,6 @@ async function imageFormFile(path: string): Promise<Blob> {
   return new Blob([buffer], { type: mimeType });
 }
 
-// The bearer key is sent to this URL, so fail fast on a malformed or
-// non-https override instead of silently targeting it. Loopback http is
-// allowed for local staging; anything else must be https so the key never
-// travels in cleartext.
-
 // Normalize library metadata: trim and drop whitespace-only values so both
 // upload paths share the "empty metadata is dropped" invariant. Lengths are
 // checked here so an oversized tag fails before the multipart upload, not
@@ -165,6 +160,10 @@ function normalizeLibraryMetadata(
   return { tag, description };
 }
 
+// The bearer key is sent to this URL, so fail fast on a malformed or
+// non-https override instead of silently targeting it. Loopback http is
+// allowed for local staging; anything else must be https so the key never
+// travels in cleartext.
 function resolveBaseUrl(override: string | undefined): string {
   const raw = override ?? PRODUCTION_API_URL;
   let url: URL;
@@ -489,7 +488,10 @@ export class PostEngineerClient {
       throw new Error('updatePersonaImage requires at least one of tag, description, or isPrimary.');
     }
     // The server PATCH is swap-only: isPrimary:false always 400s there.
-    // Fail fast with an actionable message instead of the wasted round-trip.
+    // The tool schema already rejects false (z.literal(true)); this guard
+    // is for direct programmatic callers of the client library, where
+    // isPrimary?: boolean still permits false. Fail fast with an
+    // actionable message instead of the wasted round-trip.
     if (input.isPrimary === false) {
       throw new Error(
         'updatePersonaImage: isPrimary cannot be false — mark another image as primary instead (the swap atomically demotes the old one).'

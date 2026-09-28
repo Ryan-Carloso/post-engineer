@@ -181,16 +181,27 @@ export async function POST(request: Request): Promise<NextResponse> {
       // worse than a loud one.
       // Leftover library storage paths retry BEFORE the persona delete: its
       // cascade erases the image rows, making failed removals unrecoverable.
-      if (added.leftoverPaths && added.leftoverPaths.length > 0) {
+      // Only orphanPaths are safe to remove here; rowBackedPaths still have
+      // surviving rows (the cascade delete below cleans those up).
+      const { orphanPaths, rowBackedPaths } = added.leftoverPaths ?? {
+        orphanPaths: [],
+        rowBackedPaths: [],
+      };
+      if (orphanPaths.length > 0) {
         const { error: leftoverError } = await supabase.storage
           .from(IMAGE_BUCKET)
-          .remove(added.leftoverPaths);
+          .remove(orphanPaths);
         if (leftoverError) {
           console.error('[api/persona] leftover library storage remove failed', {
             error: leftoverError,
-            leftoverPaths: added.leftoverPaths,
+            orphanPaths,
           });
         }
+      }
+      if (rowBackedPaths.length > 0) {
+        console.error('[api/persona] rollback left row-backed image paths; cascade delete will clean them', {
+          rowBackedPaths,
+        });
       }
       const { error: rollbackError } = await supabase
         .from('personas')

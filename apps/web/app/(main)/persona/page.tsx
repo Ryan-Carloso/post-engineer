@@ -150,7 +150,10 @@ const PersonaPageContent = () => {
                 used faceless mode). */}
             {editingPersonaId &&
               editingPersona !== undefined &&
-              editingPersona.faceMixPercent !== 0 ? (
+              // NULL means faceless too (the server rejects uploads for
+              // NULL face_mix_percent); default it to 0 so legacy personas
+              // don't see a library whose uploads always fail.
+              (editingPersona.faceMixPercent ?? 0) !== 0 ? (
                 <PersonaImageLibrarySection personaId={editingPersonaId} />
               ) : null}
             {/* Faceless: no avatar — voice is still required, video is 100% stock. */}

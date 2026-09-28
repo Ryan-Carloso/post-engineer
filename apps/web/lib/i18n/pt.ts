@@ -395,6 +395,7 @@ export const ptDictionary = {
     libraryPrimary: 'Principal',
     librarySetPrimary: 'Definir como principal',
     libraryRemove: 'Remover',
+    libraryImageUrlError: 'Não foi possível carregar esta imagem — será tentado de novo ao recarregar a lista.',
     libraryRemoveConfirm: 'Remover esta imagem da biblioteca?',
     libraryEmpty: 'Sem imagens na biblioteca. Adicione até 10 fotos para variar o rosto nos vídeos.',
     libraryLoadError: 'Não foi possível carregar a biblioteca de imagens.',

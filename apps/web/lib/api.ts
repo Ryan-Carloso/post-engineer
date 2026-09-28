@@ -276,7 +276,9 @@ export function usePersonaListQuery() {
 
 export interface PersonaImageRecord {
   id: string;
-  image_path: string;
+  // NOTE: image_path is intentionally absent — the API never exposes the
+  // internal storage path (GET projects only UI fields); signed URLs come
+  // via image_url.
   tag: string | null;
   description: string | null;
   is_primary: boolean;

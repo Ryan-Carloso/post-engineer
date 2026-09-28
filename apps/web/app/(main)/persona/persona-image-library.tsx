@@ -12,8 +12,11 @@ import {
 } from '@/lib/api';
 import type { TranslationKey } from '@/lib/i18n';
 import { useI18n } from '@/lib/i18n/provider';
+import { MAX_PERSONA_IMAGES } from '@/lib/persona-image-select';
 
-const MAX_LIBRARY_IMAGES = 10;
+// Single source of truth for the library cap; the picker limit, the
+// server count check, and the SQL trigger all derive from this value.
+const MAX_LIBRARY_IMAGES = MAX_PERSONA_IMAGES;
 
 // Module-level counter for pending-item ids when crypto.randomUUID is
 // unavailable (non-secure contexts). Collision-free within the session,
@@ -416,7 +419,12 @@ function LibraryImageCard({
         // eslint-disable-next-line @next/next/no-img-element
         <img src={image.image_url} alt={image.tag ?? ''} className="aspect-square w-full object-cover" />
       ) : (
-        <div className="aspect-square w-full bg-neutral-200" />
+        // A null URL with image_url_error means signing failed transiently;
+        // a refetch re-signs, so tell the user it is retryable instead of
+        // rendering a silently broken thumbnail.
+        <div className="flex aspect-square w-full items-center justify-center bg-neutral-200 p-2 text-center text-xs text-neutral-500">
+          {image.image_url_error ? t('persona.libraryImageUrlError') : null}
+        </div>
       )}
       {image.is_primary ? (
         <span className="absolute top-2 left-2 rounded-full bg-neutral-900 px-2 py-0.5 text-xs font-medium text-white">

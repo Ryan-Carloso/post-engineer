@@ -346,9 +346,9 @@ describe('addLibraryImages', () => {
     ]);
     // Rollback removes the STORED upload paths (both uploads happened before
     // the insert failed), and both failed removes are surfaced.
-    const leftover = (result as { leftoverPaths: string[] }).leftoverPaths;
-    expect(leftover).toHaveLength(2);
-    expect(leftover.every((p) => p.startsWith('user-1/'))).toBe(true);
+    const leftover = (result as { leftoverPaths: { orphanPaths: string[] } }).leftoverPaths;
+    expect(leftover.orphanPaths).toHaveLength(2);
+    expect(leftover.orphanPaths.every((p) => p.startsWith('user-1/'))).toBe(true);
   });
 
   it('returns added image paths when the rollback row delete fails', async () => {
@@ -359,13 +359,15 @@ describe('addLibraryImages', () => {
       { file: pngFile('b.png') },
     ]);
     // The first image's row survives the rollback, so its storage path is
-    // surfaced for the caller to retry before any cascade cleanup — and the
-    // row's file is NOT removed while the row still references it. The
-    // second image uploaded but never got a row (its insert failed): that
-    // path is a true orphan and is removed immediately.
+    // surfaced as row-backed for the caller to handle (never blindly
+    // storage.remove()d) — and the row's file is NOT removed while the row
+    // still references it. The second image uploaded but never got a row
+    // (its insert failed): that path is a true orphan and is removed
+    // immediately.
     expect(result).toMatchObject({ status: 500 });
-    const leftover = (result as { leftoverPaths: string[] }).leftoverPaths;
-    expect(leftover).toEqual([uploadedPaths[0]]);
+    const leftover = (result as { leftoverPaths: { orphanPaths: string[]; rowBackedPaths: string[] } }).leftoverPaths;
+    expect(leftover.rowBackedPaths).toEqual([uploadedPaths[0]]);
+    expect(leftover.orphanPaths).toEqual([]);
     expect(removedPaths).toHaveLength(1);
     expect(removedPaths[0]).toEqual([uploadedPaths[1]]);
   });
@@ -378,12 +380,12 @@ describe('addLibraryImages', () => {
       { file: pngFile('b.png') },
     ]);
     // Neither the surviving row's path nor the rowless orphan's path could
-    // be cleaned up: both are surfaced so nothing is silently dropped.
+    // be cleaned up: the row-backed path is split out (never blindly
+    // removed), the failed orphan is surfaced — nothing silently dropped.
     expect(result).toMatchObject({ status: 500 });
-    const leftover = (result as { leftoverPaths: string[] }).leftoverPaths;
-    expect(leftover).toHaveLength(2);
-    expect(leftover).toContain(uploadedPaths[0]);
-    expect(leftover).toContain(uploadedPaths[1]);
+    const leftover = (result as { leftoverPaths: { orphanPaths: string[]; rowBackedPaths: string[] } }).leftoverPaths;
+    expect(leftover.rowBackedPaths).toEqual([uploadedPaths[0]]);
+    expect(leftover.orphanPaths).toEqual([uploadedPaths[1]]);
   });
 
   it('returns 400 when the file bytes cannot be read', async () => {
@@ -404,7 +406,7 @@ describe('addLibraryImages', () => {
     expect(result).toEqual({
       error: 'Could not read the image file.',
       status: 400,
-      leftoverPaths: [],
+      leftoverPaths: { orphanPaths: [], rowBackedPaths: [] },
     });
   });
 
