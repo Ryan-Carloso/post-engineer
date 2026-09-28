@@ -250,23 +250,39 @@ export async function POST(request: Request): Promise<NextResponse> {
     },
   ]);
   if ('error' in added) {
+    const leftoverPaths = added.leftoverPaths ?? [];
+    if (leftoverPaths.length > 0) {
+      // The internal rollback could not clean up: these storage objects are
+      // orphaned and this is the only record of them. Log loudly so ops can
+      // retry the remove before the paths become unrecoverable.
+      console.error('[api/persona/images] upload rollback left storage files behind', {
+        personaId,
+        leftoverPaths,
+      });
+    }
     return errorResponse(added.status, added.error);
   }
   const image = added.images[0];
+  const warnings: string[] = [];
   if (isPrimary && image) {
     // Best-effort: the image row and storage object are already committed,
     // so a primary-flag failure must not turn this into a 500 while the
-    // image exists. Log loudly and report the true is_primary state.
+    // image exists. Log loudly and report the true is_primary state with a
+    // warning, mirroring the PATCH partial-success contract.
     const primaryError = await setPrimaryLibraryImage(supabase, personaId, image.id);
     if (primaryError) {
       console.error('[api/persona/images] primary flag after upload failed', {
         error: primaryError.error,
       });
+      warnings.push('The image was uploaded, but it could not be set as the primary image.');
     } else {
       image.is_primary = true;
     }
   }
-  return NextResponse.json({ success: true, image }, { status: 201 });
+  return NextResponse.json(
+    { success: true, image, ...(warnings.length > 0 ? { warnings } : {}) },
+    { status: 201 },
+  );
 }
 
 export async function PATCH(request: Request): Promise<NextResponse> {

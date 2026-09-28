@@ -190,7 +190,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
 
   server.tool(
     'add_persona_image',
-    `Add an image to a persona image library from a local file path (JPG, PNG, or WebP, max ${MAX_LIBRARY_IMAGE_BYTES / (1024 * 1024)}MB). Optional tag and description drive the deterministic per-video image selection.`,
+    `Add an image to a persona image library from a local file path (JPG/JPEG, PNG, or WebP, max ${MAX_LIBRARY_IMAGE_BYTES / (1024 * 1024)}MB). Optional tag and description drive the deterministic per-video image selection. The server rejects faceless personas and full libraries (${MAX_LIBRARY_IMAGES} max).`,
     AddPersonaImageShape,
     async (args) => {
       return handleAddPersonaImage(apiClient, args);

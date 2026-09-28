@@ -12,7 +12,7 @@ export interface PostEngineerClientOptions {
 
 /** One image for a persona's image library, read from a local file. */
 export interface PersonaLibraryImageInput {
-  /** Local file path (JPG, PNG, or WebP, max 10MB). */
+  /** Local file path (JPG/JPEG, PNG, or WebP, max 10MB). */
   path: string;
   /** Short tag for deterministic per-video matching (e.g. casual, formal). */
   tag?: string;
@@ -91,7 +91,7 @@ function mimeTypeForImagePath(path: string): string {
   if (extension === '.webp') return 'image/webp';
   if (extension === '.jpg' || extension === '.jpeg') return 'image/jpeg';
   throw new Error(
-    `Unsupported image extension "${extension || '(none)'}": use JPG, PNG, or WebP.`,
+    `Unsupported image extension "${extension || '(none)'}": use JPG/JPEG, PNG, or WebP.`,
   );
 }
 
@@ -409,7 +409,7 @@ export class PostEngineerClient {
 
   async addPersonaImage(
     personaId: string,
-    image: PersonaLibraryImageInput & { isPrimary?: boolean }
+    image: PersonaLibraryImageInput & { isPrimary?: true }
   ): Promise<unknown> {
     const formData = new FormData();
     formData.set('personaId', personaId);

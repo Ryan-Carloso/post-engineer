@@ -273,16 +273,61 @@ describe('POST /api/persona/images', () => {
   it('still reports success when the primary flag fails after upload', async () => {
     // The image row and storage object are already committed: a primary-flag
     // failure must not become a 500 while the image exists. Best-effort:
-    // 201 with the true is_primary state.
+    // 201 with the true is_primary state plus a warnings array so the
+    // caller knows the image is NOT primary (mirrors the PATCH
+    // partial-success contract).
     mockAuth({ userId: USER_ID });
     mockClient({ insertedRow: IMAGE_ROW, failPrimarySwap: true });
     const res = await POST(
       postForm({ personaId: PERSONA_ID, image: imageFile(), isPrimary: 'true' }),
     );
     expect(res.status).toBe(201);
-    const body = (await res.json()) as { success: boolean; image: { is_primary: boolean } };
+    const body = (await res.json()) as {
+      success: boolean;
+      image: { is_primary: boolean };
+      warnings?: string[];
+    };
     expect(body.success).toBe(true);
     expect(body.image.is_primary).toBe(false);
+    expect(body.warnings).toHaveLength(1);
+    expect(body.warnings?.[0]).toContain('primary');
+  });
+
+  it('omits warnings when the upload fully succeeds', async () => {
+    mockAuth({ userId: USER_ID });
+    mockClient({ insertedRow: IMAGE_ROW });
+    const res = await POST(
+      postForm({ personaId: PERSONA_ID, image: imageFile(), isPrimary: 'true' }),
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { success: boolean; warnings?: string[] };
+    expect(body.success).toBe(true);
+    expect(body.warnings ?? []).toHaveLength(0);
+  });
+
+  it('logs leftover storage paths when the upload rollback cannot clean up', async () => {
+    // addLibraryImages surfaces leftoverPaths when its internal rollback
+    // fails; the route must not discard them — they are the only record of
+    // the orphaned storage objects.
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      mockAuth({ userId: USER_ID });
+      mockClient({ insertedRow: null, storageRemoveError: { message: 'remove boom' } });
+      const res = await POST(postForm({ personaId: PERSONA_ID, image: imageFile() }));
+      expect(res.status).toBe(500);
+      const leftoverLogged = errorSpy.mock.calls.some(
+        (call) =>
+          typeof call[0] === 'string' &&
+          call[0].includes('left storage files behind') &&
+          typeof call[1] === 'object' &&
+          call[1] !== null &&
+          Array.isArray((call[1] as { leftoverPaths?: unknown }).leftoverPaths) &&
+          ((call[1] as { leftoverPaths: unknown[] }).leftoverPaths.length > 0),
+      );
+      expect(leftoverLogged).toBe(true);
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   it('creates the image and returns 201', async () => {

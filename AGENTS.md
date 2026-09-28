@@ -360,6 +360,63 @@ Follow these so the same issues don't come back:
   on an optional field misleads the agent; 'imageId must be a non-empty
   string' says what actually failed.
 
+## Web/API review learnings, round 7 (2026-09-28)
+- **Resolve legacy fallbacks lazily.** The video-job signed the legacy
+  photo_path before the library branch: a stale photo cost a signing
+  round-trip on every library-served job. Resolve the fallback only when
+  the primary source yields nothing — the 503 classification for the
+  no-library case stays untouched.
+- **Sanitize untyped JSONB columns at read time.** `recent_image_ids` is
+  cast from an untyped column; a non-array value made `new Set()` throw
+  and 500 every job. Filter to string[] with an Array.isArray guard —
+  best-effort history degrades to empty, never a hard failure.
+- **Cheap validation before expensive reads.** The creation route awaited
+  per-file magic-byte reads before the imagePrimaryIndex parse/range
+  checks. Order fail-fast param checks first; a malformed index must not
+  cost up to 10 file reads.
+- **Rollback must not drop rowless uploads.** When the rollback row delete
+  failed, only added-row paths were surfaced — uploads whose insert failed
+  (no row) were silently dropped from the leftovers. Remove rowless paths
+  immediately (no row references them) and surface them if that remove
+  fails.
+- **Mock the production invariant, not a fake.** The rollback mock
+  returned a hardcoded row image_path differing from the upload path,
+  making every stored path look "rowless". Echo the insert payload's
+  image_path so added[].image_path matches storedPaths like production.
+- **Partial-success contracts must be symmetric.** POST returned 201 with
+  the true is_primary but no warnings when the primary swap failed, while
+  PATCH had a warnings array. Both now report warnings; the client parser
+  captures and validates them, and the UI shows an amber banner.
+- **Mutation hooks fail loud on missing context.** useUpdate/useDelete
+  accepted null personaId and invalidated the ['persona-images', null]
+  query key. All three mutation hooks now throw 'personaId is required.'
+  before any fetch — audit every hook, not just the one quoted.
+- **Surface rollback leftovers at every boundary.** addLibraryImages
+  surfaced leftoverPaths but the POST route discarded them. Every
+  consumer of a leftoverPaths result must log (or retry) them — grep for
+  the field at each call site.
+- **Optional error fields need ?? at consumers.** leftoverPaths is absent
+  on pre-upload error paths; the route crashed on .length. Destructure
+  with a default.
+- **Keep previews alive until the queue updates.** Revoking a preview URL
+  inside the upload loop (before setPending filtered the queue) showed a
+  broken image on any re-render in between. Revoke after the state update.
+- **Disable pickers while their queue drains.** The Add button stayed
+  usable mid-upload, letting picks land in a half-drained queue. Disable
+  it (and the hidden input's trigger) while uploading.
+- **Trigger violations match on SQLSTATE, not message.** The limit
+  trigger is now `raise ... using errcode = 'PEL01'` and the app matches
+  the code — the English message is human copy and may be reworded.
+- **MCP add isPrimary is swap-only too.** addPersonaImage(isPrimary:false)
+  silently dropped the flag; the schema now takes only literal true like
+  update, so a meaningless explicit false fails at parse time.
+- **Verify the reviewer's claim against the code before changing.**
+  OCR said GIFs got a "MIME mismatch" error and that the page could show
+  the library while the personas query errored — both false: the
+  allowlist check runs before the mismatch check, and the page renders
+  PersonaPageError instead of the section. A 5-line probe test beats a
+  blind fix.
+
 ## Web/API review learnings, round 6 (2026-09-28)
 - **Dedup helpers into a leaf module, not across an existing edge.**
   Moving MCP's getErrorMessage into tools.ts while tools.ts already

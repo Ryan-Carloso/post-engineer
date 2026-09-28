@@ -276,23 +276,25 @@ describe('addLibraryImages', () => {
     return new File([bytes], name, { type: 'image/png' });
   };
 
-  function rollbackClient(options: { failInsertOn?: number; failInsertWith?: string; failRemove?: boolean; failRowDelete?: boolean }) {
+  function rollbackClient(options: { failInsertOn?: number; failInsertWith?: { message: string; code?: string }; failRemove?: boolean; failRowDelete?: boolean }) {
     let inserts = 0;
     const removedPaths: string[][] = [];
+    const uploadedPaths: string[] = [];
     const client = {
       from: vi.fn((table: string) => {
         if (table !== 'persona_images') throw new Error(`unexpected table: ${table}`);
         return {
           select: vi.fn(() => terminal({ count: 0, error: null })),
-          insert: vi.fn(() => {
+          insert: vi.fn((row: Record<string, unknown>) => {
             inserts += 1;
             const id = `img-${inserts}`;
             if (options.failInsertWith !== undefined) {
+              const { message, code } = options.failInsertWith;
               return {
                 select: vi.fn(() => ({
                   single: vi.fn(async () => ({
                     data: null,
-                    error: { message: options.failInsertWith },
+                    error: { message, ...(code !== undefined ? { code } : {}) },
                   })),
                 })),
               };
@@ -300,7 +302,11 @@ describe('addLibraryImages', () => {
             if (options.failInsertOn === inserts) {
               return { select: vi.fn(() => ({ single: vi.fn(async () => ({ data: null, error: { message: 'insert boom' } })) })) };
             }
-            const data = { id, image_path: `user/img-${inserts}.png`, tag: '', description: '', is_primary: false, created_at: '' };
+            // Echo the real image_path from the insert payload: in production
+            // the row stores the upload path, so added[].image_path always
+            // matches a stored path. A hardcoded fake would make every stored
+            // path look "rowless" and break the rollback assertions.
+            const data = { id, image_path: row.image_path, tag: '', description: '', is_primary: false, created_at: '' };
             return { select: vi.fn(() => ({ single: vi.fn(async () => ({ data, error: null })) })) };
           }),
           delete: vi.fn(() => ({ in: vi.fn(() => terminal({ error: options.failRowDelete ? { message: 'delete boom' } : null })) })),
@@ -308,7 +314,10 @@ describe('addLibraryImages', () => {
       }),
       storage: {
         from: vi.fn(() => ({
-          upload: vi.fn(async () => ({ error: null })),
+          upload: vi.fn(async (path: string) => {
+            uploadedPaths.push(path);
+            return { error: null };
+          }),
           remove: vi.fn(async (paths: string[]) => {
             removedPaths.push(paths);
             return { error: options.failRemove ? { message: 'remove boom' } : null };
@@ -316,7 +325,7 @@ describe('addLibraryImages', () => {
         })),
       },
     };
-    return { client: client as never, removedPaths };
+    return { client: client as never, removedPaths, uploadedPaths };
   }
 
   it('surfaces leftover storage paths when the rollback remove fails', async () => {
@@ -335,18 +344,37 @@ describe('addLibraryImages', () => {
 
   it('returns added image paths when the rollback row delete fails', async () => {
     const { addLibraryImages } = await import('../persona-images');
-    const { client, removedPaths } = rollbackClient({ failInsertOn: 2, failRowDelete: true });
+    const { client, removedPaths, uploadedPaths } = rollbackClient({ failInsertOn: 2, failRowDelete: true });
     const result = await addLibraryImages(client, 'user-1', 'persona-1', [
       { file: pngFile('a.png') },
       { file: pngFile('b.png') },
     ]);
     // The first image's row survives the rollback, so its storage path is
     // surfaced for the caller to retry before any cascade cleanup — and the
-    // storage files are NOT removed while rows still reference them.
+    // row's file is NOT removed while the row still references it. The
+    // second image uploaded but never got a row (its insert failed): that
+    // path is a true orphan and is removed immediately.
     expect(result).toMatchObject({ status: 500 });
     const leftover = (result as { leftoverPaths: string[] }).leftoverPaths;
-    expect(leftover).toEqual(['user/img-1.png']);
-    expect(removedPaths).toHaveLength(0);
+    expect(leftover).toEqual([uploadedPaths[0]]);
+    expect(removedPaths).toHaveLength(1);
+    expect(removedPaths[0]).toEqual([uploadedPaths[1]]);
+  });
+
+  it('surfaces rowless paths when the rollback row delete and rowless remove both fail', async () => {
+    const { addLibraryImages } = await import('../persona-images');
+    const { client, uploadedPaths } = rollbackClient({ failInsertOn: 2, failRowDelete: true, failRemove: true });
+    const result = await addLibraryImages(client, 'user-1', 'persona-1', [
+      { file: pngFile('a.png') },
+      { file: pngFile('b.png') },
+    ]);
+    // Neither the surviving row's path nor the rowless orphan's path could
+    // be cleaned up: both are surfaced so nothing is silently dropped.
+    expect(result).toMatchObject({ status: 500 });
+    const leftover = (result as { leftoverPaths: string[] }).leftoverPaths;
+    expect(leftover).toHaveLength(2);
+    expect(leftover).toContain(uploadedPaths[0]);
+    expect(leftover).toContain(uploadedPaths[1]);
   });
 
   it('returns 400 when the file bytes cannot be read', async () => {
@@ -379,7 +407,7 @@ describe('addLibraryImages', () => {
     // 500.
     const { addLibraryImages } = await import('../persona-images');
     const { client } = rollbackClient({
-      failInsertWith: 'persona image library is limited to 10 images',
+      failInsertWith: { message: 'persona image library is limited to 10 images', code: 'PEL01' },
     });
     const result = await addLibraryImages(client, 'user-1', 'persona-1', [
       { file: pngFile('a.png'), tag: '', description: '' },
@@ -387,6 +415,21 @@ describe('addLibraryImages', () => {
     expect(result).toMatchObject({ status: 400 });
     const body = result as { error: string };
     expect(body.error).toMatch(/full/i);
+  });
+
+  it('maps the limit trigger by SQLSTATE, not by the English message', async () => {
+    // The trigger message is human copy and may be reworded; the PEL01
+    // SQLSTATE is the stable contract. A reworded message with the same
+    // code must still map to 400.
+    const { addLibraryImages } = await import('../persona-images');
+    const { client } = rollbackClient({
+      failInsertWith: { message: 'some reworded limit message', code: 'PEL01' },
+    });
+    const result = await addLibraryImages(client, 'user-1', 'persona-1', [
+      { file: pngFile('a.png'), tag: '', description: '' },
+    ]);
+    expect(result).toMatchObject({ status: 400 });
+    expect((result as { error: string }).error).toMatch(/full/i);
   });
 
   it('derives the storage extension from the detected content, not the file name', async () => {
@@ -463,7 +506,7 @@ describe('validateImageBuffer', () => {
   it('rejects recognized-but-not-allowed content (GIF)', async () => {
     const { validateImageBuffer } = await import('../persona-images');
     expect(validateImageBuffer(GIF_MAGIC, 'image/gif')).toMatchObject({
-      error: expect.stringContaining('Only JPG, PNG, or WebP'),
+      error: expect.stringContaining('Only JPG/JPEG, PNG, or WebP'),
     });
   });
 

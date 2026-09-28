@@ -323,6 +323,13 @@ export interface UploadPersonaImageInput {
 interface ImageMutationResult {
   success: boolean;
   error?: string;
+  /**
+   * Partial-success notes from the server (e.g. the image uploaded but the
+   * primary swap failed). Present only when non-empty, mirroring the
+   * PATCH contract — callers surface these so the user knows the true
+   * state instead of assuming the full request applied.
+   */
+  warnings?: string[];
 }
 
 /**
@@ -336,9 +343,8 @@ interface ImageMutationResult {
 async function parseImageMutationResult(
   response: Response,
 ): Promise<ImageMutationResult> {
-  const data: { success?: unknown; error?: unknown } | null = await response
-    .json()
-    .catch(() => null);
+  const data: { success?: unknown; error?: unknown; warnings?: unknown } | null =
+    await response.json().catch(() => null);
   if (!response.ok || !data || data.success !== true) {
     return {
       success: false,
@@ -347,7 +353,10 @@ async function parseImageMutationResult(
         `Request failed with status ${response.status}.`,
     };
   }
-  return { success: true };
+  const warnings = Array.isArray(data.warnings)
+    ? data.warnings.filter((warning): warning is string => typeof warning === 'string')
+    : [];
+  return { success: true, ...(warnings.length > 0 ? { warnings } : {}) };
 }
 
 export async function uploadPersonaImage(
@@ -415,7 +424,10 @@ export function useUploadPersonaImageMutation(personaId: string | null) {
 export function useUpdatePersonaImageMutation(personaId: string | null) {
   const invalidate = useInvalidatePersonaImages(personaId);
   return useMutation({
-    mutationFn: updatePersonaImage,
+    mutationFn: (input: UpdatePersonaImageInput) => {
+      if (personaId === null) throw new Error('personaId is required.');
+      return updatePersonaImage(input);
+    },
     onSuccess: (result) => {
       if (result.success) invalidate();
     },
@@ -425,7 +437,10 @@ export function useUpdatePersonaImageMutation(personaId: string | null) {
 export function useDeletePersonaImageMutation(personaId: string | null) {
   const invalidate = useInvalidatePersonaImages(personaId);
   return useMutation({
-    mutationFn: deletePersonaImage,
+    mutationFn: (id: string) => {
+      if (personaId === null) throw new Error('personaId is required.');
+      return deletePersonaImage(id);
+    },
     onSuccess: (result) => {
       if (result.success) invalidate();
     },

@@ -26,6 +26,12 @@ export const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'ima
 export const MAX_TAG_LENGTH = 100;
 export const MAX_DESCRIPTION_LENGTH = 500;
 export const IMAGE_BUCKET = 'personas';
+/**
+ * Stable SQLSTATE raised by the enforce_persona_image_limit trigger
+ * (supabase/persona-images.sql). The app maps this code — not the English
+ * trigger message — to a 400 "library full". Keep in sync with the SQL.
+ */
+export const PERSONA_IMAGE_LIMIT_SQLSTATE = 'PEL01';
 
 export interface LibraryImageInput {
   file: File;
@@ -63,7 +69,7 @@ export function validateImageFile(
   }
   const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
   if (!ALLOWED_IMAGE_EXTENSIONS.has(extension)) {
-    return { error: 'Image must be JPG, PNG, or WebP.' };
+    return { error: 'Image must be JPG/JPEG, PNG, or WebP.' };
   }
   return { file, extension };
 }
@@ -82,7 +88,7 @@ export function validateImageBuffer(
     return { error: 'Could not verify the image content: the file is not a recognized image.' };
   }
   if (!ALLOWED_IMAGE_MIME_TYPES.has(detected)) {
-    return { error: 'Only JPG, PNG, or WebP images are accepted.' };
+    return { error: 'Only JPG/JPEG, PNG, or WebP images are accepted.' };
   }
   if (detected !== declaredType) {
     return { error: 'The image content does not match its declared file type.' };
@@ -227,8 +233,9 @@ export async function addLibraryImages(
       // the loser hits the enforce_persona_image_limit trigger. A full
       // library is a client-input problem (the app 400s it in the
       // non-racing case), so recognize the trigger violation instead of a
-      // generic 500.
-      if ((insertError as { message?: string } | null)?.message?.includes('limited to 10 images')) {
+      // generic 500. Match the stable PEL01 SQLSTATE, not the English
+      // message — the message is human copy and may be reworded.
+      if ((insertError as { code?: string } | null)?.code === PERSONA_IMAGE_LIMIT_SQLSTATE) {
         return fail(`Image library is full (${MAX_PERSONA_IMAGES} images max).`, 400);
       }
       return fail('Failed to add image.', 500);
@@ -258,7 +265,23 @@ async function rollbackLibraryImages(
       // The rows survive, so their storage files are not orphaned yet — but
       // the caller must retry the row cleanup (or a cascade delete) before
       // removing storage. Surface the paths instead of pretending the
-      // rollback finished cleanly.
+      // rollback finished cleanly. Uploaded paths WITHOUT a row (their
+      // insert failed) are true orphans — no row references them, so remove
+      // them now instead of dropping them from the leftovers.
+      const rowPaths = new Set(added.map((image) => image.image_path));
+      const rowlessPaths = storedPaths.filter((path) => !rowPaths.has(path));
+      if (rowlessPaths.length > 0) {
+        const { error: rowlessError } = await supabase.storage
+          .from(IMAGE_BUCKET)
+          .remove(rowlessPaths);
+        if (rowlessError) {
+          console.error('[persona-images] rollback rowless storage remove failed', {
+            error: rowlessError,
+            rowlessPaths,
+          });
+          return [...added.map((image) => image.image_path), ...rowlessPaths];
+        }
+      }
       return added.map((image) => image.image_path);
     }
   }

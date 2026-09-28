@@ -107,11 +107,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     tag: imageTags[index] ?? '',
     description: imageDescriptions[index] ?? '',
   }));
-  const libraryError = await validateLibraryInputs(
-    body.values.personaMode,
-    body.values.faceMixPercent,
-    libraryInputs,
-  );
+  // Cheap checks first: parsePrimaryIndex and the range check run before
+  // validateLibraryInputs reads every file's bytes, so a malformed index
+  // fails fast without the expensive per-file content validation.
   let primaryIndex: number | null;
   try {
     primaryIndex = parsePrimaryIndex(formData.get('imagePrimaryIndex'));
@@ -124,6 +122,11 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (primaryIndex !== null && primaryIndex >= libraryFiles.length) {
     return errorResponse(400, 'imagePrimaryIndex is out of range for the provided images.');
   }
+  const libraryError = await validateLibraryInputs(
+    body.values.personaMode,
+    body.values.faceMixPercent,
+    libraryInputs,
+  );
   if (libraryError) {
     return errorResponse(400, libraryError);
   }

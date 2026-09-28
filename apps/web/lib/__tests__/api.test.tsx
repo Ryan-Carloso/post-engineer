@@ -355,4 +355,59 @@ describe('api', () => {
       expect.objectContaining({ method: 'DELETE' }),
     );
   });
+
+  it('uploadPersonaImage surfaces server warnings instead of discarding them', async () => {
+    // The POST/PATCH partial-success contract reports warnings (e.g. the
+    // image uploaded but the primary swap failed). The mutation result
+    // must carry them so the UI can show them.
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse({
+        success: true,
+        image: { id: 'img-1' },
+        warnings: ['The image was uploaded, but it could not be set as the primary image.'],
+      }),
+    );
+    const { uploadPersonaImage } = await import('@/lib/api');
+    const result = await uploadPersonaImage('p-1', {
+      file: new File(['x'], 'a.png', { type: 'image/png' }),
+    });
+    expect(result.success).toBe(true);
+    expect(result.warnings).toEqual([
+      'The image was uploaded, but it could not be set as the primary image.',
+    ]);
+  });
+
+  it('uploadPersonaImage drops a malformed warnings payload instead of crashing', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse({ success: true, image: { id: 'img-1' }, warnings: 'not-an-array' }),
+    );
+    const { uploadPersonaImage } = await import('@/lib/api');
+    const result = await uploadPersonaImage('p-1', {
+      file: new File(['x'], 'a.png', { type: 'image/png' }),
+    });
+    expect(result.success).toBe(true);
+    expect(result.warnings ?? []).toHaveLength(0);
+  });
+
+  it('useUpdatePersonaImageMutation requires personaId like the upload hook', async () => {
+    // A null personaId must fail loudly at call time — otherwise onSuccess
+    // invalidates the ['persona-images', null] query key, a stale-cache bug.
+    const { useUpdatePersonaImageMutation } = await import('@/lib/api');
+    const { result } = renderHook(() => useUpdatePersonaImageMutation(null), {
+      wrapper: createWrapper(),
+    });
+    await expect(
+      result.current.mutateAsync({ id: 'img-1', tag: 'x' }),
+    ).rejects.toThrow('personaId is required.');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('useDeletePersonaImageMutation requires personaId like the upload hook', async () => {
+    const { useDeletePersonaImageMutation } = await import('@/lib/api');
+    const { result } = renderHook(() => useDeletePersonaImageMutation(null), {
+      wrapper: createWrapper(),
+    });
+    await expect(result.current.mutateAsync('img-1')).rejects.toThrow('personaId is required.');
+    expect(fetch).not.toHaveBeenCalled();
+  });
 });

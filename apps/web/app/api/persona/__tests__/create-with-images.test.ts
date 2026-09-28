@@ -216,6 +216,31 @@ describe('POST /api/persona with image library', () => {
     expect(calls.personaInserts).toBe(0);
   });
 
+  it('reports the malformed imagePrimaryIndex before reading image bytes', async () => {
+    // Cheap param validation must precede the expensive per-file content
+    // checks: an invalid index plus an invalid image must surface the index
+    // error without reading the file bytes at all. The request round-trips
+    // through multipart, so the spy goes on the shared File prototype.
+    const calls = mockClient();
+    // .png name passes the extension check so validation would reach the
+    // magic-byte read; the spy proves that read never happens.
+    const badImage = new File(['not an image'], 'a.png', { type: 'image/png' });
+    const readSpy = vi.spyOn(File.prototype, 'arrayBuffer');
+    try {
+      const res = await POST(
+        createRequest({ ...BASE_FIELDS, imagePrimaryIndex: 'abc' }, [badImage]),
+      );
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { success: boolean; error: string };
+      expect(body.success).toBe(false);
+      expect(body.error).toContain('imagePrimaryIndex');
+      expect(readSpy).not.toHaveBeenCalled();
+      expect(calls.personaInserts).toBe(0);
+    } finally {
+      readSpy.mockRestore();
+    }
+  });
+
   it('rejects an out-of-range imagePrimaryIndex before creating anything', async () => {
     const calls = mockClient();
     const res = await POST(

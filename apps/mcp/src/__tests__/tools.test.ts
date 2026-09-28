@@ -509,6 +509,15 @@ describe('persona image library tools', () => {
     expect(textOf(response)).toContain('img-1');
   });
 
+  it('add_persona_image rejects isPrimary:false at parse time', async () => {
+    // Symmetric with update_persona_image (swap-only): isPrimary:false on a
+    // brand-new image is meaningless — the image is never primary unless
+    // explicitly marked. Reject loudly instead of silently dropping it.
+    expect(() =>
+      AddPersonaImageSchema.parse({ personaId: 'p-1', path: '/tmp/a.jpg', isPrimary: false }),
+    ).toThrow();
+  });
+
   it('update_persona_image forwards metadata', async () => {
     vi.mocked(mockClient.updatePersonaImage).mockResolvedValue({ success: true });
     await handleUpdatePersonaImage(

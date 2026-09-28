@@ -694,7 +694,11 @@ export async function POST(request: Request): Promise<NextResponse> {
     // photo is legitimate.
     const avatarUrl = persona.avatar_url as string | null;
     const photoPath = persona.photo_path as string | null;
-    let photoUrl = avatarUrl ?? (await signedUrl(supabase, photoPath));
+    // Resolve the legacy photo lazily: a persona whose library supplies the
+    // image for this video must not pay a signing round-trip (or risk a 503)
+    // for a stale photo_path. The unsignable-legacy-photo 503 below still
+    // applies when the library yields no image.
+    let photoUrl: string | null | undefined = avatarUrl;
 
     // Persona image library: deterministic per-video selection (explicit
     // image_id override, then tag/description keyword match excluding
@@ -705,11 +709,20 @@ export async function POST(request: Request): Promise<NextResponse> {
     // when defined); trimmed so ' abc123 ' doesn't 404 in the exact-match
     // lookup with a confusing "not found" error.
     const requestedImageId = typeof rawImageId === 'string' ? rawImageId.trim() : null;
+    // recent_image_ids is an untyped JSONB column: sanitize defensively.
+    // A non-array value (manual edit, migration gone wrong) would make
+    // `new Set(recentIds)` throw inside selectPersonaImage and 500 every
+    // job for the persona. The anti-repeat history is best-effort, so a
+    // malformed value is treated as "no history", never a hard failure.
+    const rawRecentIds: unknown = persona.recent_image_ids;
+    const recentIds: string[] = Array.isArray(rawRecentIds)
+      ? rawRecentIds.filter((id): id is string => typeof id === 'string')
+      : [];
     const librarySelection = await resolveVideoImage(
       supabase,
       personaId,
       auth.userId,
-      (persona.recent_image_ids as string[] | null) ?? [],
+      recentIds,
       {
         topic: typeof requestBody.video_subject === 'string' ? requestBody.video_subject : null,
         niche: personaNiche,
@@ -746,6 +759,10 @@ export async function POST(request: Request): Promise<NextResponse> {
           imageId: librarySelection.image.id,
         };
       }
+    } else if (!photoUrl) {
+      // No library image and no avatar: fall back to the legacy photo_path.
+      // This is the only place the legacy signing happens now.
+      photoUrl = await signedUrl(supabase, photoPath);
     }
     const faceMix = persona.face_mix_percent as number | null;
     // A legacy persona with face_mix_percent: null is face-requiring by the

@@ -2259,6 +2259,69 @@ describe('POST /api/persona/video-job', () => {
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
+    it('does not let an unsignable legacy photo fail a job the library can serve', async () => {
+      // The legacy photo_path is stale but the library has a matching image:
+      // resolving the legacy URL eagerly (before the library branch) would
+      // 503 here even though a valid library image was about to replace it.
+      const client = mockSupabase(PERSONA, { libraryImages: LIBRARY });
+      const createSignedUrl = vi.fn(async (path: string) => {
+        if (path === `${USER_ID}/foto.png`) {
+          return { data: null, error: { message: 'stale photo' } };
+        }
+        return { data: { signedUrl: `https://supabase.test/signed/${path}` }, error: null };
+      });
+      vi.mocked(client.storage.from).mockReturnValue({ createSignedUrl } as never);
+      engineOk();
+
+      const res = await POST(
+        jsonRequest({ personaId: 'p-1', video_subject: 'business office meeting' }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(forwardedPhotoUrl()).toBe(
+        `https://supabase.test/signed/${USER_ID}/lib/formal.png`,
+      );
+    });
+
+    it('treats a malformed recent_image_ids column as empty instead of 500ing', async () => {
+      // recent_image_ids is cast from an untyped column: a non-array value
+      // (manual edit, future migration) would make `new Set(recentIds)`
+      // throw inside selectPersonaImage and 500 every job for the persona.
+      // Sanitize defensively; the history is best-effort anyway.
+      mockSupabase(
+        { ...PERSONA, recent_image_ids: 42 },
+        { libraryImages: LIBRARY },
+      );
+      engineOk();
+
+      const res = await POST(
+        jsonRequest({ personaId: 'p-1', video_subject: 'business office meeting' }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(forwardedPhotoUrl()).toBe(
+        `https://supabase.test/signed/${USER_ID}/lib/formal.png`,
+      );
+    });
+    it('skips the legacy photo signing round-trip when the library supplies the image', async () => {
+      const client = mockSupabase(PERSONA, { libraryImages: LIBRARY });
+      const createSignedUrl = vi.fn(async (path: string) => ({
+        data: { signedUrl: `https://supabase.test/signed/${path}` },
+        error: null,
+      }));
+      vi.mocked(client.storage.from).mockReturnValue({ createSignedUrl } as never);
+      engineOk();
+
+      const res = await POST(
+        jsonRequest({ personaId: 'p-1', video_subject: 'business office meeting' }),
+      );
+
+      expect(res.status).toBe(200);
+      const signedPaths = createSignedUrl.mock.calls.map((call) => call[0] as string);
+      expect(signedPaths).not.toContain(`${USER_ID}/foto.png`);
+      expect(signedPaths).toContain(`${USER_ID}/lib/formal.png`);
+    });
+
     it('scores library images with the persona script prompt', async () => {
       mockSupabase(
         { ...PERSONA, script_prompt: 'relaxed weekend beach vlog with coffee' },

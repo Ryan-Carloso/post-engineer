@@ -49,7 +49,10 @@ begin
   -- keep the two in sync manually when the limit ever changes.
   perform 1 from public.personas where id = new.persona_id for update;
   if (select count(*) from public.persona_images where persona_id = new.persona_id) > 10 then
-    raise exception 'persona image library is limited to 10 images';
+    -- Stable SQLSTATE (not the English message): the app maps PEL01 to a
+    -- 400 "library full" instead of a generic 500. Keep the code in sync
+    -- with PERSONA_IMAGE_LIMIT_SQLSTATE in apps/web/lib/persona-images.ts.
+    raise exception 'persona image library is limited to 10 images' using errcode = 'PEL01';
   end if;
   return new;
 end;

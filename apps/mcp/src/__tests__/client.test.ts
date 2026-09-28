@@ -938,7 +938,7 @@ describe('PostEngineerClient persona image library', () => {
   it('addPersonaImage rejects unsupported file extensions', async () => {
     const path = await writeTempImage('x.bmp');
     await expect(client.addPersonaImage('p-1', { path })).rejects.toThrow(
-      /JPG, PNG, or WebP/
+      /JPG\/JPEG, PNG, or WebP/
     );
     expect(global.fetch).not.toHaveBeenCalled();
   });

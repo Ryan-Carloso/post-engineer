@@ -262,6 +262,87 @@ describe('PersonaImageLibrarySection', () => {
     expect(screen.getByText(/persona.libraryFilesRejected/)).toBeInTheDocument();
   });
 
+  it('disables the Add button while an upload is in flight', async () => {
+    // The file input and Add button must not accept new picks mid-upload:
+    // the pending queue is being drained and extra picks would land in a
+    // confusing half-state.
+    let release!: (value: { success: boolean }) => void;
+    apiMocks.uploadMutateAsync.mockReturnValue(
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+    );
+    const { container } = renderSection();
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    await pickFiles(input, [new File(['a'], 'a.jpg', { type: 'image/jpeg' })]);
+
+    const addButton = screen.getByRole('button', { name: 'persona.libraryAdd' });
+    await userEvent.click(screen.getByRole('button', { name: 'persona.libraryUpload' }));
+
+    await waitFor(() => {
+      expect(addButton).toBeDisabled();
+    });
+    release({ success: true });
+    await waitFor(() => {
+      expect(addButton).not.toBeDisabled();
+    });
+  });
+
+  it('keeps uploaded previews alive until the queue updates', async () => {
+    // Two pending items, sequential upload: after the first resolves but
+    // before the second finishes, the first item is still rendered in the
+    // queue — its preview URL must not be revoked yet, or a re-render in
+    // between shows a broken image.
+    let releaseSecond!: (value: { success: boolean }) => void;
+    apiMocks.uploadMutateAsync
+      .mockResolvedValueOnce({ success: true })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseSecond = resolve;
+          }),
+      );
+    const { container } = renderSection();
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    await pickFiles(input, [
+      new File(['a'], 'a.jpg', { type: 'image/jpeg' }),
+      new File(['b'], 'b.jpg', { type: 'image/jpeg' }),
+    ]);
+
+    await userEvent.click(screen.getByRole('button', { name: 'persona.libraryUpload' }));
+
+    await waitFor(() => {
+      expect(apiMocks.uploadMutateAsync).toHaveBeenCalledTimes(2);
+    });
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+
+    releaseSecond({ success: true });
+    await waitFor(() => {
+      expect(URL.revokeObjectURL).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('surfaces server warnings when the upload succeeds with warnings', async () => {
+    // A partial success (image uploaded, primary swap failed) reports
+    // success:true with warnings — the UI must show them instead of
+    // silently looking like a full success.
+    apiMocks.uploadMutateAsync.mockResolvedValue({
+      success: true,
+      warnings: ['The image was uploaded, but it could not be set as the primary image.'],
+    });
+    const { container } = renderSection();
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    await pickFiles(input, [new File(['a'], 'a.jpg', { type: 'image/jpeg' })]);
+
+    await userEvent.click(screen.getByRole('button', { name: 'persona.libraryUpload' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('The image was uploaded, but it could not be set as the primary image.'),
+      ).toBeInTheDocument();
+    });
+  });
+
   it('revokes pending preview URLs when the component unmounts', async () => {
     const { container, unmount } = renderSection();
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;

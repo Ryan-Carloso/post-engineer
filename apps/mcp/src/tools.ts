@@ -25,7 +25,7 @@ export function missingProviderAccountIds(args: {
 // create-persona images array and add_persona_image — define once so the
 // limits and descriptions can't drift apart.
 const LibraryImageFields = {
-  path: z.string().min(1).describe(`Local file path to the image (JPG, PNG, or WebP, max ${MAX_LIBRARY_IMAGE_BYTES / 1024 / 1024}MB)`),
+  path: z.string().min(1).describe(`Local file path to the image (JPG/JPEG, PNG, or WebP, max ${MAX_LIBRARY_IMAGE_BYTES / 1024 / 1024}MB)`),
   tag: z.string().max(100).optional().describe('Short tag for deterministic per-video matching (e.g. casual, formal, gym)'),
   description: z.string().max(500).optional().describe('Description of the photo for tag/keyword matching (e.g. smiling at the beach at sunset)'),
 };
@@ -45,7 +45,7 @@ export const CreatePersonaShape = {
   niche: z.string().optional().default('General').describe('Content niche topic'),
   faceMixPercent: z.number().min(0).max(100).default(50),
   faceQuality: z.enum(['ok', 'very_good']).default('very_good'),
-  images: z.array(PersonaLibraryImageInputShape).max(MAX_LIBRARY_IMAGES).optional().describe(`Up to ${MAX_LIBRARY_IMAGES} local image files of the same person for the persona image library. Each video deterministically picks the best-matching image by tag. Requires avatarUrl.`),
+  images: z.array(PersonaLibraryImageInputShape).max(MAX_LIBRARY_IMAGES).optional().describe(`Up to ${MAX_LIBRARY_IMAGES} local image files of the same person for the persona image library. Each video deterministically picks the best-matching image by tag. Requires a non-faceless persona: avatarUrl must be set, because the server rejects library images for faceless personas.`),
   imagePrimaryIndex: z.number().int().min(0).max(MAX_LIBRARY_IMAGES - 1).optional().describe('Index into images[] marking the primary library image (no primary is set when omitted)'),
 };
 
@@ -128,7 +128,14 @@ export const ListPersonaImagesSchema = z.object(ListPersonaImagesShape);
 export const AddPersonaImageShape = {
   personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona to add the image to'),
   ...LibraryImageFields,
-  isPrimary: z.boolean().optional().describe('Mark this image as the primary library image'),
+  // Swap-only, symmetric with update_persona_image: isPrimary:false on a new
+  // image is meaningless (it is never primary unless marked), so the schema
+  // accepts only true and surfaces the constraint at parse time instead of
+  // silently dropping the flag.
+  isPrimary: z
+    .literal(true)
+    .optional()
+    .describe('Set true to mark this image as the primary library image (false is rejected — a new image is not primary unless marked)'),
 };
 
 export const AddPersonaImageSchema = z.object(AddPersonaImageShape);

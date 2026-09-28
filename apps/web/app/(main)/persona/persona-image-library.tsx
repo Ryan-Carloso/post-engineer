@@ -37,6 +37,9 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
   const uploadMutation = useUploadPersonaImageMutation(personaId);
   const [pending, setPending] = useState<PendingImage[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // Partial-success notes (e.g. the image uploaded but the primary swap
+  // failed): success:true with warnings must not look like a full success.
+  const [warning, setWarning] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   // Tracks live preview URLs so they can be revoked if the component
@@ -66,6 +69,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
 
   const onPickFiles = (event: React.ChangeEvent<HTMLInputElement>): void => {
     setError(null);
+    setWarning(null);
     const room = MAX_LIBRARY_IMAGES - images.length - pending.length;
     const all = Array.from(event.target.files ?? []);
     // Rejected files are a silent failure if dropped without feedback: tell
@@ -73,8 +77,10 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
     const picked: File[] = [];
     let rejectedCount = 0;
     for (const file of all) {
+      // The explicit allowlist is the whole check: a bare startsWith('image/')
+      // would also accept image/gif or image/svg+xml, which the server
+      // rejects — keep client and server in agreement.
       if (
-        file.type.startsWith('image/') &&
         ACCEPTED_IMAGE_TYPES.has(file.type) &&
         file.size > 0 &&
         file.size <= MAX_IMAGE_BYTES
@@ -133,14 +139,17 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
 
   const uploadPending = async (): Promise<void> => {
     setError(null);
+    setWarning(null);
     setUploading(true);
     const uploadedIds = new Set<string>();
+    const uploadedPreviews: string[] = [];
+    const warnings: string[] = [];
     try {
       // Sequential on purpose: stop at the first failure so the user sees
       // one actionable error instead of N parallel failures, and completed
       // items can leave the queue while failed/untried ones stay retryable.
       for (const item of pending) {
-        let result: { success: boolean; error?: string };
+        let result: { success: boolean; error?: string; warnings?: string[] };
         try {
           result = await uploadMutation.mutateAsync({
             file: item.file,
@@ -157,11 +166,17 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
           break;
         }
         uploadedIds.add(item.id);
-        dropPreview(item.preview);
+        // Collect the preview for revocation AFTER setPending below: the
+        // item is still rendered until the queue updates, and revoking
+        // early would show a broken image on any re-render in between.
+        uploadedPreviews.push(item.preview);
+        if (result.warnings) warnings.push(...result.warnings);
       }
       // On partial failure the already-uploaded items leave the queue; only
       // the failed (and not-yet-tried) items stay so the user can retry.
       setPending((prev) => prev.filter((item) => !uploadedIds.has(item.id)));
+      for (const preview of uploadedPreviews) dropPreview(preview);
+      if (warnings.length > 0) setWarning(warnings.join(' '));
     } finally {
       setUploading(false);
     }
@@ -182,6 +197,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
         <p className="mt-3 text-sm text-red-600">{t('persona.libraryLoadError')}</p>
       ) : null}
       {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+      {warning ? <p className="mt-3 text-sm text-amber-700">{warning}</p> : null}
 
       {images.length > 0 ? (
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -211,7 +227,8 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
+            disabled={uploading}
+            className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50 disabled:opacity-50"
           >
             {t('persona.libraryAdd')}
           </button>
