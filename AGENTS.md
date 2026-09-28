@@ -944,3 +944,19 @@ Follow these so the same issues don't come back:
   treats a missing array and `[]` identically (`?? []`); an OpenCode MINOR
   asked for the behavior to be documented — added a pinning test rather
   than changing code.
+
+## Release workflow review learnings, PR #8 (2026-09-28)
+- **Evaluated and declined: `--provenance-registry` is not needed.** OpenCode
+  MAJOR claimed `npm publish --provenance` must pass
+  `--provenance-registry https://registry.npmjs.org/` — false positive. The
+  official npm docs' canonical GitHub Actions flow is exactly
+  `npm publish --provenance --access public` with
+  `registry-url: 'https://registry.npmjs.org'` in setup-node, which is what
+  the workflow does; `--provenance-registry` appears nowhere in the
+  recommended flow. Do not add the redundant flag on reviewer request.
+- **Evaluated and declined: keep `git+https` repository URLs.** OpenCode MINOR
+  suggested `git+ssh://git@github.com/...` for the package.json repository
+  field — declined. npm's own package.json docs use the `git+https` format,
+  and SSH requires consumers to have GitHub SSH keys, which breaks the
+  universal `npx post-engineer-mcp` install path. HTTPS is the correct
+  format for a public package.
