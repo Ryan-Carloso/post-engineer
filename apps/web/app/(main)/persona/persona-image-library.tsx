@@ -11,6 +11,7 @@ import {
   type PersonaImageRecord,
 } from '@/lib/api';
 import type { TranslationKey } from '@/lib/i18n';
+import { PERSONA_IMAGE_WARNING_CODES } from '@/lib/persona-images';
 import { useI18n } from '@/lib/i18n/provider';
 import { MAX_PERSONA_IMAGES } from '@/lib/persona-image-select';
 
@@ -44,8 +45,8 @@ export function mapPersonaImageWarnings(
   t: (key: TranslationKey, vars?: Record<string, string | number>) => string,
 ): string {
   const WARNING_KEYS: Record<string, TranslationKey> = {
-    primary_swap_failed: 'persona.libraryWarningPrimarySwap',
-    metadata_save_failed: 'persona.libraryWarningMetadataSave',
+    [PERSONA_IMAGE_WARNING_CODES.PRIMARY_SWAP_FAILED]: 'persona.libraryWarningPrimarySwap',
+    [PERSONA_IMAGE_WARNING_CODES.METADATA_SAVE_FAILED]: 'persona.libraryWarningMetadataSave',
   };
   return codes.map((code) => {
     const key = WARNING_KEYS[code];
@@ -187,11 +188,11 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
           });
         } catch (uploadError) {
           console.error('[persona-image-library] upload failed', { error: uploadError });
-          setError(t('persona.libraryUploadError'));
+          setError(`${t('persona.libraryUploadError')} (${item.file.name})`);
           break;
         }
         if (!result.success) {
-          setError(result.error ?? t('persona.libraryUploadError'));
+          setError(`${result.error ?? t('persona.libraryUploadError')} (${item.file.name})`);
           break;
         }
         uploadedIds.add(item.id);
@@ -499,8 +500,9 @@ function LibraryImageCard({
               type="button"
               onClick={() => setEditing(true)}
               className="text-xs text-neutral-600 underline"
+              aria-label={t('persona.libraryEdit')}
             >
-              ✎
+              {t('persona.libraryEdit')}
             </button>
           ) : null}
           <button

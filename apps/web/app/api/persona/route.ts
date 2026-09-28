@@ -20,6 +20,7 @@ import {
   validateImageContent,
   validateImageFile,
   MAX_PERSONA_IMAGES,
+  PERSONA_IMAGE_WARNING_CODES,
   type LibraryImageInput,
 } from '@/lib/persona-images';
 
@@ -240,7 +241,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         });
         // Stable code, not English copy: the UI maps it through i18n,
         // consistent with the /api/persona/images warnings contract.
-        warnings.push('primary_swap_failed');
+        warnings.push(PERSONA_IMAGE_WARNING_CODES.PRIMARY_SWAP_FAILED);
       }
     }
   }

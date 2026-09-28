@@ -396,6 +396,7 @@ export const enDictionary: Dictionary = {
     libraryPrimary: 'Primary',
     librarySetPrimary: 'Set as primary',
     libraryRemove: 'Remove',
+    libraryEdit: 'Edit',
     libraryImageUrlError: 'Could not load this image — it will retry when the list reloads.',
     libraryRemoveConfirm: 'Remove this image from the library?',
     libraryEmpty: 'No library images yet. Add up to 10 photos to vary the face across videos.',

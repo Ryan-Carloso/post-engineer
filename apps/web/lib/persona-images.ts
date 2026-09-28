@@ -33,6 +33,20 @@ export const IMAGE_BUCKET = 'personas';
  */
 export const PERSONA_IMAGE_LIMIT_SQLSTATE = 'PEL01';
 
+/**
+ * Stable warning codes emitted by the image routes on partial success.
+ * Shared between producers (API routes) and consumers (UI warning mapper)
+ * so a typo or rename breaks the build instead of silently rendering raw
+ * codes.
+ */
+export const PERSONA_IMAGE_WARNING_CODES = {
+  PRIMARY_SWAP_FAILED: 'primary_swap_failed',
+  METADATA_SAVE_FAILED: 'metadata_save_failed',
+} as const;
+
+export type PersonaImageWarningCode =
+  (typeof PERSONA_IMAGE_WARNING_CODES)[keyof typeof PERSONA_IMAGE_WARNING_CODES];
+
 export interface LibraryImageInput {
   file: File;
   tag?: string;

@@ -8,6 +8,7 @@ import {
   isFileLike,
   MAX_DESCRIPTION_LENGTH,
   MAX_TAG_LENGTH,
+  PERSONA_IMAGE_WARNING_CODES,
   setPrimaryLibraryImage,
 } from '@/lib/persona-images';
 import { type PersonaLibraryImage } from '@/lib/persona-image-select';
@@ -345,7 +346,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       console.error('[api/persona/images] primary flag after upload failed', {
         error: primaryError.error,
       });
-      warnings.push('primary_swap_failed');
+      warnings.push(PERSONA_IMAGE_WARNING_CODES.PRIMARY_SWAP_FAILED);
     } else {
       image.is_primary = true;
     }
@@ -463,7 +464,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     // update is safe.
     const current = await fetchImageRow(supabase, id);
     // Stable code, not English copy: the UI maps it through i18n.
-    return respondWithCurrentRow(current, ['metadata_save_failed']);
+    return respondWithCurrentRow(current, [PERSONA_IMAGE_WARNING_CODES.METADATA_SAVE_FAILED]);
   }
   return NextResponse.json({ success: true, image: withoutImagePath(updated) });
 }
@@ -495,14 +496,18 @@ export async function DELETE(request: Request): Promise<NextResponse> {
   // is no safe implicit successor to promote.
   // Best-effort storage cleanup: the DB row is the source of truth, but a
   // failed remove must not go silently — otherwise orphaned objects pile up.
+  // One retry mirrors the rollback paths in lib/persona-images.ts.
   const { error: storageError } = await supabase.storage
     .from('personas')
     .remove([image.image_path]);
   if (storageError) {
-    console.error('[api/persona/images] storage cleanup failed', {
-      imagePath: image.image_path,
-      error: storageError,
-    });
+    const retry = await supabase.storage.from('personas').remove([image.image_path]);
+    if (retry.error) {
+      console.error('[api/persona/images] storage cleanup failed', {
+        imagePath: image.image_path,
+        error: retry.error,
+      });
+    }
   }
   return NextResponse.json({ success: true });
 }

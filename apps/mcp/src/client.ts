@@ -1,6 +1,6 @@
 import { validateScheduleAdvance } from './validator.js';
 import { getErrorMessage } from './errors.js';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
 
 export interface PostEngineerClientOptions {
@@ -109,13 +109,28 @@ function mimeTypeForImagePath(path: string): string {
 async function imageFormFile(path: string): Promise<Blob> {
   // Validate before uploading: the API rejects the file anyway, so an
   // oversized or unsupported image fails fast locally instead of wasting an
-  // upload. A single read (no stat/read double check) avoids TOCTOU; any
-  // failure surfaces with the path for a consistent, actionable message.
+  // upload. A stat() pre-check bounds memory before readFile — a multi-GB
+  // file misnamed .png would otherwise load fully into this stdio process.
+  // The TOCTOU window is benign: the authoritative size check still runs on
+  // the buffer after read. Any failure surfaces with the path for a
+  // consistent, actionable message.
   // Note: the extension is trusted as a hint only; the server re-validates
   // content via magic bytes, so a mislabeled file still fails server-side
   // (duplicating magic-byte sniffing locally would be a second source of
   // truth that can drift).
   const mimeType = mimeTypeForImagePath(path);
+  try {
+    const fileStat = await stat(path);
+    if (fileStat.size > MAX_LIBRARY_IMAGE_BYTES) {
+      const maxMB = MAX_LIBRARY_IMAGE_BYTES / (1024 * 1024);
+      throw new Error(
+        `Image "${path}" is too large (${fileStat.size} bytes; max ${maxMB}MB).`,
+      );
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Image "')) throw error;
+    throw new Error(`Failed to read image "${path}": ${getErrorMessage(error)}`);
+  }
   let buffer: Buffer;
   try {
     buffer = await readFile(path);
@@ -497,12 +512,23 @@ export class PostEngineerClient {
         'updatePersonaImage: isPrimary cannot be false — mark another image as primary instead (the swap atomically demotes the old one).'
       );
     }
+    // Trim metadata like the add paths do: an untrimmed tag can never match
+    // the deterministic keyword selection. undefined = leave unchanged (the
+    // key is dropped by JSON.stringify); empty string = clear the stored
+    // value (server convention).
+    const tag = input.tag?.trim();
+    const description = input.description?.trim();
     return this.request(
       '/api/persona/images',
       {
         method: 'PATCH',
         headers: this.getHeaders(),
-        body: JSON.stringify(input),
+        body: JSON.stringify({
+          id: input.id,
+          ...(tag !== undefined ? { tag } : {}),
+          ...(description !== undefined ? { description } : {}),
+          ...(input.isPrimary !== undefined ? { isPrimary: input.isPrimary } : {}),
+        }),
       },
       'update persona image'
     );

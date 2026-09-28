@@ -214,159 +214,39 @@ export async function handleCreatePersona(
   client: PostEngineerClient,
   args: z.infer<typeof CreatePersonaSchema>
 ): Promise<McpToolResponse> {
-  try {
-    const result = await client.createPersona(args);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Persona created successfully: ${JSON.stringify(result, null, 2)}`,
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error creating persona: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
+  return handleLibraryCall(() => client.createPersona(args), 'creating persona', 'Persona created successfully');
 }
 
 export async function handleListPersonas(
   client: PostEngineerClient
 ): Promise<McpToolResponse> {
-  try {
-    const result = await client.listPersonas();
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error listing personas: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
+  return handleLibraryCall(() => client.listPersonas(), 'listing personas');
 }
 
 export async function handleListVoices(
   client: PostEngineerClient
 ): Promise<McpToolResponse> {
-  try {
-    const result = await client.listVoices();
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error listing voices: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
+  return handleLibraryCall(() => client.listVoices(), 'listing voices');
 }
 
 
 export async function handleListFaces(
   client: PostEngineerClient
 ): Promise<McpToolResponse> {
-  try {
-    const result = await client.listFaces();
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error listing faces: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
+  return handleLibraryCall(() => client.listFaces(), 'listing faces');
 }
 
 export async function handleUpdatePersona(
   client: PostEngineerClient,
   args: z.infer<typeof UpdatePersonaSchema>
 ): Promise<McpToolResponse> {
-  try {
-    const result = await client.updatePersona(args);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Persona updated successfully: ${JSON.stringify(result, null, 2)}`,
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error updating persona: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
+  return handleLibraryCall(() => client.updatePersona(args), 'updating persona', 'Persona updated successfully');
 }
 
 export async function handleListSocialAccounts(
   client: PostEngineerClient
 ): Promise<McpToolResponse> {
-  try {
-    const result = await client.listSocialAccounts();
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error listing social accounts: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
+  return handleLibraryCall(() => client.listSocialAccounts(), 'listing social accounts');
 }
 
 export async function handleConnectAccount(
@@ -462,138 +342,41 @@ export async function handleConnectAccount(
 export async function handleListSchedules(
   client: PostEngineerClient
 ): Promise<McpToolResponse> {
-  try {
-    const result = await client.listSchedules();
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error listing schedules: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
+  return handleLibraryCall(() => client.listSchedules(), 'listing schedules');
 }
 
 export async function handleListPosts(
   client: PostEngineerClient,
   args: z.infer<typeof ListPostsSchema>
 ): Promise<McpToolResponse> {
-  try {
-    const result = await client.listPosts(args.limit);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error listing posts: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
+  return handleLibraryCall(() => client.listPosts(args.limit), 'listing posts');
 }
 
 export async function handleCancelSchedule(
   client: PostEngineerClient,
   args: z.infer<typeof CancelScheduleSchema>
 ): Promise<McpToolResponse> {
-  try {
-    const result = await client.cancelSchedule(args.scheduleId);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Schedule cancelled successfully: ${JSON.stringify(result, null, 2)}`,
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error cancelling schedule: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
+  return handleLibraryCall(() => client.cancelSchedule(args.scheduleId), 'cancelling schedule', 'Schedule cancelled successfully');
 }
 
 export async function handleGetTokenBalance(
   client: PostEngineerClient
 ): Promise<McpToolResponse> {
-  try {
-    const result = await client.getTokenBalance();
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error getting token balance: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
+  return handleLibraryCall(() => client.getTokenBalance(), 'getting token balance');
 }
 
 export async function handleGenerateVideo(
   client: PostEngineerClient,
   args: z.infer<typeof GenerateVideoSchema>
 ): Promise<McpToolResponse> {
-  try {
-    const result = await client.generateVideoJob(args);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Video generation task started: ${JSON.stringify(result, null, 2)}`,
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error generating video: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
+  return handleLibraryCall(() => client.generateVideoJob(args), 'generating video', 'Video generation task started');
 }
 
 /** Shared wrapper for the persona-image handlers: same try/catch + text
- * response shape, differing only in the client call and the message verbs. */
+ * response shape, differing only in the client call and the message verbs.
+ * Older handlers (handleConnectAccount, handleScheduleVideo) keep inline
+ * try/catch because they pre-validate args before the client call — the
+ * wrapper only covers the call itself. */
 async function handleLibraryCall(
   clientCall: () => Promise<unknown>,
   errorVerb: string,
@@ -679,27 +462,7 @@ export async function handleGetVideoStatus(
   client: PostEngineerClient,
   args: z.infer<typeof GetVideoStatusSchema>
 ): Promise<McpToolResponse> {
-  try {
-    const result = await client.getVideoStatus(args.taskId);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error fetching video status: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
+  return handleLibraryCall(() => client.getVideoStatus(args.taskId), 'fetching video status');
 }
 
 export async function handleScheduleVideo(
