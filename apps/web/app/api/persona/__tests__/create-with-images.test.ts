@@ -351,7 +351,8 @@ describe('POST /api/persona with image library', () => {
     const body = (await res.json()) as { success: boolean; warnings?: string[] };
     expect(body.success).toBe(true);
     expect(body.warnings).toHaveLength(1);
-    expect(body.warnings?.[0]).toContain('Primary');
+    // Stable code, not English copy: the UI maps it through i18n.
+    expect(body.warnings?.[0]).toBe('primary_swap_failed');
   });
 
   it('rejects a zero-byte library image with a clear error instead of shifting tags', async () => {

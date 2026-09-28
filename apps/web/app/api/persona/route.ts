@@ -227,7 +227,9 @@ export async function POST(request: Request): Promise<NextResponse> {
         console.error('[api/persona] set primary library image failed', {
           error: primaryError.error,
         });
-        warnings.push('Primary image could not be set; no image is marked as primary.');
+        // Stable code, not English copy: the UI maps it through i18n,
+        // consistent with the /api/persona/images warnings contract.
+        warnings.push('primary_swap_failed');
       }
     }
   }

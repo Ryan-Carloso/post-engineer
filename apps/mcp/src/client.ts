@@ -92,6 +92,14 @@ export const MAX_LIBRARY_DESCRIPTION_LENGTH = 500;
 
 function mimeTypeForImagePath(path: string): string {
   const extension = extname(path).toLowerCase();
+  // A file named exactly ".png" (hidden file, no base name) has the
+  // extension but no name; reject it so the fail-fast promise holds.
+  const base = basename(path);
+  if (base === extension) {
+    throw new Error(
+      `Unsupported image extension "${extension || '(none)'}": use JPG/JPEG, PNG, or WebP.`,
+    );
+  }
   if (extension === '.png') return 'image/png';
   if (extension === '.webp') return 'image/webp';
   if (extension === '.jpg' || extension === '.jpeg') return 'image/jpeg';
@@ -191,6 +199,9 @@ export class PostEngineerClient {
   ): Promise<unknown> {
     const response = await fetch(`${this.baseUrl}${path}`, {
       ...init,
+      // init.signal, if provided, intentionally wins over timeoutMs; no
+      // current caller passes one, so UPLOAD_TIMEOUT_MS always applies on
+      // the upload paths this parameter exists for.
       signal: init.signal ?? AbortSignal.timeout(timeoutMs),
     });
 
@@ -441,9 +452,18 @@ export class PostEngineerClient {
     formData.append('image', await imageFormFile(image.path), basename(image.path));
     // Empty/whitespace-only metadata is dropped: the server stores it
     // verbatim and an empty tag can never match the deterministic keyword
-    // selection.
+    // selection. Lengths are checked locally like createPersona so an
+    // oversized tag fails before the upload, not server-side after.
     const tag = image.tag?.trim();
     const description = image.description?.trim();
+    if ((tag?.length ?? 0) > MAX_LIBRARY_TAG_LENGTH) {
+      throw new Error(`Image tag exceeds ${MAX_LIBRARY_TAG_LENGTH} characters.`);
+    }
+    if ((description?.length ?? 0) > MAX_LIBRARY_DESCRIPTION_LENGTH) {
+      throw new Error(
+        `Image description exceeds ${MAX_LIBRARY_DESCRIPTION_LENGTH} characters.`,
+      );
+    }
     if (tag) formData.set('tag', tag);
     if (description) formData.set('description', description);
     // isPrimary is typed as `true` only (swap-only, symmetric with

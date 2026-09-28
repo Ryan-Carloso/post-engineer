@@ -485,4 +485,14 @@ describe('PersonaImageLibrarySection', () => {
       expect(dictionaries[locale].persona.libraryLimitReached).not.toContain('10');
     }
   });
+
+  it('mapPersonaImageWarnings maps codes through i18n and passes unknown codes raw', async () => {
+    const { mapPersonaImageWarnings } = await import('../persona-image-library');
+    const t = (key: string) => `t:${key}`;
+    expect(
+      mapPersonaImageWarnings(['primary_swap_failed', 'metadata_save_failed'], t),
+    ).toBe('t:persona.libraryWarningPrimarySwap t:persona.libraryWarningMetadataSave');
+    // Unknown codes are never silently dropped.
+    expect(mapPersonaImageWarnings(['some_future_code'], t)).toBe('some_future_code');
+  });
 });

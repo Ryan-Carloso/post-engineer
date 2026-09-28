@@ -4,6 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { isPersonaAllowed } from '@/lib/api-keys';
 import {
   addLibraryImages,
+  IMAGE_BUCKET,
   isFileLike,
   MAX_DESCRIPTION_LENGTH,
   MAX_TAG_LENGTH,
@@ -207,6 +208,12 @@ export async function GET(request: Request): Promise<NextResponse> {
   return NextResponse.json({ success: true, images });
 }
 
+// Strip the internal storage path from a mutation response row.
+function withoutImagePath(row: Record<string, unknown> | PersonaLibraryImage): Record<string, unknown> {
+  const { image_path: _omitted, ...safe } = row as Record<string, unknown>;
+  return safe;
+}
+
 export async function POST(request: Request): Promise<NextResponse> {
   const authed = await getAuth(request);
   if ('response' in authed) return authed.response;
@@ -263,12 +270,17 @@ export async function POST(request: Request): Promise<NextResponse> {
     const leftoverPaths = added.leftoverPaths ?? [];
     if (leftoverPaths.length > 0) {
       // The internal rollback could not clean up: these storage objects are
-      // orphaned and this is the only record of them. Log loudly so ops can
-      // retry the remove before the paths become unrecoverable.
-      console.error('[api/persona/images] upload rollback left storage files behind', {
-        personaId,
-        leftoverPaths,
-      });
+      // orphaned and this is the only record of them. Retry once — the rows
+      // are already rolled back, so these paths have no other recovery path
+      // before becoming permanent orphans — then log loudly if it still fails.
+      const retry = await supabase.storage.from(IMAGE_BUCKET).remove(leftoverPaths);
+      if (retry.error) {
+        console.error('[api/persona/images] upload rollback left storage files behind', {
+          personaId,
+          leftoverPaths,
+          retryError: retry.error,
+        });
+      }
     }
     return errorResponse(added.status, added.error);
   }
@@ -290,8 +302,11 @@ export async function POST(request: Request): Promise<NextResponse> {
       image.is_primary = true;
     }
   }
+  // Strip the internal storage path: the GET invariant (project only
+  // UI-needed fields) applies to mutations too. No consumer reads the
+  // image row from mutation payloads (ImageMutationResult has no image).
   return NextResponse.json(
-    { success: true, image, ...(warnings.length > 0 ? { warnings } : {}) },
+    { success: true, image: withoutImagePath(image), ...(warnings.length > 0 ? { warnings } : {}) },
     { status: 201 },
   );
 }
@@ -361,6 +376,8 @@ export async function PATCH(request: Request): Promise<NextResponse> {
   // actually committed in this PATCH. A metadata-only failure keeps the
   // original 500 — claiming "Primary image was updated" then would be a lie.
   let primarySwapCommitted = false;
+  // isPrimary === false is rejected with 400 above, so reaching here with
+  // updates.is_primary set means true; the strict check documents that.
   if (updates.is_primary === true) {
     // Reuse the shared helper (with its error checks) instead of
     // reimplementing the unset-others swap inline.
@@ -379,7 +396,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     // round-trip per edit for nothing.
     const current = await fetchImageRow(supabase, id);
     if (!current) return errorResponse(500, 'Failed to update image.');
-    return NextResponse.json({ success: true, image: current });
+    return NextResponse.json({ success: true, image: withoutImagePath(current) });
   }
 
   const { data: updated, error: updateError } = await supabase
@@ -401,12 +418,12 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     if (!current) return errorResponse(500, 'Failed to update image.');
     return NextResponse.json({
       success: true,
-      image: current,
+      image: withoutImagePath(current),
       // Stable code, not English copy: the UI maps it through i18n.
       warnings: ['metadata_save_failed'],
     });
   }
-  return NextResponse.json({ success: true, image: updated });
+  return NextResponse.json({ success: true, image: withoutImagePath(updated) });
 }
 
 export async function DELETE(request: Request): Promise<NextResponse> {

@@ -980,6 +980,22 @@ describe('PostEngineerClient persona image library', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  it('addPersonaImage rejects an oversized tag before uploading', async () => {
+    const path = await writeTempImage('a.jpg');
+    await expect(
+      client.addPersonaImage('p-1', { path, tag: 'x'.repeat(101) })
+    ).rejects.toThrow(/exceeds 100 characters/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('addPersonaImage rejects an oversized description before uploading', async () => {
+    const path = await writeTempImage('a.jpg');
+    await expect(
+      client.addPersonaImage('p-1', { path, description: 'x'.repeat(501) })
+    ).rejects.toThrow(/exceeds 500 characters/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it('addPersonaImage rejects library images larger than 10MB', async () => {
     const path = await writeTempImage('big.png', 11 * 1024 * 1024);
     await expect(client.addPersonaImage('p-1', { path })).rejects.toThrow(/10MB/);

@@ -30,6 +30,25 @@ interface PendingImage {
   description: string;
 }
 
+// Map server warning codes to localized messages; unknown codes pass
+// through raw so new server warnings are never silently dropped. Shared by
+// the upload flow and the card flows so a new code is added in one place.
+import type { TranslationKey } from '@/lib/i18n';
+
+export function mapPersonaImageWarnings(
+  codes: string[],
+  t: (key: TranslationKey, vars?: Record<string, string | number>) => string,
+): string {
+  const WARNING_KEYS: Record<string, TranslationKey> = {
+    primary_swap_failed: 'persona.libraryWarningPrimarySwap',
+    metadata_save_failed: 'persona.libraryWarningMetadataSave',
+  };
+  return codes.map((code) => {
+    const key = WARNING_KEYS[code];
+    return key ? t(key) : code;
+  }).join(' ');
+}
+
 //---------------
 // PersonaImageLibrarySection — up to 10 tagged photos of the same person.
 // Shown when editing an existing persona. Each video generation picks the
@@ -183,15 +202,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
       setPending((prev) => prev.filter((item) => !uploadedIds.has(item.id)));
       for (const preview of uploadedPreviews) dropPreview(preview);
       if (warnings.length > 0) {
-        // Server warnings are stable codes (not English copy); map them
-        // through i18n. Unknown codes fall back to the raw string so a new
-        // server code never renders blank.
-        const messages = warnings.map((code) => {
-          if (code === 'primary_swap_failed') return t('persona.libraryWarningPrimarySwap');
-          if (code === 'metadata_save_failed') return t('persona.libraryWarningMetadataSave');
-          return code;
-        });
-        setWarning(messages.join(' '));
+        setWarning(mapPersonaImageWarnings(warnings, t));
       }
     } finally {
       setUploading(false);
@@ -326,6 +337,9 @@ function LibraryImageCard({
   const [tag, setTag] = useState(image.tag ?? '');
   const [description, setDescription] = useState(image.description ?? '');
   const [cardError, setCardError] = useState<string | null>(null);
+  // Partial-success warnings (e.g. metadata saved but primary swap failed)
+  // are not errors; render them amber so the true state isn't misleading.
+  const [cardWarning, setCardWarning] = useState<string | null>(null);
 
   // The card keeps local copies for the inline editor. Sync them when the
   // library refetches (mutation invalidation) so a later edit starts from
@@ -337,21 +351,9 @@ function LibraryImageCard({
     }
   }, [editing, image.tag, image.description]);
 
-  // Map server warning codes to localized messages; unknown codes pass
-  // through raw so new server warnings are never silently dropped.
-  const mapWarningCodes = (codes: string[]): string =>
-    codes
-      .map((code) =>
-        code === 'primary_swap_failed'
-          ? t('persona.libraryWarningPrimarySwap')
-          : code === 'metadata_save_failed'
-            ? t('persona.libraryWarningMetadataSave')
-            : code,
-      )
-      .join(' ');
-
   const save = async (): Promise<void> => {
     setCardError(null);
+    setCardWarning(null);
     try {
       const result = await updateMutation.mutateAsync({
         id: image.id,
@@ -363,7 +365,7 @@ function LibraryImageCard({
         // Partial success (e.g. primary swap failed after metadata save):
         // surface the warning codes so the user knows the true state.
         if (result.warnings && result.warnings.length > 0) {
-          setCardError(mapWarningCodes(result.warnings));
+          setCardWarning(mapPersonaImageWarnings(result.warnings, t));
         }
       } else {
         setCardError(result.error ?? t('persona.libraryUpdateError'));
@@ -376,6 +378,7 @@ function LibraryImageCard({
 
   const setPrimary = async (): Promise<void> => {
     setCardError(null);
+    setCardWarning(null);
     try {
       const result = await updateMutation.mutateAsync({ id: image.id, isPrimary: true });
       if (!result.success) {
@@ -383,7 +386,7 @@ function LibraryImageCard({
       } else if (result.warnings && result.warnings.length > 0) {
         // Partial success: surface warning codes so the user knows the
         // true state (e.g. primary swapped but something else failed).
-        setCardError(mapWarningCodes(result.warnings));
+        setCardWarning(mapPersonaImageWarnings(result.warnings, t));
       }
     } catch (primaryError) {
       console.error('[persona-image-library] set primary failed', { error: primaryError });
@@ -394,6 +397,7 @@ function LibraryImageCard({
   const remove = async (): Promise<void> => {
     if (!window.confirm(t('persona.libraryRemoveConfirm'))) return;
     setCardError(null);
+    setCardWarning(null);
     try {
       const result = await deleteMutation.mutateAsync(image.id);
       if (!result.success) {
@@ -420,6 +424,7 @@ function LibraryImageCard({
       ) : null}
       <div className="space-y-1 p-2">
         {cardError ? <p className="text-xs text-red-600">{cardError}</p> : null}
+        {cardWarning ? <p className="text-xs text-amber-600">{cardWarning}</p> : null}
         {editing ? (
           <>
             <input
@@ -427,14 +432,16 @@ function LibraryImageCard({
               onChange={(event) => setTag(event.target.value)}
               placeholder={t('persona.libraryTagPlaceholder')}
               maxLength={100}
-              className="w-full rounded border border-neutral-300 px-1.5 py-1 text-xs"
+              disabled={updateMutation.isPending}
+              className="w-full rounded border border-neutral-300 px-1.5 py-1 text-xs disabled:opacity-50"
             />
             <input
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               placeholder={t('persona.libraryDescriptionPlaceholder')}
               maxLength={500}
-              className="w-full rounded border border-neutral-300 px-1.5 py-1 text-xs"
+              disabled={updateMutation.isPending}
+              className="w-full rounded border border-neutral-300 px-1.5 py-1 text-xs disabled:opacity-50"
             />
             <div className="flex gap-2">
               <button
@@ -452,7 +459,8 @@ function LibraryImageCard({
                   setTag(image.tag ?? '');
                   setDescription(image.description ?? '');
                 }}
-                className="text-xs text-neutral-500 underline"
+                disabled={updateMutation.isPending}
+                className="text-xs text-neutral-500 underline disabled:opacity-50"
               >
                 {t('persona.libraryCancel')}
               </button>
