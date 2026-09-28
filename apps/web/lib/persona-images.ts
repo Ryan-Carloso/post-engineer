@@ -132,19 +132,10 @@ export function validateImageBuffer(
 }
 
 /**
- * Reads the file and verifies its actual bytes against its declared MIME
- * type. Call this at the server boundary (addLibraryImages does) — never
- * trust the MCP/API caller's declared type alone.
- */
-export async function validateImageContent(file: File): Promise<string | null> {
-  const result = await readValidatedImage(file);
-  return 'error' in result ? result.error : null;
-}
-
-/**
  * Reads a file and validates its magic bytes against its declared MIME
- * type. Shared by validateImageContent and addLibraryImages so the two
- * validation paths cannot drift apart.
+ * type. Shared read-and-validate contract — call this at the server
+ * boundary (addLibraryImages does) and never trust the caller's declared
+ * type alone.
  */
 export async function readValidatedImage(
   file: File,

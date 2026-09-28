@@ -1969,6 +1969,35 @@ describe('POST /api/persona/video-job', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('debug: returns 400 when image_id is provided (debug flow has no image library)', async () => {
+    // Review round 24: the multipart branch dispatched to debugVideoJob
+    // before the JSON flow's image-id validation, so a debug request
+    // carrying image_id was silently ignored. The faceless flow rejects a
+    // provided id loudly ("a provided id is a caller bug") — the debug
+    // flow has no library to resolve against either, so it must do the
+    // same. Both spellings are checked.
+    mockSupabase(PERSONA);
+
+    for (const field of ['image_id', 'imageId']) {
+      const res = await POST(
+        multipartDebugRequest({
+          debugMode: '1',
+          personaMode: 'persona',
+          video_subject: 'história',
+          niche: 'história',
+          scriptPrompt: 'Narre.',
+          voiceId: 'pt-BR-FranciscaNeural',
+          [field]: 'img-123',
+        }),
+      );
+      const body = (await res.json()) as { error?: string };
+
+      expect(res.status).toBe(400);
+      expect(body.error).toBe('image_id requires a saved persona: debug videos have no image library.');
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('debug: returns 400 when the scriptPrompt fallback yields a subject over 300 characters', async () => {
     // Review round 10: the subject falls back to niche || scriptPrompt, and
     // scriptPrompt is capped at 2000 — a debug request with only a long

@@ -795,6 +795,21 @@ Follow these so the same issues don't come back:
   (needs two independent failures; the error contract stays
   {success, error} and the server logs loudly).
 
+## Web/API review learnings, round 24 (2026-09-28)
+- **Shared-param validation belongs on every dispatch branch, not just
+  the main path.** The multipart/debug video-job branch dispatched to
+  debugVideoJob BEFORE the JSON flow's image_id validation, so a debug
+  request carrying image_id was silently ignored while the JSON flow
+  rejects a provided id loudly. When a route fans out by content-type,
+  check the dispatch order: each branch must apply the shared
+  validation, or the branch split itself is the hole.
+- **Delete dead wrappers and fix the doc comment's drift claim.**
+  validateImageContent survived as an export with zero production
+  callers after readValidatedImage became the shared contract — and its
+  comment ("so the two validation paths cannot drift apart") described
+  a duality that no longer existed. Remove the wrapper and reword the
+  comment to the single contract.
+
 ## Web/API review learnings, round 23 (2026-09-28)
 - **Verify a finding exists before touching code.** OpenCode asked to
   delete a "dead" `pushRecentImageId` helper at a line that holds

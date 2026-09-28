@@ -435,9 +435,9 @@ describe('addLibraryImages', () => {
   });
 
   it('returns 400 when the file bytes cannot be read', async () => {
-    // A truncated multipart body makes arrayBuffer() reject: unlike the
-    // client-side validateImageContent path, the server read had no
-    // try/catch and the failure surfaced as an unstructured 500.
+    // A truncated multipart body makes arrayBuffer() reject: the server
+    // read had no try/catch and the failure surfaced as an unstructured
+    // 500.
     const { addLibraryImages } = await import('../persona-images');
     const { client } = rollbackClient({});
     const unreadable = {

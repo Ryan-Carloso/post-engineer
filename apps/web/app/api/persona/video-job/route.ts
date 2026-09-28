@@ -916,6 +916,17 @@ async function debugVideoJob(request: Request, userId: string): Promise<NextResp
     return NextResponse.json({ success: false, error: 'Invalid multipart payload.' }, { status: 400 });
   }
 
+  // image_id is persona-scoped: the debug flow builds an in-memory persona
+  // with no saved image library, so a provided id is a caller bug — reject
+  // loudly instead of silently discarding it (mirrors the JSON flow's
+  // faceless rejection). Both spellings are checked.
+  if (formData.has('image_id') || formData.has('imageId')) {
+    return NextResponse.json(
+      { success: false, error: 'image_id requires a saved persona: debug videos have no image library.' },
+      { status: 400 },
+    );
+  }
+
   const parsed = parsePersonaForm(formData, 'debug');
   if (!parsed.ok) {
     return NextResponse.json({ success: false, error: parsed.error }, { status: 400 });
