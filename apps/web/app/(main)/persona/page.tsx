@@ -18,12 +18,20 @@ import { useVoicesQuery, useVoiceSampleLanguagesQuery, createPersona, useUpdateP
 import { resolveScriptLanguage, usePersonaStore } from '@/lib/store';
 import { useDebugStore } from '@/lib/debug-store';
 import { normalizeDebugTaskResponse } from '@/lib/debug-video';
-import { isTerminalSnapshot, useVideoTaskEvents, type VideoTaskSnapshot } from '@/lib/video-task-events';
+import { isTerminalSnapshot, type VideoTaskSnapshot } from '@/lib/video-task-events';
+import {
+  allBatchVideosTerminal,
+  batchVideosReducer,
+  initBatchVideos,
+  parseBatchTopicsText,
+  type BatchVideo,
+} from '@/lib/video-batch';
 import { parsePersonaForm, personaFormSchema } from '@/lib/persona-schema';
 import { openUpgradeDialogIfInsufficient } from '@/lib/upgrade-dialog-store';
 import { useI18n } from '@/lib/i18n/provider';
 import { PersonaTokensSection } from './persona-tokens';
 import { PersonaImageLibrarySection, mapPersonaImageWarnings } from './persona-image-library';
+import { BatchVideoRow } from './debug-batch-video-row';
 import { scrollToErrorField } from '@/lib/scroll-to-error';
 import type { TranslationKey } from '@/lib/i18n';
 import { DEFAULT_PERSONA_FACE_IDS } from '@/lib/persona-faces';
@@ -814,24 +822,28 @@ const PersonaPreferencesSection = () => {
 };
 
 //---------------
-// PersonaDebugSubmit — alternative debug-mode submit: generates the video
-// through the REAL flow (/api/persona/video-job debug branch, with
-// moderation and token charging) without creating a persona/schedule,
-// and unlocks the download when done. Progress arrives over SSE
+// PersonaDebugSubmit — alternative debug-mode submit: generates 1..10
+// videos through the REAL flow (/api/persona/video-batch debug branch,
+// with moderation and token charging) without creating a persona/schedule.
+// One topic per line in the textarea; a single topic is a batch of 1 —
+// there is no separate single-video path.
+//
+// Each returned task id gets its own SSE stream
 // (/api/persona/video-events/:taskId); a terminal snapshot triggers one
-// final GET to /api/persona/video-status/:taskId so the generation
-// history and token refund side effects still run exactly once.
+// final GET to /api/persona/video-status/:taskId per video so the
+// generation history and token refund side effects still run exactly
+// once. The engine runs the batch sequentially; a failed video never
+// stops the remaining ones.
 //---------------
 const PersonaDebugSubmit = () => {
   const { t, locale } = useI18n();
   const { handleSubmit } = useFormContext();
   const [status, setStatus] = useState<'idle' | 'starting' | 'generating' | 'done' | 'error'>('idle');
-  const [progress, setProgress] = useState(0);
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [topicsText, setTopicsText] = useState('');
+  const [videos, setVideos] = useState<BatchVideo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
-  const [streamTaskId, setStreamTaskId] = useState<string | null>(null);
-  // Guards against a late terminal fetch resolving after unmount/reset.
+  // Guards against late terminal fetches resolving after unmount/reset.
   const generationRef = useRef(0);
 
   const finishTerminal = async (taskId: string, generation: number): Promise<void> => {
@@ -839,66 +851,98 @@ const PersonaDebugSubmit = () => {
       const response = await fetch(`/api/persona/video-status/${encodeURIComponent(taskId)}`, { cache: 'no-store' });
       const body: unknown = await response.json().catch(() => null);
       if (generationRef.current !== generation) return;
-      setLogs((current) => [...current, `GET status (terminal, ${response.status})\n${JSON.stringify(body, null, 2)}`]);
+      setLogs((current) => [...current, `GET status (terminal, ${taskId}, ${response.status})\n${JSON.stringify(body, null, 2)}`]);
       if (!response.ok) {
-        setError(readDebugError(body));
-        setStatus('error');
+        setVideos((current) =>
+          batchVideosReducer(current, { type: 'terminal', taskId, outcome: 'failed', error: readDebugError(body) }),
+        );
         return;
       }
       const task = normalizeDebugTaskResponse(body);
       if (!task || typeof task.state !== 'number') {
-        setError('Invalid engine status response.');
-        setStatus('error');
+        setVideos((current) =>
+          batchVideosReducer(current, { type: 'terminal', taskId, outcome: 'failed', error: 'Invalid engine status response.' }),
+        );
         return;
       }
       if (task.state === -1) {
-        setError(task.error ?? 'Task failed.');
-        setStatus('error');
+        setVideos((current) =>
+          batchVideosReducer(current, { type: 'terminal', taskId, outcome: 'failed', error: task.error ?? 'Task failed.' }),
+        );
         return;
       }
-      setDownloadUrl(`/api/persona/video-download/${encodeURIComponent(taskId)}/final-1.mp4`);
-      setProgress(100);
-      setStatus('done');
+      setVideos((current) =>
+        batchVideosReducer(current, {
+          type: 'terminal',
+          taskId,
+          outcome: 'done',
+          downloadUrl: `/api/persona/video-download/${encodeURIComponent(taskId)}/final-1.mp4`,
+        }),
+      );
     } catch (requestError: unknown) {
       if (generationRef.current !== generation) return;
-      setError(requestError instanceof Error ? requestError.message : String(requestError));
-      setStatus('error');
+      setVideos((current) =>
+        batchVideosReducer(current, {
+          type: 'terminal',
+          taskId,
+          outcome: 'failed',
+          error: requestError instanceof Error ? requestError.message : String(requestError),
+        }),
+      );
     }
   };
 
-  useVideoTaskEvents(
-    streamTaskId,
-    {
-      onSnapshot: (snapshot: VideoTaskSnapshot) => {
-        const generation = generationRef.current;
-        setLogs((current) => [...current, `SSE snapshot\n${JSON.stringify(snapshot, null, 2)}`]);
-        setProgress(snapshot.progress);
-        if (isTerminalSnapshot(snapshot)) {
-          // Stop the stream; the final status fetch records history/refund.
-          setStreamTaskId(null);
-          void finishTerminal(snapshot.taskId, generation);
-        }
-      },
-      onStreamError: () => {
-        setError('Video progress stream disconnected.');
-        setStatus('error');
-        setStreamTaskId(null);
-      },
-    },
-  );
+  const handleSnapshot = (taskId: string, snapshot: VideoTaskSnapshot): void => {
+    const generation = generationRef.current;
+    setLogs((current) => [...current, `SSE snapshot (${taskId})\n${JSON.stringify(snapshot, null, 2)}`]);
+    const terminal = isTerminalSnapshot(snapshot);
+    setVideos((current) =>
+      batchVideosReducer(current, {
+        type: 'snapshot',
+        taskId,
+        progress: snapshot.progress,
+        stage: snapshot.stage,
+        terminal,
+      }),
+    );
+    if (terminal) {
+      // The final status fetch records history/refund for this video.
+      void finishTerminal(taskId, generation);
+    }
+  };
+
+  const handleStreamError = (taskId: string): void => {
+    const generation = generationRef.current;
+    // A disconnect after a reset belongs to the previous generation.
+    setVideos((current) => {
+      if (generationRef.current !== generation) return current;
+      return batchVideosReducer(current, { type: 'stream-error', taskId });
+    });
+  };
+
+  // The batch is over when every video reached a terminal status.
+  useEffect(() => {
+    if (allBatchVideosTerminal(videos)) setStatus('done');
+  }, [videos]);
 
   const generate = async (): Promise<void> => {
     if (status === 'starting' || status === 'generating') return;
     generationRef.current += 1;
+    const generation = generationRef.current;
     setStatus('starting');
     setError(null);
-    setDownloadUrl(null);
-    setProgress(0);
-    setStreamTaskId(null);
-    setLogs(['POST /api/persona/video-job (debug)\nSending the persona form data.']);
+    setVideos([]);
+    setLogs(['POST /api/persona/video-batch (debug)\nSending the persona form data.']);
     try {
+      const topics = parseBatchTopicsText(topicsText);
+      if (!topics.ok) {
+        setError(topics.error);
+        setStatus('idle');
+        return;
+      }
       const formData = usePersonaStore.getState().buildPersonaFormData(locale);
       formData.append('debugMode', '1');
+      formData.set('topics', JSON.stringify(topics.topics));
       // Same zod schema as the server — fails here, no round-trip.
       const parsed = parsePersonaForm(formData, 'debug');
       if (!parsed.ok) {
@@ -911,7 +955,7 @@ const PersonaDebugSubmit = () => {
         scrollToErrorField('script');
         return;
       }
-      const response = await fetch('/api/persona/video-job', { method: 'POST', body: formData });
+      const response = await fetch('/api/persona/video-batch', { method: 'POST', body: formData });
       const body: unknown = await response.json().catch(() => null);
       setLogs((current) => [...current, `POST response (${response.status})\n${JSON.stringify(body, null, 2)}`]);
       if (openUpgradeDialogIfInsufficient(response.status, (body as { code?: unknown } | null)?.code)) {
@@ -919,26 +963,57 @@ const PersonaDebugSubmit = () => {
         setStatus('idle');
         return;
       }
-      if (!response.ok || !isRecord(body) || typeof body.taskId !== 'string') {
+      if (
+        !response.ok ||
+        !isRecord(body) ||
+        !Array.isArray(body.taskIds) ||
+        body.taskIds.length === 0 ||
+        body.taskIds.some((taskId: unknown) => typeof taskId !== 'string')
+      ) {
         setError(readDebugError(body));
         setStatus('error');
         return;
       }
+      if (generationRef.current !== generation) return;
+      setVideos(initBatchVideos(body.taskIds as string[], topics.topics));
       setStatus('generating');
-      setStreamTaskId(body.taskId);
     } catch (requestError: unknown) {
       setError(requestError instanceof Error ? requestError.message : String(requestError));
       setStatus('error');
     }
   };
 
-  const percentage = progress <= 1 ? Math.round(progress * 100) : Math.round(progress);
+  const doneCount = videos.filter((video) => video.status === 'done').length;
   return (
     <section className="space-y-4">
+      <label className="block space-y-1.5">
+        <span className="text-sm font-medium text-neutral-200">Tópicos dos vídeos (1 por linha, máx. 10)</span>
+        <textarea
+          data-testid="debug-topics"
+          value={topicsText}
+          onChange={(event) => setTopicsText(event.target.value)}
+          rows={4}
+          placeholder={'Um tópico por linha.\nEx:\nrotina da manhã\ntreino de pernas'}
+          className="w-full rounded-lg border border-neutral-700 bg-neutral-950 p-3 text-sm text-neutral-100 placeholder:text-neutral-500"
+        />
+      </label>
       <button type="button" data-testid="debug-generate" onClick={handleSubmit(() => void generate())} disabled={status === 'starting' || status === 'generating'} className="flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60">
-        {status === 'generating' ? `Gerando vídeo (${percentage}%)...` : 'Gerar vídeo para download'}
+        {status === 'generating' ? `Gerando vídeos (${doneCount}/${videos.length})...` : 'Gerar vídeos para download'}
       </button>
-      {status === 'done' && downloadUrl ? <a data-testid="debug-download" href={downloadUrl} download="post-engineer-debug.mp4" className="flex w-full items-center justify-center rounded-lg bg-green-600 px-4 py-3 text-sm font-semibold text-white">Baixar vídeo</a> : null}
+      {videos.length > 0 ? (
+        <div className="space-y-2">
+          {videos.map((video, index) => (
+            <BatchVideoRow
+              key={video.taskId}
+              video={video}
+              index={index}
+              total={videos.length}
+              onSnapshot={handleSnapshot}
+              onStreamError={handleStreamError}
+            />
+          ))}
+        </div>
+      ) : null}
       {error ? <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
       {logs.length > 0 ? <details open className="rounded-lg border border-neutral-800 bg-neutral-950 p-4 text-xs text-neutral-200"><summary className="cursor-pointer font-semibold text-amber-300">LOG DO DEBUG</summary><pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap">{logs.join('\n\n')}</pre></details> : null}
     </section>
