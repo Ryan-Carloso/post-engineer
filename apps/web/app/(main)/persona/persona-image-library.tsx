@@ -188,7 +188,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
       messages.push(t('persona.libraryLimitReached', { max: MAX_LIBRARY_IMAGES }));
     }
     if (rejectedCount > 0) {
-      messages.push(t('persona.libraryFilesRejected', { count: rejectedCount }));
+      messages.push(t('persona.libraryFilesRejected', { count: rejectedCount, sizeMb: MAX_IMAGE_BYTES / (1024 * 1024) }));
     }
     if (messages.length > 0) setError(messages.join(' '));
     setPending((prev) => [
@@ -293,7 +293,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
         </span>
         <span className="h-px flex-1 bg-neutral-200" />
       </div>
-      <p className="mt-2 text-sm text-neutral-500">{t('persona.libraryHint')}</p>
+      <p className="mt-2 text-sm text-neutral-500">{t('persona.libraryHint', { max: MAX_LIBRARY_IMAGES, sizeMb: MAX_IMAGE_BYTES / (1024 * 1024) })}</p>
 
       {imagesQuery.isError ? (
         <p className="mt-3 text-sm text-red-600">{t('persona.libraryLoadError')}</p>

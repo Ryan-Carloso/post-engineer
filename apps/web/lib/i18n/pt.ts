@@ -384,7 +384,7 @@ export const ptDictionary = {
     photoUpload: 'Enviar foto',
     photoHint: 'Para melhores resultados, envie uma foto nítida, de frente e enquadrada dos ombros para cima. Evite fotos de corpo inteiro. Formatos aceitos: JPG ou PNG.',
     libraryLabel: 'Biblioteca de imagens',
-    libraryHint: 'Até 10 fotos da mesma pessoa. Cada vídeo escolhe a melhor pela tag, então variedade melhora os resultados. Formatos aceitos: JPG/JPEG, PNG ou WebP (máx. 10MB).',
+    libraryHint: 'Até {max} fotos da mesma pessoa. Cada vídeo escolhe a melhor pela tag, então variedade melhora os resultados. Formatos aceitos: JPG/JPEG, PNG ou WebP (máx. {sizeMb}MB).',
     libraryCount: '{count} de {max} imagens',
     libraryAdd: 'Adicionar imagens',
     libraryUploading: 'Enviando…',
@@ -419,7 +419,7 @@ export const ptDictionary = {
     libraryErrorNotFound: 'Não encontrado. Pode ter sido removido.',
     libraryLimitReached: 'A biblioteca está cheia ({max} imagens). Remova uma para adicionar outra.',
     libraryFilesRejected:
-      '{count} arquivo(s) foram ignorados: só JPG/JPEG, PNG ou WebP de até 10MB são aceitos.',
+      '{count} arquivo(s) foram ignorados: só JPG/JPEG, PNG ou WebP de até {sizeMb}MB são aceitos.',
     librarySave: 'Salvar',
     libraryCancel: 'Cancelar',
     characterTab: 'Escolha um personagem',

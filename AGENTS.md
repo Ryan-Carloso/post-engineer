@@ -795,6 +795,20 @@ Follow these so the same issues don't come back:
   (needs two independent failures; the error contract stays
   {success, error} and the server logs loudly).
 
+## Web/API review learnings, round 23 (2026-09-28)
+- **Verify a finding exists before touching code.** OpenCode asked to
+  delete a "dead" `pushRecentImageId` helper at a line that holds
+  something else — a repo-wide grep showed zero references: the helper
+  was already gone in an earlier round. The reviewer was working from a
+  truncated diff and cited a ghost. Check the claim against the tree
+  first; a stale finding costs nothing to decline.
+- **Every user-facing number derives from the shared constants —
+  no exceptions.** `libraryHint` and (an unflagged sibling found by
+  grep) `libraryFilesRejected` hardcoded "10"/"10MB" while the count
+  badge and limit notice interpolated `{max}`. Both are now
+  `{max}`/`{sizeMb}` templates fed from MAX_PERSONA_IMAGES and
+  MAX_IMAGE_BYTES, pinned by dictionary tests.
+
 ## Web/API review learnings, round 22 (2026-09-28)
 - **Fix the pattern at every level, not just the quoted one.** Round 21
   fixed the truthiness check in `selectPersonaImage`, but the identical

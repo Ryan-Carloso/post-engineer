@@ -385,7 +385,7 @@ export const enDictionary: Dictionary = {
     photoUpload: 'Upload photo',
     photoHint: 'For best results, upload a clear, front-facing photo framed from the shoulders up. Avoid full-body photos. Accepted formats: JPG or PNG.',
     libraryLabel: 'Image library',
-    libraryHint: 'Up to 10 photos of the same person. Each video picks the best match by tag, so variety improves results. Accepted formats: JPG/JPEG, PNG, or WebP (max 10MB).',
+    libraryHint: 'Up to {max} photos of the same person. Each video picks the best match by tag, so variety improves results. Accepted formats: JPG/JPEG, PNG, or WebP (max {sizeMb}MB).',
     libraryCount: '{count} of {max} images',
     libraryAdd: 'Add images',
     libraryUploading: 'Uploading…',
@@ -422,7 +422,7 @@ export const enDictionary: Dictionary = {
     libraryErrorNotFound: 'Not found. It may have been removed.',
     libraryLimitReached: 'The library is full ({max} images). Remove one to add another.',
     libraryFilesRejected:
-      '{count} file(s) were skipped: only JPG/JPEG, PNG, or WebP images up to 10MB are accepted.',
+      '{count} file(s) were skipped: only JPG/JPEG, PNG, or WebP images up to {sizeMb}MB are accepted.',
     librarySave: 'Save',
     libraryCancel: 'Cancel',
     characterTab: 'Choose a Character',

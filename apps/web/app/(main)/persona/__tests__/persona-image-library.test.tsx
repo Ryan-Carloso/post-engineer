@@ -485,6 +485,7 @@ describe('PersonaImageLibrarySection', () => {
     });
     expect(i18nMocks.t).toHaveBeenCalledWith('persona.libraryCount', { count: 10, max: 10 });
     expect(i18nMocks.t).toHaveBeenCalledWith('persona.libraryLimitReached', { max: 10 });
+    expect(i18nMocks.t).toHaveBeenCalledWith('persona.libraryHint', { max: 10, sizeMb: 10 });
   });
 
   it('interpolates {max} in the real dictionaries', async () => {
@@ -494,6 +495,13 @@ describe('PersonaImageLibrarySection', () => {
       expect(dictionaries[locale].persona.libraryCount).not.toContain('10');
       expect(dictionaries[locale].persona.libraryLimitReached).toContain('{max}');
       expect(dictionaries[locale].persona.libraryLimitReached).not.toContain('10');
+      // The hint and the rejection notice carry the same caps: a limit
+      // change must not leave stale copy behind either.
+      expect(dictionaries[locale].persona.libraryHint).toContain('{max}');
+      expect(dictionaries[locale].persona.libraryHint).toContain('{sizeMb}');
+      expect(dictionaries[locale].persona.libraryHint).not.toContain('10');
+      expect(dictionaries[locale].persona.libraryFilesRejected).toContain('{sizeMb}');
+      expect(dictionaries[locale].persona.libraryFilesRejected).not.toContain('10MB');
     }
   });
 
