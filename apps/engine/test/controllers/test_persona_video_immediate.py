@@ -1,7 +1,9 @@
 """The daily 6am persona batch is gone: every video generates immediately.
 
 /persona-videos must start generation right away for every persona type
-(face, avatar, or faceless) — no batch queue, no daily cutoff.
+(face, avatar, or faceless) — no daily batch queue, no 6am cutoff.
+Single videos go through the same request-batching core (batch of one)
+as POST /persona-videos/batch.
 """
 
 import inspect
@@ -86,14 +88,30 @@ class PersonaVideoImmediateTest(unittest.TestCase):
         params = inspect.signature(video_controller.create_task).parameters
         self.assertNotIn("daily_batch", params)
 
-    def test_persona_video_route_does_not_request_batching(self) -> None:
+    def test_single_video_delegates_to_batch_core_as_batch_of_one(self) -> None:
+        """POST /persona-videos is a thin wrapper: batch of one, same response."""
         body = _persona_video_request(avatar_url="https://example.com/a.png")
+        params = object()
         with patch.object(
-            video_controller, "create_task", return_value="task"
-        ) as create_task:
-            result = video_controller.create_persona_video(object(), body)
-        self.assertEqual(result, "task")
-        self.assertNotIn("daily_batch", create_task.call_args.kwargs)
+            video_controller,
+            "process_persona_videos",
+            return_value=[("task-1", params)],
+        ) as process:
+            result = video_controller.create_persona_video(_request(), body)
+        process.assert_called_once()
+        user_id, batch_body = process.call_args.args
+        self.assertEqual(user_id, "internal")
+        self.assertEqual(len(batch_body.items), 1)
+        item = batch_body.items[0]
+        self.assertEqual(item.topic, "test topic")
+        self.assertEqual(item.goal, "teach")
+        self.assertEqual(item.platform_ids, ["youtube"])
+        self.assertEqual(item.video_quality, body.content.video_quality)
+        self.assertEqual(batch_body.persona, body.persona)
+        # External contract unchanged: 200 + TaskResponse shape {data: {task_id}}.
+        self.assertEqual(
+            result, {"status": 200, "data": {"task_id": "task-1"}}
+        )
 
     def test_face_persona_starts_immediately(self) -> None:
         body = _video_params(avatar_url="https://example.com/a.png")

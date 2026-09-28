@@ -1,5 +1,6 @@
 import unittest
 import tempfile
+import types
 from pathlib import Path
 from unittest.mock import patch
 
@@ -71,14 +72,29 @@ class TestPersonaVideoContract(unittest.TestCase):
             ),
         )
 
-        with patch.object(video_controller, "create_task", return_value="task") as create_task:
-            result = video_controller.create_persona_video(object(), body)
+        with patch.object(
+            video_controller,
+            "process_persona_videos",
+            return_value=[("task-1", "params")],
+        ) as process:
+            request = types.SimpleNamespace(
+                state=types.SimpleNamespace(
+                    auth=video_controller.base.AuthContext(
+                        user_id="internal", auth_type="internal"
+                    )
+                )
+            )
+            result = video_controller.create_persona_video(request, body)
 
-        self.assertEqual(result, "task")
-        mapped = create_task.call_args.args[1]
-        self.assertEqual(mapped.video_subject, "Poupar dinheiro")
-        self.assertEqual(mapped.video_quality, LipSyncQuality.very_good)
-        self.assertEqual(mapped.platform_ids, ["account-1"])
+        self.assertEqual(result, {"status": 200, "data": {"task_id": "task-1"}})
+        process.assert_called_once()
+        batch_body = process.call_args.args[1]
+        self.assertEqual(len(batch_body.items), 1)
+        item = batch_body.items[0]
+        self.assertEqual(item.topic, "Poupar dinheiro")
+        self.assertEqual(item.goal, "educar")
+        self.assertEqual(item.platform_ids, ["account-1"])
+        self.assertEqual(item.video_quality, LipSyncQuality.very_good)
 
     def test_persona_script_is_limited_at_a_sentence_boundary(self):
         long_script = "Primeira frase. " + ("palavra " * 100)

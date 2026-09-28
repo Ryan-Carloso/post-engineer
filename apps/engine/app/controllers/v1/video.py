@@ -4,8 +4,9 @@ import json
 import os
 import pathlib
 import shutil
+import threading
 import time
-from typing import Union
+from typing import Optional, Union
 
 from fastapi import BackgroundTasks, Depends, Path, Query, Request, UploadFile
 from fastapi.params import File
@@ -30,7 +31,11 @@ from app.models.schema import (
     TaskQueryResponse,
     TaskResponse,
     PersonaVideoRequest,
+    PersonaVideoBatchRequest,
+    BatchVideoItem,
+    PersonaParams,
     TaskVideoRequest,
+    LipSyncQuality,
     VideoMaterialUploadResponse,
     VideoMaterialRetrieveResponse
 )
@@ -142,27 +147,31 @@ def create_video(
     return create_task(request, body, stop_at="video")
 
 
-@router.post(
-    "/persona-videos",
-    response_model=TaskResponse,
-    summary="Generate a persona video with mandatory InfiniteTalk intro",
-)
-def create_persona_video(
-    request: Request, body: PersonaVideoRequest
-):
-    """Accept the small public persona/content contract used by the frontend."""
-    persona = body.persona
-    content = body.content
-    max_script_characters = int(
-        config.app.get("max_video_script_characters", 700)
-    )
+def _persona_video_params(
+    persona: PersonaParams,
+    topic: str,
+    goal: Optional[str],
+    platform_ids: Optional[list],
+    video_quality: LipSyncQuality,
+    webhook_url: Optional[str] = None,
+) -> TaskVideoRequest:
+    """THE single builder for persona-video task params.
+
+    Both the single-video endpoint (as a batch of one) and the batch
+    endpoint go through this; there is no separate params construction
+    for the single path.
+    """
+    max_script_characters = int(config.app.get("max_video_script_characters", 700))
     max_duration_seconds = int(config.app.get("max_video_duration_seconds", 40))
+    # goal/platform_ids are optional per batch item; fall back to neutral
+    # defaults so the prompt stays well-formed for the script LLM.
+    goal_text = goal or "Create an engaging video about the topic."
     persona_prompt = (
         f"Create the script in {persona.language}. "
         f"Persona niche: {persona.niche}. "
         f"Speaking style: {persona.speaking_style}. "
         f"Audience: {persona.audience}. "
-        f"Goal: {content.goal}. "
+        f"Goal: {goal_text}. "
         "Write only the spoken words, with no headings or stage directions. "
         "Start with a standalone hook paragraph of 8 to 16 words designed to take "
         "3 to 6 seconds "
@@ -172,16 +181,198 @@ def create_persona_video(
         f"Keep the script under {max_script_characters} characters and below "
         f"{max_duration_seconds} seconds when spoken."
     )
-    params = TaskVideoRequest(
-        video_subject=content.topic,
+    return TaskVideoRequest(
+        video_subject=topic,
         video_language=persona.language,
         persona=persona,
-        platform_ids=content.platform_ids,
-        video_quality=content.video_quality,
+        platform_ids=platform_ids or [],
+        video_quality=video_quality,
         paragraph_number=None,
         video_script_prompt=persona_prompt,
+        webhook_url=webhook_url,
     )
-    return create_task(request, params, stop_at="video")
+
+
+def _batch_billing_store():
+    """Deferred ScheduleStore construction (needs Supabase env vars).
+
+    Raises RuntimeError when billing is not configured.
+    """
+    from app.services.fill_schedule import ScheduleStore
+
+    return ScheduleStore()
+
+
+def _batch_video_cost(face_mix_percent: float, face_quality: str) -> int:
+    """Per-video token cost, reusing the scheduled-videos formula."""
+    from app.services.fill_schedule import FillScheduleScheduler
+
+    return FillScheduleScheduler._token_cost(face_mix_percent, face_quality)
+
+
+def _spend_batch_upfront(
+    store, user_id: str, batch_id: str, item_count: int, cost_per_video: int
+) -> list:
+    """Spend one generation slot per video; refund all and 400 on any failure.
+
+    Fail fast: nothing is created and nothing stays charged when the balance
+    cannot cover the whole batch.
+    """
+    spent = []
+    try:
+        for index in range(item_count):
+            generation_id = f"persona-batch:{batch_id}:video:{index}"
+            ok = store.spend_tokens(
+                user_id,
+                generation_id,
+                cost_per_video,
+                reason="persona video batch upfront",
+            )
+            if not ok:
+                raise _InsufficientTokens()
+            spent.append(generation_id)
+    except _InsufficientTokens:
+        for generation_id in spent:
+            try:
+                store.refund_tokens(
+                    user_id, generation_id, "Batch upfront check failed"
+                )
+            except Exception:
+                pass
+        raise HttpException(
+            task_id=batch_id,
+            status_code=400,
+            message=INSUFFICIENT_TOKENS_MESSAGE,
+        )
+    return spent
+
+
+class _InsufficientTokens(Exception):
+    pass
+
+
+# Message for the 400 fail-fast when the token balance cannot cover a batch.
+INSUFFICIENT_TOKENS_MESSAGE = "INSUFFICIENT_TOKENS"
+
+
+def _run_persona_batch_sequential(specs: list) -> None:
+    """Run the batch's tasks strictly one-at-a-time in the calling thread.
+
+    A failure in one video is contained: it leaves that task in its terminal
+    FAILED state (with structured failure logging) and the next video still
+    runs.
+    """
+    for task_id, params in specs:
+        try:
+            tm.start(task_id=task_id, params=params, stop_at="video")
+        except Exception:
+            # tm.start already terminalizes the task via _fail_task (with
+            # structured Bugsink logging); never let one item cancel the rest.
+            continue
+
+
+def process_persona_videos(
+    user_id: str, body: PersonaVideoBatchRequest
+) -> list[tuple[str, TaskVideoRequest]]:
+    """THE single internal code path for persona video generation.
+
+    Validates N items (done by Pydantic) -> bills upfront for N videos ->
+    creates N task states -> starts sequential background execution.
+
+    Returns [(task_id, params)] in item order. Raises HttpException(400) with
+    the INSUFFICIENT message when the balance cannot cover all N videos
+    (nothing created, nothing charged) and HttpException(500) when billing
+    is not configured.
+
+    Both POST /persona-videos (as a batch of one) and
+    POST /persona-videos/batch delegate to this; there is no separate
+    generation/billing/progress logic for the single path.
+    """
+    batch_id = utils.get_uuid()
+    try:
+        store = _batch_billing_store()
+    except Exception as exc:
+        raise HttpException(
+            task_id=batch_id, status_code=500, message=f"Billing unavailable: {exc}"
+        )
+    cost = _batch_video_cost(body.face_mix_percent, body.face_quality)
+    _spend_batch_upfront(store, user_id, batch_id, len(body.items), cost)
+
+    specs = []
+    for item in body.items:
+        task_id = utils.get_uuid()
+        params = _persona_video_params(
+            persona=body.persona,
+            topic=item.topic,
+            goal=item.goal,
+            platform_ids=item.platform_ids,
+            video_quality=item.video_quality,
+            webhook_url=body.webhook_url,
+        )
+        sm.state.update_task(task_id, user_id=user_id)
+        specs.append((task_id, params))
+
+    thread = threading.Thread(
+        target=_run_persona_batch_sequential,
+        args=(specs,),
+        daemon=True,
+        name=f"persona-batch-{batch_id}",
+    )
+    thread.start()
+    return specs
+
+
+@router.post(
+    "/persona-videos/batch",
+    status_code=202,
+    summary="Generate a batch of persona videos sequentially",
+)
+def create_persona_video_batch(request: Request, body: PersonaVideoBatchRequest):
+    """One request, N persona videos (1..10).
+
+    Validates all items first, bills upfront for N videos, and fails fast
+    with 400 INSUFFICIENT (nothing created/charged) when the balance is too
+    low. Returns 202 {task_ids} immediately; the N tasks run sequentially in
+    background. A webhook_url (if given) fires per task on terminal state;
+    per-task progress streams via GET /api/v1/tasks/{task_id}/events.
+    """
+    auth = base.get_auth_context(request)
+    specs = process_persona_videos(auth.user_id, body)
+    return utils.get_response(202, {"task_ids": [task_id for task_id, _ in specs]})
+
+
+@router.post(
+    "/persona-videos",
+    response_model=TaskResponse,
+    summary="Generate a persona video with mandatory InfiniteTalk intro",
+)
+def create_persona_video(
+    request: Request, body: PersonaVideoRequest
+):
+    """Thin backwards-compatible wrapper around the batch core.
+
+    External request/response contract is unchanged: accepts the same
+    PersonaVideoRequest body and returns the same TaskResponse shape
+    ({data: {task_id}}). Internally it delegates to process_persona_videos
+    as a batch of one, so single videos share the exact same
+    validate -> bill -> sequential-execute -> progress/webhook/logging path
+    as batches (including upfront token billing).
+    """
+    auth = base.get_auth_context(request)
+    batch_body = PersonaVideoBatchRequest(
+        persona=body.persona,
+        items=[
+            BatchVideoItem(
+                topic=body.content.topic,
+                goal=body.content.goal,
+                platform_ids=body.content.platform_ids,
+                video_quality=body.content.video_quality,
+            )
+        ],
+    )
+    specs = process_persona_videos(auth.user_id, batch_body)
+    task_id = specs[0][0]
+    return utils.get_response(200, {"task_id": task_id})
 
 
 @router.post("/subtitle", response_model=TaskResponse, summary="Generate subtitle only")
