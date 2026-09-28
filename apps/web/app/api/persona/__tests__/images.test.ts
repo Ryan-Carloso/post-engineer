@@ -248,6 +248,19 @@ describe('POST /api/persona/images', () => {
     expect(body.error).toContain('10');
   });
 
+  it('rejects a non-string tag with 400 instead of silently dropping it', async () => {
+    mockAuth({ userId: USER_ID });
+    mockClient();
+    // A File under 'tag' is a valid FormDataEntryValue; silently coercing it
+    // to '' would lose the caller's metadata with a 201.
+    const res = await POST(
+      postForm({ personaId: PERSONA_ID, image: imageFile(), tag: imageFile() }),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('tag must be a string');
+  });
+
   it('rejects non-image files', async () => {
     mockAuth({ userId: USER_ID });
     mockClient();

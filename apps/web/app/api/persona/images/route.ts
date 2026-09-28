@@ -247,6 +247,15 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
   const tag = formData.get('tag');
   const description = formData.get('description');
+  // Like isPrimary and PATCH: a non-string tag/description is a client bug.
+  // Silently coercing a File to '' would lose the caller's metadata with a
+  // 201; fail loudly instead. Missing fields are fine (they default to '').
+  if (tag !== null && typeof tag !== 'string') {
+    return errorResponse(400, 'tag must be a string.');
+  }
+  if (description !== null && typeof description !== 'string') {
+    return errorResponse(400, 'description must be a string.');
+  }
   // The form field is a string: anything other than the exact 'true'/'false'
   // literals ('1', 'yes', 'True') is a client bug. Silently coercing to
   // false would confirm a primary the caller never got.

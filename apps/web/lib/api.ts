@@ -323,7 +323,7 @@ export interface UploadPersonaImageInput {
   isPrimary?: boolean;
 }
 
-interface ImageMutationResult {
+export interface ImageMutationResult {
   success: boolean;
   error?: string;
   /**

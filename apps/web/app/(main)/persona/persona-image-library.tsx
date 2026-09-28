@@ -7,6 +7,7 @@ import {
   usePersonaImagesQuery,
   useUpdatePersonaImageMutation,
   useUploadPersonaImageMutation,
+  type ImageMutationResult,
   type PersonaImageRecord,
 } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
@@ -174,7 +175,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
       // one actionable error instead of N parallel failures, and completed
       // items can leave the queue while failed/untried ones stay retryable.
       for (const item of pending) {
-        let result: { success: boolean; error?: string; warnings?: string[] };
+        let result: ImageMutationResult;
         try {
           result = await uploadMutation.mutateAsync({
             file: item.file,
