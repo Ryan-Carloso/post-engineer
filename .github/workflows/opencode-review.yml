@@ -9,8 +9,9 @@ name: opencode-review
 #   no third-party GitHub Action wrapper, no floating install script.
 #   (Verified against the installed CLI: there is no --standalone flag;
 #   `run` is already the non-interactive command for scripts/CI.)
-# - Tries the z.ai GLM Coding Plan first, then retries against z.ai's standard
-#   API endpoint if that review fails. Both use the same ZAI_API_KEY secret.
+# - Tries the z.ai GLM Coding Plan first, then falls back to z.ai's standard
+#   API endpoint (primary model first, then the permanently-free Flash model)
+#   if a review fails. All attempts use the same ZAI_API_KEY secret.
 # - Posts the review as a new PR comment on every push (the header carries
 #   the head SHA), so each review round stays visible instead of overwriting
 #   the previous one.
@@ -21,6 +22,9 @@ name: opencode-review
 # 2. If your Coding Plan uses a different model id, change OPENCODE_MODEL below.
 # 3. If needed, change ZAI_STANDARD_MODEL to a model available on z.ai's
 #    standard API.
+# 4. ZAI_FREE_MODEL is the last-resort fallback on the standard API: keep it
+#    a permanently-free model (e.g. glm-4.5-flash) so reviews keep running
+#    when the other quotas are exhausted.
 
 on:
   pull_request:
@@ -32,10 +36,13 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Primary and fallback models, in provider/model form. Each provider id must
-  # match the one configured before its corresponding review attempt.
+  # Review models in try order. OPENCODE_MODEL is provider/model form; the
+  # standard-API models are bare ids resolved against the zai-standard
+  # provider configured in the review step.
   OPENCODE_MODEL: zai-coding-plan/glm-5.3-flash
   ZAI_STANDARD_MODEL: glm-5.3-flash
+  # Permanently-free fallback so reviews survive quota exhaustion elsewhere.
+  ZAI_FREE_MODEL: glm-4.5-flash
 
 jobs:
   review:
@@ -137,7 +144,7 @@ jobs:
           fi
           wc -c pr.diff
 
-      - name: Run OpenCode review with Coding Plan, then standard API fallback
+      - name: Run OpenCode review with Coding Plan, then standard API fallbacks
         if: steps.check.outputs.has_key == 'true'
         env:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
@@ -164,17 +171,26 @@ jobs:
           - Output ONLY the review as markdown, with no preamble about your process.
           EOF
           } > prompt.md
-          if timeout 12m opencode run \
-            --model "$OPENCODE_MODEL" \
-            --file pr.diff \
-            --title "PR #$PR_NUMBER review" \
-            "$(cat prompt.md)" > review.md && [ -s review.md ]; then
-            echo "Review completed with z.ai Coding Plan."
+          # One review attempt: runs opencode with the given provider/model id
+          # and succeeds only if it produces a non-empty review.
+          review_with_model() {
+            timeout 12m opencode run \
+              --model "$1" \
+              --file pr.diff \
+              --title "PR #$PR_NUMBER review" \
+              "$(cat prompt.md)" > review.md
+            [ -s review.md ]
+          }
+          # Attempt 1: z.ai Coding Plan (best quality, quota-limited).
+          if review_with_model "$OPENCODE_MODEL"; then
+            echo "Review completed with z.ai Coding Plan ($OPENCODE_MODEL)."
           else
             echo "Coding Plan review failed; retrying with z.ai standard API."
-            MODEL_ID="$ZAI_STANDARD_MODEL" python3 <<'EOF'
+            # Register both standard-API models in one provider config so each
+            # fallback attempt only switches the --model flag.
+            python3 <<'EOF'
           import json, os
-          model_id = os.environ["MODEL_ID"]
+          model_ids = [os.environ["ZAI_STANDARD_MODEL"], os.environ["ZAI_FREE_MODEL"]]
           config = {
               "$schema": "https://opencode.ai/config.json",
               "provider": {
@@ -185,22 +201,26 @@ jobs:
                           "baseURL": "https://api.z.ai/api/paas/v4",
                           "apiKey": "{env:ZAI_API_KEY}",
                       },
-                      "models": {model_id: {"name": model_id}},
+                      "models": {model_id: {"name": model_id} for model_id in model_ids},
                   }
               },
           }
           with open("opencode.json", "w") as f:
               json.dump(config, f, indent=2)
-          print("wrote opencode.json for standard z.ai model", model_id)
+          print("wrote opencode.json for z.ai standard models:", ", ".join(model_ids))
           EOF
-            timeout 12m opencode run \
-              --model "zai-standard/$ZAI_STANDARD_MODEL" \
-              --file pr.diff \
-              --title "PR #$PR_NUMBER review" \
-              "$(cat prompt.md)" > review.md
-            if [ ! -s review.md ]; then
-              echo "OpenCode produced no output from either endpoint" >&2
-              exit 1
+            # Attempt 2: standard API with the primary model.
+            if review_with_model "zai-standard/$ZAI_STANDARD_MODEL"; then
+              echo "Review completed with z.ai standard API ($ZAI_STANDARD_MODEL)."
+            else
+              # Attempt 3: standard API with the permanently-free Flash model.
+              echo "Standard API review with $ZAI_STANDARD_MODEL failed; retrying with permanently-free $ZAI_FREE_MODEL."
+              if review_with_model "zai-standard/$ZAI_FREE_MODEL"; then
+                echo "Review completed with z.ai standard API ($ZAI_FREE_MODEL)."
+              else
+                echo "OpenCode produced no output from any endpoint" >&2
+                exit 1
+              fi
             fi
           fi
           wc -c review.md
