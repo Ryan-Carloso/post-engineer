@@ -1086,3 +1086,30 @@ Follow these so the same issues don't come back:
   two checks are functionally equivalent — the suggestion is stylistic,
   not a robustness gap. Reviewer suggestions about "more robust"
   checks still get verified against the actual module before any change.
+
+## PR #14 review learnings, round 2 (2026-09-28, OpenCode on 772260f)
+- **Declined as false positives (verified against the code):**
+  - CRITICAL "daemon threads die silently": `thread.start()` failure is
+    caught by the caller's try/except (refund + re-raise + ERROR log);
+    a crash inside the thread target hits `task.start`'s top-level
+    `except Exception` → `logger.exception` + `_fail_task` (structured
+    Bugsink logging). Nothing is silent on either path.
+  - CRITICAL "error messages still say 'queued'": they already say
+    "could not be dispatched" — the review quoted stale line numbers.
+  - MAJOR "PersonaBatchQueueFullError comment at video.py:204-205": the
+    symbol and comment do not exist anywhere in the codebase.
+  - MAJOR "dispatch test only covers happy path": dispatch failure is
+    covered at the caller level
+    (`test_generate_batch_dispatch_failure_refunds_single_video`) and
+    `task.start` crash handling has its own tests; a concurrency test
+    would only test `threading` itself.
+  - MINORs on config.example.toml + SIGNED_URL comment: both already
+    fixed ("max gap until generation"); the remaining "daily batch
+    cadence" comment lives in the untracked local config.toml.
+- **Genuine (fixed):** the review's CRITICAL-2 misattribution surfaced a
+  real stale module docstring in fill_schedule.py describing the removed
+  `PersonaBatchQueue`/06h cutoff (and "no token spend" for batches,
+  which are prepaid at schedule creation). Fixed the docstring.
+- Lesson: this reviewer re-reviews the whole PR diff on every push and
+  its line numbers go stale fast — always re-locate each cited finding
+  in the current tree before acting.
