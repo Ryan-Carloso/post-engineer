@@ -457,6 +457,18 @@ describe('faceless video generation', () => {
     expect(result.success).toBe(false);
   });
 
+  it('GenerateVideoSchema rejects an explicit null personaId (omit the field for faceless)', () => {
+    // Deliberate two-layer contract: the tool input uses omission for
+    // faceless; only the HTTP client maps that to the web API's explicit
+    // null sentinel (see client.ts). Do not add .nullable() here.
+    const result = GenerateVideoSchema.safeParse({
+      personaId: null,
+      videoSubject: 'Top 5 AI tools',
+      voiceId: 'alloy',
+    });
+    expect(result.success).toBe(false);
+  });
+
   it('handleGenerateVideo fails fast for faceless without videoSubject', async () => {
     const client = { generateVideoJob: vi.fn() } as unknown as PostEngineerClient;
     const response = await handleGenerateVideo(client, { voiceId: 'alloy' });

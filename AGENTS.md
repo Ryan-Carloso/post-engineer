@@ -923,3 +923,24 @@ Follow these so the same issues don't come back:
   validateLibraryInputs now returns the validated bytes/mime via
   `validatedContent`, which addLibraryImages reuses. Pinned by a test
   spying on File.prototype.arrayBuffer.
+
+## MCP review learnings, PR #7 bluesky/faceless (2026-09-28)
+- **Evaluated and declined (two OpenCode rounds, contradictory):** round 1
+  MAJOR said `args.personaId === undefined || args.personaId === null` in
+  handleGenerateVideo is a type-safety bug — false positive. The MCP SDK
+  validates tool args against the Zod schema before the handler runs, and
+  `z.string().min(1).optional()` rejects null, so null can never reach the
+  handler through the tool path. The spelled-out nullish check follows the
+  project rule (strict null checks only; `== null` banned). Do not
+  "simplify" it to `=== undefined` on reviewer request. Round 2 then
+  argued the exact opposite (add `.nullable()` because "the client sends
+  null") — also false positive: it conflates the two layers. The tool
+  input contract is omission-for-faceless; only the HTTP client maps that
+  to the web API's explicit null sentinel (client.ts,
+  `personaId: input.personaId ?? null`). The codebase already avoids
+  `.nullable()` where null has no meaning at that layer (tools.ts:92).
+  Pinned by a test: the schema rejects explicit null personaId.
+- **Pin undefined/[] equivalence in validators.** missingProviderAccountIds
+  treats a missing array and `[]` identically (`?? []`); an OpenCode MINOR
+  asked for the behavior to be documented — added a pinning test rather
+  than changing code.
