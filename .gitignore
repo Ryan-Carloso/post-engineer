@@ -10,6 +10,8 @@ dist/
 # Build / test artifacts
 coverage/
 coverage-unit/
+coverage.xml
+cobertura-coverage.xml
 .nyc_output/
 .npm/
 .pnpm-store/

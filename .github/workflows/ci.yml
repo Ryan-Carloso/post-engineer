@@ -84,6 +84,7 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+      code-quality: write
     defaults:
       run:
         working-directory: apps/web
@@ -112,13 +113,28 @@ jobs:
           pnpm exec tsc --noEmit
 
       - name: Unit tests
-        run: pnpm test
+        # NOTE: pass flags via `pnpm exec vitest` — `pnpm test -- --coverage`
+        # forwards a literal `--` to the script (pnpm 10), which makes vitest
+        # silently skip coverage generation (no report files written).
+        run: pnpm exec vitest run --coverage --coverage.reporter=text --coverage.reporter=cobertura
+
+      # Best-effort until GitHub Code Quality is enabled on the repo: with
+      # fail-on-error 'false' a missing Code Quality setup warns instead of
+      # failing CI. Flip to 'true' once the coverage gate is enforced.
+      - name: Upload coverage to GitHub
+        uses: actions/upload-code-coverage@d8e329117199404bba6fc81efe8093dc7c015e34 # v1.4.2
+        with:
+          file: apps/web/coverage-unit/cobertura-coverage.xml
+          language: TypeScript
+          label: code-coverage/web
+          fail-on-error: 'false'
 
   mcp:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: read
+      code-quality: write
     defaults:
       run:
         shell: bash
@@ -149,13 +165,28 @@ jobs:
         run: pnpm exec nx run mcp:typecheck
 
       - name: Unit tests
-        run: pnpm test
+        # NOTE: pass flags via `pnpm exec vitest` — `pnpm test -- --coverage`
+        # forwards a literal `--` to the script (pnpm 10), which makes vitest
+        # silently skip coverage generation (no report files written).
+        run: pnpm exec vitest run --coverage --coverage.reporter=text --coverage.reporter=cobertura
+
+      # Best-effort until GitHub Code Quality is enabled on the repo: with
+      # fail-on-error 'false' a missing Code Quality setup warns instead of
+      # failing CI. Flip to 'true' once the coverage gate is enforced.
+      - name: Upload coverage to GitHub
+        uses: actions/upload-code-coverage@d8e329117199404bba6fc81efe8093dc7c015e34 # v1.4.2
+        with:
+          file: apps/mcp/coverage/cobertura-coverage.xml
+          language: TypeScript
+          label: code-coverage/mcp
+          fail-on-error: 'false'
 
   engine:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: read
+      code-quality: write
     defaults:
       run:
         working-directory: apps/engine
@@ -181,4 +212,15 @@ jobs:
         run: uv run python -m compileall -q app cli.py main.py
 
       - name: Tests
-        run: uv run pytest -q
+        run: uv run coverage run -m pytest -q && uv run coverage xml -o coverage.xml
+
+      # Best-effort until GitHub Code Quality is enabled on the repo: with
+      # fail-on-error 'false' a missing Code Quality setup warns instead of
+      # failing CI. Flip to 'true' once the coverage gate is enforced.
+      - name: Upload coverage to GitHub
+        uses: actions/upload-code-coverage@d8e329117199404bba6fc81efe8093dc7c015e34 # v1.4.2
+        with:
+          file: apps/engine/coverage.xml
+          language: Python
+          label: code-coverage/engine
+          fail-on-error: 'false'

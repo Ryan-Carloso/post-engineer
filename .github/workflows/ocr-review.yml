@@ -42,8 +42,14 @@
 # reach the guard via `env:`, and the checkout `ref:` — all GitHub-controlled
 # values, safe outside `run:`.)
 #
-# LLM: same z.ai OpenAI-compatible endpoint + ZAI_API_KEY secret + model as the
-# existing OpenCode review. Skips gracefully when the secret is not set.
+# LLM: the primary attempt uses the z.ai coding endpoint (glm-5.3-flash, same
+# model as the OpenCode review); if that attempt fails (e.g. quota
+# exhausted), a fallback attempt retries with the permanently-free
+# glm-4.7-flash on z.ai's standard OpenAI-compatible endpoint. Same
+# ZAI_API_KEY secret for both. Skips gracefully when the secret is not set.
+# NOTE: the fallback does NOT cover action infra failures (e.g. the action
+# failing to resolve its own ocr_version): those fail before any LLM call,
+# so both attempts fail the same way and the job stays red, as it should.
 # ocr_version is pinned (1.12.9, verified working 2026-09-25) because the
 # action defaults to npm `latest`, which would float the reviewed binary.
 #
@@ -182,14 +188,37 @@ jobs:
           echo "blocked=$blocked" >> "$GITHUB_OUTPUT"
 
       - name: Run OpenCodeReview
+        id: ocr-primary
         # Fail-closed gate: `blocked == 'false'` (not `!= 'true'`) so a
         # missing/empty output — e.g. a refactor dropping the echo — blocks
         # the review instead of running it unguarded.
         if: steps.key-check.outputs.present == 'true' && steps.env-guard.outputs.blocked == 'false'
+        # continue-on-error: a primary failure (e.g. model quota) must not
+        # fail the job before the free-model fallback below gets its chance.
+        # steps.ocr-primary.outcome still records 'failure', so the fallback
+        # gate stays accurate.
+        continue-on-error: true
         uses: alibaba/open-code-review@486022daaf14f7142275eddb9b3cacc3cc5dadfa # pinned 2026-09-25
         with:
           llm_url: https://api.z.ai/api/coding/paas/v4
           llm_auth_token: ${{ secrets.ZAI_API_KEY }}
           llm_model: glm-5.3-flash
+          llm_use_anthropic: "false"
+          ocr_version: "1.12.9" # pinned 2026-09-25; action default is npm `latest`
+
+      - name: Run OpenCodeReview (free-model fallback)
+        id: ocr-fallback
+        # Same fail-closed gate as the primary, plus: only runs when the
+        # primary attempt actually failed. Retries with the permanently-free
+        # glm-4.7-flash on z.ai's standard endpoint, so reviews survive
+        # Coding Plan quota exhaustion. This does not mask infra failures:
+        # if the action itself is broken, this attempt fails too and the
+        # job stays red.
+        if: steps.key-check.outputs.present == 'true' && steps.env-guard.outputs.blocked == 'false' && steps.ocr-primary.outcome == 'failure'
+        uses: alibaba/open-code-review@486022daaf14f7142275eddb9b3cacc3cc5dadfa # pinned 2026-09-25
+        with:
+          llm_url: https://api.z.ai/api/paas/v4
+          llm_auth_token: ${{ secrets.ZAI_API_KEY }}
+          llm_model: glm-4.7-flash
           llm_use_anthropic: "false"
           ocr_version: "1.12.9" # pinned 2026-09-25; action default is npm `latest`
