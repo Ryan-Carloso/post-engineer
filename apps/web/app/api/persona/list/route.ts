@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { isScopedApiKey } from '@/lib/api-keys';
+import { logger } from '@/lib/logger';
 
 //---------------
 // GET /api/persona/list — the logged-in user's personas.
@@ -36,7 +37,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   const { data, error } = await query.order('created_at', { ascending: false });
 
   if (error) {
-    console.error('[api/persona/list] query failed', { error });
+    logger.error('[api/persona/list] query failed', error);
     return NextResponse.json(
       { success: false, error: 'Failed to list personas.' },
       { status: 500 },

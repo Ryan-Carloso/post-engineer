@@ -987,3 +987,45 @@ Follow these so the same issues don't come back:
   with `fail-on-error: 'false'` (that input only downgrades *upload* errors,
   e.g. Code Quality not enabled). The coverage-generation step must actually
   produce the file, or CI goes red.
+
+## Test quirks (vitest 4.1)
+
+- **Don't `mockReset()`/`mockClear()` a `vi.stubGlobal`'d fetch in
+  `beforeEach` when a test makes it throw.** Observed 2026-09-28
+  (lib/__tests__/token-balance-real.test.ts): with the reset in place, a
+  throwing fetch mock surfaces as a phantom `Error` attributed to the test
+  even though the code under test catches it and behaves correctly
+  (verified: right return value, logger.warn called once). Without the
+  reset, the same test passes. Arm the mock explicitly in each test instead
+  of resetting the stubbed global.
+
+## Logger migration rule (2026-09-28)
+- When migrating a direct `console.warn/error(msg, obj)` call to
+  `logger.warn/error(...)`, the logger's console emission must preserve the
+  EXACT call shape (message first, metadata/error as separate args).
+  Pre-existing route tests pin it with
+  `toHaveBeenCalledWith(msg, expect.objectContaining(...))` — adding a
+  `[WARN] [logId]` prefix arg or JSON-stringifying metadata into the message
+  breaks them (10 tests went red this way; the fix was a shape-preserving
+  passthrough in `writeConsole`). The logger adds Bugsink routing and returns
+  the logId; it must not reshape the console call.
+- Same reason: don't "improve" the metadata at a migrated call site
+  (`console.warn(msg, err)` -> `logger.warn(msg, { err })` is NOT faithful
+  when a test expects the raw object as 2nd arg). Migrate the shape as-is;
+  split cause/metadata only where no test pins the old shape.
+
+## Reviewer finding: logging coverage (2026-09-28, PR #11)
+- OpenCode flagged a GENUINE gap: `POST /api/persona` had been migrated to
+  `logger.error` but had no dedicated failure-logging test. Fixed by adding
+  `app/api/persona/__tests__/route-logging.test.ts` (insert failure ->
+  `logger.error` with the real DB error, sanitized 500 to the client).
+- Lesson: when migrating a route's failure path to the central logger, add a
+  `route-logging.test.ts` (or extend the existing test) asserting the logger
+  call — the migration is only half done without the pinning test. The
+  reviewer's suggested assertion message was wrong (`create failed` vs the
+  actual `'[api/persona] insert failed'`): always verify findings against the
+  code before applying.
+- The same review's MINOR (extract a shared `extractErrorMessage` helper for
+  the `error instanceof Error ? error.message : ...` pattern) was evaluated
+  and DECLINED: no functional issue, and the churn would touch many files
+  and their test expectations for zero behavioral benefit.

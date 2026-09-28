@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { checkAndDeductTokens } from '@/lib/billing/token-check';
 import { secretsMatch } from '@/lib/secrets';
+import { logger } from '@/lib/logger';
 import type { FaceQuality } from '@/lib/tokens';
 
 //---------------
@@ -23,7 +24,8 @@ export async function POST(request: Request): Promise<NextResponse> {
   let engineSecret: string;
   try {
     engineSecret = getEngineSecret();
-  } catch {
+  } catch (error) {
+    logger.error('[api/billing/check-tokens] engine secret not configured', error);
     return NextResponse.json(
       { success: false, error: 'Service not configured.' },
       { status: 500 },

@@ -5,6 +5,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { isPersonaAllowed } from '@/lib/api-keys';
 import { computeVideoTokens, toFiniteNumber, type FaceQuality } from '@/lib/tokens';
+import { logger } from '@/lib/logger';
 
 //---------------
 // POST /api/schedule/batch — manual video batch (finite, user-requested).
@@ -279,10 +280,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       .eq('user_id', auth.userId)
       .eq('provider', provider);
     if (accountsError) {
-      console.error('[api/schedule/batch] connected accounts lookup failed', {
-        provider,
-        error: accountsError,
-      });
+      logger.error('[api/schedule/batch] connected accounts lookup failed', accountsError, { provider });
       return errorResponse(500, 'Failed to check connected accounts. Please try again.');
     }
     const ids = (accounts ?? [])
@@ -319,7 +317,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     p_reason: `Manual video batch (${items.length} videos)`,
   });
   if (spendError) {
-    console.error('[api/schedule/batch] spend failed', { error: spendError });
+    logger.error('[api/schedule/batch] spend failed', spendError);
     return errorResponse(500, 'Failed to process tokens. Please try again.');
   }
   const spendRecord = (spendData ?? {}) as Record<string, unknown>;
@@ -368,7 +366,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     .select('id')
     .single();
   if (scheduleError) {
-    console.error('[api/schedule/batch] schedule insert failed', { error: scheduleError });
+    logger.error('[api/schedule/batch] schedule insert failed', scheduleError);
     await serviceSupabase.rpc('refund_generation_tokens', {
       p_user_id: auth.userId,
       p_generation_id: generationId,
@@ -387,7 +385,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     })),
   );
   if (slotsError) {
-    console.error('[api/schedule/batch] slots insert failed', { error: slotsError });
+    logger.error('[api/schedule/batch] slots insert failed', slotsError);
     await supabase.from('scheduled_posts').delete().eq('schedule_id', scheduleId);
     await supabase.from('schedules').delete().eq('id', scheduleId);
     await serviceSupabase.rpc('refund_generation_tokens', {

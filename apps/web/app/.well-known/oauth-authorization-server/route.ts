@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getIssuer } from '@/lib/oauth/config';
+import { logger } from '@/lib/logger';
 
 //---------------
 // GET /.well-known/oauth-authorization-server — authorization server
@@ -26,6 +27,7 @@ export async function GET(): Promise<NextResponse> {
   try {
     return NextResponse.json(authorizationServerMetadata());
   } catch (error) {
+    logger.error('[oauth] authorization server metadata failed', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'OAuth is not configured.' },
       { status: 500 },

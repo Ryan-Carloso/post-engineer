@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { getStripePriceId, isTokenPackId, TOKEN_PACKS, type TokenPackId } from '@/lib/billing';
+import { logger } from '@/lib/logger';
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY;
@@ -11,7 +12,7 @@ function getStripe() {
 export async function POST(request: Request): Promise<NextResponse> {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!webhookSecret) {
-    console.error('[api/billing/webhook] STRIPE_WEBHOOK_SECRET is not defined');
+    logger.error('[api/billing/webhook] STRIPE_WEBHOOK_SECRET is not defined');
     return NextResponse.json({ success: false, error: 'Webhook not configured.' }, { status: 500 });
   }
 
@@ -24,7 +25,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     stripe = await getStripe();
   } catch (error) {
-    console.error('[api/billing/webhook] stripe init failed', { error });
+    logger.error('[api/billing/webhook] stripe init failed', error);
     return NextResponse.json({ success: false, error: 'Payment system unavailable.' }, { status: 500 });
   }
 
@@ -32,7 +33,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     event = stripe.webhooks.constructEvent(await request.text(), signature, webhookSecret);
   } catch (error) {
-    console.error('[api/billing/webhook] signature verification failed', { error });
+    logger.error('[api/billing/webhook] signature verification failed', error);
     return NextResponse.json({ success: false, error: 'Invalid signature.' }, { status: 400 });
   }
 
@@ -47,7 +48,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     .maybeSingle();
 
   if (eventError) {
-    console.error('[api/billing/webhook] event persistence failed', { eventId: event.id, error: eventError });
+    logger.error('[api/billing/webhook] event persistence failed', eventError, { eventId: event.id });
     return NextResponse.json({ success: false, error: 'Webhook persistence failed.' }, { status: 500 });
   }
   if (!recordedEvent) return NextResponse.json({ success: true, duplicate: true });
@@ -58,14 +59,14 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
   } catch (error) {
     if (isPermanentFulfillmentError(error)) {
-      console.error('[api/billing/webhook] permanent fulfillment rejection', { eventId: event.id, error });
+      logger.error('[api/billing/webhook] permanent fulfillment rejection', error, { eventId: event.id });
       return NextResponse.json({ success: true, ignored: true });
     }
     const { error: deleteError } = await supabase.from('stripe_webhook_events').delete().eq('event_id', event.id);
     if (deleteError) {
-      console.error('[api/billing/webhook] failed to release event for retry', { eventId: event.id, error: deleteError });
+      logger.error('[api/billing/webhook] failed to release event for retry', deleteError, { eventId: event.id });
     }
-    console.error('[api/billing/webhook] fulfillment failed', { eventId: event.id, error });
+    logger.error('[api/billing/webhook] fulfillment failed', error, { eventId: event.id });
     return NextResponse.json({ success: false, error: 'Webhook handler failed.' }, { status: 500 });
   }
 
@@ -101,7 +102,7 @@ async function fulfillCheckout(
   const packId: TokenPackId = packValue;
   const configuredPriceId = getStripePriceId(packId);
   if (metadata?.stripePriceId !== configuredPriceId) {
-    console.warn('[api/billing/webhook] checkout price configuration changed; using validated pack ID', {
+    logger.warn('[api/billing/webhook] checkout price configuration changed; using validated pack ID', {
       sessionId: session.id,
       packId,
       configuredPriceId,
@@ -122,7 +123,7 @@ async function fulfillCheckout(
   });
 
   if (error) {
-    console.error('[api/billing/webhook] token credit failed', { userId, sessionId: session.id, error });
+    logger.error('[api/billing/webhook] token credit failed', error, { userId, sessionId: session.id });
     throw error;
   }
 }

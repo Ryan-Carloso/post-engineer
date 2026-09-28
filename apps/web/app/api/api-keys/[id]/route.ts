@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
+import { logger } from '@/lib/logger';
 
 export async function DELETE(
   request: Request,
@@ -30,6 +31,7 @@ export async function DELETE(
     .eq('user_id', auth.userId);
 
   if (error) {
+    logger.error('[api/api-keys] revoke failed', error);
     return NextResponse.json(
       { success: false, error: 'Failed to revoke API key.' },
       { status: 500 },

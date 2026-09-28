@@ -3,6 +3,7 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { toFiniteNumber } from '@/lib/tokens';
+import { logger } from '@/lib/logger';
 
 //---------------
 // GET /api/billing/tokens — authoritative prepaid wallet balance.
@@ -30,10 +31,10 @@ export async function GET(request?: Request): Promise<NextResponse> {
       p_user_id: userId,
     });
     if (grantError) {
-      console.error('[api/billing/tokens] signup bonus grant failed', { userId, error: grantError });
+      logger.error('[api/billing/tokens] signup bonus grant failed', grantError, { userId });
     }
   } catch (grantException) {
-    console.error('[api/billing/tokens] signup bonus grant threw', { userId, error: grantException });
+    logger.error('[api/billing/tokens] signup bonus grant threw', grantException, { userId });
   }
 
   // Busca o profile (pode não existir para usuários free sem billing)

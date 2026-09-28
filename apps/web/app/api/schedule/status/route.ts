@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { isScopedApiKey } from '@/lib/api-keys';
+import { logger } from '@/lib/logger';
 
 //---------------
 // GET /api/schedule/status — upcoming slots + recent results of the
@@ -50,7 +51,7 @@ export async function GET(request?: Request): Promise<NextResponse> {
       .eq('user_id', userId)
       .in('persona_id', auth.personaIds ?? []);
     if (error) {
-      console.error('[api/schedule/status] scope lookup failed', { error });
+      logger.error('[api/schedule/status] scope lookup failed', error);
       return NextResponse.json(
         { success: false, error: 'Failed to load schedule status.' },
         { status: 500 },
@@ -91,7 +92,7 @@ export async function GET(request?: Request): Promise<NextResponse> {
   ]);
 
   if (upcoming.error || recent.error) {
-    console.error('[api/schedule/status] query failed', {
+    logger.error('[api/schedule/status] query failed', undefined, {
       upcoming: upcoming.error,
       recent: recent.error,
     });

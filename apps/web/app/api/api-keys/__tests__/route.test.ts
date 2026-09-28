@@ -12,8 +12,18 @@ vi.mock('@/lib/supabase/service', () => ({
   createSupabaseServiceClient: vi.fn(),
 }));
 
+vi.mock('@/lib/logger', () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  },
+}));
+
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
+import { logger } from '@/lib/logger';
 
 describe('/api/api-keys endpoints', () => {
   beforeEach(() => {
@@ -250,6 +260,85 @@ describe('/api/api-keys endpoints', () => {
       const data = await response.json();
       expect(data.success).toBe(true);
     });
+  });
+});
+
+describe('/api/api-keys failure logging', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: 'user-1', accessToken: 'token' },
+      error: null,
+    });
+  });
+
+  it('logs when listing keys fails', async () => {
+    const dbError = { message: 'db down', code: 'XX000' };
+    vi.mocked(createSupabaseServiceClient).mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            order: vi.fn().mockResolvedValue({ data: null, error: dbError }),
+          }),
+        }),
+      }),
+    } as unknown as SupabaseClient);
+
+    const response = await GET(new Request('http://localhost:3434/api/api-keys'));
+    expect(response.status).toBe(500);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('list failed'),
+      dbError,
+    );
+  });
+
+  it('logs when creating a key fails', async () => {
+    const dbError = { message: 'insert failed', code: '23505' };
+    vi.mocked(createSupabaseServiceClient).mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        insert: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({ data: null, error: dbError }),
+          }),
+        }),
+      }),
+    } as unknown as SupabaseClient);
+
+    const response = await POST(
+      new Request('http://localhost:3434/api/api-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'failing key' }),
+      }),
+    );
+    expect(response.status).toBe(500);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('create failed'),
+      dbError,
+    );
+  });
+
+  it('logs when revoking a key fails', async () => {
+    const dbError = { message: 'update failed', code: 'XX000' };
+    vi.mocked(createSupabaseServiceClient).mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        update: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            eq: vi.fn().mockResolvedValue({ error: dbError }),
+          }),
+        }),
+      }),
+    } as unknown as SupabaseClient);
+
+    const response = await DELETE(
+      new Request('http://localhost:3434/api/api-keys/key-1', { method: 'DELETE' }),
+      { params: Promise.resolve({ id: 'key-1' }) },
+    );
+    expect(response.status).toBe(500);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('revoke failed'),
+      dbError,
+    );
   });
 });
 

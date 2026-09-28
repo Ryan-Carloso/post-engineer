@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { getStripePriceId, isTokenPackId, TOKEN_PACKS, type TokenPackId } from '@/lib/billing';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { logger } from '@/lib/logger';
 
 //---------------
 // POST /api/billing/checkout — creates a one-time Checkout Session for a pack.
@@ -55,7 +56,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     stripePriceId = getStripePriceId(packId);
   } catch (error) {
-    console.error('[api/billing/checkout] price configuration failed', { error });
+    logger.error('[api/billing/checkout] price configuration failed', error);
     return NextResponse.json(
       { success: false, error: 'Payment system unavailable.' },
       { status: 500 },
@@ -66,7 +67,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     stripe = await getStripe();
   } catch (error) {
-    console.error('[api/billing/checkout] stripe init failed', { error });
+    logger.error('[api/billing/checkout] stripe init failed', error);
     return NextResponse.json(
       { success: false, error: 'Payment system unavailable.' },
       { status: 500 },
@@ -99,14 +100,14 @@ export async function POST(request: Request): Promise<NextResponse> {
           { onConflict: 'id' },
         );
       if (upsertError) {
-        console.error('[api/billing/checkout] profile upsert failed', { error: upsertError });
+        logger.error('[api/billing/checkout] profile upsert failed', upsertError);
         return NextResponse.json(
           { success: false, error: 'Unable to save billing profile.' },
           { status: 502 },
         );
       }
     } catch (error) {
-      console.error('[api/billing/checkout] customer creation failed', { error, userId: user.id });
+      logger.error('[api/billing/checkout] customer creation failed', error, { userId: user.id });
       return NextResponse.json(
         { success: false, error: 'Unable to start checkout.' },
         { status: 502 },
@@ -116,7 +117,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
   if (!appUrl) {
-    console.error('[api/billing/checkout] NEXT_PUBLIC_APP_URL is not defined');
+    logger.error('[api/billing/checkout] NEXT_PUBLIC_APP_URL is not defined');
     return NextResponse.json(
       { success: false, error: 'Payment system unavailable.' },
       { status: 500 },
@@ -144,7 +145,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     return NextResponse.json({ success: true, url: session.url });
   } catch (error) {
-    console.error('[api/billing/checkout] checkout session creation failed', { error, userId: user.id });
+    logger.error('[api/billing/checkout] checkout session creation failed', error, { userId: user.id });
     return NextResponse.json(
       { success: false, error: 'Unable to start checkout.' },
       { status: 502 },

@@ -628,7 +628,9 @@ class FillScheduleScheduler:
                 enqueued += 1
                 enqueued_topics.append(f"{persona.get('name', 'Persona')}: {topic}")
             except Exception as exc:
-                logger.warning(f"fill_schedule: slot {slot['id']} generation failed: {exc}")
+                # A failed slot is a real recurring error: log at ERROR so the
+                # Bugsink bridge (loguru sink, ERROR+) forwards it.
+                logger.error(f"fill_schedule: slot {slot['id']} generation failed: {exc}")
                 self.store.update_slot(slot["id"], status=SLOT_FAILED, error=str(exc)[:500])
                 self._safe_notify(
                     notify_module.slot_failed_msg(
@@ -804,7 +806,9 @@ class FillScheduleScheduler:
             try:
                 results[stage_name] = stage(now)
             except Exception as exc:  # noqa: BLE001
-                logger.warning(f"fill_schedule: stage {stage_name} failed: {notify_module.safe_reason(exc)}")
+                # A failed tick stage is a real recurring error: log at ERROR
+                # so the Bugsink bridge (loguru sink, ERROR+) forwards it.
+                logger.error(f"fill_schedule: stage {stage_name} failed: {notify_module.safe_reason(exc)}")
                 results[stage_name] = -1
         if any(value != 0 for value in results.values()):
             logger.info(f"fill_schedule tick: {results}")

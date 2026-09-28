@@ -25,6 +25,7 @@ import {
   PERSONA_IMAGE_WARNING_CODES,
   type LibraryImageInput,
 } from '@/lib/persona-images';
+import { logger } from '@/lib/logger';
 
 //---------------
 // POST /api/persona — creates the user's persona:
@@ -171,7 +172,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     .single();
 
   if (insertError || !persona) {
-    console.error('[api/persona] insert failed', { error: insertError });
+    logger.error('[api/persona] insert failed', insertError);
     return errorResponse(500, 'Failed to create persona.');
   }
 
@@ -206,14 +207,11 @@ export async function POST(request: Request): Promise<NextResponse> {
         .delete()
         .eq('id', persona.id);
       if (rollbackError) {
-        console.error('[api/persona] creation rollback failed', { error: rollbackError });
+        logger.error('[api/persona] creation rollback failed', rollbackError);
         if (rowBackedPaths.length > 0) {
           // Rows survive, so their storage files must survive too: removing
           // them would leave rows pointing at deleted objects.
-          console.error(
-            '[api/persona] creation rollback failed; row-backed image files left in place',
-            { rowBackedPaths },
-          );
+          logger.error('[api/persona] creation rollback failed; row-backed image files left in place', undefined, { rowBackedPaths });
         }
       } else if (rowBackedPaths.length > 0) {
         // The cascade erased the image rows: their storage files are now
@@ -227,10 +225,7 @@ export async function POST(request: Request): Promise<NextResponse> {
             .from(IMAGE_BUCKET)
             .remove(rowBackedPaths);
           if (rowBackedRetryError) {
-            console.error(
-              '[api/persona] row-backed library storage remove failed after cascade delete',
-              { error: rowBackedRetryError, rowBackedPaths },
-            );
+            logger.error('[api/persona] row-backed library storage remove failed after cascade delete', rowBackedRetryError, { rowBackedPaths });
           }
         }
       }
@@ -239,9 +234,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           .from(IMAGE_BUCKET)
           .remove([photoPath]);
         if (photoRollbackError) {
-          console.error('[api/persona] photo rollback failed', {
-            error: photoRollbackError,
-          });
+          logger.error('[api/persona] photo rollback failed', photoRollbackError);
         }
       }
       return errorResponse(added.status, added.error);
@@ -260,9 +253,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         user.id,
       );
       if (primaryError) {
-        console.error('[api/persona] set primary library image failed', {
-          error: primaryError.error,
-        });
+        logger.error('[api/persona] set primary library image failed', primaryError.error);
         // Stable code, not English copy: the UI maps it through i18n,
         // consistent with the /api/persona/images warnings contract.
         warnings.push(PERSONA_IMAGE_WARNING_CODES.PRIMARY_SWAP_FAILED);
@@ -438,14 +429,14 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     .update(updates)
     .eq('id', personaId);
   if (updateError) {
-    console.error('[api/persona] update failed', { error: updateError });
+    logger.error('[api/persona] update failed', updateError);
     return errorResponse(500, 'Failed to update persona.');
   }
 
   if (stalePaths.length > 0) {
     const { error: storageError } = await supabase.storage.from(IMAGE_BUCKET).remove(stalePaths);
     if (storageError) {
-      console.error('[api/persona] storage cleanup failed', { error: storageError });
+      logger.error('[api/persona] storage cleanup failed', storageError);
     }
   }
 
@@ -563,9 +554,7 @@ export async function DELETE(request: Request): Promise<NextResponse> {
     .select('image_path')
     .eq('persona_id', personaId);
   if (libraryError) {
-    console.error('[api/persona] library image cleanup lookup failed', {
-      error: libraryError,
-    });
+    logger.error('[api/persona] library image cleanup lookup failed', libraryError);
     return errorResponse(500, 'Failed to remove persona files.');
   }
   for (const row of libraryRows ?? []) {
@@ -584,16 +573,13 @@ export async function DELETE(request: Request): Promise<NextResponse> {
     .eq('id', personaId)
     .eq('user_id', user.id);
   if (deleteError) {
-    console.error('[api/persona] delete failed', { error: deleteError });
+    logger.error('[api/persona] delete failed', deleteError);
     return errorResponse(500, 'Failed to delete persona.');
   }
   if (paths.length > 0) {
     const { error: storageError } = await supabase.storage.from(IMAGE_BUCKET).remove(paths);
     if (storageError) {
-      console.error('[api/persona] storage cleanup failed after delete', {
-        error: storageError,
-        paths,
-      });
+      logger.error('[api/persona] storage cleanup failed after delete', storageError, { paths });
     }
   }
   return NextResponse.json({ success: true });
@@ -625,7 +611,7 @@ export async function uploadFile(
   });
 
   if (error) {
-    console.error('[api/persona] storage upload failed', { path, error });
+    logger.error('[api/persona] storage upload failed', error, { path });
     return null;
   }
   return path;

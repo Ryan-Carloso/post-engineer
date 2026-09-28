@@ -18,6 +18,7 @@ import {
   MAX_PERSONA_IMAGES,
   PERSONA_IMAGE_WARNING_CODES,
 } from '@/lib/persona-image-select';
+import { logger } from '@/lib/logger';
 
 // Single source of truth for the library cap; the picker limit, the
 // server count check, and the SQL trigger all derive from this value.
@@ -245,7 +246,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
             description: item.description.trim() || undefined,
           });
         } catch (uploadError) {
-          console.error('[persona-image-library] upload failed', { error: uploadError });
+          logger.error('[persona-image-library] upload failed', uploadError);
           setError(`${t('persona.libraryUploadError')} (${item.file.name})`);
           break;
         }
@@ -451,7 +452,7 @@ function LibraryImageCard({
         setCardError(mapPersonaImageError(result.error, t, 'persona.libraryUpdateError'));
       }
     } catch (saveError) {
-      console.error('[persona-image-library] update failed', { error: saveError });
+      logger.error('[persona-image-library] update failed', saveError);
       setCardError(t('persona.libraryUpdateError'));
     }
   };
@@ -469,7 +470,7 @@ function LibraryImageCard({
         setCardWarning(mapPersonaImageWarnings(result.warnings, t));
       }
     } catch (primaryError) {
-      console.error('[persona-image-library] set primary failed', { error: primaryError });
+      logger.error('[persona-image-library] set primary failed', primaryError);
       setCardError(t('persona.libraryUpdateError'));
     }
   };
@@ -484,7 +485,7 @@ function LibraryImageCard({
         setCardError(mapPersonaImageError(result.error, t, 'persona.libraryDeleteError'));
       }
     } catch (deleteError) {
-      console.error('[persona-image-library] delete failed', { error: deleteError });
+      logger.error('[persona-image-library] delete failed', deleteError);
       setCardError(t('persona.libraryDeleteError'));
     }
   };

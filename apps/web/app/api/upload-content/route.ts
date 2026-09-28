@@ -116,10 +116,10 @@ export async function POST(request: NextRequest) {
             ? await handleLinkedinUpload(formData, userId)
             : await handleInstagramUpload(formData, userId, logId, startTime);
 
-    console.log('[upload-content] handler finalizado', { provider, success: response.success, logId });
+    logger.info('[upload-content] handler finalizado', { provider, success: response.success, logId });
     return NextResponse.json(response);
   } catch (error) {
-    console.error('[upload-content] ERRO', {
+    logger.error('[upload-content] ERRO', undefined, {
       message: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
       name: error instanceof Error ? error.name : 'UNKNOWN',

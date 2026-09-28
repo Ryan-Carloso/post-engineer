@@ -5,6 +5,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { isPersonaAllowed } from '@/lib/api-keys';
 import { validateScheduleWindow } from '@/lib/schedule-window';
+import { logger } from '@/lib/logger';
 
 //---------------
 // /api/schedule — CRUD for the automatic fill-schedule timetables.
@@ -58,7 +59,7 @@ async function assertScheduleScope(
     .eq('user_id', userId)
     .single();
   if (error && error.code !== 'PGRST116') {
-    console.error('[api/schedule] assertScheduleScope failed', { error });
+    logger.error('[api/schedule] assertScheduleScope failed', error);
     return errorResponse(500, 'Failed to fetch schedule.');
   }
   if (!data) return errorResponse(404, 'Schedule not found.');
@@ -181,7 +182,7 @@ export async function GET(request?: Request): Promise<NextResponse> {
     .order('created_at', { ascending: true });
 
   if (error) {
-    console.error('[api/schedule] list failed', { error });
+    logger.error('[api/schedule] list failed', error);
     return errorResponse(500, 'Failed to list schedules.');
   }
 
@@ -334,7 +335,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     .single();
 
   if (insertError || !schedule) {
-    console.error('[api/schedule] insert failed', { error: insertError });
+    logger.error('[api/schedule] insert failed', insertError);
     return errorResponse(500, 'Failed to create schedule.');
   }
 
@@ -510,7 +511,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     .eq('user_id', user.id);
 
   if (updateError) {
-    console.error('[api/schedule] update failed', { error: updateError });
+    logger.error('[api/schedule] update failed', updateError);
     return errorResponse(500, 'Failed to update schedule.');
   }
   return NextResponse.json({ success: true });
@@ -541,7 +542,7 @@ export async function DELETE(request: Request): Promise<NextResponse> {
     .eq('user_id', user.id);
 
   if (deleteError) {
-    console.error('[api/schedule] delete failed', { error: deleteError });
+    logger.error('[api/schedule] delete failed', deleteError);
     return errorResponse(500, 'Failed to delete schedule.');
   }
   return NextResponse.json({ success: true });

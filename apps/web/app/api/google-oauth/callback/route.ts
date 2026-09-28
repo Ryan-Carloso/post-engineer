@@ -7,9 +7,7 @@ import { oauthPopupResponse } from '@/lib/oauth-utils';
 import { resolveOAuthCallbackAuth } from '@/lib/oauth-connect';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
-
-//---------------
-//---------------
+import { logger } from '@/lib/logger';
 
 //---------------
 // getSessionUserId — session user_id or null
@@ -141,6 +139,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logger.error('[youtube-oauth] callback failed', error);
     return oauthPopupResponse('youtube-oauth-error', { error: errorMessage });
   }
 }

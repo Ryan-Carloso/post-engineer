@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as Sentry from '@sentry/nextjs';
 import { logger } from '@/lib/logger';
+
+vi.mock('@sentry/nextjs', () => ({
+  captureException: vi.fn(),
+  captureMessage: vi.fn(),
+}));
 
 //---------------
 // logger — core and specialized methods
@@ -27,16 +33,21 @@ describe('logger', () => {
     expect(console.log).toHaveBeenCalled();
   });
 
-  it('warn e debug registram', () => {
+  it('warn usa console.warn e debug usa console.log', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     logger.warn('warning');
     logger.debug('detalhe');
-    expect(console.log).toHaveBeenCalledTimes(2);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    warnSpy.mockRestore();
+    logSpy.mockRestore();
   });
 
-  it('error includes the stack when available', () => {
+  it('error uses console.error and includes the stack when available', () => {
     const err = new Error('falhou');
     logger.error('erro', err, { endpoint: '/api/upload' });
-    expect(console.log).toHaveBeenCalled();
+    expect(console.error).toHaveBeenCalled();
   });
 
   it('logUploadStart / Progress / Success usam console.log', () => {
@@ -71,9 +82,9 @@ describe('logger', () => {
 
   it('info without metadata does not include a meta string', () => {
     logger.info('message only');
-    const [prefix, message] = (console.log as ReturnType<typeof vi.fn>).mock.calls[0] as [string, string];
-    expect(prefix).toContain('[INFO]');
+    const [message, meta] = (console.log as ReturnType<typeof vi.fn>).mock.calls[0] as [string, unknown];
     expect(message).toBe('message only');
+    expect(meta).toBeUndefined();
   });
 
   it('generateLogId de chamadas repetidas gera ids distintos', () => {
@@ -87,5 +98,102 @@ describe('logger', () => {
     err.stack = undefined;
     const id = logger.error('msg', err);
     expect(typeof id).toBe('string');
+  });
+});
+
+//---------------
+// logger — production routing: dev/test go to console only,
+// production errors/warnings also go to Bugsink (Sentry)
+//---------------
+
+describe('logger production routing', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it('production error() reports to Bugsink and keeps console output', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const err = new Error('insert boom');
+    logger.error('insert failed', err, { endpoint: '/api/schedule' });
+
+    expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+    const [reported, context] = (Sentry.captureException as ReturnType<typeof vi.fn>).mock.calls[0] as [Error, { extra?: Record<string, unknown> }];
+    expect(reported).toBe(err);
+    expect(context.extra).toMatchObject({ message: 'insert failed', endpoint: '/api/schedule' });
+    expect(console.error).toHaveBeenCalled();
+  });
+
+  it('non-production error() never touches Sentry', () => {
+    vi.stubEnv('NODE_ENV', 'test');
+    logger.error('insert failed', new Error('x'));
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+    expect(Sentry.captureMessage).not.toHaveBeenCalled();
+    expect(console.error).toHaveBeenCalled();
+  });
+
+  it('production error() normalizes Supabase-style plain-object failures', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const pgError = { message: 'new row violates check constraint "schedules_providers_check"', code: '23514' };
+    logger.error('insert failed', pgError);
+
+    expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+    const [reported, context] = (Sentry.captureException as ReturnType<typeof vi.fn>).mock.calls[0] as [Error, { extra?: Record<string, unknown> }];
+    expect(reported).toBeInstanceOf(Error);
+    expect(reported.message).toContain('schedules_providers_check');
+    // The raw PostgREST object stays visible in the Bugsink issue.
+    expect(context.extra).toMatchObject({ cause: pgError });
+  });
+
+  it('production warn() sends a warning to Bugsink and keeps console output', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    logger.warn('price changed', { packId: 'p1' });
+
+    expect(Sentry.captureMessage).toHaveBeenCalledTimes(1);
+    const [message, context] = (Sentry.captureMessage as ReturnType<typeof vi.fn>).mock.calls[0] as [string, { level?: string; extra?: Record<string, unknown> }];
+    expect(message).toBe('price changed');
+    expect(context.level).toBe('warning');
+    expect(context.extra).toMatchObject({ packId: 'p1' });
+    expect(console.warn).toHaveBeenCalled();
+  });
+
+  it('non-production warn() does not touch Sentry', () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    logger.warn('price changed');
+    expect(Sentry.captureMessage).not.toHaveBeenCalled();
+    expect(console.warn).toHaveBeenCalled();
+  });
+
+  it('info/debug never report to Sentry even in production', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    logger.info('hello');
+    logger.debug('detail');
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+    expect(Sentry.captureMessage).not.toHaveBeenCalled();
+    expect(console.log).toHaveBeenCalledTimes(2);
+  });
+
+  it('production specialized error helpers report to Bugsink', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    logger.logUploadError('log-id', new Error('upload boom'), { provider: 'youtube' });
+    logger.logOAuthError('log-id', new Error('oauth boom'));
+    expect(Sentry.captureException).toHaveBeenCalledTimes(2);
+    expect(console.error).toHaveBeenCalledTimes(2);
+  });
+
+  it('a Bugsink outage never breaks logging', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    (Sentry.captureException as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      throw new Error('bugsink down');
+    });
+    expect(() => logger.error('boom', new Error('x'))).not.toThrow();
+    expect(console.error).toHaveBeenCalled();
   });
 });

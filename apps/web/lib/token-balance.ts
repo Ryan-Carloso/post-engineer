@@ -5,6 +5,7 @@
 //---------------
 
 import { toFiniteNumber } from '@/lib/tokens';
+import { logger } from '@/lib/logger';
 
 export interface TokenBalance {
   balance: number;
@@ -34,7 +35,8 @@ export async function fetchTokenBalance(): Promise<TokenBalance> {
       balance: toFiniteNumber(data.balance, 0),
       free: toFiniteNumber(data.free, 0),
     };
-  } catch {
+  } catch (error) {
+    logger.warn('[billing] token balance fetch failed', { error });
     return EMPTY_BALANCE;
   }
 }

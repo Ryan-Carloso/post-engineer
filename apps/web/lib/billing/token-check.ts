@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { computeVideoTokens, toFiniteNumber, type FaceQuality } from '@/lib/tokens';
+import { logger } from '@/lib/logger';
 
 export async function checkAndDeductTokens(
   supabase: SupabaseClient,
@@ -22,13 +23,13 @@ export async function checkAndDeductTokens(
       p_user_id: userId,
     });
     if (grantError) {
-      console.error('[token-check] signup bonus grant failed', { userId, error: grantError });
+      logger.error('[token-check] signup bonus grant failed', grantError, { userId });
     } else if (isRecord(grantData)) {
       grantOk = grantData.granted === true || grantData.already === true;
       grantedFree = toFiniteNumber(grantData.free_balance, 0);
     }
   } catch (grantException) {
-    console.error('[token-check] signup bonus grant threw', { userId, error: grantException });
+    logger.error('[token-check] signup bonus grant threw', grantException, { userId });
     grantOk = false;
   }
 
@@ -40,7 +41,7 @@ export async function checkAndDeductTokens(
   });
 
   if (error) {
-    console.error('[token-check] atomic spend failed', { userId, generationId, error });
+    logger.error('[token-check] atomic spend failed', error, { userId, generationId });
     return { ok: false, error: 'Failed to process tokens. Please try again.', statusCode: 500, freeExhausted: false };
   }
 
@@ -73,7 +74,7 @@ export async function refundTokens(
   });
 
   if (error) {
-    console.error('[token-check] refund failed', { userId, generationId, error });
+    logger.error('[token-check] refund failed', error, { userId, generationId });
     return false;
   }
 

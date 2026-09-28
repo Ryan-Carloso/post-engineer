@@ -1,5 +1,16 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { GET } from '../route';
+
+vi.mock('@/lib/logger', () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  },
+}));
+
+import { logger } from '@/lib/logger';
 
 const ENV_KEY = 'NEXT_PUBLIC_APP_URL';
 const previous = process.env[ENV_KEY];
@@ -26,5 +37,15 @@ describe('GET /.well-known/oauth-authorization-server', () => {
       token_endpoint_auth_methods_supported: ['none'],
       scopes_supported: ['mcp:tools', 'offline_access'],
     });
+  });
+
+  it('logs when the metadata cannot be built (misconfigured issuer)', async () => {
+    delete process.env[ENV_KEY];
+    const response = await GET();
+    expect(response.status).toBe(500);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('metadata failed'),
+      expect.anything(),
+    );
   });
 });

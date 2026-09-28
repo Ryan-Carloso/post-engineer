@@ -19,6 +19,14 @@ vi.mock('@/lib/oauth-utils', () => ({
 vi.mock('@/lib/youtube', () => ({
   createGoogleOAuth2Client: vi.fn(),
 }));
+vi.mock('@/lib/logger', () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  },
+}));
 vi.mock('googleapis', () => ({
   google: {
     youtube: vi.fn(() => ({
@@ -49,6 +57,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { decodeOAuthState, verifyOAuthNonce, oauthPopupResponse } from '@/lib/oauth-utils';
 import { upsertSocialAccount } from '@/lib/social-accounts';
 import { createGoogleOAuth2Client } from '@/lib/youtube';
+import { logger } from '@/lib/logger';
 
 const user = { id: 'user-1' };
 
@@ -179,6 +188,16 @@ describe('/api/google-oauth/callback', () => {
     expect(oauthPopupResponse).toHaveBeenCalledWith(
       'youtube-oauth-error',
       expect.objectContaining({ error: 'token fail' }),
+    );
+  });
+
+  it('logs the failure when the callback flow throws', async () => {
+    sessionMock(true);
+    vi.mocked(createGoogleOAuth2Client).mockRejectedValue(new Error('token fail'));
+    await GET(makeRequest('?code=c&state=s'));
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('callback failed'),
+      expect.objectContaining({ message: 'token fail' }),
     );
   });
 

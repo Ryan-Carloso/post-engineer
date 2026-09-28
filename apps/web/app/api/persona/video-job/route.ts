@@ -12,6 +12,7 @@ import { parsePersonaForm, VALID_VIDEO_ASPECTS } from '@/lib/persona-schema';
 import { recordRecentImageId, resolveVideoImage } from '@/lib/persona-images';
 import { normalizeDebugTaskResponse } from '@/lib/debug-video';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { logger } from '@/lib/logger';
 
 //---------------
 // POST /api/persona/video-job — proxy to money-print.
@@ -150,7 +151,7 @@ async function checkCustomAudioUrl(url: string): Promise<CustomAudioCheck> {
     try {
       head = await headWithTimeout(current);
     } catch (err) {
-      console.warn('[video-job] audio_url unreachable in HEAD check', { url: redactUrlForLog(current), err });
+      logger.warn('[video-job] audio_url unreachable in HEAD check', { url: redactUrlForLog(current), err });
       return { ok: false, error: 'audio_url must point to an accessible audio file.' };
     }
 
@@ -1082,13 +1083,15 @@ async function signedUrl(
       // The common supabase-js failure shape resolves { data: null, error }
       // instead of throwing — log it so the incident stays diagnosable.
       // Callers classify an undefined URL via their own guards.
-      console.warn('[video-job] failed to sign storage URL', error);
+      // (cast: StorageError lacks a TS index signature but is a plain object
+      // at runtime; the warn metadata is passed through untouched.)
+      logger.warn('[video-job] failed to sign storage URL', error as unknown as Record<string, unknown>);
     }
     return data?.signedUrl;
   } catch (err) {
     // Never propagate: callers classify an undefined URL via their own
     // guards, but the incident must stay diagnosable — do not suppress it.
-    console.warn('[video-job] failed to sign storage URL', err);
+    logger.warn('[video-job] failed to sign storage URL', err as Record<string, unknown>);
     return undefined;
   }
 }

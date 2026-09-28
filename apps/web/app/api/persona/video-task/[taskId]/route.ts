@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
+import { logger } from '@/lib/logger';
 
 //---------------
 // DELETE /api/persona/video-task/:taskId — cancela/remove task no motor.
@@ -33,7 +34,7 @@ export async function DELETE(
     const body: unknown = await response.json().catch(() => null);
     return NextResponse.json(body, { status: response.ok ? 200 : 502 });
   } catch (error) {
-    console.error('[api/persona/video-task] upstream unavailable', { error });
+    logger.error('[api/persona/video-task] upstream unavailable', error);
     return NextResponse.json({ success: false, error: 'Video service is unavailable.' }, { status: 502 });
   }
 }

@@ -138,6 +138,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   const grantType = body.get('grant_type');
   const keys = await getOAuthKeys().catch(() => null);
   if (!keys) {
+    logger.error('[oauth/token] OAuth signing keys unavailable');
     return NextResponse.json({ error: 'server_error' }, { status: 500 });
   }
 
