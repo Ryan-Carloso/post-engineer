@@ -108,7 +108,7 @@ describe('PersonaImageLibrarySection', () => {
     await userEvent.click(screen.getByRole('button', { name: 'persona.libraryUpload' }));
 
     await waitFor(() => {
-      expect(screen.getByText('persona.libraryUploadError')).toBeInTheDocument();
+      expect(screen.getByText('persona.libraryUploadError (a.jpg)')).toBeInTheDocument();
     });
     // The failed item stays in the pending queue so the user can retry.
     expect(
@@ -130,7 +130,7 @@ describe('PersonaImageLibrarySection', () => {
     await userEvent.click(screen.getByRole('button', { name: 'persona.libraryUpload' }));
 
     await waitFor(() => {
-      expect(screen.getByText('storage full')).toBeInTheDocument();
+      expect(screen.getByText('storage full (b.jpg)')).toBeInTheDocument();
     });
     // Only the failed item remains pending.
     expect(apiMocks.uploadMutateAsync).toHaveBeenCalledTimes(2);
@@ -182,7 +182,7 @@ describe('PersonaImageLibrarySection', () => {
     apiMocks.updateMutateAsync.mockResolvedValue({ success: false, error: 'db down' });
     renderSection();
 
-    await userEvent.click(screen.getByText('✎'));
+    await userEvent.click(screen.getByRole('button', { name: 'persona.libraryEdit' }));
     await userEvent.click(screen.getByRole('button', { name: 'persona.librarySave' }));
 
     await waitFor(() => {
@@ -409,7 +409,7 @@ describe('PersonaImageLibrarySection', () => {
         <PersonaImageLibrarySection personaId="persona-1" />
       </QueryClientProvider>,
     );
-    await userEvent.click(screen.getByRole('button', { name: '✎' }));
+    await userEvent.click(screen.getByRole('button', { name: 'persona.libraryEdit' }));
     expect(screen.getByDisplayValue('fresh-tag')).toBeInTheDocument();
   });
 
@@ -419,7 +419,7 @@ describe('PersonaImageLibrarySection', () => {
         <PersonaImageLibrarySection personaId="persona-1" />
       </QueryClientProvider>,
     );
-    await userEvent.click(screen.getByRole('button', { name: '✎' }));
+    await userEvent.click(screen.getByRole('button', { name: 'persona.libraryEdit' }));
     await userEvent.type(screen.getByDisplayValue('tag-img-1'), '-draft');
     apiMocks.images = [{ ...makeImage('img-1'), tag: 'fresh-tag' }];
     rerender(
