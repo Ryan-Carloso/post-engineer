@@ -610,3 +610,29 @@ Follow these so the same issues don't come back:
   The failing-then-fixed test pair in create-with-images.test.ts pins
   both directions: the row-backed remove runs after the cascade delete,
   and never runs when the delete fails.
+
+## Web/API review learnings, round 14 (2026-09-28)
+- **Tie-breaks must match the documented order.** The GET list's comment
+  said "must match resolveVideoImage's order exactly" but
+  resolveVideoImage lacked the `id` tie-break — fast sequential inserts
+  share a transaction-scoped `created_at`, so the UI and the selector
+  could disagree about which image is "first". Both now order
+  `created_at asc, id asc`.
+- **Coerce derived state at the write boundary on EVERY branch.** The
+  faceless NULL→0 coercion (round 8) left the persona-mode branch
+  storing NULL, which the images route and page gate treat as faceless —
+  permanently write-locking the library for a persona the creation
+  accepted as face-requiring. Persona-mode NULL is now coerced to
+  DEFAULT_FACE_MIX_PERCENT (100, the UI store's default, shared from
+  persona-schema.ts) so no new row stores NULL; NULL unambiguously
+  means "legacy faceless-mode row" everywhere.
+- **Shared defaults live in one module.** The UI store's `faceMixPercent:
+  100` and the route's insert coercion both import
+  DEFAULT_FACE_MIX_PERCENT — a literal in either place would drift.
+  (Same class as the round-12 "client constants derive from shared
+  sources" rule.)
+- **Mocks must mirror the production query chain.** Adding the `id`
+  tie-break broke 73 video-job/api-key-scope tests whose mocks
+  terminated `.order()` instead of chaining it. When production adds a
+  chain link, grep every test mock of that query and extend the chain —
+  the mock that doesn't match the chain is the bug, not the code.
