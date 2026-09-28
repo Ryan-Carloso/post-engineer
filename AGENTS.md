@@ -960,3 +960,17 @@ Follow these so the same issues don't come back:
   and SSH requires consumers to have GitHub SSH keys, which breaks the
   universal `npx post-engineer-mcp` install path. HTTPS is the correct
   format for a public package.
+
+## CodeQL review learnings, PR #6 (2026-09-28)
+- **Evaluated and declined: `build-mode: none` is correct for interpreted
+  languages.** OpenCode MAJOR claimed the CodeQL workflow needs build steps
+  for Next.js and Python — false positive. CodeQL analyzes
+  javascript-typescript, python, and actions from source; no build is needed
+  or useful. CodeQL is not a type checker (tsc covers that in CI) and
+  `pip install` does not improve CodeQL Python analysis (dependency vulns are
+  Dependabot/pip-audit's job). Empirical proof: the `Analyze
+  (javascript-typescript)` and `Analyze (python)` jobs both passed with
+  `build-mode: none`. The reviewer's suggested commands were also wrong for
+  this repo (pnpm workspaces install from root, engine uses uv, no
+  requirements.txt at that path). Only compiled languages need
+  autobuild/manual.
