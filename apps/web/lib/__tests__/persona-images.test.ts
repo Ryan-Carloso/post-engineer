@@ -298,6 +298,15 @@ describe('validateImageFile', () => {
       error: expect.stringContaining('Only image files'),
     });
   });
+
+  it('rejects bare-extension filenames like ".png" (no basename)', () => {
+    // '.png'.split('.').pop() is 'png', so the extension allowlist alone
+    // passes it. The MCP boundary rejects dotfiles; the web fail-fast
+    // check must agree on the same input class.
+    expect(validateImageFile(png('.png', 'image/png'))).toMatchObject({
+      error: expect.stringContaining('JPG/JPEG, PNG, or WebP'),
+    });
+  });
 });
 
 describe('addLibraryImages', () => {

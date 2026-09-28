@@ -795,6 +795,21 @@ Follow these so the same issues don't come back:
   (needs two independent failures; the error contract stays
   {success, error} and the server logs loudly).
 
+## Web/API review learnings, round 20 (2026-09-28)
+- **Align sibling boundaries on the same input class.** Round 10 rejected
+  bare-extension filenames (".png") in the MCP fail-fast path, but the
+  web `validateImageFile` used `split('.').pop()` which maps ".png" to
+  "png" and passed it. `lastIndexOf('.') > 0` treats a leading dot as
+  "no extension" (matching Node's extname, which the MCP relies on), so
+  both boundaries now reject dotfiles identically. When a reviewer
+  flags a pattern fixed on one side, grep for the sibling.
+- **Evaluated and declined:** buffering up to 10×10MB in
+  validateLibraryInputs before insert (round-18 trade-off: fail-fast
+  validation with no double read, pinned by a test; the reviewer
+  itself called it "a note, not a defect" — per-file validate+store
+  would trade the all-or-nothing creation atomicity for bounded
+  memory).
+
 ## Web/API review learnings, round 18 (2026-09-28)
 - **Coercion at the write boundary must be unconditional for the
   security-relevant branch.** resolveStoredFaceMixPercent only coerced

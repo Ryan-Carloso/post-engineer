@@ -86,7 +86,12 @@ export function validateImageFile(
   if (!ALLOWED_IMAGE_MIME_TYPES.has(file.type)) {
     return { error: 'Only image files are accepted.' };
   }
-  const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
+  const dotIndex = file.name.lastIndexOf('.');
+  // A leading dot with no other dots (".png") is not an extension — Node's
+  // extname agrees — and split('.').pop() would still yield 'png' and pass
+  // the allowlist. Reject it here so the web fail-fast check matches the
+  // MCP boundary, which already rejects dotfiles.
+  const extension = dotIndex > 0 ? file.name.slice(dotIndex + 1).toLowerCase() : '';
   if (!ALLOWED_IMAGE_EXTENSIONS.has(extension)) {
     return { error: 'Image must be JPG/JPEG, PNG, or WebP.' };
   }
