@@ -1060,3 +1060,20 @@ Follow these so the same issues don't come back:
   carries the node pragma for this reason — any new test posting multipart
   bodies (especially with files) must too. String-only FormData does not
   trip it, which makes the failure look file-specific.
+
+## Billing review learnings (2026-09-28, genuine finding)
+- **Whoever charges owns the refund ledger.** Engine-billed batch videos are
+  charged with IDs the web never sees and never receives `engine_task_id`,
+  so the web's status-proxy refund cannot reach them. The batch runner
+  refunds each failed video's own upfront charge itself — one refund per
+  task by construction, never via the web path. When adding a new
+  charge flow, first map which ledger owns each charge row, then place
+  the refund next to the charge.
+- **`refund_tokens` returns bool — False is a real failure.** A soft
+  failure (RPC answered, charge not refunded) is not an exception, so
+  try/except alone lets lost tokens vanish silently. Log loudly on any
+  non-True return, and keep the batch running.
+- **An unreadable terminal state must be loud, not just fail-closed.**
+  `_batch_task_failed` returns False on a read exception so the batch
+  survives, but the exception is logged — otherwise a skipped refund
+  leaves no trail at all.
