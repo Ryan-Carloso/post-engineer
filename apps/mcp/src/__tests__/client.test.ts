@@ -878,6 +878,20 @@ describe('PostEngineerClient persona image library', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  it('createPersona rejects library images with avatarUrl but faceMixPercent 0 (server treats 0 as faceless)', async () => {
+    // The server 400s library images when the effective face mix is 0, so
+    // fail fast locally instead of uploading the image bytes first.
+    await expect(
+      client.createPersona({
+        name: 'X',
+        avatarUrl: 'https://example.com/a.png',
+        faceMixPercent: 0,
+        images: [{ path: '/tmp/img.jpg' }],
+      })
+    ).rejects.toThrow(/faceMixPercent must be greater than 0/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it('createPersona rejects an out-of-range imagePrimaryIndex', async () => {
     const path = await writeTempImage('a.jpg');
     await expect(

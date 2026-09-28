@@ -290,7 +290,11 @@ export class PostEngineerClient {
     if (input.scriptPrompt !== undefined) formData.set('scriptPrompt', input.scriptPrompt);
     formData.set('paragraphNumber', String(input.paragraphNumber ?? 1));
     formData.set('niche', input.niche ?? 'General');
-    formData.set('faceMixPercent', String(hasAvatar ? input.faceMixPercent ?? 50 : 0));
+    // The effective mix is computed once: the server treats 0 as faceless
+    // and rejects library images for it, so the local guard below must see
+    // the same value the form sends.
+    const effectiveFaceMixPercent = hasAvatar ? input.faceMixPercent ?? 50 : 0;
+    formData.set('faceMixPercent', String(effectiveFaceMixPercent));
     formData.set('faceQuality', hasAvatar ? input.faceQuality ?? 'very_good' : 'ok');
     const images = input.images ?? [];
     // An imagePrimaryIndex without images is a caller bug (typo'd `images`
@@ -302,6 +306,14 @@ export class PostEngineerClient {
     if (images.length > 0) {
       if (!hasAvatar) {
         throw new Error('Library images require a persona avatar: provide avatarUrl together with images.');
+      }
+      // The server rejects library images when the stored face mix is 0
+      // (faceless), even with an avatarUrl. Fail fast here instead of
+      // uploading the bytes first.
+      if (effectiveFaceMixPercent === 0) {
+        throw new Error(
+          'Library images require a non-zero face mix: faceMixPercent must be greater than 0 when images are provided.',
+        );
       }
       if (images.length > MAX_LIBRARY_IMAGES) {
         throw new Error(`At most ${MAX_LIBRARY_IMAGES} library images are allowed per persona.`);

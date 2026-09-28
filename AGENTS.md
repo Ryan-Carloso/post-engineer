@@ -771,6 +771,30 @@ Follow these so the same issues don't come back:
   not a code failure. After two consecutive failures, stop re-running
   and document it; the local test suite + CI green is the evidence.
 
+## MCP review learnings, round 19 (2026-09-28)
+- **Fail fast on the effective value, not just presence.** createPersona
+  rejected library images without an avatarUrl but let
+  avatarUrl + faceMixPercent: 0 through — the server treats a stored 0
+  as faceless and 400s after the bytes are uploaded. The client now
+  computes the effective mix once (shared with the form field) and
+  rejects images at mix 0 before any file read.
+- **Evaluated and declined (thread triage, 181 threads):** FK from
+  persona_images.user_id to auth.users (Supabase convention avoids it;
+  the in-RPC ownership guard is the trust boundary); an exists()
+  pre-check in resolveVideoImage (the listing query IS the existence
+  check — a pre-check adds a round trip); versioned SQL migrations
+  (deliberate manual-apply script; the user applies it in the
+  dashboard); a local faceless/library-full pre-check in
+  addPersonaImage (needs server knowledge the client doesn't have);
+  distinct errcodes for the two set_primary_persona_image probes
+  (practically unreachable; churn); unifying NULL face_mix_percent
+  behind one helper (the two NULL treatments are both deliberate
+  fail-closed in different contexts — library writes block, the
+  video-job 503s on an unsignable photo — one boolean would weaken
+  one of them); surfacing personaId on double-failed creation rollback
+  (needs two independent failures; the error contract stays
+  {success, error} and the server logs loudly).
+
 ## Web/API review learnings, round 18 (2026-09-28)
 - **Coercion at the write boundary must be unconditional for the
   security-relevant branch.** resolveStoredFaceMixPercent only coerced
