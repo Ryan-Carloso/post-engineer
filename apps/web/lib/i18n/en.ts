@@ -401,6 +401,10 @@ export const enDictionary: Dictionary = {
     libraryLoadError: 'Could not load the image library.',
     libraryUploadError: 'Could not upload the image.',
     libraryUpload: 'Upload images',
+    libraryWarningPrimarySwap:
+      'The image was uploaded, but it could not be set as the primary image.',
+    libraryWarningMetadataSave:
+      'Primary image was updated, but the tag/description could not be saved.',
     libraryUpdateError: 'Could not save the changes.',
     libraryDeleteError: 'Could not remove the image.',
     libraryLimitReached: 'The library is full ({max} images). Remove one to add another.',

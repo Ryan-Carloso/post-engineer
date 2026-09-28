@@ -242,6 +242,15 @@ describe('validateImageFile', () => {
     expect('error' in result).toBe(false);
   });
 
+  it('reports the size error before the type error for oversized non-images', () => {
+    // An 11MB PDF should tell the user it's too large (actionable), not
+    // that it's the wrong type (confusing — the size is the real problem).
+    const result = validateImageFile(
+      new File([new Uint8Array(11 * 1024 * 1024)], 'big.pdf', { type: 'application/pdf' }),
+    );
+    expect(result).toMatchObject({ error: expect.stringContaining('10MB') });
+  });
+
   it('rejects non-images, oversized files, and unsupported extensions', () => {
     expect(validateImageFile(new File(['x'], 'd.pdf', { type: 'application/pdf' }))).toMatchObject({
       error: expect.any(String),
@@ -515,5 +524,41 @@ describe('validateImageBuffer', () => {
     expect(validateImageBuffer(ZEROS, 'image/png')).toMatchObject({
       error: expect.stringContaining('not a recognized image'),
     });
+  });
+});
+
+describe('supabase/persona-images.sql literals', () => {
+  it('keeps the SQL literals in sync with the TypeScript constants', async () => {
+    // The trigger/RPC literals have no import of the TS constants; a
+    // one-sided change would silently desynchronize app-side 400s from the
+    // database behavior. This test parses the SQL file and asserts the
+    // literals match.
+    const { readFileSync } = await import('node:fs');
+    const { join, dirname } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const sqlPath = join(
+      dirname(fileURLToPath(import.meta.url)),
+      '..',
+      '..',
+      '..',
+      '..',
+      'supabase',
+      'persona-images.sql',
+    );
+    const sql = readFileSync(sqlPath, 'utf8');
+    const { MAX_PERSONA_IMAGES, PERSONA_IMAGE_LIMIT_SQLSTATE } = await import('../persona-images');
+    const { PERSONA_IMAGE_HISTORY_LIMIT } = await import('../persona-image-select');
+
+    // Limit trigger: `> 10` must equal MAX_PERSONA_IMAGES.
+    const limitMatch = sql.match(/count\(\*\) from public\.persona_images where persona_id = new\.persona_id\) > (\d+)/);
+    expect(limitMatch?.[1]).toBe(String(MAX_PERSONA_IMAGES));
+
+    // Limit trigger errcode must equal PERSONA_IMAGE_LIMIT_SQLSTATE.
+    const errcodeMatch = sql.match(/raise exception '[^']+' using errcode = '([A-Z0-9]+)'/);
+    expect(errcodeMatch?.[1]).toBe(PERSONA_IMAGE_LIMIT_SQLSTATE);
+
+    // History window: `[1:3]` must equal PERSONA_IMAGE_HISTORY_LIMIT.
+    const historyMatch = sql.match(/\[1:(\d+)\]/);
+    expect(historyMatch?.[1]).toBe(String(PERSONA_IMAGE_HISTORY_LIMIT));
   });
 });

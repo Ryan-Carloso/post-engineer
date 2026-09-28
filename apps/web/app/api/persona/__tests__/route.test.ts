@@ -1,14 +1,14 @@
 // @vitest-environment node
-// Rotas de API usam Request/FormData nativos (undici); o jsdom mistura
-// implementações e trava `request.formData()`. Testes de UI ficam no jsdom.
+// API routes use native Request/FormData (undici); jsdom mixes
+// implementations and locks up `request.formData()`. UI tests stay in jsdom.
 import '@testing-library/jest-dom/vitest';
 import { NextResponse } from 'next/server';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 //---------------
-// Testes de POST /api/persona (contrato real).
-// A fronteira externa (Supabase) é mockada; tudo o mais é real:
-// parse do formData, validações, montagem dos paths e payload.
+// POST /api/persona tests (real contract).
+// The external boundary (Supabase) is mocked; everything else is real:
+// formData parsing, validations, path assembly, and payload.
 //---------------
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -275,9 +275,9 @@ describe('POST /api/persona', () => {
   });
 
   //---------------
-  // Preferências de conteúdo (opcionais): language, videoAspect,
-  // scriptPrompt, paragraphNumber. Persistidas na persona e aplicadas
-  // como defaults no job de vídeo.
+  // Content preferences (optional): language, videoAspect,
+  // scriptPrompt, paragraphNumber. Persisted on the persona and applied
+  // as defaults in the video job.
   //---------------
 
   it('cria persona com preferências de conteúdo completas', async () => {
@@ -493,7 +493,7 @@ describe('POST /api/persona — mix faceless/face (híbrido) e qualidade', () =>
     expect(body.error).toContain('faceQuality');
   });
 
-  it('persona sem o mix (legado) mantém colunas null — backward compat', async () => {
+  it('persona without mix (legacy) keeps null columns — backward compat', async () => {
     const { inserted } = mockSupabase();
 
     const res = await POST(formRequest({ name: 'Ana', voiceId: 'voz-1' }, [photo()]));
@@ -505,7 +505,11 @@ describe('POST /api/persona — mix faceless/face (híbrido) e qualidade', () =>
     });
   });
 
-  it('faceless legado (sem mix explícito) continua válido sem foto', async () => {
+  it('faceless without explicit mix is stored as 0 so the library guard holds', async () => {
+    // A faceless creation with no explicit faceMixPercent used to store
+    // NULL, which passed the POST /api/persona/images `=== 0` faceless
+    // check — a backdoor for library uploads on faceless personas. New
+    // faceless rows are coerced to 0.
     const { inserted } = mockSupabase();
 
     const res = await POST(
@@ -513,14 +517,14 @@ describe('POST /api/persona — mix faceless/face (híbrido) e qualidade', () =>
     );
 
     expect(res.status).toBe(200);
-    expect(inserted[0]).toMatchObject({ face_mix_percent: null, photo_path: null });
+    expect(inserted[0]).toMatchObject({ face_mix_percent: 0, photo_path: null });
   });
 });
 
 //---------------
-// PATCH — edição de persona existente. Campos todos opcionais;
-// pelo menos um deve ser enviado. Arquivos substituídos são removidos
-// do Storage.
+// PATCH — edit an existing persona. All fields optional;
+// at least one must be sent. Replaced files are removed
+// from Storage.
 //---------------
 
 interface PatchOverrides {
@@ -751,9 +755,9 @@ describe('PATCH /api/persona', () => {
   });
 
   //---------------
-  // Preservação — o que não foi editado precisa continuar exatamente
-  // como estava: o update só pode citar campos alterados e a limpeza
-  // do Storage só pode remover arquivos substituídos.
+  // Preservation — what was not edited must stay exactly
+  // as it was: the update may only cite changed fields and the
+  // Storage cleanup may only remove replaced files.
   //---------------
 
   describe('preservação de dados não editados', () => {

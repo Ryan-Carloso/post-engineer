@@ -400,6 +400,10 @@ export const ptDictionary = {
     libraryLoadError: 'Não foi possível carregar a biblioteca de imagens.',
     libraryUploadError: 'Não foi possível enviar a imagem.',
     libraryUpload: 'Enviar imagens',
+    libraryWarningPrimarySwap:
+      'A imagem foi enviada, mas não pôde ser definida como principal.',
+    libraryWarningMetadataSave:
+      'A imagem principal foi atualizada, mas a tag/descrição não pôde ser salva.',
     libraryUpdateError: 'Não foi possível salvar as alterações.',
     libraryDeleteError: 'Não foi possível remover a imagem.',
     libraryLimitReached: 'A biblioteca está cheia ({max} imagens). Remova uma para adicionar outra.',

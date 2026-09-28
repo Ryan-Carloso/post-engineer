@@ -364,7 +364,7 @@ describe('api', () => {
       jsonResponse({
         success: true,
         image: { id: 'img-1' },
-        warnings: ['The image was uploaded, but it could not be set as the primary image.'],
+        warnings: ['primary_swap_failed'],
       }),
     );
     const { uploadPersonaImage } = await import('@/lib/api');
@@ -372,9 +372,7 @@ describe('api', () => {
       file: new File(['x'], 'a.png', { type: 'image/png' }),
     });
     expect(result.success).toBe(true);
-    expect(result.warnings).toEqual([
-      'The image was uploaded, but it could not be set as the primary image.',
-    ]);
+    expect(result.warnings).toEqual(['primary_swap_failed']);
   });
 
   it('uploadPersonaImage drops a malformed warnings payload instead of crashing', async () => {

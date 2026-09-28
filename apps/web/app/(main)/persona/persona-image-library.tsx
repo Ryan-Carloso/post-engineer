@@ -12,6 +12,11 @@ import {
 import { useI18n } from '@/lib/i18n/provider';
 
 const MAX_LIBRARY_IMAGES = 10;
+
+// Module-level counter for pending-item ids when crypto.randomUUID is
+// unavailable (non-secure contexts). Collision-free within the session,
+// unlike Date.now()+Math.random().
+let nextPendingId = 0;
 // Mirrors the server-side limits in apps/web/lib/persona-images.ts. The
 // server stays authoritative; this only keeps the picker honest.
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -111,10 +116,11 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
         trackPreview(preview);
         return {
           // crypto.randomUUID is undefined in non-secure contexts (plain
-          // HTTP): fall back to a unique-enough id so file pick never throws.
+          // HTTP): fall back to a module-level counter so file pick never
+          // throws and ids cannot collide.
           id: typeof crypto.randomUUID === 'function'
             ? crypto.randomUUID()
-            : `pending-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            : `pending-${nextPendingId++}`,
           file,
           preview,
           tag: '',
@@ -176,7 +182,17 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
       // the failed (and not-yet-tried) items stay so the user can retry.
       setPending((prev) => prev.filter((item) => !uploadedIds.has(item.id)));
       for (const preview of uploadedPreviews) dropPreview(preview);
-      if (warnings.length > 0) setWarning(warnings.join(' '));
+      if (warnings.length > 0) {
+        // Server warnings are stable codes (not English copy); map them
+        // through i18n. Unknown codes fall back to the raw string so a new
+        // server code never renders blank.
+        const messages = warnings.map((code) => {
+          if (code === 'primary_swap_failed') return t('persona.libraryWarningPrimarySwap');
+          if (code === 'metadata_save_failed') return t('persona.libraryWarningMetadataSave');
+          return code;
+        });
+        setWarning(messages.join(' '));
+      }
     } finally {
       setUploading(false);
     }
@@ -205,7 +221,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
             <LibraryImageCard key={image.id} image={image} personaId={personaId} />
           ))}
         </div>
-      ) : imagesQuery.isPending ? null : (
+      ) : imagesQuery.isPending || imagesQuery.isError ? null : (
         <p className="mt-3 text-sm text-neutral-500">{t('persona.libraryEmpty')}</p>
       )}
 
@@ -251,7 +267,8 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
                   placeholder={t('persona.libraryTagPlaceholder')}
                   aria-label={t('persona.libraryTag')}
                   maxLength={100}
-                  className="w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm"
+                  disabled={uploading}
+                  className="w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm disabled:opacity-50"
                 />
                 <input
                   value={item.description}
@@ -259,13 +276,19 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
                   placeholder={t('persona.libraryDescriptionPlaceholder')}
                   aria-label={t('persona.libraryDescription')}
                   maxLength={500}
-                  className="w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm"
+                  disabled={uploading}
+                  className="w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm disabled:opacity-50"
                 />
               </div>
+              {/* Disabled while uploading: removePending would revoke the
+                  preview and drop the item from state, but the upload loop
+                  captured the queue at render time and would still store
+                  the cancelled file on the server. */}
               <button
                 type="button"
                 onClick={() => removePending(item.id)}
-                className="self-start text-sm text-neutral-500 hover:text-red-600"
+                disabled={uploading}
+                className="self-start text-sm text-neutral-500 hover:text-red-600 disabled:opacity-50"
               >
                 {t('persona.libraryRemove')}
               </button>

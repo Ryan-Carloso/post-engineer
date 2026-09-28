@@ -159,9 +159,13 @@ async function signImageUrl(
     const { data, error } = await supabase.storage
       .from('personas')
       .createSignedUrl(imagePath, 3600);
-    if (error || !data?.signedUrl) return null;
+    if (error || !data?.signedUrl) {
+      console.warn('[api/persona/images] failed to sign storage URL', { imagePath, error });
+      return null;
+    }
     return data.signedUrl;
-  } catch {
+  } catch (error) {
+    console.warn('[api/persona/images] failed to sign storage URL', { imagePath, error });
     return null;
   }
 }
@@ -178,7 +182,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   const { data, error } = await supabase
     .from('persona_images')
-    .select('id, image_path, tag, description, is_primary, created_at')
+    .select(IMAGE_ROW_COLUMNS)
     .eq('persona_id', personaId)
     .order('created_at', { ascending: true });
   if (error) {
@@ -268,13 +272,14 @@ export async function POST(request: Request): Promise<NextResponse> {
     // Best-effort: the image row and storage object are already committed,
     // so a primary-flag failure must not turn this into a 500 while the
     // image exists. Log loudly and report the true is_primary state with a
-    // warning, mirroring the PATCH partial-success contract.
+    // warning, mirroring the PATCH partial-success contract. Warnings are
+    // stable codes, not English copy: the UI maps them through i18n.
     const primaryError = await setPrimaryLibraryImage(supabase, personaId, image.id);
     if (primaryError) {
       console.error('[api/persona/images] primary flag after upload failed', {
         error: primaryError.error,
       });
-      warnings.push('The image was uploaded, but it could not be set as the primary image.');
+      warnings.push('primary_swap_failed');
     } else {
       image.is_primary = true;
     }
@@ -391,7 +396,8 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     return NextResponse.json({
       success: true,
       image: current,
-      warnings: ['Primary image was updated, but the tag/description could not be saved.'],
+      // Stable code, not English copy: the UI maps it through i18n.
+      warnings: ['metadata_save_failed'],
     });
   }
   return NextResponse.json({ success: true, image: updated });

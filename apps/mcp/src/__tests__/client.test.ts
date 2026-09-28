@@ -987,6 +987,18 @@ describe('PostEngineerClient persona image library', () => {
     expect(formData.get('isPrimary')).toBe('true');
   });
 
+  it('addPersonaImage drops empty tag/description instead of storing them verbatim', async () => {
+    // An empty tag can never match the deterministic keyword selection;
+    // the server stores metadata verbatim, so the client must normalize.
+    const path = await writeTempImage('d.png');
+    await client.addPersonaImage('p-1', { path, tag: '   ', description: '' });
+
+    const request = vi.mocked(global.fetch).mock.calls[0];
+    const formData = request?.[1]?.body as FormData;
+    expect(formData.has('tag')).toBe(false);
+    expect(formData.has('description')).toBe(false);
+  });
+
   it('updatePersonaImage sends a PATCH with the metadata', async () => {
     await client.updatePersonaImage({ id: 'img-1', tag: 'casual', isPrimary: true });
     expect(global.fetch).toHaveBeenCalledWith(

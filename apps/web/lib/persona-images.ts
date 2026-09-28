@@ -61,11 +61,13 @@ export function validateImageFile(
   if (!isFileLike(file) || file.size === 0) {
     return { error: 'An image file is required.' };
   }
-  if (!ALLOWED_IMAGE_MIME_TYPES.has(file.type)) {
-    return { error: 'Only image files are accepted.' };
-  }
+  // Size first: an oversized file with a wrong/missing type should report
+  // the actionable size error, not a confusing type error.
   if (file.size > MAX_IMAGE_BYTES) {
     return { error: 'Image must be 10MB or smaller.' };
+  }
+  if (!ALLOWED_IMAGE_MIME_TYPES.has(file.type)) {
+    return { error: 'Only image files are accepted.' };
   }
   const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
   if (!ALLOWED_IMAGE_EXTENSIONS.has(extension)) {
@@ -102,14 +104,27 @@ export function validateImageBuffer(
  * trust the MCP/API caller's declared type alone.
  */
 export async function validateImageContent(file: File): Promise<string | null> {
+  const result = await readValidatedImage(file);
+  return 'error' in result ? result.error : null;
+}
+
+/**
+ * Reads a file and validates its magic bytes against its declared MIME
+ * type. Shared by validateImageContent and addLibraryImages so the two
+ * validation paths cannot drift apart.
+ */
+export async function readValidatedImage(
+  file: File,
+): Promise<{ bytes: Uint8Array; mime: string } | { error: string }> {
   let buffer: Buffer;
   try {
     buffer = Buffer.from(await file.arrayBuffer());
   } catch {
-    return 'Could not read the image file.';
+    return { error: 'Could not read the image file.' };
   }
   const result = validateImageBuffer(buffer, file.type);
-  return 'error' in result ? result.error : null;
+  if ('error' in result) return result;
+  return { bytes: new Uint8Array(buffer), mime: result.mime };
 }
 
 // Extension implied by the detected content type. The storage path uses this
@@ -193,23 +208,19 @@ export async function addLibraryImages(
     if ('error' in validated) return fail(validated.error, 400);
     // A truncated multipart body makes arrayBuffer() reject: surface it as
     // a 400 validation error, not an unstructured 500.
-    let bytes: Uint8Array;
-    try {
-      bytes = new Uint8Array(await validated.file.arrayBuffer());
-    } catch {
-      return fail('Could not read the image file.', 400);
-    }
     // Magic-byte check on the real bytes (single read, reused for upload):
     // the declared MIME type and extension are client-controlled. The
-    // storage extension comes from the detected content type so the path
-    // matches the real bytes even when the file name lies.
-    const content = validateImageBuffer(Buffer.from(bytes), validated.file.type);
+    // storage extension and content type come from the detected content so
+    // the stored object matches the real bytes even when the file name or
+    // declared type lies.
+    const content = await readValidatedImage(validated.file);
     if ('error' in content) return fail(content.error, 400);
-    const extension = DETECTED_MIME_TO_EXTENSION[content.mime] ?? validated.extension;
+    const { bytes, mime } = content;
+    const extension = DETECTED_MIME_TO_EXTENSION[mime] ?? validated.extension;
     const path = `${userId}/${randomUUID()}.${extension}`;
     const { error: uploadError } = await supabase.storage
       .from(IMAGE_BUCKET)
-      .upload(path, bytes, { contentType: validated.file.type });
+      .upload(path, bytes, { contentType: mime });
     if (uploadError) {
       console.error('[persona-images] storage upload failed', { path, error: uploadError });
       return fail('Failed to upload image.', 500);

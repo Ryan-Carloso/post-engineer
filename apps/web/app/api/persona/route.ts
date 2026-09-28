@@ -152,7 +152,14 @@ export async function POST(request: Request): Promise<NextResponse> {
       script_prompt: body.values.scriptPrompt,
       paragraph_number: body.values.paragraphNumber,
       niche: body.values.niche,
-      face_mix_percent: body.values.faceMixPercent,
+      // Faceless creations without an explicit mix would be stored as NULL,
+      // passing the POST /api/persona/images `=== 0` faceless check — a
+      // backdoor for library images on faceless personas. Coerce to 0 so
+      // the stored state matches the creation-time rule.
+      face_mix_percent:
+        body.values.personaMode === 'faceless' && body.values.faceMixPercent == null
+          ? 0
+          : body.values.faceMixPercent,
       face_quality: body.values.faceQuality,
     })
     .select('id')

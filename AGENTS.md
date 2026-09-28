@@ -360,6 +360,54 @@ Follow these so the same issues don't come back:
   on an optional field misleads the agent; 'imageId must be a non-empty
   string' says what actually failed.
 
+## Web/API review learnings, round 8 (2026-09-28)
+- **Coerce derived state at the write boundary.** A faceless creation
+  stored `face_mix_percent: NULL` (no explicit mix), passing the images
+  route's `=== 0` faceless guard — a backdoor for library uploads on
+  faceless personas. Coerce to 0 on insert so stored state matches the
+  creation-time rule; the guard then holds for every row.
+- **Server warnings are i18n codes, not English copy.** POST/PATCH
+  returned English warning sentences rendered verbatim; pt-BR users got
+  English in a localized page. Return stable codes
+  (`primary_swap_failed`, `metadata_save_failed`) and map them through
+  the dictionaries in the UI, with a raw-string fallback for unknown
+  codes.
+- **Log inside never-throw helpers.** `signImageUrl` swallowed signing
+  failures silently; a gray placeholder with zero diagnostic trail.
+  `console.warn` with the path in both failure branches — the video-job
+  sibling already did this.
+- **Normalize empty metadata at the client boundary.** The MCP sent
+  `tag: ''` verbatim; the server stores it verbatim and an empty tag can
+  never match keyword selection. Trim and drop empty strings before
+  building the form.
+- **Disable the whole pending row while uploading.** The remove button
+  (and tag/description inputs) stayed enabled mid-upload; removing an
+  in-flight item revokes its preview but the captured loop still stores
+  the cancelled file. Disable, don't try to cancel the loop.
+- **Use a counter for non-secure-context ids.** `Date.now()` +
+  `Math.random()` can collide for same-millisecond picks; a module-level
+  counter is collision-free.
+- **Suppress empty-state copy on query error.** "No images yet" next to a
+  load error is contradictory — the library may have images that failed
+  to load.
+- **Size before type in validation order.** An oversized non-image should
+  report the actionable size error, not a confusing type error.
+- **Share the read-and-validate helper.** `validateImageContent` and
+  `addLibraryImages` duplicated the arrayBuffer→magic-bytes sequence;
+  extract `readValidatedImage` so the contract lives in one place. Use
+  the detected MIME (not the declared type) for the storage contentType.
+- **Test SQL literals against TS constants.** The trigger limit, errcode,
+  and history window are manually synced; a unit test parses
+  `supabase/persona-images.sql` and asserts they equal
+  `MAX_PERSONA_IMAGES`, `PERSONA_IMAGE_LIMIT_SQLSTATE`, and
+  `PERSONA_IMAGE_HISTORY_LIMIT`.
+- **Factory for repeated mutation shapes.** Three hooks duplicated the
+  null-guard + invalidate-on-success; a `usePersonaImageMutation`
+  factory keeps future changes (warnings surfacing, toasts) in one place.
+- **GET-only types can require their fields.** `ImageMutationResult`
+  carries no image (round 6), so `PersonaImageRecord.image_url` is now
+  required — the compiler enforces the GET-only contract.
+
 ## Web/API review learnings, round 7 (2026-09-28)
 - **Resolve legacy fallbacks lazily.** The video-job signed the legacy
   photo_path before the library branch: a stale photo cost a signing

@@ -37,6 +37,7 @@ function terminal(result: unknown): Record<string, unknown> {
 function mockClient(options: { failPrimarySwap?: boolean } = {}) {
   const calls = {
     personaInserts: 0,
+    personaInsertValues: null as Record<string, unknown> | null,
     personaDeletes: 0,
     imageInserts: [] as Array<Record<string, unknown>>,
     primaryUpdates: [] as Array<{ id: string; isPrimary: boolean }>,
@@ -56,8 +57,9 @@ function mockClient(options: { failPrimarySwap?: boolean } = {}) {
     from: vi.fn((table: string) => {
       if (table === 'personas') {
         return {
-          insert: vi.fn(() => {
+          insert: vi.fn((values: Record<string, unknown>) => {
             calls.personaInserts += 1;
+            calls.personaInsertValues = values;
             return terminal({ data: { id: PERSONA_ID }, error: null });
           }),
           delete: vi.fn(() => {
@@ -186,6 +188,31 @@ describe('POST /api/persona with image library', () => {
       createRequest({ ...BASE_FIELDS, personaMode: 'faceless' }, [png('a.png')]),
     );
     expect(res.status).toBe(400);
+  });
+
+  it('coerces a faceless creation to face_mix_percent 0 so the library guard holds', async () => {
+    // A persona created with personaMode 'faceless' and no explicit
+    // faceMixPercent would be stored with face_mix_percent NULL, passing
+    // the POST /api/persona/images `=== 0` faceless check — a backdoor for
+    // library images on faceless personas. Coercing to 0 on insert keeps
+    // the stored state consistent with the creation-time rule.
+    const calls = mockClient();
+    const form = new FormData();
+    form.append('name', 'Ana');
+    form.append('voiceId', 'voice-1');
+    form.append('personaMode', 'faceless');
+    const res = await POST(new Request('http://localhost/api/persona', { method: 'POST', body: form }));
+    expect(res.status).toBe(200);
+    expect(calls.personaInsertValues?.face_mix_percent).toBe(0);
+  });
+
+  it('does not coerce face_mix_percent for persona-mode creations', async () => {
+    const calls = mockClient();
+    const res = await POST(
+      createRequest({ ...BASE_FIELDS, personaMode: 'persona', faceMixPercent: '50' }),
+    );
+    expect(res.status).toBe(200);
+    expect(calls.personaInsertValues?.face_mix_percent).toBe(50);
   });
 
   it('still creates a persona without library images', async () => {

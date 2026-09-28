@@ -281,8 +281,9 @@ export interface PersonaImageRecord {
   description: string | null;
   is_primary: boolean;
   created_at: string;
-  /** Only GET /api/persona/images signs URLs; mutations return raw rows. */
-  image_url?: string | null;
+  /** Signed URL. Only GET /api/persona/images populates this; mutations
+      return ImageMutationResult (no image row), so this type is GET-only. */
+  image_url: string | null;
 }
 
 async function fetchPersonaImages(personaId: string): Promise<PersonaImageRecord[]> {
@@ -406,12 +407,21 @@ function useInvalidatePersonaImages(personaId: string | null) {
   };
 }
 
-export function useUploadPersonaImageMutation(personaId: string | null) {
+/**
+ * Shared factory for the persona-image mutations. Every mutation needs the
+ * same null-personaId guard and the same invalidate-on-success behavior;
+ * keeping them in one place means future changes (surfacing warnings,
+ * error toasts) land once instead of three times.
+ */
+function usePersonaImageMutation<TInput>(
+  personaId: string | null,
+  mutationFn: (personaId: string, input: TInput) => Promise<ImageMutationResult>,
+) {
   const invalidate = useInvalidatePersonaImages(personaId);
   return useMutation({
-    mutationFn: (input: UploadPersonaImageInput) => {
+    mutationFn: (input: TInput) => {
       if (personaId === null) throw new Error('personaId is required.');
-      return uploadPersonaImage(personaId, input);
+      return mutationFn(personaId, input);
     },
     // Only refresh the library when the server actually accepted the change;
     // a success:false payload must not look like a completed mutation.
@@ -421,30 +431,22 @@ export function useUploadPersonaImageMutation(personaId: string | null) {
   });
 }
 
+export function useUploadPersonaImageMutation(personaId: string | null) {
+  return usePersonaImageMutation<UploadPersonaImageInput>(personaId, uploadPersonaImage);
+}
+
 export function useUpdatePersonaImageMutation(personaId: string | null) {
-  const invalidate = useInvalidatePersonaImages(personaId);
-  return useMutation({
-    mutationFn: (input: UpdatePersonaImageInput) => {
-      if (personaId === null) throw new Error('personaId is required.');
-      return updatePersonaImage(input);
-    },
-    onSuccess: (result) => {
-      if (result.success) invalidate();
-    },
-  });
+  return usePersonaImageMutation<UpdatePersonaImageInput>(
+    personaId,
+    (_personaId, input) => updatePersonaImage(input),
+  );
 }
 
 export function useDeletePersonaImageMutation(personaId: string | null) {
-  const invalidate = useInvalidatePersonaImages(personaId);
-  return useMutation({
-    mutationFn: (id: string) => {
-      if (personaId === null) throw new Error('personaId is required.');
-      return deletePersonaImage(id);
-    },
-    onSuccess: (result) => {
-      if (result.success) invalidate();
-    },
-  });
+  return usePersonaImageMutation<string>(
+    personaId,
+    (_personaId, id) => deletePersonaImage(id),
+  );
 }
 
 //---------------

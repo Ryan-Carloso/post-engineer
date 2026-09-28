@@ -289,8 +289,7 @@ describe('POST /api/persona/images', () => {
     };
     expect(body.success).toBe(true);
     expect(body.image.is_primary).toBe(false);
-    expect(body.warnings).toHaveLength(1);
-    expect(body.warnings?.[0]).toContain('primary');
+    expect(body.warnings).toEqual(['primary_swap_failed']);
   });
 
   it('omits warnings when the upload fully succeeds', async () => {
@@ -456,7 +455,7 @@ describe('PATCH /api/persona/images', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { success: boolean; warnings?: string[] };
     expect(body.success).toBe(true);
-    expect(body.warnings?.[0]).toMatch(/tag\/description/);
+    expect(body.warnings).toEqual(['metadata_save_failed']);
   });
 
   it('returns 500 when a metadata-only update fails — no swap committed to warn about', async () => {

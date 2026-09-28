@@ -414,9 +414,17 @@ export class PostEngineerClient {
     const formData = new FormData();
     formData.set('personaId', personaId);
     formData.append('image', await imageFormFile(image.path), basename(image.path));
-    if (image.tag !== undefined) formData.set('tag', image.tag);
-    if (image.description !== undefined) formData.set('description', image.description);
-    if (image.isPrimary !== undefined) formData.set('isPrimary', String(image.isPrimary));
+    // Empty/whitespace-only metadata is dropped: the server stores it
+    // verbatim and an empty tag can never match the deterministic keyword
+    // selection.
+    const tag = image.tag?.trim();
+    const description = image.description?.trim();
+    if (tag) formData.set('tag', tag);
+    if (description) formData.set('description', description);
+    // isPrimary is typed as `true` only (swap-only, symmetric with
+    // update_persona_image): an explicit false is rejected at schema parse
+    // time and can never reach this branch.
+    if (image.isPrimary) formData.set('isPrimary', 'true');
     return this.request(
       '/api/persona/images',
       { method: 'POST', headers: this.getHeaders(false), body: formData },

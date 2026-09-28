@@ -19,6 +19,7 @@ interface MockImage {
 
 const apiMocks = vi.hoisted(() => ({
   images: [] as MockImage[],
+  imagesQueryError: false,
   uploadMutateAsync: vi.fn(),
   updateMutateAsync: vi.fn(),
   deleteMutateAsync: vi.fn(),
@@ -29,7 +30,7 @@ vi.mock('@/lib/api', () => ({
   usePersonaImagesQuery: vi.fn(() => ({
     data: apiMocks.images,
     isPending: false,
-    isError: false,
+    isError: apiMocks.imagesQueryError,
   })),
   useUploadPersonaImageMutation: vi.fn(() => ({
     mutateAsync: apiMocks.uploadMutateAsync,
@@ -288,6 +289,39 @@ describe('PersonaImageLibrarySection', () => {
     });
   });
 
+  it('disables pending remove buttons and inputs while an upload is in flight', async () => {
+    // Removing a pending item mid-upload would revoke its preview and drop
+    // it from state, but the upload loop captured the queue at render time
+    // and would still store the cancelled file on the server.
+    let release!: (value: { success: boolean }) => void;
+    apiMocks.uploadMutateAsync.mockReturnValue(
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+    );
+    const { container } = renderSection();
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    await pickFiles(input, [new File(['a'], 'a.jpg', { type: 'image/jpeg' })]);
+
+    await userEvent.click(screen.getByRole('button', { name: 'persona.libraryUpload' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'persona.libraryRemove' })).toBeDisabled();
+    });
+    expect(screen.getByLabelText('persona.libraryTag')).toBeDisabled();
+    expect(screen.getByLabelText('persona.libraryDescription')).toBeDisabled();
+    release({ success: true });
+  });
+
+  it('suppresses the empty-state hint when the images query errors', async () => {
+    // The empty-state copy ("no images yet") contradicts the error message:
+    // the library may have images that simply failed to load.
+    apiMocks.imagesQueryError = true;
+    renderSection();
+    expect(screen.queryByText('persona.libraryEmpty')).not.toBeInTheDocument();
+    apiMocks.imagesQueryError = false;
+  });
+
   it('keeps uploaded previews alive until the queue updates', async () => {
     // Two pending items, sequential upload: after the first resolves but
     // before the second finishes, the first item is still rendered in the
@@ -328,7 +362,7 @@ describe('PersonaImageLibrarySection', () => {
     // silently looking like a full success.
     apiMocks.uploadMutateAsync.mockResolvedValue({
       success: true,
-      warnings: ['The image was uploaded, but it could not be set as the primary image.'],
+      warnings: ['primary_swap_failed'],
     });
     const { container } = renderSection();
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
@@ -338,7 +372,7 @@ describe('PersonaImageLibrarySection', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText('The image was uploaded, but it could not be set as the primary image.'),
+        screen.getByText('persona.libraryWarningPrimarySwap'),
       ).toBeInTheDocument();
     });
   });

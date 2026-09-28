@@ -1167,7 +1167,7 @@ const SectionDivider = ({ label }: { label: string }) => (
 );
 
 //---------------
-// getCharacterIndex — encontra o avatar salvo no carrossel sem executar scroll.
+// getCharacterIndex — finds the saved avatar in the carousel without scrolling it.
 // Returns the first item when the image is not an available character.
 //---------------
 const getCharacterIndex = (avatarUrl: string | null): number => {
