@@ -436,5 +436,31 @@ describe('GET /api/persona/video-status/:taskId', () => {
         updateSpy.mockRestore();
       }
     });
+
+    it('never refunds engine-billed batch tasks: the engine owns that ledger', async () => {
+      // Billing ownership model: videos created through the batch endpoint
+      // (POST /api/persona/video-batch) are charged upfront by the ENGINE
+      // under `persona-batch:<id>:video:<n>` generation ids. The engine
+      // never attaches engine_task_id to those charge rows, so this
+      // proxy's token_transactions lookup finds nothing — and it must
+      // stay that way: a web-side refund here would double-refund the
+      // engine's own failure refund (see _run_persona_batch_sequential).
+      mockTaskBody({
+        status: 200,
+        data: { task_id: 'task-1', state: -1, error: 'boom' },
+      });
+      mockServiceClient(null);
+      const updateSpy = vi
+        .spyOn(videoGeneration, 'recordGenerationUpdate')
+        .mockResolvedValue(undefined);
+      try {
+        const response = await poll();
+        expect(response.status).toBe(200);
+        expect(refundTokens).not.toHaveBeenCalled();
+        expect(updateSpy).not.toHaveBeenCalled();
+      } finally {
+        updateSpy.mockRestore();
+      }
+    });
   });
 });

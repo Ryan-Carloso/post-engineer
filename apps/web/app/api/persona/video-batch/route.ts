@@ -33,10 +33,12 @@ import { logger } from '@/lib/logger';
 //
 // Each accepted video gets its own video_generations history row and its
 // own task id; per-video progress streams at
-// /api/persona/video-events/:taskId. Terminal history side effects run
-// through /api/persona/video-status/:taskId, which understands
-// engine-billed (batch) generations and skips the web-side refund for them
-// (the engine owns that charge).
+// /api/persona/video-events/:taskId. Billing ownership: the engine charges
+// under `persona-batch:<id>:video:<n>` generation ids and refunds failed
+// videos itself (see _run_persona_batch_sequential). Those charge rows
+// never carry engine_task_id, so the terminal flow on
+// /api/persona/video-status/:taskId finds no web charge row and issues no
+// web-side refund — each task is refunded at most once.
 //
 // V1 limits: no custom audio_url for batch (faceless needs voiceId); the
 // debug form's scriptPrompt does not apply — the engine builds each video's

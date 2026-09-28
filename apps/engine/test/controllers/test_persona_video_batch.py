@@ -260,3 +260,101 @@ class BatchSequentialTest(unittest.TestCase):
             specs_holder["target"](*specs_holder["args"])
 
         self.assertEqual(len(ran), 3)
+
+
+class BatchFailureRefundTest(unittest.TestCase):
+    """Engine-billed batches own their ledger: a failed video's upfront
+    charge is refunded by the batch runner. The web refund proxy cannot
+    reach these charge rows (it looks up by engine_task_id, which
+    engine-billed rows never carry), so each task is refunded at most once.
+    """
+
+    def _run_batch_inline(self, body, store, start_side_effect, get_task_side_effect):
+        specs_holder = {}
+
+        def capture_thread(**kwargs):
+            specs_holder["target"] = kwargs["target"]
+            specs_holder["args"] = kwargs["args"]
+            return types.SimpleNamespace(start=lambda: None)
+
+        with (
+            patch.object(video_controller, "_batch_billing_store", return_value=store),
+            patch.object(video_controller.sm.state, "update_task"),
+            patch.object(video_controller.sm.state, "delete_task"),
+            patch.object(threading, "Thread", side_effect=capture_thread),
+        ):
+            video_controller.create_persona_video_batch(_request(), body)
+
+        with (
+            patch.object(video_controller.tm, "start", side_effect=start_side_effect),
+            patch.object(
+                video_controller.sm.state, "get_task", side_effect=get_task_side_effect
+            ),
+        ):
+            specs_holder["target"](*specs_holder["args"])
+
+    def test_failed_video_gets_its_upfront_charge_refunded(self):
+        body = _batch_request(3)
+        spent = []
+        refunded = []
+
+        def fake_spend(user_id, generation_id, amount, reason):
+            spent.append((user_id, generation_id))
+            return True
+
+        store = types.SimpleNamespace(
+            spend_tokens=fake_spend,
+            refund_tokens=lambda u, g, r: refunded.append((u, g)) or True,
+        )
+        task_ids = []
+
+        def fake_start(task_id, params, stop_at):
+            task_ids.append(task_id)
+
+        def fake_get_task(task_id):
+            # Only the second video failed.
+            return {"state": -1 if task_id == task_ids[1] else 1}
+
+        self._run_batch_inline(body, store, fake_start, fake_get_task)
+
+        # Exactly one refund: the failed video's own upfront charge.
+        self.assertEqual(refunded, [spent[1]])
+        self.assertEqual(refunded[0][0], "user-1")
+        self.assertTrue(refunded[0][1].endswith(":video:1"))
+
+    def test_successful_videos_are_never_refunded(self):
+        body = _batch_request(2)
+        refunded = []
+        store = types.SimpleNamespace(
+            spend_tokens=lambda *a, **k: True,
+            refund_tokens=lambda u, g, r: refunded.append(g) or True,
+        )
+
+        self._run_batch_inline(
+            body,
+            store,
+            lambda task_id, params, stop_at: None,
+            lambda task_id: {"state": 1},
+        )
+        self.assertEqual(refunded, [])
+
+    def test_refund_failure_does_not_cancel_the_rest(self):
+        body = _batch_request(3)
+        ran = []
+
+        def fake_start(task_id, params, stop_at):
+            ran.append(task_id)
+
+        def fail_refund(user_id, generation_id, reason):
+            raise RuntimeError("ledger down")
+
+        store = types.SimpleNamespace(
+            spend_tokens=lambda *a, **k: True, refund_tokens=fail_refund
+        )
+
+        # All three fail; the refund RPC explodes each time — the runner
+        # must still attempt every video and every refund.
+        self._run_batch_inline(
+            body, store, fake_start, lambda task_id: {"state": -1}
+        )
+        self.assertEqual(len(ran), 3)

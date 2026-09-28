@@ -255,20 +255,44 @@ class _InsufficientTokens(Exception):
 INSUFFICIENT_TOKENS_MESSAGE = "INSUFFICIENT_TOKENS"
 
 
-def _run_persona_batch_sequential(specs: list) -> None:
+def _batch_task_failed(task_id: str) -> bool:
+    """True when the task reached the terminal FAILED state."""
+    try:
+        task = sm.state.get_task(task_id)
+    except Exception:  # noqa: BLE001 — a failed read must not hide the failure
+        return False
+    return bool(task) and task.get("state") == const.TASK_STATE_FAILED
+
+
+def _run_persona_batch_sequential(specs: list, store, user_id: str) -> None:
     """Run the batch's tasks strictly one-at-a-time in the calling thread.
 
     A failure in one video is contained: it leaves that task in its terminal
     FAILED state (with structured failure logging) and the next video still
-    runs.
+    runs. A failed video's upfront charge is refunded here — engine-billed
+    batches own their ledger (the web never charged these videos, and the
+    web-side refund proxy cannot reach engine-billed charge rows: it looks
+    up by engine_task_id, which those rows never carry), so each task is
+    refunded at most once. A refund failure is logged but never cancels the
+    rest.
     """
-    for task_id, params in specs:
+    for task_id, params, generation_id in specs:
         try:
             tm.start(task_id=task_id, params=params, stop_at="video")
         except Exception:
-            # tm.start already terminalizes the task via _fail_task (with
-            # structured Bugsink logging); never let one item cancel the rest.
-            continue
+            # tm.start terminalizes via _fail_task on every known path
+            # (including its catch-all); this only catches truly unexpected
+            # escapes.
+            logger.exception("persona batch task escaped without terminalizing")
+        if _batch_task_failed(task_id):
+            try:
+                store.refund_tokens(
+                    user_id, generation_id, "persona video batch: video failed"
+                )
+            except Exception:
+                logger.exception(
+                    "persona batch refund failed for task %s", task_id
+                )
 
 
 def process_persona_videos(
@@ -279,7 +303,9 @@ def process_persona_videos(
     Validates N items (done by Pydantic) -> bills upfront for N videos ->
     creates N task states -> starts sequential background execution.
 
-    Returns [(task_id, params)] in item order. Raises HttpException(400) with
+    Returns [(task_id, params, generation_id)] in item order, where
+    generation_id is the upfront charge id the batch runner refunds if that
+    video fails. Raises HttpException(400) with
     the INSUFFICIENT message when the balance cannot cover all N videos
     (nothing created, nothing charged) and HttpException(500) when billing
     is not configured.
@@ -296,10 +322,10 @@ def process_persona_videos(
             task_id=batch_id, status_code=500, message=f"Billing unavailable: {exc}"
         )
     cost = _batch_video_cost(body.face_mix_percent, body.face_quality)
-    _spend_batch_upfront(store, user_id, batch_id, len(body.items), cost)
+    spent = _spend_batch_upfront(store, user_id, batch_id, len(body.items), cost)
 
     specs = []
-    for item in body.items:
+    for index, item in enumerate(body.items):
         task_id = utils.get_uuid()
         params = _persona_video_params(
             persona=body.persona,
@@ -310,11 +336,11 @@ def process_persona_videos(
             webhook_url=body.webhook_url,
         )
         sm.state.update_task(task_id, user_id=user_id)
-        specs.append((task_id, params))
+        specs.append((task_id, params, spent[index]))
 
     thread = threading.Thread(
         target=_run_persona_batch_sequential,
-        args=(specs,),
+        args=(specs, store, user_id),
         daemon=True,
         name=f"persona-batch-{batch_id}",
     )
@@ -338,7 +364,7 @@ def create_persona_video_batch(request: Request, body: PersonaVideoBatchRequest)
     """
     auth = base.get_auth_context(request)
     specs = process_persona_videos(auth.user_id, body)
-    return utils.get_response(202, {"task_ids": [task_id for task_id, _ in specs]})
+    return utils.get_response(202, {"task_ids": [task_id for task_id, _, _ in specs]})
 
 
 @router.post(
