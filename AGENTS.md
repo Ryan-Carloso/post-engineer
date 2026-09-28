@@ -795,6 +795,14 @@ Follow these so the same issues don't come back:
   (needs two independent failures; the error contract stays
   {success, error} and the server logs loudly).
 
+## Web/API review learnings, round 25 (2026-09-28)
+- **Re-sweep the dictionaries after every "no exceptions" rule.**
+  Round 23 converted libraryHint/libraryFilesRejected to {max}/
+  {sizeMb} templates but missed libraryEmpty — the same hardcoded
+  "10" in the empty-state copy. When a standing rule says "no
+  exceptions", grep the dictionary files for the literal, not just
+  the quoted call sites.
+
 ## Web/API review learnings, round 24 (2026-09-28)
 - **Shared-param validation belongs on every dispatch branch, not just
   the main path.** The multipart/debug video-job branch dispatched to

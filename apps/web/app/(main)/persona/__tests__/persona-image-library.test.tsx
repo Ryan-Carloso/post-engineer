@@ -332,6 +332,17 @@ describe('PersonaImageLibrarySection', () => {
     apiMocks.imagesQueryError = false;
   });
 
+  it('passes the library max to the empty-state copy', async () => {
+    // Round 25: libraryEmpty hardcoded "10" while its siblings
+    // interpolate {max} — the same drift class as round 23.
+    renderSection();
+
+    await waitFor(() => {
+      expect(screen.getByText('persona.libraryEmpty')).toBeInTheDocument();
+    });
+    expect(i18nMocks.t).toHaveBeenCalledWith('persona.libraryEmpty', { max: 10 });
+  });
+
   it('keeps uploaded previews alive until the queue updates', async () => {
     // Two pending items, sequential upload: after the first resolves but
     // before the second finishes, the first item is still rendered in the
@@ -502,6 +513,10 @@ describe('PersonaImageLibrarySection', () => {
       expect(dictionaries[locale].persona.libraryHint).not.toContain('10');
       expect(dictionaries[locale].persona.libraryFilesRejected).toContain('{sizeMb}');
       expect(dictionaries[locale].persona.libraryFilesRejected).not.toContain('10MB');
+      // The empty-state copy was missed by the round-23 sweep: it
+      // hardcoded the same cap.
+      expect(dictionaries[locale].persona.libraryEmpty).toContain('{max}');
+      expect(dictionaries[locale].persona.libraryEmpty).not.toContain('10');
     }
   });
 

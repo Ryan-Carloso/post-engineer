@@ -308,7 +308,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
           ))}
         </div>
       ) : showEmptyState ? (
-        <p className="mt-3 text-sm text-neutral-500">{t('persona.libraryEmpty')}</p>
+        <p className="mt-3 text-sm text-neutral-500">{t('persona.libraryEmpty', { max: MAX_LIBRARY_IMAGES })}</p>
       ) : null}
 
       {/* The pending queue renders outside the full/partial conditional: a

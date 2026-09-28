@@ -398,7 +398,7 @@ export const ptDictionary = {
     libraryEdit: 'Editar',
     libraryImageUrlError: 'Não foi possível carregar esta imagem — será tentado de novo ao recarregar a lista.',
     libraryRemoveConfirm: 'Remover esta imagem da biblioteca?',
-    libraryEmpty: 'Sem imagens na biblioteca. Adicione até 10 fotos para variar o rosto nos vídeos.',
+    libraryEmpty: 'Sem imagens na biblioteca. Adicione até {max} fotos para variar o rosto nos vídeos.',
     libraryLoadError: 'Não foi possível carregar a biblioteca de imagens.',
     libraryUploadError: 'Não foi possível enviar a imagem.',
     libraryUpload: 'Enviar imagens',

@@ -399,7 +399,7 @@ export const enDictionary: Dictionary = {
     libraryEdit: 'Edit',
     libraryImageUrlError: 'Could not load this image — it will retry when the list reloads.',
     libraryRemoveConfirm: 'Remove this image from the library?',
-    libraryEmpty: 'No library images yet. Add up to 10 photos to vary the face across videos.',
+    libraryEmpty: 'No library images yet. Add up to {max} photos to vary the face across videos.',
     libraryLoadError: 'Could not load the image library.',
     libraryUploadError: 'Could not upload the image.',
     libraryUpload: 'Upload images',
