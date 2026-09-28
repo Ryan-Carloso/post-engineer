@@ -85,6 +85,12 @@ def main() -> int:
         "ZAI_FREE_MODEL must stay a free Flash model (e.g. glm-4.7-flash) "
         "so the fallback survives quota exhaustion",
     )
+    check(
+        "second free fallback model is a permanently-free Flash model",
+        re.search(r"^\s*ZAI_FREE_MODEL_FALLBACK:\s*glm-\S*flash\s*$", text, re.M) is not None,
+        "ZAI_FREE_MODEL_FALLBACK must stay a free Flash model "
+        "(e.g. glm-4.5-flash) so the chain has a last resort",
+    )
     check("standard API retry follows Coding Plan", "retrying with z.ai standard API" in text)
 
     # Secret gating must not rely on secrets.* inside job/step `if:`

@@ -10,8 +10,8 @@ name: opencode-review
 #   (Verified against the installed CLI: there is no --standalone flag;
 #   `run` is already the non-interactive command for scripts/CI.)
 # - Tries the z.ai GLM Coding Plan first, then falls back to z.ai's standard
-#   API endpoint with the permanently-free Flash model if the review fails.
-#   All attempts use the same ZAI_API_KEY secret.
+#   API endpoint with the permanently-free Flash models (newest first) if a
+#   review fails. All attempts use the same ZAI_API_KEY secret.
 # - Posts the review as a new PR comment on every push (the header carries
 #   the head SHA), so each review round stays visible instead of overwriting
 #   the previous one.
@@ -20,9 +20,10 @@ name: opencode-review
 # 1. Add the `ZAI_API_KEY` secret (usable with both z.ai API endpoints).
 #    Until the secret exists, the review steps are skipped.
 # 2. If your Coding Plan uses a different model id, change OPENCODE_MODEL below.
-# 3. ZAI_FREE_MODEL is the fallback on the standard API: keep it a
-#    permanently-free model (e.g. glm-4.7-flash) so reviews keep running
-#    when the Coding Plan quota is exhausted.
+# 3. ZAI_FREE_MODEL / ZAI_FREE_MODEL_FALLBACK are the fallbacks on the
+#    standard API, tried in order: keep both permanently-free Flash models
+#    (e.g. glm-4.7-flash, glm-4.5-flash) so reviews keep running when the
+#    Coding Plan quota is exhausted or one model is throttled.
 
 on:
   pull_request:
@@ -38,8 +39,11 @@ env:
   # ZAI_FREE_MODEL is a bare id resolved against the zai-standard provider
   # configured in the review step.
   OPENCODE_MODEL: zai-coding-plan/glm-5.3-flash
-  # Permanently-free fallback so reviews survive Coding Plan quota exhaustion.
+  # Permanently-free fallbacks so reviews survive Coding Plan quota
+  # exhaustion. Tried in order; both are free Flash models on the same
+  # tier, so a per-model throttle on one need not block the other.
   ZAI_FREE_MODEL: glm-4.7-flash
+  ZAI_FREE_MODEL_FALLBACK: glm-4.5-flash
 
 jobs:
   review:
@@ -141,7 +145,7 @@ jobs:
           fi
           wc -c pr.diff
 
-      - name: Run OpenCode review with Coding Plan, then free-model fallback
+      - name: Run OpenCode review with Coding Plan, then free-model fallbacks
         if: steps.check.outputs.has_key == 'true'
         env:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
@@ -183,11 +187,11 @@ jobs:
             echo "Review completed with z.ai Coding Plan ($OPENCODE_MODEL)."
           else
             echo "Coding Plan review failed; retrying with z.ai standard API."
-            # Fallback: the permanently-free Flash model, so reviews keep
-            # running when the Coding Plan quota is exhausted.
+            # Register both free Flash models in one provider config so each
+            # fallback attempt only switches the --model flag.
             python3 <<'EOF'
           import json, os
-          model_id = os.environ["ZAI_FREE_MODEL"]
+          model_ids = [os.environ["ZAI_FREE_MODEL"], os.environ["ZAI_FREE_MODEL_FALLBACK"]]
           config = {
               "$schema": "https://opencode.ai/config.json",
               "provider": {
@@ -198,19 +202,26 @@ jobs:
                           "baseURL": "https://api.z.ai/api/paas/v4",
                           "apiKey": "{env:ZAI_API_KEY}",
                       },
-                      "models": {model_id: {"name": model_id}},
+                      "models": {model_id: {"name": model_id} for model_id in model_ids},
                   }
               },
           }
           with open("opencode.json", "w") as f:
               json.dump(config, f, indent=2)
-          print("wrote opencode.json for z.ai standard model", model_id)
+          print("wrote opencode.json for z.ai standard models:", ", ".join(model_ids))
           EOF
+            # Attempt 2: standard API with the newest free Flash model.
             if review_with_model "zai-standard/$ZAI_FREE_MODEL"; then
               echo "Review completed with z.ai standard API ($ZAI_FREE_MODEL)."
             else
-              echo "OpenCode produced no output from any endpoint" >&2
-              exit 1
+              # Attempt 3: standard API with the older free Flash model.
+              echo "Standard API review with $ZAI_FREE_MODEL failed; retrying with $ZAI_FREE_MODEL_FALLBACK."
+              if review_with_model "zai-standard/$ZAI_FREE_MODEL_FALLBACK"; then
+                echo "Review completed with z.ai standard API ($ZAI_FREE_MODEL_FALLBACK)."
+              else
+                echo "OpenCode produced no output from any endpoint" >&2
+                exit 1
+              fi
             fi
           fi
           wc -c review.md
