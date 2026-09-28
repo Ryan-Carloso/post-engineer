@@ -109,7 +109,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
 
   server.tool(
     'list_social_accounts',
-    'List connected social accounts (YouTube, Instagram, LinkedIn) with the account IDs needed for schedule_video.',
+    'List connected social accounts (YouTube, Instagram, LinkedIn, Bluesky) with the account IDs needed for schedule_video.',
     ListSocialAccountsShape,
     async () => {
       return handleListSocialAccounts(apiClient);
@@ -163,7 +163,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
 
   server.tool(
     'generate_video_from_persona',
-    'Trigger video generation using an existing persona. Optional scriptPrompt overrides the video script; optional audioUrl (public http(s) URL) supplies custom audio for this video, overriding the persona voice; optional imageId picks a specific image from the persona image library (see list_persona_images), overriding the deterministic per-video selection.',
+    'Trigger video generation using an existing persona. Optional scriptPrompt overrides the video script; optional audioUrl (public http(s) URL) supplies custom audio for this video, overriding the persona voice; optional imageId picks a specific image from the persona image library (see list_persona_images), overriding the deterministic per-video selection. For faceless generation, omit personaId and provide videoSubject plus a voice source (audioUrl or voiceId).',
     GenerateVideoShape,
     async (args) => {
       return handleGenerateVideo(apiClient, args);

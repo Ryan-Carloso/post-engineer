@@ -421,6 +421,39 @@ describe('PostEngineerClient', () => {
     expect(result).toEqual(mockJob);
   });
 
+  it('starts a faceless video job without personaId', async () => {
+    const mockJob = {
+      success: true,
+      taskId: 'task-faceless-1',
+    };
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(mockJob),
+    });
+
+    const result = await client.generateVideoJob({
+      videoSubject: 'Top 5 AI tools',
+      voiceId: 'alloy',
+    });
+
+    // personaId: null selects the faceless flow in POST /api/persona/video-job;
+    // undefined keys are dropped by JSON.stringify, matching the route contract.
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/persona/video-job`,
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          personaId: null,
+          video_subject: 'Top 5 AI tools',
+          voice_id: 'alloy',
+        }),
+      })
+    );
+    expect(result).toEqual(mockJob);
+  });
+
   it('retrieves video task status', async () => {
     const mockStatus = {
       success: true,
@@ -505,6 +538,44 @@ describe('PostEngineerClient', () => {
       `${baseUrl}/api/schedule`,
       expect.objectContaining({
         method: 'POST',
+      })
+    );
+    expect(result).toEqual(mockSchedule);
+  });
+
+  it('sends blueskyAccountIds in the schedule payload', async () => {
+    const mockSchedule = { success: true, scheduleId: 'sched-bsky-1' };
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(mockSchedule),
+    });
+
+    const now = new Date('2026-09-18T09:00:00.000Z');
+    const validTime = new Date('2026-09-20T10:00:00.000Z').toISOString();
+    const clockClient = new PostEngineerClient({ apiKey: 'k', now: () => now });
+
+    const result = await clockClient.createSchedule({
+      personaId: 'persona-123',
+      providers: ['bluesky'],
+      blueskyAccountIds: ['did:plc:xyz'],
+      scheduledAt: validTime,
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/schedule`,
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          personaId: 'persona-123',
+          providers: ['bluesky'],
+          youtubeAccountIds: [],
+          instagramAccountIds: [],
+          linkedinAccountIds: [],
+          blueskyAccountIds: ['did:plc:xyz'],
+          scheduledAt: validTime,
+          timezone: 'UTC',
+        }),
       })
     );
     expect(result).toEqual(mockSchedule);

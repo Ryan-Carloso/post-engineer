@@ -17,11 +17,13 @@ export function missingProviderAccountIds(args: {
   youtubeAccountIds?: string[];
   instagramAccountIds?: string[];
   linkedinAccountIds?: string[];
+  blueskyAccountIds?: string[];
 }): string[] {
   const idsByProvider: Record<string, string[] | undefined> = {
     youtube: args.youtubeAccountIds,
     instagram: args.instagramAccountIds,
     linkedin: args.linkedinAccountIds,
+    bluesky: args.blueskyAccountIds,
   };
   return args.providers.filter((provider) => (idsByProvider[provider] ?? []).length === 0);
 }
@@ -132,7 +134,13 @@ export const GetTokenBalanceShape = {};
 export const GetTokenBalanceSchema = z.object(GetTokenBalanceShape);
 
 export const GenerateVideoShape = {
-  personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona to generate video with'),
+  // Omitting personaId selects the faceless flow (no persona loaded; the job
+  // runs fully faceless with face_mix_percent 0). Faceless generation then
+  // requires videoSubject plus a voice source (audioUrl or voiceId) — the
+  // web API has no stored persona to fall back to.
+  personaId: z.string().min(1, 'personaId must be a non-empty string').optional().describe('The ID of the persona to generate video with. Omit for faceless generation.'),
+  videoSubject: z.string().min(1).optional().describe('Video subject/topic. Required for faceless generation (no persona).'),
+  voiceId: z.string().min(1).optional().describe('Voice ID for faceless generation. Required when no audioUrl is given and no persona.'),
   scriptPrompt: z.string().optional().describe('Optional specific prompt override for this video'),
   audioUrl: z.string().url('audioUrl must be a valid URL').optional().describe('Optional public URL of custom audio for this video (overrides the persona voice)'),
   imageId: z.string().min(1, 'imageId must be a non-empty string').optional().describe('Optional library image ID to use for this video (overrides the deterministic per-video image selection; see list_persona_images)'),
@@ -206,12 +214,13 @@ export const GetVideoStatusSchema = z.object(GetVideoStatusShape);
 export const ScheduleVideoShape = {
   personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona'),
   providers: z
-    .array(z.enum(['youtube', 'instagram', 'linkedin']))
+    .array(z.enum(['youtube', 'instagram', 'linkedin', 'bluesky']))
     .min(1, 'At least one provider required')
     .describe('Target social platforms'),
   youtubeAccountIds: z.array(z.string()).optional().default([]),
   instagramAccountIds: z.array(z.string()).optional().default([]),
   linkedinAccountIds: z.array(z.string()).optional().default([]),
+  blueskyAccountIds: z.array(z.string()).optional().default([]),
   scheduledAt: z
     .string()
     .describe('Target ISO date time for scheduling. Must be between 24h and 30 days in the future.'),
@@ -399,6 +408,34 @@ export async function handleGenerateVideo(
   client: PostEngineerClient,
   args: z.infer<typeof GenerateVideoSchema>
 ): Promise<McpToolResponse> {
+  // Faceless flow (no personaId): the web API has no stored persona to fall
+  // back to, so the subject and a voice source must come with the request.
+  // Fail fast here instead of surfacing the API 400.
+  const faceless = args.personaId === undefined || args.personaId === null;
+  if (faceless) {
+    if (!args.videoSubject || args.videoSubject.trim().length === 0) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: 'Error: faceless generation requires videoSubject (no persona to take the topic from).',
+          },
+        ],
+        isError: true,
+      };
+    }
+    if (!args.audioUrl && !args.voiceId) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: 'Error: faceless generation requires a voice source — audioUrl or voiceId (no persona voice to fall back to).',
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
   return handleLibraryCall(() => client.generateVideoJob(args), 'generating video', 'Video generation task started');
 }
 

@@ -42,7 +42,12 @@ export interface CreatePersonaInput {
 }
 
 export interface GenerateVideoJobInput {
-  personaId: string;
+  // Omitted for faceless generation (the web API runs the job with
+  // face_mix_percent 0 and no photo); videoSubject plus a voice source
+  // (audioUrl or voiceId) are then required.
+  personaId?: string;
+  videoSubject?: string;
+  voiceId?: string;
   scriptPrompt?: string;
   audioUrl?: string;
   /** Library image ID overriding the deterministic per-video selection. */
@@ -63,10 +68,11 @@ export interface UpdatePersonaInput {
 
 export interface CreateScheduleInput {
   personaId: string;
-  providers: ('youtube' | 'instagram' | 'linkedin')[];
+  providers: ('youtube' | 'instagram' | 'linkedin' | 'bluesky')[];
   youtubeAccountIds?: string[];
   instagramAccountIds?: string[];
   linkedinAccountIds?: string[];
+  blueskyAccountIds?: string[];
   scheduledAt?: string | Date;
   daysOfWeek?: number[];
   startHour?: number;
@@ -468,7 +474,11 @@ export class PostEngineerClient {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify({
-          personaId: input.personaId,
+          // Explicit null (not a dropped key): the web route treats both as
+          // the faceless flow, and null survives serialization explicitly.
+          personaId: input.personaId ?? null,
+          video_subject: input.videoSubject,
+          voice_id: input.voiceId,
           video_script_prompt: input.scriptPrompt,
           audio_url: input.audioUrl,
           image_id: input.imageId,
@@ -598,6 +608,7 @@ export class PostEngineerClient {
           youtubeAccountIds: input.youtubeAccountIds ?? [],
           instagramAccountIds: input.instagramAccountIds ?? [],
           linkedinAccountIds: input.linkedinAccountIds ?? [],
+          blueskyAccountIds: input.blueskyAccountIds ?? [],
           scheduledAt: input.scheduledAt,
           daysOfWeek: input.daysOfWeek,
           startHour: input.startHour,

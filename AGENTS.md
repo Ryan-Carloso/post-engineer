@@ -924,6 +924,57 @@ Follow these so the same issues don't come back:
   `validatedContent`, which addLibraryImages reuses. Pinned by a test
   spying on File.prototype.arrayBuffer.
 
+## MCP review learnings, PR #7 bluesky/faceless (2026-09-28)
+- **Evaluated and declined (two OpenCode rounds, contradictory):** round 1
+  MAJOR said `args.personaId === undefined || args.personaId === null` in
+  handleGenerateVideo is a type-safety bug — false positive. The MCP SDK
+  validates tool args against the Zod schema before the handler runs, and
+  `z.string().min(1).optional()` rejects null, so null can never reach the
+  handler through the tool path. The spelled-out nullish check follows the
+  project rule (strict null checks only; `== null` banned). Do not
+  "simplify" it to `=== undefined` on reviewer request. Round 2 then
+  argued the exact opposite (add `.nullable()` because "the client sends
+  null") — also false positive: it conflates the two layers. The tool
+  input contract is omission-for-faceless; only the HTTP client maps that
+  to the web API's explicit null sentinel (client.ts,
+  `personaId: input.personaId ?? null`). The codebase already avoids
+  `.nullable()` where null has no meaning at that layer (tools.ts:92).
+  Pinned by a test: the schema rejects explicit null personaId.
+- **Pin undefined/[] equivalence in validators.** missingProviderAccountIds
+  treats a missing array and `[]` identically (`?? []`); an OpenCode MINOR
+  asked for the behavior to be documented — added a pinning test rather
+  than changing code.
+
+## Release workflow review learnings, PR #8 (2026-09-28)
+- **Evaluated and declined: `--provenance-registry` is not needed.** OpenCode
+  MAJOR claimed `npm publish --provenance` must pass
+  `--provenance-registry https://registry.npmjs.org/` — false positive. The
+  official npm docs' canonical GitHub Actions flow is exactly
+  `npm publish --provenance --access public` with
+  `registry-url: 'https://registry.npmjs.org'` in setup-node, which is what
+  the workflow does; `--provenance-registry` appears nowhere in the
+  recommended flow. Do not add the redundant flag on reviewer request.
+- **Evaluated and declined: keep `git+https` repository URLs.** OpenCode MINOR
+  suggested `git+ssh://git@github.com/...` for the package.json repository
+  field — declined. npm's own package.json docs use the `git+https` format,
+  and SSH requires consumers to have GitHub SSH keys, which breaks the
+  universal `npx post-engineer-mcp` install path. HTTPS is the correct
+  format for a public package.
+
+## CodeQL review learnings, PR #6 (2026-09-28)
+- **Evaluated and declined: `build-mode: none` is correct for interpreted
+  languages.** OpenCode MAJOR claimed the CodeQL workflow needs build steps
+  for Next.js and Python — false positive. CodeQL analyzes
+  javascript-typescript, python, and actions from source; no build is needed
+  or useful. CodeQL is not a type checker (tsc covers that in CI) and
+  `pip install` does not improve CodeQL Python analysis (dependency vulns are
+  Dependabot/pip-audit's job). Empirical proof: the `Analyze
+  (javascript-typescript)` and `Analyze (python)` jobs both passed with
+  `build-mode: none`. The reviewer's suggested commands were also wrong for
+  this repo (pnpm workspaces install from root, engine uses uv, no
+  requirements.txt at that path). Only compiled languages need
+  autobuild/manual.
+
 ## CI lessons
 
 - Never pass CLI flags through `pnpm <script> -- <flags>` in workflows:

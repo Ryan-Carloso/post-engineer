@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import {
+  missingProviderAccountIds,
   handleCreatePersona,
   handleListPersonaImages,
   handleAddPersonaImage,
@@ -386,6 +387,39 @@ describe('schedule account validation', () => {
     expect(result.success).toBe(true);
   });
 
+  it('ScheduleVideoSchema accepts bluesky with blueskyAccountIds', () => {
+    const result = ScheduleVideoSchema.safeParse({
+      ...baseArgs,
+      providers: ['bluesky'],
+      blueskyAccountIds: ['did:plc:xyz'],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('ScheduleVideoSchema rejects bluesky with no account IDs', () => {
+    const result = ScheduleVideoSchema.safeParse({
+      ...baseArgs,
+      providers: ['bluesky'],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('missingProviderAccountIds flags bluesky without account IDs', () => {
+    expect(
+      missingProviderAccountIds({ providers: ['bluesky'], blueskyAccountIds: [] })
+    ).toEqual(['bluesky']);
+    expect(
+      missingProviderAccountIds({ providers: ['bluesky'], blueskyAccountIds: ['did:plc:xyz'] })
+    ).toEqual([]);
+  });
+
+  it('missingProviderAccountIds treats undefined and [] the same for bluesky', () => {
+    expect(missingProviderAccountIds({ providers: ['bluesky'] })).toEqual(['bluesky']);
+    expect(
+      missingProviderAccountIds({ providers: ['bluesky'], blueskyAccountIds: [] })
+    ).toEqual(['bluesky']);
+  });
+
   it('handleScheduleVideo fails fast without calling the API when account IDs are missing', async () => {
     const client = { createSchedule: vi.fn() } as unknown as PostEngineerClient;
     const response = await handleScheduleVideo(client, {
@@ -394,6 +428,7 @@ describe('schedule account validation', () => {
       youtubeAccountIds: [],
       instagramAccountIds: [],
       linkedinAccountIds: [],
+      blueskyAccountIds: [],
       scheduledAt: '2026-10-18T12:00:00.000Z',
       timezone: 'UTC',
     });
@@ -401,6 +436,86 @@ describe('schedule account validation', () => {
     expect(response.isError).toBe(true);
     expect(textOf(response)).toMatch(/youtube.*account|account.*youtube/i);
     expect(client.createSchedule).not.toHaveBeenCalled();
+  });
+});
+
+describe('faceless video generation', () => {
+  it('GenerateVideoSchema accepts a missing personaId (faceless)', () => {
+    const result = GenerateVideoSchema.safeParse({
+      videoSubject: 'Top 5 AI tools',
+      voiceId: 'alloy',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('GenerateVideoSchema still rejects an empty-string personaId', () => {
+    const result = GenerateVideoSchema.safeParse({
+      personaId: '',
+      videoSubject: 'Top 5 AI tools',
+      voiceId: 'alloy',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('GenerateVideoSchema rejects an explicit null personaId (omit the field for faceless)', () => {
+    // Deliberate two-layer contract: the tool input uses omission for
+    // faceless; only the HTTP client maps that to the web API's explicit
+    // null sentinel (see client.ts). Do not add .nullable() here.
+    const result = GenerateVideoSchema.safeParse({
+      personaId: null,
+      videoSubject: 'Top 5 AI tools',
+      voiceId: 'alloy',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('handleGenerateVideo fails fast for faceless without videoSubject', async () => {
+    const client = { generateVideoJob: vi.fn() } as unknown as PostEngineerClient;
+    const response = await handleGenerateVideo(client, { voiceId: 'alloy' });
+
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toMatch(/videoSubject/i);
+    expect(client.generateVideoJob).not.toHaveBeenCalled();
+  });
+
+  it('handleGenerateVideo fails fast for faceless without a voice source', async () => {
+    const client = { generateVideoJob: vi.fn() } as unknown as PostEngineerClient;
+    const response = await handleGenerateVideo(client, { videoSubject: 'Top 5 AI tools' });
+
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toMatch(/audioUrl|voiceId/i);
+    expect(client.generateVideoJob).not.toHaveBeenCalled();
+  });
+
+  it('handleGenerateVideo passes faceless args through to the client', async () => {
+    const client = { generateVideoJob: vi.fn() } as unknown as PostEngineerClient;
+    vi.mocked(client.generateVideoJob).mockResolvedValue({ success: true, taskId: 't-1' });
+
+    const response = await handleGenerateVideo(client, {
+      videoSubject: 'Top 5 AI tools',
+      audioUrl: 'https://cdn.example.com/narracao.mp3',
+    });
+
+    expect(response.isError).toBeUndefined();
+    expect(client.generateVideoJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        videoSubject: 'Top 5 AI tools',
+        audioUrl: 'https://cdn.example.com/narracao.mp3',
+      })
+    );
+    expect(textOf(response)).toContain('t-1');
+  });
+
+  it('handleGenerateVideo still works with a personaId', async () => {
+    const client = { generateVideoJob: vi.fn() } as unknown as PostEngineerClient;
+    vi.mocked(client.generateVideoJob).mockResolvedValue({ success: true, taskId: 't-2' });
+
+    const response = await handleGenerateVideo(client, { personaId: 'persona-123' });
+
+    expect(response.isError).toBeUndefined();
+    expect(client.generateVideoJob).toHaveBeenCalledWith(
+      expect.objectContaining({ personaId: 'persona-123' })
+    );
   });
 });
 
