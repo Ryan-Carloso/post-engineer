@@ -1013,3 +1013,19 @@ Follow these so the same issues don't come back:
   (`console.warn(msg, err)` -> `logger.warn(msg, { err })` is NOT faithful
   when a test expects the raw object as 2nd arg). Migrate the shape as-is;
   split cause/metadata only where no test pins the old shape.
+
+## Reviewer finding: logging coverage (2026-09-28, PR #11)
+- OpenCode flagged a GENUINE gap: `POST /api/persona` had been migrated to
+  `logger.error` but had no dedicated failure-logging test. Fixed by adding
+  `app/api/persona/__tests__/route-logging.test.ts` (insert failure ->
+  `logger.error` with the real DB error, sanitized 500 to the client).
+- Lesson: when migrating a route's failure path to the central logger, add a
+  `route-logging.test.ts` (or extend the existing test) asserting the logger
+  call — the migration is only half done without the pinning test. The
+  reviewer's suggested assertion message was wrong (`create failed` vs the
+  actual `'[api/persona] insert failed'`): always verify findings against the
+  code before applying.
+- The same review's MINOR (extract a shared `extractErrorMessage` helper for
+  the `error instanceof Error ? error.message : ...` pattern) was evaluated
+  and DECLINED: no functional issue, and the churn would touch many files
+  and their test expectations for zero behavioral benefit.
