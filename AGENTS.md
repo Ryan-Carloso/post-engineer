@@ -765,3 +765,24 @@ Follow these so the same issues don't come back:
   (observed on 2451284 and 5899432 — "Run OpenCodeReview" step errors).
   Zero new threads + a failed action = infrastructure, not a dirty
   review. Re-run or proceed; do not treat it as a code failure.
+
+## Web/API review learnings, round 18 (2026-09-28)
+- **Coercion at the write boundary must be unconditional for the
+  security-relevant branch.** resolveStoredFaceMixPercent only coerced
+  null/undefined; a direct API caller sending personaMode=faceless with
+  an explicit faceMixPercent=80 stored 80, and the images route (which
+  treats the stored mix as the facelessness source) accepted library
+  uploads — re-opening the backdoor. The faceless branch is now
+  unconditional (`if (personaMode === 'faceless') return 0`), pinned by
+  a test.
+- **One canonical error shape per failure class across producers.**
+  addLibraryImages said "Tag must be N characters or fewer." while PATCH
+  said "tag must be at most N characters." — the UI's error-class
+  pattern only matched the latter, so upload rejections fell back to the
+  generic message. Aligned addLibraryImages to the PATCH wording.
+- **Don't read the same file twice at creation.** validateLibraryInputs
+  read every file for the fail-fast magic-byte check, then
+  addLibraryImages re-read them for upload (2×10×10MB worst case).
+  validateLibraryInputs now returns the validated bytes/mime via
+  `validatedContent`, which addLibraryImages reuses. Pinned by a test
+  spying on File.prototype.arrayBuffer.
