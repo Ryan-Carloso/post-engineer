@@ -1,0 +1,77 @@
+name: release-mcp
+
+# Publishes post-engineer-mcp to npm via trusted publishing (GitHub OIDC, no token).
+#
+# How to cut a release (after the changes are merged to main):
+#   1. Bump the version in apps/mcp/package.json (e.g. 1.2.0 -> 1.3.0) and push.
+#   2. git tag -a mcp-v1.3.0 -m "post-engineer-mcp v1.3.0"
+#   3. git push origin mcp-v1.3.0
+#
+# The tag version MUST match apps/mcp/package.json or the job fails before
+# publishing. One-time npm setup required: on npmjs.com, add this repo as a
+# trusted publisher for the post-engineer-mcp package
+# (org Ryan-Carloso, repo post-engineer, workflow release-mcp.yml).
+
+on:
+  push:
+    tags:
+      - 'mcp-v*'
+
+permissions:
+  contents: read
+  id-token: write # required for npm trusted publishing / provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+        working-directory: apps/mcp
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
+
+      - name: Verify tag matches package version
+        run: |
+          set -euo pipefail
+          TAG_VERSION="${GITHUB_REF_NAME#mcp-v}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match apps/mcp/package.json version ${PKG_VERSION}. Bump the version first, then tag."
+            exit 1
+          fi
+          echo "Releasing post-engineer-mcp v${PKG_VERSION}"
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.22.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm exec nx run mcp:typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Publish to npm (trusted publishing)
+        run: |
+          set -euo pipefail
+          # npm CLI bundled with Node 22 predates OIDC trusted publishing; upgrade first.
+          npm install -g npm@latest
+          npm publish --provenance --access public

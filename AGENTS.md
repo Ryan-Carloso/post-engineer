@@ -974,3 +974,16 @@ Follow these so the same issues don't come back:
   this repo (pnpm workspaces install from root, engine uses uv, no
   requirements.txt at that path). Only compiled languages need
   autobuild/manual.
+
+## CI lessons
+
+- Never pass CLI flags through `pnpm <script> -- <flags>` in workflows:
+  pnpm (v10) forwards a literal `--` to the script, so
+  `pnpm test -- --coverage` runs `vitest run -- --coverage`, and vitest then
+  silently skips coverage generation (tests still pass, no report files are
+  written). The downstream step fails later with a confusing "file not found".
+  Invoke the binary directly instead: `pnpm exec vitest run --coverage ...`.
+- `actions/upload-code-coverage` fails closed on a missing report file even
+  with `fail-on-error: 'false'` (that input only downgrades *upload* errors,
+  e.g. Code Quality not enabled). The coverage-generation step must actually
+  produce the file, or CI goes red.
