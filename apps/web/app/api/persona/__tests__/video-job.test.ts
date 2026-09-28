@@ -345,6 +345,23 @@ describe('POST /api/persona/video-job', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('returns 400 when both image_id and imageId are present with different values', async () => {
+    mockSupabase(PERSONA);
+
+    const res = await POST(
+      jsonRequest({
+        video_subject: 'viagem',
+        image_id: 'img-a',
+        imageId: 'img-b',
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { success: boolean; error: string };
+    expect(body.error).toContain('not both');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('returns 400 with invalid JSON', async () => {
     mockSupabase(PERSONA);
 
@@ -2160,6 +2177,25 @@ describe('POST /api/persona/video-job', () => {
 
       expect(res.status).toBe(200);
       // image_id wins even though the topic matches the formal image.
+      expect(forwardedPhotoUrl()).toBe(
+        `https://supabase.test/signed/${USER_ID}/lib/casual.png`,
+      );
+    });
+
+    it('accepts identical image_id and imageId values', async () => {
+      mockSupabase(PERSONA, { libraryImages: LIBRARY });
+      engineOk();
+
+      const res = await POST(
+        jsonRequest({
+          personaId: 'p-1',
+          video_subject: 'business office meeting',
+          image_id: 'img-casual',
+          imageId: 'img-casual',
+        }),
+      );
+
+      expect(res.status).toBe(200);
       expect(forwardedPhotoUrl()).toBe(
         `https://supabase.test/signed/${USER_ID}/lib/casual.png`,
       );

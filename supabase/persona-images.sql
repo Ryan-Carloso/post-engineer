@@ -103,6 +103,13 @@ $$;
 --    path for the history — the old app-side helper was removed. Called by
 --    the web app via the service-role client (recordRecentImageId in
 --    apps/web/lib/persona-images.ts).
+--    Trust boundary: this function performs no ownership check itself — it
+--    relies on RLS on public.personas (invoker rights) when called with a
+--    user-scoped client. The app invokes it with both the service-role
+--    client (API-key callers, after route-level ownership checks) and the
+--    session client, so EXECUTE must stay granted to authenticated: the
+--    safety net is the RLS policy on personas, which must keep covering
+--    UPDATE for the row owner.
 create or replace function public.record_persona_image_use(p_persona_id uuid, p_image_id uuid)
 returns void
 language sql
@@ -121,9 +128,13 @@ $$;
 --    back-to-back. Raises if the image does not belong to the persona (the
 --    exception rolls back the demote too).
 --    Trust boundary: like record_persona_image_use, this function performs
---    no ownership check itself — it is called via the service-role client
---    (setPrimaryLibraryImage in apps/web/lib/persona-images.ts) only after
---    the route validated that the image belongs to the caller's persona.
+--    no ownership check itself — it relies on RLS (invoker rights) when
+--    called with a user-scoped client. The app invokes it with both the
+--    service-role client (API-key callers) and the session client, always
+--    after the route validated that the image belongs to the caller's
+--    persona via getOwnedImage. EXECUTE must stay granted to authenticated;
+--    the RLS policies on persona_images must keep scoping UPDATE/SELECT to
+--    the row owner.
 create or replace function public.set_primary_persona_image(p_persona_id uuid, p_image_id uuid)
 returns void
 language plpgsql

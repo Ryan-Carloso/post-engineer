@@ -206,7 +206,17 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
   const tag = formData.get('tag');
   const description = formData.get('description');
-  const isPrimary = formData.get('isPrimary') === 'true';
+  // The form field is a string: anything other than the exact 'true'/'false'
+  // literals ('1', 'yes', 'True') is a client bug. Silently coercing to
+  // false would confirm a primary the caller never got.
+  const rawIsPrimary = formData.get('isPrimary');
+  let isPrimary = false;
+  if (rawIsPrimary !== null) {
+    if (rawIsPrimary !== 'true' && rawIsPrimary !== 'false') {
+      return errorResponse(400, "isPrimary must be 'true' or 'false'.");
+    }
+    isPrimary = rawIsPrimary === 'true';
+  }
 
   const added = await addLibraryImages(supabase, auth.userId, personaId, [
     {
@@ -301,6 +311,11 @@ export async function PATCH(request: Request): Promise<NextResponse> {
   }
   if (Object.keys(updates).length === 0) {
     // The primary flag was the only change and is already applied.
+    // Mutations intentionally return the raw DB row (snake_case, no signed
+    // image_url): every client invalidates ['persona-images', personaId] on
+    // success and refetches the signed GET shape, so no consumer reads
+    // image_url from a mutation payload. Signing here would pay a storage
+    // round-trip per edit for nothing.
     const { data: current, error: fetchError } = await supabase
       .from('persona_images')
       .select('id, image_path, tag, description, is_primary, created_at')

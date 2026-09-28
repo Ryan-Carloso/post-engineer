@@ -311,3 +311,51 @@ Follow these so the same issues don't come back:
   tag/description/isPrimary" lived only in the handler guard; a
   .refine() on UpdatePersonaImageSchema makes the contract
   machine-checkable at parse time.
+
+## Web/API review learnings, round 5 (2026-09-28)
+- **Derive the storage extension from the detected content, not the file
+  name.** Magic-byte validation already rejected mismatched content, but a
+  truthful WebP file named "photo.png" was stored with a .png path.
+  validateImageBuffer now returns the detected MIME and addLibraryImages
+  maps it to the extension, so path and bytes always agree.
+- **A failed rollback row delete must surface, not just log.** The internal
+  rollback logged the delete error and returned []: surviving rows kept
+  pointing at files the caller believed were cleaned up. It now returns
+  the added image paths so the caller retries before any cascade cleanup,
+  and skips the storage remove while rows still reference the files.
+- **Ambiguous dual-spelling params are 400, not silent precedence.** The
+  video-job accepted both image_id and imageId with image_id silently
+  winning; conflicting values are now rejected like every other ambiguous
+  input in that route. Identical values are still accepted.
+- **Gate edit-UI sections on loaded data, not just non-faceless.** The
+  library gate read `editingPersona?.faceMixPercent !== 0`, which is true
+  while the list is loading — flashing the section for a faceless persona
+  (and discarding pending picks on unmount). Require
+  `editingPersona !== undefined` too.
+- **Interpolate numeric limits into i18n copy.** libraryCount/
+  libraryLimitReached hardcoded '10' in en+pt while MAX_LIBRARY_IMAGES is
+  the source of truth; both now take {max} and the component passes it.
+- **POST isPrimary accepts only 'true'/'false'.** `=== 'true'` silently
+  coerced '1'/'yes'/'True' to false, confirming a 201 with a silently
+  unset primary — the standing no-silent-coercion rule applied to form
+  fields too, matching PATCH's strict boolean handling.
+- **Document why the REVOKE suggestion doesn't apply.** OpenCode suggested
+  REVOKE EXECUTE on the RPCs from authenticated — but the app invokes
+  both RPCs with the user-scoped session client (getAuth), so the revoke
+  would break the feature. The SQL comments now state the real trust
+  boundary: invoker-rights RLS + route-level ownership checks, EXECUTE
+  stays granted.
+- **Mutations return raw rows by design; document it.** PATCH returns the
+  DB row without a signed image_url because every client invalidates the
+  query and refetches the signed GET shape — signing in the mutation
+  would pay a storage round-trip per edit for no consumer. The comment
+  on the handler says so explicitly.
+
+## MCP review learnings, round 5 (2026-09-28)
+- **Export shared limits from the client module.** MAX_LIBRARY_IMAGES/
+  MAX_LIBRARY_IMAGE_BYTES lived unexported in client.ts while tools.ts
+  hardcoded .max(10)/.max(9)/'10MB' in schemas and descriptions — one
+  import keeps the guards, Zod bounds, and doc strings in sync.
+- **Zod messages must match optional semantics.** 'imageId is required'
+  on an optional field misleads the agent; 'imageId must be a non-empty
+  string' says what actually failed.

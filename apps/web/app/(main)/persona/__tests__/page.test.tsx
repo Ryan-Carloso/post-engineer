@@ -435,8 +435,8 @@ describe('app/(main)/persona/page — PersonaPage', () => {
 });
 
 //---------------
-// preencherFormularioValido — fluxo completo: personagem + nome + voz
-// (vive no nível do arquivo para reuso entre describes)
+// fillValidForm — full flow: character + name + voice
+// (lives at file level for reuse across describes)
 //---------------
 async function preencherFormularioValido(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'persona.characterLabel 1' }));
@@ -628,9 +628,9 @@ describe('app/(main)/persona/page — modo edição (mesma página do create)', 
     const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });
 
-    // Começa em es (idioma da persona)…
+    // Starts at es (the persona's language)…
     expect(screen.getByTestId('sample-language')).toHaveValue('es');
-    // …mas a escolha manual do usuário vence.
+    // …but the user's manual choice wins.
     await user.selectOptions(screen.getByTestId('sample-language'), 'pt-br');
     await user.click(screen.getByRole('button', { name: 'persona.voiceCalm' }));
 
@@ -670,6 +670,22 @@ describe('app/(main)/persona/page — sample language', () => {
     vi.mocked(usePersonaListQuery).mockReturnValue({
       data: [{ id: 'p-1', name: 'Faceless editor', faceMixPercent: 0 }],
       isLoading: false,
+    } as never);
+
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(screen.queryByText('persona.libraryLabel')).not.toBeInTheDocument();
+    });
+  });
+
+  it('hides the image library while the persona list is still loading', async () => {
+    // While editingPersona is undefined the gate must not flash the library:
+    // a faceless persona would render it for a frame before the data arrives.
+    searchParams.value = new URLSearchParams('edit=p-1');
+    vi.mocked(usePersonaListQuery).mockReturnValue({
+      data: undefined,
+      isLoading: true,
     } as never);
 
     render(<PersonaPage />, { wrapper: createWrapper() });

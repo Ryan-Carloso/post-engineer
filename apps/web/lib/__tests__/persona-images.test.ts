@@ -238,7 +238,7 @@ describe('addLibraryImages', () => {
     return new File([bytes], name, { type: 'image/png' });
   };
 
-  function rollbackClient(options: { failInsertOn?: number; failRemove?: boolean }) {
+  function rollbackClient(options: { failInsertOn?: number; failRemove?: boolean; failRowDelete?: boolean }) {
     let inserts = 0;
     const removedPaths: string[][] = [];
     const client = {
@@ -255,7 +255,7 @@ describe('addLibraryImages', () => {
             const data = { id, image_path: `user/img-${inserts}.png`, tag: '', description: '', is_primary: false, created_at: '' };
             return { select: vi.fn(() => ({ single: vi.fn(async () => ({ data, error: null })) })) };
           }),
-          delete: vi.fn(() => ({ in: vi.fn(() => terminal({ error: null })) })),
+          delete: vi.fn(() => ({ in: vi.fn(() => terminal({ error: options.failRowDelete ? { message: 'delete boom' } : null })) })),
         };
       }),
       storage: {
@@ -285,6 +285,58 @@ describe('addLibraryImages', () => {
     expect(leftover.every((p) => p.startsWith('user-1/'))).toBe(true);
   });
 
+  it('returns added image paths when the rollback row delete fails', async () => {
+    const { addLibraryImages } = await import('../persona-images');
+    const { client, removedPaths } = rollbackClient({ failInsertOn: 2, failRowDelete: true });
+    const result = await addLibraryImages(client, 'user-1', 'persona-1', [
+      { file: pngFile('a.png') },
+      { file: pngFile('b.png') },
+    ]);
+    // The first image's row survives the rollback, so its storage path is
+    // surfaced for the caller to retry before any cascade cleanup — and the
+    // storage files are NOT removed while rows still reference them.
+    expect(result).toMatchObject({ status: 500 });
+    const leftover = (result as { leftoverPaths: string[] }).leftoverPaths;
+    expect(leftover).toEqual(['user/img-1.png']);
+    expect(removedPaths).toHaveLength(0);
+  });
+
+  it('derives the storage extension from the detected content, not the file name', async () => {
+    const { addLibraryImages } = await import('../persona-images');
+    const uploadedPaths: string[] = [];
+    const client = {
+      from: vi.fn(() => ({
+        select: vi.fn(() => terminal({ count: 0, error: null })),
+        insert: vi.fn(() => ({
+          select: vi.fn(() => ({
+            single: vi.fn(async () => ({
+              data: { id: 'img-1', image_path: '', tag: '', description: '', is_primary: false, created_at: '' },
+              error: null,
+            })),
+          })),
+        })),
+      })),
+      storage: {
+        from: vi.fn(() => ({
+          upload: vi.fn(async (path: string) => {
+            uploadedPaths.push(path);
+            return { error: null };
+          }),
+          remove: vi.fn(async () => ({ error: null })),
+        })),
+      },
+    };
+    // WebP bytes named photo.png with a truthful declared type: the stored
+    // object must use the detected .webp extension, not the .png file name.
+    const bytes = new Uint8Array(1024);
+    bytes.set([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50]); // RIFF....WEBP
+    const file = new File([bytes], 'photo.png', { type: 'image/webp' });
+    const result = await addLibraryImages(client as never, 'user-1', 'persona-1', [{ file }]);
+    expect(result).toMatchObject({ images: expect.any(Array) });
+    expect(uploadedPaths).toHaveLength(1);
+    expect(uploadedPaths[0]).toMatch(/^user-1\/.+\.webp$/);
+  });
+
   it('keeps a zero-byte file so validation emits the right error and tags stay index-aligned', async () => {
     const { addLibraryImages } = await import('../persona-images');
     const { client } = rollbackClient({});
@@ -305,9 +357,9 @@ describe('validateImageBuffer', () => {
   const GIF_MAGIC = Buffer.from('GIF89a........', 'ascii');
   const ZEROS = Buffer.alloc(12);
 
-  it('accepts bytes whose magic matches the declared type', async () => {
+  it('returns the detected mime when magic matches the declared type', async () => {
     const { validateImageBuffer } = await import('../persona-images');
-    expect(validateImageBuffer(PNG_MAGIC, 'image/png')).toBeNull();
+    expect(validateImageBuffer(PNG_MAGIC, 'image/png')).toEqual({ mime: 'image/png' });
   });
 
   it('rejects content whose magic does not match the declared type', async () => {
@@ -315,16 +367,22 @@ describe('validateImageBuffer', () => {
     // the declared type lies.
     const { validateImageBuffer } = await import('../persona-images');
     const jpegMagic = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0]);
-    expect(validateImageBuffer(jpegMagic, 'image/png')).toContain('does not match');
+    expect(validateImageBuffer(jpegMagic, 'image/png')).toMatchObject({
+      error: expect.stringContaining('does not match'),
+    });
   });
 
   it('rejects recognized-but-not-allowed content (GIF)', async () => {
     const { validateImageBuffer } = await import('../persona-images');
-    expect(validateImageBuffer(GIF_MAGIC, 'image/gif')).toContain('Only JPG, PNG, or WebP');
+    expect(validateImageBuffer(GIF_MAGIC, 'image/gif')).toMatchObject({
+      error: expect.stringContaining('Only JPG, PNG, or WebP'),
+    });
   });
 
   it('rejects unrecognized content', async () => {
     const { validateImageBuffer } = await import('../persona-images');
-    expect(validateImageBuffer(ZEROS, 'image/png')).toContain('not a recognized image');
+    expect(validateImageBuffer(ZEROS, 'image/png')).toMatchObject({
+      error: expect.stringContaining('not a recognized image'),
+    });
   });
 });

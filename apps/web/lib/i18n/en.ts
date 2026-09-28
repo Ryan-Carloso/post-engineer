@@ -386,7 +386,7 @@ export const enDictionary: Dictionary = {
     photoHint: 'For best results, upload a clear, front-facing photo framed from the shoulders up. Avoid full-body photos. Accepted formats: JPG or PNG.',
     libraryLabel: 'Image library',
     libraryHint: 'Up to 10 photos of the same person. Each video picks the best match by tag, so variety improves results. Accepted formats: JPG, PNG, or WebP (max 10MB).',
-    libraryCount: '{count} of 10 images',
+    libraryCount: '{count} of {max} images',
     libraryAdd: 'Add images',
     libraryUploading: 'Uploading…',
     libraryTag: 'Tag',
@@ -403,7 +403,7 @@ export const enDictionary: Dictionary = {
     libraryUpload: 'Upload images',
     libraryUpdateError: 'Could not save the changes.',
     libraryDeleteError: 'Could not remove the image.',
-    libraryLimitReached: 'The library is full (10 images). Remove one to add another.',
+    libraryLimitReached: 'The library is full ({max} images). Remove one to add another.',
     libraryFilesRejected:
       'Some files were skipped: only JPG, PNG, or WebP images up to 10MB are accepted.',
     librarySave: 'Save',

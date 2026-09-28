@@ -285,6 +285,20 @@ describe('POST /api/persona/images', () => {
     expect(body.image.id).toBe(IMAGE_ROW.id);
   });
 
+  it('rejects a non-boolean isPrimary string instead of silently coercing to false', async () => {
+    // formData.get('isPrimary') === 'true' used to treat '1'/'yes'/'True' as
+    // not-primary: an API-key caller sending '1' got a 201 with a silently
+    // unset primary. Only 'true'/'false' are accepted now.
+    mockAuth({ userId: USER_ID });
+    mockClient({ insertedRow: IMAGE_ROW });
+    const res = await POST(
+      postForm({ personaId: PERSONA_ID, image: imageFile(), isPrimary: '1' }),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('isPrimary');
+  });
+
   it('rejects library images for a faceless persona', async () => {
     mockAuth({ userId: USER_ID });
     mockClient({ persona: { id: PERSONA_ID, face_mix_percent: 0 } });

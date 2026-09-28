@@ -385,7 +385,7 @@ export const ptDictionary = {
     photoHint: 'Para melhores resultados, envie uma foto nítida, de frente e enquadrada dos ombros para cima. Evite fotos de corpo inteiro. Formatos aceitos: JPG ou PNG.',
     libraryLabel: 'Biblioteca de imagens',
     libraryHint: 'Até 10 fotos da mesma pessoa. Cada vídeo escolhe a melhor pela tag, então variedade melhora os resultados. Formatos aceitos: JPG, PNG ou WebP (máx. 10MB).',
-    libraryCount: '{count} de 10 imagens',
+    libraryCount: '{count} de {max} imagens',
     libraryAdd: 'Adicionar imagens',
     libraryUploading: 'Enviando…',
     libraryTag: 'Tag',
@@ -402,7 +402,7 @@ export const ptDictionary = {
     libraryUpload: 'Enviar imagens',
     libraryUpdateError: 'Não foi possível salvar as alterações.',
     libraryDeleteError: 'Não foi possível remover a imagem.',
-    libraryLimitReached: 'A biblioteca está cheia (10 imagens). Remova uma para adicionar outra.',
+    libraryLimitReached: 'A biblioteca está cheia ({max} imagens). Remova uma para adicionar outra.',
     libraryFilesRejected:
       'Alguns arquivos foram ignorados: só JPG, PNG ou WebP de até 10MB são aceitos.',
     librarySave: 'Salvar',

@@ -140,12 +140,18 @@ const PersonaPageContent = () => {
             {/* The server decides facelessness from the stored face_mix_percent
                 (see POST /api/persona/images), not from the create-flow store:
                 an editing persona whose face_mix_percent is 0 must not show
-                the library, or every upload would be rejected. */}
-            {personaMode === 'persona' && editingPersonaId && editingPersona?.faceMixPercent !== 0 ? (
-              <PersonaImageLibrarySection personaId={editingPersonaId} />
-            ) : null}
+                the library, or every upload would be rejected. The persona
+                must also be loaded: while the list is fetching (or errored),
+                editingPersona is undefined and the section stays hidden
+                instead of flashing for a faceless persona. */}
+            {personaMode === 'persona' &&
+            editingPersonaId &&
+            editingPersona !== undefined &&
+            editingPersona.faceMixPercent !== 0 ? (
+                <PersonaImageLibrarySection personaId={editingPersonaId} />
+              ) : null}
             {/* Faceless: no avatar — voice is still required, video is 100% stock. */}
-            {/* Mix + qualidade + custo: habilita no modo persona, trava em 0% no faceless. */}
+            {/* Mix + quality + cost: enabled in persona mode, locked at 0% in faceless. */}
             <PersonaTokensSection />
           </section>
           <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
@@ -273,9 +279,9 @@ const PersonaHeader = ({ editing }: { editing: boolean }) => {
 };
 
 //---------------
-// PersonaModeSelector — escolha entre Consumer Persona (avatar IA + lipsync)
-// ou Video Faceless (100% stock footage, sem avatar, sem filtro de rostos).
-// A voz pode ser escolhida nos dois modos.
+// PersonaModeSelector — choose between Consumer Persona (AI avatar + lipsync)
+// or Video Faceless (100% stock footage, no avatar, no face filter).
+// The voice can be chosen in both modes.
 //---------------
 const PersonaModeSelector = () => {
   const personaMode = usePersonaStore((s) => s.personaMode);

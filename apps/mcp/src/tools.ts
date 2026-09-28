@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { PostEngineerClient } from './client.js';
+import { MAX_LIBRARY_IMAGES, MAX_LIBRARY_IMAGE_BYTES } from './client.js';
 
 export type McpToolResponse = CallToolResult;
 
@@ -28,7 +29,7 @@ export function missingProviderAccountIds(args: {
 // create-persona images array and add_persona_image — define once so the
 // limits and descriptions can't drift apart.
 const LibraryImageFields = {
-  path: z.string().min(1).describe('Local file path to the image (JPG, PNG, or WebP, max 10MB)'),
+  path: z.string().min(1).describe(`Local file path to the image (JPG, PNG, or WebP, max ${MAX_LIBRARY_IMAGE_BYTES / 1024 / 1024}MB)`),
   tag: z.string().max(100).optional().describe('Short tag for deterministic per-video matching (e.g. casual, formal, gym)'),
   description: z.string().max(500).optional().describe('Description of the photo for tag/keyword matching (e.g. smiling at the beach at sunset)'),
 };
@@ -48,8 +49,8 @@ export const CreatePersonaShape = {
   niche: z.string().optional().default('General').describe('Content niche topic'),
   faceMixPercent: z.number().min(0).max(100).default(50),
   faceQuality: z.enum(['ok', 'very_good']).default('very_good'),
-  images: z.array(PersonaLibraryImageInputShape).max(10).optional().describe('Up to 10 local image files of the same person for the persona image library. Each video deterministically picks the best-matching image by tag. Requires avatarUrl.'),
-  imagePrimaryIndex: z.number().int().min(0).max(9).optional().describe('Index into images[] marking the primary library image (no primary is set when omitted)'),
+  images: z.array(PersonaLibraryImageInputShape).max(MAX_LIBRARY_IMAGES).optional().describe(`Up to ${MAX_LIBRARY_IMAGES} local image files of the same person for the persona image library. Each video deterministically picks the best-matching image by tag. Requires avatarUrl.`),
+  imagePrimaryIndex: z.number().int().min(0).max(MAX_LIBRARY_IMAGES - 1).optional().describe('Index into images[] marking the primary library image (no primary is set when omitted)'),
 };
 
 export const CreatePersonaSchema = z.object(CreatePersonaShape);
@@ -117,7 +118,7 @@ export const GenerateVideoShape = {
   personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona to generate video with'),
   scriptPrompt: z.string().optional().describe('Optional specific prompt override for this video'),
   audioUrl: z.string().url('audioUrl must be a valid URL').optional().describe('Optional public URL of custom audio for this video (overrides the persona voice)'),
-  imageId: z.string().min(1, 'imageId is required').optional().describe('Optional library image ID to use for this video (overrides the deterministic per-video image selection; see list_persona_images)'),
+  imageId: z.string().min(1, 'imageId must be a non-empty string').optional().describe('Optional library image ID to use for this video (overrides the deterministic per-video image selection; see list_persona_images)'),
 };
 
 export const GenerateVideoSchema = z.object(GenerateVideoShape);

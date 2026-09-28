@@ -46,13 +46,16 @@ vi.mock('@/lib/api', () => ({
   })),
 }));
 
+const i18nMocks = vi.hoisted(() => ({
+  t: vi.fn((key: string, _vars?: Record<string, string | number>) => key),
+}));
+
 vi.mock('@/lib/i18n/provider', () => {
-  const t = (key: string) => key;
   function I18nProvider({ children }: { children: ReactNode }) {
     return <>{children}</>;
   }
   I18nProvider.displayName = 'I18nProvider';
-  return { I18nProvider, useI18n: () => ({ t, locale: 'en', setLocale: vi.fn() }) };
+  return { I18nProvider, useI18n: () => ({ t: i18nMocks.t, locale: 'en', setLocale: vi.fn() }) };
 });
 
 function renderSection() {
@@ -89,6 +92,7 @@ describe('PersonaImageLibrarySection', () => {
     apiMocks.updateMutateAsync.mockReset();
     apiMocks.deleteMutateAsync.mockReset();
     apiMocks.updateMutate.mockReset();
+    i18nMocks.t.mockClear();
     URL.createObjectURL = vi.fn(() => 'blob:mock-preview') as unknown as typeof URL.createObjectURL;
     URL.revokeObjectURL = vi.fn() as unknown as typeof URL.revokeObjectURL;
     window.confirm = vi.fn(() => true);
@@ -323,5 +327,29 @@ describe('PersonaImageLibrarySection', () => {
     await waitFor(() => {
       expect(screen.getByText('db down')).toBeInTheDocument();
     });
+  });
+
+  it('passes the library max to the count and limit-reached copy', async () => {
+    // The limit lives in MAX_LIBRARY_IMAGES; the translated strings
+    // interpolate {max} instead of hardcoding 10, so a limit change can't
+    // silently drift the UI copy away from the enforced cap.
+    apiMocks.images = Array.from({ length: 10 }, (_, i) => makeImage(`img-${i}`));
+    renderSection();
+
+    await waitFor(() => {
+      expect(screen.getByText('persona.libraryLimitReached')).toBeInTheDocument();
+    });
+    expect(i18nMocks.t).toHaveBeenCalledWith('persona.libraryCount', { count: 10, max: 10 });
+    expect(i18nMocks.t).toHaveBeenCalledWith('persona.libraryLimitReached', { max: 10 });
+  });
+
+  it('interpolates {max} in the real dictionaries', async () => {
+    const { dictionaries } = await import('@/lib/i18n/index');
+    for (const locale of ['en', 'pt'] as const) {
+      expect(dictionaries[locale].persona.libraryCount).toContain('{max}');
+      expect(dictionaries[locale].persona.libraryCount).not.toContain('10');
+      expect(dictionaries[locale].persona.libraryLimitReached).toContain('{max}');
+      expect(dictionaries[locale].persona.libraryLimitReached).not.toContain('10');
+    }
   });
 });

@@ -78,9 +78,11 @@ const REQUEST_TIMEOUT_MS = 30_000;
 const UPLOAD_TIMEOUT_MS = 120_000;
 // Bound how much of an upstream error body can flow into agent-visible output.
 const MAX_ERROR_BODY_CHARS = 200;
-const MAX_LIBRARY_IMAGES = 10;
+// Shared with tools.ts so the client-side guards, the Zod schema limits,
+// and the field description strings can't drift apart.
+export const MAX_LIBRARY_IMAGES = 10;
 
-const MAX_LIBRARY_IMAGE_BYTES = 10 * 1024 * 1024;
+export const MAX_LIBRARY_IMAGE_BYTES = 10 * 1024 * 1024;
 
 function mimeTypeForImagePath(path: string): string {
   const extension = extname(path).toLowerCase();

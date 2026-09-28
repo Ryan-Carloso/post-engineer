@@ -248,7 +248,18 @@ export async function POST(request: Request): Promise<NextResponse> {
   // branch below. Deleted here so it never reaches the engine as a loose
   // field. An empty string or a non-string is a client bug: rejected with
   // 400 here, before the faceless/persona split, so faceless callers also
-  // get a signal instead of a silent ignore.
+  // get a signal instead of a silent ignore. Both spellings with different
+  // values is ambiguous: rejected instead of silently preferring one.
+  if (
+    requestBody.image_id !== undefined &&
+    requestBody.imageId !== undefined &&
+    requestBody.image_id !== requestBody.imageId
+  ) {
+    return NextResponse.json(
+      { success: false, error: 'Provide either image_id or imageId, not both.' },
+      { status: 400 },
+    );
+  }
   const rawImageId =
     requestBody.image_id === undefined ? requestBody.imageId : requestBody.image_id;
   if (

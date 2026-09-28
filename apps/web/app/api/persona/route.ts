@@ -521,7 +521,7 @@ function optionalString(value: FormDataEntryValue | null): string | null {
 
 //---------------
 // uploadFile — uploads the file to the 'personas' bucket under the user's folder.
-// Exportada para reuso por outras rotas de persona.
+// Exported for reuse by other persona routes.
 //---------------
 export async function uploadFile(
   supabase: SupabaseClient,

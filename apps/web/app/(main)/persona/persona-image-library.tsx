@@ -88,7 +88,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
     if (picked.length > accepted.length) {
       // Either the library is full or the picker selection overflowed the
       // remaining room — the server re-validates on upload either way.
-      setError(t('persona.libraryLimitReached'));
+      setError(t('persona.libraryLimitReached', { max: MAX_LIBRARY_IMAGES }));
     } else if (rejectedCount > 0) {
       setError(t('persona.libraryFilesRejected'));
     }
@@ -163,7 +163,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
       <div className="flex items-center gap-3">
         <span className="text-sm font-semibold text-neutral-900">{t('persona.libraryLabel')}</span>
         <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">
-          {t('persona.libraryCount', { count: images.length })}
+          {t('persona.libraryCount', { count: images.length, max: MAX_LIBRARY_IMAGES })}
         </span>
         <span className="h-px flex-1 bg-neutral-200" />
       </div>
@@ -188,7 +188,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
           refetch that fills the library must not silently hide queued items
           (with their upload button) while their previews stay alive. */}
       {full ? (
-        <p className="mt-3 text-sm text-amber-700">{t('persona.libraryLimitReached')}</p>
+        <p className="mt-3 text-sm text-amber-700">{t('persona.libraryLimitReached', { max: MAX_LIBRARY_IMAGES })}</p>
       ) : (
         <div className="mt-4">
           <input

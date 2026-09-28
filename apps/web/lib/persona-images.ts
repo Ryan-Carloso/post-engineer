@@ -71,20 +71,23 @@ export function validateImageFile(
 /**
  * Verifies image bytes against the declared MIME type. The declared type and
  * extension are client-controlled and spoofable; the magic bytes are not.
- * Returns an error message, or null when the content checks out.
+ * Returns the detected MIME type on success, or an error message.
  */
-export function validateImageBuffer(buffer: Buffer, declaredType: string): string | null {
+export function validateImageBuffer(
+  buffer: Buffer,
+  declaredType: string,
+): { mime: string } | { error: string } {
   const detected = detectMagicMimeType(buffer);
   if (!detected) {
-    return 'Could not verify the image content: the file is not a recognized image.';
+    return { error: 'Could not verify the image content: the file is not a recognized image.' };
   }
   if (!ALLOWED_IMAGE_MIME_TYPES.has(detected)) {
-    return 'Only JPG, PNG, or WebP images are accepted.';
+    return { error: 'Only JPG, PNG, or WebP images are accepted.' };
   }
   if (detected !== declaredType) {
-    return 'The image content does not match its declared file type.';
+    return { error: 'The image content does not match its declared file type.' };
   }
-  return null;
+  return { mime: detected };
 }
 
 /**
@@ -99,8 +102,19 @@ export async function validateImageContent(file: File): Promise<string | null> {
   } catch {
     return 'Could not read the image file.';
   }
-  return validateImageBuffer(buffer, file.type);
+  const result = validateImageBuffer(buffer, file.type);
+  return 'error' in result ? result.error : null;
 }
+
+// Extension implied by the detected content type. The storage path uses this
+// instead of the client-supplied file-name extension, so the path always
+// matches the real bytes (WebP bytes named "photo.png" land on .webp, not
+// .png).
+const DETECTED_MIME_TO_EXTENSION: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+};
 
 export async function countLibraryImages(
   supabase: SupabaseClient,
@@ -167,12 +181,15 @@ export async function addLibraryImages(
   for (const input of inputs) {
     const validated = validateImageFile(input.file);
     if ('error' in validated) return fail(validated.error, 400);
-    const path = `${userId}/${randomUUID()}.${validated.extension}`;
     const bytes = new Uint8Array(await validated.file.arrayBuffer());
     // Magic-byte check on the real bytes (single read, reused for upload):
-    // the declared MIME type and extension are client-controlled.
-    const contentError = validateImageBuffer(Buffer.from(bytes), validated.file.type);
-    if (contentError) return fail(contentError, 400);
+    // the declared MIME type and extension are client-controlled. The
+    // storage extension comes from the detected content type so the path
+    // matches the real bytes even when the file name lies.
+    const content = validateImageBuffer(Buffer.from(bytes), validated.file.type);
+    if ('error' in content) return fail(content.error, 400);
+    const extension = DETECTED_MIME_TO_EXTENSION[content.mime] ?? validated.extension;
+    const path = `${userId}/${randomUUID()}.${extension}`;
     const { error: uploadError } = await supabase.storage
       .from(IMAGE_BUCKET)
       .upload(path, bytes, { contentType: validated.file.type });
@@ -219,6 +236,11 @@ async function rollbackLibraryImages(
       .in('id', added.map((image) => image.id));
     if (deleteError) {
       console.error('[persona-images] rollback row delete failed', { error: deleteError });
+      // The rows survive, so their storage files are not orphaned yet — but
+      // the caller must retry the row cleanup (or a cascade delete) before
+      // removing storage. Surface the paths instead of pretending the
+      // rollback finished cleanly.
+      return added.map((image) => image.image_path);
     }
   }
   if (storedPaths.length > 0) {
