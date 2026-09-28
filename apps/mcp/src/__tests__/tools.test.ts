@@ -413,6 +413,13 @@ describe('schedule account validation', () => {
     ).toEqual([]);
   });
 
+  it('missingProviderAccountIds treats undefined and [] the same for bluesky', () => {
+    expect(missingProviderAccountIds({ providers: ['bluesky'] })).toEqual(['bluesky']);
+    expect(
+      missingProviderAccountIds({ providers: ['bluesky'], blueskyAccountIds: [] })
+    ).toEqual(['bluesky']);
+  });
+
   it('handleScheduleVideo fails fast without calling the API when account IDs are missing', async () => {
     const client = { createSchedule: vi.fn() } as unknown as PostEngineerClient;
     const response = await handleScheduleVideo(client, {
