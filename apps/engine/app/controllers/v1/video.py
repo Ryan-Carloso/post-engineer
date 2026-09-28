@@ -1,7 +1,10 @@
+import asyncio
 import glob
+import json
 import os
 import pathlib
 import shutil
+import time
 from typing import Union
 
 from fastapi import BackgroundTasks, Depends, Path, Query, Request, UploadFile
@@ -16,6 +19,7 @@ from app.controllers.manager.memory_manager import InMemoryTaskManager
 from app.controllers.manager.redis_manager import RedisTaskManager
 from app.controllers.v1.base import new_router
 from app.models.exception import HttpException
+from app.models import const
 from app.models.schema import (
     AudioRequest,
     BgmRetrieveResponse,
@@ -273,6 +277,72 @@ def get_task(
     raise HttpException(
         task_id=task_id, status_code=404, message=f"{request_id}: task not found"
     )
+
+
+@router.get(
+    "/tasks/{task_id}/events",
+    summary="Stream task progress via Server-Sent Events",
+)
+async def task_events(
+    request: Request,
+    task_id: str = Path(..., description="Task ID"),
+):
+    request_id = base.get_task_id(request)
+    auth = base.get_auth_context(request)
+    task = sm.state.get_task(task_id, user_id=auth.user_id)
+    if not task:
+        raise HttpException(
+            task_id=task_id, status_code=404, message=f"{request_id}: task not found"
+        )
+    return StreamingResponse(
+        _task_event_stream(task_id, auth.user_id, request.is_disconnected),
+        media_type="text/event-stream",
+    )
+
+
+SSE_POLL_SECONDS = 0.5
+SSE_HEARTBEAT_SECONDS = 15
+
+
+async def _task_event_stream(
+    task_id: str,
+    user_id: str,
+    is_disconnected,
+    poll_interval: float = SSE_POLL_SECONDS,
+    heartbeat_interval: float = SSE_HEARTBEAT_SECONDS,
+):
+    """Yield SSE snapshots for a task until it terminates or disconnects.
+
+    Emits ``data: {task_id, state, progress, stage}`` only when the snapshot
+    changes, a ``:heartbeat`` comment to keep idle connections alive, and
+    closes the stream after a terminal state (complete/failed).
+    """
+    last_snapshot = None
+    last_heartbeat = time.monotonic()
+    while True:
+        if await is_disconnected():
+            break
+        task = sm.state.get_task(task_id, user_id=user_id)
+        if task is None:
+            break
+        snapshot = {
+            "task_id": task_id,
+            "state": task.get("state"),
+            "progress": task.get("progress", 0),
+            "stage": task.get("stage"),
+        }
+        if snapshot != last_snapshot:
+            yield f"data: {json.dumps(snapshot)}\n\n"
+            last_snapshot = snapshot
+            if snapshot["state"] in (
+                const.TASK_STATE_COMPLETE,
+                const.TASK_STATE_FAILED,
+            ):
+                break
+        if time.monotonic() - last_heartbeat >= heartbeat_interval:
+            yield ":heartbeat\n\n"
+            last_heartbeat = time.monotonic()
+        await asyncio.sleep(poll_interval)
 
 
 @router.delete(
