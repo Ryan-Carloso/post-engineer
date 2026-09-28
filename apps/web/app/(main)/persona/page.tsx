@@ -18,6 +18,7 @@ import { useVoicesQuery, useVoiceSampleLanguagesQuery, createPersona, useUpdateP
 import { resolveScriptLanguage, usePersonaStore } from '@/lib/store';
 import { useDebugStore } from '@/lib/debug-store';
 import { normalizeDebugTaskResponse } from '@/lib/debug-video';
+import { isTerminalSnapshot, useVideoTaskEvents, type VideoTaskSnapshot } from '@/lib/video-task-events';
 import { parsePersonaForm, personaFormSchema } from '@/lib/persona-schema';
 import { openUpgradeDialogIfInsufficient } from '@/lib/upgrade-dialog-store';
 import { useI18n } from '@/lib/i18n/provider';
@@ -816,7 +817,10 @@ const PersonaPreferencesSection = () => {
 // PersonaDebugSubmit — alternative debug-mode submit: generates the video
 // through the REAL flow (/api/persona/video-job debug branch, with
 // moderation and token charging) without creating a persona/schedule,
-// and unlocks the download when done.
+// and unlocks the download when done. Progress arrives over SSE
+// (/api/persona/video-events/:taskId); a terminal snapshot triggers one
+// final GET to /api/persona/video-status/:taskId so the generation
+// history and token refund side effects still run exactly once.
 //---------------
 const PersonaDebugSubmit = () => {
   const { t, locale } = useI18n();
@@ -826,65 +830,76 @@ const PersonaDebugSubmit = () => {
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
-  const pollingRef = useRef(false);
+  const [streamTaskId, setStreamTaskId] = useState<string | null>(null);
+  // Guards against a late terminal fetch resolving after unmount/reset.
+  const generationRef = useRef(0);
 
-  useEffect(() => () => { pollingRef.current = false; }, []);
-
-  const poll = async (taskId: string): Promise<void> => {
-    pollingRef.current = true;
-    while (pollingRef.current) {
-      try {
-        const response = await fetch(`/api/persona/video-status/${encodeURIComponent(taskId)}`, { cache: 'no-store' });
-        const body: unknown = await response.json().catch(() => null);
-        setLogs((current) => [...current, `GET status (${response.status})\n${JSON.stringify(body, null, 2)}`]);
-        if (!response.ok) {
-          setError(readDebugError(body));
-          setStatus('error');
-          pollingRef.current = false;
-          return;
-        }
-        const task = normalizeDebugTaskResponse(body);
-        if (!task || typeof task.state !== 'number') {
-          setError('Resposta de status inválida do engine.');
-          setStatus('error');
-          pollingRef.current = false;
-          return;
-        }
-        if (typeof task.progress === 'number') setProgress(task.progress);
-        if (task.state === -1) {
-          setError(task.error ?? 'Task failed.');
-          setStatus('error');
-          pollingRef.current = false;
-          return;
-        }
-        if (task.state === 1) {
-          setDownloadUrl(`/api/persona/video-download/${encodeURIComponent(taskId)}/final-1.mp4`);
-          setProgress(100);
-          setStatus('done');
-          pollingRef.current = false;
-          return;
-        }
-      } catch (requestError: unknown) {
-        setError(requestError instanceof Error ? requestError.message : String(requestError));
+  const finishTerminal = async (taskId: string, generation: number): Promise<void> => {
+    try {
+      const response = await fetch(`/api/persona/video-status/${encodeURIComponent(taskId)}`, { cache: 'no-store' });
+      const body: unknown = await response.json().catch(() => null);
+      if (generationRef.current !== generation) return;
+      setLogs((current) => [...current, `GET status (terminal, ${response.status})\n${JSON.stringify(body, null, 2)}`]);
+      if (!response.ok) {
+        setError(readDebugError(body));
         setStatus('error');
-        pollingRef.current = false;
         return;
       }
-      await new Promise<void>((resolve) => setTimeout(resolve, 3000));
+      const task = normalizeDebugTaskResponse(body);
+      if (!task || typeof task.state !== 'number') {
+        setError('Invalid engine status response.');
+        setStatus('error');
+        return;
+      }
+      if (task.state === -1) {
+        setError(task.error ?? 'Task failed.');
+        setStatus('error');
+        return;
+      }
+      setDownloadUrl(`/api/persona/video-download/${encodeURIComponent(taskId)}/final-1.mp4`);
+      setProgress(100);
+      setStatus('done');
+    } catch (requestError: unknown) {
+      if (generationRef.current !== generation) return;
+      setError(requestError instanceof Error ? requestError.message : String(requestError));
+      setStatus('error');
     }
   };
 
+  useVideoTaskEvents(
+    streamTaskId,
+    {
+      onSnapshot: (snapshot: VideoTaskSnapshot) => {
+        const generation = generationRef.current;
+        setLogs((current) => [...current, `SSE snapshot\n${JSON.stringify(snapshot, null, 2)}`]);
+        setProgress(snapshot.progress);
+        if (isTerminalSnapshot(snapshot)) {
+          // Stop the stream; the final status fetch records history/refund.
+          setStreamTaskId(null);
+          void finishTerminal(snapshot.taskId, generation);
+        }
+      },
+      onStreamError: () => {
+        setError('Video progress stream disconnected.');
+        setStatus('error');
+        setStreamTaskId(null);
+      },
+    },
+  );
+
   const generate = async (): Promise<void> => {
     if (status === 'starting' || status === 'generating') return;
+    generationRef.current += 1;
     setStatus('starting');
     setError(null);
     setDownloadUrl(null);
     setProgress(0);
-    setLogs(['POST /api/persona/video-job (debug)\nEnviando os dados do formulário de persona.']);
+    setStreamTaskId(null);
+    setLogs(['POST /api/persona/video-job (debug)\nSending the persona form data.']);
     try {
       const formData = usePersonaStore.getState().buildPersonaFormData(locale);
       formData.append('debugMode', '1');
-      // Mesmo schema zod do server — falha aqui, sem round-trip.
+      // Same zod schema as the server — fails here, no round-trip.
       const parsed = parsePersonaForm(formData, 'debug');
       if (!parsed.ok) {
         setError(
@@ -898,9 +913,9 @@ const PersonaDebugSubmit = () => {
       }
       const response = await fetch('/api/persona/video-job', { method: 'POST', body: formData });
       const body: unknown = await response.json().catch(() => null);
-      setLogs((current) => [...current, `POST resposta (${response.status})\n${JSON.stringify(body, null, 2)}`]);
+      setLogs((current) => [...current, `POST response (${response.status})\n${JSON.stringify(body, null, 2)}`]);
       if (openUpgradeDialogIfInsufficient(response.status, (body as { code?: unknown } | null)?.code)) {
-        // Sem saldo: dialog global de upgrade.
+        // Insufficient balance: global upgrade dialog.
         setStatus('idle');
         return;
       }
@@ -910,7 +925,7 @@ const PersonaDebugSubmit = () => {
         return;
       }
       setStatus('generating');
-      void poll(body.taskId);
+      setStreamTaskId(body.taskId);
     } catch (requestError: unknown) {
       setError(requestError instanceof Error ? requestError.message : String(requestError));
       setStatus('error');
