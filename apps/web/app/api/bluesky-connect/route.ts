@@ -108,7 +108,9 @@ export async function POST(request: Request): Promise<NextResponse> {
       .single();
 
     if (insertError || !inserted) {
-      logger.error('[api/bluesky-connect] insert failed', insertError?.message, { userId: auth.userId });
+      // Log the full PostgREST error object (not just the message) so the
+      // Bugsink issue carries code/details/hint for diagnosis.
+      logger.error('[api/bluesky-connect] insert failed', insertError, { userId: auth.userId });
       return errorResponse(500, 'Could not save the Bluesky account.');
     }
 
