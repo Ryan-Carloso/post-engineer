@@ -929,4 +929,113 @@ describe('DELETE /api/persona', () => {
     expect(res.status).toBe(500);
     expect(body.success).toBe(false);
   });
+
+  it('inclui os image_paths da biblioteca na limpeza do storage', async () => {
+    const removed: string[][] = [];
+    const client = {
+      auth: {
+        getUser: vi.fn(async () => ({ data: { user: { id: USER_ID } }, error: null })),
+      },
+      storage: {
+        from: vi.fn(() => ({
+          remove: vi.fn(async (paths: string[]) => {
+            removed.push(paths);
+            return { error: null };
+          }),
+        })),
+      },
+      from: vi.fn((table: string) => {
+        // The library rows vanish via on delete cascade, but their storage
+        // objects must be collected BEFORE the persona row is deleted.
+        if (table === 'persona_images') {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(async () => ({
+                data: [{ image_path: 'uid/img1.png' }, { image_path: 'uid/img2.png' }],
+                error: null,
+              })),
+            })),
+          };
+        }
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                single: vi.fn(async () => ({
+                  data: { id: 'persona-uuid-1', photo_path: null, voice_audio_path: null },
+                  error: null,
+                })),
+              })),
+            })),
+          })),
+          delete: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(async () => ({ error: null })),
+            })),
+          })),
+        };
+      }),
+    };
+    vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: USER_ID, accessToken: 'cookie-token' },
+      error: null,
+    });
+
+    const res = await DELETE(
+      new Request('http://localhost/api/persona?personaId=persona-uuid-1', { method: 'DELETE' }),
+    );
+    const body = (await res.json()) as { success: boolean };
+
+    expect(res.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(removed).toHaveLength(1);
+    expect(removed[0]).toEqual(['uid/img1.png', 'uid/img2.png']);
+  });
+
+  it('retorna 500 quando a leitura da biblioteca falha', async () => {
+    const client = {
+      auth: {
+        getUser: vi.fn(async () => ({ data: { user: { id: USER_ID } }, error: null })),
+      },
+      storage: { from: vi.fn(() => ({ remove: vi.fn(async () => ({ error: null })) })) },
+      from: vi.fn((table: string) => {
+        if (table === 'persona_images') {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(async () => ({ data: null, error: { message: 'db down' } })),
+            })),
+          };
+        }
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                single: vi.fn(async () => ({
+                  data: { id: 'persona-uuid-1', photo_path: null, voice_audio_path: null },
+                  error: null,
+                })),
+              })),
+            })),
+          })),
+          delete: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(async () => ({ error: null })),
+            })),
+          })),
+        };
+      }),
+    };
+    vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: USER_ID, accessToken: 'cookie-token' },
+      error: null,
+    });
+
+    const res = await DELETE(
+      new Request('http://localhost/api/persona?personaId=persona-uuid-1', { method: 'DELETE' }),
+    );
+
+    expect(res.status).toBe(500);
+  });
 });

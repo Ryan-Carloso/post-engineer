@@ -59,6 +59,10 @@ async function getAuth(request: Request): Promise<
   };
 }
 
+interface OwnedRow extends PersonaLibraryImage {
+  persona_id: string;
+}
+
 /** Confirms the persona exists and belongs to the caller. */
 async function assertPersonaOwned(
   supabase: SupabaseClient,
@@ -84,12 +88,9 @@ async function getOwnedImage(
   auth: Authed,
   imageId: string,
 ): Promise<
-  | { image: PersonaLibraryImage; error: null }
+  | { image: OwnedRow; error: null }
   | { image: null; error: NextResponse }
 > {
-  interface OwnedRow extends PersonaLibraryImage {
-    persona_id: string;
-  }
   const { data, error } = await supabase
     .from('persona_images')
     .select('id, persona_id, image_path, tag, description, is_primary')
@@ -186,12 +187,16 @@ export async function POST(request: Request): Promise<NextResponse> {
   // Creation rejects library images for faceless personas; the same rule
   // applies here so images cannot be added backdoor after creation. Stored
   // facelessness is face_mix_percent = 0 (there is no persona_mode column).
-  const { data: personaRow } = await supabase
+  const { data: personaRow, error: facelessError } = await supabase
     .from('personas')
     .select('face_mix_percent')
     .eq('id', personaId)
     .single();
-  if ((personaRow as { face_mix_percent: number | null } | null)?.face_mix_percent === 0) {
+  if (facelessError) {
+    console.error('[api/persona/images] faceless check failed', { error: facelessError });
+    return errorResponse(500, 'Failed to verify persona.');
+  }
+  if (personaRow?.face_mix_percent === 0) {
     return errorResponse(400, 'Faceless persona must not include library images.');
   }
 
@@ -215,9 +220,17 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
   const image = added.images[0];
   if (isPrimary && image) {
+    // Best-effort: the image row and storage object are already committed,
+    // so a primary-flag failure must not turn this into a 500 while the
+    // image exists. Log loudly and report the true is_primary state.
     const primaryError = await setPrimaryLibraryImage(supabase, personaId, image.id);
-    if (primaryError) return errorResponse(500, primaryError.error);
-    image.is_primary = true;
+    if (primaryError) {
+      console.error('[api/persona/images] primary flag after upload failed', {
+        error: primaryError.error,
+      });
+    } else {
+      image.is_primary = true;
+    }
   }
   return NextResponse.json({ success: true, image }, { status: 201 });
 }
@@ -271,7 +284,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
   if (updates.is_primary === true) {
     // Reuse the shared helper (with its error checks) instead of
     // reimplementing the unset-others swap inline.
-    const personaId = (image as unknown as { persona_id: string }).persona_id;
+    const personaId = image.persona_id;
     const primaryError = await setPrimaryLibraryImage(supabase, personaId, id);
     if (primaryError) return errorResponse(500, primaryError.error);
     delete updates.is_primary;

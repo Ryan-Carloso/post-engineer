@@ -281,7 +281,8 @@ export interface PersonaImageRecord {
   description: string | null;
   is_primary: boolean;
   created_at: string;
-  image_url: string | null;
+  /** Only GET /api/persona/images signs URLs; mutations return raw rows. */
+  image_url?: string | null;
 }
 
 async function fetchPersonaImages(personaId: string): Promise<PersonaImageRecord[]> {

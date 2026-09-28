@@ -403,6 +403,8 @@ export const ptDictionary = {
     libraryUpdateError: 'Não foi possível salvar as alterações.',
     libraryDeleteError: 'Não foi possível remover a imagem.',
     libraryLimitReached: 'A biblioteca está cheia (10 imagens). Remova uma para adicionar outra.',
+    libraryFilesRejected:
+      'Alguns arquivos foram ignorados: só JPG, PNG ou WebP de até 10MB são aceitos.',
     librarySave: 'Salvar',
     libraryCancel: 'Cancelar',
     characterTab: 'Escolha um personagem',

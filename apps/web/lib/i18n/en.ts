@@ -404,6 +404,8 @@ export const enDictionary: Dictionary = {
     libraryUpdateError: 'Could not save the changes.',
     libraryDeleteError: 'Could not remove the image.',
     libraryLimitReached: 'The library is full (10 images). Remove one to add another.',
+    libraryFilesRejected:
+      'Some files were skipped: only JPG, PNG, or WebP images up to 10MB are accepted.',
     librarySave: 'Save',
     libraryCancel: 'Cancel',
     characterTab: 'Choose a Character',

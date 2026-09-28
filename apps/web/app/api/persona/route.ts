@@ -14,6 +14,7 @@ import {
 } from '@/lib/persona-schema';
 import {
   addLibraryImages,
+  isFileLike,
   setPrimaryLibraryImage,
   validateImageFile,
   MAX_PERSONA_IMAGES,
@@ -77,14 +78,27 @@ export async function POST(request: Request): Promise<NextResponse> {
   // upload or insert happens.
   // Structural check on purpose: the undici File constructor in the server
   // runtime can differ from the global File, and `instanceof File` would
-  // silently drop every library image in that case (isFilePart, below).
+  // silently drop every library image in that case (isFileLike, imported
+  // from lib/persona-images — one shared structural guard, no local copy).
   const libraryFiles = formData
     .getAll('images')
-    .filter((value): value is File => isFilePart(value) && value.size > 0);
+    .filter((value): value is File => isFileLike(value) && value.size > 0);
+  // Parsed once: parseJsonStringArray is pure JSON parsing, no need to
+  // re-parse per file inside the map below.
+  const imageTags = parseJsonStringArray(formData.get('imageTags'));
+  const imageDescriptions = parseJsonStringArray(formData.get('imageDescriptions'));
+  // Tags/descriptions are matched to files by index: a non-empty array that
+  // does not cover every file is a client bug, not a silent default.
+  if (
+    (imageTags.length > 0 && imageTags.length !== libraryFiles.length) ||
+    (imageDescriptions.length > 0 && imageDescriptions.length !== libraryFiles.length)
+  ) {
+    return errorResponse(400, 'imageTags/imageDescriptions must match the number of images.');
+  }
   const libraryInputs: LibraryImageInput[] = libraryFiles.map((file, index) => ({
     file,
-    tag: parseJsonStringArray(formData.get('imageTags'))[index] ?? '',
-    description: parseJsonStringArray(formData.get('imageDescriptions'))[index] ?? '',
+    tag: imageTags[index] ?? '',
+    description: imageDescriptions[index] ?? '',
   }));
   const libraryError = validateLibraryInputs(
     body.values.personaMode,
@@ -158,8 +172,9 @@ export async function POST(request: Request): Promise<NextResponse> {
       return errorResponse(added.status, added.error);
     }
     libraryImageIds = added.images.map((image) => image.id);
-    // primaryIndex was validated against the uploaded file count up front,
-    // so it is in range here.
+    // Defensive: addLibraryImages rolls back partial work and returns exactly
+    // one row per input, so the up-front range check guarantees this index is
+    // in range — there is no partial-success path to skip here.
     if (primaryIndex !== null && primaryIndex < added.images.length) {
       const primaryError = await setPrimaryLibraryImage(
         supabase,
@@ -216,6 +231,10 @@ function validateLibraryInputs(
   if (inputs.length > MAX_PERSONA_IMAGES) {
     return `Image library accepts at most ${MAX_PERSONA_IMAGES} images.`;
   }
+  // Intentional second per-file validation: validateImageFile also runs
+  // inside addLibraryImages, but this route-level check fails BEFORE any
+  // upload or persona insert happens, so a bad file never creates partial
+  // state the rollback then has to clean up.
   for (const input of inputs) {
     const validated = validateImageFile(input.file);
     if ('error' in validated) return validated.error;
@@ -411,6 +430,24 @@ export async function DELETE(request: Request): Promise<NextResponse> {
   const paths = [persona.photo_path, persona.voice_audio_path].filter(
     (value): value is string => typeof value === 'string' && value.length > 0,
   );
+  // Library images: their rows vanish via on delete cascade, but the storage
+  // objects would orphan forever — collect the paths BEFORE the persona row
+  // is deleted, while they are still recoverable.
+  const { data: libraryRows, error: libraryError } = await supabase
+    .from('persona_images')
+    .select('image_path')
+    .eq('persona_id', personaId);
+  if (libraryError) {
+    console.error('[api/persona] library image cleanup lookup failed', {
+      error: libraryError,
+    });
+    return errorResponse(500, 'Failed to remove persona files.');
+  }
+  for (const row of libraryRows ?? []) {
+    if (typeof row.image_path === 'string' && row.image_path.length > 0) {
+      paths.push(row.image_path);
+    }
+  }
   if (paths.length > 0) {
     const { error: storageError } = await supabase.storage.from('personas').remove(paths);
     if (storageError) {
@@ -431,23 +468,8 @@ export async function DELETE(request: Request): Promise<NextResponse> {
   return NextResponse.json({ success: true });
 }
 
-//---------------
-// isFilePart — files come from the server runtime (undici), whose File
-// is not the same constructor as the test environment's; structural check.
-//---------------
-function isFilePart(value: FormDataEntryValue | null): value is File {
-  if (typeof value !== 'object' || value === null) return false;
-  const candidate = value as unknown as Record<string, unknown>;
-  return (
-    typeof candidate.name === 'string' &&
-    typeof candidate.type === 'string' &&
-    typeof candidate.size === 'number' &&
-    candidate.arrayBuffer instanceof Function
-  );
-}
-
 function asFile(value: FormDataEntryValue | null): File | null {
-  return isFilePart(value) ? value : null;
+  return isFileLike(value) ? value : null;
 }
 
 function optionalString(value: FormDataEntryValue | null): string | null {

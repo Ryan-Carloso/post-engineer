@@ -67,18 +67,30 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
   const onPickFiles = (event: React.ChangeEvent<HTMLInputElement>): void => {
     setError(null);
     const room = MAX_LIBRARY_IMAGES - images.length - pending.length;
-    const picked = Array.from(event.target.files ?? []).filter(
-      (file) =>
+    const all = Array.from(event.target.files ?? []);
+    // Rejected files are a silent failure if dropped without feedback: tell
+    // the user which picks were skipped and why instead of losing them.
+    const picked: File[] = [];
+    let rejectedCount = 0;
+    for (const file of all) {
+      if (
         file.type.startsWith('image/') &&
         ACCEPTED_IMAGE_TYPES.has(file.type) &&
         file.size > 0 &&
-        file.size <= MAX_IMAGE_BYTES,
-    );
+        file.size <= MAX_IMAGE_BYTES
+      ) {
+        picked.push(file);
+      } else {
+        rejectedCount += 1;
+      }
+    }
     const accepted = picked.slice(0, Math.max(room, 0));
     if (picked.length > accepted.length) {
       // Either the library is full or the picker selection overflowed the
       // remaining room — the server re-validates on upload either way.
       setError(t('persona.libraryLimitReached'));
+    } else if (rejectedCount > 0) {
+      setError(t('persona.libraryFilesRejected'));
     }
     setPending((prev) => [
       ...prev,
@@ -86,7 +98,11 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
         const preview = URL.createObjectURL(file);
         trackPreview(preview);
         return {
-          id: crypto.randomUUID(),
+          // crypto.randomUUID is undefined in non-secure contexts (plain
+          // HTTP): fall back to a unique-enough id so file pick never throws.
+          id: typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `pending-${Date.now()}-${Math.random().toString(36).slice(2)}`,
           file,
           preview,
           tag: '',
@@ -98,11 +114,11 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
   };
 
   const removePending = (id: string): void => {
-    setPending((prev) => {
-      const target = prev.find((item) => item.id === id);
-      if (target) dropPreview(target.preview);
-      return prev.filter((item) => item.id !== id);
-    });
+    // Side effects must not run inside the state updater: StrictMode invokes
+    // updaters twice, so revoke the preview outside the update.
+    const target = pending.find((item) => item.id === id);
+    if (target) dropPreview(target.preview);
+    setPending((prev) => prev.filter((item) => item.id !== id));
   };
 
   const updatePending = (id: string, patch: Partial<Pick<PendingImage, 'tag' | 'description'>>): void => {

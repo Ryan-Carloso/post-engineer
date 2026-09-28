@@ -251,7 +251,10 @@ export async function POST(request: Request): Promise<NextResponse> {
   // get a signal instead of a silent ignore.
   const rawImageId =
     requestBody.image_id === undefined ? requestBody.imageId : requestBody.image_id;
-  if (rawImageId !== undefined && (typeof rawImageId !== 'string' || rawImageId.length === 0)) {
+  if (
+    rawImageId !== undefined &&
+    (typeof rawImageId !== 'string' || rawImageId.trim().length === 0)
+  ) {
     return NextResponse.json(
       { success: false, error: 'image_id must be a non-empty string.' },
       { status: 400 },
@@ -677,15 +680,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     // recently used images, then primary/first). The engine still receives
     // a single resolved photo URL, so no engine changes are needed.
     // Legacy personas (empty library) keep the behavior above untouched.
-    // rawImageId is pre-validated above (non-empty string when defined);
-    // only whitespace-only ids are still rejected here.
+    // rawImageId is pre-validated above (non-empty, non-whitespace string
+    // when defined); the split two-stage check is gone.
     const requestedImageId = typeof rawImageId === 'string' ? rawImageId : null;
-    if (requestedImageId !== null && requestedImageId.trim().length === 0) {
-      return NextResponse.json(
-        { success: false, error: 'image_id must be a non-empty string.' },
-        { status: 400 },
-      );
-    }
     const librarySelection = await resolveVideoImage(
       supabase,
       personaId,
@@ -798,15 +795,10 @@ export async function POST(request: Request): Promise<NextResponse> {
   });
   if (!gate.ok) return gate.response;
 
-  // Record the rotation pick now that the request is paid for: a request
-  // rejected by the token gate must never mark an image as used.
-  if (libraryHistory) {
-    await recordRecentImageId(
-      supabase,
-      libraryHistory.personaId,
-      libraryHistory.imageId,
-    );
-  }
+  // History is recorded only after the engine ACCEPTS the job (below): a
+  // failed generation is refunded, and it must not consume one of the 3
+  // anti-repeat slots — otherwise the retry rotates away from the
+  // best-matching image even though no video was produced.
 
   // Snapshot the generation for the History page right after the token
   // gate: persona name/subject are denormalized so the row renders even if
@@ -855,6 +847,16 @@ export async function POST(request: Request): Promise<NextResponse> {
     status: 'running',
     engineTaskId: engineTask.taskId,
   });
+
+  // The engine accepted the job: now the rotation pick is committed, so a
+  // failed generation can never mark an image as used (see above).
+  if (libraryHistory) {
+    await recordRecentImageId(
+      supabase,
+      libraryHistory.personaId,
+      libraryHistory.imageId,
+    );
+  }
 
   return NextResponse.json({ success: true, taskId: engineTask.taskId });
 }

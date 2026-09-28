@@ -185,6 +185,22 @@ describe('PersonaImageLibrarySection', () => {
     expect(screen.getByText('persona.libraryLimitReached')).toBeInTheDocument();
   });
 
+  it('names the rejection notice when files fail type/size checks', async () => {
+    const { container } = renderSection();
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    // One valid file plus one .bmp and one oversized: the invalid ones are
+    // skipped with feedback instead of silently disappearing.
+    await pickFiles(input, [
+      new File(['a'], 'a.jpg', { type: 'image/jpeg' }),
+      new File(['b'], 'b.bmp', { type: 'image/bmp' }),
+      new File([new Uint8Array(11 * 1024 * 1024)], 'big.jpg', { type: 'image/jpeg' }),
+    ]);
+
+    const tagInputs = container.querySelectorAll('input[placeholder="persona.libraryTagPlaceholder"]');
+    expect(tagInputs).toHaveLength(1);
+    expect(screen.getByText('persona.libraryFilesRejected')).toBeInTheDocument();
+  });
+
   it('revokes pending preview URLs when the component unmounts', async () => {
     const { container, unmount } = renderSection();
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;

@@ -226,6 +226,43 @@ describe('POST /api/persona/images', () => {
     expect(res.status).toBe(400);
   });
 
+  it('rejects an over-length tag instead of truncating it', async () => {
+    mockAuth({ userId: USER_ID });
+    mockClient({ insertedRow: IMAGE_ROW });
+    const res = await POST(
+      postForm({ personaId: PERSONA_ID, image: imageFile(), tag: 'x'.repeat(101) }),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('100');
+  });
+
+  it('rejects an over-length description instead of truncating it', async () => {
+    mockAuth({ userId: USER_ID });
+    mockClient({ insertedRow: IMAGE_ROW });
+    const res = await POST(
+      postForm({ personaId: PERSONA_ID, image: imageFile(), description: 'x'.repeat(501) }),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('500');
+  });
+
+  it('still reports success when the primary flag fails after upload', async () => {
+    // The image row and storage object are already committed: a primary-flag
+    // failure must not become a 500 while the image exists. Best-effort:
+    // 201 with the true is_primary state.
+    mockAuth({ userId: USER_ID });
+    mockClient({ insertedRow: IMAGE_ROW, failPrimarySwap: true });
+    const res = await POST(
+      postForm({ personaId: PERSONA_ID, image: imageFile(), isPrimary: 'true' }),
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { success: boolean; image: { is_primary: boolean } };
+    expect(body.success).toBe(true);
+    expect(body.image.is_primary).toBe(false);
+  });
+
   it('creates the image and returns 201', async () => {
     mockAuth({ userId: USER_ID });
     mockClient({ insertedRow: IMAGE_ROW });

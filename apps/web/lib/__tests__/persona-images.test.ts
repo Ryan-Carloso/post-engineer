@@ -212,7 +212,19 @@ describe('validateImageFile', () => {
       error: expect.stringContaining('10MB'),
     });
     expect(validateImageFile(png('a.bmp', 'image/bmp'))).toMatchObject({
-      error: expect.stringContaining('JPG, PNG, or WebP'),
+      error: expect.stringContaining('Only image files'),
+    });
+    expect(validateImageFile(png('photo.png', 'image/png'))).not.toHaveProperty('error');
+  });
+
+  it('rejects image/* payloads outside the allowlist even with a valid extension', () => {
+    // image/gif renamed to .png: the MIME allowlist fires before the
+    // extension check, so API-key callers can't bypass the type restriction.
+    expect(validateImageFile(new File(['x'], 'photo.png', { type: 'image/gif' }))).toMatchObject({
+      error: expect.stringContaining('Only image files'),
+    });
+    expect(validateImageFile(new File(['x'], 'photo.png', { type: 'image/svg+xml' }))).toMatchObject({
+      error: expect.stringContaining('Only image files'),
     });
   });
 });

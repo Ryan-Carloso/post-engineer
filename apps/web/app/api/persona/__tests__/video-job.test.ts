@@ -2293,5 +2293,19 @@ describe('POST /api/persona/video-job', () => {
       expect(res.status).toBe(200);
       expect(historyWrites(client)).toHaveLength(0);
     });
+
+    it('does not touch the rotation history when the engine rejects the job', async () => {
+      // The failed generation is refunded: it must not consume one of the
+      // anti-repeat slots, so the retry rotates to the same best image.
+      const client = mockSupabase(PERSONA, { libraryImages: LIBRARY });
+      fetchMock.mockResolvedValue(new Response('rejected', { status: 502 }));
+
+      const res = await POST(
+        jsonRequest({ personaId: 'p-1', video_subject: 'business office meeting' }),
+      );
+
+      expect(res.status).toBe(502);
+      expect(historyWrites(client)).toHaveLength(0);
+    });
   });
 });

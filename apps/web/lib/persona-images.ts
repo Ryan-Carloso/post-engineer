@@ -18,6 +18,10 @@ export { MAX_PERSONA_IMAGES };
 
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 export const ALLOWED_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp']);
+// Explicit MIME allowlist: startsWith('image/') would also accept image/gif
+// or image/svg+xml payloads renamed to .png, and API-key callers bypass the
+// client-side ACCEPTED_IMAGE_TYPES filter.
+export const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 export const MAX_TAG_LENGTH = 100;
 export const MAX_DESCRIPTION_LENGTH = 500;
 const IMAGE_BUCKET = 'personas';
@@ -50,7 +54,7 @@ export function validateImageFile(
   if (!isFileLike(file) || file.size === 0) {
     return { error: 'An image file is required.' };
   }
-  if (!file.type.startsWith('image/')) {
+  if (!ALLOWED_IMAGE_MIME_TYPES.has(file.type)) {
     return { error: 'Only image files are accepted.' };
   }
   if (file.size > MAX_IMAGE_BYTES) {
@@ -95,6 +99,18 @@ export async function addLibraryImages(
   personaId: string,
   inputs: LibraryImageInput[],
 ): Promise<{ images: PersonaLibraryImage[] } | LibraryImagesError> {
+  // Reject over-length input instead of truncating: silent truncation loses
+  // caller data with no signal, and PATCH already rejects with 400.
+  for (const input of inputs) {
+    const tag = (input.tag ?? '').trim();
+    const description = (input.description ?? '').trim();
+    if (tag.length > MAX_TAG_LENGTH) {
+      return { error: `Tag must be ${MAX_TAG_LENGTH} characters or fewer.`, status: 400 };
+    }
+    if (description.length > MAX_DESCRIPTION_LENGTH) {
+      return { error: `Description must be ${MAX_DESCRIPTION_LENGTH} characters or fewer.`, status: 400 };
+    }
+  }
   const existing = await countLibraryImages(supabase, personaId);
   if (existing === null) return { error: 'Failed to add image.', status: 500 };
   if (existing + inputs.length > MAX_PERSONA_IMAGES) {
@@ -126,8 +142,8 @@ export async function addLibraryImages(
         persona_id: personaId,
         user_id: userId,
         image_path: path,
-        tag: (input.tag ?? '').trim().slice(0, MAX_TAG_LENGTH),
-        description: (input.description ?? '').trim().slice(0, MAX_DESCRIPTION_LENGTH),
+        tag: (input.tag ?? '').trim(),
+        description: (input.description ?? '').trim(),
         is_primary: false,
       })
       .select('id, image_path, tag, description, is_primary, created_at')

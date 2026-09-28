@@ -75,9 +75,13 @@ const PersonaPageContent = () => {
   // /personas/<id>/edit path. The image library needs a persisted persona.
   const editingPersonaId = resolveEditingPersonaId(pathname, editId);
   const personasQuery = usePersonaListQuery();
+  // Derived from the resolved id (not the raw ?edit= param): on the legacy
+  // /personas/<id>/edit path the image library renders but the old derivation
+  // left editingPersona undefined, so personaLanguage silently fell back to
+  // the default instead of the persona's saved language.
   const editingPersona = useMemo(
-    () => (editId ? personasQuery.data?.find((item) => item.id === editId) : undefined),
-    [editId, personasQuery.data],
+    () => (editingPersonaId ? personasQuery.data?.find((item) => item.id === editingPersonaId) : undefined),
+    [editingPersonaId, personasQuery.data],
   );
   const voicesQuery = useVoicesQuery();
   const sampleLanguagesQuery = useVoiceSampleLanguagesQuery();
