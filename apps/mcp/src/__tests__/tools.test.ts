@@ -803,3 +803,92 @@ describe('persona image library tools', () => {
     expect(textOf(response)).toContain('boom');
   });
 });
+
+describe('video batch + task progress tools', () => {
+  const mockClient = {
+    generateVideoJob: vi.fn(),
+    generateVideoBatch: vi.fn(),
+    getVideoStatus: vi.fn(),
+  } as unknown as PostEngineerClient;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('handleGetVideoTaskProgress narrows the status body to task_id/state/progress/stage', async () => {
+    const { handleGetVideoTaskProgress } = await import('../tools.js');
+    vi.mocked(mockClient.getVideoStatus).mockResolvedValue({
+      status: 200,
+      message: 'success',
+      data: { task_id: 'task-1', state: 4, progress: 42, stage: 'audio' },
+    });
+
+    const response = await handleGetVideoTaskProgress(mockClient, { taskId: 'task-1' });
+
+    expect(mockClient.getVideoStatus).toHaveBeenCalledWith('task-1');
+    const text = textOf(response);
+    expect(text).toContain('"task_id": "task-1"');
+    expect(text).toContain('"state": 4');
+    expect(text).toContain('"progress": 42');
+    expect(text).toContain('"stage": "audio"');
+  });
+
+  it('handleGetVideoTaskProgress reports explicit nulls when the task payload is missing', async () => {
+    const { handleGetVideoTaskProgress } = await import('../tools.js');
+    vi.mocked(mockClient.getVideoStatus).mockResolvedValue({ ok: true });
+
+    const response = await handleGetVideoTaskProgress(mockClient, { taskId: 'task-9' });
+    const text = textOf(response);
+    expect(text).toContain('"task_id": null');
+    expect(text).toContain('"state": null');
+    expect(text).toContain('"progress": null');
+    expect(text).toContain('"stage": null');
+  });
+
+  it('handleGenerateVideo passes webhookUrl through to the client', async () => {
+    vi.mocked(mockClient.generateVideoJob).mockResolvedValue({ success: true, taskId: 'task-1' });
+
+    const response = await handleGenerateVideo(mockClient, {
+      personaId: 'persona-123',
+      webhookUrl: 'https://example.com/hook',
+    });
+
+    expect(mockClient.generateVideoJob).toHaveBeenCalledWith(
+      expect.objectContaining({ webhookUrl: 'https://example.com/hook' }),
+    );
+    expect(textOf(response)).toContain('task-1');
+  });
+
+  it('handleGenerateVideoBatch triggers the batch and returns the task ids', async () => {
+    const { handleGenerateVideoBatch } = await import('../tools.js');
+    vi.mocked(mockClient.generateVideoBatch).mockResolvedValue({
+      success: true,
+      taskIds: ['task-1', 'task-2'],
+    });
+
+    const response = await handleGenerateVideoBatch(mockClient, {
+      topics: ['topic one', 'topic two'],
+      personaId: 'persona-123',
+    });
+
+    expect(mockClient.generateVideoBatch).toHaveBeenCalledWith({
+      topics: ['topic one', 'topic two'],
+      personaId: 'persona-123',
+    });
+    const text = textOf(response);
+    expect(text).toContain('task-1');
+    expect(text).toContain('task-2');
+  });
+
+  it('handleGenerateVideoBatch fails fast for faceless without voiceId', async () => {
+    const { handleGenerateVideoBatch } = await import('../tools.js');
+
+    const response = await handleGenerateVideoBatch(mockClient, {
+      topics: ['topic one'],
+    });
+
+    expect(response.isError).toBe(true);
+    expect(mockClient.generateVideoBatch).not.toHaveBeenCalled();
+    expect(textOf(response)).toContain('voiceId');
+  });
+});

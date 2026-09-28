@@ -1328,3 +1328,49 @@ describe('PostEngineerClient persona image library', () => {
     );
   });
 });
+
+describe('video batch client', () => {
+  const baseUrl = 'https://post-engineer.com';
+  let client: PostEngineerClient;
+
+  beforeEach(() => {
+    client = new PostEngineerClient({ apiKey: 'test-token-123' });
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+    });
+  });
+
+  it('generateVideoJob maps webhookUrl to webhook_url', async () => {
+    await client.generateVideoJob({ personaId: 'p-1', webhookUrl: 'https://example.com/hook' });
+    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
+    const body = JSON.parse(String(request?.body));
+    expect(body.webhook_url).toBe('https://example.com/hook');
+    expect('webhookUrl' in body).toBe(false);
+  });
+
+  it('generateVideoJob omits webhook_url when not provided', async () => {
+    await client.generateVideoJob({ personaId: 'p-1' });
+    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
+    const body = JSON.parse(String(request?.body));
+    expect('webhook_url' in body).toBe(false);
+  });
+
+  it('generateVideoBatch posts topics to the web batch endpoint', async () => {
+    await client.generateVideoBatch({
+      topics: ['topic one', 'topic two'],
+      personaId: 'p-1',
+      webhookUrl: 'https://example.com/hook',
+    });
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/persona/video-batch`,
+      expect.objectContaining({ method: 'POST' }),
+    );
+    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
+    const body = JSON.parse(String(request?.body));
+    expect(body.topics).toEqual(['topic one', 'topic two']);
+    expect(body.personaId).toBe('p-1');
+    expect(body.webhookUrl).toBe('https://example.com/hook');
+  });
+});

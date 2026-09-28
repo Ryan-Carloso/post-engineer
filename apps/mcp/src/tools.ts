@@ -159,6 +159,7 @@ export const GenerateVideoShape = {
   scriptPrompt: z.string().optional().describe('Optional specific prompt override for this video'),
   audioUrl: z.string().url('audioUrl must be a valid URL').optional().describe('Optional public URL of custom audio for this video (overrides the persona voice)'),
   imageId: z.string().min(1, 'imageId must be a non-empty string').optional().describe('Optional library image ID to use for this video (overrides the deterministic per-video image selection; see list_persona_images)'),
+  webhookUrl: z.string().url('webhookUrl must be a valid URL').optional().describe('Optional callback URL the server POSTs to once when the video reaches a terminal state (completed/failed)'),
 };
 
 export const GenerateVideoSchema = z.object(GenerateVideoShape);
@@ -225,6 +226,32 @@ export const GetVideoStatusShape = {
 };
 
 export const GetVideoStatusSchema = z.object(GetVideoStatusShape);
+
+// Machine-readable progress for a single video task. Unlike get_video_status
+// (raw status + URLs), this returns only the four progress fields so agents
+// can poll "video 1/6: 60%" style progress without parsing a full payload.
+export const GetVideoTaskProgressShape = {
+  taskId: z.string().min(1, 'taskId is required').describe('The video generation task ID'),
+};
+
+export const GetVideoTaskProgressSchema = z.object(GetVideoTaskProgressShape);
+
+export const GenerateVideoBatchShape = {
+  // The array bound lives in the shape (not a .refine): the MCP SDK parses
+  // tool args against the raw shape, so a refine would be a hollow claim on
+  // the tool path (round 26 learning).
+  topics: z
+    .array(z.string().min(1, 'Each topic must be a non-empty string'))
+    .min(1, 'Provide at least one video topic')
+    .max(10, 'A batch holds at most 10 videos')
+    .describe('Video topics, one per video (1-10). The videos generate sequentially in order.'),
+  personaId: z.string().min(1, 'personaId must be a non-empty string').optional().describe('The ID of the persona to generate videos with. Omit for faceless generation (then voiceId is required).'),
+  voiceId: z.string().min(1).optional().describe('Voice ID for faceless generation. Required when personaId is omitted and no persona voice exists.'),
+  imageId: z.string().min(1, 'imageId must be a non-empty string').optional().describe('Optional library image ID to use for every video in the batch (overrides the deterministic per-video selection; see list_persona_images). Rejected for faceless generation.'),
+  webhookUrl: z.string().url('webhookUrl must be a valid URL').optional().describe('Optional callback URL the server POSTs to once when each video reaches a terminal state (completed/failed)'),
+};
+
+export const GenerateVideoBatchSchema = z.object(GenerateVideoBatchShape);
 
 export const ScheduleVideoShape = {
   personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona'),
@@ -578,6 +605,71 @@ export async function handleGetVideoStatus(
   args: z.infer<typeof GetVideoStatusSchema>
 ): Promise<McpToolResponse> {
   return handleLibraryCall(() => client.getVideoStatus(args.taskId), 'fetching video status');
+}
+
+/** Narrows the web video-status response to the four progress fields agents
+ * poll on. The engine task record carries task_id/state/progress/stage; a
+ * body without them (empty-body sentinel, 404 shape) is reported with
+ * explicit nulls rather than silently dropping fields. */
+function narrowTaskProgress(result: unknown): {
+  task_id: string | null;
+  state: number | null;
+  progress: number | null;
+  stage: string | null;
+} {
+  const data =
+    typeof result === 'object' && result !== null && 'data' in result
+      ? (result as { data?: unknown }).data
+      : undefined;
+  const record = typeof data === 'object' && data !== null ? data : {};
+  const get = (key: string): unknown =>
+    key in record ? (record as Record<string, unknown>)[key] : undefined;
+  const taskId = get('task_id');
+  const state = get('state');
+  const progress = get('progress');
+  const stage = get('stage');
+  return {
+    task_id: typeof taskId === 'string' ? taskId : null,
+    state: typeof state === 'number' ? state : null,
+    progress: typeof progress === 'number' ? progress : null,
+    stage: typeof stage === 'string' ? stage : null,
+  };
+}
+
+export async function handleGetVideoTaskProgress(
+  client: PostEngineerClient,
+  args: z.infer<typeof GetVideoTaskProgressSchema>
+): Promise<McpToolResponse> {
+  return handleLibraryCall(
+    async () => narrowTaskProgress(await client.getVideoStatus(args.taskId)),
+    'fetching video task progress'
+  );
+}
+
+export async function handleGenerateVideoBatch(
+  client: PostEngineerClient,
+  args: z.infer<typeof GenerateVideoBatchSchema>
+): Promise<McpToolResponse> {
+  // Faceless flow (no personaId): the batch web API resolves no persona voice
+  // and accepts no custom audio per video in V1, so a voice source is
+  // required. Fail fast here instead of surfacing the API 400.
+  const faceless = args.personaId === undefined || args.personaId === null;
+  if (faceless && (args.voiceId === undefined || args.voiceId === null)) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: 'Error: faceless batch generation requires voiceId (no persona voice to fall back to, and batches accept no custom audio_url per video).',
+        },
+      ],
+      isError: true,
+    };
+  }
+  return handleLibraryCall(
+    () => client.generateVideoBatch(args),
+    'generating video batch',
+    'Video batch started'
+  );
 }
 
 export async function handleScheduleVideo(

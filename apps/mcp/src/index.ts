@@ -18,6 +18,8 @@ import {
   CancelScheduleShape,
   GenerateVideoShape,
   GetVideoStatusShape,
+  GetVideoTaskProgressShape,
+  GenerateVideoBatchShape,
   ScheduleVideoShape,
   ListPersonaImagesShape,
   AddPersonaImageShape,
@@ -36,6 +38,8 @@ import {
   handleGetTokenBalance,
   handleGenerateVideo,
   handleGetVideoStatus,
+  handleGetVideoTaskProgress,
+  handleGenerateVideoBatch,
   handleScheduleVideo,
   handleListPersonaImages,
   handleAddPersonaImage,
@@ -163,7 +167,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
 
   server.tool(
     'generate_video_from_persona',
-    'Trigger video generation using an existing persona. Optional scriptPrompt overrides the video script; optional audioUrl (public http(s) URL) supplies custom audio for this video, overriding the persona voice; optional imageId picks a specific image from the persona image library (see list_persona_images), overriding the deterministic per-video selection. For faceless generation, omit personaId and provide videoSubject plus a voice source (audioUrl or voiceId).',
+    'Trigger video generation using an existing persona. Optional scriptPrompt overrides the video script; optional audioUrl (public http(s) URL) supplies custom audio for this video, overriding the persona voice; optional imageId picks a specific image from the persona image library (see list_persona_images), overriding the deterministic per-video selection; optional webhookUrl is POSTed by the server once when the video reaches a terminal state. For faceless generation, omit personaId and provide videoSubject plus a voice source (audioUrl or voiceId).',
     GenerateVideoShape,
     async (args) => {
       return handleGenerateVideo(apiClient, args);
@@ -176,6 +180,24 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
     GetVideoStatusShape,
     async (args) => {
       return handleGetVideoStatus(apiClient, args);
+    }
+  );
+
+  server.tool(
+    'get_video_task_progress',
+    'Poll one video task for its machine-readable progress: returns {task_id, state, progress, stage}. Use per-video (1/6, 2/6, ...) after generate_persona_video_batch; prefer this over get_video_status when only progress matters.',
+    GetVideoTaskProgressShape,
+    async (args) => {
+      return handleGetVideoTaskProgress(apiClient, args);
+    }
+  );
+
+  server.tool(
+    'generate_persona_video_batch',
+    'Generate 1-10 persona videos in one batch (sequential, in order). topics is one topic per video. Optional voiceId is required for faceless generation (personaId omitted). Optional webhookUrl is POSTed by the server once when each video terminates. Returns {task_ids}; poll each with get_video_task_progress.',
+    GenerateVideoBatchShape,
+    async (args) => {
+      return handleGenerateVideoBatch(apiClient, args);
     }
   );
 
