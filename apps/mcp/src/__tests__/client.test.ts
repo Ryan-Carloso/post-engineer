@@ -3,6 +3,8 @@ import {
   PostEngineerClient,
   assertImageSize,
   MAX_LIBRARY_IMAGE_BYTES,
+  MAX_LIBRARY_TAG_LENGTH,
+  MAX_LIBRARY_DESCRIPTION_LENGTH,
 } from '../client.js';
 import { ImageTooLargeError } from '../errors.js';
 
@@ -1132,6 +1134,31 @@ describe('PostEngineerClient persona image library', () => {
     await expect(client.updatePersonaImage({ id: 'img-1' })).rejects.toThrow(
       /at least one of tag, description, or isPrimary/
     );
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('addPersonaImage rejects a dotfile (".PNG") as an unsupported extension', async () => {
+    // Node's extname('.PNG') is '' (a leading dot with no other dots is not
+    // an extension), so dotfiles are rejected here — the fail-fast promise
+    // holds, just via the unsupported-extension branch.
+    const path = await writeTempImage('.PNG');
+    await expect(client.addPersonaImage('p-1', { path })).rejects.toThrow(
+      /Unsupported image extension "\(none\)"/
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('updatePersonaImage rejects an over-length tag locally instead of a server 400', async () => {
+    // Symmetric with the add/create paths: fail fast before the round-trip.
+    await expect(
+      client.updatePersonaImage({ id: 'img-1', tag: 'x'.repeat(MAX_LIBRARY_TAG_LENGTH + 1) })
+    ).rejects.toThrow(/tag.*exceeds/);
+    await expect(
+      client.updatePersonaImage({
+        id: 'img-1',
+        description: 'y'.repeat(MAX_LIBRARY_DESCRIPTION_LENGTH + 1),
+      })
+    ).rejects.toThrow(/description.*exceeds/);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 

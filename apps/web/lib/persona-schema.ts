@@ -15,6 +15,26 @@ export const FACE_QUALITIES = ['ok', 'very_good'] as const;
 // so NULL keeps meaning "legacy faceless-mode row" everywhere.
 export const DEFAULT_FACE_MIX_PERCENT = 100;
 
+/**
+ * Coerces the face-mix value stored at creation. Faceless creations without
+ * an explicit mix would be stored as NULL, passing the images route's
+ * `=== 0` faceless check — a backdoor for library images on faceless
+ * personas. Persona-mode creations without an explicit mix are coerced to
+ * the shared default for the same reason: a stored NULL is treated as
+ * faceless by the images route and the page gate, which would permanently
+ * write-lock the library for a persona the creation accepted as
+ * face-requiring.
+ */
+export function resolveStoredFaceMixPercent(
+  personaMode: 'persona' | 'faceless',
+  faceMixPercent: number | null | undefined,
+): number {
+  if (faceMixPercent === null || faceMixPercent === undefined) {
+    return personaMode === 'faceless' ? 0 : DEFAULT_FACE_MIX_PERCENT;
+  }
+  return faceMixPercent;
+}
+
 export const PHOTO_EXTENSIONS: Record<string, string> = {
   'image/png': 'png',
   'image/jpeg': 'jpg',

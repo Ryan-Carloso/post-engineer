@@ -413,6 +413,13 @@ export const enDictionary: Dictionary = {
       'The primary image was updated, but the latest state could not be confirmed. Refresh the library to see the current state.',
     libraryUpdateError: 'Could not save the changes.',
     libraryDeleteError: 'Could not remove the image.',
+    // Specific server failure classes, so the UI never renders the raw
+    // English server string (mapPersonaImageError).
+    libraryErrorFull: 'The image library is full. Remove one to add another.',
+    libraryErrorFaceless: 'Faceless personas cannot have library images.',
+    libraryErrorContentMismatch: 'The image content does not match its file type.',
+    libraryErrorTooLong: 'The tag or description is too long.',
+    libraryErrorNotFound: 'Not found. It may have been removed.',
     libraryLimitReached: 'The library is full ({max} images). Remove one to add another.',
     libraryFilesRejected:
       '{count} file(s) were skipped: only JPG/JPEG, PNG, or WebP images up to 10MB are accepted.',

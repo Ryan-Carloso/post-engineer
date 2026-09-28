@@ -62,6 +62,49 @@ export function mapPersonaImageWarnings(
   }).join(' ');
 }
 
+// Server failure classes the UI renders with specific localized copy.
+// Dynamic server strings (interpolated limits) match by shape so a limit
+// change can't silently fall through to the generic message. Unknown
+// server errors fall back to the generic localized message: the raw
+// English server string must never reach the UI.
+const ERROR_CLASS_PATTERNS: Array<{
+  test: (error: string) => boolean;
+  key: TranslationKey;
+}> = [
+  {
+    test: (error) => /^Image library is full \(\d+ images max\)\.$/.test(error),
+    key: 'persona.libraryErrorFull',
+  },
+  {
+    test: (error) => error === 'Faceless persona must not include library images.',
+    key: 'persona.libraryErrorFaceless',
+  },
+  {
+    test: (error) => error === 'The image content does not match its declared file type.',
+    key: 'persona.libraryErrorContentMismatch',
+  },
+  {
+    test: (error) => /^(tag|description) must be at most \d+ characters\.$/.test(error),
+    key: 'persona.libraryErrorTooLong',
+  },
+  {
+    test: (error) => error === 'Image not found.' || error === 'Persona not found.',
+    key: 'persona.libraryErrorNotFound',
+  },
+];
+
+export function mapPersonaImageError(
+  error: string | undefined,
+  t: (key: TranslationKey, vars?: Record<string, string | number>) => string,
+  fallbackKey: TranslationKey,
+): string {
+  if (error) {
+    const match = ERROR_CLASS_PATTERNS.find(({ test }) => test(error));
+    if (match) return t(match.key);
+  }
+  return t(fallbackKey);
+}
+
 //---------------
 // PersonaImageLibrarySection — up to 10 tagged photos of the same person.
 // Shown when editing an existing persona. Each video generation picks the
@@ -89,6 +132,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
   // Revoke any previews still alive on unmount (navigation away mid-queue).
   useEffect(() => {
     const live = livePreviewsRef.current;
+
     return () => {
       for (const preview of live) URL.revokeObjectURL(preview);
       live.clear();
@@ -200,7 +244,9 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
           break;
         }
         if (!result.success) {
-          setError(`${result.error ?? t('persona.libraryUploadError')} (${item.file.name})`);
+          setError(
+            `${mapPersonaImageError(result.error, t, 'persona.libraryUploadError')} (${item.file.name})`,
+          );
           break;
         }
         uploadedIds.add(item.id);
@@ -213,7 +259,12 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
       // On partial failure the already-uploaded items leave the queue; only
       // the failed (and not-yet-tried) items stay so the user can retry.
       setPending((prev) => prev.filter((item) => !uploadedIds.has(item.id)));
-      for (const preview of uploadedPreviews) dropPreview(preview);
+      // Defer revocation until after the queue update commits: setPending is
+      // async, so revoking synchronously here could let a removed card
+      // render one frame with a revoked blob URL (broken image flash).
+      queueMicrotask(() => {
+        for (const preview of uploadedPreviews) dropPreview(preview);
+      });
       if (warnings.length > 0) {
         setWarning(mapPersonaImageWarnings(warnings, t));
       }
@@ -221,6 +272,11 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
       setUploading(false);
     }
   };
+
+  // Extracted so the JSX below has no nested ternary: the empty state
+  // shows only once loading finished without error.
+  const showEmptyState =
+    images.length === 0 && !imagesQuery.isPending && !imagesQuery.isError;
 
   return (
     <section aria-label={t('persona.libraryLabel')}>
@@ -245,9 +301,9 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
             <LibraryImageCard key={image.id} image={image} personaId={personaId} />
           ))}
         </div>
-      ) : imagesQuery.isPending || imagesQuery.isError ? null : (
+      ) : showEmptyState ? (
         <p className="mt-3 text-sm text-neutral-500">{t('persona.libraryEmpty')}</p>
-      )}
+      ) : null}
 
       {/* The pending queue renders outside the full/partial conditional: a
           refetch that fills the library must not silently hide queued items
@@ -386,7 +442,7 @@ function LibraryImageCard({
           setCardWarning(mapPersonaImageWarnings(result.warnings, t));
         }
       } else {
-        setCardError(result.error ?? t('persona.libraryUpdateError'));
+        setCardError(mapPersonaImageError(result.error, t, 'persona.libraryUpdateError'));
       }
     } catch (saveError) {
       console.error('[persona-image-library] update failed', { error: saveError });
@@ -400,7 +456,7 @@ function LibraryImageCard({
     try {
       const result = await updateMutation.mutateAsync({ id: image.id, isPrimary: true });
       if (!result.success) {
-        setCardError(result.error ?? t('persona.libraryUpdateError'));
+        setCardError(mapPersonaImageError(result.error, t, 'persona.libraryUpdateError'));
       } else if (result.warnings && result.warnings.length > 0) {
         // Partial success: surface warning codes so the user knows the
         // true state (e.g. primary swapped but something else failed).
@@ -419,7 +475,7 @@ function LibraryImageCard({
     try {
       const result = await deleteMutation.mutateAsync(image.id);
       if (!result.success) {
-        setCardError(result.error ?? t('persona.libraryDeleteError'));
+        setCardError(mapPersonaImageError(result.error, t, 'persona.libraryDeleteError'));
       }
     } catch (deleteError) {
       console.error('[persona-image-library] delete failed', { error: deleteError });

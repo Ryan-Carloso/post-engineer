@@ -9,6 +9,7 @@ import {
   MAX_DESCRIPTION_LENGTH,
   MAX_TAG_LENGTH,
   PERSONA_IMAGE_WARNING_CODES,
+  removeOrphanedUploadPaths,
   setPrimaryLibraryImage,
 } from '@/lib/persona-images';
 import { type PersonaLibraryImage } from '@/lib/persona-image-select';
@@ -89,7 +90,18 @@ async function assertPersonaOwned(
     .eq('id', personaId)
     .eq('user_id', auth.userId)
     .single();
-  if (error || !data) return { response: errorResponse(404, 'Persona not found.') };
+  if (error) {
+    // PGRST116 = .single() matched zero rows: the persona is missing or
+    // belongs to someone else. Any other error is a real DB failure — a
+    // bare 404 would tell the client to stop retrying and leave zero
+    // diagnostic trail, so log it and report 500.
+    if (error.code === 'PGRST116') {
+      return { response: errorResponse(404, 'Persona not found.') };
+    }
+    console.error('[api/persona/images] persona ownership lookup failed', { personaId, error });
+    return { response: errorResponse(500, 'Failed to load persona.') };
+  }
+  if (!data) return { response: errorResponse(404, 'Persona not found.') };
   return { persona: data as OwnedPersona };
 }
 
@@ -158,7 +170,16 @@ async function getOwnedImage(
     .eq('id', imageId)
     .single();
   const image = data as OwnedRow | null;
-  if (error || !image) {
+  if (error) {
+    // Same PGRST116-vs-DB-failure split as assertPersonaOwned: zero rows
+    // is 404, anything else is a logged 500.
+    if (error.code === 'PGRST116') {
+      return { image: null, error: errorResponse(404, 'Image not found.') };
+    }
+    console.error('[api/persona/images] image lookup failed', { imageId, error });
+    return { image: null, error: errorResponse(500, 'Failed to load image.') };
+  }
+  if (!image) {
     return { image: null, error: errorResponse(404, 'Image not found.') };
   }
   const { data: persona, error: personaError } = await supabase
@@ -167,7 +188,17 @@ async function getOwnedImage(
     .eq('id', image.persona_id)
     .eq('user_id', auth.userId)
     .single();
-  if (personaError || !persona) {
+  if (personaError) {
+    if (personaError.code === 'PGRST116') {
+      return { image: null, error: errorResponse(404, 'Image not found.') };
+    }
+    console.error('[api/persona/images] image ownership lookup failed', {
+      imageId,
+      error: personaError,
+    });
+    return { image: null, error: errorResponse(500, 'Failed to load image.') };
+  }
+  if (!persona) {
     return { image: null, error: errorResponse(404, 'Image not found.') };
   }
   if (!isPersonaAllowed(auth.personaIds, image.persona_id)) {
@@ -179,6 +210,9 @@ async function getOwnedImage(
   return { image, error: null };
 }
 
+/** Signed URL TTL (seconds): thumbnails are refetched on every library invalidation. */
+export const IMAGE_URL_TTL_SECONDS = 3600;
+
 /** Signs one library image path; null when signing fails (never throws). */
 async function signImageUrl(
   supabase: SupabaseClient,
@@ -187,7 +221,7 @@ async function signImageUrl(
   try {
     const { data, error } = await supabase.storage
       .from(IMAGE_BUCKET)
-      .createSignedUrl(imagePath, 3600);
+      .createSignedUrl(imagePath, IMAGE_URL_TTL_SECONDS);
     if (error || !data?.signedUrl) {
       console.warn('[api/persona/images] failed to sign storage URL', { imagePath, error });
       return null;
@@ -330,19 +364,12 @@ export async function POST(request: Request): Promise<NextResponse> {
         rowBackedPaths,
       });
     }
-    if (orphanPaths.length > 0) {
-      // The internal rollback could not clean up: these storage objects are
-      // orphaned and this is the only record of them. Retry once — then log
-      // loudly if it still fails.
-      const retry = await supabase.storage.from(IMAGE_BUCKET).remove(orphanPaths);
-      if (retry.error) {
-        console.error('[api/persona/images] upload rollback left storage files behind', {
-          personaId,
-          orphanPaths,
-          retryError: retry.error,
-        });
-      }
-    }
+    // The internal rollback could not clean up the orphans: retry once via
+    // the shared helper, which logs loudly if the retry still fails.
+    await removeOrphanedUploadPaths(supabase, orphanPaths, {
+      route: 'api/persona/images',
+      personaId,
+    });
     return errorResponse(added.status, added.error);
   }
   const image = added.images[0];
@@ -463,10 +490,20 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     .from('persona_images')
     .update(updates)
     .eq('id', id)
+    // Re-scope by persona_id: the id was ownership-checked above and image
+    // rows never change owner, but this makes the TOCTOU window explicit —
+    // a concurrently deleted row yields zero rows, not someone else's row.
+    .eq('persona_id', image.persona_id)
     .select(IMAGE_ROW_COLUMNS)
     .single();
   if (updateError || !updated) {
     console.error('[api/persona/images] update failed', { error: updateError });
+    // PGRST116 = the row vanished between the ownership check and the
+    // update (concurrent delete): report 404, not 500.
+    const rowGone = updateError?.code === 'PGRST116';
+    if (rowGone && !primarySwapCommitted) {
+      return errorResponse(404, 'Image not found.');
+    }
     if (!primarySwapCommitted) {
       return errorResponse(500, 'Failed to update image.');
     }

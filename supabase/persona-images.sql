@@ -122,8 +122,9 @@ $$;
 drop function if exists public.record_persona_image_use(uuid, uuid);
 create or replace function public.record_persona_image_use(p_persona_id uuid, p_image_id uuid, p_user_id uuid default null)
 returns void
-language sql
+language plpgsql
 as $$
+begin
   update public.personas
   set recent_image_ids =
     (array[p_image_id] || array_remove(coalesce(recent_image_ids, '{}'), p_image_id))[1:3]
@@ -132,6 +133,13 @@ as $$
     -- user id; session/JWT callers fall back to auth.uid(). Either way a
     -- caller can only write its own persona's history.
     and user_id = coalesce(p_user_id, auth.uid());
+  -- Enforcing, not advisory: a silent no-op here would disable the
+  -- anti-repeat behavior with no diagnostic trail (e.g. a caller that
+  -- forgot p_user_id on the service-role path, where auth.uid() is null).
+  if not found then
+    raise exception 'persona % not found for caller', p_persona_id using errcode = 'P0002';
+  end if;
+end;
 $$;
 
 -- 6. Atomic primary-image swap: the app used to demote-then-promote with two
@@ -166,6 +174,13 @@ begin
   where id = p_persona_id
     and user_id = coalesce(p_user_id, auth.uid())
   for update;
+  -- Enforcing, not advisory: without the raise below, a service-role caller
+  -- with a wrong/omitted p_user_id would fall through to the persona_id-scoped
+  -- UPDATEs and corrupt another tenant's rows. (Session/JWT callers are
+  -- additionally contained by RLS.)
+  if not found then
+    raise exception 'persona % not found for caller', p_persona_id using errcode = 'P0002';
+  end if;
   update public.persona_images
   set is_primary = false
   where persona_id = p_persona_id and is_primary;

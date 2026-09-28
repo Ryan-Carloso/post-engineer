@@ -22,9 +22,9 @@ export function detectMagicMimeType(buffer: Buffer): string | null {
     return 'image/png';
   }
 
-  // WebP: 'RIFF' at 0-3 and 'WEBP' at 8-11
+  // WebP: 'RIFF' at 0-3 and 'WEBP' at 8-11 (length >= 12 is guaranteed by
+  // the early return above, so no redundant length check here).
   if (
-    buffer.length >= 12 &&
     buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
     buffer.subarray(8, 12).toString('ascii') === 'WEBP'
   ) {
@@ -33,7 +33,7 @@ export function detectMagicMimeType(buffer: Buffer): string | null {
 
   // GIF: 'GIF87a' or 'GIF89a' — not an accepted upload type, but detecting
   // it lets callers report a precise mismatch instead of "unrecognized".
-  const gifHeader = buffer.length >= 6 ? buffer.subarray(0, 6).toString('ascii') : '';
+  const gifHeader = buffer.subarray(0, 6).toString('ascii');
   if (gifHeader === 'GIF87a' || gifHeader === 'GIF89a') {
     return 'image/gif';
   }

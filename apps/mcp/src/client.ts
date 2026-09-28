@@ -1,5 +1,9 @@
 import { validateScheduleAdvance } from './validator.js';
 import { getErrorMessage, ImageTooLargeError } from './errors.js';
+import { MAX_LIBRARY_IMAGE_BYTES, MAX_LIBRARY_IMAGE_MB } from './limits.js';
+
+// Re-exported so existing import sites (`../client.js`) keep working.
+export { MAX_LIBRARY_IMAGE_BYTES, MAX_LIBRARY_IMAGE_MB };
 import { readFile, stat } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
 
@@ -83,8 +87,6 @@ const MAX_ERROR_BODY_CHARS = 200;
 // and the field description strings can't drift apart.
 export const MAX_LIBRARY_IMAGES = 10;
 
-export const MAX_LIBRARY_IMAGE_BYTES = 10 * 1024 * 1024;
-
 // Mirrors the server-side addLibraryImages limits: checked in createPersona
 // so an oversized tag/description fails locally before the multipart upload.
 export const MAX_LIBRARY_TAG_LENGTH = 100;
@@ -97,18 +99,15 @@ export const MAX_LIBRARY_DESCRIPTION_LENGTH = 500;
  */
 export function assertImageSize(sizeBytes: number, path: string): void {
   if (sizeBytes > MAX_LIBRARY_IMAGE_BYTES) {
-    throw new ImageTooLargeError(path, sizeBytes, MAX_LIBRARY_IMAGE_BYTES);
+    throw new ImageTooLargeError(path, sizeBytes);
   }
 }
 
 function mimeTypeForImagePath(path: string): string {
   const extension = extname(path).toLowerCase();
-  // A file named exactly ".png" (hidden file, no base name) has the
-  // extension but no name; reject it so the fail-fast promise holds.
-  const base = basename(path);
-  if (base === extension) {
-    throw new Error(`Missing image file name: "${path}" has an extension but no base name.`);
-  }
+  // No special hidden-file check needed: Node's extname('.PNG') is ''
+  // (a leading dot with no other dots is not an extension), so dotfiles
+  // fall through to the unsupported-extension rejection below.
   if (extension === '.png') return 'image/png';
   if (extension === '.webp') return 'image/webp';
   if (extension === '.jpg' || extension === '.jpeg') return 'image/jpeg';
@@ -168,21 +167,29 @@ async function imageFormFile(path: string): Promise<Blob> {
 // Lengths are checked here so an oversized tag fails before the multipart
 // upload, not server-side after all bytes transfer. The label (e.g.
 // filename) is included in the error when available.
+function checkLibraryMetadataLengths(
+  tag: string | undefined,
+  description: string | undefined,
+  label?: string,
+): void {
+  const where = label ? ` for "${label}"` : '';
+  if (tag !== undefined && tag.length > MAX_LIBRARY_TAG_LENGTH) {
+    throw new Error(`Image tag${where} exceeds ${MAX_LIBRARY_TAG_LENGTH} characters.`);
+  }
+  if (description !== undefined && description.length > MAX_LIBRARY_DESCRIPTION_LENGTH) {
+    throw new Error(
+      `Image description${where} exceeds ${MAX_LIBRARY_DESCRIPTION_LENGTH} characters.`,
+    );
+  }
+}
+
 function normalizeLibraryMetadata(
   image: { tag?: string; description?: string },
   label?: string,
 ): { tag: string; description: string } {
   const tag = image.tag?.trim() ?? '';
   const description = image.description?.trim() ?? '';
-  const where = label ? ` for "${label}"` : '';
-  if (tag.length > MAX_LIBRARY_TAG_LENGTH) {
-    throw new Error(`Image tag${where} exceeds ${MAX_LIBRARY_TAG_LENGTH} characters.`);
-  }
-  if (description.length > MAX_LIBRARY_DESCRIPTION_LENGTH) {
-    throw new Error(
-      `Image description${where} exceeds ${MAX_LIBRARY_DESCRIPTION_LENGTH} characters.`,
-    );
-  }
+  checkLibraryMetadataLengths(tag, description, label);
   return { tag, description };
 }
 
@@ -532,6 +539,10 @@ export class PostEngineerClient {
     // since a caller passing "   " likely did not intend to wipe the value.
     const tag = input.tag?.trim();
     const description = input.description?.trim();
+    // Fail fast on oversized metadata before the round-trip, symmetric with
+    // the add/create paths (undefined = leave unchanged, so the check must
+    // skip undefined instead of defaulting to '').
+    checkLibraryMetadataLengths(tag, description);
     return this.request(
       '/api/persona/images',
       {

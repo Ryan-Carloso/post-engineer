@@ -130,7 +130,9 @@ describe('PersonaImageLibrarySection', () => {
     await userEvent.click(screen.getByRole('button', { name: 'persona.libraryUpload' }));
 
     await waitFor(() => {
-      expect(screen.getByText('storage full (b.jpg)')).toBeInTheDocument();
+      // Unknown server errors map to the generic localized message, with
+      // the file name appended.
+      expect(screen.getByText('persona.libraryUploadError (b.jpg)')).toBeInTheDocument();
     });
     // Only the failed item remains pending.
     expect(apiMocks.uploadMutateAsync).toHaveBeenCalledTimes(2);
@@ -186,7 +188,9 @@ describe('PersonaImageLibrarySection', () => {
     await userEvent.click(screen.getByRole('button', { name: 'persona.librarySave' }));
 
     await waitFor(() => {
-      expect(screen.getByText('db down')).toBeInTheDocument();
+      // Unknown server errors map to the generic localized message — the
+      // raw English string must never reach the UI.
+      expect(screen.getByText('persona.libraryUpdateError')).toBeInTheDocument();
     });
     // Still editing: the Save button is still on screen.
     expect(screen.getByRole('button', { name: 'persona.librarySave' })).toBeInTheDocument();
@@ -458,7 +462,8 @@ describe('PersonaImageLibrarySection', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('db down')).toBeInTheDocument();
+      // Unknown server errors map to the generic localized message.
+      expect(screen.getByText('persona.libraryUpdateError')).toBeInTheDocument();
     });
   });
 
@@ -497,6 +502,34 @@ describe('PersonaImageLibrarySection', () => {
     // message instead.
     expect(mapPersonaImageWarnings(['some_future_code'], t)).toBe(
       't:persona.libraryWarningUnknown',
+    );
+  });
+
+  it('mapPersonaImageError maps known server failure classes to localized copy, never raw English', async () => {
+    const { mapPersonaImageError } = await import('../persona-image-library');
+    const t = (key: string) => `t:${key}`;
+    expect(mapPersonaImageError('Image library is full (10 images max).', t, 'persona.libraryUploadError')).toBe(
+      't:persona.libraryErrorFull',
+    );
+    expect(
+      mapPersonaImageError('Faceless persona must not include library images.', t, 'persona.libraryUploadError'),
+    ).toBe('t:persona.libraryErrorFaceless');
+    expect(
+      mapPersonaImageError('The image content does not match its declared file type.', t, 'persona.libraryUploadError'),
+    ).toBe('t:persona.libraryErrorContentMismatch');
+    expect(
+      mapPersonaImageError('tag must be at most 100 characters.', t, 'persona.libraryUpdateError'),
+    ).toBe('t:persona.libraryErrorTooLong');
+    expect(mapPersonaImageError('Image not found.', t, 'persona.libraryDeleteError')).toBe(
+      't:persona.libraryErrorNotFound',
+    );
+    // Unknown server errors fall back to the generic localized message —
+    // the raw English string must never reach the UI.
+    expect(
+      mapPersonaImageError('Something broke in English.', t, 'persona.libraryUploadError'),
+    ).toBe('t:persona.libraryUploadError');
+    expect(mapPersonaImageError(undefined, t, 'persona.libraryUpdateError')).toBe(
+      't:persona.libraryUpdateError',
     );
   });
 

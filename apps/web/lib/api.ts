@@ -94,12 +94,14 @@ async function createPersona(formData: FormData): Promise<CreatePersonaResult> {
   };
 }
 
-// String arrays only: anything else (missing, mixed, or scalar) is absent,
-// never a partially-trusted array.
+// String arrays, defensively filtered: non-string entries are dropped but
+// the valid ones are kept, so a partially malformed payload can't silently
+// swallow real partial-success notes (each warning is independently mapped
+// through i18n anyway). Non-arrays are absent.
 function toStringArray(value: unknown): string[] | undefined {
-  return Array.isArray(value) && value.every((entry) => typeof entry === 'string')
-    ? (value as string[])
-    : undefined;
+  if (!Array.isArray(value)) return undefined;
+  const entries = value.filter((entry): entry is string => typeof entry === 'string');
+  return entries.length > 0 ? entries : undefined;
 }
 
 export interface CreateScheduleInput {
@@ -320,7 +322,13 @@ async function fetchPersonaImages(personaId: string): Promise<PersonaImageRecord
   if (!data || data.success !== true || !Array.isArray(data.images)) {
     throw new Error(serverError ?? 'Persona images request returned an unexpected payload.');
   }
-  return data.images;
+  // Narrow each record: the UI reads id/image_url directly, so a malformed
+  // entry must not flow through unchecked and break rendering downstream.
+  return data.images.filter(
+    (image): image is PersonaImageRecord =>
+      typeof image?.id === 'string' &&
+      (image.image_url === null || typeof image.image_url === 'string'),
+  );
 }
 
 export function usePersonaImagesQuery(personaId: string | null) {

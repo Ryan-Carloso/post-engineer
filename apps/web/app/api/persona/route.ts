@@ -10,13 +10,14 @@ import {
   validateVisualCues,
   validateVoiceSource,
   photoExtensionOf,
+  resolveStoredFaceMixPercent,
   VALID_VIDEO_ASPECTS,
-  DEFAULT_FACE_MIX_PERCENT,
 } from '@/lib/persona-schema';
 import {
   addLibraryImages,
   IMAGE_BUCKET,
   isFileLike,
+  removeOrphanedUploadPaths,
   setPrimaryLibraryImage,
   validateImageContent,
   validateImageFile,
@@ -81,11 +82,14 @@ export async function POST(request: Request): Promise<NextResponse> {
   // `imagePrimaryIndex`. Pre-validated here so a bad file fails before any
   // upload or insert happens.
   // Keep every file-like entry (even empty ones): validateImageFile rejects
-  // size-0 files with a clear error. Dropping them here would shift the
-  // index-aligned imageTags/imageDescriptions onto the wrong images.
-  const libraryFiles = formData
-    .getAll('images')
-    .filter((value): value is File => isFileLike(value));
+  // size-0 files with a clear error. Dropping entries here would shift the
+  // index-aligned imageTags/imageDescriptions onto the wrong images, so a
+  // non-file entry is a hard 400, not a silent filter.
+  const allImageEntries = formData.getAll('images');
+  if (allImageEntries.some((value) => !isFileLike(value))) {
+    return errorResponse(400, 'images must be a list of image files.');
+  }
+  const libraryFiles = allImageEntries.filter((value): value is File => isFileLike(value));
   // Parsed once: parseJsonStringArray is pure JSON parsing, no need to
   // re-parse per file inside the map below. Malformed JSON is a 400 here.
   let imageTags: string[];
@@ -154,22 +158,12 @@ export async function POST(request: Request): Promise<NextResponse> {
       script_prompt: body.values.scriptPrompt,
       paragraph_number: body.values.paragraphNumber,
       niche: body.values.niche,
-      // Faceless creations without an explicit mix would be stored as NULL,
-      // passing the POST /api/persona/images `=== 0` faceless check — a
-      // backdoor for library images on faceless personas. Coerce to 0 so
-      // the stored state matches the creation-time rule.
-      // Persona-mode creations without an explicit mix are coerced to the
-      // shared default for the same reason: a stored NULL is treated as
-      // faceless by the images route and the page gate, which would
-      // permanently write-lock the library for a persona the creation
-      // accepted as face-requiring. No new row stores NULL, so NULL keeps
-      // meaning "legacy faceless-mode row" everywhere.
-      face_mix_percent:
-        body.values.faceMixPercent === null || body.values.faceMixPercent === undefined
-          ? body.values.personaMode === 'faceless'
-            ? 0
-            : DEFAULT_FACE_MIX_PERCENT
-          : body.values.faceMixPercent,
+      // Coerced via the shared helper (no nested ternary): no new row may
+      // store NULL — see resolveStoredFaceMixPercent.
+      face_mix_percent: resolveStoredFaceMixPercent(
+        body.values.personaMode,
+        body.values.faceMixPercent,
+      ),
       face_quality: body.values.faceQuality,
     })
     .select('id')
@@ -200,15 +194,11 @@ export async function POST(request: Request): Promise<NextResponse> {
         rowBackedPaths: [],
       };
       if (orphanPaths.length > 0) {
-        const { error: leftoverError } = await supabase.storage
-          .from(IMAGE_BUCKET)
-          .remove(orphanPaths);
-        if (leftoverError) {
-          console.error('[api/persona] leftover library storage remove failed', {
-            error: leftoverError,
-            orphanPaths,
-          });
-        }
+        // Retry the orphan removal once via the shared helper (logs loudly
+        // on failure); row-backed orchestration below is route-specific.
+        await removeOrphanedUploadPaths(supabase, orphanPaths, {
+          route: 'api/persona',
+        });
       }
       const { error: rollbackError } = await supabase
         .from('personas')

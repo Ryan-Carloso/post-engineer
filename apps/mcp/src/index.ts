@@ -3,7 +3,7 @@ import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { PostEngineerClient, MAX_LIBRARY_IMAGES, MAX_LIBRARY_IMAGE_BYTES } from './client.js';
+import { PostEngineerClient, MAX_LIBRARY_IMAGES, MAX_LIBRARY_IMAGE_MB } from './client.js';
 import {
   CreatePersonaShape,
   ListPersonasShape,
@@ -190,7 +190,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
 
   server.tool(
     'add_persona_image',
-    `Add an image to a persona image library from a local file path (JPG/JPEG, PNG, or WebP, max ${MAX_LIBRARY_IMAGE_BYTES / (1024 * 1024)}MB). Optional tag and description drive the deterministic per-video image selection. The server rejects faceless personas and full libraries (${MAX_LIBRARY_IMAGES} max).`,
+    `Add an image to a persona image library from a local file path (JPG/JPEG, PNG, or WebP, max ${MAX_LIBRARY_IMAGE_MB}MB). Optional tag and description drive the deterministic per-video image selection. The server rejects faceless personas and full libraries (${MAX_LIBRARY_IMAGES} max).`,
     AddPersonaImageShape,
     async (args) => {
       return handleAddPersonaImage(apiClient, args);

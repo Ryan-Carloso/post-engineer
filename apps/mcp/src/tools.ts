@@ -3,7 +3,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { PostEngineerClient } from './client.js';
 import {
   MAX_LIBRARY_IMAGES,
-  MAX_LIBRARY_IMAGE_BYTES,
+  MAX_LIBRARY_IMAGE_MB,
   MAX_LIBRARY_TAG_LENGTH,
   MAX_LIBRARY_DESCRIPTION_LENGTH,
 } from './client.js';
@@ -30,7 +30,7 @@ export function missingProviderAccountIds(args: {
 // create-persona images array and add_persona_image — define once so the
 // limits and descriptions can't drift apart.
 const LibraryImageFields = {
-  path: z.string().min(1).describe(`Local file path to the image (JPG/JPEG, PNG, or WebP, max ${MAX_LIBRARY_IMAGE_BYTES / 1024 / 1024}MB)`),
+  path: z.string().min(1).describe(`Local file path to the image (JPG/JPEG, PNG, or WebP, max ${MAX_LIBRARY_IMAGE_MB}MB)`),
   tag: z.string().max(MAX_LIBRARY_TAG_LENGTH).optional().describe('Short tag for deterministic per-video matching (e.g. casual, formal, gym)'),
   description: z.string().max(MAX_LIBRARY_DESCRIPTION_LENGTH).optional().describe('Description of the photo for tag/keyword matching (e.g. smiling at the beach at sunset)'),
 };

@@ -54,12 +54,27 @@ interface DbState {
   /** Makes the persona_images metadata UPDATE fail (partial-commit path). */
   failUpdate?: boolean;
   /**
+   * Makes the metadata UPDATE report PGRST116 (the row was concurrently
+   * deleted between the ownership check and the update): 404, not 500.
+   */
+  failUpdateGone?: boolean;
+  /**
    * Makes the post-mutation row refetch fail (fetchImageRow returns null).
    * The default select branch serves the refetch in PATCH/POST flows.
    */
   failRefetch?: boolean;
   /** Makes the storage remove() call fail (orphan-file logging path). */
   storageRemoveError?: { message: string } | null;
+  /**
+   * Makes the personas ownership lookup fail with a PostgREST error.
+   * code 'PGRST116' = zero rows (404); anything else = DB failure (500).
+   */
+  personaLookupError?: { code?: string; message: string } | null;
+  /**
+   * Makes the persona_images single-row lookup fail with a PostgREST error.
+   * Same PGRST116-vs-DB-failure split as personaLookupError.
+   */
+  imageLookupError?: { code?: string; message: string } | null;
 }
 
 function terminal(result: unknown): Record<string, unknown> {
@@ -83,11 +98,14 @@ function mockClient(state: Partial<DbState> = {}) {
     ...state,
   };
   const calls = { primarySwaps: [] as Array<Record<string, unknown>>, removedPaths: [] as string[] };
-  const updateMock = vi.fn(() =>
-    full.failUpdate === true
+  const updateMock = vi.fn(() => {
+    if (full.failUpdateGone === true) {
+      return terminal({ data: null, error: { code: 'PGRST116', message: 'row gone' } });
+    }
+    return full.failUpdate === true
       ? terminal({ data: null, error: { message: 'update failed' } })
-      : terminal({ data: full.updatedRow, error: null }),
-  );
+      : terminal({ data: full.updatedRow, error: null });
+  });
   const client = {
     rpc: vi.fn((fn: string, args: Record<string, unknown>) => {
       if (fn === 'set_primary_persona_image') {
@@ -106,7 +124,11 @@ function mockClient(state: Partial<DbState> = {}) {
     }),
     from: vi.fn((table: string) => {
       if (table === 'personas') {
-        return terminal({ data: full.persona, error: full.persona ? null : { message: 'nf' } });
+        // Zero rows surface as PGRST116 through .single(); the route maps
+        // that to 404 and any other DB error to 500.
+        const error =
+          full.personaLookupError ?? (full.persona ? null : { code: 'PGRST116', message: 'nf' });
+        return terminal({ data: error ? null : full.persona, error });
       }
       return {
         select: vi.fn((columns: string) => {
@@ -114,9 +136,11 @@ function mockClient(state: Partial<DbState> = {}) {
             return terminal({ count: full.imageCount, error: null });
           }
           if (columns.includes('persona_id')) {
+            const error =
+              full.imageLookupError ?? (full.imageRow ? null : { code: 'PGRST116', message: 'nf' });
             return terminal({
-              data: full.imageRow,
-              error: full.imageRow ? null : { message: 'nf' },
+              data: error ? null : full.imageRow,
+              error,
             });
           }
           if (full.failRefetch === true) {
@@ -205,6 +229,26 @@ describe('GET /api/persona/images', () => {
       new Request(`http://localhost/api/persona/images?personaId=${PERSONA_ID}`),
     );
     expect(res.status).toBe(403);
+  });
+
+  it('returns 404 when the persona lookup matches zero rows (PGRST116)', async () => {
+    mockAuth({ userId: USER_ID });
+    mockClient({ persona: null });
+    const res = await GET(
+      new Request(`http://localhost/api/persona/images?personaId=${PERSONA_ID}`),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 500 (not 404) when the persona lookup fails with a real DB error', async () => {
+    // A Supabase outage must not masquerade as "not found": the client
+    // would stop retrying and there would be no diagnostic trail.
+    mockAuth({ userId: USER_ID });
+    mockClient({ personaLookupError: { code: 'XX000', message: 'connection reset' } });
+    const res = await GET(
+      new Request(`http://localhost/api/persona/images?personaId=${PERSONA_ID}`),
+    );
+    expect(res.status).toBe(500);
   });
 
   it('lists the persona images with signed URLs', async () => {
@@ -356,7 +400,7 @@ describe('POST /api/persona/images', () => {
       const leftoverLogged = errorSpy.mock.calls.some(
         (call) =>
           typeof call[0] === 'string' &&
-          call[0].includes('left storage files behind') &&
+          call[0].includes('orphaned upload storage paths could not be removed') &&
           typeof call[1] === 'object' &&
           call[1] !== null &&
           Array.isArray((call[1] as { orphanPaths?: unknown }).orphanPaths) &&
@@ -430,6 +474,13 @@ describe('PATCH /api/persona/images', () => {
     mockClient({ imageRow: null });
     const res = await PATCH(patchRequest({ id: 'missing', tag: 'x' }));
     expect(res.status).toBe(404);
+  });
+
+  it('returns 500 (not 404) when the image lookup fails with a real DB error', async () => {
+    mockAuth({ userId: USER_ID });
+    mockClient({ imageLookupError: { code: 'XX000', message: 'connection reset' } });
+    const res = await PATCH(patchRequest({ id: IMAGE_ROW.id, tag: 'x' }));
+    expect(res.status).toBe(500);
   });
 
   it('rejects an empty patch', async () => {
@@ -548,6 +599,15 @@ describe('PATCH /api/persona/images', () => {
     const body = (await res.json()) as { success: boolean; error: string; warnings?: string[] };
     expect(body.success).toBe(false);
     expect(body.warnings).toBeUndefined();
+  });
+
+  it('returns 404 when the row is concurrently deleted between the ownership check and the metadata update', async () => {
+    // The TOCTOU window is real: getOwnedImage succeeded, then the row
+    // vanished. PGRST116 on the update means "not found", not a DB failure.
+    mockAuth({ userId: USER_ID });
+    mockClient({ imageRow: IMAGE_ROW, updatedRow: IMAGE_ROW, failUpdateGone: true });
+    const res = await PATCH(patchRequest({ id: IMAGE_ROW.id, tag: 'formal' }));
+    expect(res.status).toBe(404);
   });
 
   it('rejects isPrimary:false — primary is swap-only, never demote-only', async () => {

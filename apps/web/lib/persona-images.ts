@@ -355,6 +355,31 @@ async function rollbackLibraryImages(
   return empty;
 }
 
+/**
+ * Retries removing orphaned upload storage paths once, then logs loudly if
+ * the retry fails. Orphans are storage objects with no surviving DB row:
+ * the internal rollback could not clean them up, so this call is the only
+ * record of them. Shared by the persona-creation and image-upload error
+ * paths so the retry-once semantics can't drift apart. Row-backed leftovers
+ * are NOT touched here — their orchestration (log-only vs remove-after-
+ * cascade) differs per route and stays at the call site.
+ */
+export async function removeOrphanedUploadPaths(
+  supabase: SupabaseClient,
+  orphanPaths: string[],
+  logContext: Record<string, unknown>,
+): Promise<void> {
+  if (orphanPaths.length === 0) return;
+  const { error } = await supabase.storage.from(IMAGE_BUCKET).remove(orphanPaths);
+  if (error) {
+    console.error('[persona-images] orphaned upload storage paths could not be removed', {
+      ...logContext,
+      orphanPaths,
+      removeError: error,
+    });
+  }
+}
+
 /** Marks one library image as primary and unsets the flag on the others. */
 export async function setPrimaryLibraryImage(
   supabase: SupabaseClient,

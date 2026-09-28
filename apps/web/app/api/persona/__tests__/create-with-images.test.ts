@@ -370,6 +370,21 @@ describe('POST /api/persona with image library', () => {
     expect(calls.personaInserts).toBe(0);
   });
 
+  it('rejects a non-file images entry instead of silently dropping it and shifting tags', async () => {
+    // A stray string in the `images` field must not be filtered out: the
+    // index-aligned imageTags would silently shift onto the wrong image.
+    const calls = mockClient();
+    const form = new FormData();
+    for (const [key, value] of Object.entries(BASE_FIELDS)) form.append(key, value);
+    form.append('photo', png('main.png'));
+    form.append('images', 'not-a-file');
+    form.append('images', png('a.png'));
+    form.append('imageTags', JSON.stringify(['stray', 'first']));
+    const res = await POST(new Request('http://localhost/api/persona', { method: 'POST', body: form }));
+    expect(res.status).toBe(400);
+    expect(calls.personaInserts).toBe(0);
+  });
+
   it('rejects spoofed content: GIF bytes declared as image/png', async () => {
     // The declared MIME type and extension pass the allowlist, but the
     // magic bytes say GIF. The server must read the real bytes.

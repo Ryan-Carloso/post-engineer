@@ -599,5 +599,14 @@ describe('supabase/persona-images.sql literals', () => {
     }
     const guardMatches = sql.match(/user_id = coalesce\(p_user_id, auth\.uid\(\)\)/g);
     expect(guardMatches).toHaveLength(2);
+
+    // The guards must be enforcing, not advisory: set_primary_persona_image
+    // must raise when the ownership-checked lock finds no row, otherwise a
+    // service-role caller with a wrong/omitted p_user_id would fall through
+    // to the persona_id-scoped UPDATEs and corrupt another tenant's rows.
+    // record_persona_image_use must raise instead of silently writing
+    // nothing when no row matches.
+    const noRowRaises = sql.match(/if not found then\s+raise exception 'persona % not found for caller'/g);
+    expect(noRowRaises).toHaveLength(2);
   });
 });

@@ -17,16 +17,19 @@ export function getErrorMessage(error: unknown): string {
  * sniffing misclassifies any future error whose prose happens to match, or
  * silently re-wraps the size error if the message is ever reworded.
  */
+import { MAX_LIBRARY_IMAGE_MB } from './limits.js';
+
 export class ImageTooLargeError extends Error {
   /** Full local path of the oversized image. */
   readonly path: string;
   /** Observed size in bytes (from stat, or from the read buffer). */
   readonly sizeBytes: number;
 
-  constructor(path: string, sizeBytes: number, maxBytes: number) {
-    // The max is derived from the enforced limit (never a hardcoded
-    // literal) so the message can't drift from the bound.
-    super(`Image "${path}" is too large (${sizeBytes} bytes; max ${maxBytes / (1024 * 1024)}MB).`);
+  constructor(path: string, sizeBytes: number) {
+    // The max is the shared derived constant (never a hardcoded literal
+    // or a locally recomputed divisor) so the message can't drift from the
+    // enforced bound.
+    super(`Image "${path}" is too large (${sizeBytes} bytes; max ${MAX_LIBRARY_IMAGE_MB}MB).`);
     this.name = 'ImageTooLargeError';
     this.path = path;
     this.sizeBytes = sizeBytes;

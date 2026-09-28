@@ -412,6 +412,11 @@ export const ptDictionary = {
       'A imagem principal foi atualizada, mas o estado atual não pôde ser confirmado. Atualize a biblioteca para ver o estado atual.',
     libraryUpdateError: 'Não foi possível salvar as alterações.',
     libraryDeleteError: 'Não foi possível remover a imagem.',
+    libraryErrorFull: 'A biblioteca de imagens está cheia. Remova uma para adicionar outra.',
+    libraryErrorFaceless: 'Personas sem rosto não podem ter biblioteca de imagens.',
+    libraryErrorContentMismatch: 'O conteúdo da imagem não corresponde ao tipo do arquivo.',
+    libraryErrorTooLong: 'A etiqueta ou descrição é muito longa.',
+    libraryErrorNotFound: 'Não encontrado. Pode ter sido removido.',
     libraryLimitReached: 'A biblioteca está cheia ({max} imagens). Remova uma para adicionar outra.',
     libraryFilesRejected:
       '{count} arquivo(s) foram ignorados: só JPG/JPEG, PNG ou WebP de até 10MB são aceitos.',
