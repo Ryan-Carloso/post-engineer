@@ -215,3 +215,43 @@ Follow these so the same issues don't come back:
   instead of stat/read (TOCTOU + consistent errors); file-carrying
   requests get a longer timeout (120s vs 30s); independent reads go
   through `Promise.all`; fail fast client-side on no-op calls.
+
+## Web/API review learnings, round 3 (2026-09-28)
+- **Cascade deletes need storage cleanup BEFORE the row dies.** The persona
+  DELETE collected photo/voice paths but not `persona_images.image_path` —
+  after the cascade the paths were unrecoverable, so up to 10 private
+  photos orphaned per deletion. Whenever an ON DELETE CASCADE table has
+  storage objects, select the paths first, then delete.
+- **History/timing writes belong after the external accept, not the token
+  gate.** Recording the rotation right after the token gate meant a failed
+  (refunded) engine call still burned an anti-repeat slot. Persist only
+  after the engine accepts/creates the job; a failed engine call must leave
+  zero history.
+- **A committed partial result turns errors into best-effort.** POST
+  /api/persona/images committed the image row + storage object, then a
+  primary-flag failure returned 500 for an image that existed. When the
+  mutation is already committed, log loudly and report the true state
+  (201 with actual is_primary), not a 500.
+- **Never discard a query error on a security branch.** The faceless check
+  ignored the personas select error and treated failure as "not faceless",
+  silently defeating the check. Every select on an auth path must handle
+  its error explicitly.
+- **Explicit MIME allowlist on file validation.** `startsWith('image/')`
+  passed image/gif or image/svg+xml renamed to .png; the server must
+  enforce the same allowlist as the client since API-key callers bypass
+  the UI.
+- **Validate shared params before index-aligned arrays.** imageTags/
+  imageDescriptions are matched to files by index: a non-empty array
+  shorter than the file count is a client bug — 400, not silent defaults.
+- **Rejects in the picker need visible feedback.** Silently filtering
+  invalid picked files is a silent failure on the input path; surface a
+  skip notice naming the rule.
+- **No side effects inside setState updaters.** URL.revokeObjectURL ran
+  inside an updater (StrictMode invokes updaters twice) — compute outside,
+  update state, then run the side effect.
+- **MCP stdio memory budget.** Promise.all over 10 x 10MB images held
+  ~100MB in the stdio process; sequential reads bound it to one image.
+  Pure-argument checks (index range) go before any file read.
+- **Verify the doc claim against the code.** The imagePrimaryIndex doc said
+  "default: first" but no primary was set when omitted — docs must describe
+  what the code does, not what it should do.
