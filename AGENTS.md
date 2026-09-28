@@ -1050,3 +1050,66 @@ Follow these so the same issues don't come back:
 - MINOR gitignore note (`!test/controllers/test_*.py` "broad"): DECLINED,
   the reviewer itself admitted it matches the existing
   `!test/services/test_*.py` pattern and is intentional.
+
+## Web/API review learnings, round 28 (2026-09-28)
+- **Multipart route tests need `// @vitest-environment node`.** The default
+  jsdom env mixes jsdom's FormData/File with undici's Request: constructing
+  `new Request(url, { body: formData })` with a File entry throws
+  `TypeError: Cannot read properties of undefined (reading '_buffer')`
+  inside jsdom's FormData.forEach. The create-with-images suite already
+  carries the node pragma for this reason — any new test posting multipart
+  bodies (especially with files) must too. String-only FormData does not
+  trip it, which makes the failure look file-specific.
+
+## Billing review learnings (2026-09-28, genuine finding)
+- **Whoever charges owns the refund ledger.** Engine-billed batch videos are
+  charged with IDs the web never sees and never receives `engine_task_id`,
+  so the web's status-proxy refund cannot reach them. The batch runner
+  refunds each failed video's own upfront charge itself — one refund per
+  task by construction, never via the web path. When adding a new
+  charge flow, first map which ledger owns each charge row, then place
+  the refund next to the charge.
+- **`refund_tokens` returns bool — False is a real failure.** A soft
+  failure (RPC answered, charge not refunded) is not an exception, so
+  try/except alone lets lost tokens vanish silently. Log loudly on any
+  non-True return, and keep the batch running.
+- **An unreadable terminal state must be loud, not just fail-closed.**
+  `_batch_task_failed` returns False on a read exception so the batch
+  survives, but the exception is logged — otherwise a skipped refund
+  leaves no trail at all.
+
+## PR #14 review learnings (2026-09-28, OpenCode — evaluated and declined)
+- OpenCode MINOR suggested replacing `hasattr(module, name)` with
+  `assertNotIn(name, dir(module))` in `test_batch_machinery_is_gone` as
+  "more robust". Declined: the module defines no module-level
+  `__getattr__` (verified by grep), so for plain module attributes the
+  two checks are functionally equivalent — the suggestion is stylistic,
+  not a robustness gap. Reviewer suggestions about "more robust"
+  checks still get verified against the actual module before any change.
+
+## PR #14 review learnings, round 2 (2026-09-28, OpenCode on 772260f)
+- **Declined as false positives (verified against the code):**
+  - CRITICAL "daemon threads die silently": `thread.start()` failure is
+    caught by the caller's try/except (refund + re-raise + ERROR log);
+    a crash inside the thread target hits `task.start`'s top-level
+    `except Exception` → `logger.exception` + `_fail_task` (structured
+    Bugsink logging). Nothing is silent on either path.
+  - CRITICAL "error messages still say 'queued'": they already say
+    "could not be dispatched" — the review quoted stale line numbers.
+  - MAJOR "PersonaBatchQueueFullError comment at video.py:204-205": the
+    symbol and comment do not exist anywhere in the codebase.
+  - MAJOR "dispatch test only covers happy path": dispatch failure is
+    covered at the caller level
+    (`test_generate_batch_dispatch_failure_refunds_single_video`) and
+    `task.start` crash handling has its own tests; a concurrency test
+    would only test `threading` itself.
+  - MINORs on config.example.toml + SIGNED_URL comment: both already
+    fixed ("max gap until generation"); the remaining "daily batch
+    cadence" comment lives in the untracked local config.toml.
+- **Genuine (fixed):** the review's CRITICAL-2 misattribution surfaced a
+  real stale module docstring in fill_schedule.py describing the removed
+  `PersonaBatchQueue`/06h cutoff (and "no token spend" for batches,
+  which are prepaid at schedule creation). Fixed the docstring.
+- Lesson: this reviewer re-reviews the whole PR diff on every push and
+  its line numbers go stale fast — always re-locate each cited finding
+  in the current tree before acting.

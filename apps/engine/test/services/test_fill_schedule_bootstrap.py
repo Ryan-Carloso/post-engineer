@@ -52,14 +52,22 @@ class StartFillScheduleSchedulerTests(unittest.TestCase):
         thread.assert_called_once()
         self.assertTrue(any("started" in message for message in notifications))
 
-    def test_queue_missing_skips_with_warning(self):
-        # M3: a disabled persona batch queue must NOT take down app boot.
+    def test_scheduler_starts_without_a_queue_dependency(self):
+        # The daily persona batch (and its queue) is gone: the scheduler
+        # boots with only the store, no queue wiring required.
         asgi = self._import_asgi()
+        self.assertFalse(hasattr(asgi, "fill_schedule_queue"))
+        notifications = []
         with patch.dict(os.environ, SUPABASE_ENV, clear=False):
-            with patch.object(asgi, "fill_schedule_queue", None):
-                with patch.object(asgi, "start_fill_schedule_thread") as thread:
-                    asgi.start_fill_schedule_scheduler()
-        thread.assert_not_called()
+            with patch.object(asgi, "ScheduleStore") as store_cls, \
+                 patch.object(asgi, "FillScheduleScheduler") as scheduler_cls, \
+                 patch.object(asgi, "start_fill_schedule_thread") as thread, \
+                 patch("app.services.notify.send_discord", side_effect=lambda m: notifications.append(m) or True):
+                asgi.start_fill_schedule_scheduler()
+        store_cls.assert_called_once()
+        scheduler_cls.assert_called_once()
+        thread.assert_called_once()
+        self.assertTrue(any("started" in message for message in notifications))
 
 
 @contextmanager

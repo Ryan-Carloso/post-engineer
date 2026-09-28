@@ -38,6 +38,10 @@ const REQUEST_FORWARD_FIELDS: ReadonlyArray<string> = [
   'video_script_prompt',
   'video_quality',
   'paragraph_number',
+  // webhook_url is a first-class engine field (TaskVideoRequest validates it
+  // as http(s)); it must survive the allowlist so per-request callbacks
+  // (MCP webhookUrl) reach the engine's terminal dispatch.
+  'webhook_url',
 ];
 
 export interface JobPersona {

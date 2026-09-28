@@ -1,18 +1,16 @@
 import unittest
-import types
 import tempfile
+import types
 from pathlib import Path
 from unittest.mock import patch
 
 import requests
 
-from app.models import const
 from app.models.schema import (
     ContentParams,
     LipSyncQuality,
     PersonaParams,
     PersonaVideoRequest,
-    TaskVideoRequest,
 )
 from app.controllers.v1 import video as video_controller
 from app.services import infinitetalk
@@ -55,54 +53,7 @@ class TestPersonaVideoContract(unittest.TestCase):
                 }
             )
 
-    def test_deleting_queued_persona_removes_it_from_daily_batch(self):
-        request = type("Request", (), {
-            "headers": {"x-task-id": "request"},
-            "state": types.SimpleNamespace(
-                auth=video_controller.base.AuthContext(user_id="internal", auth_type="internal")
-            ),
-        })()
-        queued_task = {
-            "state": const.TASK_STATE_QUEUED,
-            "status": "queued_for_daily_batch",
-        }
-        with patch.object(video_controller.sm.state, "get_task", return_value=queued_task):
-            with patch.object(video_controller.sm.state, "delete_task") as delete_task:
-                with patch.object(video_controller, "_persona_batch_queue") as queue:
-                    response = video_controller.delete_video(request, task_id="queued-task")
-
-        queue.delete.assert_called_once_with("queued-task")
-        delete_task.assert_called_once_with("queued-task")
-        self.assertEqual(response["status"], 200)
-
-    def test_queue_enqueue_failure_does_not_create_queued_state(self):
-        request = type("Request", (), {
-            "headers": {"x-task-id": "request"},
-            "state": types.SimpleNamespace(
-                auth=video_controller.base.AuthContext(user_id="internal", auth_type="internal")
-            ),
-        })()
-        body = TaskVideoRequest(
-            video_subject="topic",
-            persona=PersonaParams(
-                name="Ana",
-                photo_url="https://example.com/ana.png",
-                voice_id="calm",
-                niche="education",
-                speaking_style="direct",
-                audience="adults",
-            ),
-        )
-        with patch.object(video_controller, "_persona_batch_queue") as queue:
-            queue.enqueue.side_effect = RuntimeError("database locked")
-            with patch.object(video_controller.sm.state, "update_task") as update_task:
-                with self.assertRaises(RuntimeError):
-                    video_controller.create_task(request, body, "video", daily_batch=True)
-
-        update_task.assert_not_called()
-
     def test_public_controller_maps_nested_content_to_video_task(self):
-        from app.controllers.v1 import video as video_controller
 
         body = PersonaVideoRequest(
             persona=PersonaParams(
@@ -121,14 +72,29 @@ class TestPersonaVideoContract(unittest.TestCase):
             ),
         )
 
-        with patch.object(video_controller, "create_task", return_value="task") as create_task:
-            result = video_controller.create_persona_video(object(), body)
+        with patch.object(
+            video_controller,
+            "process_persona_videos",
+            return_value=[("task-1", "params")],
+        ) as process:
+            request = types.SimpleNamespace(
+                state=types.SimpleNamespace(
+                    auth=video_controller.base.AuthContext(
+                        user_id="internal", auth_type="internal"
+                    )
+                )
+            )
+            result = video_controller.create_persona_video(request, body)
 
-        self.assertEqual(result, "task")
-        mapped = create_task.call_args.args[1]
-        self.assertEqual(mapped.video_subject, "Poupar dinheiro")
-        self.assertEqual(mapped.video_quality, LipSyncQuality.very_good)
-        self.assertEqual(mapped.platform_ids, ["account-1"])
+        self.assertEqual(result, {"status": 200, "data": {"task_id": "task-1"}})
+        process.assert_called_once()
+        batch_body = process.call_args.args[1]
+        self.assertEqual(len(batch_body.items), 1)
+        item = batch_body.items[0]
+        self.assertEqual(item.topic, "Poupar dinheiro")
+        self.assertEqual(item.goal, "educar")
+        self.assertEqual(item.platform_ids, ["account-1"])
+        self.assertEqual(item.video_quality, LipSyncQuality.very_good)
 
     def test_persona_script_is_limited_at_a_sentence_boundary(self):
         long_script = "Primeira frase. " + ("palavra " * 100)

@@ -52,6 +52,23 @@ export interface GenerateVideoJobInput {
   audioUrl?: string;
   /** Library image ID overriding the deterministic per-video selection. */
   imageId?: string;
+  /** Optional callback URL the server POSTs to when the video terminates. */
+  webhookUrl?: string;
+}
+
+export interface GenerateVideoBatchInput {
+  /** One topic per video, 1-10. Videos generate sequentially in order. */
+  topics: string[];
+  // Omitted for faceless generation (the web API runs each video with
+  // face_mix_percent 0); voiceId is then required — batches accept no custom
+  // audio_url per video in V1.
+  personaId?: string;
+  /** Voice ID for faceless batch generation. */
+  voiceId?: string;
+  /** Library image ID overriding the deterministic per-video selection. */
+  imageId?: string;
+  /** Optional callback URL the server POSTs to when each video terminates. */
+  webhookUrl?: string;
 }
 
 export interface UpdatePersonaInput {
@@ -482,9 +499,33 @@ export class PostEngineerClient {
           video_script_prompt: input.scriptPrompt,
           audio_url: input.audioUrl,
           image_id: input.imageId,
+          // Snake_case at the wire level: the web route's forward allowlist
+          // carries webhook_url (a first-class TaskVideoRequest field) to the
+          // engine's terminal dispatch. Undefined keys drop out of the JSON.
+          webhook_url: input.webhookUrl,
         }),
       },
       'generate video job'
+    );
+  }
+
+  async generateVideoBatch(input: GenerateVideoBatchInput): Promise<unknown> {
+    return this.request(
+      '/api/persona/video-batch',
+      {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          // Explicit null (not a dropped key): the web route treats both as
+          // the faceless flow, and null survives serialization explicitly.
+          personaId: input.personaId ?? null,
+          topics: input.topics,
+          voice_id: input.voiceId,
+          image_id: input.imageId,
+          webhookUrl: input.webhookUrl,
+        }),
+      },
+      'generate video batch'
     );
   }
 

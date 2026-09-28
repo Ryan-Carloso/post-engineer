@@ -1,13 +1,12 @@
+import asyncio
 import glob
 import json
 import os
 import pathlib
-import sqlite3
 import shutil
 import threading
 import time
-from datetime import datetime, timezone
-from typing import Union
+from typing import Optional, Union
 
 from fastapi import BackgroundTasks, Depends, Path, Query, Request, UploadFile
 from fastapi.params import File
@@ -32,17 +31,16 @@ from app.models.schema import (
     TaskQueryResponse,
     TaskResponse,
     PersonaVideoRequest,
+    PersonaVideoBatchRequest,
+    BatchVideoItem,
+    PersonaParams,
     TaskVideoRequest,
+    LipSyncQuality,
     VideoMaterialUploadResponse,
     VideoMaterialRetrieveResponse
 )
 from app.services import state as sm
 from app.services import task as tm
-from app.services.persona_batch_queue import (
-    DailyPersonaBatchScheduler,
-    PersonaBatchQueue,
-    PersonaBatchQueueFullError,
-)
 from app.utils import file_security, upload_limits, utils
 
 # Upload size caps: the handlers stream uploads in chunks instead of
@@ -61,12 +59,6 @@ _redis_db = config.app.get("redis_db", 0)
 _redis_password = config.app.get("redis_password", None)
 _max_concurrent_tasks = config.app.get("max_concurrent_tasks", 5)
 _max_queued_tasks = config.app.get("max_queued_tasks", 100)
-_persona_batch_enabled = os.getenv(
-    "MPT_PERSONA_BATCH_ENABLED",
-    "true",
-).lower() not in {"0", "false", "no"}
-_persona_batch_queue_limit = int(config.app.get("max_persona_queued_tasks", 100))
-_persona_batch_cutoff_hour = int(config.app.get("persona_batch_cutoff_hour_utc", 6))
 
 redis_url = f"redis://:{_redis_password}@{_redis_host}:{_redis_port}/{_redis_db}"
 # Select the task manager according to the configuration
@@ -81,17 +73,6 @@ else:
         max_concurrent_tasks=_max_concurrent_tasks,
         max_queued_tasks=_max_queued_tasks,
     )
-
-_persona_batch_queue: PersonaBatchQueue | None = None
-if _persona_batch_enabled:
-    _persona_batch_queue = PersonaBatchQueue(
-        pathlib.Path(utils.storage_dir(create=True)) / "persona_batch_queue.sqlite3",
-        cutoff_hour_utc=_persona_batch_cutoff_hour,
-    )
-# Public alias for fill_schedule (asgi.py) — same queue, 1 batch/cold start.
-fill_schedule_queue = _persona_batch_queue
-_persona_batch_scheduler: DailyPersonaBatchScheduler | None = None
-_persona_batch_thread: threading.Thread | None = None
 
 
 def _sanitize_upload_filename(filename: str, request_id: str) -> str:
@@ -166,13 +147,239 @@ def create_video(
     return create_task(request, body, stop_at="video")
 
 
-def _use_daily_persona_batch(params: TaskVideoRequest) -> bool:
-    # The 6am UTC batch exists to amortize the InfiniteTalk model load on Modal
-    # GPUs: one warm batch per day is far cheaper than a cold load per video.
-    # Faceless personas never touch InfiniteTalk (no face to animate), so they
-    # generate immediately. Bigger projects can disable the batch entirely
-    # (MPT_PERSONA_BATCH_ENABLED=0) or run it more often.
-    return _persona_batch_enabled and tm.persona_lipsync_active(params)
+def _persona_video_params(
+    persona: PersonaParams,
+    topic: str,
+    goal: Optional[str],
+    platform_ids: Optional[list],
+    video_quality: LipSyncQuality,
+    webhook_url: Optional[str] = None,
+) -> TaskVideoRequest:
+    """THE single builder for persona-video task params.
+
+    Both the single-video endpoint (as a batch of one) and the batch
+    endpoint go through this; there is no separate params construction
+    for the single path.
+    """
+    max_script_characters = int(config.app.get("max_video_script_characters", 700))
+    max_duration_seconds = int(config.app.get("max_video_duration_seconds", 40))
+    # goal/platform_ids are optional per batch item; fall back to neutral
+    # defaults so the prompt stays well-formed for the script LLM.
+    goal_text = goal or "Create an engaging video about the topic."
+    persona_prompt = (
+        f"Create the script in {persona.language}. "
+        f"Persona niche: {persona.niche}. "
+        f"Speaking style: {persona.speaking_style}. "
+        f"Audience: {persona.audience}. "
+        f"Goal: {goal_text}. "
+        "Write only the spoken words, with no headings or stage directions. "
+        "Start with a standalone hook paragraph of 8 to 16 words designed to take "
+        "3 to 6 seconds "
+        "when spoken. The hook must contain complete sentences, end with terminal "
+        "punctuation, and be followed by exactly one blank line. Continue the main "
+        "content in a new paragraph. "
+        f"Keep the script under {max_script_characters} characters and below "
+        f"{max_duration_seconds} seconds when spoken."
+    )
+    return TaskVideoRequest(
+        video_subject=topic,
+        video_language=persona.language,
+        persona=persona,
+        platform_ids=platform_ids or [],
+        video_quality=video_quality,
+        paragraph_number=None,
+        video_script_prompt=persona_prompt,
+        webhook_url=webhook_url,
+    )
+
+
+def _batch_billing_store():
+    """Deferred ScheduleStore construction (needs Supabase env vars).
+
+    Raises RuntimeError when billing is not configured.
+    """
+    from app.services.fill_schedule import ScheduleStore
+
+    return ScheduleStore()
+
+
+def _batch_video_cost(face_mix_percent: float, face_quality: str) -> int:
+    """Per-video token cost, reusing the scheduled-videos formula."""
+    from app.services.fill_schedule import FillScheduleScheduler
+
+    return FillScheduleScheduler._token_cost(face_mix_percent, face_quality)
+
+
+def _spend_batch_upfront(
+    store, user_id: str, batch_id: str, item_count: int, cost_per_video: int
+) -> list:
+    """Spend one generation slot per video; refund all and 400 on any failure.
+
+    Fail fast: nothing is created and nothing stays charged when the balance
+    cannot cover the whole batch.
+    """
+    spent = []
+    try:
+        for index in range(item_count):
+            generation_id = f"persona-batch:{batch_id}:video:{index}"
+            ok = store.spend_tokens(
+                user_id,
+                generation_id,
+                cost_per_video,
+                reason="persona video batch upfront",
+            )
+            if not ok:
+                raise _InsufficientTokens()
+            spent.append(generation_id)
+    except _InsufficientTokens:
+        for generation_id in spent:
+            try:
+                store.refund_tokens(
+                    user_id, generation_id, "Batch upfront check failed"
+                )
+            except Exception:
+                pass
+        raise HttpException(
+            task_id=batch_id,
+            status_code=400,
+            message=INSUFFICIENT_TOKENS_MESSAGE,
+        )
+    return spent
+
+
+class _InsufficientTokens(Exception):
+    pass
+
+
+# Message for the 400 fail-fast when the token balance cannot cover a batch.
+INSUFFICIENT_TOKENS_MESSAGE = "INSUFFICIENT_TOKENS"
+
+
+def _batch_task_failed(task_id: str) -> bool:
+    """True when the task reached the terminal FAILED state."""
+    try:
+        task = sm.state.get_task(task_id)
+    except Exception:  # noqa: BLE001 — a failed read must not kill the batch
+        # Fail closed (no refund attempted on an unreadable state) but loud:
+        # without this log a failed read would silently skip a refund the
+        # user is owed.
+        logger.exception("persona batch could not read terminal state for task %s", task_id)
+        return False
+    return bool(task) and task.get("state") == const.TASK_STATE_FAILED
+
+
+def _run_persona_batch_sequential(specs: list, store, user_id: str) -> None:
+    """Run the batch's tasks strictly one-at-a-time in the calling thread.
+
+    A failure in one video is contained: it leaves that task in its terminal
+    FAILED state (with structured failure logging) and the next video still
+    runs. A failed video's upfront charge is refunded here — engine-billed
+    batches own their ledger (the web never charged these videos, and the
+    web-side refund proxy cannot reach engine-billed charge rows: it looks
+    up by engine_task_id, which those rows never carry), so each task is
+    refunded at most once. A refund failure is logged but never cancels the
+    rest.
+    """
+    for task_id, params, generation_id in specs:
+        try:
+            tm.start(task_id=task_id, params=params, stop_at="video")
+        except Exception:
+            # tm.start terminalizes via _fail_task on every known path
+            # (including its catch-all); this only catches truly unexpected
+            # escapes.
+            logger.exception("persona batch task escaped without terminalizing")
+        if _batch_task_failed(task_id):
+            try:
+                refunded = store.refund_tokens(
+                    user_id, generation_id, "persona video batch: video failed"
+                )
+            except Exception:
+                logger.exception(
+                    "persona batch refund failed for task %s", task_id
+                )
+            else:
+                # refund_tokens returns False on soft failure (RPC answered
+                # but the charge was not actually refunded). That must be
+                # loud in Bugsink: silent here means lost tokens.
+                if refunded is not True:
+                    logger.error(
+                        "persona batch refund returned False for task %s "
+                        "(generation %s)",
+                        task_id,
+                        generation_id,
+                    )
+
+
+def process_persona_videos(
+    user_id: str, body: PersonaVideoBatchRequest
+) -> list[tuple[str, TaskVideoRequest]]:
+    """THE single internal code path for persona video generation.
+
+    Validates N items (done by Pydantic) -> bills upfront for N videos ->
+    creates N task states -> starts sequential background execution.
+
+    Returns [(task_id, params, generation_id)] in item order, where
+    generation_id is the upfront charge id the batch runner refunds if that
+    video fails. Raises HttpException(400) with
+    the INSUFFICIENT message when the balance cannot cover all N videos
+    (nothing created, nothing charged) and HttpException(500) when billing
+    is not configured.
+
+    Both POST /persona-videos (as a batch of one) and
+    POST /persona-videos/batch delegate to this; there is no separate
+    generation/billing/progress logic for the single path.
+    """
+    batch_id = utils.get_uuid()
+    try:
+        store = _batch_billing_store()
+    except Exception as exc:
+        raise HttpException(
+            task_id=batch_id, status_code=500, message=f"Billing unavailable: {exc}"
+        )
+    cost = _batch_video_cost(body.face_mix_percent, body.face_quality)
+    spent = _spend_batch_upfront(store, user_id, batch_id, len(body.items), cost)
+
+    specs = []
+    for index, item in enumerate(body.items):
+        task_id = utils.get_uuid()
+        params = _persona_video_params(
+            persona=body.persona,
+            topic=item.topic,
+            goal=item.goal,
+            platform_ids=item.platform_ids,
+            video_quality=item.video_quality,
+            webhook_url=body.webhook_url,
+        )
+        sm.state.update_task(task_id, user_id=user_id)
+        specs.append((task_id, params, spent[index]))
+
+    thread = threading.Thread(
+        target=_run_persona_batch_sequential,
+        args=(specs, store, user_id),
+        daemon=True,
+        name=f"persona-batch-{batch_id}",
+    )
+    thread.start()
+    return specs
+
+
+@router.post(
+    "/persona-videos/batch",
+    status_code=202,
+    summary="Generate a batch of persona videos sequentially",
+)
+def create_persona_video_batch(request: Request, body: PersonaVideoBatchRequest):
+    """One request, N persona videos (1..10).
+
+    Validates all items first, bills upfront for N videos, and fails fast
+    with 400 INSUFFICIENT (nothing created/charged) when the balance is too
+    low. Returns 202 {task_ids} immediately; the N tasks run sequentially in
+    background. A webhook_url (if given) fires per task on terminal state;
+    per-task progress streams via GET /api/v1/tasks/{task_id}/events.
+    """
+    auth = base.get_auth_context(request)
+    specs = process_persona_videos(auth.user_id, body)
+    return utils.get_response(202, {"task_ids": [task_id for task_id, _, _ in specs]})
 
 
 @router.post(
@@ -183,40 +390,30 @@ def _use_daily_persona_batch(params: TaskVideoRequest) -> bool:
 def create_persona_video(
     request: Request, body: PersonaVideoRequest
 ):
-    """Accept the small public persona/content contract used by the frontend."""
-    persona = body.persona
-    content = body.content
-    max_script_characters = int(
-        config.app.get("max_video_script_characters", 700)
+    """Thin backwards-compatible wrapper around the batch core.
+
+    External request/response contract is unchanged: accepts the same
+    PersonaVideoRequest body and returns the same TaskResponse shape
+    ({data: {task_id}}). Internally it delegates to process_persona_videos
+    as a batch of one, so single videos share the exact same
+    validate -> bill -> sequential-execute -> progress/webhook/logging path
+    as batches (including upfront token billing).
+    """
+    auth = base.get_auth_context(request)
+    batch_body = PersonaVideoBatchRequest(
+        persona=body.persona,
+        items=[
+            BatchVideoItem(
+                topic=body.content.topic,
+                goal=body.content.goal,
+                platform_ids=body.content.platform_ids,
+                video_quality=body.content.video_quality,
+            )
+        ],
     )
-    max_duration_seconds = int(config.app.get("max_video_duration_seconds", 40))
-    persona_prompt = (
-        f"Create the script in {persona.language}. "
-        f"Persona niche: {persona.niche}. "
-        f"Speaking style: {persona.speaking_style}. "
-        f"Audience: {persona.audience}. "
-        f"Goal: {content.goal}. "
-        "Write only the spoken words, with no headings or stage directions. "
-        "Start with a standalone hook paragraph of 8 to 16 words designed to take "
-        "3 to 6 seconds "
-        "when spoken. The hook must contain complete sentences, end with terminal "
-        "punctuation, and be followed by exactly one blank line. Continue the main "
-        "content in a new paragraph. "
-        f"Keep the script under {max_script_characters} characters and below "
-        f"{max_duration_seconds} seconds when spoken."
-    )
-    params = TaskVideoRequest(
-        video_subject=content.topic,
-        video_language=persona.language,
-        persona=persona,
-        platform_ids=content.platform_ids,
-        video_quality=content.video_quality,
-        paragraph_number=None,
-        video_script_prompt=persona_prompt,
-    )
-    return create_task(
-        request, params, stop_at="video", daily_batch=_use_daily_persona_batch(params)
-    )
+    specs = process_persona_videos(auth.user_id, batch_body)
+    task_id = specs[0][0]
+    return utils.get_response(200, {"task_id": task_id})
 
 
 @router.post("/subtitle", response_model=TaskResponse, summary="Generate subtitle only")
@@ -237,7 +434,6 @@ def create_task(
     request: Request,
     body: Union[TaskVideoRequest, SubtitleRequest, AudioRequest],
     stop_at: str,
-    daily_batch: bool = False,
 ):
     task_id = utils.get_uuid()
     request_id = base.get_task_id(request)
@@ -249,31 +445,11 @@ def create_task(
             "params": body.model_dump(),
             "user_id": auth.user_id,
         }
-        if daily_batch:
-            if _persona_batch_queue is None:
-                raise RuntimeError("persona batch queue is not enabled")
-            _persona_batch_queue.enqueue(
-                task_id,
-                body.model_dump_json(),
-                datetime.now(timezone.utc),
-                max_waiting_tasks=_persona_batch_queue_limit,
-            )
-            try:
-                sm.state.update_task(
-                    task_id,
-                    state=const.TASK_STATE_QUEUED,
-                    status="queued_for_daily_batch",
-                    user_id=auth.user_id,
-                )
-            except Exception:
-                _persona_batch_queue.delete(task_id)
-                raise
-        else:
-            sm.state.update_task(task_id, user_id=auth.user_id)
-            task_manager.add_task(tm.start, task_id=task_id, params=body, stop_at=stop_at)
+        sm.state.update_task(task_id, user_id=auth.user_id)
+        task_manager.add_task(tm.start, task_id=task_id, params=body, stop_at=stop_at)
         logger.success(f"Task created: task_id={task_id}")
         return utils.get_response(200, task)
-    except (TaskQueueFullError, PersonaBatchQueueFullError) as e:
+    except TaskQueueFullError as e:
         sm.state.delete_task(task_id)
         logger.warning(
             f"reject task because queue is full, request_id: {request_id}, task_id: {task_id}"
@@ -285,60 +461,7 @@ def create_task(
         raise HttpException(
             task_id=task_id, status_code=400, message=f"{request_id}: {str(e)}"
         )
-    except sqlite3.Error as e:
-        if daily_batch and _persona_batch_queue is not None:
-            _persona_batch_queue.delete(task_id)
-        sm.state.delete_task(task_id)
-        raise HttpException(
-            task_id=task_id,
-            status_code=503,
-            message=f"{request_id}: persona batch queue temporarily unavailable: {str(e)}",
-        )
 
-
-def _dispatch_persona_batch_task(task_id: str, payload_json: str) -> None:
-    params = TaskVideoRequest.model_validate(json.loads(payload_json))
-    tm.start(task_id=task_id, params=params, stop_at="video")
-    task = sm.state.get_task(task_id)
-    if _persona_batch_queue is None:
-        raise RuntimeError("persona batch queue is not enabled")
-    if task is not None and task.get("state") == const.TASK_STATE_COMPLETE:
-        _persona_batch_queue.finish(task_id)
-    else:
-        _persona_batch_queue.finish(task_id, str(task.get("error", "task failed")) if task else "task state missing")
-
-
-def _persona_batch_loop() -> None:
-    while True:
-        try:
-            now = datetime.now(timezone.utc)
-            if _persona_batch_scheduler is None:
-                raise RuntimeError("persona batch scheduler is not initialized")
-            if now.hour >= _persona_batch_cutoff_hour:
-                _persona_batch_scheduler.run_once(now, f"batch-{now.date().isoformat()}")
-        except Exception:
-            logger.exception("persona batch scheduler iteration failed")
-        time.sleep(30)
-
-
-def start_persona_batch_scheduler() -> None:
-    global _persona_batch_scheduler, _persona_batch_thread
-    if not _persona_batch_enabled:
-        return
-    if _persona_batch_thread is not None and _persona_batch_thread.is_alive():
-        return
-    if _persona_batch_queue is None:
-        raise RuntimeError("persona batch queue is not initialized")
-    _persona_batch_queue.requeue_claimed()
-    _persona_batch_scheduler = DailyPersonaBatchScheduler(
-        _persona_batch_queue,
-        _dispatch_persona_batch_task,
-        cutoff_hour_utc=_persona_batch_cutoff_hour,
-    )
-    _persona_batch_thread = threading.Thread(
-        target=_persona_batch_loop, name="persona-batch-scheduler", daemon=True
-    )
-    _persona_batch_thread.start()
 
 @router.get("/tasks", response_model=TaskQueryResponse, summary="Get all tasks")
 def get_all_tasks(request: Request, page: int = Query(1, ge=1), page_size: int = Query(10, ge=1)):
@@ -388,6 +511,72 @@ def get_task(
     )
 
 
+@router.get(
+    "/tasks/{task_id}/events",
+    summary="Stream task progress via Server-Sent Events",
+)
+async def task_events(
+    request: Request,
+    task_id: str = Path(..., description="Task ID"),
+):
+    request_id = base.get_task_id(request)
+    auth = base.get_auth_context(request)
+    task = sm.state.get_task(task_id, user_id=auth.user_id)
+    if not task:
+        raise HttpException(
+            task_id=task_id, status_code=404, message=f"{request_id}: task not found"
+        )
+    return StreamingResponse(
+        _task_event_stream(task_id, auth.user_id, request.is_disconnected),
+        media_type="text/event-stream",
+    )
+
+
+SSE_POLL_SECONDS = 0.5
+SSE_HEARTBEAT_SECONDS = 15
+
+
+async def _task_event_stream(
+    task_id: str,
+    user_id: str,
+    is_disconnected,
+    poll_interval: float = SSE_POLL_SECONDS,
+    heartbeat_interval: float = SSE_HEARTBEAT_SECONDS,
+):
+    """Yield SSE snapshots for a task until it terminates or disconnects.
+
+    Emits ``data: {task_id, state, progress, stage}`` only when the snapshot
+    changes, a ``:heartbeat`` comment to keep idle connections alive, and
+    closes the stream after a terminal state (complete/failed).
+    """
+    last_snapshot = None
+    last_heartbeat = time.monotonic()
+    while True:
+        if await is_disconnected():
+            break
+        task = sm.state.get_task(task_id, user_id=user_id)
+        if task is None:
+            break
+        snapshot = {
+            "task_id": task_id,
+            "state": task.get("state"),
+            "progress": task.get("progress", 0),
+            "stage": task.get("stage"),
+        }
+        if snapshot != last_snapshot:
+            yield f"data: {json.dumps(snapshot)}\n\n"
+            last_snapshot = snapshot
+            if snapshot["state"] in (
+                const.TASK_STATE_COMPLETE,
+                const.TASK_STATE_FAILED,
+            ):
+                break
+        if time.monotonic() - last_heartbeat >= heartbeat_interval:
+            yield ":heartbeat\n\n"
+            last_heartbeat = time.monotonic()
+        await asyncio.sleep(poll_interval)
+
+
 @router.delete(
     "/tasks/{task_id}",
     response_model=TaskDeletionResponse,
@@ -398,8 +587,6 @@ def delete_video(request: Request, task_id: str = Path(..., description="Task ID
     auth = base.get_auth_context(request)
     task = sm.state.get_task(task_id, user_id=auth.user_id)
     if task:
-        if task.get("state") == const.TASK_STATE_QUEUED and _persona_batch_queue is not None:
-            _persona_batch_queue.delete(task_id)
         tasks_dir = utils.task_dir()
         current_task_dir = os.path.join(tasks_dir, task_id)
         if os.path.exists(current_task_dir):

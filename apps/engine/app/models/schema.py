@@ -1,9 +1,10 @@
 import warnings
 from enum import Enum
 from typing import Any, List, Optional, Union
+from urllib.parse import urlparse
 
 import pydantic
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.config import config
 from app.models import publish as publish_models
@@ -260,8 +261,26 @@ class BaseResponse(BaseModel):
     data: Any = None
 
 
+def _validate_webhook_url(value: Optional[str]) -> Optional[str]:
+    """Shared http(s) check for optional webhook callback URLs."""
+    if value is None:
+        return None
+    scheme = urlparse(value).scheme.lower()
+    if scheme not in {"http", "https"}:
+        raise ValueError("webhook_url must be an http(s) URL")
+    return value
+
+
 class TaskVideoRequest(VideoParams, BaseModel):
     publish: Optional[publish_models.PublishParams] = None
+    # Optional callback fired once when the task reaches a terminal state
+    # (completed/failed). Must be http(s); delivery is fire-and-forget.
+    webhook_url: Optional[str] = None
+
+    @field_validator("webhook_url")
+    @classmethod
+    def _validate_task_webhook_url(cls, value: Optional[str]) -> Optional[str]:
+        return _validate_webhook_url(value)
 
 
 PublishParams = publish_models.PublishParams
@@ -279,6 +298,41 @@ class ContentParams(BaseModel):
 class PersonaVideoRequest(BaseModel):
     persona: PersonaParams
     content: ContentParams
+
+
+class BatchVideoItem(BaseModel):
+    """One video in a persona batch request.
+
+    Reuses ContentParams field constraints so per-item validation stays
+    consistent with the single-video contract; goal/platform_ids are
+    optional per item (the batch fills defaults).
+    """
+
+    topic: str = Field(min_length=1, max_length=300)
+    goal: Optional[str] = Field(default=None, max_length=300)
+    platform_ids: Optional[list[str]] = Field(default=None, max_length=20)
+    video_quality: LipSyncQuality = LipSyncQuality.ok
+
+
+class PersonaVideoBatchRequest(BaseModel):
+    """Batch of persona videos: one request, N videos (1..10).
+
+    The N tasks run sequentially in background; each keeps its own
+    state/progress/failure logging, and webhook_url (if given) fires per
+    task on its terminal state. face_mix_percent/face_quality feed the
+    upfront per-video token cost (same formula as scheduled videos).
+    """
+
+    persona: PersonaParams
+    items: list[BatchVideoItem] = Field(min_length=1, max_length=10)
+    webhook_url: Optional[str] = None
+    face_mix_percent: float = Field(default=100.0, ge=0.0, le=100.0)
+    face_quality: str = Field(default="ok", max_length=32)
+
+    @field_validator("webhook_url")
+    @classmethod
+    def _validate_batch_webhook_url(cls, value: Optional[str]) -> Optional[str]:
+        return _validate_webhook_url(value)
 
 
 class TaskQueryRequest(BaseModel):

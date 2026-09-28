@@ -173,7 +173,7 @@ def scheduler_started_msg() -> str:
 
 def generation_batch_msg(count: int, topics: list[str]) -> str:
     listing = "\n".join(f"  • {_clip(topic, 120)}" for topic in topics) if topics else "  (none)"
-    return _clip(f"🎬 Generation batch: {count} video(s) enqueued\n{listing}", DISCORD_MAX_CONTENT)
+    return _clip(f"🎬 Generation batch: {count} video(s) started\n{listing}", DISCORD_MAX_CONTENT)
 
 
 def slot_published_msg(persona: str, topic: str, providers: list[str]) -> str:
