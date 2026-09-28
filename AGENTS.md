@@ -765,6 +765,11 @@ Follow these so the same issues don't come back:
   (observed on 2451284 and 5899432 — "Run OpenCodeReview" step errors).
   Zero new threads + a failed action = infrastructure, not a dirty
   review. Re-run or proceed; do not treat it as a code failure.
+- **The OpenCode review action can fail twice in a row without posting**
+  (observed 2026-09-28 on 84db8ca — both the initial run and the rerun
+  failed in the review step, zero threads). Same rule: infrastructure,
+  not a code failure. After two consecutive failures, stop re-running
+  and document it; the local test suite + CI green is the evidence.
 
 ## Web/API review learnings, round 18 (2026-09-28)
 - **Coercion at the write boundary must be unconditional for the
