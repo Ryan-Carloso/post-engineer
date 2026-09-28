@@ -4,6 +4,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
   recordRecentImageId,
   resolveVideoImage,
+  setPrimaryLibraryImage,
   validateImageFile,
 } from '../persona-images';
 
@@ -154,6 +155,26 @@ describe('recordRecentImageId', () => {
       recordRecentImageId(client, 'persona-1', 'img-formal'),
     ).resolves.toBeUndefined();
     expect(calls.rpcCalls).toHaveLength(1);
+  });
+});
+
+describe('setPrimaryLibraryImage', () => {
+  it('swaps the primary image through the atomic SQL function', async () => {
+    const { calls, client } = mockClient();
+    const result = await setPrimaryLibraryImage(client, 'persona-1', 'img-2');
+    expect(result).toBeNull();
+    expect(calls.rpcCalls).toEqual([
+      {
+        fn: 'set_primary_persona_image',
+        args: { p_persona_id: 'persona-1', p_image_id: 'img-2' },
+      },
+    ]);
+  });
+
+  it('returns an error when the swap RPC fails', async () => {
+    const { client } = mockClient({ historyError: { message: 'db down' } });
+    const result = await setPrimaryLibraryImage(client, 'persona-1', 'img-2');
+    expect(result).toEqual({ error: 'Failed to update image.' });
   });
 });
 

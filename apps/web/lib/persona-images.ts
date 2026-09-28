@@ -160,21 +160,16 @@ export async function setPrimaryLibraryImage(
   personaId: string,
   imageId: string,
 ): Promise<{ error: string } | null> {
-  const { error: unsetError } = await supabase
-    .from('persona_images')
-    .update({ is_primary: false })
-    .eq('persona_id', personaId)
-    .neq('id', imageId);
-  if (unsetError) {
-    console.error('[persona-images] unset primary failed', { error: unsetError });
-    return { error: 'Failed to update image.' };
-  }
-  const { error: setError } = await supabase
-    .from('persona_images')
-    .update({ is_primary: true })
-    .eq('id', imageId);
-  if (setError) {
-    console.error('[persona-images] set primary failed', { error: setError });
+  // The swap runs inside the set_primary_persona_image SQL function: it
+  // locks the parent persona row and performs demote-then-promote
+  // back-to-back, so concurrent swaps cannot interleave (two separate
+  // UPDATEs from the app could transiently leave zero or two primaries).
+  const { error } = await supabase.rpc('set_primary_persona_image', {
+    p_persona_id: personaId,
+    p_image_id: imageId,
+  });
+  if (error) {
+    console.error('[persona-images] set primary failed', { error });
     return { error: 'Failed to update image.' };
   }
   return null;

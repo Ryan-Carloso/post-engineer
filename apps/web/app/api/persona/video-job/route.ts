@@ -247,9 +247,16 @@ export async function POST(request: Request): Promise<NextResponse> {
   // (camel); resolved against the persona's image library in the persona
   // branch below. Deleted here so it never reaches the engine as a loose
   // field. An empty string or a non-string is a client bug: rejected with
-  // 400 in the persona branch instead of being silently ignored.
+  // 400 here, before the faceless/persona split, so faceless callers also
+  // get a signal instead of a silent ignore.
   const rawImageId =
     requestBody.image_id === undefined ? requestBody.imageId : requestBody.image_id;
+  if (rawImageId !== undefined && (typeof rawImageId !== 'string' || rawImageId.length === 0)) {
+    return NextResponse.json(
+      { success: false, error: 'image_id must be a non-empty string.' },
+      { status: 400 },
+    );
+  }
   delete requestBody.image_id;
   delete requestBody.imageId;
 
@@ -670,19 +677,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     // recently used images, then primary/first). The engine still receives
     // a single resolved photo URL, so no engine changes are needed.
     // Legacy personas (empty library) keep the behavior above untouched.
-    // An empty string is a client bug (reject it); a non-string is too —
-    // silently ignoring it would hide a broken integration.
+    // rawImageId is pre-validated above (non-empty string when defined);
+    // only whitespace-only ids are still rejected here.
     const requestedImageId = typeof rawImageId === 'string' ? rawImageId : null;
-    if (
-      rawImageId !== undefined &&
-      rawImageId !== null &&
-      requestedImageId === null
-    ) {
-      return NextResponse.json(
-        { success: false, error: 'image_id must be a string.' },
-        { status: 400 },
-      );
-    }
     if (requestedImageId !== null && requestedImageId.trim().length === 0) {
       return NextResponse.json(
         { success: false, error: 'image_id must be a non-empty string.' },

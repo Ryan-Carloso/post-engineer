@@ -221,8 +221,7 @@ describe('PersonaImageLibrarySection', () => {
     expect(screen.getByDisplayValue('fresh-tag')).toBeInTheDocument();
   });
 
-  it('does not clobber an in-progress edit when the library refetches', async () => {
-    apiMocks.images = [makeImage('img-1')];
+  it('does not clobber an in-progress edit when the library refetches', async () => {    apiMocks.images = [makeImage('img-1')];
     const { rerender } = render(
       <QueryClientProvider client={new QueryClient()}>
         <PersonaImageLibrarySection personaId="persona-1" />
@@ -237,5 +236,37 @@ describe('PersonaImageLibrarySection', () => {
       </QueryClientProvider>,
     );
     expect(screen.getByDisplayValue('tag-img-1-draft')).toBeInTheDocument();
+  });
+
+  it('shows an error when setting primary rejects', async () => {
+    apiMocks.images = [makeImage('img-1')];
+    apiMocks.updateMutateAsync.mockRejectedValue(new Error('network down'));
+    renderSection();
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'persona.librarySetPrimary' }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('persona.libraryUpdateError')).toBeInTheDocument();
+    });
+    expect(apiMocks.updateMutateAsync).toHaveBeenCalledWith({
+      id: 'img-1',
+      isPrimary: true,
+    });
+  });
+
+  it('shows an error when setting primary returns success:false', async () => {
+    apiMocks.images = [makeImage('img-1')];
+    apiMocks.updateMutateAsync.mockResolvedValue({ success: false, error: 'db down' });
+    renderSection();
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'persona.librarySetPrimary' }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('db down')).toBeInTheDocument();
+    });
   });
 });

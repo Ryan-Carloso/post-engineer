@@ -56,14 +56,24 @@ export default function PersonaPage() {
   );
 }
 
+//---------------
+// resolveEditingPersonaId — the persona id being edited comes from ?edit=
+// (current route) or the legacy /personas/<id>/edit path. Shared by
+// PersonaPageContent and PersonaSubmit so the two cannot drift if the
+// legacy route format ever changes.
+//---------------
+function resolveEditingPersonaId(pathname: string, editId: string | null): string | null {
+  const editMatch = pathname.match(/^\/personas\/([^/]+)\/edit$/);
+  return editMatch?.[1] ?? editId;
+}
+
 const PersonaPageContent = () => {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const editId = searchParams.get('edit');
   // Same edit-id resolution as PersonaSubmit: ?edit= or the legacy
   // /personas/<id>/edit path. The image library needs a persisted persona.
-  const editMatch = pathname.match(/^\/personas\/([^/]+)\/edit$/);
-  const editingPersonaId = editMatch?.[1] ?? editId;
+  const editingPersonaId = resolveEditingPersonaId(pathname, editId);
   const personasQuery = usePersonaListQuery();
   const editingPersona = useMemo(
     () => (editId ? personasQuery.data?.find((item) => item.id === editId) : undefined),
@@ -935,8 +945,7 @@ const PersonaSubmit = ({ editId }: { editId: string | null }) => {
 
   // Same page serves create and edit: the id comes from ?edit= (current route)
   // or the legacy /personas/<id>/edit.
-  const editMatch = pathname.match(/^\/personas\/([^/]+)\/edit$/);
-  const editingPersonaId = editMatch?.[1] ?? editId;
+  const editingPersonaId = resolveEditingPersonaId(pathname, editId);
   const isEditing = Boolean(editingPersonaId);
 
   const handleSubmit = async () => {

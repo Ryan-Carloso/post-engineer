@@ -40,9 +40,14 @@ function mockClient() {
     personaDeletes: 0,
     imageInserts: [] as Array<Record<string, unknown>>,
     primaryUpdates: [] as Array<{ id: string; isPrimary: boolean }>,
+    primarySwaps: [] as Array<Record<string, unknown>>,
   };
   let imageSeq = 0;
   const client = {
+    rpc: vi.fn((fn: string, args: Record<string, unknown>) => {
+      if (fn === 'set_primary_persona_image') calls.primarySwaps.push(args);
+      return Promise.resolve({ data: null, error: null });
+    }),
     from: vi.fn((table: string) => {
       if (table === 'personas') {
         return {
@@ -138,14 +143,15 @@ describe('POST /api/persona with image library', () => {
     expect(calls.imageInserts[1].description).toBe('at the office');
   });
 
-  it('marks the chosen primary index', async () => {
+  it('marks the chosen primary index via the atomic primary-swap RPC', async () => {
     const calls = mockClient();
     const res = await POST(
       createRequest({ ...BASE_FIELDS, imagePrimaryIndex: '1' }, [png('a.png'), png('b.png')]),
     );
     expect(res.status).toBe(200);
-    const primary = calls.primaryUpdates.find((update) => update.isPrimary);
-    expect(primary?.id).toBe('img-2');
+    expect(calls.primarySwaps).toEqual([
+      { p_persona_id: PERSONA_ID, p_image_id: 'img-2' },
+    ]);
   });
 
   it('rejects more than 10 library images before creating anything', async () => {
@@ -183,5 +189,50 @@ describe('POST /api/persona with image library', () => {
     const body = (await res.json()) as { imageIds: string[] };
     expect(body.imageIds).toEqual([]);
     expect(calls.imageInserts).toHaveLength(0);
+  });
+
+  it('rejects an out-of-range imagePrimaryIndex before creating anything', async () => {
+    const calls = mockClient();
+    const res = await POST(
+      createRequest({ ...BASE_FIELDS, imagePrimaryIndex: '5' }, [png('a.png'), png('b.png')]),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { success: boolean; error: string };
+    expect(body.success).toBe(false);
+    expect(body.error).toContain('imagePrimaryIndex');
+    expect(calls.personaInserts).toBe(0);
+  });
+
+  it('accepts library images that are not built by the global File constructor', async () => {
+    // The server runtime (undici) File can be a different constructor than
+    // the global File. The route must use a structural check: a file-like
+    // object that is NOT `instanceof File` must still be accepted as a
+    // library image instead of being silently dropped.
+    const calls = mockClient();
+    const structuralFile = {
+      name: 'a.png',
+      type: 'image/png',
+      size: 1024,
+      arrayBuffer: async () => new ArrayBuffer(1024),
+    };
+    expect(structuralFile).not.toBeInstanceOf(File);
+    class StubFormData extends FormData {
+      override getAll(name: string): FormDataEntryValue[] {
+        if (name === 'images') return [structuralFile as unknown as FormDataEntryValue];
+        return super.getAll(name);
+      }
+    }
+    const form = new StubFormData();
+    form.append('name', 'Ana');
+    form.append('voiceId', 'voice-1');
+    form.append('photo', png('main.png'));
+    const request = { formData: async () => form } as unknown as Request;
+
+    const res = await POST(request);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { success: boolean; imageIds: string[] };
+    expect(body.success).toBe(true);
+    expect(body.imageIds).toHaveLength(1);
+    expect(calls.imageInserts).toHaveLength(1);
   });
 });

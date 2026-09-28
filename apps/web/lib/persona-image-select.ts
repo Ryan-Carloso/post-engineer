@@ -60,7 +60,11 @@ export function selectPersonaImage(
   if (input.imageId) {
     const explicit = images.find((image) => image.id === input.imageId);
     if (explicit) return explicit;
-    // Unknown id: fall through to automatic selection instead of failing.
+    // Unreachable under the documented contract: the sole caller
+    // (resolveVideoImage) returns 404 for an unknown id before ever calling
+    // selectPersonaImage. The fall-through stays as a defensive last resort
+    // for any future caller that skips that check — automatic selection
+    // rather than a broken video job.
   }
 
   const recent = new Set(recentIds);

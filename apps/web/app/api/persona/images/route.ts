@@ -83,7 +83,10 @@ async function getOwnedImage(
   supabase: SupabaseClient,
   auth: Authed,
   imageId: string,
-): Promise<{ image: PersonaLibraryImage; error: NextResponse | null }> {
+): Promise<
+  | { image: PersonaLibraryImage; error: null }
+  | { image: null; error: NextResponse }
+> {
   interface OwnedRow extends PersonaLibraryImage {
     persona_id: string;
   }
@@ -94,7 +97,7 @@ async function getOwnedImage(
     .single();
   const image = data as OwnedRow | null;
   if (error || !image) {
-    return { image: image as unknown as PersonaLibraryImage, error: errorResponse(404, 'Image not found.') };
+    return { image: null, error: errorResponse(404, 'Image not found.') };
   }
   const { data: persona, error: personaError } = await supabase
     .from('personas')
@@ -103,11 +106,11 @@ async function getOwnedImage(
     .eq('user_id', auth.userId)
     .single();
   if (personaError || !persona) {
-    return { image: image as unknown as PersonaLibraryImage, error: errorResponse(404, 'Image not found.') };
+    return { image: null, error: errorResponse(404, 'Image not found.') };
   }
   if (!isPersonaAllowed(auth.personaIds, image.persona_id)) {
     return {
-      image: image as unknown as PersonaLibraryImage,
+      image: null,
       error: errorResponse(403, 'This API key does not have access to this persona.'),
     };
   }
@@ -240,13 +243,19 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     const patch = body as { tag?: unknown; description?: unknown; isPrimary?: unknown };
     if (patch.tag !== undefined) {
       if (typeof patch.tag !== 'string') return errorResponse(400, 'tag must be a string.');
-      updates.tag = patch.tag.trim().slice(0, MAX_TAG_LENGTH);
+      if (patch.tag.trim().length > MAX_TAG_LENGTH) {
+        return errorResponse(400, `tag must be at most ${MAX_TAG_LENGTH} characters.`);
+      }
+      updates.tag = patch.tag.trim();
     }
     if (patch.description !== undefined) {
       if (typeof patch.description !== 'string') {
         return errorResponse(400, 'description must be a string.');
       }
-      updates.description = patch.description.trim().slice(0, MAX_DESCRIPTION_LENGTH);
+      if (patch.description.trim().length > MAX_DESCRIPTION_LENGTH) {
+        return errorResponse(400, `description must be at most ${MAX_DESCRIPTION_LENGTH} characters.`);
+      }
+      updates.description = patch.description.trim();
     }
     if (patch.isPrimary !== undefined) {
       if (typeof patch.isPrimary !== 'boolean') {

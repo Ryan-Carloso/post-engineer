@@ -284,6 +284,19 @@ function LibraryImageCard({
     }
   };
 
+  const setPrimary = async (): Promise<void> => {
+    setCardError(null);
+    try {
+      const result = await updateMutation.mutateAsync({ id: image.id, isPrimary: true });
+      if (!result.success) {
+        setCardError(result.error ?? t('persona.libraryUpdateError'));
+      }
+    } catch (primaryError) {
+      console.error('[persona-image-library] set primary failed', { error: primaryError });
+      setCardError(t('persona.libraryUpdateError'));
+    }
+  };
+
   const remove = async (): Promise<void> => {
     if (!window.confirm(t('persona.libraryRemoveConfirm'))) return;
     setCardError(null);
@@ -363,7 +376,7 @@ function LibraryImageCard({
           {!image.is_primary ? (
             <button
               type="button"
-              onClick={() => updateMutation.mutate({ id: image.id, isPrimary: true })}
+              onClick={setPrimary}
               disabled={updateMutation.isPending}
               className="text-xs text-neutral-600 underline disabled:opacity-50"
             >

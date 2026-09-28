@@ -75,9 +75,12 @@ export async function POST(request: Request): Promise<NextResponse> {
   // `imageTags` / `imageDescriptions` JSON arrays and an optional
   // `imagePrimaryIndex`. Pre-validated here so a bad file fails before any
   // upload or insert happens.
+  // Structural check on purpose: the undici File constructor in the server
+  // runtime can differ from the global File, and `instanceof File` would
+  // silently drop every library image in that case (isFilePart, below).
   const libraryFiles = formData
     .getAll('images')
-    .filter((value): value is File => value instanceof File && value.size > 0);
+    .filter((value): value is File => isFilePart(value) && value.size > 0);
   const libraryInputs: LibraryImageInput[] = libraryFiles.map((file, index) => ({
     file,
     tag: parseJsonStringArray(formData.get('imageTags'))[index] ?? '',
@@ -88,6 +91,10 @@ export async function POST(request: Request): Promise<NextResponse> {
     body.values.faceMixPercent,
     libraryInputs,
   );
+  const primaryIndex = parsePrimaryIndex(formData.get('imagePrimaryIndex'));
+  if (primaryIndex !== null && primaryIndex >= libraryFiles.length) {
+    return errorResponse(400, 'imagePrimaryIndex is out of range for the provided images.');
+  }
   if (libraryError) {
     return errorResponse(400, libraryError);
   }
@@ -151,7 +158,8 @@ export async function POST(request: Request): Promise<NextResponse> {
       return errorResponse(added.status, added.error);
     }
     libraryImageIds = added.images.map((image) => image.id);
-    const primaryIndex = parsePrimaryIndex(formData.get('imagePrimaryIndex'));
+    // primaryIndex was validated against the uploaded file count up front,
+    // so it is in range here.
     if (primaryIndex !== null && primaryIndex < added.images.length) {
       const primaryError = await setPrimaryLibraryImage(
         supabase,

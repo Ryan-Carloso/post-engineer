@@ -44,8 +44,8 @@ interface DbState {
   listRows: unknown[];
   insertedRow: unknown | null;
   updatedRow: unknown | null;
-  /** Makes the first persona_images UPDATE fail (unset-primary error path). */
-  failFirstUpdate?: boolean;
+  /** Makes the set_primary_persona_image RPC fail (primary-swap error path). */
+  failPrimarySwap?: boolean;
   /** Makes the storage remove() call fail (orphan-file logging path). */
   storageRemoveError?: { message: string } | null;
 }
@@ -70,15 +70,18 @@ function mockClient(state: Partial<DbState> = {}) {
     updatedRow: null,
     ...state,
   };
-  const calls = { unsetPrimary: 0, removedPaths: [] as string[] };
-  const updateMock = vi.fn(() => {
-    calls.unsetPrimary += 1;
-    if (full.failFirstUpdate === true && calls.unsetPrimary === 1) {
-      return terminal({ data: null, error: { message: 'unset failed' } });
-    }
-    return terminal({ data: full.updatedRow, error: null });
-  });
+  const calls = { primarySwaps: [] as Array<Record<string, unknown>>, removedPaths: [] as string[] };
+  const updateMock = vi.fn(() => terminal({ data: full.updatedRow, error: null }));
   const client = {
+    rpc: vi.fn((fn: string, args: Record<string, unknown>) => {
+      if (fn === 'set_primary_persona_image') {
+        calls.primarySwaps.push(args);
+        if (full.failPrimarySwap === true) {
+          return Promise.resolve({ data: null, error: { message: 'swap failed' } });
+        }
+      }
+      return Promise.resolve({ data: null, error: null });
+    }),
     from: vi.fn((table: string) => {
       if (table === 'personas') {
         return terminal({ data: full.persona, error: full.persona ? null : { message: 'nf' } });
@@ -285,22 +288,41 @@ describe('PATCH /api/persona/images', () => {
     expect(body.image.tag).toBe('formal');
   });
 
-  it('unsets other primaries when marking an image primary', async () => {
+  it('swaps the primary image atomically via the set_primary_persona_image RPC', async () => {
     mockAuth({ userId: USER_ID });
     const { calls } = mockClient({ imageRow: IMAGE_ROW, updatedRow: IMAGE_ROW });
     const res = await PATCH(patchRequest({ id: IMAGE_ROW.id, isPrimary: true }));
     expect(res.status).toBe(200);
-    // One update for unsetting the others, one for the row itself.
-    expect(calls.unsetPrimary).toBe(2);
+    // One atomic swap: no separate demote/promote updates from the app.
+    expect(calls.primarySwaps).toEqual([
+      { p_persona_id: PERSONA_ID, p_image_id: IMAGE_ROW.id },
+    ]);
   });
 
-  it('returns 500 when the unset-primary update fails', async () => {
+  it('returns 500 when the primary-swap RPC fails', async () => {
     mockAuth({ userId: USER_ID });
-    mockClient({ imageRow: IMAGE_ROW, updatedRow: IMAGE_ROW, failFirstUpdate: true });
+    mockClient({ imageRow: IMAGE_ROW, updatedRow: IMAGE_ROW, failPrimarySwap: true });
     const res = await PATCH(patchRequest({ id: IMAGE_ROW.id, isPrimary: true }));
     expect(res.status).toBe(500);
     const body = (await res.json()) as { success: boolean; error: string };
     expect(body.success).toBe(false);
+  });
+
+  it('rejects an over-length tag instead of truncating it', async () => {
+    mockAuth({ userId: USER_ID });
+    mockClient({ imageRow: IMAGE_ROW, updatedRow: IMAGE_ROW });
+    const res = await PATCH(patchRequest({ id: IMAGE_ROW.id, tag: 'x'.repeat(101) }));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { success: boolean; error: string };
+    expect(body.success).toBe(false);
+    expect(body.error).toContain('at most');
+  });
+
+  it('rejects an over-length description instead of truncating it', async () => {
+    mockAuth({ userId: USER_ID });
+    mockClient({ imageRow: IMAGE_ROW, updatedRow: IMAGE_ROW });
+    const res = await PATCH(patchRequest({ id: IMAGE_ROW.id, description: 'y'.repeat(501) }));
+    expect(res.status).toBe(400);
   });
 });
 

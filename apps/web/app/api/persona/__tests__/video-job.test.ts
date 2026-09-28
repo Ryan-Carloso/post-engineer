@@ -313,6 +313,38 @@ describe('POST /api/persona/video-job', () => {
     }
   });
 
+  it('returns 400 when a faceless request carries a non-string image_id', async () => {
+    mockSupabase(PERSONA);
+
+    const res = await POST(
+      jsonRequest({
+        video_subject: 'viagem',
+        audio_url: 'https://cdn.test/narracao.mp3',
+        image_id: 123,
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { success: boolean; error: string };
+    expect(body.error).toContain('image_id');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when a faceless request carries an empty image_id', async () => {
+    mockSupabase(PERSONA);
+
+    const res = await POST(
+      jsonRequest({
+        video_subject: 'viagem',
+        audio_url: 'https://cdn.test/narracao.mp3',
+        image_id: '',
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('returns 400 with invalid JSON', async () => {
     mockSupabase(PERSONA);
 

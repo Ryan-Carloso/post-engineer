@@ -111,3 +111,33 @@ as $$
     (array[p_image_id] || array_remove(coalesce(recent_image_ids, '{}'), p_image_id))[1:3]
   where id = p_persona_id;
 $$;
+
+-- 6. Atomic primary-image swap: the app used to demote-then-promote with two
+--    separate UPDATEs, which concurrent swaps could interleave (transiently
+--    leaving zero or two primaries despite the partial unique index). This
+--    function locks the parent persona row first so concurrent swaps
+--    serialize, then demotes the old primary and promotes the new one
+--    back-to-back. Raises if the image does not belong to the persona (the
+--    exception rolls back the demote too).
+--    Trust boundary: like record_persona_image_use, this function performs
+--    no ownership check itself — it is called via the service-role client
+--    (setPrimaryLibraryImage in apps/web/lib/persona-images.ts) only after
+--    the route validated that the image belongs to the caller's persona.
+create or replace function public.set_primary_persona_image(p_persona_id uuid, p_image_id uuid)
+returns void
+language plpgsql
+as $$
+begin
+  -- Serialize concurrent swaps on the parent row.
+  perform 1 from public.personas where id = p_persona_id for update;
+  update public.persona_images
+  set is_primary = false
+  where persona_id = p_persona_id and is_primary;
+  update public.persona_images
+  set is_primary = true
+  where id = p_image_id and persona_id = p_persona_id;
+  if not found then
+    raise exception 'image % does not belong to persona %', p_image_id, p_persona_id;
+  end if;
+end;
+$$;
