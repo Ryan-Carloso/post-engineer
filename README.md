@@ -1,18 +1,29 @@
 # Post Engineer
 
+[![CI](https://github.com/Ryan-Carloso/post-engineer/actions/workflows/ci.yml/badge.svg)](https://github.com/Ryan-Carloso/post-engineer/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![npm](https://img.shields.io/npm/v/post-engineer-mcp.svg)](https://www.npmjs.com/package/post-engineer-mcp)
+
 [🇧🇷🇵🇹 Leia em Português](README.pt-BR.md)
 
 Create AI video personas that generate and publish short videos on autopilot.
 
 Give a persona a niche and a voice; Post Engineer writes the script, generates the
 voiceover, assembles the video, and publishes it to your social accounts on a
-schedule. Manage everything from the web dashboard, or drive it programmatically
-through the API and the MCP server.
+schedule. Manage everything from the web dashboard, drive it programmatically
+through the API, or let your AI agent run it through the MCP server — all from
+this one monorepo.
+
+> Prefer the hosted version? The same platform runs at
+> [post-engineer.com](https://post-engineer.com) — you can skip the local
+> setup and connect the MCP server straight to your account (see
+> [MCP server](#mcp-server)).
 
 ## What it does
 
 - **AI personas** — persistent characters with a voice, face, language, and niche.
-  Optional lip-synced intro clips for a human-like presenter.
+  Optional lip-synced intro clips for a human-like presenter, plus a persona
+  image library for face consistency across videos.
 - **Automatic video generation** — topic in, HD short video out: script (LLM),
   voiceover (TTS), subtitles, stock footage, and background music, assembled
   into a finished video.
@@ -20,21 +31,26 @@ through the API and the MCP server.
   and Bluesky; track upcoming and past posts with per-account status.
 - **Dashboard** — personas, posts history, connected social accounts, API keys,
   and token billing in one Next.js app.
-- **Agent control** — an MCP server exposes the same capabilities to AI agents
-  (separate repo: [post-engineer-mcp](https://github.com/Ryan-Carloso/post-engineer-mcp)).
+- **Agent control** — an MCP server ([`apps/mcp/`](apps/mcp/)) exposes the same
+  capabilities to AI agents (Claude, Cursor, Codex, OpenCode): create personas,
+  generate videos, check status, and schedule posts.
 
-## Architecture
+## Repository layout
+
+This is a pnpm/Nx monorepo — web, engine, and MCP live together:
 
 ```text
 apps/web/       Next.js 15 dashboard + API routes (TypeScript)
 apps/engine/    Python/FastAPI video-generation engine
+apps/mcp/       MCP server for AI agents (npm package: post-engineer-mcp)
 ```
 
 The web app owns authentication, personas, scheduling, OAuth, billing, and the
 API. It calls the engine over HTTP (authenticated with a shared secret,
-`MONEYPRINT_API_SECRET`) for video generation, TTS, and publishing. Postgres
-(via Supabase) is the system of record: personas, schedules, OAuth tokens
-(encrypted at rest), API keys, and token balances.
+`MONEYPRINT_API_SECRET`) for video generation, TTS, and publishing. The MCP
+server talks to the web API with a user API key. Postgres (via Supabase) is
+the system of record: personas, schedules, OAuth tokens (encrypted at rest),
+API keys, and token balances.
 
 ## Prerequisites
 
@@ -50,7 +66,7 @@ API. It calls the engine over HTTP (authenticated with a shared secret,
 ### 1. Install dependencies
 
 ```bash
-git clone <this-repo>
+git clone https://github.com/Ryan-Carloso/post-engineer.git
 cd post-engineer
 pnpm install
 ```
@@ -59,13 +75,12 @@ pnpm install
 
 1. Create a project at [supabase.com](https://supabase.com) (or point at your
    self-hosted instance).
-2. Provision the database schema in your project. The schema is not versioned
-   in this repository — the web app expects the tables for OAuth tokens,
-   personas, schedules, API keys (`user_api_keys`), token billing, and the MCP
-   OAuth clients to already exist.
+2. In the Supabase SQL editor, apply the database scripts. The persona image
+   library script lives in this repo: [`supabase/persona-images.sql`](supabase/persona-images.sql)
+   (manual-apply by design).
 
    > **Need help?** If you are setting up a fresh project and need the current
-   > if have any questions, reach out:
+   > schema snapshot, reach out:
    > **Email:** [ryan@post-engineer.com](mailto:ryan@post-engineer.com) ·
    > **WhatsApp:** [+351 962 248 268](https://wa.me/351962248268)
 
@@ -143,15 +158,44 @@ pnpm dev:engine   # video engine API at http://127.0.0.1:8080 (see /docs there)
 Useful commands (all verified against `package.json` / `project.json`):
 
 ```bash
-pnpm test        # all tests (web Vitest + engine pytest, via Nx)
-pnpm lint        # ESLint (web) + ruff (engine)
-pnpm typecheck   # tsc --noEmit (web) + compileall (engine)
+pnpm test        # all tests (web + engine + MCP, via Nx)
+pnpm lint        # ESLint (web + MCP) + ruff (engine)
+pnpm typecheck   # tsc --noEmit (web + MCP) + engine checks
 pnpm build       # production build of the web app
 pnpm graph       # Nx project graph
 ```
 
 Per-app details: [apps/web/README.md](apps/web/README.md),
-[apps/engine/README.md](apps/engine/README.md).
+[apps/engine/README.md](apps/engine/README.md),
+[apps/mcp/README.md](apps/mcp/README.md).
+
+## MCP server
+
+The MCP server ([`apps/mcp/`](apps/mcp/), npm package
+[`post-engineer-mcp`](https://www.npmjs.com/package/post-engineer-mcp)) lets AI
+agents create personas, generate videos, check generation status, and schedule
+posts on your account. You don't need to clone this repo to use it against the
+hosted platform:
+
+```json
+{
+  "mcpServers": {
+    "post-engineer": {
+      "type": "local",
+      "command": ["npx", "-y", "post-engineer-mcp"],
+      "environment": {
+        "POST_ENGINEER_API_KEY": "<MY_API_KEY>"
+      }
+    }
+  }
+}
+```
+
+Generate `<MY_API_KEY>` at
+[post-engineer.com/api-keys](https://post-engineer.com/api-keys). To point the
+server at your own self-hosted instance instead, set
+`POST_ENGINEER_API_URL` (see [apps/mcp/README.md](apps/mcp/README.md) for the
+full tool list, OpenCode timeout tips, and local development).
 
 ## External services you must key yourself
 
@@ -180,8 +224,8 @@ Questions, get in touch:
 
 ## License
 
-Licensed under the [Apache License, Version 2.0](LICENSE) — see [CONTRIBUTING.md](CONTRIBUTING.md)
-and [SECURITY.md](SECURITY.md).
+Licensed under the [Apache License, Version 2.0](LICENSE) — see
+[CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
 
 ## Credits
 
