@@ -106,7 +106,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
       messages.push(t('persona.libraryLimitReached', { max: MAX_LIBRARY_IMAGES }));
     }
     if (rejectedCount > 0) {
-      messages.push(t('persona.libraryFilesRejected'));
+      messages.push(t('persona.libraryFilesRejected', { count: rejectedCount }));
     }
     if (messages.length > 0) setError(messages.join(' '));
     setPending((prev) => [
@@ -337,6 +337,19 @@ function LibraryImageCard({
     }
   }, [editing, image.tag, image.description]);
 
+  // Map server warning codes to localized messages; unknown codes pass
+  // through raw so new server warnings are never silently dropped.
+  const mapWarningCodes = (codes: string[]): string =>
+    codes
+      .map((code) =>
+        code === 'primary_swap_failed'
+          ? t('persona.libraryWarningPrimarySwap')
+          : code === 'metadata_save_failed'
+            ? t('persona.libraryWarningMetadataSave')
+            : code,
+      )
+      .join(' ');
+
   const save = async (): Promise<void> => {
     setCardError(null);
     try {
@@ -347,6 +360,11 @@ function LibraryImageCard({
       });
       if (result.success) {
         setEditing(false);
+        // Partial success (e.g. primary swap failed after metadata save):
+        // surface the warning codes so the user knows the true state.
+        if (result.warnings && result.warnings.length > 0) {
+          setCardError(mapWarningCodes(result.warnings));
+        }
       } else {
         setCardError(result.error ?? t('persona.libraryUpdateError'));
       }
@@ -362,6 +380,10 @@ function LibraryImageCard({
       const result = await updateMutation.mutateAsync({ id: image.id, isPrimary: true });
       if (!result.success) {
         setCardError(result.error ?? t('persona.libraryUpdateError'));
+      } else if (result.warnings && result.warnings.length > 0) {
+        // Partial success: surface warning codes so the user knows the
+        // true state (e.g. primary swapped but something else failed).
+        setCardError(mapWarningCodes(result.warnings));
       }
     } catch (primaryError) {
       console.error('[persona-image-library] set primary failed', { error: primaryError });

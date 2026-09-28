@@ -408,4 +408,13 @@ describe('api', () => {
     await expect(result.current.mutateAsync('img-1')).rejects.toThrow('personaId is required.');
     expect(fetch).not.toHaveBeenCalled();
   });
+
+  it('updatePersonaImage rejects isPrimary:false without a network call', async () => {
+    const { updatePersonaImage } = await import('@/lib/api');
+    // The type is isPrimary?: true; the runtime guard protects JS callers.
+    await expect(
+      updatePersonaImage({ id: 'img-1', isPrimary: false as unknown as true }),
+    ).rejects.toThrow('isPrimary cannot be false');
+    expect(fetch).not.toHaveBeenCalled();
+  });
 });

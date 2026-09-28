@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { PostEngineerClient } from './client.js';
-import { MAX_LIBRARY_IMAGES, MAX_LIBRARY_IMAGE_BYTES } from './client.js';
+import { MAX_LIBRARY_IMAGES, MAX_LIBRARY_IMAGE_BYTES, MAX_LIBRARY_TAG_LENGTH, MAX_LIBRARY_DESCRIPTION_LENGTH } from './client.js';
 import { getErrorMessage } from './errors.js';
 
 export type McpToolResponse = CallToolResult;
@@ -26,8 +26,8 @@ export function missingProviderAccountIds(args: {
 // limits and descriptions can't drift apart.
 const LibraryImageFields = {
   path: z.string().min(1).describe(`Local file path to the image (JPG/JPEG, PNG, or WebP, max ${MAX_LIBRARY_IMAGE_BYTES / 1024 / 1024}MB)`),
-  tag: z.string().max(100).optional().describe('Short tag for deterministic per-video matching (e.g. casual, formal, gym)'),
-  description: z.string().max(500).optional().describe('Description of the photo for tag/keyword matching (e.g. smiling at the beach at sunset)'),
+  tag: z.string().max(MAX_LIBRARY_TAG_LENGTH).optional().describe('Short tag for deterministic per-video matching (e.g. casual, formal, gym)'),
+  description: z.string().max(MAX_LIBRARY_DESCRIPTION_LENGTH).optional().describe('Description of the photo for tag/keyword matching (e.g. smiling at the beach at sunset)'),
 };
 
 // Single source of truth: index.ts registers these shapes directly with the

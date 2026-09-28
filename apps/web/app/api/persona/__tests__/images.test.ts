@@ -216,6 +216,24 @@ describe('GET /api/persona/images', () => {
       `https://supabase.test/signed/${IMAGE_ROW.image_path}`,
     );
   });
+
+  it('does not expose the internal storage path (image_path) in the response', async () => {
+    mockAuth({ userId: USER_ID });
+    mockClient({ listRows: [IMAGE_ROW] });
+    const res = await GET(
+      new Request(`http://localhost/api/persona/images?personaId=${PERSONA_ID}`),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      success: boolean;
+      images: Array<Record<string, unknown>>;
+    };
+    expect(body.images[0]).not.toHaveProperty('image_path');
+    // Only the UI-needed fields are projected.
+    expect(Object.keys(body.images[0] ?? {}).sort()).toEqual(
+      ['created_at', 'description', 'id', 'image_url', 'is_primary', 'tag'].sort(),
+    );
+  });
 });
 
 describe('POST /api/persona/images', () => {

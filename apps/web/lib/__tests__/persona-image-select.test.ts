@@ -105,4 +105,15 @@ describe('selectPersonaImage', () => {
     expect(MAX_PERSONA_IMAGES).toBe(10);
     expect(PERSONA_IMAGE_HISTORY_LIMIT).toBe(3);
   });
+
+  it('tokenizes non-Latin scripts (Cyrillic) for keyword matching', () => {
+    // A Latin-only character class would produce an empty keyword set and
+    // silently degrade to primary/first for non-Latin personas.
+    const library = [
+      img('img-ru', 'повседневный', 'женщина в джинсах в парке', true),
+      img('img-en', 'formal', 'business woman in a suit'),
+    ];
+    const picked = selectPersonaImage(library, { topic: 'женщина в парке' }, []);
+    expect(picked?.id).toBe('img-ru');
+  });
 });

@@ -190,10 +190,16 @@ export async function GET(request: Request): Promise<NextResponse> {
     return errorResponse(500, 'Failed to list images.');
   }
   // The bucket is private: the UI needs signed URLs to render thumbnails.
+  // Project only the fields the UI needs; the internal storage path
+  // (image_path) is not exposed to the browser.
   const images = await Promise.all(
     ((data ?? []) as Array<{ image_path: string } & Record<string, unknown>>).map(
       async (row) => ({
-        ...row,
+        id: row.id,
+        tag: row.tag,
+        description: row.description,
+        is_primary: row.is_primary,
+        created_at: row.created_at,
         image_url: await signImageUrl(supabase, row.image_path),
       }),
     ),

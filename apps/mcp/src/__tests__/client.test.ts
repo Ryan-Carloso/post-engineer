@@ -898,6 +898,43 @@ describe('PostEngineerClient persona image library', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  it('createPersona trims and drops whitespace-only tag/description like addPersonaImage', async () => {
+    const path = await writeTempImage('a.jpg');
+    await client.createPersona({
+      name: 'Tech Creator',
+      avatarUrl: 'https://example.com/avatar.png',
+      images: [{ path, tag: '  casual  ', description: '   ' }],
+    });
+
+    const formData = formDataOf();
+    expect(JSON.parse(String(formData.get('imageTags')))).toEqual(['casual']);
+    expect(JSON.parse(String(formData.get('imageDescriptions')))).toEqual(['']);
+  });
+
+  it('createPersona rejects an oversized tag before uploading', async () => {
+    const path = await writeTempImage('a.jpg');
+    await expect(
+      client.createPersona({
+        name: 'X',
+        avatarUrl: 'https://example.com/a.png',
+        images: [{ path, tag: 'x'.repeat(101) }],
+      })
+    ).rejects.toThrow(/exceeds 100 characters/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('createPersona rejects an oversized description before uploading', async () => {
+    const path = await writeTempImage('a.jpg');
+    await expect(
+      client.createPersona({
+        name: 'X',
+        avatarUrl: 'https://example.com/a.png',
+        images: [{ path, description: 'x'.repeat(501) }],
+      })
+    ).rejects.toThrow(/exceeds 500 characters/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it('createPersona rejects imagePrimaryIndex when no images are supplied', async () => {
     // A lone index with no images is a caller bug: fail fast instead of a
     // silent successful creation with no primary image.

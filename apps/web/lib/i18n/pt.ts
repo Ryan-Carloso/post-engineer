@@ -408,7 +408,7 @@ export const ptDictionary = {
     libraryDeleteError: 'Não foi possível remover a imagem.',
     libraryLimitReached: 'A biblioteca está cheia ({max} imagens). Remova uma para adicionar outra.',
     libraryFilesRejected:
-      'Alguns arquivos foram ignorados: só JPG/JPEG, PNG ou WebP de até 10MB são aceitos.',
+      '{count} arquivo(s) foram ignorados: só JPG/JPEG, PNG ou WebP de até 10MB são aceitos.',
     librarySave: 'Salvar',
     libraryCancel: 'Cancelar',
     characterTab: 'Escolha um personagem',

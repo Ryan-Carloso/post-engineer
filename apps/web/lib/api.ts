@@ -290,14 +290,16 @@ async function fetchPersonaImages(personaId: string): Promise<PersonaImageRecord
   const response = await fetch(
     `/api/persona/images?personaId=${encodeURIComponent(personaId)}`,
   );
+  const data: { success: boolean; images: PersonaImageRecord[]; error?: string } | null =
+    await response.json().catch(() => null);
+  // Surface the server's error string when present, like the mutation
+  // paths do — a generic status message is less actionable.
+  const serverError = data && typeof data.error === 'string' ? data.error : null;
   if (!response.ok) {
-    throw new Error(`Persona images request failed with status ${response.status}`);
+    throw new Error(serverError ?? `Persona images request failed with status ${response.status}`);
   }
-  const data: { success: boolean; images: PersonaImageRecord[] } | null = await response
-    .json()
-    .catch(() => null);
   if (!data || data.success !== true || !Array.isArray(data.images)) {
-    throw new Error('Persona images request returned an unexpected payload.');
+    throw new Error(serverError ?? 'Persona images request returned an unexpected payload.');
   }
   return data.images;
 }
@@ -378,12 +380,19 @@ export interface UpdatePersonaImageInput {
   id: string;
   tag?: string;
   description?: string;
-  isPrimary?: boolean;
+  /** Swap-only, like the MCP client: the server 400s isPrimary:false. */
+  isPrimary?: true;
 }
 
 export async function updatePersonaImage(
   input: UpdatePersonaImageInput,
 ): Promise<ImageMutationResult> {
+  // Fail fast like the MCP client instead of a server 400 after the
+  // round-trip. The type above already prevents this at compile time;
+  // the runtime check guards JS callers (hence the cast).
+  if ((input.isPrimary as boolean | undefined) === false) {
+    throw new Error('isPrimary cannot be false: mark another image as primary instead.');
+  }
   const response = await fetch('/api/persona/images', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },

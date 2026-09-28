@@ -85,6 +85,11 @@ export const MAX_LIBRARY_IMAGES = 10;
 
 export const MAX_LIBRARY_IMAGE_BYTES = 10 * 1024 * 1024;
 
+// Mirrors the server-side addLibraryImages limits: checked in createPersona
+// so an oversized tag/description fails locally before the multipart upload.
+export const MAX_LIBRARY_TAG_LENGTH = 100;
+export const MAX_LIBRARY_DESCRIPTION_LENGTH = 500;
+
 function mimeTypeForImagePath(path: string): string {
   const extension = extname(path).toLowerCase();
   if (extension === '.png') return 'image/png';
@@ -100,6 +105,10 @@ async function imageFormFile(path: string): Promise<Blob> {
   // oversized or unsupported image fails fast locally instead of wasting an
   // upload. A single read (no stat/read double check) avoids TOCTOU; any
   // failure surfaces with the path for a consistent, actionable message.
+  // Note: the extension is trusted as a hint only; the server re-validates
+  // content via magic bytes, so a mislabeled file still fails server-side
+  // (duplicating magic-byte sniffing locally would be a second source of
+  // truth that can drift).
   const mimeType = mimeTypeForImagePath(path);
   let buffer: Buffer;
   try {
@@ -248,9 +257,25 @@ export class PostEngineerClient {
       // upload time is dominated by network transfer anyway. Order is
       // preserved, so tags/descriptions stay aligned with the entries.
       for (const image of images) {
+        // Normalize like addPersonaImage: trim and drop whitespace-only
+        // values so both upload paths share the "empty metadata is dropped"
+        // invariant. Check lengths locally so an oversized tag fails before
+        // the multipart upload, not server-side after all bytes transfer.
+        const tag = image.tag?.trim() ?? '';
+        const description = image.description?.trim() ?? '';
+        if (tag.length > MAX_LIBRARY_TAG_LENGTH) {
+          throw new Error(
+            `Image tag for "${basename(image.path)}" exceeds ${MAX_LIBRARY_TAG_LENGTH} characters.`,
+          );
+        }
+        if (description.length > MAX_LIBRARY_DESCRIPTION_LENGTH) {
+          throw new Error(
+            `Image description for "${basename(image.path)}" exceeds ${MAX_LIBRARY_DESCRIPTION_LENGTH} characters.`,
+          );
+        }
         formData.append('images', await imageFormFile(image.path), basename(image.path));
-        tags.push(image.tag ?? '');
-        descriptions.push(image.description ?? '');
+        tags.push(tag);
+        descriptions.push(description);
       }
       formData.set('imageTags', JSON.stringify(tags));
       formData.set('imageDescriptions', JSON.stringify(descriptions));

@@ -143,9 +143,12 @@ const PersonaPageContent = () => {
                 the library, or every upload would be rejected. The persona
                 must also be loaded: while the list is fetching (or errored),
                 editingPersona is undefined and the section stays hidden
-                instead of flashing for a faceless persona. */}
-            {personaMode === 'persona' &&
-            editingPersonaId &&
+                instead of flashing for a faceless persona. When editing, the
+                mode comes from the stored persona, not the zustand
+                create-flow store (which persists across navigation and would
+                hide the library for a persona-mode persona if the user last
+                used faceless mode). */}
+            {editingPersonaId &&
             editingPersona !== undefined &&
             editingPersona.faceMixPercent !== 0 ? (
                 <PersonaImageLibrarySection personaId={editingPersonaId} />

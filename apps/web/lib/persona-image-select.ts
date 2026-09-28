@@ -35,9 +35,12 @@ export interface ImageSelectionInput {
 }
 
 function tokenize(text: string): Set<string> {
+  // Unicode-aware: personas may be created in non-Latin scripts (Cyrillic,
+  // Greek, CJK). A Latin-only class would silently degrade scoring to
+  // primary/first for those personas.
   const words = text
     .toLowerCase()
-    .split(/[^a-z0-9\u00c0-\u00ff]+/i)
+    .split(/[^\p{L}\p{N}]+/u)
     .filter((word) => word.length > 2);
   return new Set(words);
 }

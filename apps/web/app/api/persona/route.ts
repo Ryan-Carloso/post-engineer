@@ -157,7 +157,8 @@ export async function POST(request: Request): Promise<NextResponse> {
       // backdoor for library images on faceless personas. Coerce to 0 so
       // the stored state matches the creation-time rule.
       face_mix_percent:
-        body.values.personaMode === 'faceless' && body.values.faceMixPercent == null
+        body.values.personaMode === 'faceless' &&
+        (body.values.faceMixPercent === null || body.values.faceMixPercent === undefined)
           ? 0
           : body.values.faceMixPercent,
       face_quality: body.values.faceQuality,
