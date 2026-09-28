@@ -360,6 +360,25 @@ Follow these so the same issues don't come back:
   on an optional field misleads the agent; 'imageId must be a non-empty
   string' says what actually failed.
 
+## Web/API review learnings, round 10 (2026-09-28)
+- **One mapping for server warning codes.** The upload flow and card
+  flows duplicated the code→i18n map; extract `mapPersonaImageWarnings`
+  so a new code is added once.
+- **Warnings are not errors.** Partial-success warnings rendered in red
+  error text mislead; use a separate amber warning state.
+- **Disable the whole editor during save.** Inputs and Cancel stay
+  enabled while saving invite lost edits; disable on `isPending`.
+- **Mutations share the GET projection invariant.** Strip `image_path`
+  from POST/PATCH responses too, not just GET.
+- **Warnings contract is codes everywhere.** The create-persona route
+  emitted English copy while images routes emit codes; standardize on
+  stable codes mapped through i18n.
+- **Retry orphan cleanup once.** If rollback leaves storage files behind,
+  retry the remove before logging — the rows are already gone, so this
+  is the last recovery chance.
+- **Bare-extension files are not images.** A file named exactly ".png"
+  has no basename; reject it in the fail-fast path.
+
 ## Web/API review learnings, round 9 (2026-09-28)
 - **Strict null checks only.** `== null` is banned by project rules;
   spell out `=== null || === undefined` even for genuine nullish checks.
