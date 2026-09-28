@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from loguru import logger
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.services import fill_schedule as fs
@@ -483,6 +485,35 @@ class GenerateTests(unittest.TestCase):
         enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
         self.assertEqual(enqueued, 0)
         self.assertEqual(store.updates[0][1]["status"], "failed")
+
+    def test_generation_failure_logs_at_error_level(self):
+        # A failed slot is a real recurring error: it must be logged at ERROR
+        # so the Bugsink bridge (loguru sink, ERROR+) forwards it.
+        slot = {
+            "id": "slot-err",
+            "slot_at": "2026-09-07T12:00:00+00:00",
+            "schedules": {"user_id": "user-1", "providers": [], "personas": {}},
+        }
+        store = _FakeStore()
+        store.pending_slots = lambda now: [slot]
+        scheduler = self._scheduler(
+            store, MagicMock(),
+            # fail inside generate: generate_topic_fn raising hits the per-slot handler
+        )
+        scheduler.generate_topic_fn = MagicMock(side_effect=RuntimeError("boom"))
+        records = []
+        handler_id = logger.add(lambda message: records.append(message.record))
+        try:
+            scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        finally:
+            logger.remove(handler_id)
+        self.assertTrue(
+            any(
+                record["level"].name == "ERROR" and "generation failed" in record["message"]
+                for record in records
+            ),
+            f"expected an ERROR record about the failed generation, got: {[r['message'] for r in records]}",
+        )
 
     def test_invalid_publish_plan_fails_slot_before_spending(self):
         # Invalid plan (youtube with no accounts) fails the slot BEFORE
@@ -1290,6 +1321,26 @@ class CoverageGapTests(unittest.TestCase):
         self.assertEqual(results["generated"], -1)
         self.assertEqual(results["reconciled"], 1)
         self.assertEqual(store.updates[0][1]["status"], "ready")
+
+    def test_failed_stage_logs_at_error_level(self):
+        # A failed tick stage is a real recurring error: it must be logged at
+        # ERROR so the Bugsink bridge (loguru sink, ERROR+) forwards it.
+        store = _FakeStore()
+        store.pending_slots = MagicMock(side_effect=RuntimeError("supabase down"))
+        scheduler = self._scheduler(store)
+        records = []
+        handler_id = logger.add(lambda message: records.append(message.record))
+        try:
+            scheduler.run_once(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        finally:
+            logger.remove(handler_id)
+        self.assertTrue(
+            any(
+                record["level"].name == "ERROR" and "stage generated failed" in record["message"]
+                for record in records
+            ),
+            f"expected an ERROR record about the failed stage, got: {[r['message'] for r in records]}",
+        )
 
 
 class TopicPromptTests(unittest.TestCase):

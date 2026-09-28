@@ -47,6 +47,27 @@ def should_init_error_tracking() -> bool:
 # complete .env). Under pytest the init is always skipped (see
 # should_init_error_tracking): the tracked .env carries the real DSN.
 #---------------
+def _loguru_bugsink_sink(message) -> None:
+    """Forward ERROR+ loguru records to Bugsink.
+
+    sentry_sdk's stdlib logging integration never sees loguru records, so
+    without this sink every handled engine error (fill-scheduler slot and
+    stage failures, cross-post failures, ...) would only exist in the
+    process logs. Telemetry must never break the app: every failure inside
+    this sink is swallowed.
+    """
+    try:
+        record = message.record
+        exception = record.get("exception")
+        if exception is not None:
+            # loguru stores the exception as a (type, value, traceback) tuple
+            sentry_sdk.capture_exception(exception[1])
+        else:
+            sentry_sdk.capture_message(str(record.get("message", "")), level="error")
+    except Exception:
+        pass
+
+
 if should_init_error_tracking():
     sentry_sdk.init(
         dsn=os.environ["BUGSINK_DSN"],
@@ -54,6 +75,9 @@ if should_init_error_tracking():
         traces_sample_rate=0.0,
         send_default_pii=False,
     )
+    # Loguru records bypass the SDK's stdlib logging integration entirely;
+    # without this sink, handled errors would never reach Bugsink.
+    logger.add(_loguru_bugsink_sink, level="ERROR")
     logger.info("Bugsink error tracking enabled")
 elif notify.running_under_test():
     if notify.test_skip_is_suspicious():
