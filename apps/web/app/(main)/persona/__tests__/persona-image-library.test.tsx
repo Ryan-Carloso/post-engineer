@@ -15,6 +15,7 @@ interface MockImage {
   is_primary: boolean;
   created_at: string;
   image_url: string | null;
+  image_url_error?: true;
 }
 
 const apiMocks = vi.hoisted(() => ({
@@ -80,6 +81,11 @@ function makeImage(id: string): MockImage {
     created_at: '2026-09-27T00:00:00Z',
     image_url: `https://example.com/${id}.jpg`,
   };
+}
+
+/** An image whose signing failed transiently: null URL with the error flag. */
+function makeUnsignableImage(id: string): MockImage {
+  return { ...makeImage(id), image_url: null, image_url_error: true as const };
 }
 
 function pickFiles(input: HTMLInputElement, files: File[]) {
@@ -517,6 +523,15 @@ describe('PersonaImageLibrarySection', () => {
     expect(
       mapPersonaImageError('The image content does not match its declared file type.', t, 'persona.libraryUploadError'),
     ).toBe('t:persona.libraryErrorContentMismatch');
+    // The creation route appends batch file context (" (image 2: foo.jpg)");
+    // the specific mapping must still apply.
+    expect(
+      mapPersonaImageError(
+        'The image content does not match its declared file type. (image 2: foo.jpg)',
+        t,
+        'persona.libraryUploadError',
+      ),
+    ).toBe('t:persona.libraryErrorContentMismatch');
     expect(
       mapPersonaImageError('tag must be at most 100 characters.', t, 'persona.libraryUpdateError'),
     ).toBe('t:persona.libraryErrorTooLong');
@@ -531,6 +546,17 @@ describe('PersonaImageLibrarySection', () => {
     expect(mapPersonaImageError(undefined, t, 'persona.libraryUpdateError')).toBe(
       't:persona.libraryUpdateError',
     );
+  });
+
+  it('renders the retry copy (not a bare gray box) when signing failed', async () => {
+    apiMocks.images = [makeUnsignableImage('img-1')];
+    renderSection();
+
+    await waitFor(() => {
+      expect(screen.getByText('persona.libraryImageUrlError')).toBeInTheDocument();
+    });
+    // No img element for the failed thumbnail.
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
   });
 
   it('keeps the editor open with the typed values when the metadata save fails with a warning', async () => {

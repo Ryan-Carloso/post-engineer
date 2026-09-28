@@ -182,6 +182,16 @@ describe('POST /api/persona with image library', () => {
     expect(calls.personaInserts).toBe(0);
   });
 
+  it('identifies the failing file by index and name in batch validation errors', async () => {
+    mockClient();
+    const bad = new File(['x'], 'doc.pdf', { type: 'application/pdf' });
+    const res = await POST(createRequest(BASE_FIELDS, [png('a.png'), bad]));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error?: string };
+    // The second file (index 1) is the bad one; the error names it.
+    expect(body.error).toContain('(image 2: doc.pdf)');
+  });
+
   it('rejects library images in faceless mode', async () => {
     mockClient();
     const res = await POST(

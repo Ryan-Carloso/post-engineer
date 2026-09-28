@@ -80,7 +80,13 @@ const ERROR_CLASS_PATTERNS: Array<{
     key: 'persona.libraryErrorFaceless',
   },
   {
-    test: (error) => error === 'The image content does not match its declared file type.',
+    // The content-mismatch error may carry a batch file context suffix
+    // (" (image 2: foo.jpg)") appended at the creation call site; match
+    // the base message so the specific localized copy still applies.
+    test: (error) =>
+      /^The image content does not match its declared file type\.( \(image \d+(: [^)]+)?\))?$/.test(
+        error,
+      ),
     key: 'persona.libraryErrorContentMismatch',
   },
   {

@@ -334,13 +334,31 @@ async function validateLibraryInputs(
   // upload or persona insert happens, so a bad file never creates partial
   // state the rollback then has to clean up. The magic-byte check reads the
   // real bytes: declared MIME type and extension are client-controlled.
-  for (const input of inputs) {
+  // Per-file errors carry the entry index and filename so a caller with
+  // up to 10 files can tell which entry to fix. validateImageFile's own
+  // messages stay stable (the UI's ERROR_CLASS_PATTERNS matches some of
+  // them by shape); the context is appended here at the call site.
+  for (let index = 0; index < inputs.length; index += 1) {
+    const input = inputs[index] as LibraryImageInput;
     const validated = validateImageFile(input.file);
-    if ('error' in validated) return validated.error;
+    if ('error' in validated) {
+      return withImageContext(validated.error, index, input.file.name);
+    }
     const contentError = await validateImageContent(validated.file);
-    if (contentError) return contentError;
+    if (contentError) {
+      return withImageContext(contentError, index, input.file.name);
+    }
   }
   return null;
+}
+
+/**
+ * Appends the 1-based entry index and filename to a per-file validation
+ * error, so batch callers can identify the failing file.
+ */
+function withImageContext(error: string, index: number, fileName: string): string {
+  const name = fileName.trim() === '' ? '' : `: ${fileName}`;
+  return `${error} (image ${index + 1}${name})`;
 }
 
 export async function PATCH(request: Request): Promise<NextResponse> {

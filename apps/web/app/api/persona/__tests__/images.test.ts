@@ -53,6 +53,8 @@ interface DbState {
   failPrimarySwapGone?: boolean;
   /** Makes the persona_images metadata UPDATE fail (partial-commit path). */
   failUpdate?: boolean;
+  /** Storage paths for which createSignedUrl fails (image_url_error path). */
+  failSignPaths?: string[];
   /**
    * Makes the metadata UPDATE report PGRST116 (the row was concurrently
    * deleted between the ownership check and the update): 404, not 500.
@@ -162,10 +164,15 @@ function mockClient(state: Partial<DbState> = {}) {
           calls.removedPaths.push(...paths);
           return { error: full.storageRemoveError ?? null };
         }),
-        createSignedUrl: vi.fn(async (path: string) => ({
-          data: { signedUrl: `https://supabase.test/signed/${path}` },
-          error: null,
-        })),
+        createSignedUrl: vi.fn(async (path: string) => {
+          if (full.failSignPaths?.includes(path)) {
+            return { data: null, error: { message: 'signing failed' } };
+          }
+          return {
+            data: { signedUrl: `https://supabase.test/signed/${path}` },
+            error: null,
+          };
+        }),
       })),
     },
   };
@@ -267,6 +274,30 @@ describe('GET /api/persona/images', () => {
     expect(body.images[0]?.image_url).toBe(
       `https://supabase.test/signed/${IMAGE_ROW.image_path}`,
     );
+  });
+
+  it('flags image_url_error when signing fails but keeps the other images signed', async () => {
+    mockAuth({ userId: USER_ID });
+    const badRow = { ...IMAGE_ROW, id: 'img-bad', image_path: 'bad/path.jpg' };
+    mockClient({
+      listRows: [badRow, IMAGE_ROW],
+      failSignPaths: ['bad/path.jpg'],
+    });
+    const res = await GET(
+      new Request(`http://localhost/api/persona/images?personaId=${PERSONA_ID}`),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      success: boolean;
+      images: Array<{ id: string; image_url: string | null; image_url_error?: true }>;
+    };
+    expect(body.images).toHaveLength(2);
+    expect(body.images[0]?.image_url).toBeNull();
+    expect(body.images[0]?.image_url_error).toBe(true);
+    expect(body.images[1]?.image_url).toBe(
+      `https://supabase.test/signed/${IMAGE_ROW.image_path}`,
+    );
+    expect(body.images[1]?.image_url_error).toBeUndefined();
   });
 
   it('does not expose the internal storage path (image_path) in the response', async () => {
