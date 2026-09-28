@@ -598,3 +598,15 @@ Follow these so the same issues don't come back:
 - **Share warning codes as constants.** 'primary_swap_failed' /
   'metadata_save_failed' were string literals in 3 producers + 1 mapper.
   PERSONA_IMAGE_WARNING_CODES (as const) makes typos a build error.
+
+## Web/API review learnings, self-review (2026-09-28)
+- **A cascade delete erases rows, not storage objects.** The creation
+  rollback removed orphanPaths before the persona delete and only logged
+  rowBackedPaths — after the cascade the files were true orphans with no
+  cleanup path left. Remove row-backed storage only AFTER a successful
+  delete (one retry, then loud logging); if the delete fails, the rows
+  survive and their storage must never be touched.
+- **Never remove row-backed storage while surviving rows reference it.**
+  The failing-then-fixed test pair in create-with-images.test.ts pins
+  both directions: the row-backed remove runs after the cascade delete,
+  and never runs when the delete fails.
