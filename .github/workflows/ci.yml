@@ -113,7 +113,10 @@ jobs:
           pnpm exec tsc --noEmit
 
       - name: Unit tests
-        run: pnpm test -- --coverage --coverage.reporter=text --coverage.reporter=cobertura
+        # NOTE: pass flags via `pnpm exec vitest` — `pnpm test -- --coverage`
+        # forwards a literal `--` to the script (pnpm 10), which makes vitest
+        # silently skip coverage generation (no report files written).
+        run: pnpm exec vitest run --coverage --coverage.reporter=text --coverage.reporter=cobertura
 
       # Best-effort until GitHub Code Quality is enabled on the repo: with
       # fail-on-error 'false' a missing Code Quality setup warns instead of
@@ -162,7 +165,10 @@ jobs:
         run: pnpm exec nx run mcp:typecheck
 
       - name: Unit tests
-        run: pnpm test -- --coverage --coverage.reporter=text --coverage.reporter=cobertura
+        # NOTE: pass flags via `pnpm exec vitest` — `pnpm test -- --coverage`
+        # forwards a literal `--` to the script (pnpm 10), which makes vitest
+        # silently skip coverage generation (no report files written).
+        run: pnpm exec vitest run --coverage --coverage.reporter=text --coverage.reporter=cobertura
 
       # Best-effort until GitHub Code Quality is enabled on the repo: with
       # fail-on-error 'false' a missing Code Quality setup warns instead of
