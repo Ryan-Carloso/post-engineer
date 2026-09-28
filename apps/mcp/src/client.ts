@@ -1,5 +1,5 @@
 import { validateScheduleAdvance } from './validator.js';
-import { getErrorMessage } from './errors.js';
+import { getErrorMessage, ImageTooLargeError } from './errors.js';
 import { readFile, stat } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
 
@@ -90,6 +90,17 @@ export const MAX_LIBRARY_IMAGE_BYTES = 10 * 1024 * 1024;
 export const MAX_LIBRARY_TAG_LENGTH = 100;
 export const MAX_LIBRARY_DESCRIPTION_LENGTH = 500;
 
+/**
+ * Shared size guard for both image-read call sites (the stat pre-check and
+ * the post-read check) so the limit and the message text can't drift apart.
+ * Throws the typed ImageTooLargeError carrying the full path.
+ */
+export function assertImageSize(sizeBytes: number, path: string): void {
+  if (sizeBytes > MAX_LIBRARY_IMAGE_BYTES) {
+    throw new ImageTooLargeError(path, sizeBytes, MAX_LIBRARY_IMAGE_BYTES);
+  }
+}
+
 function mimeTypeForImagePath(path: string): string {
   const extension = extname(path).toLowerCase();
   // A file named exactly ".png" (hidden file, no base name) has the
@@ -112,7 +123,7 @@ async function imageFormFile(path: string): Promise<Blob> {
   // upload. A stat() pre-check bounds memory before readFile — a multi-GB
   // file misnamed .png would otherwise load fully into this stdio process.
   // The TOCTOU window is benign: the authoritative size check still runs on
-  // the buffer after read. Any failure surfaces with the path for a
+  // the buffer after read. Any failure surfaces with the full path for a
   // consistent, actionable message.
   // Note: the extension is trusted as a hint only; the server re-validates
   // content via magic bytes, so a mislabeled file still fails server-side
@@ -121,14 +132,13 @@ async function imageFormFile(path: string): Promise<Blob> {
   const mimeType = mimeTypeForImagePath(path);
   try {
     const fileStat = await stat(path);
-    if (fileStat.size > MAX_LIBRARY_IMAGE_BYTES) {
-      const maxMB = MAX_LIBRARY_IMAGE_BYTES / (1024 * 1024);
-      throw new Error(
-        `Image "${path}" is too large (${fileStat.size} bytes; max ${maxMB}MB).`,
-      );
-    }
+    assertImageSize(fileStat.size, path);
   } catch (error) {
-    if (error instanceof Error && error.message.startsWith('Image "')) throw error;
+    // Discriminate by type, not by message text: the typed size error
+    // passes through untouched, while stat failures become the actionable
+    // "Failed to read image" wrapper. Message sniffing would misclassify
+    // any future error whose prose happens to match.
+    if (error instanceof ImageTooLargeError) throw error;
     throw new Error(`Failed to read image "${path}": ${getErrorMessage(error)}`);
   }
   let buffer: Buffer;
@@ -142,21 +152,22 @@ async function imageFormFile(path: string): Promise<Blob> {
     // imageTags/imageDescriptions (the server 400s when the tag/description
     // counts don't match the file count), so reject it here with a clear
     // message instead of a confusing server 400.
-    throw new Error(`Image "${basename(path)}" is empty.`);
+    throw new Error(`Image "${path}" is empty.`);
   }
-  if (buffer.length > MAX_LIBRARY_IMAGE_BYTES) {
-    throw new Error(
-      `Image "${basename(path)}" is larger than ${MAX_LIBRARY_IMAGE_BYTES / (1024 * 1024)}MB (max library image size).`,
-    );
-  }
+  // The post-read check reuses the shared guard: same limit, same message,
+  // full path — and it covers the (benign) TOCTOU window after stat.
+  assertImageSize(buffer.length, path);
   return new Blob([buffer], { type: mimeType });
 }
 
-// Normalize library metadata: trim and drop whitespace-only values so both
-// upload paths share the "empty metadata is dropped" invariant. Lengths are
-// checked here so an oversized tag fails before the multipart upload, not
-// server-side after all bytes transfer. The label (e.g. filename) is
-// included in the error when available.
+// Normalize library metadata: trim; empty/whitespace-only values normalize
+// to ''. Both upload paths (the create-persona imageTags/imageDescriptions
+// arrays and the add-persona-image tag/description fields) send '' for empty
+// metadata, and the server stores '' verbatim (the tag column is text not
+// null default ''), so the stored values are identical on both paths.
+// Lengths are checked here so an oversized tag fails before the multipart
+// upload, not server-side after all bytes transfer. The label (e.g.
+// filename) is included in the error when available.
 function normalizeLibraryMetadata(
   image: { tag?: string; description?: string },
   label?: string,
@@ -471,9 +482,10 @@ export class PostEngineerClient {
     const formData = new FormData();
     formData.set('personaId', personaId);
     formData.append('image', await imageFormFile(image.path), basename(image.path));
-    // Empty/whitespace-only metadata is dropped: the server stores it
-    // verbatim and an empty tag can never match the deterministic keyword
-    // selection.
+    // Empty/whitespace-only metadata normalizes to '' (see
+    // normalizeLibraryMetadata): the server stores '' verbatim on both
+    // upload paths, so the add path simply omits the keys — an empty tag
+    // can never match the deterministic keyword selection.
     const { tag, description } = normalizeLibraryMetadata(image);
     if (tag) formData.set('tag', tag);
     if (description) formData.set('description', description);
@@ -515,7 +527,9 @@ export class PostEngineerClient {
     // Trim metadata like the add paths do: an untrimmed tag can never match
     // the deterministic keyword selection. undefined = leave unchanged (the
     // key is dropped by JSON.stringify); empty string = clear the stored
-    // value (server convention).
+    // value (server convention). A whitespace-only value trims to '' and
+    // therefore clears too — the field descriptions in tools.ts say so,
+    // since a caller passing "   " likely did not intend to wipe the value.
     const tag = input.tag?.trim();
     const description = input.description?.trim();
     return this.request(

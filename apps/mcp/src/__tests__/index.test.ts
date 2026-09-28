@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { z } from 'zod';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createPostEngineerMcpServer, isMainModule, requireApiKey } from '../index.js';
@@ -175,11 +176,17 @@ describe('registered tool schemas (single source of truth)', () => {
 
   it('registers create_persona with the tools.ts schema (paragraphNumber max 10)', async () => {
     const schemas = await listServerTools(createPostEngineerMcpServer(mockClient));
-    const inputSchema = schemas.get('create_persona');
-    expect(Object.keys(inputSchema?.properties ?? {}).sort()).toEqual(
-      Object.keys(CreatePersonaSchema.shape).sort()
+    // CreatePersonaSchema wraps the raw shape in .superRefine() for the
+    // images-require-avatarUrl rule, so it is a ZodEffects: unwrap to the
+    // inner object to reach the registered field list.
+    const inner =
+      CreatePersonaSchema instanceof z.ZodEffects
+        ? CreatePersonaSchema.innerType()
+        : CreatePersonaSchema;
+    expect(Object.keys(schemas.get('create_persona')?.properties ?? {}).sort()).toEqual(
+      Object.keys((inner as z.AnyZodObject).shape).sort()
     );
-    expect(inputSchema?.properties.paragraphNumber?.maximum).toBe(10);
+    expect(schemas.get('create_persona')?.properties.paragraphNumber?.maximum).toBe(10);
   });
 
   it('registers update_persona without a nullable avatarUrl', async () => {

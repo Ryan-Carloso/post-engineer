@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { PostEngineerClient } from '../client.js';
+import {
+  PostEngineerClient,
+  assertImageSize,
+  MAX_LIBRARY_IMAGE_BYTES,
+} from '../client.js';
+import { ImageTooLargeError } from '../errors.js';
 
 describe('PostEngineerClient', () => {
   let client: PostEngineerClient;
@@ -898,7 +903,7 @@ describe('PostEngineerClient persona image library', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('createPersona trims and drops whitespace-only tag/description like addPersonaImage', async () => {
+  it('createPersona normalizes whitespace-only tag/description to empty strings (server stores \'\' on both paths)', async () => {
     const path = await writeTempImage('a.jpg');
     await client.createPersona({
       name: 'Tech Creator',
@@ -948,15 +953,17 @@ describe('PostEngineerClient persona image library', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('createPersona rejects zero-byte image files with a filename-specific error', async () => {
+  it('createPersona reports the full path for zero-byte image files', async () => {
     const path = await writeTempImage('empty.jpg', 0);
+    // The full path (not just the basename) is reported so the agent can
+    // find the offending file when several images are uploaded at once.
     await expect(
       client.createPersona({
         name: 'X',
         avatarUrl: 'https://example.com/a.png',
         images: [{ path }],
       })
-    ).rejects.toThrow(/empty\.jpg.*empty/);
+    ).rejects.toThrow(path);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
@@ -970,6 +977,64 @@ describe('PostEngineerClient persona image library', () => {
       })
     ).rejects.toThrow(/10MB/);
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('createPersona rejects oversized images with the typed ImageTooLargeError (never re-wrapped)', async () => {
+    // The stat pre-check throws inside the try/catch that wraps stat
+    // failures as "Failed to read image": the typed error must pass through
+    // by instanceof, not by matching the message text.
+    const path = await writeTempImage('big.jpg', 11 * 1024 * 1024);
+    const error: unknown = await client
+      .createPersona({
+        name: 'X',
+        avatarUrl: 'https://example.com/a.png',
+        images: [{ path }],
+      })
+      .catch((e: unknown) => e);
+    if (!(error instanceof ImageTooLargeError)) {
+      throw new Error(`expected ImageTooLargeError, got: ${String(error)}`);
+    }
+    expect(error.path).toBe(path);
+    expect(error.sizeBytes).toBe(11 * 1024 * 1024);
+    expect(error.message).toContain(path);
+    expect(error.message).not.toContain('Failed to read image');
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('createPersona still wraps stat failures as "Failed to read image"', async () => {
+    // A nonexistent path fails stat(): the typed size error is not involved,
+    // so the catch must still produce the actionable read-failure message.
+    await expect(
+      client.createPersona({
+        name: 'X',
+        avatarUrl: 'https://example.com/a.png',
+        images: [{ path: '/tmp/pe-mcp-test-does-not-exist.jpg' }],
+      })
+    ).rejects.toThrow(/Failed to read image/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('assertImageSize throws the typed error with the full path and a unified message', () => {
+    const size = MAX_LIBRARY_IMAGE_BYTES + 1;
+    let error: unknown;
+    try {
+      assertImageSize(size, '/tmp/photos/a.jpg');
+    } catch (e: unknown) {
+      error = e;
+    }
+    if (!(error instanceof ImageTooLargeError)) {
+      throw new Error(`expected ImageTooLargeError, got: ${String(error)}`);
+    }
+    expect(error.path).toBe('/tmp/photos/a.jpg');
+    expect(error.sizeBytes).toBe(size);
+    expect(error.message).toBe(
+      `Image "/tmp/photos/a.jpg" is too large (${size} bytes; max 10MB).`
+    );
+  });
+
+  it('assertImageSize accepts sizes at or under the limit', () => {
+    expect(() => assertImageSize(MAX_LIBRARY_IMAGE_BYTES, '/tmp/photos/a.jpg')).not.toThrow();
+    expect(() => assertImageSize(0, '/tmp/photos/a.jpg')).not.toThrow();
   });
 
   it('addPersonaImage rejects unsupported file extensions', async () => {
@@ -1040,7 +1105,7 @@ describe('PostEngineerClient persona image library', () => {
     expect(formData.get('isPrimary')).toBe('true');
   });
 
-  it('addPersonaImage drops empty tag/description instead of storing them verbatim', async () => {
+  it('addPersonaImage omits empty tag/description keys (the server stores \'\' on both upload paths)', async () => {
     // An empty tag can never match the deterministic keyword selection;
     // the server stores metadata verbatim, so the client must normalize.
     const path = await writeTempImage('d.png');

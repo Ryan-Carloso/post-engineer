@@ -54,7 +54,23 @@ export const CreatePersonaShape = {
   imagePrimaryIndex: z.number().int().min(0).max(MAX_LIBRARY_IMAGES - 1).optional().describe('Index into images[] marking the primary library image (no primary is set when omitted)'),
 };
 
-export const CreatePersonaSchema = z.object(CreatePersonaShape);
+export const CreatePersonaSchema = z.object(CreatePersonaShape).superRefine((value, ctx) => {
+  // Domain rule encoded at parse time (the round-4 standing rule: encode
+  // domain rules in the zod schema): library images are rejected
+  // server-side for faceless personas, so require the avatar up front.
+  // The client keeps its own check as defense in depth.
+  const hasImages = (value.images?.length ?? 0) > 0;
+  const hasAvatar =
+    value.avatarUrl !== undefined && value.avatarUrl !== null && value.avatarUrl.length > 0;
+  if (hasImages && !hasAvatar) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['avatarUrl'],
+      message:
+        'avatarUrl is required when images are provided: library images need a persona avatar (faceless personas cannot have an image library).',
+    });
+  }
+});
 
 export const ListPersonasShape = {};
 
@@ -149,9 +165,15 @@ export const UpdatePersonaImageShape = {
   id: z.string().min(1, 'id is required').describe('The library image ID to update'),
   // Reuse the shared field definitions so tag/description limits can't drift
   // from the create path; PATCH supports clearing via empty string, which the
-  // create schema's .min(1) path field doesn't need.
-  tag: LibraryImageFields.tag.describe('New tag (empty string clears it)'),
-  description: LibraryImageFields.description.describe('New description (empty string clears it)'),
+  // create schema's .min(1) path field doesn't need. Whitespace-only values
+  // trim to '' client-side and therefore clear too (server convention:
+  // undefined = keep, '' = clear) — the descriptions say so explicitly.
+  tag: LibraryImageFields.tag.describe(
+    'New tag (empty or whitespace-only clears the stored value; omit to keep it)'
+  ),
+  description: LibraryImageFields.description.describe(
+    'New description (empty or whitespace-only clears the stored value; omit to keep it)'
+  ),
   // Swap-only: the server rejects isPrimary:false, so the schema accepts only
   // true and surfaces the constraint at parse time instead of a server 400.
   isPrimary: z
@@ -214,7 +236,15 @@ export async function handleCreatePersona(
   client: PostEngineerClient,
   args: z.infer<typeof CreatePersonaSchema>
 ): Promise<McpToolResponse> {
-  return handleLibraryCall(() => client.createPersona(args), 'creating persona', 'Persona created successfully');
+  // Re-parse with the refined schema: the MCP SDK parses tool args from the
+  // raw shape only, so the superRefine cross-field rule would otherwise never
+  // fire on the tool path. A parse failure becomes a loud isError via
+  // handleLibraryCall, before any file is read.
+  return handleLibraryCall(
+    () => client.createPersona(CreatePersonaSchema.parse(args)),
+    'creating persona',
+    'Persona created successfully'
+  );
 }
 
 export async function handleListPersonas(

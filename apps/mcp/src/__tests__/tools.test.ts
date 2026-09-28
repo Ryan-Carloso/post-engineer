@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { z } from 'zod';
 import {
   handleCreatePersona,
   handleListPersonaImages,
@@ -19,11 +20,13 @@ import {
   ListPostsSchema,
   ScheduleVideoSchema,
   CreatePersonaSchema,
+  CreatePersonaShape,
   UpdatePersonaSchema,
   GenerateVideoSchema,
   ListPersonaImagesSchema,
   AddPersonaImageSchema,
   UpdatePersonaImageSchema,
+  UpdatePersonaImageShape,
   RemovePersonaImageSchema,
 } from '../tools.js';
 import type { PostEngineerClient } from '../client.js';
@@ -466,6 +469,55 @@ describe('persona image library tools', () => {
     expect(() =>
       CreatePersonaSchema.parse({ name: 'X', avatarUrl: 'https://example.com/a.png', images })
     ).toThrow();
+  });
+
+  it('CreatePersonaSchema rejects images without avatarUrl at parse time', () => {
+    // The images-require-avatarUrl domain rule is encoded in the schema
+    // (superRefine), not just in the client guard: library images are
+    // rejected server-side for faceless personas, so fail at parse time
+    // with an actionable message.
+    expect(() =>
+      CreatePersonaSchema.parse({ name: 'X', images: [{ path: '/tmp/a.jpg' }] })
+    ).toThrow(/avatarUrl is required when images are provided/);
+  });
+
+  it('CreatePersonaSchema accepts images with avatarUrl, and faceless personas without images', () => {
+    expect(() =>
+      CreatePersonaSchema.parse({
+        name: 'X',
+        avatarUrl: 'https://example.com/a.png',
+        images: [{ path: '/tmp/a.jpg' }],
+      })
+    ).not.toThrow();
+    expect(() => CreatePersonaSchema.parse({ name: 'X' })).not.toThrow();
+    expect(() => CreatePersonaSchema.parse({ name: 'X', images: [] })).not.toThrow();
+  });
+
+  it('create_persona handler enforces images-require-avatarUrl before the client call', async () => {
+    // Simulates what the MCP SDK hands the handler: args parsed from the raw
+    // shape (no cross-field rule) — the handler re-parses with the refined
+    // schema so the rule bites on the tool path too, not just in direct
+    // schema parses.
+    vi.clearAllMocks();
+    vi.mocked(mockClient.createPersona).mockResolvedValue({ success: true });
+    const sdkArgs = z.object(CreatePersonaShape).parse({
+      name: 'X',
+      images: [{ path: '/tmp/a.jpg' }],
+    });
+    const response = await handleCreatePersona(mockClient, sdkArgs);
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toMatch(/avatarUrl is required when images are provided/);
+    expect(mockClient.createPersona).not.toHaveBeenCalled();
+  });
+
+  it('update_persona_image documents that whitespace-only metadata clears the stored value', () => {
+    // Server convention: undefined = keep, '' = clear. A whitespace-only
+    // value trims to '' client-side, so the field docs must say so —
+    // otherwise a caller passing "   " wipes the value unknowingly.
+    for (const field of [UpdatePersonaImageShape.tag, UpdatePersonaImageShape.description]) {
+      expect(field.description).toMatch(/whitespace/i);
+      expect(field.description).toMatch(/clear/i);
+    }
   });
 
   it('generate_video_from_persona passes imageId through', async () => {
