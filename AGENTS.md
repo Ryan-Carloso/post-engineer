@@ -1050,3 +1050,13 @@ Follow these so the same issues don't come back:
 - MINOR gitignore note (`!test/controllers/test_*.py` "broad"): DECLINED,
   the reviewer itself admitted it matches the existing
   `!test/services/test_*.py` pattern and is intentional.
+
+## Web/API review learnings, round 28 (2026-09-28)
+- **Multipart route tests need `// @vitest-environment node`.** The default
+  jsdom env mixes jsdom's FormData/File with undici's Request: constructing
+  `new Request(url, { body: formData })` with a File entry throws
+  `TypeError: Cannot read properties of undefined (reading '_buffer')`
+  inside jsdom's FormData.forEach. The create-with-images suite already
+  carries the node pragma for this reason — any new test posting multipart
+  bodies (especially with files) must too. String-only FormData does not
+  trip it, which makes the failure look file-specific.
