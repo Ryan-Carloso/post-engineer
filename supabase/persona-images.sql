@@ -106,22 +106,32 @@ $$;
 --    path for the history — the old app-side helper was removed. Called by
 --    the web app via the service-role client (recordRecentImageId in
 --    apps/web/lib/persona-images.ts).
---    Trust boundary: this function performs no ownership check itself — it
---    relies on RLS on public.personas (invoker rights) when called with a
---    user-scoped client. The app's only caller is recordRecentImageId
+--    Trust boundary: the function enforces ownership explicitly via
+--    p_user_id instead of relying on RLS on public.personas (which lives
+--    outside this file). The app's only caller is recordRecentImageId
 --    (apps/web/lib/persona-images.ts), invoked from the video-job route,
---    which always uses the service-role client: the safety net is the
---    route's ownership check (persona user_id filter) before the call.
---    EXECUTE stays granted so the function remains callable; do not add a
---    direct PostgREST caller without an ownership check.
-create or replace function public.record_persona_image_use(p_persona_id uuid, p_image_id uuid)
+--    which always uses the service-role client and passes the verified
+--    caller id it already checked (persona user_id filter) before the call.
+--    Direct PostgREST callers fall back to auth.uid() via coalesce, so a
+--    user JWT can only ever touch its own row. EXECUTE stays granted so
+--    the function remains callable; do not add a direct PostgREST caller
+--    without an ownership check.
+--    NOTE: the signature changed (p_user_id added); CREATE OR REPLACE does
+--    not replace a function whose argument list changed, so drop the old
+--    2-argument variant first.
+drop function if exists public.record_persona_image_use(uuid, uuid);
+create or replace function public.record_persona_image_use(p_persona_id uuid, p_image_id uuid, p_user_id uuid default null)
 returns void
 language sql
 as $$
   update public.personas
   set recent_image_ids =
     (array[p_image_id] || array_remove(coalesce(recent_image_ids, '{}'), p_image_id))[1:3]
-  where id = p_persona_id;
+  where id = p_persona_id
+    -- Explicit ownership: the service-role app caller passes the verified
+    -- user id; session/JWT callers fall back to auth.uid(). Either way a
+    -- caller can only write its own persona's history.
+    and user_id = coalesce(p_user_id, auth.uid());
 $$;
 
 -- 6. Atomic primary-image swap: the app used to demote-then-promote with two
@@ -131,21 +141,31 @@ $$;
 --    serialize, then demotes the old primary and promotes the new one
 --    back-to-back. Raises if the image does not belong to the persona (the
 --    exception rolls back the demote too).
---    Trust boundary: like record_persona_image_use, this function performs
---    no ownership check itself — it relies on RLS (invoker rights) when
---    called with a user-scoped client. The app invokes it with both the
---    service-role client (API-key callers) and the session client, always
---    after the route validated that the image belongs to the caller's
---    persona via getOwnedImage. EXECUTE must stay granted to authenticated;
---    the RLS policies on persona_images must keep scoping UPDATE/SELECT to
---    the row owner.
-create or replace function public.set_primary_persona_image(p_persona_id uuid, p_image_id uuid)
+--    Trust boundary: like record_persona_image_use, the function enforces
+--    ownership explicitly via p_user_id instead of relying on RLS on
+--    public.personas (which lives outside this file). The app invokes it
+--    with both the service-role client (API-key callers) and the session
+--    client, always after the route validated that the image belongs to
+--    the caller's persona via getOwnedImage, and always passing the
+--    verified caller id. The UPDATEs on persona_images are additionally
+--    scoped by the in-repo persona_images_owner_all policy. EXECUTE must
+--    stay granted to authenticated (the browser flow uses the session
+--    client); do not add a direct PostgREST caller without an ownership
+--    check.
+--    NOTE: the signature changed (p_user_id added); drop the old 2-argument
+--    variant first (CREATE OR REPLACE does not replace a changed signature).
+drop function if exists public.set_primary_persona_image(uuid, uuid);
+create or replace function public.set_primary_persona_image(p_persona_id uuid, p_image_id uuid, p_user_id uuid default null)
 returns void
 language plpgsql
 as $$
 begin
-  -- Serialize concurrent swaps on the parent row.
-  perform 1 from public.personas where id = p_persona_id for update;
+  -- Serialize concurrent swaps on the parent row. The explicit user_id
+  -- guard keeps the lock scoped to the caller's own persona.
+  perform 1 from public.personas
+  where id = p_persona_id
+    and user_id = coalesce(p_user_id, auth.uid())
+  for update;
   update public.persona_images
   set is_primary = false
   where persona_id = p_persona_id and is_primary;

@@ -486,13 +486,55 @@ describe('PersonaImageLibrarySection', () => {
     }
   });
 
-  it('mapPersonaImageWarnings maps codes through i18n and passes unknown codes raw', async () => {
+  it('mapPersonaImageWarnings maps codes through i18n and falls back to a localized message for unknown codes', async () => {
     const { mapPersonaImageWarnings } = await import('../persona-image-library');
     const t = (key: string) => `t:${key}`;
     expect(
       mapPersonaImageWarnings(['primary_swap_failed', 'metadata_save_failed'], t),
     ).toBe('t:persona.libraryWarningPrimarySwap t:persona.libraryWarningMetadataSave');
-    // Unknown codes are never silently dropped.
-    expect(mapPersonaImageWarnings(['some_future_code'], t)).toBe('some_future_code');
+    // Unknown codes are never silently dropped — and never rendered as a
+    // raw English slug: a future server code maps to a localized generic
+    // message instead.
+    expect(mapPersonaImageWarnings(['some_future_code'], t)).toBe(
+      't:persona.libraryWarningUnknown',
+    );
+  });
+
+  it('keeps the editor open with the typed values when the metadata save fails with a warning', async () => {
+    apiMocks.images = [makeImage('img-1')];
+    apiMocks.updateMutateAsync.mockResolvedValue({
+      success: true,
+      warnings: ['metadata_save_failed'],
+    });
+    renderSection();
+
+    await userEvent.click(screen.getByRole('button', { name: 'persona.libraryEdit' }));
+    const tagInput = screen.getByPlaceholderText('persona.libraryTagPlaceholder');
+    await userEvent.clear(tagInput);
+    await userEvent.type(tagInput, 'retry-tag');
+    await userEvent.click(screen.getByRole('button', { name: 'persona.librarySave' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('persona.libraryWarningMetadataSave')).toBeInTheDocument();
+    });
+    // Still editing: the metadata was NOT persisted, so the editor stays
+    // open with the typed value instead of being discarded by the refetch.
+    expect(screen.getByRole('button', { name: 'persona.librarySave' })).toBeInTheDocument();
+    expect(screen.getByDisplayValue('retry-tag')).toBeInTheDocument();
+  });
+
+  it('closes the editor on success without warnings', async () => {
+    apiMocks.images = [makeImage('img-1')];
+    apiMocks.updateMutateAsync.mockResolvedValue({ success: true });
+    renderSection();
+
+    await userEvent.click(screen.getByRole('button', { name: 'persona.libraryEdit' }));
+    await userEvent.click(screen.getByRole('button', { name: 'persona.librarySave' }));
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('button', { name: 'persona.librarySave' }),
+      ).not.toBeInTheDocument();
+    });
   });
 });

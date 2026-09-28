@@ -19,6 +19,17 @@
 export const MAX_PERSONA_IMAGES = 10;
 export const PERSONA_IMAGE_HISTORY_LIMIT = 3;
 
+// Client-safe upload limits: the picker gates on these before any bytes
+// transfer, and the server enforces the same values in validateImageFile.
+// They live in this dependency-free leaf (not in persona-images.ts, whose
+// node:crypto import must not ride into the browser bundle) so the two
+// sides cannot drift.
+export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+// Explicit MIME allowlist: startsWith('image/') would also accept image/gif
+// or image/svg+xml payloads renamed to .png, and API-key callers bypass the
+// client-side filter.
+export const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
 /**
  * Stable warning codes emitted by the image routes on partial success.
  * Shared between producers (API routes) and consumers (UI warning mapper)
@@ -31,6 +42,10 @@ export const PERSONA_IMAGE_HISTORY_LIMIT = 3;
 export const PERSONA_IMAGE_WARNING_CODES = {
   PRIMARY_SWAP_FAILED: 'primary_swap_failed',
   METADATA_SAVE_FAILED: 'metadata_save_failed',
+  // The mutation committed but the follow-up row refetch failed: the true
+  // row state is unconfirmed. Never report this state as a total failure —
+  // the committed change is real.
+  ROW_REFETCH_FAILED: 'row_refetch_failed',
 } as const;
 
 export type PersonaImageWarningCode =

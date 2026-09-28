@@ -22,7 +22,7 @@ import { parsePersonaForm, personaFormSchema } from '@/lib/persona-schema';
 import { openUpgradeDialogIfInsufficient } from '@/lib/upgrade-dialog-store';
 import { useI18n } from '@/lib/i18n/provider';
 import { PersonaTokensSection } from './persona-tokens';
-import { PersonaImageLibrarySection } from './persona-image-library';
+import { PersonaImageLibrarySection, mapPersonaImageWarnings } from './persona-image-library';
 import { scrollToErrorField } from '@/lib/scroll-to-error';
 import type { TranslationKey } from '@/lib/i18n';
 import { DEFAULT_PERSONA_FACE_IDS } from '@/lib/persona-faces';
@@ -1084,6 +1084,11 @@ const PersonaFeedback = () => {
             <div className="min-w-0 flex-1">
               <h3 className="text-sm font-semibold text-green-900">{t('persona.created')}</h3>
               <p className="mt-1 text-sm leading-relaxed text-green-800">{t('persona.createdHint')}</p>
+              {result.warnings && result.warnings.length > 0 ? (
+                <p className="mt-2 text-sm leading-relaxed text-amber-700">
+                  {mapPersonaImageWarnings(result.warnings, t)}
+                </p>
+              ) : null}
               <div className="mt-4">
                 <button
                   type="button"

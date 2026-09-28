@@ -245,7 +245,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       }
       if (photoPath) {
         const { error: photoRollbackError } = await supabase.storage
-          .from('personas')
+          .from(IMAGE_BUCKET)
           .remove([photoPath]);
         if (photoRollbackError) {
           console.error('[api/persona] photo rollback failed', {
@@ -266,6 +266,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         supabase,
         persona.id,
         added.images[primaryIndex].id,
+        user.id,
       );
       if (primaryError) {
         console.error('[api/persona] set primary library image failed', {
@@ -278,6 +279,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
   }
 
+  // The web UI never sends images[] at creation (the library is edit-only),
+  // so warnings only reach direct API-key callers — but the response shape
+  // is shared, and the web CreatePersonaResult type describes it.
   return NextResponse.json({
     success: true,
     personaId: persona.id,
@@ -425,7 +429,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
   }
 
   if (stalePaths.length > 0) {
-    const { error: storageError } = await supabase.storage.from('personas').remove(stalePaths);
+    const { error: storageError } = await supabase.storage.from(IMAGE_BUCKET).remove(stalePaths);
     if (storageError) {
       console.error('[api/persona] storage cleanup failed', { error: storageError });
     }
@@ -570,7 +574,7 @@ export async function DELETE(request: Request): Promise<NextResponse> {
     return errorResponse(500, 'Failed to delete persona.');
   }
   if (paths.length > 0) {
-    const { error: storageError } = await supabase.storage.from('personas').remove(paths);
+    const { error: storageError } = await supabase.storage.from(IMAGE_BUCKET).remove(paths);
     if (storageError) {
       console.error('[api/persona] storage cleanup failed after delete', {
         error: storageError,
@@ -602,7 +606,7 @@ export async function uploadFile(
 ): Promise<string | null> {
   const path = `${userId}/${randomUUID()}.${extension}`;
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const { error } = await supabase.storage.from('personas').upload(path, bytes, {
+  const { error } = await supabase.storage.from(IMAGE_BUCKET).upload(path, bytes, {
     contentType: file.type,
   });
 

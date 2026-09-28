@@ -12,7 +12,12 @@ import {
 } from '@/lib/api';
 import type { TranslationKey } from '@/lib/i18n';
 import { useI18n } from '@/lib/i18n/provider';
-import { MAX_PERSONA_IMAGES, PERSONA_IMAGE_WARNING_CODES } from '@/lib/persona-image-select';
+import {
+  ALLOWED_IMAGE_MIME_TYPES,
+  MAX_IMAGE_BYTES,
+  MAX_PERSONA_IMAGES,
+  PERSONA_IMAGE_WARNING_CODES,
+} from '@/lib/persona-image-select';
 
 // Single source of truth for the library cap; the picker limit, the
 // server count check, and the SQL trigger all derive from this value.
@@ -22,10 +27,6 @@ const MAX_LIBRARY_IMAGES = MAX_PERSONA_IMAGES;
 // unavailable (non-secure contexts). Collision-free within the session,
 // unlike Date.now()+Math.random().
 let nextPendingId = 0;
-// Mirrors the server-side limits in apps/web/lib/persona-images.ts. The
-// server stays authoritative; this only keeps the picker honest.
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
-const ACCEPTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 interface PendingImage {
   id: string;
@@ -35,21 +36,29 @@ interface PendingImage {
   description: string;
 }
 
-// Map server warning codes to localized messages; unknown codes pass
-// through raw so new server warnings are never silently dropped. Shared by
-// the upload flow and the card flows so a new code is added in one place.
+// Map server warning codes to localized messages; unknown codes map to a
+// localized generic message so new server warnings are neither silently
+// dropped nor rendered as raw English slugs. Shared by the upload flow and
+// the card flows so a new code is added in one place.
+
+// Hoisted: the code→i18n-key map is static; rebuilding it per warning
+// message would re-allocate the object on every call.
+const WARNING_KEYS: Record<string, TranslationKey> = {
+  [PERSONA_IMAGE_WARNING_CODES.PRIMARY_SWAP_FAILED]: 'persona.libraryWarningPrimarySwap',
+  [PERSONA_IMAGE_WARNING_CODES.METADATA_SAVE_FAILED]: 'persona.libraryWarningMetadataSave',
+  [PERSONA_IMAGE_WARNING_CODES.ROW_REFETCH_FAILED]: 'persona.libraryWarningRowRefetch',
+};
 
 export function mapPersonaImageWarnings(
   codes: string[],
   t: (key: TranslationKey, vars?: Record<string, string | number>) => string,
 ): string {
-  const WARNING_KEYS: Record<string, TranslationKey> = {
-    [PERSONA_IMAGE_WARNING_CODES.PRIMARY_SWAP_FAILED]: 'persona.libraryWarningPrimarySwap',
-    [PERSONA_IMAGE_WARNING_CODES.METADATA_SAVE_FAILED]: 'persona.libraryWarningMetadataSave',
-  };
   return codes.map((code) => {
     const key = WARNING_KEYS[code];
-    return key ? t(key) : code;
+    // Unknown codes are never silently dropped — but a raw English slug
+    // must never reach the UI either: a future server code the client
+    // doesn't know yet maps to a localized generic message.
+    return key ? t(key) : t('persona.libraryWarningUnknown');
   }).join(' ');
 }
 
@@ -109,7 +118,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
       // would also accept image/gif or image/svg+xml, which the server
       // rejects — keep client and server in agreement.
       if (
-        ACCEPTED_IMAGE_TYPES.has(file.type) &&
+        ALLOWED_IMAGE_MIME_TYPES.has(file.type) &&
         file.size > 0 &&
         file.size <= MAX_IMAGE_BYTES
       ) {
@@ -250,7 +259,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/jpeg,image/png,image/webp"
+            accept={[...ALLOWED_IMAGE_MIME_TYPES].join(',')}
             multiple
             className="hidden"
             onChange={onPickFiles}
@@ -365,7 +374,12 @@ function LibraryImageCard({
         description: description.trim(),
       });
       if (result.success) {
-        setEditing(false);
+        // The metadata was NOT persisted on METADATA_SAVE_FAILED: keep the
+        // editor open so the user can retry instead of losing their input
+        // to the refetch sync.
+        const metadataFailed =
+          result.warnings?.includes(PERSONA_IMAGE_WARNING_CODES.METADATA_SAVE_FAILED) ?? false;
+        if (!metadataFailed) setEditing(false);
         // Partial success (e.g. primary swap failed after metadata save):
         // surface the warning codes so the user knows the true state.
         if (result.warnings && result.warnings.length > 0) {

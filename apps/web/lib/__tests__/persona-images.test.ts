@@ -189,13 +189,13 @@ describe('resolveVideoImage', () => {
 });
 
 describe('recordRecentImageId', () => {
-  it('calls the atomic history function with the persona and image ids', async () => {
+  it('calls the atomic history function with the persona, image, and verified user ids', async () => {
     const { calls, client } = mockClient();
-    await recordRecentImageId(client, 'persona-1', 'img-formal');
+    await recordRecentImageId(client, 'persona-1', 'img-formal', 'user-1');
     expect(calls.rpcCalls).toEqual([
       {
         fn: 'record_persona_image_use',
-        args: { p_persona_id: 'persona-1', p_image_id: 'img-formal' },
+        args: { p_persona_id: 'persona-1', p_image_id: 'img-formal', p_user_id: 'user-1' },
       },
     ]);
   });
@@ -203,7 +203,7 @@ describe('recordRecentImageId', () => {
   it('never throws when the history write fails (best-effort)', async () => {
     const { calls, client } = mockClient({ historyError: { message: 'db down' } });
     await expect(
-      recordRecentImageId(client, 'persona-1', 'img-formal'),
+      recordRecentImageId(client, 'persona-1', 'img-formal', 'user-1'),
     ).resolves.toBeUndefined();
     expect(calls.rpcCalls).toHaveLength(1);
   });
@@ -212,19 +212,19 @@ describe('recordRecentImageId', () => {
 describe('setPrimaryLibraryImage', () => {
   it('swaps the primary image through the atomic SQL function', async () => {
     const { calls, client } = mockClient();
-    const result = await setPrimaryLibraryImage(client, 'persona-1', 'img-2');
+    const result = await setPrimaryLibraryImage(client, 'persona-1', 'img-2', 'user-1');
     expect(result).toBeNull();
     expect(calls.rpcCalls).toEqual([
       {
         fn: 'set_primary_persona_image',
-        args: { p_persona_id: 'persona-1', p_image_id: 'img-2' },
+        args: { p_persona_id: 'persona-1', p_image_id: 'img-2', p_user_id: 'user-1' },
       },
     ]);
   });
 
   it('returns an error when the swap RPC fails', async () => {
     const { client } = mockClient({ historyError: { message: 'db down' } });
-    const result = await setPrimaryLibraryImage(client, 'persona-1', 'img-2');
+    const result = await setPrimaryLibraryImage(client, 'persona-1', 'img-2', 'user-1');
     expect(result).toEqual({ error: 'Failed to update image.', status: 500 });
   });
 
@@ -232,7 +232,7 @@ describe('setPrimaryLibraryImage', () => {
     const { client } = mockClient({
       historyError: { message: 'image gone', code: 'P0002' },
     });
-    const result = await setPrimaryLibraryImage(client, 'persona-1', 'img-2');
+    const result = await setPrimaryLibraryImage(client, 'persona-1', 'img-2', 'user-1');
     expect(result).toEqual({
       error: "Image not found in this persona's image library.",
       status: 404,
@@ -586,5 +586,18 @@ describe('supabase/persona-images.sql literals', () => {
     // History window: `[1:3]` must equal PERSONA_IMAGE_HISTORY_LIMIT.
     const historyMatch = sql.match(/\[1:(\d+)\]/);
     expect(historyMatch?.[1]).toBe(String(PERSONA_IMAGE_HISTORY_LIMIT));
+
+    // Ownership guard: both RPCs take p_user_id and enforce it explicitly
+    // instead of relying on out-of-repo personas RLS. The app always passes
+    // the verified caller id; direct PostgREST callers fall back to
+    // auth.uid() via coalesce.
+    for (const fn of ['record_persona_image_use', 'set_primary_persona_image']) {
+      expect(sql).toContain(`function public.${fn}(`);
+      expect(sql).toMatch(
+        new RegExp(`function public\\.${fn}\\([^)]*p_user_id uuid`),
+      );
+    }
+    const guardMatches = sql.match(/user_id = coalesce\(p_user_id, auth\.uid\(\)\)/g);
+    expect(guardMatches).toHaveLength(2);
   });
 });

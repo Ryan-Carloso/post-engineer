@@ -162,7 +162,7 @@ describe('POST /api/persona with image library', () => {
     );
     expect(res.status).toBe(200);
     expect(calls.primarySwaps).toEqual([
-      { p_persona_id: PERSONA_ID, p_image_id: 'img-2' },
+      { p_persona_id: PERSONA_ID, p_image_id: 'img-2', p_user_id: USER_ID },
     ]);
   });
 

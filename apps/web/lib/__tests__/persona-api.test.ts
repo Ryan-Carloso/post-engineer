@@ -65,6 +65,38 @@ describe('lib/api — persona', () => {
       expect(result.success).toBe(false);
       expect(result.error).toBe('Nome obrigatório');
     });
+
+    it('passes through imageIds and warnings string arrays', async () => {
+      fetchMock.mockResolvedValue(
+        jsonResponse({
+          success: true,
+          personaId: 'p-1',
+          imageIds: ['img-1'],
+          warnings: ['primary_swap_failed'],
+        }),
+      );
+
+      const result = await createPersona(new FormData());
+
+      expect(result.imageIds).toEqual(['img-1']);
+      expect(result.warnings).toEqual(['primary_swap_failed']);
+    });
+
+    it('drops imageIds/warnings that are not string arrays', async () => {
+      fetchMock.mockResolvedValue(
+        jsonResponse({
+          success: true,
+          personaId: 'p-1',
+          imageIds: ['img-1', 42],
+          warnings: 'primary_swap_failed',
+        }),
+      );
+
+      const result = await createPersona(new FormData());
+
+      expect(result.imageIds).toBeUndefined();
+      expect(result.warnings).toBeUndefined();
+    });
   });
 
   describe('generatePersonaAvatar', () => {

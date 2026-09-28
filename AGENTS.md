@@ -636,3 +636,51 @@ Follow these so the same issues don't come back:
   terminated `.order()` instead of chaining it. When production adds a
   chain link, grep every test mock of that query and extend the chain —
   the mock that doesn't match the chain is the bug, not the code.
+
+## Web/API review learnings, round 15 (2026-09-28)
+- **Never render a raw internal slug to users.** Unknown server warning
+  codes used to pass through `mapPersonaImageWarnings` as raw English
+  slugs (broken i18n for future codes). They now map to a localized
+  generic fallback (`persona.libraryWarningUnknown` in en/pt) — the
+  code is still logged server-side for diagnostics, but the UI never
+  shows untranslated internal identifiers.
+- **Keep the editor open when the metadata was NOT saved.** A success
+  carrying METADATA_SAVE_FAILED used to close the editor; the refetch
+  then synced local inputs back to the unchanged stored metadata,
+  discarding the user's attempted edit. The editor now stays open on
+  that warning so the user can retry.
+- **A committed mutation is never a total failure.** When the primary
+  swap committed but the follow-up row refetch failed, the route
+  returned a bare 500 — hiding the committed change from a UI that
+  treats 500 as "nothing changed". It now returns 200
+  `{ success: true, image: null, warnings: [..., 'row_refetch_failed'] }`
+  (a distinct code, not the misleading 'primary_swap_failed'); the
+  mutation hook invalidates on success, so the library refetch converges
+  the UI to the true state.
+- **Storage bucket literals must derive from IMAGE_BUCKET.** Review
+  caught `storage.from('personas')` literals in the images route's
+  signed-URL/DELETE paths and persona route's creation/update/delete
+  cleanup — all now use IMAGE_BUCKET. When fixing a banned literal,
+  grep the whole diff for siblings (db `.from('personas')` calls are
+  fine — they are tables, not buckets).
+- **Response types must describe the response.** POST /api/persona
+  returned `warnings`/`imageIds` that CreatePersonaResult didn't
+  declare, so the web consumer dropped them silently. The type now
+  declares both, createPersona narrows them defensively, and the
+  creation feedback surfaces warnings through the shared i18n mapper.
+- **Client-safe constants live in the client-safe leaf.**
+  MAX_IMAGE_BYTES / ALLOWED_IMAGE_MIME_TYPES moved into
+  persona-image-select.ts (dependency-free) so the picker, the server
+  helper, and `<input accept>` all derive from one source — and
+  PERSONA_IMAGE_WARNING_CODES moved there too, after a client import
+  of persona-images.ts pulled node:crypto into the browser bundle.
+- **RPCs enforce ownership explicitly via p_user_id — never rely on
+  out-of-repo RLS alone.** record_persona_image_use and
+  set_primary_persona_image take `p_user_id uuid default null` and filter
+  `user_id = coalesce(p_user_id, auth.uid())`. The app always passes the
+  verified caller id (the route checked ownership first); direct
+  PostgREST callers fall back to auth.uid(). Blanket REVOKE is NOT an
+  option — the browser flow invokes set_primary_persona_image through
+  the session client. Signature changes need `drop function if exists`
+  for the old arity first: CREATE OR REPLACE does not replace a changed
+  argument list. The SQL-literals sync test pins the guard's presence.

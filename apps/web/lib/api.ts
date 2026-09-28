@@ -84,8 +84,22 @@ async function fetchBlueskyAccounts(): Promise<BlueskyAccountResponse> {
 
 async function createPersona(formData: FormData): Promise<CreatePersonaResult> {
   const response = await fetch('/api/persona', { method: 'POST', body: formData });
-  const data: CreatePersonaResult = await response.json();
-  return data;
+  const data = (await response.json()) as CreatePersonaResult;
+  // The server only sends string arrays here, but narrow defensively: a
+  // non-string entry would break the i18n warning mapper downstream.
+  return {
+    ...data,
+    imageIds: toStringArray(data.imageIds),
+    warnings: toStringArray(data.warnings),
+  };
+}
+
+// String arrays only: anything else (missing, mixed, or scalar) is absent,
+// never a partially-trusted array.
+function toStringArray(value: unknown): string[] | undefined {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string')
+    ? (value as string[])
+    : undefined;
 }
 
 export interface CreateScheduleInput {

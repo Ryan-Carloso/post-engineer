@@ -348,6 +348,23 @@ describe('app/(main)/persona/page — PersonaPage', () => {
     expect(navigation.push).toHaveBeenCalledWith('/schedule?personaId=p-1');
   });
 
+  it('mostra o aviso de sucesso parcial quando a criação retorna warnings', async () => {
+    vi.mocked(createPersona).mockResolvedValue({
+      success: true,
+      personaId: 'p-1',
+      imageIds: ['img-1'],
+      warnings: ['primary_swap_failed'],
+    } as never);
+    const user = userEvent.setup();
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await preencherFormularioValido(user);
+    await user.click(screen.getByText('persona.submit'));
+
+    // The warning code is mapped through i18n (t returns the key in tests).
+    expect(await screen.findByText('persona.libraryWarningPrimarySwap')).toBeTruthy();
+  });
+
   it('criação envia as preferências de conteúdo escolhidas', async () => {
     const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });

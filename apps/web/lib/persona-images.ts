@@ -2,14 +2,29 @@ import { randomUUID } from 'crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { detectMagicMimeType } from './media/magic-bytes';
+// Client-safe shared constants (upload limits, warning codes, selection
+// inputs) live in the dependency-free persona-image-select leaf: the
+// 'use client' library component imports them from there, and this module's
+// top-level node:crypto import must not ride into the browser bundle.
+// Re-exported here so server consumers keep a single import site.
 import {
+  ALLOWED_IMAGE_MIME_TYPES,
+  MAX_IMAGE_BYTES,
   MAX_PERSONA_IMAGES,
+  PERSONA_IMAGE_WARNING_CODES,
   selectPersonaImage,
   type ImageSelectionInput,
+  type PersonaImageWarningCode,
   type PersonaLibraryImage,
 } from './persona-image-select';
 
-export { MAX_PERSONA_IMAGES };
+export {
+  ALLOWED_IMAGE_MIME_TYPES,
+  MAX_IMAGE_BYTES,
+  MAX_PERSONA_IMAGES,
+  PERSONA_IMAGE_WARNING_CODES,
+  type PersonaImageWarningCode,
+};
 
 //---------------
 // Shared persona image-library helpers: validation, storage upload, and row
@@ -17,12 +32,7 @@ export { MAX_PERSONA_IMAGES };
 // POST /api/persona/images (later additions).
 //---------------
 
-export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 export const ALLOWED_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp']);
-// Explicit MIME allowlist: startsWith('image/') would also accept image/gif
-// or image/svg+xml payloads renamed to .png, and API-key callers bypass the
-// client-side ACCEPTED_IMAGE_TYPES filter.
-export const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 export const MAX_TAG_LENGTH = 100;
 export const MAX_DESCRIPTION_LENGTH = 500;
 export const IMAGE_BUCKET = 'personas';
@@ -32,17 +42,6 @@ export const IMAGE_BUCKET = 'personas';
  * trigger message — to a 400 "library full". Keep in sync with the SQL.
  */
 export const PERSONA_IMAGE_LIMIT_SQLSTATE = 'PEL01';
-
-/**
- * Stable warning codes live in the client-safe persona-image-select leaf
- * module (re-exported here for the server consumers): the 'use client'
- * library component imports them, and this module's top-level node:crypto
- * import must not ride into the browser bundle.
- */
-export {
-  PERSONA_IMAGE_WARNING_CODES,
-  type PersonaImageWarningCode,
-} from './persona-image-select';
 
 export interface LibraryImageInput {
   file: File;
@@ -361,14 +360,19 @@ export async function setPrimaryLibraryImage(
   supabase: SupabaseClient,
   personaId: string,
   imageId: string,
+  userId: string,
 ): Promise<{ error: string; status: 404 | 500 } | null> {
   // The swap runs inside the set_primary_persona_image SQL function: it
   // locks the parent persona row and performs demote-then-promote
   // back-to-back, so concurrent swaps cannot interleave (two separate
   // UPDATEs from the app could transiently leave zero or two primaries).
+  // p_user_id is the already-verified caller id (the route checked image
+  // ownership via getOwnedImage); the function enforces it explicitly so
+  // the service-role path does not rely on RLS.
   const { error } = await supabase.rpc('set_primary_persona_image', {
     p_persona_id: personaId,
     p_image_id: imageId,
+    p_user_id: userId,
   });
   if (error) {
     console.error('[persona-images] set primary failed', { error });
@@ -395,10 +399,14 @@ export async function recordRecentImageId(
   supabase: SupabaseClient,
   personaId: string,
   imageId: string,
+  userId: string,
 ): Promise<void> {
   const { error } = await supabase.rpc('record_persona_image_use', {
     p_persona_id: personaId,
     p_image_id: imageId,
+    // The SQL function enforces ownership explicitly; the caller must pass
+    // the already-verified user id (the route checked persona ownership).
+    p_user_id: userId,
   });
   if (error) {
     console.error('[persona-images] recent-image history update failed', { error });

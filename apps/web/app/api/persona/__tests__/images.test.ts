@@ -53,6 +53,11 @@ interface DbState {
   failPrimarySwapGone?: boolean;
   /** Makes the persona_images metadata UPDATE fail (partial-commit path). */
   failUpdate?: boolean;
+  /**
+   * Makes the post-mutation row refetch fail (fetchImageRow returns null).
+   * The default select branch serves the refetch in PATCH/POST flows.
+   */
+  failRefetch?: boolean;
   /** Makes the storage remove() call fail (orphan-file logging path). */
   storageRemoveError?: { message: string } | null;
 }
@@ -113,6 +118,9 @@ function mockClient(state: Partial<DbState> = {}) {
               data: full.imageRow,
               error: full.imageRow ? null : { message: 'nf' },
             });
+          }
+          if (full.failRefetch === true) {
+            return terminal({ data: null, error: { message: 'refetch failed' } });
           }
           return terminal({ data: full.listRows, error: null });
         }),
@@ -449,7 +457,7 @@ describe('PATCH /api/persona/images', () => {
     expect(res.status).toBe(200);
     // One atomic swap: no separate demote/promote updates from the app.
     expect(calls.primarySwaps).toEqual([
-      { p_persona_id: PERSONA_ID, p_image_id: IMAGE_ROW.id },
+      { p_persona_id: PERSONA_ID, p_image_id: IMAGE_ROW.id, p_user_id: USER_ID },
     ]);
   });
 
@@ -489,8 +497,48 @@ describe('PATCH /api/persona/images', () => {
     expect(body.warnings).toEqual(['metadata_save_failed']);
   });
 
-  it('returns 500 when a metadata-only update fails — no swap committed to warn about', async () => {
-    // The warning-style success exists only because a primary swap already
+  it('reports an honest partial success when the refetch fails after a committed swap', async () => {
+    // The swap RPC committed, then the row refetch failed: a bare 500 would
+    // tell the UI "nothing changed" and hide the committed primary change.
+    // The mutation hook invalidates on success, so the library refetch
+    // converges the UI to the true state.
+    mockAuth({ userId: USER_ID });
+    mockClient({ imageRow: IMAGE_ROW, updatedRow: IMAGE_ROW, failRefetch: true });
+    const res = await PATCH(patchRequest({ id: IMAGE_ROW.id, isPrimary: true }));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      success: boolean;
+      image: unknown;
+      warnings?: string[];
+    };
+    expect(body.success).toBe(true);
+    expect(body.image).toBeNull();
+    expect(body.warnings).toEqual(['row_refetch_failed']);
+  });
+
+  it('keeps the metadata warning when the refetch fails after a committed swap plus failed metadata', async () => {
+    mockAuth({ userId: USER_ID });
+    mockClient({
+      imageRow: IMAGE_ROW,
+      updatedRow: IMAGE_ROW,
+      failUpdate: true,
+      failRefetch: true,
+    });
+    const res = await PATCH(
+      patchRequest({ id: IMAGE_ROW.id, isPrimary: true, tag: 'formal' }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      success: boolean;
+      image: unknown;
+      warnings?: string[];
+    };
+    expect(body.success).toBe(true);
+    expect(body.image).toBeNull();
+    expect(body.warnings).toEqual(['metadata_save_failed', 'row_refetch_failed']);
+  });
+
+  it('returns 500 when a metadata-only update fails — no swap committed to warn about', async () => {    // The warning-style success exists only because a primary swap already
     // committed atomically. With no swap in this PATCH, claiming "Primary
     // image was updated" would be a lie: keep the honest 500.
     mockAuth({ userId: USER_ID });

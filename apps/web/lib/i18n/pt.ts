@@ -406,6 +406,10 @@ export const ptDictionary = {
       'A imagem foi enviada, mas não pôde ser definida como principal.',
     libraryWarningMetadataSave:
       'A imagem principal foi atualizada, mas a tag/descrição não pôde ser salva.',
+    libraryWarningUnknown:
+      'Algumas alterações não puderam ser totalmente aplicadas. Tente novamente.',
+    libraryWarningRowRefetch:
+      'A imagem principal foi atualizada, mas o estado atual não pôde ser confirmado. Atualize a biblioteca para ver o estado atual.',
     libraryUpdateError: 'Não foi possível salvar as alterações.',
     libraryDeleteError: 'Não foi possível remover a imagem.',
     libraryLimitReached: 'A biblioteca está cheia ({max} imagens). Remova uma para adicionar outra.',

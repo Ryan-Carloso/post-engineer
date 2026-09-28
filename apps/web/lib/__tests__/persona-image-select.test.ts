@@ -3,7 +3,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
+  MAX_IMAGE_BYTES,
   MAX_PERSONA_IMAGES,
+  ALLOWED_IMAGE_MIME_TYPES,
   PERSONA_IMAGE_HISTORY_LIMIT,
   PERSONA_IMAGE_WARNING_CODES,
   selectPersonaImage,
@@ -126,6 +128,7 @@ describe('PERSONA_IMAGE_WARNING_CODES', () => {
     expect(PERSONA_IMAGE_WARNING_CODES).toEqual({
       PRIMARY_SWAP_FAILED: 'primary_swap_failed',
       METADATA_SAVE_FAILED: 'metadata_save_failed',
+      ROW_REFETCH_FAILED: 'row_refetch_failed',
     });
   });
 
@@ -143,5 +146,24 @@ describe('PERSONA_IMAGE_WARNING_CODES', () => {
   it('is re-exported from persona-images for the server consumers', async () => {
     const serverModule = await import('../persona-images');
     expect(serverModule.PERSONA_IMAGE_WARNING_CODES).toBe(PERSONA_IMAGE_WARNING_CODES);
+  });
+});
+
+describe('shared upload limits', () => {
+  it('exposes the client-safe upload limits with the enforced values', () => {
+    // The picker imports these from the leaf instead of duplicating the
+    // literals, so the client-side gate cannot drift from server validation.
+    expect(MAX_IMAGE_BYTES).toBe(10 * 1024 * 1024);
+    expect([...ALLOWED_IMAGE_MIME_TYPES].sort()).toEqual([
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+    ]);
+  });
+
+  it('is re-exported from persona-images for the server consumers', async () => {
+    const serverModule = await import('../persona-images');
+    expect(serverModule.MAX_IMAGE_BYTES).toBe(MAX_IMAGE_BYTES);
+    expect(serverModule.ALLOWED_IMAGE_MIME_TYPES).toBe(ALLOWED_IMAGE_MIME_TYPES);
   });
 });

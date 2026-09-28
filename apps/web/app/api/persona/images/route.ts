@@ -118,12 +118,24 @@ async function fetchImageRow(
 
 // Shared mutation-response shape: refetch the row and project it without
 // image_path. Used by the primary-swap-only and metadata-partial-failure
-// paths so the response shape can't drift apart.
+// paths so the response shape can't drift apart. Both callers run after a
+// primary swap already committed atomically.
 function respondWithCurrentRow(
   current: Record<string, unknown> | null,
   warnings?: string[],
 ): NextResponse {
-  if (!current) return errorResponse(500, 'Failed to update image.');
+  if (!current) {
+    // The swap committed, but the row could not be re-read: a bare 500
+    // would tell the UI "nothing changed" and hide the committed primary
+    // change. Report the honest partial state instead — the mutation hook
+    // invalidates the library on success, so the UI refetches and converges
+    // to the true state.
+    return NextResponse.json({
+      success: true,
+      image: null,
+      warnings: [...(warnings ?? []), PERSONA_IMAGE_WARNING_CODES.ROW_REFETCH_FAILED],
+    });
+  }
   return NextResponse.json({
     success: true,
     image: withoutImagePath(current),
@@ -174,7 +186,7 @@ async function signImageUrl(
 ): Promise<string | null> {
   try {
     const { data, error } = await supabase.storage
-      .from('personas')
+      .from(IMAGE_BUCKET)
       .createSignedUrl(imagePath, 3600);
     if (error || !data?.signedUrl) {
       console.warn('[api/persona/images] failed to sign storage URL', { imagePath, error });
@@ -341,7 +353,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     // image exists. Log loudly and report the true is_primary state with a
     // warning, mirroring the PATCH partial-success contract. Warnings are
     // stable codes, not English copy: the UI maps them through i18n.
-    const primaryError = await setPrimaryLibraryImage(supabase, personaId, image.id);
+    const primaryError = await setPrimaryLibraryImage(supabase, personaId, image.id, auth.userId);
     if (primaryError) {
       console.error('[api/persona/images] primary flag after upload failed', {
         error: primaryError.error,
@@ -431,7 +443,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     // Reuse the shared helper (with its error checks) instead of
     // reimplementing the unset-others swap inline.
     const personaId = image.persona_id;
-    const primaryError = await setPrimaryLibraryImage(supabase, personaId, id);
+    const primaryError = await setPrimaryLibraryImage(supabase, personaId, id, auth.userId);
     if (primaryError) return errorResponse(primaryError.status, primaryError.error);
     primarySwapCommitted = true;
     delete updates.is_primary;
@@ -498,10 +510,10 @@ export async function DELETE(request: Request): Promise<NextResponse> {
   // failed remove must not go silently — otherwise orphaned objects pile up.
   // One retry mirrors the rollback paths in lib/persona-images.ts.
   const { error: storageError } = await supabase.storage
-    .from('personas')
+    .from(IMAGE_BUCKET)
     .remove([image.image_path]);
   if (storageError) {
-    const retry = await supabase.storage.from('personas').remove([image.image_path]);
+    const retry = await supabase.storage.from(IMAGE_BUCKET).remove([image.image_path]);
     if (retry.error) {
       console.error('[api/persona/images] storage cleanup failed', {
         imagePath: image.image_path,

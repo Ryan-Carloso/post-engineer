@@ -2363,7 +2363,7 @@ describe('POST /api/persona/video-job', () => {
 
       expect(res.status).toBe(200);
       expect(historyWrites(client)).toEqual([
-        ['record_persona_image_use', { p_persona_id: 'p-1', p_image_id: 'img-formal' }],
+        ['record_persona_image_use', { p_persona_id: 'p-1', p_image_id: 'img-formal', p_user_id: USER_ID }],
       ]);
     });
 

@@ -407,6 +407,10 @@ export const enDictionary: Dictionary = {
       'The image was uploaded, but it could not be set as the primary image.',
     libraryWarningMetadataSave:
       'Primary image was updated, but the tag/description could not be saved.',
+    libraryWarningUnknown:
+      'Some changes could not be fully applied. Please try again.',
+    libraryWarningRowRefetch:
+      'The primary image was updated, but the latest state could not be confirmed. Refresh the library to see the current state.',
     libraryUpdateError: 'Could not save the changes.',
     libraryDeleteError: 'Could not remove the image.',
     libraryLimitReached: 'The library is full ({max} images). Remove one to add another.',

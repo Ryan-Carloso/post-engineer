@@ -895,6 +895,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       supabase,
       libraryHistory.personaId,
       libraryHistory.imageId,
+      user.id,
     );
   }
 
