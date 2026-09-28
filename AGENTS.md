@@ -533,3 +533,39 @@ Follow these so the same issues don't come back:
 - **Document faceless exemptions at the handler.** PATCH/DELETE stay
   available for images that predate a switch to faceless; only POST is
   blocked. The comment lives on both handlers.
+
+## Web/API review learnings, round 12 (2026-09-28)
+- **UI gates must match the server's NULL semantics.** Making POST treat
+  NULL face_mix_percent as faceless while the page gate used `!== 0`
+  showed the library to legacy NULL-mix personas whose uploads always
+  failed. Gate on `(faceMixPercent ?? 0) !== 0` — every consumer of a
+  nullable flag must agree on what NULL means.
+- **Never expose internal paths in GET-only types.** PersonaImageRecord
+  declared `image_path: string` required while the API never returns it —
+  a future consumer would silently pass undefined to a storage call.
+  Delete the field, don't just document it.
+- **Split rollback leftovers by safety.** A flat leftoverPaths array let
+  callers storage.remove() files that surviving rows still referenced.
+  Return `{ orphanPaths, rowBackedPaths }`: retry the row delete inside
+  the helper, remove only orphans, log row-backed loudly for manual
+  cleanup.
+- **Wire every new server flag to a UI consumer.** image_url_error was
+  added to the GET shape with docs but the card ignored it — a silently
+  broken thumbnail with no retry hint. A flag without a consumer is a
+  broken contract.
+- **Shared helpers own their preconditions.** addLibraryImages silently
+  200'd on an empty batch; the helper now 400s so callers can't forget
+  the check.
+- **Normalize once, use everywhere.** tag/description were trimmed in the
+  validation loop and again at insert — one normalization step up front
+  prevents drift.
+- **Don't let insertions orphan comments.** Adding normalizeLibraryMetadata
+  between the HTTPS-policy comment and resolveBaseUrl detached the
+  comment from its function. Re-read the surrounding 10 lines after any
+  insertion.
+- **Client constants derive from shared sources.** MAX_LIBRARY_IMAGES
+  hardcoded 10 next to MAX_PERSONA_IMAGES = 10; import the shared
+  constant instead of duplicating the literal.
+- **Answer "already covered" with the test name.** The SQL sync test from
+  round 8 (parses persona-images.sql, asserts literals vs TS constants)
+  is the proof — cite it, don't re-argue.
