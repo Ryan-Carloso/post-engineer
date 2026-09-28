@@ -454,7 +454,6 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     // Stable code, not English copy: the UI maps it through i18n.
     return respondWithCurrentRow(current, ['metadata_save_failed']);
   }
-  }
   return NextResponse.json({ success: true, image: withoutImagePath(updated) });
 }
 
