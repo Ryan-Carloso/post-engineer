@@ -10,14 +10,27 @@ import {
   validateVisualCues,
   validateVoiceSource,
   photoExtensionOf,
+  resolveStoredFaceMixPercent,
   VALID_VIDEO_ASPECTS,
 } from '@/lib/persona-schema';
+import {
+  addLibraryImages,
+  IMAGE_BUCKET,
+  isFileLike,
+  readValidatedImage,
+  removeOrphanedUploadPaths,
+  setPrimaryLibraryImage,
+  validateImageFile,
+  MAX_PERSONA_IMAGES,
+  PERSONA_IMAGE_WARNING_CODES,
+  type LibraryImageInput,
+} from '@/lib/persona-images';
 
 //---------------
-// POST /api/persona — cria persona do usuário:
-// sobe foto/áudio para o bucket privado 'personas' no Supabase e
-// insere o registro na tabela public.personas (RLS por user_id).
-// Validação = schema zod compartilhado (lib/persona-schema.ts).
+// POST /api/persona — creates the user's persona:
+// uploads photo/audio to the private 'personas' bucket on Supabase and
+// inserts the record into public.personas (RLS by user_id).
+// Validation = shared zod schema (lib/persona-schema.ts).
 //---------------
 
 function errorResponse(status: number, error: string): NextResponse {
@@ -64,6 +77,67 @@ export async function POST(request: Request): Promise<NextResponse> {
     return errorResponse(400, voiceError);
   }
 
+  // Optional image library at creation: `images` (files) with parallel
+  // `imageTags` / `imageDescriptions` JSON arrays and an optional
+  // `imagePrimaryIndex`. Pre-validated here so a bad file fails before any
+  // upload or insert happens.
+  // Keep every file-like entry (even empty ones): validateImageFile rejects
+  // size-0 files with a clear error. Dropping entries here would shift the
+  // index-aligned imageTags/imageDescriptions onto the wrong images, so a
+  // non-file entry is a hard 400, not a silent filter.
+  const allImageEntries = formData.getAll('images');
+  if (allImageEntries.some((value) => !isFileLike(value))) {
+    return errorResponse(400, 'images must be a list of image files.');
+  }
+  const libraryFiles = allImageEntries.filter((value): value is File => isFileLike(value));
+  // Parsed once: parseJsonStringArray is pure JSON parsing, no need to
+  // re-parse per file inside the map below. Malformed JSON is a 400 here.
+  let imageTags: string[];
+  let imageDescriptions: string[];
+  try {
+    imageTags = parseJsonStringArray(formData.get('imageTags'));
+    imageDescriptions = parseJsonStringArray(formData.get('imageDescriptions'));
+  } catch (error) {
+    return errorResponse(400, error instanceof Error ? error.message : 'Invalid imageTags/imageDescriptions.');
+  }
+  // Tags/descriptions are matched to files by index: a non-empty array that
+  // does not cover every file is a client bug, not a silent default.
+  if (
+    (imageTags.length > 0 && imageTags.length !== libraryFiles.length) ||
+    (imageDescriptions.length > 0 && imageDescriptions.length !== libraryFiles.length)
+  ) {
+    return errorResponse(400, 'imageTags/imageDescriptions must match the number of images.');
+  }
+  const libraryInputs: LibraryImageInput[] = libraryFiles.map((file, index) => ({
+    file,
+    tag: imageTags[index] ?? '',
+    description: imageDescriptions[index] ?? '',
+  }));
+  // Cheap checks first: parsePrimaryIndex and the range check run before
+  // validateLibraryInputs reads every file's bytes, so a malformed index
+  // fails fast without the expensive per-file content validation.
+  let primaryIndex: number | null;
+  try {
+    primaryIndex = parsePrimaryIndex(formData.get('imagePrimaryIndex'));
+  } catch (error) {
+    return errorResponse(
+      400,
+      error instanceof Error ? error.message : 'Invalid imagePrimaryIndex.',
+    );
+  }
+  if (primaryIndex !== null && primaryIndex >= libraryFiles.length) {
+    return errorResponse(400, 'imagePrimaryIndex is out of range for the provided images.');
+  }
+  const libraryValidation = await validateLibraryInputs(
+    body.values.personaMode,
+    body.values.faceMixPercent,
+    libraryInputs,
+  );
+  if ('error' in libraryValidation) {
+    return errorResponse(400, libraryValidation.error);
+  }
+  const validatedLibraryInputs = libraryValidation.inputs;
+
   const photoPath =
     body.photo && body.photoExtension
       ? await uploadFile(supabase, user.id, body.photo, body.photoExtension)
@@ -85,7 +159,12 @@ export async function POST(request: Request): Promise<NextResponse> {
       script_prompt: body.values.scriptPrompt,
       paragraph_number: body.values.paragraphNumber,
       niche: body.values.niche,
-      face_mix_percent: body.values.faceMixPercent,
+      // Coerced via the shared helper (no nested ternary): no new row may
+      // store NULL — see resolveStoredFaceMixPercent.
+      face_mix_percent: resolveStoredFaceMixPercent(
+        body.values.personaMode,
+        body.values.faceMixPercent,
+      ),
       face_quality: body.values.faceQuality,
     })
     .select('id')
@@ -96,7 +175,196 @@ export async function POST(request: Request): Promise<NextResponse> {
     return errorResponse(500, 'Failed to create persona.');
   }
 
-  return NextResponse.json({ success: true, personaId: persona.id });
+  let libraryImageIds: string[] = [];
+  const warnings: string[] = [];
+  if (validatedLibraryInputs.length > 0) {
+    const added = await addLibraryImages(supabase, user.id, persona.id, validatedLibraryInputs);
+    if ('error' in added) {
+      // Roll back the whole creation so a half-written persona never survives.
+      // Rollback failures are logged loudly: an invisible failed rollback is
+      // worse than a loud one.
+      // orphanPaths have no surviving row, so retry their removal BEFORE the
+      // persona delete: its cascade erases the image rows, making failed
+      // removals unrecoverable.
+      // rowBackedPaths still have surviving rows (a cascade erases rows, not
+      // storage objects), so their files must NOT be removed before the
+      // delete. After a successful delete the rows are gone and the files
+      // are true orphans — remove them then, and only then.
+      const { orphanPaths, rowBackedPaths } = added.leftoverPaths ?? {
+        orphanPaths: [],
+        rowBackedPaths: [],
+      };
+      if (orphanPaths.length > 0) {
+        // Retry the orphan removal once via the shared helper (logs loudly
+        // on failure); row-backed orchestration below is route-specific.
+        await removeOrphanedUploadPaths(supabase, orphanPaths, {
+          route: 'api/persona',
+        });
+      }
+      const { error: rollbackError } = await supabase
+        .from('personas')
+        .delete()
+        .eq('id', persona.id);
+      if (rollbackError) {
+        console.error('[api/persona] creation rollback failed', { error: rollbackError });
+        if (rowBackedPaths.length > 0) {
+          // Rows survive, so their storage files must survive too: removing
+          // them would leave rows pointing at deleted objects.
+          console.error(
+            '[api/persona] creation rollback failed; row-backed image files left in place',
+            { rowBackedPaths },
+          );
+        }
+      } else if (rowBackedPaths.length > 0) {
+        // The cascade erased the image rows: their storage files are now
+        // true orphans. One retry, then loud logging — the rows are gone,
+        // so this is the last recovery chance.
+        const { error: rowBackedRemoveError } = await supabase.storage
+          .from(IMAGE_BUCKET)
+          .remove(rowBackedPaths);
+        if (rowBackedRemoveError) {
+          const { error: rowBackedRetryError } = await supabase.storage
+            .from(IMAGE_BUCKET)
+            .remove(rowBackedPaths);
+          if (rowBackedRetryError) {
+            console.error(
+              '[api/persona] row-backed library storage remove failed after cascade delete',
+              { error: rowBackedRetryError, rowBackedPaths },
+            );
+          }
+        }
+      }
+      if (photoPath) {
+        const { error: photoRollbackError } = await supabase.storage
+          .from(IMAGE_BUCKET)
+          .remove([photoPath]);
+        if (photoRollbackError) {
+          console.error('[api/persona] photo rollback failed', {
+            error: photoRollbackError,
+          });
+        }
+      }
+      return errorResponse(added.status, added.error);
+    }
+    libraryImageIds = added.images.map((image) => image.id);
+    // Defensive: addLibraryImages rolls back partial work and returns exactly
+    // one row per input, so the up-front range check guarantees this index is
+    // in range — there is no partial-success path to skip here.
+    // A failed primary swap is surfaced as a warning, not a 500: the persona
+    // and its images are already committed.
+    if (primaryIndex !== null && primaryIndex < added.images.length) {
+      const primaryError = await setPrimaryLibraryImage(
+        supabase,
+        persona.id,
+        added.images[primaryIndex].id,
+        user.id,
+      );
+      if (primaryError) {
+        console.error('[api/persona] set primary library image failed', {
+          error: primaryError.error,
+        });
+        // Stable code, not English copy: the UI maps it through i18n,
+        // consistent with the /api/persona/images warnings contract.
+        warnings.push(PERSONA_IMAGE_WARNING_CODES.PRIMARY_SWAP_FAILED);
+      }
+    }
+  }
+
+  // The web UI never sends images[] at creation (the library is edit-only),
+  // so warnings only reach direct API-key callers — but the response shape
+  // is shared, and the web CreatePersonaResult type describes it.
+  return NextResponse.json({
+    success: true,
+    personaId: persona.id,
+    imageIds: libraryImageIds,
+    ...(warnings.length > 0 ? { warnings } : {}),
+  });
+}
+
+//---------------
+// parseJsonStringArray — reads an optional JSON array of strings from a
+// multipart field (e.g. imageTags). Returns [] on missing/invalid input.
+//---------------
+function parseJsonStringArray(value: FormDataEntryValue | null): string[] {
+  if (typeof value !== 'string' || value.trim() === '') return [];
+  // Malformed JSON is a client bug, not a silent default: throwing here
+  // becomes a 400 at the call site instead of empty tags/descriptions.
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error('imageTags/imageDescriptions must be a JSON array of strings.');
+  }
+  if (!Array.isArray(parsed) || parsed.some((entry) => typeof entry !== 'string')) {
+    throw new Error('imageTags/imageDescriptions must be a JSON array of strings.');
+  }
+  return parsed;
+}
+
+function parsePrimaryIndex(value: FormDataEntryValue | null): number | null {
+  if (typeof value !== 'string' || value.trim() === '') return null;
+  const trimmed = value.trim();
+  // A non-empty but non-numeric value is a client bug, not a silent
+  // default: silently dropping it would lose the caller's pinned primary
+  // selection. Strict digits only — parseInt('3x') === 3 would coerce.
+  if (!/^\d+$/.test(trimmed)) {
+    throw new Error('imagePrimaryIndex must be a non-negative integer.');
+  }
+  return Number.parseInt(trimmed, 10);
+}
+
+//---------------
+// validateLibraryInputs — library rules at creation:
+// - faceless personas (or faceMixPercent 0) accept no images at all;
+// - at most MAX_PERSONA_IMAGES files, each a valid image.
+//---------------
+async function validateLibraryInputs(
+  personaMode: 'persona' | 'faceless',
+  faceMixPercent: number | null,
+  inputs: LibraryImageInput[],
+): Promise<{ inputs: LibraryImageInput[] } | { error: string }> {
+  if (inputs.length === 0) return { inputs: [] };
+  if (personaMode === 'faceless' || faceMixPercent === 0) {
+    return { error: 'Faceless persona must not include library images.' };
+  }
+  if (inputs.length > MAX_PERSONA_IMAGES) {
+    return { error: `Image library accepts at most ${MAX_PERSONA_IMAGES} images.` };
+  }
+  // Intentional per-file validation BEFORE any upload or persona insert, so
+  // a bad file never creates partial state the rollback then has to clean
+  // up. The magic-byte check reads the real bytes (declared MIME type and
+  // extension are client-controlled); the validated bytes are passed through
+  // to addLibraryImages so the file is not read a second time.
+  // Per-file errors carry the entry index and filename so a caller with
+  // up to 10 files can tell which entry to fix. validateImageFile's own
+  // messages stay stable (the UI's ERROR_CLASS_PATTERNS matches some of
+  // them by shape); the context is appended here at the call site.
+  const validated: LibraryImageInput[] = [];
+  for (let index = 0; index < inputs.length; index += 1) {
+    const input = inputs[index] as LibraryImageInput;
+    const fileCheck = validateImageFile(input.file);
+    if ('error' in fileCheck) {
+      return { error: withImageContext(fileCheck.error, index, input.file.name) };
+    }
+    const content = await readValidatedImage(fileCheck.file);
+    if ('error' in content) {
+      return { error: withImageContext(content.error, index, input.file.name) };
+    }
+    validated.push({
+      ...input,
+      validatedContent: { bytes: content.bytes, mime: content.mime },
+    });
+  }
+  return { inputs: validated };
+}
+
+/**
+ * Appends the 1-based entry index and filename to a per-file validation
+ * error, so batch callers can identify the failing file.
+ */
+function withImageContext(error: string, index: number, fileName: string): string {
+  const name = fileName.trim() === '' ? '' : `: ${fileName}`;
+  return `${error} (image ${index + 1}${name})`;
 }
 
 export async function PATCH(request: Request): Promise<NextResponse> {
@@ -175,7 +443,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
   }
 
   if (stalePaths.length > 0) {
-    const { error: storageError } = await supabase.storage.from('personas').remove(stalePaths);
+    const { error: storageError } = await supabase.storage.from(IMAGE_BUCKET).remove(stalePaths);
     if (storageError) {
       console.error('[api/persona] storage cleanup failed', { error: storageError });
     }
@@ -185,8 +453,8 @@ export async function PATCH(request: Request): Promise<NextResponse> {
 }
 
 //---------------
-// parsePatchBody — todos os campos são opcionais na edição; retorna
-// null para os que não vieram no multipart.
+// parsePatchBody — all fields are optional on edit; returns
+// null for the ones missing from the multipart body.
 //---------------
 interface PersonaPatchBody {
   name: string | null;
@@ -287,14 +555,29 @@ export async function DELETE(request: Request): Promise<NextResponse> {
   const paths = [persona.photo_path, persona.voice_audio_path].filter(
     (value): value is string => typeof value === 'string' && value.length > 0,
   );
-  if (paths.length > 0) {
-    const { error: storageError } = await supabase.storage.from('personas').remove(paths);
-    if (storageError) {
-      console.error('[api/persona] storage cleanup failed', { error: storageError });
-      return errorResponse(500, 'Failed to remove persona files.');
+  // Library images: their rows vanish via on delete cascade, but the storage
+  // objects would orphan forever — collect the paths BEFORE the persona row
+  // is deleted, while they are still recoverable.
+  const { data: libraryRows, error: libraryError } = await supabase
+    .from('persona_images')
+    .select('image_path')
+    .eq('persona_id', personaId);
+  if (libraryError) {
+    console.error('[api/persona] library image cleanup lookup failed', {
+      error: libraryError,
+    });
+    return errorResponse(500, 'Failed to remove persona files.');
+  }
+  for (const row of libraryRows ?? []) {
+    if (typeof row.image_path === 'string' && row.image_path.length > 0) {
+      paths.push(row.image_path);
     }
   }
 
+  // Row first, storage second: if the row delete fails, nothing is lost; if
+  // the storage remove fails afterwards, the persona is already gone and the
+  // orphaned files are cleanable — never destroy data still referenced by a
+  // surviving row.
   const { error: deleteError } = await supabase
     .from('personas')
     .delete()
@@ -304,26 +587,20 @@ export async function DELETE(request: Request): Promise<NextResponse> {
     console.error('[api/persona] delete failed', { error: deleteError });
     return errorResponse(500, 'Failed to delete persona.');
   }
+  if (paths.length > 0) {
+    const { error: storageError } = await supabase.storage.from(IMAGE_BUCKET).remove(paths);
+    if (storageError) {
+      console.error('[api/persona] storage cleanup failed after delete', {
+        error: storageError,
+        paths,
+      });
+    }
+  }
   return NextResponse.json({ success: true });
 }
 
-//---------------
-// isFilePart — os arquivos vêm do runtime do servidor (undici), cujo File
-// não é o mesmo construtor do ambiente de testes; checagem estrutural.
-//---------------
-function isFilePart(value: FormDataEntryValue | null): value is File {
-  if (typeof value !== 'object' || value === null) return false;
-  const candidate = value as unknown as Record<string, unknown>;
-  return (
-    typeof candidate.name === 'string' &&
-    typeof candidate.type === 'string' &&
-    typeof candidate.size === 'number' &&
-    candidate.arrayBuffer instanceof Function
-  );
-}
-
 function asFile(value: FormDataEntryValue | null): File | null {
-  return isFilePart(value) ? value : null;
+  return isFileLike(value) ? value : null;
 }
 
 function optionalString(value: FormDataEntryValue | null): string | null {
@@ -332,8 +609,8 @@ function optionalString(value: FormDataEntryValue | null): string | null {
 }
 
 //---------------
-// uploadFile — sobe o arquivo no bucket 'personas' sob a pasta do usuário.
-// Exportada para reuso por outras rotas de persona.
+// uploadFile — uploads the file to the 'personas' bucket under the user's folder.
+// Exported for reuse by other persona routes.
 //---------------
 export async function uploadFile(
   supabase: SupabaseClient,
@@ -343,7 +620,7 @@ export async function uploadFile(
 ): Promise<string | null> {
   const path = `${userId}/${randomUUID()}.${extension}`;
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const { error } = await supabase.storage.from('personas').upload(path, bytes, {
+  const { error } = await supabase.storage.from(IMAGE_BUCKET).upload(path, bytes, {
     contentType: file.type,
   });
 

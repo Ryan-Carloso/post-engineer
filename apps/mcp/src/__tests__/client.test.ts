@@ -1,5 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PostEngineerClient } from '../client.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  PostEngineerClient,
+  assertImageSize,
+  MAX_LIBRARY_IMAGE_BYTES,
+  MAX_LIBRARY_TAG_LENGTH,
+  MAX_LIBRARY_DESCRIPTION_LENGTH,
+} from '../client.js';
+import { ImageTooLargeError } from '../errors.js';
 
 describe('PostEngineerClient', () => {
   let client: PostEngineerClient;
@@ -796,5 +803,457 @@ describe('PostEngineerClient error truncation', () => {
     } catch (error) {
       expect((error as Error).message.length).toBeLessThan(1000);
     }
+  });
+});
+
+describe('PostEngineerClient persona image library', () => {
+  let client: PostEngineerClient;
+  const baseUrl = 'https://post-engineer.com';
+  const tempDirs: string[] = [];
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    client = new PostEngineerClient({ apiKey: 'test-token-123' });
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+    });
+  });
+
+  afterEach(async () => {
+    const { rm } = await import('node:fs/promises');
+    await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  });
+
+  async function writeTempImage(name: string, size = 4): Promise<string> {
+    const { mkdtempSync } = await import('node:fs');
+    const { writeFile } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'pe-mcp-test-'));
+    tempDirs.push(dir);
+    const path = join(dir, name);
+    await writeFile(path, Buffer.alloc(size, 0xff));
+    return path;
+  }
+
+  function formDataOf(): FormData {
+    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
+    return request?.body as FormData;
+  }
+
+  it('createPersona uploads library images with parallel tags and descriptions', async () => {
+    const first = await writeTempImage('a.jpg');
+    const second = await writeTempImage('b.png');
+    await client.createPersona({
+      name: 'Tech Creator',
+      avatarUrl: 'https://example.com/avatar.png',
+      images: [
+        { path: first, tag: 'casual', description: 'smiling at the beach' },
+        { path: second, tag: 'formal' },
+      ],
+      imagePrimaryIndex: 1,
+    });
+
+    const formData = formDataOf();
+    expect(formData.getAll('images')).toHaveLength(2);
+    expect(JSON.parse(String(formData.get('imageTags')))).toEqual(['casual', 'formal']);
+    expect(JSON.parse(String(formData.get('imageDescriptions')))).toEqual(['smiling at the beach', '']);
+    expect(formData.get('imagePrimaryIndex')).toBe('1');
+  });
+
+  it('createPersona rejects more than 10 library images', async () => {
+    const images = Array.from({ length: 11 }, (_, i) => ({ path: `/tmp/img-${i}.jpg` }));
+    await expect(
+      client.createPersona({ name: 'X', avatarUrl: 'https://example.com/a.png', images })
+    ).rejects.toThrow(/At most 10 library images/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('createPersona rejects library images without an avatar (persona mode required)', async () => {
+    await expect(
+      client.createPersona({ name: 'X', images: [{ path: '/tmp/img.jpg' }] })
+    ).rejects.toThrow(/require a persona avatar/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('createPersona rejects library images with avatarUrl but faceMixPercent 0 (server treats 0 as faceless)', async () => {
+    // The server 400s library images when the effective face mix is 0, so
+    // fail fast locally instead of uploading the image bytes first.
+    await expect(
+      client.createPersona({
+        name: 'X',
+        avatarUrl: 'https://example.com/a.png',
+        faceMixPercent: 0,
+        images: [{ path: '/tmp/img.jpg' }],
+      })
+    ).rejects.toThrow(/faceMixPercent must be greater than 0/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('createPersona rejects an out-of-range imagePrimaryIndex', async () => {
+    const path = await writeTempImage('a.jpg');
+    await expect(
+      client.createPersona({
+        name: 'X',
+        avatarUrl: 'https://example.com/a.png',
+        images: [{ path }],
+        imagePrimaryIndex: 1,
+      })
+    ).rejects.toThrow(/out of range/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('createPersona validates imagePrimaryIndex before reading any file', async () => {
+    // A nonexistent path would fail the read; the range error must win,
+    // proving no file is read before the pure-argument check.
+    await expect(
+      client.createPersona({
+        name: 'X',
+        avatarUrl: 'https://example.com/a.png',
+        images: [{ path: '/tmp/does-not-exist.jpg' }],
+        imagePrimaryIndex: 5,
+      })
+    ).rejects.toThrow(/out of range/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('createPersona normalizes whitespace-only tag/description to empty strings (server stores \'\' on both paths)', async () => {
+    const path = await writeTempImage('a.jpg');
+    await client.createPersona({
+      name: 'Tech Creator',
+      avatarUrl: 'https://example.com/avatar.png',
+      images: [{ path, tag: '  casual  ', description: '   ' }],
+    });
+
+    const formData = formDataOf();
+    expect(JSON.parse(String(formData.get('imageTags')))).toEqual(['casual']);
+    expect(JSON.parse(String(formData.get('imageDescriptions')))).toEqual(['']);
+  });
+
+  it('createPersona rejects an oversized tag before uploading', async () => {
+    const path = await writeTempImage('a.jpg');
+    await expect(
+      client.createPersona({
+        name: 'X',
+        avatarUrl: 'https://example.com/a.png',
+        images: [{ path, tag: 'x'.repeat(101) }],
+      })
+    ).rejects.toThrow(/exceeds 100 characters/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('createPersona rejects an oversized description before uploading', async () => {
+    const path = await writeTempImage('a.jpg');
+    await expect(
+      client.createPersona({
+        name: 'X',
+        avatarUrl: 'https://example.com/a.png',
+        images: [{ path, description: 'x'.repeat(501) }],
+      })
+    ).rejects.toThrow(/exceeds 500 characters/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('createPersona rejects imagePrimaryIndex when no images are supplied', async () => {
+    // A lone index with no images is a caller bug: fail fast instead of a
+    // silent successful creation with no primary image.
+    await expect(
+      client.createPersona({
+        name: 'X',
+        avatarUrl: 'https://example.com/a.png',
+        imagePrimaryIndex: 0,
+      })
+    ).rejects.toThrow(/requires images/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('createPersona reports the full path for zero-byte image files', async () => {
+    const path = await writeTempImage('empty.jpg', 0);
+    // The full path (not just the basename) is reported so the agent can
+    // find the offending file when several images are uploaded at once.
+    await expect(
+      client.createPersona({
+        name: 'X',
+        avatarUrl: 'https://example.com/a.png',
+        images: [{ path }],
+      })
+    ).rejects.toThrow(path);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('createPersona rejects library images larger than 10MB', async () => {
+    const path = await writeTempImage('big.jpg', 11 * 1024 * 1024);
+    await expect(
+      client.createPersona({
+        name: 'X',
+        avatarUrl: 'https://example.com/a.png',
+        images: [{ path }],
+      })
+    ).rejects.toThrow(/10MB/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('createPersona rejects oversized images with the typed ImageTooLargeError (never re-wrapped)', async () => {
+    // The stat pre-check throws inside the try/catch that wraps stat
+    // failures as "Failed to read image": the typed error must pass through
+    // by instanceof, not by matching the message text.
+    const path = await writeTempImage('big.jpg', 11 * 1024 * 1024);
+    const error: unknown = await client
+      .createPersona({
+        name: 'X',
+        avatarUrl: 'https://example.com/a.png',
+        images: [{ path }],
+      })
+      .catch((e: unknown) => e);
+    if (!(error instanceof ImageTooLargeError)) {
+      throw new Error(`expected ImageTooLargeError, got: ${String(error)}`);
+    }
+    expect(error.path).toBe(path);
+    expect(error.sizeBytes).toBe(11 * 1024 * 1024);
+    expect(error.message).toContain(path);
+    expect(error.message).not.toContain('Failed to read image');
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('createPersona still wraps stat failures as "Failed to read image"', async () => {
+    // A nonexistent path fails stat(): the typed size error is not involved,
+    // so the catch must still produce the actionable read-failure message.
+    await expect(
+      client.createPersona({
+        name: 'X',
+        avatarUrl: 'https://example.com/a.png',
+        images: [{ path: '/tmp/pe-mcp-test-does-not-exist.jpg' }],
+      })
+    ).rejects.toThrow(/Failed to read image/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('assertImageSize throws the typed error with the full path and a unified message', () => {
+    const size = MAX_LIBRARY_IMAGE_BYTES + 1;
+    let error: unknown;
+    try {
+      assertImageSize(size, '/tmp/photos/a.jpg');
+    } catch (e: unknown) {
+      error = e;
+    }
+    if (!(error instanceof ImageTooLargeError)) {
+      throw new Error(`expected ImageTooLargeError, got: ${String(error)}`);
+    }
+    expect(error.path).toBe('/tmp/photos/a.jpg');
+    expect(error.sizeBytes).toBe(size);
+    expect(error.message).toBe(
+      `Image "/tmp/photos/a.jpg" is too large (${size} bytes; max 10MB).`
+    );
+  });
+
+  it('assertImageSize accepts sizes at or under the limit', () => {
+    expect(() => assertImageSize(MAX_LIBRARY_IMAGE_BYTES, '/tmp/photos/a.jpg')).not.toThrow();
+    expect(() => assertImageSize(0, '/tmp/photos/a.jpg')).not.toThrow();
+  });
+
+  it('addPersonaImage rejects unsupported file extensions', async () => {
+    const path = await writeTempImage('x.bmp');
+    await expect(client.addPersonaImage('p-1', { path })).rejects.toThrow(
+      /JPG\/JPEG, PNG, or WebP/
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('addPersonaImage rejects an oversized tag before uploading', async () => {
+    const path = await writeTempImage('a.jpg');
+    await expect(
+      client.addPersonaImage('p-1', { path, tag: 'x'.repeat(101) })
+    ).rejects.toThrow(/exceeds 100 characters/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('addPersonaImage rejects an oversized description before uploading', async () => {
+    const path = await writeTempImage('a.jpg');
+    await expect(
+      client.addPersonaImage('p-1', { path, description: 'x'.repeat(501) })
+    ).rejects.toThrow(/exceeds 500 characters/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('addPersonaImage rejects library images larger than 10MB', async () => {
+    const path = await writeTempImage('big.png', 11 * 1024 * 1024);
+    await expect(client.addPersonaImage('p-1', { path })).rejects.toThrow(/10MB/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('generateVideoJob sends image_id when provided', async () => {
+    await client.generateVideoJob({ personaId: 'p-1', imageId: 'img-123' });
+    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
+    const body = JSON.parse(String(request?.body));
+    expect(body.image_id).toBe('img-123');
+    expect(body.personaId).toBe('p-1');
+  });
+
+  it('generateVideoJob omits image_id when not provided', async () => {
+    await client.generateVideoJob({ personaId: 'p-1' });
+    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
+    const body = JSON.parse(String(request?.body));
+    expect('image_id' in body).toBe(false);
+  });
+
+  it('listPersonaImages hits the library endpoint', async () => {
+    await client.listPersonaImages('p-1');
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/persona/images?personaId=p-1`,
+      expect.objectContaining({ method: 'GET' })
+    );
+  });
+
+  it('addPersonaImage uploads a single image as multipart', async () => {
+    const path = await writeTempImage('c.webp');
+    await client.addPersonaImage('p-1', { path, tag: 'gym', description: 'training', isPrimary: true });
+
+    const request = vi.mocked(global.fetch).mock.calls[0];
+    expect(request?.[0]).toBe(`${baseUrl}/api/persona/images`);
+    expect(request?.[1]).toMatchObject({ method: 'POST' });
+    const formData = request?.[1]?.body as FormData;
+    expect(formData.get('personaId')).toBe('p-1');
+    expect(formData.getAll('image')).toHaveLength(1);
+    expect(formData.get('tag')).toBe('gym');
+    expect(formData.get('description')).toBe('training');
+    expect(formData.get('isPrimary')).toBe('true');
+  });
+
+  it('addPersonaImage omits empty tag/description keys (the server stores \'\' on both upload paths)', async () => {
+    // An empty tag can never match the deterministic keyword selection;
+    // the server stores metadata verbatim, so the client must normalize.
+    const path = await writeTempImage('d.png');
+    await client.addPersonaImage('p-1', { path, tag: '   ', description: '' });
+
+    const request = vi.mocked(global.fetch).mock.calls[0];
+    const formData = request?.[1]?.body as FormData;
+    expect(formData.has('tag')).toBe(false);
+    expect(formData.has('description')).toBe(false);
+  });
+
+  it('updatePersonaImage sends a PATCH with the metadata', async () => {
+    await client.updatePersonaImage({ id: 'img-1', tag: 'casual', isPrimary: true });
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/persona/images`,
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ id: 'img-1', tag: 'casual', isPrimary: true }),
+      })
+    );
+  });
+
+  it('updatePersonaImage throws client-side when no fields are provided', async () => {
+    await expect(client.updatePersonaImage({ id: 'img-1' })).rejects.toThrow(
+      /at least one of tag, description, or isPrimary/
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('addPersonaImage rejects a dotfile (".PNG") as an unsupported extension', async () => {
+    // Node's extname('.PNG') is '' (a leading dot with no other dots is not
+    // an extension), so dotfiles are rejected here — the fail-fast promise
+    // holds, just via the unsupported-extension branch.
+    const path = await writeTempImage('.PNG');
+    await expect(client.addPersonaImage('p-1', { path })).rejects.toThrow(
+      /Unsupported image extension "\(none\)"/
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('updatePersonaImage rejects an over-length tag locally instead of a server 400', async () => {
+    // Symmetric with the add/create paths: fail fast before the round-trip.
+    await expect(
+      client.updatePersonaImage({ id: 'img-1', tag: 'x'.repeat(MAX_LIBRARY_TAG_LENGTH + 1) })
+    ).rejects.toThrow(/tag.*exceeds/);
+    await expect(
+      client.updatePersonaImage({
+        id: 'img-1',
+        description: 'y'.repeat(MAX_LIBRARY_DESCRIPTION_LENGTH + 1),
+      })
+    ).rejects.toThrow(/description.*exceeds/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('updatePersonaImage rejects isPrimary:false locally instead of a server 400', async () => {
+    // The server PATCH is swap-only: isPrimary:false always 400s there.
+    // Failing fast here keeps the message actionable and avoids the
+    // wasted round-trip.
+    await expect(
+      client.updatePersonaImage({ id: 'img-1', isPrimary: false })
+    ).rejects.toThrow(/cannot be false.*mark another image/i);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('addPersonaImage wraps a missing file in an actionable error', async () => {
+    await expect(
+      client.addPersonaImage('p-1', { path: '/tmp/does-not-exist-a1b2c3.jpg' })
+    ).rejects.toThrow(/Failed to read image "\/tmp\/does-not-exist-a1b2c3\.jpg"/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('createPersona uses the longer upload timeout for file-carrying requests', async () => {
+    const path = await writeTempImage('a.jpg');
+    const timeouts: number[] = [];
+    const realTimeout = AbortSignal.timeout;
+    const spy = vi
+      .spyOn(AbortSignal, 'timeout')
+      .mockImplementation((ms: number) => {
+        timeouts.push(ms);
+        return realTimeout(ms);
+      });
+    try {
+      await client.createPersona({
+        name: 'X',
+        avatarUrl: 'https://example.com/a.png',
+        images: [{ path }],
+      });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(timeouts).toContain(120_000);
+  });
+
+  it('createPersona always uses the upload timeout (multipart request)', async () => {
+    const timeouts: number[] = [];
+    const realTimeout = AbortSignal.timeout;
+    const spy = vi
+      .spyOn(AbortSignal, 'timeout')
+      .mockImplementation((ms: number) => {
+        timeouts.push(ms);
+        return realTimeout(ms);
+      });
+    try {
+      await client.createPersona({ name: 'X', avatarUrl: 'https://example.com/a.png' });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(timeouts).toEqual([120_000]);
+  });
+
+  it('listPersonas uses the default timeout', async () => {
+    const timeouts: number[] = [];
+    const realTimeout = AbortSignal.timeout;
+    const spy = vi
+      .spyOn(AbortSignal, 'timeout')
+      .mockImplementation((ms: number) => {
+        timeouts.push(ms);
+        return realTimeout(ms);
+      });
+    try {
+      await client.listPersonas();
+    } finally {
+      spy.mockRestore();
+    }
+    expect(timeouts).toEqual([30_000]);
+  });
+
+  it('deletePersonaImage sends a DELETE with the id query', async () => {
+    await client.deletePersonaImage('img-1');
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/persona/images?id=img-1`,
+      expect.objectContaining({ method: 'DELETE' })
+    );
   });
 });

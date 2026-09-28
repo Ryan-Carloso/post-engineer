@@ -9,6 +9,35 @@ import { z } from 'zod';
 export const VALID_VIDEO_ASPECTS = ['9:16', '16:9', '1:1'] as const;
 export const PERSONA_MODES = ['persona', 'faceless'] as const;
 export const FACE_QUALITIES = ['ok', 'very_good'] as const;
+// Default face mix for persona-mode creations that omit the field (the UI
+// always sends it; raw API callers may not). Shared so the insert
+// coercion and the UI store can't drift apart: no new row may store NULL,
+// so NULL keeps meaning "legacy faceless-mode row" everywhere.
+export const DEFAULT_FACE_MIX_PERCENT = 100;
+
+/**
+ * Coerces the face-mix value stored at creation. Faceless creations are
+ * ALWAYS stored as 0 — even with an explicit mix (a direct API caller can
+ * send personaMode=faceless&faceMixPercent=80; storing 80 would let the
+ * images route treat the row as face-requiring and accept library
+ * uploads, re-opening the backdoor). Persona-mode creations without an
+ * explicit mix are coerced to the shared default for the same reason: a
+ * stored NULL is treated as faceless by the images route and the page
+ * gate, which would permanently write-lock the library for a persona the
+ * creation accepted as face-requiring.
+ */
+export function resolveStoredFaceMixPercent(
+  personaMode: 'persona' | 'faceless',
+  faceMixPercent: number | null | undefined,
+): number {
+  // The faceless branch is UNCONDITIONAL: a direct API caller can send
+  // personaMode=faceless with an explicit faceMixPercent (e.g. 80). If that
+  // were stored, the images route (which treats the stored mix as the
+  // facelessness source) would accept library uploads — re-opening the
+  // backdoor the NULL-coercion was meant to close.
+  if (personaMode === 'faceless') return 0;
+  return faceMixPercent ?? DEFAULT_FACE_MIX_PERCENT;
+}
 
 export const PHOTO_EXTENSIONS: Record<string, string> = {
   'image/png': 'png',

@@ -18,6 +18,7 @@ import {
   updatePersona,
   useDeletePersonaMutation,
   useUpdatePersonaMutation,
+  usePersonaImagesQuery,
 } from '@/lib/api';
 
 const jsonResponse = (body: unknown, status = 200): Response =>
@@ -64,6 +65,57 @@ describe('lib/api — persona', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Nome obrigatório');
+    });
+
+    it('passes through imageIds and warnings string arrays', async () => {
+      fetchMock.mockResolvedValue(
+        jsonResponse({
+          success: true,
+          personaId: 'p-1',
+          imageIds: ['img-1'],
+          warnings: ['primary_swap_failed'],
+        }),
+      );
+
+      const result = await createPersona(new FormData());
+
+      expect(result.imageIds).toEqual(['img-1']);
+      expect(result.warnings).toEqual(['primary_swap_failed']);
+    });
+
+    it('keeps the valid entries of a mixed imageIds/warnings array instead of dropping it', async () => {
+      // A partially malformed payload must not silently drop real
+      // partial-success notes: filter non-string entries, keep the valid
+      // ones (each warning is independently mapped through i18n anyway).
+      fetchMock.mockResolvedValue(
+        jsonResponse({
+          success: true,
+          personaId: 'p-1',
+          imageIds: ['img-1', 42],
+          warnings: ['primary_swap_failed', null],
+        }),
+      );
+
+      const result = await createPersona(new FormData());
+
+      expect(result.imageIds).toEqual(['img-1']);
+      expect(result.warnings).toEqual(['primary_swap_failed']);
+    });
+
+    it('drops imageIds/warnings that are not arrays at all', async () => {
+      fetchMock.mockResolvedValue(
+        jsonResponse({
+          success: true,
+          personaId: 'p-1',
+          imageIds: 'img-1',
+          warnings: 'primary_swap_failed',
+        }),
+      );
+
+      const result = await createPersona(new FormData());
+
+      expect(result.imageIds).toBeUndefined();
+      expect(result.warnings).toBeUndefined();
     });
   });
 
@@ -261,6 +313,47 @@ describe('lib/api — persona', () => {
       expect(fetchMock).toHaveBeenCalledWith('/api/persona?personaId=p-1', {
         method: 'DELETE',
       });
+    });
+  });
+
+  describe('usePersonaImagesQuery', () => {
+    function renderImagesQuery() {
+      const queryClient = new QueryClient();
+      function Wrapper({ children }: { children: ReactNode }) {
+        return createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          children,
+        );
+      }
+      Wrapper.displayName = 'PersonaImagesWrapper';
+      return renderHook(() => usePersonaImagesQuery('p-1'), { wrapper: Wrapper });
+    }
+
+    it('drops malformed image records instead of passing them to the UI', async () => {
+      // The UI reads id/image_url directly, is_primary drives the primary
+      // badge/toggle, and tag/description render as text: a record missing
+      // id, with a non-string image_url, a non-boolean is_primary, or a
+      // non-string tag/description must not flow through unchecked.
+      fetchMock.mockResolvedValue(
+        jsonResponse({
+          success: true,
+          images: [
+            { id: 'img-1', image_url: 'https://signed/1', tag: null, description: null, is_primary: true, created_at: 'x' },
+            { id: 42, image_url: 'https://signed/2' },
+            { image_url: 'https://signed/3' },
+            { id: 'img-4', image_url: 42 },
+            { id: 'img-5', image_url: 'https://signed/5', is_primary: 'yes' },
+            { id: 'img-6', image_url: 'https://signed/6', is_primary: true, tag: 42 },
+            { id: 'img-7', image_url: 'https://signed/7', is_primary: true, description: {} },
+          ],
+        }),
+      );
+      const { result } = renderImagesQuery();
+      await waitFor(() => {
+        expect(result.current.isSuccess).toBe(true);
+      });
+      expect(result.current.data?.map((image) => image.id)).toEqual(['img-1']);
     });
   });
 });

@@ -77,7 +77,7 @@ type SessionResult = Promise<{
   error: null;
 }>;
 
-function mockSupabase(persona: Record<string, unknown> | null, opts?: { noSession?: boolean; noToken?: boolean }) {
+function mockSupabase(persona: Record<string, unknown> | null, opts?: { noSession?: boolean; noToken?: boolean; libraryImages?: Array<Record<string, unknown>> }) {
   const getUser = vi.fn<() => AuthResult>(async () =>
     opts?.noSession
       ? { data: { user: null }, error: null }
@@ -93,23 +93,43 @@ function mockSupabase(persona: Record<string, unknown> | null, opts?: { noSessio
       getUser,
       getSession,
     },
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
+    from: vi.fn((table: string) => {
+      // Persona image library: deterministic selection reads the library
+      // ordered by creation. Default is empty so legacy behavior is tested
+      // unless opts.libraryImages overrides it.
+      if (table === 'persona_images') {
+        // Terminal for the awaited query; the first .order() returns the
+        // chain so the created_at+id tie-break (.order().order()) resolves.
+        const terminal = vi.fn(async () => ({ data: opts?.libraryImages ?? [], error: null }));
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              // Mirrors resolveVideoImage's defense-in-depth chain:
+              // .eq('persona_id', …).eq('user_id', …).order(…).order(…)
+              eq: vi.fn(() => ({
+                order: vi.fn(() => ({ order: terminal })),
+              })),
+            })),
+          })),
+        };
+      }
+      return {
+        select: vi.fn(() => ({
           eq: vi.fn(() => ({
-            single: vi.fn(async () => ({
-              data: persona ? { ...persona } : null,
-              error: persona ? null : { message: 'not found' },
+            eq: vi.fn(() => ({
+              single: vi.fn(async () => ({
+                data: persona ? { ...persona } : null,
+                error: persona ? null : { message: 'not found' },
+              })),
             })),
           })),
         })),
-      })),
-      update: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          eq: vi.fn().mockResolvedValue({ error: null }),
+        update: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            eq: vi.fn().mockResolvedValue({ error: null }),
+          })),
         })),
-      })),
-    })),
+      }}),
     storage: {
       from: vi.fn(() => ({
         createSignedUrl: vi.fn(async (path: string) => ({
@@ -118,6 +138,7 @@ function mockSupabase(persona: Record<string, unknown> | null, opts?: { noSessio
         })),
       })),
     },
+    rpc: vi.fn(async () => ({ data: null, error: null })),
   };
   vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
   vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
@@ -297,6 +318,55 @@ describe('POST /api/persona/video-job', () => {
       expect(res.status).toBe(400);
       expect(fetchMock).not.toHaveBeenCalled();
     }
+  });
+
+  it('returns 400 when a faceless request carries a non-string image_id', async () => {
+    mockSupabase(PERSONA);
+
+    const res = await POST(
+      jsonRequest({
+        video_subject: 'viagem',
+        audio_url: 'https://cdn.test/narracao.mp3',
+        image_id: 123,
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { success: boolean; error: string };
+    expect(body.error).toContain('image_id');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when a faceless request carries an empty image_id', async () => {
+    mockSupabase(PERSONA);
+
+    const res = await POST(
+      jsonRequest({
+        video_subject: 'viagem',
+        audio_url: 'https://cdn.test/narracao.mp3',
+        image_id: '',
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when both image_id and imageId are present with different values', async () => {
+    mockSupabase(PERSONA);
+
+    const res = await POST(
+      jsonRequest({
+        video_subject: 'viagem',
+        image_id: 'img-a',
+        imageId: 'img-b',
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { success: boolean; error: string };
+    expect(body.error).toContain('not both');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('returns 400 with invalid JSON', async () => {
@@ -1899,6 +1969,35 @@ describe('POST /api/persona/video-job', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('debug: returns 400 when image_id is provided (debug flow has no image library)', async () => {
+    // Review round 24: the multipart branch dispatched to debugVideoJob
+    // before the JSON flow's image-id validation, so a debug request
+    // carrying image_id was silently ignored. The faceless flow rejects a
+    // provided id loudly ("a provided id is a caller bug") — the debug
+    // flow has no library to resolve against either, so it must do the
+    // same. Both spellings are checked.
+    mockSupabase(PERSONA);
+
+    for (const field of ['image_id', 'imageId']) {
+      const res = await POST(
+        multipartDebugRequest({
+          debugMode: '1',
+          personaMode: 'persona',
+          video_subject: 'história',
+          niche: 'história',
+          scriptPrompt: 'Narre.',
+          voiceId: 'pt-BR-FranciscaNeural',
+          [field]: 'img-123',
+        }),
+      );
+      const body = (await res.json()) as { error?: string };
+
+      expect(res.status).toBe(400);
+      expect(body.error).toBe('image_id requires a saved persona: debug videos have no image library.');
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('debug: returns 400 when the scriptPrompt fallback yields a subject over 300 characters', async () => {
     // Review round 10: the subject falls back to niche || scriptPrompt, and
     // scriptPrompt is capped at 2000 — a debug request with only a long
@@ -2052,6 +2151,296 @@ describe('POST /api/persona/video-job', () => {
         startSpy.mockRestore();
         updateSpy.mockRestore();
       }
+    });
+  });
+
+  //---------------
+  // Persona image library: deterministic per-video selection.
+  //---------------
+
+  describe('image library selection', () => {
+    const LIBRARY = [
+      {
+        id: 'img-casual',
+        image_path: `${USER_ID}/lib/casual.png`,
+        tag: 'casual',
+        description: 'relaxed weekend look',
+        is_primary: true,
+      },
+      {
+        id: 'img-formal',
+        image_path: `${USER_ID}/lib/formal.png`,
+        tag: 'formal',
+        description: 'business suit at the office',
+        is_primary: false,
+      },
+    ];
+
+    function forwardedPhotoUrl(): string | undefined {
+      const forwarded = JSON.parse(
+        (fetchMock.mock.calls[0]?.[1]?.body ?? '{}') as string,
+      ) as { persona: { photo_url?: string } };
+      return forwarded.persona.photo_url;
+    }
+
+    function engineOk(): void {
+      fetchMock.mockResolvedValue(
+        new Response(JSON.stringify({ status: 200, data: { task_id: 't-1' } }), { status: 200 }),
+      );
+    }
+
+    it('selects the library image matching the topic over the legacy photo', async () => {
+      mockSupabase(PERSONA, { libraryImages: LIBRARY });
+      engineOk();
+
+      const res = await POST(
+        jsonRequest({ personaId: 'p-1', video_subject: 'business office meeting' }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(forwardedPhotoUrl()).toBe(
+        `https://supabase.test/signed/${USER_ID}/lib/formal.png`,
+      );
+    });
+
+    it('honors an explicit image_id (and the imageId camelCase alias)', async () => {
+      mockSupabase(PERSONA, { libraryImages: LIBRARY });
+      engineOk();
+
+      const res = await POST(
+        jsonRequest({ personaId: 'p-1', video_subject: 'business office meeting', imageId: 'img-casual' }),
+      );
+
+      expect(res.status).toBe(200);
+      // image_id wins even though the topic matches the formal image.
+      expect(forwardedPhotoUrl()).toBe(
+        `https://supabase.test/signed/${USER_ID}/lib/casual.png`,
+      );
+    });
+
+    it('accepts identical image_id and imageId values', async () => {
+      mockSupabase(PERSONA, { libraryImages: LIBRARY });
+      engineOk();
+
+      const res = await POST(
+        jsonRequest({
+          personaId: 'p-1',
+          video_subject: 'business office meeting',
+          image_id: 'img-casual',
+          imageId: 'img-casual',
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(forwardedPhotoUrl()).toBe(
+        `https://supabase.test/signed/${USER_ID}/lib/casual.png`,
+      );
+    });
+
+    it('returns 404 for an image_id outside the persona library', async () => {
+      mockSupabase(PERSONA, { libraryImages: LIBRARY });
+
+      const res = await POST(
+        jsonRequest({ personaId: 'p-1', video_subject: 'business office meeting', image_id: 'nope' }),
+      );
+
+      expect(res.status).toBe(404);
+      const body = (await res.json()) as { success: boolean; error: string };
+      expect(body.error).toContain('image library');
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('keeps the legacy photo when the library is empty', async () => {
+      mockSupabase(PERSONA);
+      engineOk();
+
+      const res = await POST(
+        jsonRequest({ personaId: 'p-1', video_subject: 'business office meeting' }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(forwardedPhotoUrl()).toBe('https://supabase.test/signed/user-uuid-1/foto.png');
+    });
+
+    it('rejects a non-string image_id with 400', async () => {
+      mockSupabase(PERSONA, { libraryImages: LIBRARY });
+
+      const res = await POST(
+        jsonRequest({ personaId: 'p-1', video_subject: 'business office meeting', image_id: 5 }),
+      );
+
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { success: boolean; error: string };
+      expect(body.error).toContain('image_id');
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('returns 503 when the selected library image cannot be signed', async () => {
+      const client = mockSupabase(PERSONA, { libraryImages: LIBRARY });
+      vi.mocked(client.storage.from).mockReturnValue({
+        createSignedUrl: vi.fn(async () => ({ data: null, error: { message: 'boom' } })),
+      } as never);
+
+      const res = await POST(
+        jsonRequest({ personaId: 'p-1', video_subject: 'business office meeting' }),
+      );
+
+      expect(res.status).toBe(503);
+      const body = (await res.json()) as { success: boolean; error: string };
+      expect(body.error).toContain('selected persona image');
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('does not let an unsignable legacy photo fail a job the library can serve', async () => {
+      // The legacy photo_path is stale but the library has a matching image:
+      // resolving the legacy URL eagerly (before the library branch) would
+      // 503 here even though a valid library image was about to replace it.
+      const client = mockSupabase(PERSONA, { libraryImages: LIBRARY });
+      const createSignedUrl = vi.fn(async (path: string) => {
+        if (path === `${USER_ID}/foto.png`) {
+          return { data: null, error: { message: 'stale photo' } };
+        }
+        return { data: { signedUrl: `https://supabase.test/signed/${path}` }, error: null };
+      });
+      vi.mocked(client.storage.from).mockReturnValue({ createSignedUrl } as never);
+      engineOk();
+
+      const res = await POST(
+        jsonRequest({ personaId: 'p-1', video_subject: 'business office meeting' }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(forwardedPhotoUrl()).toBe(
+        `https://supabase.test/signed/${USER_ID}/lib/formal.png`,
+      );
+    });
+
+    it('treats a malformed recent_image_ids column as empty instead of 500ing', async () => {
+      // recent_image_ids is cast from an untyped column: a non-array value
+      // (manual edit, future migration) would make `new Set(recentIds)`
+      // throw inside selectPersonaImage and 500 every job for the persona.
+      // Sanitize defensively; the history is best-effort anyway.
+      mockSupabase(
+        { ...PERSONA, recent_image_ids: 42 },
+        { libraryImages: LIBRARY },
+      );
+      engineOk();
+
+      const res = await POST(
+        jsonRequest({ personaId: 'p-1', video_subject: 'business office meeting' }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(forwardedPhotoUrl()).toBe(
+        `https://supabase.test/signed/${USER_ID}/lib/formal.png`,
+      );
+    });
+    it('skips the legacy photo signing round-trip when the library supplies the image', async () => {
+      const client = mockSupabase(PERSONA, { libraryImages: LIBRARY });
+      const createSignedUrl = vi.fn(async (path: string) => ({
+        data: { signedUrl: `https://supabase.test/signed/${path}` },
+        error: null,
+      }));
+      vi.mocked(client.storage.from).mockReturnValue({ createSignedUrl } as never);
+      engineOk();
+
+      const res = await POST(
+        jsonRequest({ personaId: 'p-1', video_subject: 'business office meeting' }),
+      );
+
+      expect(res.status).toBe(200);
+      const signedPaths = createSignedUrl.mock.calls.map((call) => call[0] as string);
+      expect(signedPaths).not.toContain(`${USER_ID}/foto.png`);
+      expect(signedPaths).toContain(`${USER_ID}/lib/formal.png`);
+    });
+
+    it('scores library images with the persona script prompt', async () => {
+      mockSupabase(
+        { ...PERSONA, script_prompt: 'relaxed weekend beach vlog with coffee' },
+        { libraryImages: LIBRARY },
+      );
+      engineOk();
+
+      const res = await POST(
+        jsonRequest({ personaId: 'p-1', video_subject: 'office tour' }),
+      );
+
+      expect(res.status).toBe(200);
+      // The topic alone matches the formal image; the script prompt matches
+      // the casual image harder, so the casual image wins.
+      expect(forwardedPhotoUrl()).toBe(
+        `https://supabase.test/signed/${USER_ID}/lib/casual.png`,
+      );
+    });
+
+    function historyRpcCalls(client: unknown): unknown[][] {
+      const rpcMock = (client as { rpc: ReturnType<typeof vi.fn> }).rpc;
+      return rpcMock.mock.calls;
+    }
+
+    function historyWrites(client: unknown): unknown[][] {
+      return historyRpcCalls(client);
+    }
+
+    it('records the rotation history only after the token gate passes', async () => {
+      const client = mockSupabase(PERSONA, { libraryImages: LIBRARY });
+      engineOk();
+
+      const res = await POST(
+        jsonRequest({ personaId: 'p-1', video_subject: 'business office meeting' }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(historyWrites(client)).toEqual([
+        ['record_persona_image_use', { p_persona_id: 'p-1', p_image_id: 'img-formal', p_user_id: USER_ID }],
+      ]);
+    });
+
+    it('does not touch the rotation history when the token gate rejects', async () => {
+      const client = mockSupabase(PERSONA, { libraryImages: LIBRARY });
+      vi.mocked(checkAndDeductTokens).mockResolvedValueOnce({
+        ok: false,
+        error: 'Insufficient tokens.',
+        statusCode: 402,
+        freeExhausted: false,
+      });
+
+      const res = await POST(
+        jsonRequest({ personaId: 'p-1', video_subject: 'business office meeting' }),
+      );
+
+      expect(res.status).toBe(402);
+      expect(historyWrites(client)).toHaveLength(0);
+    });
+
+    it('does not touch the rotation history for an explicit image_id', async () => {
+      const client = mockSupabase(PERSONA, { libraryImages: LIBRARY });
+      engineOk();
+
+      const res = await POST(
+        jsonRequest({
+          personaId: 'p-1',
+          video_subject: 'business office meeting',
+          imageId: 'img-casual',
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(historyWrites(client)).toHaveLength(0);
+    });
+
+    it('does not touch the rotation history when the engine rejects the job', async () => {
+      // The failed generation is refunded: it must not consume one of the
+      // anti-repeat slots, so the retry rotates to the same best image.
+      const client = mockSupabase(PERSONA, { libraryImages: LIBRARY });
+      fetchMock.mockResolvedValue(new Response('rejected', { status: 502 }));
+
+      const res = await POST(
+        jsonRequest({ personaId: 'p-1', video_subject: 'business office meeting' }),
+      );
+
+      expect(res.status).toBe(502);
+      expect(historyWrites(client)).toHaveLength(0);
     });
   });
 });

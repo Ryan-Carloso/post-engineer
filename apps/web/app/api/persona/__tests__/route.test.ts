@@ -1,14 +1,14 @@
 // @vitest-environment node
-// Rotas de API usam Request/FormData nativos (undici); o jsdom mistura
-// implementações e trava `request.formData()`. Testes de UI ficam no jsdom.
+// API routes use native Request/FormData (undici); jsdom mixes
+// implementations and locks up `request.formData()`. UI tests stay in jsdom.
 import '@testing-library/jest-dom/vitest';
 import { NextResponse } from 'next/server';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 //---------------
-// Testes de POST /api/persona (contrato real).
-// A fronteira externa (Supabase) é mockada; tudo o mais é real:
-// parse do formData, validações, montagem dos paths e payload.
+// POST /api/persona tests (real contract).
+// The external boundary (Supabase) is mocked; everything else is real:
+// formData parsing, validations, path assembly, and payload.
 //---------------
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -22,6 +22,7 @@ vi.mock('@/lib/request-auth', () => ({
 }));
 
 import { POST, PATCH, DELETE } from '../route';
+import { DEFAULT_FACE_MIX_PERCENT } from '@/lib/persona-schema';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
@@ -275,9 +276,9 @@ describe('POST /api/persona', () => {
   });
 
   //---------------
-  // Preferências de conteúdo (opcionais): language, videoAspect,
-  // scriptPrompt, paragraphNumber. Persistidas na persona e aplicadas
-  // como defaults no job de vídeo.
+  // Content preferences (optional): language, videoAspect,
+  // scriptPrompt, paragraphNumber. Persisted on the persona and applied
+  // as defaults in the video job.
   //---------------
 
   it('cria persona com preferências de conteúdo completas', async () => {
@@ -430,6 +431,17 @@ describe('POST /api/persona — mix faceless/face (híbrido) e qualidade', () =>
     });
   });
 
+  it('faceless sem faceMixPercent persiste 0 (sem backdoor do NULL)', async () => {
+    const { inserted } = mockSupabase();
+
+    const res = await POST(
+      formRequest({ name: 'Ninja', personaMode: 'faceless', voiceId: 'voz-1' }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(inserted[0]).toMatchObject({ face_mix_percent: 0 });
+  });
+
   it('rejeita foto quando o mix é 0 (sem face)', async () => {
     mockSupabase();
 
@@ -493,19 +505,28 @@ describe('POST /api/persona — mix faceless/face (híbrido) e qualidade', () =>
     expect(body.error).toContain('faceQuality');
   });
 
-  it('persona sem o mix (legado) mantém colunas null — backward compat', async () => {
+  it('persona without mix stores the shared default — no new row keeps NULL', async () => {
+    // A persona-mode creation that omitted faceMixPercent used to store
+    // NULL, which the images route treats as faceless — permanently
+    // write-locking the library for a persona the creation accepted as
+    // face-requiring. New rows are coerced to the UI store's default so
+    // NULL keeps meaning "legacy faceless-mode row" everywhere.
     const { inserted } = mockSupabase();
 
     const res = await POST(formRequest({ name: 'Ana', voiceId: 'voz-1' }, [photo()]));
 
     expect(res.status).toBe(200);
     expect(inserted[0]).toMatchObject({
-      face_mix_percent: null,
+      face_mix_percent: DEFAULT_FACE_MIX_PERCENT,
       face_quality: null,
     });
   });
 
-  it('faceless legado (sem mix explícito) continua válido sem foto', async () => {
+  it('faceless without explicit mix is stored as 0 so the library guard holds', async () => {
+    // A faceless creation with no explicit faceMixPercent used to store
+    // NULL, which passed the POST /api/persona/images `=== 0` faceless
+    // check — a backdoor for library uploads on faceless personas. New
+    // faceless rows are coerced to 0.
     const { inserted } = mockSupabase();
 
     const res = await POST(
@@ -513,14 +534,35 @@ describe('POST /api/persona — mix faceless/face (híbrido) e qualidade', () =>
     );
 
     expect(res.status).toBe(200);
-    expect(inserted[0]).toMatchObject({ face_mix_percent: null, photo_path: null });
+    expect(inserted[0]).toMatchObject({ face_mix_percent: 0, photo_path: null });
+  });
+
+  it('faceless with an explicit faceMixPercent is coerced to 0 (backdoor closed)', async () => {
+    // A direct API caller can send personaMode=faceless with an explicit
+    // faceMixPercent=80. Without coercion, 80 is stored and the images
+    // route (which treats the stored mix as the facelessness source)
+    // would accept library uploads — re-opening the backdoor. The
+    // faceless branch is unconditional at the write boundary.
+    const { inserted } = mockSupabase();
+
+    const res = await POST(
+      formRequest({
+        name: 'Canal Ninja',
+        personaMode: 'faceless',
+        faceMixPercent: '80',
+        voiceId: 'voz-1',
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(inserted[0]).toMatchObject({ face_mix_percent: 0 });
   });
 });
 
 //---------------
-// PATCH — edição de persona existente. Campos todos opcionais;
-// pelo menos um deve ser enviado. Arquivos substituídos são removidos
-// do Storage.
+// PATCH — edit an existing persona. All fields optional;
+// at least one must be sent. Replaced files are removed
+// from Storage.
 //---------------
 
 interface PatchOverrides {
@@ -751,9 +793,9 @@ describe('PATCH /api/persona', () => {
   });
 
   //---------------
-  // Preservação — o que não foi editado precisa continuar exatamente
-  // como estava: o update só pode citar campos alterados e a limpeza
-  // do Storage só pode remover arquivos substituídos.
+  // Preservation — what was not edited must stay exactly
+  // as it was: the update may only cite changed fields and the
+  // Storage cleanup may only remove replaced files.
   //---------------
 
   describe('preservação de dados não editados', () => {
@@ -928,5 +970,114 @@ describe('DELETE /api/persona', () => {
 
     expect(res.status).toBe(500);
     expect(body.success).toBe(false);
+  });
+
+  it('inclui os image_paths da biblioteca na limpeza do storage', async () => {
+    const removed: string[][] = [];
+    const client = {
+      auth: {
+        getUser: vi.fn(async () => ({ data: { user: { id: USER_ID } }, error: null })),
+      },
+      storage: {
+        from: vi.fn(() => ({
+          remove: vi.fn(async (paths: string[]) => {
+            removed.push(paths);
+            return { error: null };
+          }),
+        })),
+      },
+      from: vi.fn((table: string) => {
+        // The library rows vanish via on delete cascade, but their storage
+        // objects must be collected BEFORE the persona row is deleted.
+        if (table === 'persona_images') {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(async () => ({
+                data: [{ image_path: 'uid/img1.png' }, { image_path: 'uid/img2.png' }],
+                error: null,
+              })),
+            })),
+          };
+        }
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                single: vi.fn(async () => ({
+                  data: { id: 'persona-uuid-1', photo_path: null, voice_audio_path: null },
+                  error: null,
+                })),
+              })),
+            })),
+          })),
+          delete: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(async () => ({ error: null })),
+            })),
+          })),
+        };
+      }),
+    };
+    vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: USER_ID, accessToken: 'cookie-token' },
+      error: null,
+    });
+
+    const res = await DELETE(
+      new Request('http://localhost/api/persona?personaId=persona-uuid-1', { method: 'DELETE' }),
+    );
+    const body = (await res.json()) as { success: boolean };
+
+    expect(res.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(removed).toHaveLength(1);
+    expect(removed[0]).toEqual(['uid/img1.png', 'uid/img2.png']);
+  });
+
+  it('retorna 500 quando a leitura da biblioteca falha', async () => {
+    const client = {
+      auth: {
+        getUser: vi.fn(async () => ({ data: { user: { id: USER_ID } }, error: null })),
+      },
+      storage: { from: vi.fn(() => ({ remove: vi.fn(async () => ({ error: null })) })) },
+      from: vi.fn((table: string) => {
+        if (table === 'persona_images') {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(async () => ({ data: null, error: { message: 'db down' } })),
+            })),
+          };
+        }
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                single: vi.fn(async () => ({
+                  data: { id: 'persona-uuid-1', photo_path: null, voice_audio_path: null },
+                  error: null,
+                })),
+              })),
+            })),
+          })),
+          delete: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(async () => ({ error: null })),
+            })),
+          })),
+        };
+      }),
+    };
+    vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: USER_ID, accessToken: 'cookie-token' },
+      error: null,
+    });
+
+    const res = await DELETE(
+      new Request('http://localhost/api/persona?personaId=persona-uuid-1', { method: 'DELETE' }),
+    );
+
+    expect(res.status).toBe(500);
   });
 });

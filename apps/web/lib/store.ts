@@ -9,6 +9,7 @@ import type {
 } from '@/lib/types';
 import { SOCIAL_PROVIDERS } from '@/lib/types';
 import type { FaceQuality } from '@/lib/tokens';
+import { DEFAULT_FACE_MIX_PERCENT } from '@/lib/persona-schema';
 
 //---------------
 // UploadStore — global state shared between screens
@@ -261,8 +262,9 @@ const initialPersonaState = {
   scriptPrompt: '',
   niche: '',
   result: null,
-  // Legacy mode default: 100% face, ok quality (1 token).
-  faceMixPercent: 100,
+  // Legacy mode default: 100% face, ok quality (1 token). Shared with the
+  // creation route's insert coercion so the two can't drift apart.
+  faceMixPercent: DEFAULT_FACE_MIX_PERCENT,
   faceQuality: 'ok' as FaceQuality,
   scheduleDays: [0, 1, 2, 3, 4, 5, 6],
   scheduleTimes: ['09:00'],

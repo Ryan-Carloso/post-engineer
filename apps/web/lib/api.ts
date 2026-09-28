@@ -84,8 +84,24 @@ async function fetchBlueskyAccounts(): Promise<BlueskyAccountResponse> {
 
 async function createPersona(formData: FormData): Promise<CreatePersonaResult> {
   const response = await fetch('/api/persona', { method: 'POST', body: formData });
-  const data: CreatePersonaResult = await response.json();
-  return data;
+  const data = (await response.json()) as CreatePersonaResult;
+  // The server only sends string arrays here, but narrow defensively: a
+  // non-string entry would break the i18n warning mapper downstream.
+  return {
+    ...data,
+    imageIds: toStringArray(data.imageIds),
+    warnings: toStringArray(data.warnings),
+  };
+}
+
+// String arrays, defensively filtered: non-string entries are dropped but
+// the valid ones are kept, so a partially malformed payload can't silently
+// swallow real partial-success notes (each warning is independently mapped
+// through i18n anyway). Non-arrays are absent.
+function toStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const entries = value.filter((entry): entry is string => typeof entry === 'string');
+  return entries.length > 0 ? entries : undefined;
 }
 
 export interface CreateScheduleInput {
@@ -267,6 +283,221 @@ export function usePersonaListQuery() {
     queryFn: fetchPersonaList,
     staleTime: 30_000,
   });
+}
+
+//---------------
+// Persona image library — up to 10 tagged images per persona used for
+// deterministic per-video image selection.
+//---------------
+
+export interface PersonaImageRecord {
+  id: string;
+  // NOTE: image_path is intentionally absent — the API never exposes the
+  // internal storage path (GET projects only UI fields); signed URLs come
+  // via image_url.
+  tag: string | null;
+  description: string | null;
+  is_primary: boolean;
+  created_at: string;
+  /** Signed URL. Only GET /api/persona/images populates this; mutations
+      return ImageMutationResult (no image row), so this type is GET-only. */
+  image_url: string | null;
+  /** True when signing failed transiently; the UI can show a retryable
+      error state instead of a silently broken thumbnail. */
+  image_url_error?: true;
+}
+
+async function fetchPersonaImages(personaId: string): Promise<PersonaImageRecord[]> {
+  const response = await fetch(
+    `/api/persona/images?personaId=${encodeURIComponent(personaId)}`,
+  );
+  const data: { success: boolean; images: PersonaImageRecord[]; error?: string } | null =
+    await response.json().catch(() => null);
+  // Surface the server's error string when present, like the mutation
+  // paths do — a generic status message is less actionable.
+  const serverError = data && typeof data.error === 'string' ? data.error : null;
+  if (!response.ok) {
+    throw new Error(serverError ?? `Persona images request failed with status ${response.status}`);
+  }
+  if (!data || data.success !== true || !Array.isArray(data.images)) {
+    throw new Error(serverError ?? 'Persona images request returned an unexpected payload.');
+  }
+  // Narrow each record: the UI reads id/image_url directly, is_primary
+  // drives the primary badge/toggle, and tag/description render as text,
+  // so a malformed entry must not flow through unchecked and break
+  // rendering downstream.
+  return data.images.filter(
+    (image): image is PersonaImageRecord =>
+      typeof image?.id === 'string' &&
+      (image.image_url === null || typeof image.image_url === 'string') &&
+      typeof image?.is_primary === 'boolean' &&
+      (image.tag === null ||
+        image.tag === undefined ||
+        typeof image.tag === 'string') &&
+      (image.description === null ||
+        image.description === undefined ||
+        typeof image.description === 'string'),
+  );
+}
+
+export function usePersonaImagesQuery(personaId: string | null) {
+  return useQuery<PersonaImageRecord[]>({
+    queryKey: ['persona-images', personaId],
+    queryFn: () => {
+      if (personaId === null) throw new Error('personaId is required.');
+      return fetchPersonaImages(personaId);
+    },
+    enabled: personaId !== null,
+    staleTime: 30_000,
+  });
+}
+
+export interface UploadPersonaImageInput {
+  file: File;
+  tag?: string;
+  description?: string;
+  /** Swap-only, like UpdatePersonaImageInput: false is meaningless on upload
+      (new images default to is_primary:false; the server only promotes on
+      'true'). */
+  isPrimary?: true;
+}
+
+export interface ImageMutationResult {
+  success: boolean;
+  error?: string;
+  /**
+   * Partial-success notes from the server (e.g. the image uploaded but the
+   * primary swap failed). Present only when non-empty, mirroring the
+   * PATCH contract — callers surface these so the user knows the true
+   * state instead of assuming the full request applied.
+   */
+  warnings?: string[];
+}
+
+/**
+ * Reads a mutation-style JSON payload defensively: a non-2xx status, a
+ * non-JSON body, or a success:false payload all surface as
+ * { success: false } instead of throwing on .json() or resolving as success.
+ * The server row is intentionally NOT carried: mutations return the raw DB
+ * row (no signed image_url) and no consumer reads it — every mutation hook
+ * invalidates the library query and refetches the signed GET shape.
+ */
+async function parseImageMutationResult(
+  response: Response,
+): Promise<ImageMutationResult> {
+  const data: { success?: unknown; error?: unknown; warnings?: unknown } | null =
+    await response.json().catch(() => null);
+  if (!response.ok || !data || data.success !== true) {
+    return {
+      success: false,
+      error:
+        (data && typeof data.error === 'string' && data.error) ||
+        `Request failed with status ${response.status}.`,
+    };
+  }
+  const warnings = Array.isArray(data.warnings)
+    ? data.warnings.filter((warning): warning is string => typeof warning === 'string')
+    : [];
+  return { success: true, ...(warnings.length > 0 ? { warnings } : {}) };
+}
+
+export async function uploadPersonaImage(
+  personaId: string,
+  input: UploadPersonaImageInput,
+): Promise<ImageMutationResult> {
+  const formData = new FormData();
+  formData.append('personaId', personaId);
+  formData.append('image', input.file);
+  if (input.tag) formData.append('tag', input.tag);
+  if (input.description) formData.append('description', input.description);
+  if (input.isPrimary !== undefined) formData.append('isPrimary', String(input.isPrimary));
+  const response = await fetch('/api/persona/images', { method: 'POST', body: formData });
+  return parseImageMutationResult(response);
+}
+
+export interface UpdatePersonaImageInput {
+  id: string;
+  tag?: string;
+  description?: string;
+  /** Swap-only, like the MCP client: the server 400s isPrimary:false. */
+  isPrimary?: true;
+}
+
+export async function updatePersonaImage(
+  input: UpdatePersonaImageInput,
+): Promise<ImageMutationResult> {
+  // Fail fast like the MCP client instead of a server 400 after the
+  // round-trip. The type above already prevents this at compile time;
+  // the runtime check guards JS callers (hence the cast).
+  if ((input.isPrimary as boolean | undefined) === false) {
+    throw new Error('isPrimary cannot be false: mark another image as primary instead.');
+  }
+  const response = await fetch('/api/persona/images', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  return parseImageMutationResult(response);
+}
+
+export async function deletePersonaImage(id: string): Promise<ImageMutationResult> {
+  const response = await fetch(
+    `/api/persona/images?id=${encodeURIComponent(id)}`,
+    { method: 'DELETE' },
+  );
+  return parseImageMutationResult(response);
+}
+
+function useInvalidatePersonaImages(personaId: string | null) {
+  const queryClient = useQueryClient();
+  return () => {
+    void queryClient.invalidateQueries({ queryKey: ['persona-images', personaId] });
+  };
+}
+
+/**
+ * Shared factory for the persona-image mutations. Every mutation needs the
+ * same null-personaId guard and the same invalidate-on-success behavior;
+ * keeping them in one place means future changes (surfacing warnings,
+ * error toasts) land once instead of three times.
+ */
+function usePersonaImageMutation<TInput>(
+  personaId: string | null,
+  mutationFn: (personaId: string, input: TInput) => Promise<ImageMutationResult>,
+) {
+  const invalidate = useInvalidatePersonaImages(personaId);
+  return useMutation({
+    mutationFn: (input: TInput) => {
+      if (personaId === null) throw new Error('personaId is required.');
+      return mutationFn(personaId, input);
+    },
+    // NOTE: server rejections resolve as { success: false } rather than
+    // throwing — consumers MUST check result.success / result.error;
+    // mutation.isError will never be true for these hooks.
+    // Only refresh the library when the server actually accepted the change;
+    // a success:false payload must not look like a completed mutation.
+    onSuccess: (result) => {
+      if (result.success) invalidate();
+    },
+  });
+}
+
+export function useUploadPersonaImageMutation(personaId: string | null) {
+  return usePersonaImageMutation<UploadPersonaImageInput>(personaId, uploadPersonaImage);
+}
+
+export function useUpdatePersonaImageMutation(personaId: string | null) {
+  return usePersonaImageMutation<UpdatePersonaImageInput>(
+    personaId,
+    (_personaId, input) => updatePersonaImage(input),
+  );
+}
+
+export function useDeletePersonaImageMutation(personaId: string | null) {
+  return usePersonaImageMutation<string>(
+    personaId,
+    (_personaId, id) => deletePersonaImage(id),
+  );
 }
 
 //---------------

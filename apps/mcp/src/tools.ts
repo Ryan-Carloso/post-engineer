@@ -1,13 +1,15 @@
 import { z } from 'zod';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { PostEngineerClient } from './client.js';
+import {
+  MAX_LIBRARY_IMAGES,
+  MAX_LIBRARY_IMAGE_MB,
+  MAX_LIBRARY_TAG_LENGTH,
+  MAX_LIBRARY_DESCRIPTION_LENGTH,
+} from './client.js';
+import { getErrorMessage } from './errors.js';
 
 export type McpToolResponse = CallToolResult;
-
-export function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return String(error);
-}
 
 // Each provider in `providers` must map to a non-empty account-ID list.
 export function missingProviderAccountIds(args: {
@@ -24,8 +26,19 @@ export function missingProviderAccountIds(args: {
   return args.providers.filter((provider) => (idsByProvider[provider] ?? []).length === 0);
 }
 
+// Shared field definitions: path/tag/description limits appear in both the
+// create-persona images array and add_persona_image — define once so the
+// limits and descriptions can't drift apart.
+const LibraryImageFields = {
+  path: z.string().min(1).describe(`Local file path to the image (JPG/JPEG, PNG, or WebP, max ${MAX_LIBRARY_IMAGE_MB}MB)`),
+  tag: z.string().max(MAX_LIBRARY_TAG_LENGTH).optional().describe('Short tag for deterministic per-video matching (e.g. casual, formal, gym)'),
+  description: z.string().max(MAX_LIBRARY_DESCRIPTION_LENGTH).optional().describe('Description of the photo for tag/keyword matching (e.g. smiling at the beach at sunset)'),
+};
+
 // Single source of truth: index.ts registers these shapes directly with the
 // MCP server, so field definitions (and their descriptions) live here only.
+const PersonaLibraryImageInputShape = z.object(LibraryImageFields);
+
 export const CreatePersonaShape = {
   name: z.string().min(1, 'Name is required').describe('Name of the persona'),
   avatarUrl: z.string().url().optional().nullable().describe('Public URL to the persona avatar image (use list_faces for stock face URLs)'),
@@ -37,9 +50,27 @@ export const CreatePersonaShape = {
   niche: z.string().optional().default('General').describe('Content niche topic'),
   faceMixPercent: z.number().min(0).max(100).default(50),
   faceQuality: z.enum(['ok', 'very_good']).default('very_good'),
+  images: z.array(PersonaLibraryImageInputShape).max(MAX_LIBRARY_IMAGES).optional().describe(`Up to ${MAX_LIBRARY_IMAGES} local image files of the same person for the persona image library. Each video deterministically picks the best-matching image by tag. Requires a non-faceless persona: avatarUrl must be set, because the server rejects library images for faceless personas.`),
+  imagePrimaryIndex: z.number().int().min(0).max(MAX_LIBRARY_IMAGES - 1).optional().describe('Index into images[] marking the primary library image (no primary is set when omitted)'),
 };
 
-export const CreatePersonaSchema = z.object(CreatePersonaShape);
+export const CreatePersonaSchema = z.object(CreatePersonaShape).superRefine((value, ctx) => {
+  // Domain rule encoded at parse time (the round-4 standing rule: encode
+  // domain rules in the zod schema): library images are rejected
+  // server-side for faceless personas, so require the avatar up front.
+  // The client keeps its own check as defense in depth.
+  const hasImages = (value.images?.length ?? 0) > 0;
+  const hasAvatar =
+    value.avatarUrl !== undefined && value.avatarUrl !== null && value.avatarUrl.length > 0;
+  if (hasImages && !hasAvatar) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['avatarUrl'],
+      message:
+        'avatarUrl is required when images are provided: library images need a persona avatar (faceless personas cannot have an image library).',
+    });
+  }
+});
 
 export const ListPersonasShape = {};
 
@@ -104,9 +135,67 @@ export const GenerateVideoShape = {
   personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona to generate video with'),
   scriptPrompt: z.string().optional().describe('Optional specific prompt override for this video'),
   audioUrl: z.string().url('audioUrl must be a valid URL').optional().describe('Optional public URL of custom audio for this video (overrides the persona voice)'),
+  imageId: z.string().min(1, 'imageId must be a non-empty string').optional().describe('Optional library image ID to use for this video (overrides the deterministic per-video image selection; see list_persona_images)'),
 };
 
 export const GenerateVideoSchema = z.object(GenerateVideoShape);
+
+export const ListPersonaImagesShape = {
+  personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona whose image library to list'),
+};
+
+export const ListPersonaImagesSchema = z.object(ListPersonaImagesShape);
+
+export const AddPersonaImageShape = {
+  personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona to add the image to'),
+  ...LibraryImageFields,
+  // Swap-only, symmetric with update_persona_image: isPrimary:false on a new
+  // image is meaningless (it is never primary unless marked), so the schema
+  // accepts only true and surfaces the constraint at parse time instead of
+  // silently dropping the flag.
+  isPrimary: z
+    .literal(true)
+    .optional()
+    .describe('Set true to mark this image as the primary library image (false is rejected — a new image is not primary unless marked)'),
+};
+
+export const AddPersonaImageSchema = z.object(AddPersonaImageShape);
+
+export const UpdatePersonaImageShape = {
+  id: z.string().min(1, 'id is required').describe('The library image ID to update'),
+  // Reuse the shared field definitions so tag/description limits can't drift
+  // from the create path; PATCH supports clearing via empty string, which the
+  // create schema's .min(1) path field doesn't need. Whitespace-only values
+  // trim to '' client-side and therefore clear too (server convention:
+  // undefined = keep, '' = clear) — the descriptions say so explicitly.
+  tag: LibraryImageFields.tag.describe(
+    'New tag (empty or whitespace-only clears the stored value; omit to keep it)'
+  ),
+  description: LibraryImageFields.description.describe(
+    'New description (empty or whitespace-only clears the stored value; omit to keep it)'
+  ),
+  // Swap-only: the server rejects isPrimary:false, so the schema accepts only
+  // true and surfaces the constraint at parse time instead of a server 400.
+  isPrimary: z
+    .literal(true)
+    .optional()
+    .describe(
+      'Set true to mark this image as the primary library image (the swap atomically demotes the old primary; false is rejected — mark another image instead)'
+    ),
+};
+
+export const UpdatePersonaImageSchema = z
+  .object(UpdatePersonaImageShape)
+  .refine(
+    (v) => v.tag !== undefined || v.description !== undefined || v.isPrimary !== undefined,
+    { message: 'At least one of tag, description, or isPrimary is required.' },
+  );
+
+export const RemovePersonaImageShape = {
+  id: z.string().min(1, 'id is required').describe('The library image ID to remove'),
+};
+
+export const RemovePersonaImageSchema = z.object(RemovePersonaImageShape);
 
 export const GetVideoStatusShape = {
   taskId: z.string().min(1, 'taskId is required').describe('The video generation task ID'),
@@ -147,159 +236,47 @@ export async function handleCreatePersona(
   client: PostEngineerClient,
   args: z.infer<typeof CreatePersonaSchema>
 ): Promise<McpToolResponse> {
-  try {
-    const result = await client.createPersona(args);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Persona created successfully: ${JSON.stringify(result, null, 2)}`,
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error creating persona: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
+  // Re-parse with the refined schema: the MCP SDK parses tool args from the
+  // raw shape only, so the superRefine cross-field rule would otherwise never
+  // fire on the tool path. A parse failure becomes a loud isError via
+  // handleLibraryCall, before any file is read.
+  return handleLibraryCall(
+    () => client.createPersona(CreatePersonaSchema.parse(args)),
+    'creating persona',
+    'Persona created successfully'
+  );
 }
 
 export async function handleListPersonas(
   client: PostEngineerClient
 ): Promise<McpToolResponse> {
-  try {
-    const result = await client.listPersonas();
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error listing personas: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
+  return handleLibraryCall(() => client.listPersonas(), 'listing personas');
 }
 
 export async function handleListVoices(
   client: PostEngineerClient
 ): Promise<McpToolResponse> {
-  try {
-    const result = await client.listVoices();
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error listing voices: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
+  return handleLibraryCall(() => client.listVoices(), 'listing voices');
 }
 
 
 export async function handleListFaces(
   client: PostEngineerClient
 ): Promise<McpToolResponse> {
-  try {
-    const result = await client.listFaces();
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error listing faces: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
+  return handleLibraryCall(() => client.listFaces(), 'listing faces');
 }
 
 export async function handleUpdatePersona(
   client: PostEngineerClient,
   args: z.infer<typeof UpdatePersonaSchema>
 ): Promise<McpToolResponse> {
-  try {
-    const result = await client.updatePersona(args);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Persona updated successfully: ${JSON.stringify(result, null, 2)}`,
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error updating persona: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
+  return handleLibraryCall(() => client.updatePersona(args), 'updating persona', 'Persona updated successfully');
 }
 
 export async function handleListSocialAccounts(
   client: PostEngineerClient
 ): Promise<McpToolResponse> {
-  try {
-    const result = await client.listSocialAccounts();
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error listing social accounts: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
+  return handleLibraryCall(() => client.listSocialAccounts(), 'listing social accounts');
 }
 
 export async function handleConnectAccount(
@@ -395,129 +372,60 @@ export async function handleConnectAccount(
 export async function handleListSchedules(
   client: PostEngineerClient
 ): Promise<McpToolResponse> {
-  try {
-    const result = await client.listSchedules();
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error listing schedules: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
+  return handleLibraryCall(() => client.listSchedules(), 'listing schedules');
 }
 
 export async function handleListPosts(
   client: PostEngineerClient,
   args: z.infer<typeof ListPostsSchema>
 ): Promise<McpToolResponse> {
-  try {
-    const result = await client.listPosts(args.limit);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error listing posts: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
+  return handleLibraryCall(() => client.listPosts(args.limit), 'listing posts');
 }
 
 export async function handleCancelSchedule(
   client: PostEngineerClient,
   args: z.infer<typeof CancelScheduleSchema>
 ): Promise<McpToolResponse> {
-  try {
-    const result = await client.cancelSchedule(args.scheduleId);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Schedule cancelled successfully: ${JSON.stringify(result, null, 2)}`,
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error cancelling schedule: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
+  return handleLibraryCall(() => client.cancelSchedule(args.scheduleId), 'cancelling schedule', 'Schedule cancelled successfully');
 }
 
 export async function handleGetTokenBalance(
   client: PostEngineerClient
 ): Promise<McpToolResponse> {
-  try {
-    const result = await client.getTokenBalance();
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error getting token balance: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
+  return handleLibraryCall(() => client.getTokenBalance(), 'getting token balance');
 }
 
 export async function handleGenerateVideo(
   client: PostEngineerClient,
   args: z.infer<typeof GenerateVideoSchema>
 ): Promise<McpToolResponse> {
+  return handleLibraryCall(() => client.generateVideoJob(args), 'generating video', 'Video generation task started');
+}
+
+/** Shared wrapper for the persona-image handlers: same try/catch + text
+ * response shape, differing only in the client call and the message verbs.
+ * Older handlers (handleConnectAccount, handleScheduleVideo) keep inline
+ * try/catch because they pre-validate args before the client call — the
+ * wrapper only covers the call itself. */
+async function handleLibraryCall(
+  clientCall: () => Promise<unknown>,
+  errorVerb: string,
+  successPrefix?: string,
+): Promise<McpToolResponse> {
   try {
-    const result = await client.generateVideoJob(args);
+    const result = await clientCall();
+    const text = successPrefix
+      ? `${successPrefix}: ${JSON.stringify(result, null, 2)}`
+      : JSON.stringify(result, null, 2);
     return {
-      content: [
-        {
-          type: 'text',
-          text: `Video generation task started: ${JSON.stringify(result, null, 2)}`,
-        },
-      ],
+      content: [{ type: 'text', text }],
     };
   } catch (error) {
     return {
       content: [
         {
           type: 'text',
-          text: `Error generating video: ${getErrorMessage(error)}`,
+          text: `Error ${errorVerb}: ${getErrorMessage(error)}`,
         },
       ],
       isError: true,
@@ -525,31 +433,74 @@ export async function handleGenerateVideo(
   }
 }
 
+export async function handleListPersonaImages(
+  client: PostEngineerClient,
+  args: z.infer<typeof ListPersonaImagesSchema>
+): Promise<McpToolResponse> {
+  return handleLibraryCall(
+    () => client.listPersonaImages(args.personaId),
+    'listing persona images',
+  );
+}
+
+export async function handleAddPersonaImage(
+  client: PostEngineerClient,
+  args: z.infer<typeof AddPersonaImageSchema>
+): Promise<McpToolResponse> {
+  return handleLibraryCall(
+    () =>
+      client.addPersonaImage(args.personaId, {
+        path: args.path,
+        tag: args.tag,
+        description: args.description,
+        isPrimary: args.isPrimary,
+      }),
+    'adding persona image',
+    'Persona image added successfully',
+  );
+}
+
+export async function handleUpdatePersonaImage(
+  client: PostEngineerClient,
+  args: z.infer<typeof UpdatePersonaImageSchema>
+): Promise<McpToolResponse> {
+  return handleLibraryCall(
+    () => {
+      // Re-parse with the refined schema: the MCP SDK parses tool args
+      // from the raw shape only, so the "at least one of
+      // tag/description/isPrimary" refine would otherwise never fire on
+      // the tool path. Parsing inside the closure turns the failure into
+      // a loud isError, before any client call.
+      // (Same reason handleCreatePersona re-parses.)
+      const parsed = UpdatePersonaImageSchema.parse(args);
+      return client.updatePersonaImage({
+        id: parsed.id,
+        tag: parsed.tag,
+        description: parsed.description,
+        isPrimary: parsed.isPrimary,
+      });
+    },
+    'updating persona image',
+    'Persona image updated successfully',
+  );
+}
+
+export async function handleRemovePersonaImage(
+  client: PostEngineerClient,
+  args: z.infer<typeof RemovePersonaImageSchema>
+): Promise<McpToolResponse> {
+  return handleLibraryCall(
+    () => client.deletePersonaImage(args.id),
+    'removing persona image',
+    'Persona image removed successfully',
+  );
+}
+
 export async function handleGetVideoStatus(
   client: PostEngineerClient,
   args: z.infer<typeof GetVideoStatusSchema>
 ): Promise<McpToolResponse> {
-  try {
-    const result = await client.getVideoStatus(args.taskId);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error fetching video status: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
+  return handleLibraryCall(() => client.getVideoStatus(args.taskId), 'fetching video status');
 }
 
 export async function handleScheduleVideo(

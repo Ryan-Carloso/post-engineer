@@ -9,6 +9,7 @@ import { isPersonaAllowed, isScopedApiKey } from '@/lib/api-keys';
 import { attachGenerationTask, gateGeneration, recordGenerationStart, recordGenerationUpdate, refundFailedGeneration, startEngineVideoTask, uploadEngineTempAsset } from '@/lib/generation/video-generation';
 import { buildJobPayload, hasNonEmptyString, type JobPersona } from '@/lib/generation/video-job-payload';
 import { parsePersonaForm, VALID_VIDEO_ASPECTS } from '@/lib/persona-schema';
+import { recordRecentImageId, resolveVideoImage } from '@/lib/persona-images';
 import { normalizeDebugTaskResponse } from '@/lib/debug-video';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
@@ -242,6 +243,37 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
   delete requestBody.audioUrl;
 
+  // Per-video library image override: accepts image_id (snake) or imageId
+  // (camel); resolved against the persona's image library in the persona
+  // branch below. Deleted here so it never reaches the engine as a loose
+  // field. An empty string or a non-string is a client bug: rejected with
+  // 400 here, before the faceless/persona split, so faceless callers also
+  // get a signal instead of a silent ignore. Both spellings with different
+  // values is ambiguous: rejected instead of silently preferring one.
+  if (
+    requestBody.image_id !== undefined &&
+    requestBody.imageId !== undefined &&
+    requestBody.image_id !== requestBody.imageId
+  ) {
+    return NextResponse.json(
+      { success: false, error: 'Provide either image_id or imageId, not both.' },
+      { status: 400 },
+    );
+  }
+  const rawImageId =
+    requestBody.image_id === undefined ? requestBody.imageId : requestBody.image_id;
+  if (
+    rawImageId !== undefined &&
+    (typeof rawImageId !== 'string' || rawImageId.trim().length === 0)
+  ) {
+    return NextResponse.json(
+      { success: false, error: 'image_id must be a non-empty string.' },
+      { status: 400 },
+    );
+  }
+  delete requestBody.image_id;
+  delete requestBody.imageId;
+
   let customAudioUrl: string | undefined;
   if (requestBody.audio_url !== undefined) {
     if (
@@ -422,6 +454,12 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   let jobPersona: JobPersona;
   let recordPersonaId: string | null;
+  // Rotation-history write deferred until after the token gate: a request
+  // rejected before the gate must not mark an image as used.
+  let libraryHistory: {
+    personaId: string;
+    imageId: string;
+  } | null = null;
 
   if (faceless) {
     // A persona-scoped API key names explicit personas; a faceless job uses
@@ -434,6 +472,16 @@ export async function POST(request: Request): Promise<NextResponse> {
           error: 'This API key is restricted to specific personas and cannot generate faceless videos.',
         },
         { status: 403 },
+      );
+    }
+
+    // image_id is persona-scoped: on a faceless job there is no library it
+    // could resolve against, so a provided id is a caller bug — reject
+    // loudly instead of silently discarding it.
+    if (rawImageId !== undefined) {
+      return NextResponse.json(
+        { success: false, error: 'image_id requires a personaId: faceless videos have no image library.' },
+        { status: 400 },
       );
     }
 
@@ -503,7 +551,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     const { data: persona, error: personaError } = await supabase
       .from('personas')
-      .select('id, name, photo_path, avatar_url, voice_id, voice_audio_path, language, video_aspect, script_prompt, paragraph_number, niche, face_mix_percent, face_quality')
+      .select('id, name, photo_path, avatar_url, voice_id, voice_audio_path, language, video_aspect, script_prompt, paragraph_number, niche, face_mix_percent, face_quality, recent_image_ids')
       .eq('id', personaId)
       .eq('user_id', user.id)
       .single();
@@ -646,7 +694,76 @@ export async function POST(request: Request): Promise<NextResponse> {
     // photo is legitimate.
     const avatarUrl = persona.avatar_url as string | null;
     const photoPath = persona.photo_path as string | null;
-    const photoUrl = avatarUrl ?? (await signedUrl(supabase, photoPath));
+    // Resolve the legacy photo lazily: a persona whose library supplies the
+    // image for this video must not pay a signing round-trip (or risk a 503)
+    // for a stale photo_path. The unsignable-legacy-photo 503 below still
+    // applies when the library yields no image.
+    let photoUrl: string | null | undefined = avatarUrl;
+
+    // Persona image library: deterministic per-video selection (explicit
+    // image_id override, then tag/description keyword match excluding
+    // recently used images, then primary/first). The engine still receives
+    // a single resolved photo URL, so no engine changes are needed.
+    // Legacy personas (empty library) keep the behavior above untouched.
+    // rawImageId is pre-validated above (non-empty, non-whitespace string
+    // when defined); trimmed so ' abc123 ' doesn't 404 in the exact-match
+    // lookup with a confusing "not found" error.
+    const requestedImageId = typeof rawImageId === 'string' ? rawImageId.trim() : null;
+    // recent_image_ids is an untyped JSONB column: sanitize defensively.
+    // A non-array value (manual edit, migration gone wrong) would make
+    // `new Set(recentIds)` throw inside selectPersonaImage and 500 every
+    // job for the persona. The anti-repeat history is best-effort, so a
+    // malformed value is treated as "no history", never a hard failure.
+    const rawRecentIds: unknown = persona.recent_image_ids;
+    const recentIds: string[] = Array.isArray(rawRecentIds)
+      ? rawRecentIds.filter((id): id is string => typeof id === 'string')
+      : [];
+    const librarySelection = await resolveVideoImage(
+      supabase,
+      personaId,
+      auth.userId,
+      recentIds,
+      {
+        topic: typeof requestBody.video_subject === 'string' ? requestBody.video_subject : null,
+        niche: personaNiche,
+        script: typeof persona.script_prompt === 'string' ? persona.script_prompt : null,
+        imageId: requestedImageId,
+      },
+    );
+    if (!librarySelection.ok) {
+      return NextResponse.json(
+        { success: false, error: librarySelection.error },
+        { status: librarySelection.status },
+      );
+    }
+    if (librarySelection.image) {
+      const libraryUrl = await signedUrl(supabase, librarySelection.image.image_path);
+      // The library image was explicitly resolved for this video: a signing
+      // failure must not silently fall back to a different face. Fail loud
+      // with 503, before the token gate, like the legacy photo path below.
+      if (!libraryUrl) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'The selected persona image could not be loaded. Please try again.',
+          },
+          { status: 503 },
+        );
+      }
+      photoUrl = libraryUrl;
+      // An explicit override is the caller's pinned choice, not a rotation
+      // pick: it must not pollute the anti-repeat history.
+      if (requestedImageId === null) {
+        libraryHistory = {
+          personaId,
+          imageId: librarySelection.image.id,
+        };
+      }
+    } else if (!photoUrl) {
+      // No library image and no avatar: fall back to the legacy photo_path.
+      // This is the only place the legacy signing happens now.
+      photoUrl = await signedUrl(supabase, photoPath);
+    }
     const faceMix = persona.face_mix_percent as number | null;
     // A legacy persona with face_mix_percent: null is face-requiring by the
     // historical default the mix field was added on top of: an unsignable photo
@@ -718,6 +835,11 @@ export async function POST(request: Request): Promise<NextResponse> {
   });
   if (!gate.ok) return gate.response;
 
+  // History is recorded only after the engine ACCEPTS the job (below): a
+  // failed generation is refunded, and it must not consume one of the 3
+  // anti-repeat slots — otherwise the retry rotates away from the
+  // best-matching image even though no video was produced.
+
   // Snapshot the generation for the History page right after the token
   // gate: persona name/subject are denormalized so the row renders even if
   // the persona is later renamed or deleted.
@@ -766,6 +888,17 @@ export async function POST(request: Request): Promise<NextResponse> {
     engineTaskId: engineTask.taskId,
   });
 
+  // The engine accepted the job: now the rotation pick is committed, so a
+  // failed generation can never mark an image as used (see above).
+  if (libraryHistory) {
+    await recordRecentImageId(
+      supabase,
+      libraryHistory.personaId,
+      libraryHistory.imageId,
+      user.id,
+    );
+  }
+
   return NextResponse.json({ success: true, taskId: engineTask.taskId });
 }
 
@@ -781,6 +914,17 @@ async function debugVideoJob(request: Request, userId: string): Promise<NextResp
     formData = await request.formData();
   } catch {
     return NextResponse.json({ success: false, error: 'Invalid multipart payload.' }, { status: 400 });
+  }
+
+  // image_id is persona-scoped: the debug flow builds an in-memory persona
+  // with no saved image library, so a provided id is a caller bug — reject
+  // loudly instead of silently discarding it (mirrors the JSON flow's
+  // faceless rejection). Both spellings are checked.
+  if (formData.has('image_id') || formData.has('imageId')) {
+    return NextResponse.json(
+      { success: false, error: 'image_id requires a saved persona: debug videos have no image library.' },
+      { status: 400 },
+    );
   }
 
   const parsed = parsePersonaForm(formData, 'debug');

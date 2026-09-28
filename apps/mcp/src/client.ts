@@ -1,10 +1,27 @@
 import { validateScheduleAdvance } from './validator.js';
+import { getErrorMessage, ImageTooLargeError } from './errors.js';
+import { MAX_LIBRARY_IMAGE_BYTES, MAX_LIBRARY_IMAGE_MB } from './limits.js';
+
+// Re-exported so existing import sites (`../client.js`) keep working.
+export { MAX_LIBRARY_IMAGE_BYTES, MAX_LIBRARY_IMAGE_MB };
+import { readFile, stat } from 'node:fs/promises';
+import { basename, extname } from 'node:path';
 
 export interface PostEngineerClientOptions {
   apiKey?: string;
   baseUrl?: string;
   /** Clock override used by schedule validation (tests); defaults to the real clock. */
   now?: () => Date;
+}
+
+/** One image for a persona's image library, read from a local file. */
+export interface PersonaLibraryImageInput {
+  /** Local file path (JPG/JPEG, PNG, or WebP, max 10MB). */
+  path: string;
+  /** Short tag for deterministic per-video matching (e.g. casual, formal). */
+  tag?: string;
+  /** Description of the photo for keyword matching. */
+  description?: string;
 }
 
 export interface CreatePersonaInput {
@@ -18,12 +35,18 @@ export interface CreatePersonaInput {
   niche?: string;
   faceMixPercent?: number;
   faceQuality?: 'ok' | 'very_good';
+  /** Up to 10 local images of the same person for the image library. */
+  images?: PersonaLibraryImageInput[];
+  /** Index into images[] marking the primary library image. */
+  imagePrimaryIndex?: number;
 }
 
 export interface GenerateVideoJobInput {
   personaId: string;
   scriptPrompt?: string;
   audioUrl?: string;
+  /** Library image ID overriding the deterministic per-video selection. */
+  imageId?: string;
 }
 
 export interface UpdatePersonaInput {
@@ -55,8 +78,120 @@ export interface CreateScheduleInput {
 const PRODUCTION_API_URL = 'https://post-engineer.com';
 // Hung requests must not block the stdio tool call (and the agent session) forever.
 const REQUEST_TIMEOUT_MS = 30_000;
+// Multipart uploads can legitimately exceed the default budget: up to 10
+// 10MB library images on one request.
+const UPLOAD_TIMEOUT_MS = 120_000;
 // Bound how much of an upstream error body can flow into agent-visible output.
 const MAX_ERROR_BODY_CHARS = 200;
+// Shared with tools.ts so the client-side guards, the Zod schema limits,
+// and the field description strings can't drift apart.
+export const MAX_LIBRARY_IMAGES = 10;
+
+// Mirrors the server-side addLibraryImages limits: checked in createPersona
+// so an oversized tag/description fails locally before the multipart upload.
+export const MAX_LIBRARY_TAG_LENGTH = 100;
+export const MAX_LIBRARY_DESCRIPTION_LENGTH = 500;
+
+/**
+ * Shared size guard for both image-read call sites (the stat pre-check and
+ * the post-read check) so the limit and the message text can't drift apart.
+ * Throws the typed ImageTooLargeError carrying the full path.
+ */
+export function assertImageSize(sizeBytes: number, path: string): void {
+  if (sizeBytes > MAX_LIBRARY_IMAGE_BYTES) {
+    throw new ImageTooLargeError(path, sizeBytes);
+  }
+}
+
+function mimeTypeForImagePath(path: string): string {
+  const extension = extname(path).toLowerCase();
+  // No special hidden-file check needed: Node's extname('.PNG') is ''
+  // (a leading dot with no other dots is not an extension), so dotfiles
+  // fall through to the unsupported-extension rejection below.
+  if (extension === '.png') return 'image/png';
+  if (extension === '.webp') return 'image/webp';
+  if (extension === '.jpg' || extension === '.jpeg') return 'image/jpeg';
+  throw new Error(
+    `Unsupported image extension "${extension || '(none)'}": use JPG/JPEG, PNG, or WebP.`,
+  );
+}
+
+async function imageFormFile(path: string): Promise<Blob> {
+  // Validate before uploading: the API rejects the file anyway, so an
+  // oversized or unsupported image fails fast locally instead of wasting an
+  // upload. A stat() pre-check bounds memory before readFile — a multi-GB
+  // file misnamed .png would otherwise load fully into this stdio process.
+  // The TOCTOU window is benign: the authoritative size check still runs on
+  // the buffer after read. Any failure surfaces with the full path for a
+  // consistent, actionable message.
+  // Note: the extension is trusted as a hint only; the server re-validates
+  // content via magic bytes, so a mislabeled file still fails server-side
+  // (duplicating magic-byte sniffing locally would be a second source of
+  // truth that can drift).
+  const mimeType = mimeTypeForImagePath(path);
+  try {
+    const fileStat = await stat(path);
+    assertImageSize(fileStat.size, path);
+  } catch (error) {
+    // Discriminate by type, not by message text: the typed size error
+    // passes through untouched, while stat failures become the actionable
+    // "Failed to read image" wrapper. Message sniffing would misclassify
+    // any future error whose prose happens to match.
+    if (error instanceof ImageTooLargeError) throw error;
+    throw new Error(`Failed to read image "${path}": ${getErrorMessage(error)}`);
+  }
+  let buffer: Buffer;
+  try {
+    buffer = await readFile(path);
+  } catch (error) {
+    throw new Error(`Failed to read image "${path}": ${getErrorMessage(error)}`);
+  }
+  if (buffer.length === 0) {
+    // A 0-byte file would pass the local gate but shift the index-aligned
+    // imageTags/imageDescriptions (the server 400s when the tag/description
+    // counts don't match the file count), so reject it here with a clear
+    // message instead of a confusing server 400.
+    throw new Error(`Image "${path}" is empty.`);
+  }
+  // The post-read check reuses the shared guard: same limit, same message,
+  // full path — and it covers the (benign) TOCTOU window after stat.
+  assertImageSize(buffer.length, path);
+  return new Blob([buffer], { type: mimeType });
+}
+
+// Normalize library metadata: trim; empty/whitespace-only values normalize
+// to ''. Both upload paths (the create-persona imageTags/imageDescriptions
+// arrays and the add-persona-image tag/description fields) send '' for empty
+// metadata, and the server stores '' verbatim (the tag column is text not
+// null default ''), so the stored values are identical on both paths.
+// Lengths are checked here so an oversized tag fails before the multipart
+// upload, not server-side after all bytes transfer. The label (e.g.
+// filename) is included in the error when available.
+function checkLibraryMetadataLengths(
+  tag: string | undefined,
+  description: string | undefined,
+  label?: string,
+): void {
+  const where = label ? ` for "${label}"` : '';
+  if (tag !== undefined && tag.length > MAX_LIBRARY_TAG_LENGTH) {
+    throw new Error(`Image tag${where} exceeds ${MAX_LIBRARY_TAG_LENGTH} characters.`);
+  }
+  if (description !== undefined && description.length > MAX_LIBRARY_DESCRIPTION_LENGTH) {
+    throw new Error(
+      `Image description${where} exceeds ${MAX_LIBRARY_DESCRIPTION_LENGTH} characters.`,
+    );
+  }
+}
+
+function normalizeLibraryMetadata(
+  image: { tag?: string; description?: string },
+  label?: string,
+): { tag: string; description: string } {
+  const tag = image.tag?.trim() ?? '';
+  const description = image.description?.trim() ?? '';
+  checkLibraryMetadataLengths(tag, description, label);
+  return { tag, description };
+}
 
 // The bearer key is sent to this URL, so fail fast on a malformed or
 // non-https override instead of silently targeting it. Loopback http is
@@ -110,10 +245,18 @@ export class PostEngineerClient {
     return headers;
   }
 
-  private async request(path: string, init: RequestInit, action: string): Promise<unknown> {
+  private async request(
+    path: string,
+    init: RequestInit,
+    action: string,
+    timeoutMs = REQUEST_TIMEOUT_MS,
+  ): Promise<unknown> {
     const response = await fetch(`${this.baseUrl}${path}`, {
       ...init,
-      signal: init.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      // init.signal, if provided, intentionally wins over timeoutMs; no
+      // current caller passes one, so UPLOAD_TIMEOUT_MS always applies on
+      // the upload paths this parameter exists for.
+      signal: init.signal ?? AbortSignal.timeout(timeoutMs),
     });
 
     if (!response.ok) {
@@ -147,12 +290,63 @@ export class PostEngineerClient {
     if (input.scriptPrompt !== undefined) formData.set('scriptPrompt', input.scriptPrompt);
     formData.set('paragraphNumber', String(input.paragraphNumber ?? 1));
     formData.set('niche', input.niche ?? 'General');
-    formData.set('faceMixPercent', String(hasAvatar ? input.faceMixPercent ?? 50 : 0));
+    // The effective mix is computed once: the server treats 0 as faceless
+    // and rejects library images for it, so the local guard below must see
+    // the same value the form sends.
+    const effectiveFaceMixPercent = hasAvatar ? input.faceMixPercent ?? 50 : 0;
+    formData.set('faceMixPercent', String(effectiveFaceMixPercent));
     formData.set('faceQuality', hasAvatar ? input.faceQuality ?? 'very_good' : 'ok');
+    const images = input.images ?? [];
+    // An imagePrimaryIndex without images is a caller bug (typo'd `images`
+    // or a lone index): fail fast instead of a silent successful creation
+    // with no primary image.
+    if (input.imagePrimaryIndex !== undefined && images.length === 0) {
+      throw new Error('imagePrimaryIndex requires images: provide at least one library image.');
+    }
+    if (images.length > 0) {
+      if (!hasAvatar) {
+        throw new Error('Library images require a persona avatar: provide avatarUrl together with images.');
+      }
+      // The server rejects library images when the stored face mix is 0
+      // (faceless), even with an avatarUrl. Fail fast here instead of
+      // uploading the bytes first.
+      if (effectiveFaceMixPercent === 0) {
+        throw new Error(
+          'Library images require a non-zero face mix: faceMixPercent must be greater than 0 when images are provided.',
+        );
+      }
+      if (images.length > MAX_LIBRARY_IMAGES) {
+        throw new Error(`At most ${MAX_LIBRARY_IMAGES} library images are allowed per persona.`);
+      }
+      if (input.imagePrimaryIndex !== undefined) {
+        // Fail fast before reading any file: pure-argument checks come first.
+        if (input.imagePrimaryIndex < 0 || input.imagePrimaryIndex >= images.length) {
+          throw new Error(
+            `imagePrimaryIndex ${input.imagePrimaryIndex} is out of range: ${images.length} images provided.`,
+          );
+        }
+        formData.set('imagePrimaryIndex', String(input.imagePrimaryIndex));
+      }
+      const tags: string[] = [];
+      const descriptions: string[] = [];
+      // Sequential reads bound memory: at most one 10MB image is resident at
+      // a time (10 in parallel would hold ~100MB in this stdio process), and
+      // upload time is dominated by network transfer anyway. Order is
+      // preserved, so tags/descriptions stay aligned with the entries.
+      for (const image of images) {
+        const { tag, description } = normalizeLibraryMetadata(image, basename(image.path));
+        formData.append('images', await imageFormFile(image.path), basename(image.path));
+        tags.push(tag);
+        descriptions.push(description);
+      }
+      formData.set('imageTags', JSON.stringify(tags));
+      formData.set('imageDescriptions', JSON.stringify(descriptions));
+    }
     return this.request(
       '/api/persona',
       { method: 'POST', headers: this.getHeaders(false), body: formData },
-      'create persona'
+      'create persona',
+      UPLOAD_TIMEOUT_MS,
     );
   }
 
@@ -277,6 +471,7 @@ export class PostEngineerClient {
           personaId: input.personaId,
           video_script_prompt: input.scriptPrompt,
           audio_url: input.audioUrl,
+          image_id: input.imageId,
         }),
       },
       'generate video job'
@@ -288,6 +483,99 @@ export class PostEngineerClient {
       `/api/persona/video-status/${encodeURIComponent(taskId)}`,
       { method: 'GET', headers: this.getHeaders() },
       'get video status'
+    );
+  }
+
+  async listPersonaImages(personaId: string): Promise<unknown> {
+    return this.request(
+      `/api/persona/images?personaId=${encodeURIComponent(personaId)}`,
+      { method: 'GET', headers: this.getHeaders() },
+      'list persona images'
+    );
+  }
+
+  async addPersonaImage(
+    personaId: string,
+    image: PersonaLibraryImageInput & { isPrimary?: true }
+  ): Promise<unknown> {
+    const formData = new FormData();
+    formData.set('personaId', personaId);
+    formData.append('image', await imageFormFile(image.path), basename(image.path));
+    // Empty/whitespace-only metadata normalizes to '' (see
+    // normalizeLibraryMetadata): the server stores '' verbatim on both
+    // upload paths, so the add path simply omits the keys — an empty tag
+    // can never match the deterministic keyword selection.
+    const { tag, description } = normalizeLibraryMetadata(image);
+    if (tag) formData.set('tag', tag);
+    if (description) formData.set('description', description);
+    // isPrimary is typed as `true` only (swap-only, symmetric with
+    // update_persona_image): an explicit false is rejected at schema parse
+    // time and can never reach this branch.
+    if (image.isPrimary) formData.set('isPrimary', 'true');
+    return this.request(
+      '/api/persona/images',
+      { method: 'POST', headers: this.getHeaders(false), body: formData },
+      'add persona image',
+      UPLOAD_TIMEOUT_MS,
+    );
+  }
+
+  async updatePersonaImage(input: {
+    id: string;
+    tag?: string;
+    description?: string;
+    isPrimary?: boolean;
+  }): Promise<unknown> {
+    if (
+      input.tag === undefined &&
+      input.description === undefined &&
+      input.isPrimary === undefined
+    ) {
+      throw new Error('updatePersonaImage requires at least one of tag, description, or isPrimary.');
+    }
+    // The server PATCH is swap-only: isPrimary:false always 400s there.
+    // The tool schema already rejects false (z.literal(true)); this guard
+    // is for direct programmatic callers of the client library, where
+    // isPrimary?: boolean still permits false. Fail fast with an
+    // actionable message instead of the wasted round-trip.
+    if (input.isPrimary === false) {
+      throw new Error(
+        'updatePersonaImage: isPrimary cannot be false — mark another image as primary instead (the swap atomically demotes the old one).'
+      );
+    }
+    // Trim metadata like the add paths do: an untrimmed tag can never match
+    // the deterministic keyword selection. undefined = leave unchanged (the
+    // key is dropped by JSON.stringify); empty string = clear the stored
+    // value (server convention). A whitespace-only value trims to '' and
+    // therefore clears too — the field descriptions in tools.ts say so,
+    // since a caller passing "   " likely did not intend to wipe the value.
+    const tag = input.tag?.trim();
+    const description = input.description?.trim();
+    // Fail fast on oversized metadata before the round-trip, symmetric with
+    // the add/create paths (undefined = leave unchanged, so the check must
+    // skip undefined instead of defaulting to '').
+    checkLibraryMetadataLengths(tag, description);
+    return this.request(
+      '/api/persona/images',
+      {
+        method: 'PATCH',
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          id: input.id,
+          ...(tag !== undefined ? { tag } : {}),
+          ...(description !== undefined ? { description } : {}),
+          ...(input.isPrimary !== undefined ? { isPrimary: input.isPrimary } : {}),
+        }),
+      },
+      'update persona image'
+    );
+  }
+
+  async deletePersonaImage(id: string): Promise<unknown> {
+    return this.request(
+      `/api/persona/images?id=${encodeURIComponent(id)}`,
+      { method: 'DELETE', headers: this.getHeaders() },
+      'delete persona image'
     );
   }
 

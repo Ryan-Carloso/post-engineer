@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 //---------------
-// Escopo de personas por API key: chave restrita só acessa as personas
-// escolhidas na criação. Auth e Supabase são fronteiras mockadas; o
-// controle de acesso (403 + filtro .in) é real.
+// Persona scope per API key: a restricted key only accesses the personas
+// chosen at creation. Auth and Supabase are mocked boundaries; the access
+// control (403 + .in filter) is real.
 //---------------
 
 vi.mock('@/lib/request-auth', () => ({
@@ -86,8 +86,21 @@ function mockPersonaDb(personaId: string): void {
     },
     error: null,
   });
-  const eqInner = vi.fn().mockReturnValue({ single });
-  const eqOuter = vi.fn().mockReturnValue({ eq: eqInner });
+  const eqInner = vi.fn().mockReturnValue({
+    single,
+    // The image-library query chains .order().order() (created_at + id
+    // tie-break) instead of a second .eq().
+    order: vi.fn().mockReturnValue({
+      order: vi.fn().mockResolvedValue({ data: [], error: null }),
+    }),
+  });
+  const eqOuter = vi.fn().mockReturnValue({
+    eq: eqInner,
+    // The image-library query chains .order() after two .eq() calls.
+    order: vi.fn().mockReturnValue({
+      order: vi.fn().mockResolvedValue({ data: [], error: null }),
+    }),
+  });
   const select = vi.fn().mockReturnValue({ eq: eqOuter });
   vi.mocked(createSupabaseServiceClient).mockReturnValue({
     from: vi.fn().mockReturnValue({ select }),
@@ -146,7 +159,7 @@ describe('persona scope enforcement for scoped api keys', () => {
     mockScopedAuth();
     mockPersonaDb(ALLOWED_ID);
     const response = await videoJob(jsonRequest('http://localhost:3434/api/persona/video-job', { personaId: ALLOWED_ID }));
-    // Passou do 403 do escopo e chegou ao gate de tokens (402 mockado).
+    // Past the 403 scope check and reached the token gate (mocked 402).
     expect(response.status).toBe(402);
   });
 

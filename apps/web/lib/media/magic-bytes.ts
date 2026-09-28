@@ -1,7 +1,7 @@
 //---------------
 // Magic Bytes — detects the real MIME type from the file content.
 // The client-declared Content-Type is spoofable; the content is not.
-// Formatos suportados: JPEG, PNG, MP4 e MOV.
+// Supported formats: JPEG, PNG, WebP, GIF, MP4 and MOV.
 //---------------
 
 export function detectMagicMimeType(buffer: Buffer): string | null {
@@ -20,6 +20,22 @@ export function detectMagicMimeType(buffer: Buffer): string | null {
     buffer[3] === 0x47
   ) {
     return 'image/png';
+  }
+
+  // WebP: 'RIFF' at 0-3 and 'WEBP' at 8-11 (length >= 12 is guaranteed by
+  // the early return above, so no redundant length check here).
+  if (
+    buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    buffer.subarray(8, 12).toString('ascii') === 'WEBP'
+  ) {
+    return 'image/webp';
+  }
+
+  // GIF: 'GIF87a' or 'GIF89a' — not an accepted upload type, but detecting
+  // it lets callers report a precise mismatch instead of "unrecognized".
+  const gifHeader = buffer.subarray(0, 6).toString('ascii');
+  if (gifHeader === 'GIF87a' || gifHeader === 'GIF89a') {
+    return 'image/gif';
   }
 
   // MP4: 'ftyp' box at bytes 4-7 (brand varies: isom, mp42, etc.)

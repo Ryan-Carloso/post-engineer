@@ -25,9 +25,9 @@ vi.mock('embla-carousel-react', () => ({
 }));
 
 //---------------
-// Testes da tela de criação de persona via interface pública.
-// Usa o store REAL (zustand é colaborador interno, não boundary);
-// apenas a rede (lib/api) é mockada.
+// Tests for the persona creation screen via its public interface.
+// Uses the REAL store (zustand is an internal collaborator, not a boundary);
+// only the network (lib/api) is mocked.
 //---------------
 
 vi.mock('next/image', () => ({
@@ -51,6 +51,10 @@ vi.mock('@/lib/api', () => ({
   useYouTubeAccountsQuery: vi.fn(),
   useInstagramAccountsQuery: vi.fn(),
   useLinkedinAccountsQuery: vi.fn(),
+  usePersonaImagesQuery: vi.fn(() => ({ data: [], isPending: false, isError: false })),
+  useUploadPersonaImageMutation: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
+  useUpdatePersonaImageMutation: vi.fn(() => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false })),
+  useDeletePersonaImageMutation: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
 }));
 
 vi.mock('@/lib/ui', () => ({
@@ -344,6 +348,23 @@ describe('app/(main)/persona/page — PersonaPage', () => {
     expect(navigation.push).toHaveBeenCalledWith('/schedule?personaId=p-1');
   });
 
+  it('mostra o aviso de sucesso parcial quando a criação retorna warnings', async () => {
+    vi.mocked(createPersona).mockResolvedValue({
+      success: true,
+      personaId: 'p-1',
+      imageIds: ['img-1'],
+      warnings: ['primary_swap_failed'],
+    } as never);
+    const user = userEvent.setup();
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await preencherFormularioValido(user);
+    await user.click(screen.getByText('persona.submit'));
+
+    // The warning code is mapped through i18n (t returns the key in tests).
+    expect(await screen.findByText('persona.libraryWarningPrimarySwap')).toBeTruthy();
+  });
+
   it('criação envia as preferências de conteúdo escolhidas', async () => {
     const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });
@@ -431,8 +452,8 @@ describe('app/(main)/persona/page — PersonaPage', () => {
 });
 
 //---------------
-// preencherFormularioValido — fluxo completo: personagem + nome + voz
-// (vive no nível do arquivo para reuso entre describes)
+// fillValidForm — full flow: character + name + voice
+// (lives at file level for reuse across describes)
 //---------------
 async function preencherFormularioValido(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'persona.characterLabel 1' }));
@@ -624,9 +645,9 @@ describe('app/(main)/persona/page — modo edição (mesma página do create)', 
     const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });
 
-    // Começa em es (idioma da persona)…
+    // Starts at es (the persona's language)…
     expect(screen.getByTestId('sample-language')).toHaveValue('es');
-    // …mas a escolha manual do usuário vence.
+    // …but the user's manual choice wins.
     await user.selectOptions(screen.getByTestId('sample-language'), 'pt-br');
     await user.click(screen.getByRole('button', { name: 'persona.voiceCalm' }));
 
@@ -656,5 +677,52 @@ describe('app/(main)/persona/page — sample language', () => {
     expect(created).toHaveLength(1);
     expect(created[0].url).toBe('/voice-samples/calm-en-uk.mp3');
     vi.unstubAllGlobals();
+  });
+
+  it('hides the image library when the edited persona is persisted as faceless', async () => {
+    // The library gate reads the persisted faceMixPercent, not the
+    // create-flow store: an editing persona with face_mix_percent 0 must not
+    // show the library, or every upload would be rejected by the server.
+    searchParams.value = new URLSearchParams('edit=p-1');
+    vi.mocked(usePersonaListQuery).mockReturnValue({
+      data: [{ id: 'p-1', name: 'Faceless editor', faceMixPercent: 0 }],
+      isLoading: false,
+    } as never);
+
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(screen.queryByText('persona.libraryLabel')).not.toBeInTheDocument();
+    });
+  });
+
+  it('hides the image library while the persona list is still loading', async () => {
+    // While editingPersona is undefined the gate must not flash the library:
+    // a faceless persona would render it for a frame before the data arrives.
+    searchParams.value = new URLSearchParams('edit=p-1');
+    vi.mocked(usePersonaListQuery).mockReturnValue({
+      data: undefined,
+      isLoading: true,
+    } as never);
+
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(screen.queryByText('persona.libraryLabel')).not.toBeInTheDocument();
+    });
+  });
+
+  it('shows the image library when the edited persona has a non-zero face mix', async () => {
+    searchParams.value = new URLSearchParams('edit=p-1');
+    vi.mocked(usePersonaListQuery).mockReturnValue({
+      data: [{ id: 'p-1', name: 'Persona editor', faceMixPercent: 50 }],
+      isLoading: false,
+    } as never);
+
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(screen.getByText('persona.libraryLabel')).toBeInTheDocument();
+    });
   });
 });

@@ -1,7 +1,11 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { z } from 'zod';
 import {
-  getErrorMessage,
   handleCreatePersona,
+  handleListPersonaImages,
+  handleAddPersonaImage,
+  handleUpdatePersonaImage,
+  handleRemovePersonaImage,
   handleGenerateVideo,
   handleListVoices,
   handleListFaces,
@@ -16,7 +20,14 @@ import {
   ListPostsSchema,
   ScheduleVideoSchema,
   CreatePersonaSchema,
+  CreatePersonaShape,
   UpdatePersonaSchema,
+  GenerateVideoSchema,
+  ListPersonaImagesSchema,
+  AddPersonaImageSchema,
+  UpdatePersonaImageSchema,
+  UpdatePersonaImageShape,
+  RemovePersonaImageSchema,
 } from '../tools.js';
 import type { PostEngineerClient } from '../client.js';
 import type { McpToolResponse } from '../tools.js';
@@ -421,15 +432,203 @@ describe('schema bounds', () => {
   });
 });
 
-describe('getErrorMessage', () => {
-  it('returns the message for Error instances', () => {
-    expect(getErrorMessage(new Error('boom'))).toBe('boom');
+describe('persona image library tools', () => {
+  const mockClient = {
+    createPersona: vi.fn(),
+    generateVideoJob: vi.fn(),
+    listPersonaImages: vi.fn(),
+    addPersonaImage: vi.fn(),
+    updatePersonaImage: vi.fn(),
+    deletePersonaImage: vi.fn(),
+  } as unknown as PostEngineerClient;
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
   });
 
-  it('stringifies non-Error thrown values', () => {
-    expect(getErrorMessage('plain string')).toBe('plain string');
-    expect(getErrorMessage(42)).toBe('42');
-    expect(getErrorMessage(null)).toBe('null');
-    expect(getErrorMessage(undefined)).toBe('undefined');
+  it('create_persona accepts images and imagePrimaryIndex', async () => {
+    vi.mocked(mockClient.createPersona).mockResolvedValue({ success: true, personaId: 'p-1' });
+    const args = CreatePersonaSchema.parse({
+      name: 'Alex AI',
+      avatarUrl: 'https://example.com/alex.png',
+      images: [
+        { path: '/tmp/a.jpg', tag: 'casual', description: 'at the beach' },
+        { path: '/tmp/b.png' },
+      ],
+      imagePrimaryIndex: 1,
+    });
+    const response = await handleCreatePersona(mockClient, args);
+    expect(mockClient.createPersona).toHaveBeenCalledWith(
+      expect.objectContaining({ imagePrimaryIndex: 1, images: expect.any(Array) })
+    );
+    expect(textOf(response)).toContain('p-1');
+  });
+
+  it('create_persona rejects more than 10 images at the schema level', () => {
+    const images = Array.from({ length: 11 }, (_, i) => ({ path: `/tmp/img-${i}.jpg` }));
+    expect(() =>
+      CreatePersonaSchema.parse({ name: 'X', avatarUrl: 'https://example.com/a.png', images })
+    ).toThrow();
+  });
+
+  it('CreatePersonaSchema rejects images without avatarUrl at parse time', () => {
+    // The images-require-avatarUrl domain rule is encoded in the schema
+    // (superRefine), not just in the client guard: library images are
+    // rejected server-side for faceless personas, so fail at parse time
+    // with an actionable message.
+    expect(() =>
+      CreatePersonaSchema.parse({ name: 'X', images: [{ path: '/tmp/a.jpg' }] })
+    ).toThrow(/avatarUrl is required when images are provided/);
+  });
+
+  it('CreatePersonaSchema accepts images with avatarUrl, and faceless personas without images', () => {
+    expect(() =>
+      CreatePersonaSchema.parse({
+        name: 'X',
+        avatarUrl: 'https://example.com/a.png',
+        images: [{ path: '/tmp/a.jpg' }],
+      })
+    ).not.toThrow();
+    expect(() => CreatePersonaSchema.parse({ name: 'X' })).not.toThrow();
+    expect(() => CreatePersonaSchema.parse({ name: 'X', images: [] })).not.toThrow();
+  });
+
+  it('create_persona handler enforces images-require-avatarUrl before the client call', async () => {
+    // Simulates what the MCP SDK hands the handler: args parsed from the raw
+    // shape (no cross-field rule) — the handler re-parses with the refined
+    // schema so the rule bites on the tool path too, not just in direct
+    // schema parses.
+    vi.clearAllMocks();
+    vi.mocked(mockClient.createPersona).mockResolvedValue({ success: true });
+    const sdkArgs = z.object(CreatePersonaShape).parse({
+      name: 'X',
+      images: [{ path: '/tmp/a.jpg' }],
+    });
+    const response = await handleCreatePersona(mockClient, sdkArgs);
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toMatch(/avatarUrl is required when images are provided/);
+    expect(mockClient.createPersona).not.toHaveBeenCalled();
+  });
+
+  it('update_persona_image documents that whitespace-only metadata clears the stored value', () => {
+    // Server convention: undefined = keep, '' = clear. A whitespace-only
+    // value trims to '' client-side, so the field docs must say so —
+    // otherwise a caller passing "   " wipes the value unknowingly.
+    for (const field of [UpdatePersonaImageShape.tag, UpdatePersonaImageShape.description]) {
+      expect(field.description).toMatch(/whitespace/i);
+      expect(field.description).toMatch(/clear/i);
+    }
+  });
+
+  it('generate_video_from_persona passes imageId through', async () => {
+    vi.mocked(mockClient.generateVideoJob).mockResolvedValue({ success: true, taskId: 't-1' });
+    const response = await handleGenerateVideo(
+      mockClient,
+      GenerateVideoSchema.parse({ personaId: 'p-1', imageId: 'img-123' })
+    );
+    expect(mockClient.generateVideoJob).toHaveBeenCalledWith(
+      expect.objectContaining({ imageId: 'img-123' })
+    );
+    expect(textOf(response)).toContain('t-1');
+  });
+
+  it('generate_video_from_persona rejects an empty imageId', () => {
+    expect(() =>
+      GenerateVideoSchema.parse({ personaId: 'p-1', imageId: '' })
+    ).toThrow();
+  });
+
+  it('list_persona_images returns the library', async () => {
+    vi.mocked(mockClient.listPersonaImages).mockResolvedValue({ images: [] });
+    const response = await handleListPersonaImages(
+      mockClient,
+      ListPersonaImagesSchema.parse({ personaId: 'p-1' })
+    );
+    expect(mockClient.listPersonaImages).toHaveBeenCalledWith('p-1');
+    expect(textOf(response)).toContain('images');
+  });
+
+  it('add_persona_image forwards path, tag, description, isPrimary', async () => {
+    vi.mocked(mockClient.addPersonaImage).mockResolvedValue({ success: true, id: 'img-1' });
+    const response = await handleAddPersonaImage(
+      mockClient,
+      AddPersonaImageSchema.parse({ personaId: 'p-1', path: '/tmp/a.jpg', tag: 'gym', isPrimary: true })
+    );
+    expect(mockClient.addPersonaImage).toHaveBeenCalledWith(
+      'p-1',
+      expect.objectContaining({ path: '/tmp/a.jpg', tag: 'gym', isPrimary: true })
+    );
+    expect(textOf(response)).toContain('img-1');
+  });
+
+  it('add_persona_image rejects isPrimary:false at parse time', async () => {
+    // Symmetric with update_persona_image (swap-only): isPrimary:false on a
+    // brand-new image is meaningless — the image is never primary unless
+    // explicitly marked. Reject loudly instead of silently dropping it.
+    expect(() =>
+      AddPersonaImageSchema.parse({ personaId: 'p-1', path: '/tmp/a.jpg', isPrimary: false }),
+    ).toThrow();
+  });
+
+  it('update_persona_image forwards metadata', async () => {
+    vi.mocked(mockClient.updatePersonaImage).mockResolvedValue({ success: true });
+    await handleUpdatePersonaImage(
+      mockClient,
+      UpdatePersonaImageSchema.parse({ id: 'img-1', tag: 'formal', isPrimary: true })
+    );
+    expect(mockClient.updatePersonaImage).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'img-1', tag: 'formal', isPrimary: true })
+    );
+  });
+
+  it('update_persona_image rejects a no-op update with only an id', async () => {
+    // The refine encodes the domain rule "at least one of tag/description/
+    // isPrimary" in the schema: an id-only call must fail at parse time,
+    // before any client call.
+    vi.clearAllMocks();
+    expect(() => UpdatePersonaImageSchema.parse({ id: 'img-1' })).toThrow(
+      /At least one of tag, description, or isPrimary/
+    );
+    expect(mockClient.updatePersonaImage).not.toHaveBeenCalled();
+  });
+
+  it('update_persona_image re-parses raw handler args with the refined schema', async () => {
+    // The MCP SDK parses tool args against the raw UpdatePersonaImageShape,
+    // so the .refine would never fire on the tool path. The handler
+    // re-parses (like handleCreatePersona) so the id-only call fails at
+    // parse time with the schema message, before any client call.
+    vi.clearAllMocks();
+    const result = await handleUpdatePersonaImage(mockClient, { id: 'img-1' });
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toMatch(
+      /At least one of tag, description, or isPrimary/
+    );
+    expect(mockClient.updatePersonaImage).not.toHaveBeenCalled();
+  });
+
+  it('update_persona_image rejects isPrimary:false at parse time', async () => {
+    // The server PATCH is swap-only and 400s isPrimary:false. The schema
+    // is z.literal(true) so an agent learns the constraint from the tool
+    // contract instead of a server error.
+    expect(() =>
+      UpdatePersonaImageSchema.parse({ id: 'img-1', isPrimary: false })
+    ).toThrow();
+    expect(mockClient.updatePersonaImage).not.toHaveBeenCalled();
+  });
+
+  it('remove_persona_image forwards the id', async () => {
+    vi.mocked(mockClient.deletePersonaImage).mockResolvedValue({ success: true });
+    await handleRemovePersonaImage(mockClient, RemovePersonaImageSchema.parse({ id: 'img-1' }));
+    expect(mockClient.deletePersonaImage).toHaveBeenCalledWith('img-1');
+  });
+
+  it('library handlers surface client errors as isError', async () => {
+    vi.mocked(mockClient.listPersonaImages).mockRejectedValue(new Error('boom'));
+    const response = await handleListPersonaImages(
+      mockClient,
+      ListPersonaImagesSchema.parse({ personaId: 'p-1' })
+    );
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('boom');
   });
 });

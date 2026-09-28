@@ -97,6 +97,11 @@ export interface CreatePersonaResult {
   success: boolean;
   personaId?: string;
   error?: string;
+  // Present when images[] were uploaded at creation: the inserted image
+  // rows, plus any partial-success warning codes (stable codes like
+  // 'primary_swap_failed', mapped through i18n by the UI).
+  imageIds?: string[];
+  warnings?: string[];
 }
 
 export interface GeneratePersonaAvatarResult {

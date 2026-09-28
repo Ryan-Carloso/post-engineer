@@ -3,7 +3,7 @@ import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { PostEngineerClient } from './client.js';
+import { PostEngineerClient, MAX_LIBRARY_IMAGES, MAX_LIBRARY_IMAGE_MB } from './client.js';
 import {
   CreatePersonaShape,
   ListPersonasShape,
@@ -19,6 +19,10 @@ import {
   GenerateVideoShape,
   GetVideoStatusShape,
   ScheduleVideoShape,
+  ListPersonaImagesShape,
+  AddPersonaImageShape,
+  UpdatePersonaImageShape,
+  RemovePersonaImageShape,
   handleCreatePersona,
   handleListPersonas,
   handleListVoices,
@@ -33,6 +37,10 @@ import {
   handleGenerateVideo,
   handleGetVideoStatus,
   handleScheduleVideo,
+  handleListPersonaImages,
+  handleAddPersonaImage,
+  handleUpdatePersonaImage,
+  handleRemovePersonaImage,
 } from './tools.js';
 
 // The server advertises the package version: import it so a version bump in
@@ -155,7 +163,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
 
   server.tool(
     'generate_video_from_persona',
-    'Trigger video generation using an existing persona. Optional scriptPrompt overrides the video script; optional audioUrl (public http(s) URL) supplies custom audio for this video, overriding the persona voice.',
+    'Trigger video generation using an existing persona. Optional scriptPrompt overrides the video script; optional audioUrl (public http(s) URL) supplies custom audio for this video, overriding the persona voice; optional imageId picks a specific image from the persona image library (see list_persona_images), overriding the deterministic per-video selection.',
     GenerateVideoShape,
     async (args) => {
       return handleGenerateVideo(apiClient, args);
@@ -168,6 +176,42 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
     GetVideoStatusShape,
     async (args) => {
       return handleGetVideoStatus(apiClient, args);
+    }
+  );
+
+  server.tool(
+    'list_persona_images',
+    `List the image library of a persona (up to ${MAX_LIBRARY_IMAGES} tagged images). Each entry has id, tag, description, and is_primary. Use the ids with generate_video_from_persona imageId to force a specific image for one video.`,
+    ListPersonaImagesShape,
+    async (args) => {
+      return handleListPersonaImages(apiClient, args);
+    }
+  );
+
+  server.tool(
+    'add_persona_image',
+    `Add an image to a persona image library from a local file path (JPG/JPEG, PNG, or WebP, max ${MAX_LIBRARY_IMAGE_MB}MB). Optional tag and description drive the deterministic per-video image selection. The server rejects faceless personas and full libraries (${MAX_LIBRARY_IMAGES} max).`,
+    AddPersonaImageShape,
+    async (args) => {
+      return handleAddPersonaImage(apiClient, args);
+    }
+  );
+
+  server.tool(
+    'update_persona_image',
+    'Update a persona library image tag, description, or primary flag.',
+    UpdatePersonaImageShape,
+    async (args) => {
+      return handleUpdatePersonaImage(apiClient, args);
+    }
+  );
+
+  server.tool(
+    'remove_persona_image',
+    'Remove an image from a persona image library.',
+    RemovePersonaImageShape,
+    async (args) => {
+      return handleRemovePersonaImage(apiClient, args);
     }
   );
 
