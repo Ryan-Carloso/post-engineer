@@ -19,6 +19,23 @@
 export const MAX_PERSONA_IMAGES = 10;
 export const PERSONA_IMAGE_HISTORY_LIMIT = 3;
 
+/**
+ * Stable warning codes emitted by the image routes on partial success.
+ * Shared between producers (API routes) and consumers (UI warning mapper)
+ * so a typo or rename breaks the build instead of silently rendering raw
+ * codes.
+ * This module must stay dependency-free: the 'use client'
+ * persona-image-library imports these codes, and any Node builtin import
+ * here (e.g. crypto) would ride into the browser bundle.
+ */
+export const PERSONA_IMAGE_WARNING_CODES = {
+  PRIMARY_SWAP_FAILED: 'primary_swap_failed',
+  METADATA_SAVE_FAILED: 'metadata_save_failed',
+} as const;
+
+export type PersonaImageWarningCode =
+  (typeof PERSONA_IMAGE_WARNING_CODES)[keyof typeof PERSONA_IMAGE_WARNING_CODES];
+
 export interface PersonaLibraryImage {
   id: string;
   image_path: string;

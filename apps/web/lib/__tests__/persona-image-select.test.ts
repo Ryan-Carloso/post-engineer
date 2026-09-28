@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import {
   MAX_PERSONA_IMAGES,
   PERSONA_IMAGE_HISTORY_LIMIT,
+  PERSONA_IMAGE_WARNING_CODES,
   selectPersonaImage,
   type PersonaLibraryImage,
 } from '../persona-image-select';
@@ -115,5 +118,30 @@ describe('selectPersonaImage', () => {
     ];
     const picked = selectPersonaImage(library, { topic: 'женщина в парке' }, []);
     expect(picked?.id).toBe('img-ru');
+  });
+});
+
+describe('PERSONA_IMAGE_WARNING_CODES', () => {
+  it('lives in this client-safe leaf module with the stable codes', () => {
+    expect(PERSONA_IMAGE_WARNING_CODES).toEqual({
+      PRIMARY_SWAP_FAILED: 'primary_swap_failed',
+      METADATA_SAVE_FAILED: 'metadata_save_failed',
+    });
+  });
+
+  it('keeps this module free of Node builtin imports (client components import it)', () => {
+    // persona-image-library.tsx ('use client') imports the warning codes
+    // from here: a Node builtin import (e.g. crypto for randomUUID) would
+    // ride into the browser bundle. This module must stay dependency-free.
+    // Resolved from the vitest cwd (apps/web); the web test task always
+    // runs from there.
+    const source = readFileSync(join(process.cwd(), 'lib', 'persona-image-select.ts'), 'utf8');
+    expect(source).not.toMatch(/from\s+['"]node:/);
+    expect(source).not.toMatch(/from\s+['"]crypto['"]/);
+  });
+
+  it('is re-exported from persona-images for the server consumers', async () => {
+    const serverModule = await import('../persona-images');
+    expect(serverModule.PERSONA_IMAGE_WARNING_CODES).toBe(PERSONA_IMAGE_WARNING_CODES);
   });
 });

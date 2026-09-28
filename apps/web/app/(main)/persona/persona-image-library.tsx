@@ -11,9 +11,8 @@ import {
   type PersonaImageRecord,
 } from '@/lib/api';
 import type { TranslationKey } from '@/lib/i18n';
-import { PERSONA_IMAGE_WARNING_CODES } from '@/lib/persona-images';
 import { useI18n } from '@/lib/i18n/provider';
-import { MAX_PERSONA_IMAGES } from '@/lib/persona-image-select';
+import { MAX_PERSONA_IMAGES, PERSONA_IMAGE_WARNING_CODES } from '@/lib/persona-image-select';
 
 // Single source of truth for the library cap; the picker limit, the
 // server count check, and the SQL trigger all derive from this value.
