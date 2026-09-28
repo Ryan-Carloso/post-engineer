@@ -331,8 +331,10 @@ describe('lib/api — persona', () => {
     }
 
     it('drops malformed image records instead of passing them to the UI', async () => {
-      // The UI reads id/image_url directly: a record missing id (or with a
-      // non-string image_url) must not flow through unchecked.
+      // The UI reads id/image_url directly and is_primary drives the
+      // primary badge/toggle: a record missing id, with a non-string
+      // image_url, or a non-boolean is_primary must not flow through
+      // unchecked.
       fetchMock.mockResolvedValue(
         jsonResponse({
           success: true,
@@ -341,6 +343,7 @@ describe('lib/api — persona', () => {
             { id: 42, image_url: 'https://signed/2' },
             { image_url: 'https://signed/3' },
             { id: 'img-4', image_url: 42 },
+            { id: 'img-5', image_url: 'https://signed/5', is_primary: 'yes' },
           ],
         }),
       );

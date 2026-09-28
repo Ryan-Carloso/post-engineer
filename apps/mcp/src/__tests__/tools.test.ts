@@ -592,6 +592,20 @@ describe('persona image library tools', () => {
     expect(mockClient.updatePersonaImage).not.toHaveBeenCalled();
   });
 
+  it('update_persona_image re-parses raw handler args with the refined schema', async () => {
+    // The MCP SDK parses tool args against the raw UpdatePersonaImageShape,
+    // so the .refine would never fire on the tool path. The handler
+    // re-parses (like handleCreatePersona) so the id-only call fails at
+    // parse time with the schema message, before any client call.
+    vi.clearAllMocks();
+    const result = await handleUpdatePersonaImage(mockClient, { id: 'img-1' });
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toMatch(
+      /At least one of tag, description, or isPrimary/
+    );
+    expect(mockClient.updatePersonaImage).not.toHaveBeenCalled();
+  });
+
   it('update_persona_image rejects isPrimary:false at parse time', async () => {
     // The server PATCH is swap-only and 400s isPrimary:false. The schema
     // is z.literal(true) so an agent learns the constraint from the tool

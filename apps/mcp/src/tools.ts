@@ -465,13 +465,21 @@ export async function handleUpdatePersonaImage(
   args: z.infer<typeof UpdatePersonaImageSchema>
 ): Promise<McpToolResponse> {
   return handleLibraryCall(
-    () =>
-      client.updatePersonaImage({
-        id: args.id,
-        tag: args.tag,
-        description: args.description,
-        isPrimary: args.isPrimary,
-      }),
+    () => {
+      // Re-parse with the refined schema: the MCP SDK parses tool args
+      // from the raw shape only, so the "at least one of
+      // tag/description/isPrimary" refine would otherwise never fire on
+      // the tool path. Parsing inside the closure turns the failure into
+      // a loud isError, before any client call.
+      // (Same reason handleCreatePersona re-parses.)
+      const parsed = UpdatePersonaImageSchema.parse(args);
+      return client.updatePersonaImage({
+        id: parsed.id,
+        tag: parsed.tag,
+        description: parsed.description,
+        isPrimary: parsed.isPrimary,
+      });
+    },
     'updating persona image',
     'Persona image updated successfully',
   );

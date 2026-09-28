@@ -795,6 +795,21 @@ Follow these so the same issues don't come back:
   (needs two independent failures; the error contract stays
   {success, error} and the server logs loudly).
 
+## Web/API review learnings, round 26 (2026-09-28)
+- **A schema refine that never runs on the tool path is a hollow claim.**
+  UpdatePersonaImageSchema's "at least one of tag/description/isPrimary"
+  .refine was documented as machine-checkable at parse time, but the MCP
+  SDK parses tool args against the raw shape and handleUpdatePersonaImage
+  forwarded them without re-parsing — the rule held only via the client's
+  fail-fast guard. Re-parse INSIDE the handleLibraryCall closure (like
+  handleCreatePersona): parsing outside the closure throws the ZodError
+  past the handler instead of turning it into a loud isError.
+- **Narrowing guards must cover every field the UI reads.**
+  fetchPersonaImages narrowed only id/image_url while the card drives
+  the primary badge/toggle off is_primary — a corrupt non-boolean value
+  slipped through. When a guard's comment states its intent, every field
+  the downstream consumers read belongs in the predicate.
+
 ## Web/API review learnings, round 25 (2026-09-28)
 - **Re-sweep the dictionaries after every "no exceptions" rule.**
   Round 23 converted libraryHint/libraryFilesRejected to {max}/
