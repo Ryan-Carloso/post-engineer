@@ -746,3 +746,22 @@ Follow these so the same issues don't come back:
   is now IMAGE_URL_TTL_SECONDS; the face-mix insert coercion is
   resolveStoredFaceMixPercent in persona-schema.ts (no nested ternary);
   the empty-state conditional is a named showEmptyState.
+
+## Web/API review learnings, round 17 (2026-09-28)
+- **New stateful UI ships with behavioral tests on both sides.** The
+  `image_url_error` retryable-thumbnail state had a producer, a
+  consumer, and a documented type — but no test asserting GET emits the
+  flag on signing failure, nor that the card renders the retry copy.
+  A refactor of `signImageUrl` or the card branch could have silently
+  broken the contract. Both are now pinned.
+- **Batch file errors name the failing entry.** At creation, up to 10
+  files arrive with index-aligned tags; a bare "Only image files are
+  accepted." left API callers guessing which entry failed. The creation
+  call site appends `(image N: name)` context (1-based). validateImageFile
+  keeps its own messages stable; the UI's ERROR_CLASS_PATTERNS matches
+  the content-mismatch base message with an optional context suffix so
+  the specific localized copy still applies.
+- **The OCR review action fails intermittently without posting findings**
+  (observed on 2451284 and 5899432 — "Run OpenCodeReview" step errors).
+  Zero new threads + a failed action = infrastructure, not a dirty
+  review. Re-run or proceed; do not treat it as a code failure.
