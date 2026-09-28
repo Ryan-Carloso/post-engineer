@@ -120,8 +120,21 @@ def _task_already_failed(task_id: str) -> bool:
     return bool(task) and task.get("state") == const.TASK_STATE_FAILED
 
 
-def _fail_task(task_id: str, error: str, params: VideoParams | None = None, **kwargs: object) -> None:
+def _fail_task(
+    task_id: str,
+    error: str,
+    params: VideoParams | None = None,
+    stage: str | None = None,
+    exc: BaseException | None = None,
+    **kwargs: object,
+) -> None:
     """Mark a task FAILED; fire-and-forget Discord alert (once per task).
+
+    Every call emits a structured Loguru ERROR record (forwarded to
+    Bugsink by the asgi sink, ERROR+) with the task id, the pipeline
+    stage that failed and the error type — so the reason is visible per
+    step. The full params are never logged: they may carry secrets,
+    signed URLs or tokens.
 
     The first failure notice records its error and alerts. A later notice
     for an already-failed task only re-asserts the FAILED state — it never
@@ -129,6 +142,14 @@ def _fail_task(task_id: str, error: str, params: VideoParams | None = None, **kw
     (e.g. "custom audio file is invalid: ..." must survive the generic
     "failed to generate audio" follow-up).
     """
+    failed_stage = stage or "unknown"
+    error_type = type(exc).__name__ if exc is not None else "TaskError"
+    # Bind only safe identifiers: never params, headers, tokens or URLs.
+    logger.bind(task_id=task_id, stage=failed_stage, error_type=error_type).error(
+        "video task failed at stage {stage}: {error}",
+        stage=failed_stage,
+        error=error,
+    )
     if _task_already_failed(task_id):
         sm.state.update_task(task_id, state=const.TASK_STATE_FAILED, **kwargs)
     else:
@@ -283,7 +304,7 @@ def generate_script(task_id, params):
                 raise ValueError("persona script failed hook validation after separate regeneration")
 
     if not video_script:
-        _fail_task(task_id, "failed to generate video script", params)
+        _fail_task(task_id, "failed to generate video script", params, stage="script")
         logger.error("failed to generate video script.")
         return None
 
@@ -317,7 +338,7 @@ def generate_terms(task_id, params, video_script):
         logger.debug(f"video terms: {len(video_terms)} terms")
 
     if not video_terms:
-        _fail_task(task_id, "failed to generate video terms", params)
+        _fail_task(task_id, "failed to generate video terms", params, stage="terms")
         logger.error("failed to generate video terms.")
         return None
 
@@ -462,7 +483,7 @@ def generate_audio(task_id, params, video_script):
             "custom audio file is invalid, "
             f"task_id: {task_id}, path: {requested_custom_audio_file}, error: {reason}"
         )
-        _fail_task(task_id, f"custom audio file is invalid: {reason}", params)
+        _fail_task(task_id, f"custom audio file is invalid: {reason}", params, stage="custom_audio")
         return None, None, None
 
     # Persona inline: the house voice overrides voice_name; the user's voice
@@ -472,7 +493,7 @@ def generate_audio(task_id, params, video_script):
         try:
             custom_audio_file = _download_persona_voice(task_id, persona_voice_audio)
         except PersonaVoiceError as exc:
-            _fail_task(task_id, f"Custom audio rejected: {safe_reason(exc)}", params)
+            _fail_task(task_id, f"Custom audio rejected: {safe_reason(exc)}", params, stage="custom_audio", exc=exc)
             return None, None, None
 
     if not custom_audio_file:
@@ -494,7 +515,7 @@ def generate_audio(task_id, params, video_script):
             voice_file=audio_file,
         )
         if sub_maker is None:
-            _fail_task(task_id, "failed to generate audio: voice/subtitle mismatch", params)
+            _fail_task(task_id, "failed to generate audio: voice/subtitle mismatch", params, stage="audio")
             logger.error(
                 """failed to generate audio:
 1. check if the language of the voice matches the language of the video script.
@@ -504,7 +525,7 @@ def generate_audio(task_id, params, video_script):
             return None, None, None
         audio_duration = math.ceil(voice.get_audio_duration(sub_maker))
         if audio_duration == 0:
-            _fail_task(task_id, "failed to get audio duration", params)
+            _fail_task(task_id, "failed to get audio duration", params, stage="audio")
             logger.error("failed to get audio duration.")
             return None, None, None
         return audio_file, audio_duration, sub_maker
@@ -512,7 +533,7 @@ def generate_audio(task_id, params, video_script):
         logger.info(f"using custom audio file: {custom_audio_file}")
         audio_duration = voice.get_audio_duration(custom_audio_file)
         if audio_duration == 0:
-            _fail_task(task_id, "failed to get audio duration from custom audio file", params)
+            _fail_task(task_id, "failed to get audio duration from custom audio file", params, stage="audio")
             logger.error("failed to get audio duration from custom audio file.")
             return None, None, None
         return custom_audio_file, audio_duration, None
@@ -573,7 +594,7 @@ def get_video_materials(task_id, params, video_terms, audio_duration):
             materials=params.video_materials, clip_duration=params.video_clip_duration
         )
         if not materials:
-            _fail_task(task_id, "no valid materials found", params)
+            _fail_task(task_id, "no valid materials found", params, stage="materials")
             logger.error(
                 "no valid materials found, please check the materials and try again."
             )
@@ -605,7 +626,7 @@ def get_video_materials(task_id, params, video_terms, audio_duration):
             exclude_faces=persona_lipsync_active(params),
         )
         if not downloaded_videos:
-            _fail_task(task_id, "failed to download videos", params)
+            _fail_task(task_id, "failed to download videos", params, stage="download")
             logger.error(
                 "failed to download videos, maybe the network is not available. if you are in China, please use a VPN."
             )
@@ -767,6 +788,20 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         )
         _phase_start = now
         _last_phase = phase
+        # Persist the last completed phase so the progress (SSE) endpoint
+        # and failure logs can report which stage the task is in.
+        # update_task() overwrites state/progress with its defaults, so
+        # re-assert the current values to avoid clobbering them.
+        try:
+            current = sm.state.get_task(task_id) or {}
+            sm.state.update_task(
+                task_id,
+                state=current.get("state", const.TASK_STATE_PROCESSING),
+                progress=current.get("progress", 0),
+                stage=phase,
+            )
+        except Exception:  # noqa: BLE001 — stage tracking must not break the pipeline
+            logger.warning(f"could not persist stage for task {task_id}")
 
     try:
         sm.state.update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=5)
@@ -775,7 +810,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         video_script = generate_script(task_id, params)
         _mark("script")
         if not video_script or "Error: " in video_script:
-            _fail_task(task_id, "failed to generate video script", params)
+            _fail_task(task_id, "failed to generate video script", params, stage="script")
             cleanup_task_intermediates(task_id, ())
             return
 
@@ -793,7 +828,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             video_terms = generate_terms(task_id, params, video_script)
             _mark("terms")
             if not video_terms:
-                _fail_task(task_id, "failed to generate video terms", params)
+                _fail_task(task_id, "failed to generate video terms", params, stage="terms")
                 cleanup_task_intermediates(task_id, ())
                 return
 
@@ -813,7 +848,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         )
         _mark("audio")
         if not audio_file:
-            _fail_task(task_id, "failed to generate audio", params)
+            _fail_task(task_id, "failed to generate audio", params, stage="audio")
             cleanup_task_intermediates(task_id, ())
             return
 
@@ -868,7 +903,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         )
         _mark("materials")
         if not downloaded_videos:
-            _fail_task(task_id, "failed to download videos", params)
+            _fail_task(task_id, "failed to download videos", params, stage="download")
             cleanup_task_intermediates(task_id, ())
             return
 
@@ -909,7 +944,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         _mark("render")
 
         if not final_video_paths:
-            _fail_task(task_id, "failed to generate final videos", params)
+            _fail_task(task_id, "failed to generate final videos", params, stage="render")
             cleanup_task_intermediates(task_id, ())
             return
 
@@ -985,7 +1020,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         return kwargs
     except Exception as exc:
         logger.exception("task %s crashed", task_id)
-        _fail_task(task_id, safe_reason(exc), params, music_mood=music_mood)
+        _fail_task(task_id, safe_reason(exc), params, stage=_last_phase, exc=exc, music_mood=music_mood)
         try:
             cleanup_task_intermediates(task_id, ())
         except OSError as cleanup_error:
