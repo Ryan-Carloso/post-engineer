@@ -360,6 +360,27 @@ Follow these so the same issues don't come back:
   on an optional field misleads the agent; 'imageId must be a non-empty
   string' says what actually failed.
 
+## Web/API review learnings, round 9 (2026-09-28)
+- **Strict null checks only.** `== null` is banned by project rules;
+  spell out `=== null || === undefined` even for genuine nullish checks.
+- **Edit-mode gates derive from stored data, not flow stores.** The
+  zustand create-flow store persists across navigation; when editing,
+  derive mode/visibility from the loaded persona (faceMixPercent), not
+  from the store.
+- **Project GET responses.** Spreading a DB row leaks internal fields
+  (image_path); project only what the UI renders.
+- **Unicode-aware tokenization.** `\p{L}\p{N}` with the `u` flag for
+  keyword matching; a Latin-only class silently degrades non-Latin
+  personas to primary/first with no signal.
+- **Surface warnings in every consumer.** Warnings parsed but unread are
+  a broken contract; card save/set-primary now map codes through i18n.
+- **Type narrow + runtime guard for swap-only fields.** `isPrimary?: true`
+  at the type level, with a runtime throw for JS callers.
+- **Check metadata lengths client-side.** Tag/description limits checked
+  before the multipart upload, not server-side after bytes transfer.
+- **Share normalization between upload paths.** Trim/drop-empty logic
+  lives in one place so both MCP paths honor the invariant.
+
 ## Web/API review learnings, round 8 (2026-09-28)
 - **Coerce derived state at the write boundary.** A faceless creation
   stored `face_mix_percent: NULL` (no explicit mix), passing the images
