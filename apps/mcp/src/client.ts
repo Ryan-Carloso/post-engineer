@@ -220,19 +220,8 @@ export class PostEngineerClient {
       if (images.length > MAX_LIBRARY_IMAGES) {
         throw new Error(`At most ${MAX_LIBRARY_IMAGES} library images are allowed per persona.`);
       }
-      const tags: string[] = [];
-      const descriptions: string[] = [];
-      // The reads are independent: load in parallel (order is preserved, so
-      // tags/descriptions stay aligned with the formData entries).
-      const blobs = await Promise.all(images.map((image) => imageFormFile(image.path)));
-      images.forEach((image, index) => {
-        formData.append('images', blobs[index], basename(image.path));
-        tags.push(image.tag ?? '');
-        descriptions.push(image.description ?? '');
-      });
-      formData.set('imageTags', JSON.stringify(tags));
-      formData.set('imageDescriptions', JSON.stringify(descriptions));
       if (input.imagePrimaryIndex !== undefined) {
+        // Fail fast before reading any file: pure-argument checks come first.
         if (input.imagePrimaryIndex < 0 || input.imagePrimaryIndex >= images.length) {
           throw new Error(
             `imagePrimaryIndex ${input.imagePrimaryIndex} is out of range: ${images.length} images provided.`,
@@ -240,6 +229,19 @@ export class PostEngineerClient {
         }
         formData.set('imagePrimaryIndex', String(input.imagePrimaryIndex));
       }
+      const tags: string[] = [];
+      const descriptions: string[] = [];
+      // Sequential reads bound memory: at most one 10MB image is resident at
+      // a time (10 in parallel would hold ~100MB in this stdio process), and
+      // upload time is dominated by network transfer anyway. Order is
+      // preserved, so tags/descriptions stay aligned with the entries.
+      for (const image of images) {
+        formData.append('images', await imageFormFile(image.path), basename(image.path));
+        tags.push(image.tag ?? '');
+        descriptions.push(image.description ?? '');
+      }
+      formData.set('imageTags', JSON.stringify(tags));
+      formData.set('imageDescriptions', JSON.stringify(descriptions));
     }
     return this.request(
       '/api/persona',

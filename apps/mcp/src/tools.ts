@@ -24,13 +24,18 @@ export function missingProviderAccountIds(args: {
   return args.providers.filter((provider) => (idsByProvider[provider] ?? []).length === 0);
 }
 
-// Single source of truth: index.ts registers these shapes directly with the
-// MCP server, so field definitions (and their descriptions) live here only.
-const PersonaLibraryImageInputShape = z.object({
+// Shared field definitions: path/tag/description limits appear in both the
+// create-persona images array and add_persona_image — define once so the
+// limits and descriptions can't drift apart.
+const LibraryImageFields = {
   path: z.string().min(1).describe('Local file path to the image (JPG, PNG, or WebP, max 10MB)'),
   tag: z.string().max(100).optional().describe('Short tag for deterministic per-video matching (e.g. casual, formal, gym)'),
   description: z.string().max(500).optional().describe('Description of the photo for tag/keyword matching (e.g. smiling at the beach at sunset)'),
-});
+};
+
+// Single source of truth: index.ts registers these shapes directly with the
+// MCP server, so field definitions (and their descriptions) live here only.
+const PersonaLibraryImageInputShape = z.object(LibraryImageFields);
 
 export const CreatePersonaShape = {
   name: z.string().min(1, 'Name is required').describe('Name of the persona'),
@@ -44,7 +49,7 @@ export const CreatePersonaShape = {
   faceMixPercent: z.number().min(0).max(100).default(50),
   faceQuality: z.enum(['ok', 'very_good']).default('very_good'),
   images: z.array(PersonaLibraryImageInputShape).max(10).optional().describe('Up to 10 local image files of the same person for the persona image library. Each video deterministically picks the best-matching image by tag. Requires avatarUrl.'),
-  imagePrimaryIndex: z.number().int().min(0).max(9).optional().describe('Index into images[] marking the primary library image (default: first)'),
+  imagePrimaryIndex: z.number().int().min(0).max(9).optional().describe('Index into images[] marking the primary library image (no primary is set when omitted)'),
 };
 
 export const CreatePersonaSchema = z.object(CreatePersonaShape);
@@ -125,9 +130,7 @@ export const ListPersonaImagesSchema = z.object(ListPersonaImagesShape);
 
 export const AddPersonaImageShape = {
   personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona to add the image to'),
-  path: z.string().min(1).describe('Local file path to the image (JPG, PNG, or WebP, max 10MB)'),
-  tag: z.string().max(100).optional().describe('Short tag for deterministic per-video matching (e.g. casual, formal, gym)'),
-  description: z.string().max(500).optional().describe('Description of the photo for tag/keyword matching'),
+  ...LibraryImageFields,
   isPrimary: z.boolean().optional().describe('Mark this image as the primary library image'),
 };
 
@@ -565,122 +568,87 @@ export async function handleGenerateVideo(
   }
 }
 
-export async function handleListPersonaImages(
-  client: PostEngineerClient,
-  args: z.infer<typeof ListPersonaImagesSchema>
+/** Shared wrapper for the persona-image handlers: same try/catch + text
+ * response shape, differing only in the client call and the message verbs. */
+async function handleLibraryCall(
+  clientCall: () => Promise<unknown>,
+  errorVerb: string,
+  successPrefix?: string,
 ): Promise<McpToolResponse> {
   try {
-    const result = await client.listPersonaImages(args.personaId);
+    const result = await clientCall();
+    const text = successPrefix
+      ? `${successPrefix}: ${JSON.stringify(result, null, 2)}`
+      : JSON.stringify(result, null, 2);
     return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
+      content: [{ type: 'text', text }],
     };
   } catch (error) {
     return {
       content: [
         {
           type: 'text',
-          text: `Error listing persona images: ${getErrorMessage(error)}`,
+          text: `Error ${errorVerb}: ${getErrorMessage(error)}`,
         },
       ],
       isError: true,
     };
   }
+}
+
+export async function handleListPersonaImages(
+  client: PostEngineerClient,
+  args: z.infer<typeof ListPersonaImagesSchema>
+): Promise<McpToolResponse> {
+  return handleLibraryCall(
+    () => client.listPersonaImages(args.personaId),
+    'listing persona images',
+  );
 }
 
 export async function handleAddPersonaImage(
   client: PostEngineerClient,
   args: z.infer<typeof AddPersonaImageSchema>
 ): Promise<McpToolResponse> {
-  try {
-    const result = await client.addPersonaImage(args.personaId, {
-      path: args.path,
-      tag: args.tag,
-      description: args.description,
-      isPrimary: args.isPrimary,
-    });
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Persona image added successfully: ${JSON.stringify(result, null, 2)}`,
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error adding persona image: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
+  return handleLibraryCall(
+    () =>
+      client.addPersonaImage(args.personaId, {
+        path: args.path,
+        tag: args.tag,
+        description: args.description,
+        isPrimary: args.isPrimary,
+      }),
+    'adding persona image',
+    'Persona image added successfully',
+  );
 }
 
 export async function handleUpdatePersonaImage(
   client: PostEngineerClient,
   args: z.infer<typeof UpdatePersonaImageSchema>
 ): Promise<McpToolResponse> {
-  try {
-    const result = await client.updatePersonaImage({
-      id: args.id,
-      tag: args.tag,
-      description: args.description,
-      isPrimary: args.isPrimary,
-    });
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Persona image updated successfully: ${JSON.stringify(result, null, 2)}`,
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error updating persona image: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
+  return handleLibraryCall(
+    () =>
+      client.updatePersonaImage({
+        id: args.id,
+        tag: args.tag,
+        description: args.description,
+        isPrimary: args.isPrimary,
+      }),
+    'updating persona image',
+    'Persona image updated successfully',
+  );
 }
 
 export async function handleRemovePersonaImage(
   client: PostEngineerClient,
   args: z.infer<typeof RemovePersonaImageSchema>
 ): Promise<McpToolResponse> {
-  try {
-    const result = await client.deletePersonaImage(args.id);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Persona image removed successfully: ${JSON.stringify(result, null, 2)}`,
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error removing persona image: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
+  return handleLibraryCall(
+    () => client.deletePersonaImage(args.id),
+    'removing persona image',
+    'Persona image removed successfully',
+  );
 }
 
 export async function handleGetVideoStatus(

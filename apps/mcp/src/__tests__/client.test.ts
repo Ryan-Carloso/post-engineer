@@ -884,6 +884,20 @@ describe('PostEngineerClient persona image library', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  it('createPersona validates imagePrimaryIndex before reading any file', async () => {
+    // A nonexistent path would fail the read; the range error must win,
+    // proving no file is read before the pure-argument check.
+    await expect(
+      client.createPersona({
+        name: 'X',
+        avatarUrl: 'https://example.com/a.png',
+        images: [{ path: '/tmp/does-not-exist.jpg' }],
+        imagePrimaryIndex: 5,
+      })
+    ).rejects.toThrow(/out of range/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it('createPersona rejects library images larger than 10MB', async () => {
     const path = await writeTempImage('big.jpg', 11 * 1024 * 1024);
     await expect(
