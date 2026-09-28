@@ -20,6 +20,7 @@ import {
   handleConnectAccount,
   ListPostsSchema,
   ScheduleVideoSchema,
+  ScheduleVideoShape,
   CreatePersonaSchema,
   CreatePersonaShape,
   UpdatePersonaSchema,
@@ -418,6 +419,61 @@ describe('schedule account validation', () => {
     expect(
       missingProviderAccountIds({ providers: ['bluesky'], blueskyAccountIds: [] })
     ).toEqual(['bluesky']);
+  });
+
+  it('account-ID fields pin which list_social_accounts field to use (recordId is the trap)', () => {
+    // list_social_accounts returns both `recordId` (internal row uuid) and the
+    // provider's real account id; agents must use the latter. Pin the wording
+    // so a future "cleanup" cannot silently drop the warning.
+    expect(ScheduleVideoShape.youtubeAccountIds.description).toContain('channelId');
+    expect(ScheduleVideoShape.youtubeAccountIds.description).toContain('NOT recordId');
+    expect(ScheduleVideoShape.instagramAccountIds.description).toContain('igUserId');
+    expect(ScheduleVideoShape.instagramAccountIds.description).toContain('NOT recordId');
+    expect(ScheduleVideoShape.linkedinAccountIds.description).toContain('providerAccountId');
+    expect(ScheduleVideoShape.linkedinAccountIds.description).toContain('NOT recordId');
+    expect(ScheduleVideoShape.blueskyAccountIds.description).toContain('did');
+    expect(ScheduleVideoShape.blueskyAccountIds.description).toContain('NOT recordId');
+  });
+
+  it('ScheduleVideoSchema rejects UUID-shaped blueskyAccountIds with a did hint', () => {
+    // A bare UUID is a list_social_accounts `recordId` pasted into the wrong
+    // field — no Bluesky DID is ever UUID-shaped, so this is safe to reject.
+    const result = ScheduleVideoSchema.safeParse({
+      ...baseArgs,
+      providers: ['bluesky'],
+      blueskyAccountIds: ['550e8400-e29b-41d4-a716-446655440000'],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const message = result.error.issues.map((issue) => issue.message).join(' ');
+      expect(message).toContain('did');
+      expect(message).toContain('recordId');
+    }
+  });
+
+  it('ScheduleVideoSchema still accepts did:plc: and did:web: bluesky IDs', () => {
+    for (const did of ['did:plc:xyz123', 'did:web:example.com']) {
+      const result = ScheduleVideoSchema.safeParse({
+        ...baseArgs,
+        providers: ['bluesky'],
+        blueskyAccountIds: [did],
+      });
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it('handleScheduleVideo fails fast on recordId-shaped bluesky IDs without calling the API', async () => {
+    const client = { createSchedule: vi.fn() } as unknown as PostEngineerClient;
+    const response = await handleScheduleVideo(client, {
+      personaId: 'persona-123',
+      providers: ['bluesky'],
+      blueskyAccountIds: ['550e8400-e29b-41d4-a716-446655440000'],
+    } as z.infer<typeof ScheduleVideoSchema>);
+    expect(response.isError).toBe(true);
+    expect(client.createSchedule).not.toHaveBeenCalled();
+    const text = textOf(response);
+    expect(text).toContain('did');
+    expect(text).toContain('recordId');
   });
 
   it('handleScheduleVideo fails fast without calling the API when account IDs are missing', async () => {

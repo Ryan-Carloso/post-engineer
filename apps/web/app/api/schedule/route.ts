@@ -103,6 +103,19 @@ type ScheduleSupabaseClient =
   | ReturnType<typeof createSupabaseServiceClient>;
 
 //---------------
+// ACCOUNT_ID_HINTS — per-provider pointer to the list_social_accounts field
+// that callers must use. That endpoint returns both `recordId` (internal row
+// id) and the provider's real account id; callers (especially agents) mix
+// them up, so the ownership 400 below names the right field explicitly.
+//---------------
+const ACCOUNT_ID_HINTS: Record<(typeof VALID_PROVIDERS)[number], string> = {
+  youtube: 'the channelId field from list_social_accounts, not recordId',
+  instagram: 'the igUserId field from list_social_accounts, not recordId',
+  linkedin: 'the providerAccountId field from list_social_accounts, not recordId',
+  bluesky: 'Bluesky DIDs (the did field from list_social_accounts), not recordIds',
+};
+
+//---------------
 // assertAccountsOwned — an account selection may only reference accounts
 // registered to the caller. Queries social_accounts per provider and requires
 // an exact match between the requested ids and the user's own ones. Returns
@@ -126,7 +139,7 @@ async function assertAccountsOwned(
     const foundIds = (accounts ?? []).map((account) => account.provider_account_id).sort();
     const requestedIds = [...ids].sort();
     if (error || foundIds.length !== requestedIds.length || foundIds.some((id, index) => id !== requestedIds[index])) {
-      return `Invalid ${provider} account selection.`;
+      return `Invalid ${provider} account selection — expected ${ACCOUNT_ID_HINTS[provider]}.`;
     }
   }
   return null;

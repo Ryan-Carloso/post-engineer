@@ -531,7 +531,11 @@ describe('/api/schedule', () => {
     }, 'PATCH'));
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
-    expect(body.error).toContain('Invalid bluesky account selection.');
+    expect(body.error).toContain('Invalid bluesky account selection');
+    // The hint must name the right field: a recordId-shaped id is the classic
+    // mix-up with list_social_accounts (recordId vs did).
+    expect(body.error).toContain('did');
+    expect(body.error).toContain('recordId');
   });
 
   it('PATCH rejeita conta mantida que não é mais do usuário', async () => {
@@ -550,7 +554,9 @@ describe('/api/schedule', () => {
     const res = await PATCH(jsonRequest({ id: 's-1', active: true, blueskyAccountIds: [] }, 'PATCH'));
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
-    expect(body.error).toContain('Invalid youtube account selection.');
+    expect(body.error).toContain('Invalid youtube account selection');
+    expect(body.error).toContain('channelId');
+    expect(body.error).toContain('recordId');
   });
 
   it('PATCH retorna 404 quando schedule não existe', async () => {

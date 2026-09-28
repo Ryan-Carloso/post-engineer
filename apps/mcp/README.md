@@ -93,6 +93,21 @@ The `Authorization: Bearer` API key header is sent to the configured base URL, s
 - `list_posts`: list upcoming (scheduled) and past (published/failed) posts across all connected accounts.
 - `cancel_schedule`: cancel a schedule by its ID.
 
+### Social account IDs for `schedule_video`
+
+Each provider's `*AccountIds` field expects the provider's account identifier
+from `list_social_accounts` — **not** the `recordId` (that is the internal
+database row id and is rejected):
+
+| Provider | `schedule_video` field | Use this `list_social_accounts` field |
+|---|---|---|
+| YouTube | `youtubeAccountIds` | `channelId` |
+| Instagram | `instagramAccountIds` | `igUserId` |
+| LinkedIn | `linkedinAccountIds` | `providerAccountId` |
+| Bluesky | `blueskyAccountIds` | `did` (e.g. `did:plc:...`) |
+
+Passing a `recordId` fails fast with an error naming the right field.
+
 ## Links
 
 - Platform: https://post-engineer.com/
