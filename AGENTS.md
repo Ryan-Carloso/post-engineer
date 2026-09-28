@@ -187,3 +187,31 @@ Follow these so the same issues don't come back:
 - **Commit messages describe the implementation**, not the process
   ("redact encoded app password, inject clock via options", never
   "review 11 findings").
+
+## Web/API review learnings, round 2 (2026-09-28)
+- **Fixing a banned pattern? grep the whole diff.** The `instanceof File` ban
+  was applied to `images/route.ts` but the same PR added a new call site in
+  `persona/route.ts`. When a reviewer flags a pattern, search every touched
+  file for siblings before declaring it fixed.
+- **Every mutation needs visible error state.** The "set as primary" toggle
+  used fire-and-forget `mutate()` while save/remove had error handling —
+  audit every mutation call site in a component, not just the ones the
+  reviewer quoted.
+- **Validate shared params before branch splits.** `image_id` validation
+  lived only in the persona branch; faceless callers got silent ignores.
+  Validate before the faceless/persona split.
+- **Reject over-length input, don't truncate.** PATCH silently `.slice()`d
+  over-length tag/description; direct API callers got silent data loss.
+  Strict type checks + silent truncation is inconsistent — 400 instead.
+- **Multi-step DB mutations go in one SQL function.** The primary swap was
+  two app-side UPDATEs that concurrent calls could interleave; the
+  `set_primary_persona_image` function locks the parent row and does
+  demote-then-promote back-to-back. Same class as the history RPC.
+- **Verify the reviewer's arithmetic.** OCR claimed the AFTER INSERT
+  `count(*) > 10` trigger allows an 11th row — wrong: after inserting row
+  11, count is 11 > 10, so it raises. Don't apply a fix for a broken proof.
+- **MCP client hygiene:** derive display values from constants (never
+  hardcode "10MB" next to `MAX_LIBRARY_IMAGE_BYTES`); one `readFile`
+  instead of stat/read (TOCTOU + consistent errors); file-carrying
+  requests get a longer timeout (120s vs 30s); independent reads go
+  through `Promise.all`; fail fast client-side on no-op calls.
