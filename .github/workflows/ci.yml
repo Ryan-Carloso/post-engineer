@@ -10,12 +10,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Regression gate for the review-workflow files (ocr-review.yml,
-  # opencode-review.yml and their validators). This job checks out the PR's
+  # Regression gate for the review-workflow files (opencode-review.yml
+  # and its validator). This job checks out the PR's
   # own merge ref, so a commit that relaxes both a workflow and its
   # validator passes the gate by construction — the gate is
   # accidental-regression protection, NOT tamper-resistance. The remote
-  # opencode-review and OCR reviews are the adversarial layer: any such
+  # opencode-review is the adversarial layer: any such
   # relaxation shows up as a reviewed diff before merge.
   review-workflows:
     runs-on: ubuntu-latest
@@ -43,12 +43,6 @@ jobs:
         run: |
           set -euo pipefail
           python3 .github/scripts/validate-opencode-review.py
-          python3 .github/scripts/validate-ocr-review.py
-
-      - name: Validator self-tests
-        run: |
-          set -euo pipefail
-          python3 -m pytest .github/scripts/test_validate_ocr_review.py -q
 
   # Fails if secret-bearing files are tracked in git. config.toml may hold
   # provider API keys and real .env files must never be committed (see the
