@@ -123,6 +123,14 @@ def compute_slots(
 # which bypasses RLS; per-user isolation comes from the user_id stored on each
 # schedule/slot row.
 # ---------------------------------------------------------------------------
+class SupabaseAuthError(RuntimeError):
+    """Supabase rejected the service key (HTTP 401).
+
+    Raised by ScheduleStore when PostgREST answers 401 so the tick log
+    names the exact env var to fix instead of a raw "401 Client Error".
+    """
+
+
 class ScheduleStore:
     """Read/write ``schedules`` and ``scheduled_posts`` in Supabase."""
 
@@ -173,7 +181,18 @@ class ScheduleStore:
             timeout=30,
             **kwargs,
         )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except Exception as exc:  # noqa: BLE001 - translated below when 401
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            if status == 401:
+                raise SupabaseAuthError(
+                    "Supabase rejected the request with 401 Unauthorized: "
+                    "SUPABASE_SERVICE_ROLE_KEY in the engine environment is "
+                    "invalid or has been rotated. Update the key and restart "
+                    "the engine."
+                ) from exc
+            raise
         if response.status_code == 204 or not response.content:
             return None
         return response.json()

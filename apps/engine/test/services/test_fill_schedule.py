@@ -23,6 +23,40 @@ from app.services.upload_publisher import InstagramMetadata, LinkedInMetadata, Y
 UTC = timezone.utc
 
 
+class ScheduleStoreAuthTests(unittest.TestCase):
+    """ScheduleStore must translate a Supabase 401 into an actionable error."""
+
+    def _store_with_status(self, status_code):
+        import requests
+
+        response = MagicMock()
+        response.status_code = status_code
+        http_error = requests.HTTPError(f"{status_code} Error")
+        http_error.response = response
+        response.raise_for_status.side_effect = http_error
+        requests_module = MagicMock()
+        requests_module.request.return_value = response
+        return fs.ScheduleStore(
+            url="https://example.supabase.co",
+            service_key="test-key",
+            requests_module=requests_module,
+        )
+
+    def test_401_raises_actionable_auth_error(self):
+        store = self._store_with_status(401)
+        with self.assertRaises(fs.SupabaseAuthError) as ctx:
+            store.active_schedules()
+        self.assertIn("SUPABASE_SERVICE_ROLE_KEY", str(ctx.exception))
+        self.assertIn("401", str(ctx.exception))
+
+    def test_500_still_raises_original_error(self):
+        import requests
+
+        store = self._store_with_status(500)
+        with self.assertRaises(requests.HTTPError):
+            store.active_schedules()
+
+
 class ComputeSlotsTests(unittest.TestCase):
     def test_only_days_of_week_get_slots(self):
         # 2026-09-06 is a Sunday. Days [1] = Monday -> only Mondays in the 7 days.

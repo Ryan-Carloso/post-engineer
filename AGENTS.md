@@ -1169,3 +1169,11 @@ Follow these so the same issues don't come back:
   for one param of two tools — that is a different test with a different
   contract. Record the decline; do not expand the test to satisfy the
   reviewer.
+
+## Engine review learnings, Supabase 401 (2026-09-29)
+- **Translate infra 401s into actionable errors at the client boundary.**
+  `ScheduleStore._request` raised the raw `401 Client Error` per tick stage
+  (8 Bugsink issues/min, no hint at the cause). Now a 401 raises
+  `SupabaseAuthError` naming `SUPABASE_SERVICE_ROLE_KEY` explicitly, so the
+  log tells the operator exactly which env var to rotate. Never let a bare
+  HTTP status be the whole diagnostic for a credential failure.
