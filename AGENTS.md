@@ -987,6 +987,49 @@ Follow these so the same issues don't come back:
   with `fail-on-error: 'false'` (that input only downgrades *upload* errors,
   e.g. Code Quality not enabled). The coverage-generation step must actually
   produce the file, or CI goes red.
+- **OCR review 409 artifact conflict (2026-09-29):** the `alibaba/open-code-review`
+  action's "Upload review artifacts" step runs `always()` with a fixed per-run
+  name (`ocr-review-result-<run_id>-<run_attempt>`). Our workflow invokes the
+  action twice (primary + free-model fallback), so when the primary fails and
+  the fallback runs, the fallback's upload 409s on the name the primary already
+  created — the job goes red and "Post review comments" is skipped even though
+  the fallback review SUCCEEDED. Fix: `upload_artifacts: 'false'` on the
+  primary attempt only; the fallback keeps its upload (its artifacts are the
+  useful ones). Verified against run 36537786650 (single artifact from the
+  primary, fallback 409).
+- **OCR review exits 1 on informational-only findings (2026-09-29):** with the
+  409 fixed, a run can still go red with just two `low` severity comments that
+  explicitly say "no code quality concerns" (verified: PR #17, run 36538879908,
+  both notes praised the docs). The action exits 1 whenever its comments list
+  is non-empty. A red ocr-review check is NOT actionable until the findings are
+  read: download the `ocr-review-result-<run_id>-1` artifact and inspect
+  `ocr-result.json`'s `comments[].content` before touching code.
+- **OCR review concurrency vs z.ai rate limits (2026-09-29):** the action's
+  default `--concurrency 8` trips z.ai's rate limiter (HTTP 429 on BOTH the
+  coding endpoint/glm-5.3-flash and the standard endpoint/glm-4.7-flash —
+  observed on PR #17's run 36538879908, 13 requests all 429ing after retries).
+  The workflow now pins `review_concurrency: '2'` on BOTH attempts (the
+  validator requires the two invocations to stay in sync on shared settings).
+  If ocr-review goes red with `classification: "provider"` /
+  `reason: "provider or subtask request failed"` in the artifact's
+  `ocr-result.json`, it's z.ai throttling, not our code — re-run the job
+  later rather than "fixing" anything.
+- **OCR review: verify alleged type errors against the code (2026-09-29):**
+  the reviewer flagged a `high` "return type mismatch" on a function with NO
+  return-type annotation whose four paths all return a consistent 5-tuple and
+  whose caller handles the None case explicitly — pure false positive.
+  Declined without code change. Pattern: the reviewer invents a "contract"
+  (e.g. "5-tuple contract", "should be Optional[...]") that the code never
+  declares; check whether the alleged contract exists before touching anything.
+- **OCR fallback chain mirrors opencode-review (2026-09-29):** ocr-review now
+  retries 5.3-flash -> 4.7-flash -> 4.5-flash, same as opencode-review's
+  ZAI_FREE_MODEL -> ZAI_FREE_MODEL_FALLBACK. Invariants the validator pins:
+  all invocations share one action pin (max 3), every fallback carries the
+  fail-closed gates (key-check + env-guard) plus the previous-attempts-failed
+  conditions, non-final attempts have `continue-on-error: true` (otherwise a
+  mid-chain failure ends the job before the next fallback runs) and
+  `upload_artifacts: 'false'` (only the LAST attempt uploads — fixed per-run
+  artifact name would 409-conflict otherwise).
 
 ## Test quirks (vitest 4.1)
 
@@ -1113,3 +1156,16 @@ Follow these so the same issues don't come back:
 - Lesson: this reviewer re-reviews the whole PR diff on every push and
   its line numbers go stale fast — always re-locate each cited finding
   in the current tree before acting.
+
+## Docs-sync review learnings, round 1 (2026-09-28, PR #16)
+- **Verify the reviewer's line numbers before touching code.** OpenCode
+  cited docs-sync.test.ts lines 316-318 for a "missing webhookUrl param
+  assertion" — the file has 45 lines. The premise was stale/hallucinated;
+  the finding was declined after verifying webhookUrl IS documented in
+  both surfaces (README + mcp-docs-section.tsx EN/PT) and the test's
+  contract is tool-name sync, not per-parameter pinning.
+- **Decline scope-creep findings explicitly.** A docs test designed to pin
+  tool-list sync across surfaces should not grow per-parameter assertions
+  for one param of two tools — that is a different test with a different
+  contract. Record the decline; do not expand the test to satisfy the
+  reviewer.

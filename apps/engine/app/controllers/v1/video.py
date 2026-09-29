@@ -173,7 +173,7 @@ def _persona_video_params(
         f"Audience: {persona.audience}. "
         f"Goal: {goal_text}. "
         "Write only the spoken words, with no headings or stage directions. "
-        "Start with a standalone hook paragraph of 8 to 16 words designed to take "
+        "Start with a standalone hook paragraph of 8 to 12 words designed to take "
         "3 to 6 seconds "
         "when spoken. The hook must contain complete sentences, end with terminal "
         "punctuation, and be followed by exactly one blank line. Continue the main "

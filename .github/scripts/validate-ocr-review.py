@@ -255,9 +255,32 @@ def main(workflow: Path = WORKFLOW) -> int:
     ocr_uses = [u for u in uses if u.startswith("alibaba/open-code-review@")]
     check(
         "ocr action invocations share one pin",
-        1 <= len(ocr_uses) <= 2 and len(set(ocr_uses)) == 1,
+        1 <= len(ocr_uses) <= 3 and len(set(ocr_uses)) == 1,
         f"uses={ocr_uses}",
     )
+    # Artifact-upload invariant (2026-09-29): the action's upload step runs
+    # `always()` with a fixed per-run name, so if any attempt before the
+    # last uploads, the next attempt's upload 409-conflicts and kills a
+    # successful review before its comments post. Only the last OCR
+    # invocation in document order may upload (absent input == 'true').
+    ocr_steps = [
+        s
+        for s in steps
+        if isinstance(s, dict)
+        and str(s.get("uses", "")).startswith("alibaba/open-code-review@")
+    ]
+    if len(ocr_steps) > 1:
+        early_uploads = [
+            str(s.get("id") or s.get("name"))
+            for s in ocr_steps[:-1]
+            if str(as_str_dict(s.get("with")).get("upload_artifacts", "true"))
+            != "false"
+        ]
+        check(
+            "only the last ocr attempt uploads artifacts",
+            not early_uploads,
+            f"uploaders before last={early_uploads}",
+        )
     ocr_version = str(as_str_dict(review_step.get("with")).get("ocr_version", ""))
     check(
         "ocr_version pinned (not npm latest)",
@@ -319,6 +342,70 @@ def main(workflow: Path = WORKFLOW) -> int:
             "fallback uses openai-compatible protocol",
             str(fb_with.get("llm_use_anthropic")) == "false",
             f"llm_use_anthropic={fb_with.get('llm_use_anthropic')!r}",
+        )
+        check(
+            "fallback 1 has continue-on-error (chain must reach fallback 2)",
+            fallback_step.get("continue-on-error") is True,
+            f"continue-on-error={fallback_step.get('continue-on-error')!r}",
+        )
+
+    # Second free-model fallback (2026-09-29): same free chain as
+    # opencode-review (5.3 -> 4.7 -> 4.5). Runs only when BOTH previous
+    # attempts failed; it is the last attempt, so it keeps the artifact
+    # upload (pinned by the invariant above) and has no continue-on-error.
+    fallback2_step = next(
+        (s for s in steps if isinstance(s, dict) and s.get("id") == "ocr-fallback-2"),
+        None,
+    )
+    check("ocr second free-model fallback step exists", fallback2_step is not None)
+    if fallback2_step is not None:
+        fb2_cond = fallback2_step.get("if", "")
+        fb2_cond_str = fb2_cond if isinstance(fb2_cond, str) else ""
+        check(
+            "fallback 2 gated on key-check",
+            "steps.key-check.outputs.present == 'true'" in fb2_cond_str,
+            f"if={fb2_cond}",
+        )
+        check(
+            "fallback 2 gated on env-guard (fail-closed == 'false')",
+            "steps.env-guard.outputs.blocked == 'false'" in fb2_cond_str,
+            f"if={fb2_cond}",
+        )
+        check(
+            "fallback 2 only runs when primary failed",
+            "steps.ocr-primary.outcome == 'failure'" in fb2_cond_str,
+            f"if={fb2_cond}",
+        )
+        check(
+            "fallback 2 only runs when fallback 1 failed",
+            "steps.ocr-fallback.outcome == 'failure'" in fb2_cond_str,
+            f"if={fb2_cond}",
+        )
+        fb2_with = as_str_dict(fallback2_step.get("with"))
+        check(
+            "fallback 2 uses z.ai standard endpoint",
+            fb2_with.get("llm_url") == "https://api.z.ai/api/paas/v4",
+            f"llm_url={fb2_with.get('llm_url')!r}",
+        )
+        check(
+            "fallback 2 uses glm-4.5-flash",
+            fb2_with.get("llm_model") == "glm-4.5-flash",
+            f"llm_model={fb2_with.get('llm_model')!r}",
+        )
+        check(
+            "fallback 2 pins ocr_version",
+            bool(re.fullmatch(r"\d+\.\d+\.\d+", str(fb2_with.get("ocr_version", "")))),
+            f"ocr_version={fb2_with.get('ocr_version')!r}",
+        )
+        check(
+            "fallback 2 uses openai-compatible protocol",
+            str(fb2_with.get("llm_use_anthropic")) == "false",
+            f"llm_use_anthropic={fb2_with.get('llm_use_anthropic')!r}",
+        )
+        check(
+            "fallback 2 is the final attempt (no continue-on-error)",
+            fallback2_step.get("continue-on-error") is not True,
+            f"continue-on-error={fallback2_step.get('continue-on-error')!r}",
         )
 
     # Comment conventions

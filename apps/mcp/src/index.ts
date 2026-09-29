@@ -185,7 +185,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
 
   server.tool(
     'get_video_task_progress',
-    'Poll one video task for its machine-readable progress: returns {task_id, state, progress, stage}. Use per-video (1/6, 2/6, ...) after generate_persona_video_batch; prefer this over get_video_status when only progress matters.',
+    'Poll one video task for its machine-readable progress: returns {task_id, state, progress, stage, error}. error is the engine failure reason when state is -1 (failed), null otherwise. Use per-video (1/6, 2/6, ...) after generate_persona_video_batch; prefer this over get_video_status when only progress matters.',
     GetVideoTaskProgressShape,
     async (args) => {
       return handleGetVideoTaskProgress(apiClient, args);

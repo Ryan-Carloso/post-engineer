@@ -578,3 +578,52 @@ def test_guard_blocks_env_in_event_base_head_range(tmp_path: Path) -> None:
     git(repo, "update-ref", "refs/pull/60/head", git(repo, "rev-parse", "HEAD"))
     git(repo, "checkout", "-q", "-")
     assert run_guard(repo, "success", tmp_path) == "true"
+
+
+def test_rejects_early_artifact_upload(tmp_path: Path) -> None:
+    # 2026-09-29: an earlier attempt uploading artifacts 409-conflicts with
+    # the next attempt's upload (fixed per-run artifact name) and kills a
+    # successful review before its comments post.
+    text = mutate(
+        WORKFLOW.read_text(),
+        """          # No artifact upload here either: only the LAST attempt uploads
+          # (fixed per-run artifact name would 409-conflict otherwise).
+          upload_artifacts: 'false'""",
+        "",
+    )
+    proc = validate_proc(text, tmp_path)
+    assert proc.returncode != 0
+    assert "only the last ocr attempt uploads artifacts" in proc.stdout
+
+
+def test_rejects_missing_second_fallback(tmp_path: Path) -> None:
+    text = mutate(WORKFLOW.read_text(), 'id: ocr-fallback-2', 'id: ocr-fallback-2-removed')
+    proc = validate_proc(text, tmp_path)
+    assert proc.returncode != 0
+    assert "ocr second free-model fallback step exists" in proc.stdout
+
+
+def test_rejects_second_fallback_missing_chain_gate(tmp_path: Path) -> None:
+    text = mutate(
+        WORKFLOW.read_text(),
+        "&& steps.ocr-fallback.outcome == 'failure'",
+        "",
+    )
+    proc = validate_proc(text, tmp_path)
+    assert proc.returncode != 0
+    assert "fallback 2 only runs when fallback 1 failed" in proc.stdout
+
+
+def test_rejects_fallback_1_without_continue_on_error(tmp_path: Path) -> None:
+    # Without continue-on-error on fallback 1, its failure ends the job
+    # before fallback 2 ever runs — silently breaking the 3-level chain.
+    text = mutate(
+        WORKFLOW.read_text(),
+        """        # second fallback below gets its chance. steps.ocr-fallback.outcome
+        # still records 'failure', so the next gate stays accurate.
+        continue-on-error: true""",
+        "",
+    )
+    proc = validate_proc(text, tmp_path)
+    assert proc.returncode != 0
+    assert "fallback 1 has continue-on-error" in proc.stdout

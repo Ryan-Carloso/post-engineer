@@ -607,15 +607,17 @@ export async function handleGetVideoStatus(
   return handleLibraryCall(() => client.getVideoStatus(args.taskId), 'fetching video status');
 }
 
-/** Narrows the web video-status response to the four progress fields agents
- * poll on. The engine task record carries task_id/state/progress/stage; a
- * body without them (empty-body sentinel, 404 shape) is reported with
+/** Narrows the web video-status response to the progress fields agents
+ * poll on. The engine task record carries task_id/state/progress/stage;
+ * error carries the engine failure reason when the task failed. A body
+ * without them (empty-body sentinel, 404 shape) is reported with
  * explicit nulls rather than silently dropping fields. */
 function narrowTaskProgress(result: unknown): {
   task_id: string | null;
   state: number | null;
   progress: number | null;
   stage: string | null;
+  error: string | null;
 } {
   const data =
     typeof result === 'object' && result !== null && 'data' in result
@@ -628,11 +630,15 @@ function narrowTaskProgress(result: unknown): {
   const state = get('state');
   const progress = get('progress');
   const stage = get('stage');
+  const error = get('error');
   return {
     task_id: typeof taskId === 'string' ? taskId : null,
     state: typeof state === 'number' ? state : null,
     progress: typeof progress === 'number' ? progress : null,
     stage: typeof stage === 'string' ? stage : null,
+    // Surface the engine failure reason: without it a failed task only
+    // reports state -1 and the caller can never learn why it failed.
+    error: typeof error === 'string' ? error : null,
   };
 }
 
