@@ -81,7 +81,7 @@ pnpm install
 
    > **Need help?** If you are setting up a fresh project and need the current
    > schema snapshot, reach out:
-   > **Email:** [ryan@post-engineer.com](mailto:ryan@post-engineer.com) ·
+   > **Email:** [madebyryandev@gmail.com](mailto:madebyryandev@gmail.com) ·
    > **WhatsApp:** [+351 962 248 268](https://wa.me/351962248268)
 
 ### 3. Create the three env files (never commit these)
@@ -219,7 +219,7 @@ full tool list, OpenCode timeout tips, and local development).
 
 Questions, get in touch:
 
-- **Email:** [ryan@post-engineer.com](mailto:ryan@post-engineer.com)
+- **Email:** [madebyryandev@gmail.com](mailto:madebyryandev@gmail.com)
 - **WhatsApp:** [+351 962 248 268](https://wa.me/351962248268)
 
 ## License

@@ -18,8 +18,8 @@ export default function SiteFooter() {
         <Link href="/terms" className="hover:text-[#101728]">
           {t('footer.terms')}
         </Link>
-        <a href="mailto:support@post-engineer.com" className="hover:text-[#101728]">
-          support@post-engineer.com
+        <a href="mailto:madebyryandev@gmail.com" className="hover:text-[#101728]">
+          madebyryandev@gmail.com
         </a>
       </div>
       <p className="mt-2 text-center text-xs text-[#8a94a8]">
