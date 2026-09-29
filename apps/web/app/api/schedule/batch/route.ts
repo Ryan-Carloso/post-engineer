@@ -17,8 +17,8 @@ import { logger } from '@/lib/logger';
 //
 // On accept: one schedules row + N scheduled_posts rows with
 // exact slot datetimes (next N occurrences of `times` in `timezone`).
-// Tokens are prepaid, so the engine generate() pass at the 06h UTC cutoff
-// uses each slot's stored topic with no LLM call and no further spend.
+// Tokens are prepaid, so the engine generate() pass uses each slot's
+// stored topic with no LLM call and no further spend.
 //---------------
 
 // Bluesky is intentionally NOT offered here: batch publishing requires
