@@ -700,6 +700,55 @@ describe('video batch + task progress tools', () => {
     expect(text).toContain('"error": "persona hook must end between 3 and 6 seconds, got 6.55"');
   });
 
+  it('handleGetVideoTaskProgress redacts credential-like material from the engine error', async () => {
+    const { handleGetVideoTaskProgress } = await import('../tools.js');
+    vi.mocked(mockClient.getVideoStatus).mockResolvedValue({
+      status: 200,
+      message: 'success',
+      data: {
+        task_id: 'task-1',
+        state: -1,
+        progress: 75,
+        stage: 'render',
+        error:
+          'upload failed: 401 for Bearer abc123XYZ; ' +
+          'dsn https://user:s3cret@ingest.example.com/9 failed; ' +
+          'GET https://api.example.com/v1?api_key=SECRET123 denied',
+      },
+    });
+
+    const response = await handleGetVideoTaskProgress(mockClient, { taskId: 'task-1' });
+    const text = textOf(response);
+    expect(text).toContain('Bearer [redacted]');
+    expect(text).toContain('https://[redacted]@ingest.example.com/9');
+    expect(text).toContain('api_key=[redacted]');
+    expect(text).not.toContain('abc123XYZ');
+    expect(text).not.toContain('s3cret');
+    expect(text).not.toContain('SECRET123');
+    // The human-readable failure reason survives redaction.
+    expect(text).toContain('upload failed');
+  });
+
+  it('handleGetVideoTaskProgress leaves an ordinary engine error untouched', async () => {
+    const { handleGetVideoTaskProgress } = await import('../tools.js');
+    vi.mocked(mockClient.getVideoStatus).mockResolvedValue({
+      status: 200,
+      message: 'success',
+      data: {
+        task_id: 'task-1',
+        state: -1,
+        progress: 10,
+        stage: 'hook',
+        error: 'persona hook must end between 3 and 6 seconds, got 6.55',
+      },
+    });
+
+    const response = await handleGetVideoTaskProgress(mockClient, { taskId: 'task-1' });
+    expect(textOf(response)).toContain(
+      '"error": "persona hook must end between 3 and 6 seconds, got 6.55"'
+    );
+  });
+
   it('handleGetVideoTaskProgress reports explicit nulls when the task payload is missing', async () => {
     const { handleGetVideoTaskProgress } = await import('../tools.js');
     vi.mocked(mockClient.getVideoStatus).mockResolvedValue({ ok: true });

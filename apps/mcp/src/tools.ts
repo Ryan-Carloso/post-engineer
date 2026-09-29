@@ -520,6 +520,22 @@ export async function handleGetVideoStatus(
   return handleLibraryCall(() => client.getVideoStatus(args.taskId), 'fetching video status');
 }
 
+/** Redacts credential-shaped material from an engine failure reason before
+ * it reaches the MCP client. The engine error is the user's own task failure
+ * text (e.g. "persona hook must end between 3 and 6 seconds"), but provider
+ * exceptions can echo request URLs, DSNs, or bearer tokens into it. Keep the
+ * human-readable reason intact; only the secret-shaped fragments are masked.
+ * Mirrors the app-password redaction in client.ts. */
+export function sanitizeEngineError(error: string): string {
+  return error
+    .replace(/\bBearer\s+[^\s]+/gi, 'Bearer [redacted]')
+    .replace(/(https?:\/\/)[^\s/@]+@/gi, '$1[redacted]@')
+    .replace(/([?&](?:api[_-]?key|access[_-]?token|token)=)[^\s&]+/gi, '$1[redacted]')
+    .replace(/\bsk-[A-Za-z0-9_-]{20,}/g, '[redacted]');
+}
+
+/** Narrows the web video-status response to the progress fields agents
+ * poll on.
 /** Narrows the web video-status response to the progress fields agents
  * poll on. The engine task record carries task_id/state/progress/stage;
  * error carries the engine failure reason when the task failed. A body
@@ -551,7 +567,7 @@ function narrowTaskProgress(result: unknown): {
     stage: typeof stage === 'string' ? stage : null,
     // Surface the engine failure reason: without it a failed task only
     // reports state -1 and the caller can never learn why it failed.
-    error: typeof error === 'string' ? error : null,
+    error: typeof error === 'string' ? sanitizeEngineError(error) : null,
   };
 }
 
