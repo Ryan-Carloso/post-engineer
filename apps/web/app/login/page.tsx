@@ -373,7 +373,7 @@ const LoginBottomBar = () => {
       <div className="flex items-center gap-5">
         <Link href="/privacy" className="hover:text-[#101728]">{t('footer.privacy')}</Link>
         <Link href="/terms" className="hover:text-[#101728]">{t('footer.terms')}</Link>
-        <a href="mailto:support@post-engineer.com" className="hover:text-[#101728]">
+        <a href="mailto:madebyryandev@gmail.com" className="hover:text-[#101728]">
           {t('footer.support')}
         </a>
       </div>

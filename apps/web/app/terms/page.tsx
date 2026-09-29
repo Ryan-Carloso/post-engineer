@@ -24,8 +24,8 @@ export default function TermsPage() {
         </div>
         <p className="mt-6 text-sm text-[#657184]">
           {t('footer.support')}:{' '}
-          <a href="mailto:support@post-engineer.com" className="font-medium text-[#ff544c] hover:underline">
-            support@post-engineer.com
+          <a href="mailto:madebyryandev@gmail.com" className="font-medium text-[#ff544c] hover:underline">
+            madebyryandev@gmail.com
           </a>
         </p>
       </main>
