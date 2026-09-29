@@ -1004,6 +1004,16 @@ Follow these so the same issues don't come back:
   is non-empty. A red ocr-review check is NOT actionable until the findings are
   read: download the `ocr-review-result-<run_id>-1` artifact and inspect
   `ocr-result.json`'s `comments[].content` before touching code.
+- **OCR review concurrency vs z.ai rate limits (2026-09-29):** the action's
+  default `--concurrency 8` trips z.ai's rate limiter (HTTP 429 on BOTH the
+  coding endpoint/glm-5.3-flash and the standard endpoint/glm-4.7-flash —
+  observed on PR #17's run 36538879908, 13 requests all 429ing after retries).
+  The workflow now pins `review_concurrency: '2'` on BOTH attempts (the
+  validator requires the two invocations to stay in sync on shared settings).
+  If ocr-review goes red with `classification: "provider"` /
+  `reason: "provider or subtask request failed"` in the artifact's
+  `ocr-result.json`, it's z.ai throttling, not our code — re-run the job
+  later rather than "fixing" anything.
 
 ## Test quirks (vitest 4.1)
 
