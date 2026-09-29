@@ -535,8 +535,10 @@ export function sanitizeEngineError(error: string): string {
 }
 
 /** Narrows the web video-status response to the progress fields agents
- * poll on.
-/** Narrows the web video-status response to the progress fields agents
+ * poll on. The engine task record carries task_id/state/progress/stage;
+ * error carries the engine failure reason when the task failed. A body
+ * without them (empty-body sentinel, 404 shape) is reported with
+ * explicit nulls rather than silently dropping fields. */
  * poll on. The engine task record carries task_id/state/progress/stage;
  * error carries the engine failure reason when the task failed. A body
  * without them (empty-body sentinel, 404 shape) is reported with
