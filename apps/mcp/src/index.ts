@@ -111,7 +111,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
 
   server.tool(
     'list_social_accounts',
-    'List connected social accounts (YouTube, Instagram, LinkedIn, Bluesky) with the account IDs needed for scheduling.',
+    'List connected social accounts (YouTube, Instagram, LinkedIn, Bluesky) with the account IDs needed for batch posting.',
     ListSocialAccountsShape,
     async () => {
       return handleListSocialAccounts(apiClient);
