@@ -248,7 +248,7 @@ const SidebarLegalLinks = () => {
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs text-[#8a94a8]">
       <Link href="/privacy" className="hover:text-[#101728]">{t('footer.privacy')}</Link>
       <Link href="/terms" className="hover:text-[#101728]">{t('footer.terms')}</Link>
-      <a href="mailto:support@post-engineer.com" className="hover:text-[#101728]">{t('footer.support')}</a>
+      <a href="mailto:madebyryandev@gmail.com" className="hover:text-[#101728]">{t('footer.support')}</a>
     </div>
   );
 };
