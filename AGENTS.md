@@ -1014,6 +1014,13 @@ Follow these so the same issues don't come back:
   `reason: "provider or subtask request failed"` in the artifact's
   `ocr-result.json`, it's z.ai throttling, not our code — re-run the job
   later rather than "fixing" anything.
+- **OCR review: verify alleged type errors against the code (2026-09-29):**
+  the reviewer flagged a `high` "return type mismatch" on a function with NO
+  return-type annotation whose four paths all return a consistent 5-tuple and
+  whose caller handles the None case explicitly — pure false positive.
+  Declined without code change. Pattern: the reviewer invents a "contract"
+  (e.g. "5-tuple contract", "should be Optional[...]") that the code never
+  declares; check whether the alleged contract exists before touching anything.
 - **OCR fallback chain mirrors opencode-review (2026-09-29):** ocr-review now
   retries 5.3-flash -> 4.7-flash -> 4.5-flash, same as opencode-review's
   ZAI_FREE_MODEL -> ZAI_FREE_MODEL_FALLBACK. Invariants the validator pins:
