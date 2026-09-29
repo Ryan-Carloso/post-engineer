@@ -105,44 +105,6 @@ function toStringArray(value: unknown): string[] | undefined {
   return entries.length > 0 ? entries : undefined;
 }
 
-export interface CreateScheduleInput {
-  personaId: string;
-  providers?: string[];
-  youtubeAccountIds?: string[];
-  instagramAccountIds?: string[];
-  linkedinAccountIds?: string[];
-  blueskyAccountIds?: string[];
-  daysOfWeek?: number[];
-  startHour?: number;
-  endHour?: number;
-  postsPerDay?: number;
-  times?: string[];
-  timezone?: string;
-  scheduledAt?: string;
-}
-
-export class ScheduleError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'ScheduleError';
-  }
-}
-
-export async function createSchedule(input: CreateScheduleInput): Promise<void> {
-  const response = await fetch('/api/schedule', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
-  });
-  const data: { success: boolean; error?: string } = await response.json().catch(() => ({ success: false }));
-  if (!response.ok || !data.success) {
-    throw new ScheduleError(response.status, data.error ?? 'Failed to create schedule');
-  }
-}
-
 async function generatePersonaAvatar(prompt: string): Promise<GeneratePersonaAvatarResult> {
   const response = await fetch('/api/persona/avatar', {
     method: 'POST',

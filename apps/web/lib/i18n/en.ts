@@ -328,7 +328,7 @@ export const enDictionary: Dictionary = {
     docsStepsTitle: 'How to connect',
     docsStep1: 'Generate an API Key above and copy the full value.',
     docsStep2: 'Add the MCP server to your agent using the install prompt below.',
-    docsStep3: 'Done! The agent gets access to these tools: create_persona, list_personas, generate_video_from_persona, get_video_status, and schedule_video.',
+    docsStep3: 'Done! The agent gets access to these tools: create_persona, list_personas, generate_video_from_persona, get_video_status, and generate_persona_video_batch.',
     docsCopyPrompt: 'Copy install prompt',
     docsCopied: 'Copied!',
     docsSecurityNote:
@@ -376,7 +376,6 @@ export const enDictionary: Dictionary = {
     toolDescRemovePersonaImage: 'Remove a library image',
     toolDescConnectAccount: 'Connect a social account',
     toolDescListSocialAccounts: 'List connected social accounts',
-    toolDescScheduleVideo: 'Schedule a video for publishing',
     toolDescListSchedules: 'List automation schedules',
     toolDescListPosts: 'List upcoming and past posts',
     toolDescCancelSchedule: 'Cancel a schedule',

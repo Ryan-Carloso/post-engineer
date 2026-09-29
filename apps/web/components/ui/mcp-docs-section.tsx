@@ -8,7 +8,6 @@ import { whatsappUrl } from '@/lib/whatsapp';
 import { Button } from '@/components/ui/button';
 import {
   AccountsIcon,
-  BoltIcon,
   CalendarIcon,
   CheckIcon,
   CoinsIcon,
@@ -49,7 +48,6 @@ const MCP_TOOL_CARDS: McpToolCard[] = [
   { id: 'get_video_task_progress', descKey: 'apiKeys.toolDescGetVideoTaskProgress', Icon: SpinnerIcon },
   { id: 'list_social_accounts', descKey: 'apiKeys.toolDescListSocialAccounts', Icon: GlobeIcon },
   { id: 'connect_account', descKey: 'apiKeys.toolDescConnectAccount', Icon: KeyIcon },
-  { id: 'schedule_video', descKey: 'apiKeys.toolDescScheduleVideo', Icon: BoltIcon },
   { id: 'list_schedules', descKey: 'apiKeys.toolDescListSchedules', Icon: HistoryIcon },
   { id: 'list_posts', descKey: 'apiKeys.toolDescListPosts', Icon: CalendarIcon },
   { id: 'cancel_schedule', descKey: 'apiKeys.toolDescCancelSchedule', Icon: TrashIcon },
@@ -98,7 +96,6 @@ export default function McpDocsSection(): ReactNode {
         '- get_video_task_progress: poll one video task for machine-readable progress ({task_id, state, progress, stage, error}); error is the failure reason when state is -1, null otherwise; use per video (1/6, 2/6, ...) after generate_persona_video_batch.',
         '- list_social_accounts: list my connected social accounts with the account IDs needed for scheduling.',
         '- connect_account: connect a social account (youtube/instagram/linkedin return an authorization URL for me to open in a browser; bluesky connects directly with handle + app password).',
-        '- schedule_video: schedule automated posting (personaId, providers youtube|instagram|linkedin, account IDs from list_social_accounts, scheduledAt ISO, timezone default UTC). Must be 24h to 30 days in advance.',
         '- list_schedules: list my automation schedules.',
         // list_posts limit contract mirrors the MCP server (verified): the
         // ListPostsSchema (mcp src/tools.ts) defaults limit to 20 (max 500),
@@ -156,7 +153,6 @@ export default function McpDocsSection(): ReactNode {
       '- get_video_task_progress: acompanhar o progresso legível por máquina de uma tarefa de vídeo ({task_id, state, progress, stage, error}); error é o motivo da falha quando state é -1, null caso contrário; use por vídeo (1/6, 2/6, ...) após generate_persona_video_batch.',
       '- list_social_accounts: listar minhas contas sociais conectadas com os IDs necessários para agendar.',
       '- connect_account: conectar uma conta social (youtube/instagram/linkedin retornam uma URL de autorização para eu abrir no navegador; bluesky conecta direto com handle + app password).',
-      '- schedule_video: agendar publicação automática (personaId, providers youtube|instagram|linkedin, IDs de conta do list_social_accounts, scheduledAt ISO, timezone padrão UTC). Somente de 24h a 30 dias de antecedência.',
       '- list_schedules: listar meus agendamentos.',
       // list_posts limit contract mirrors the MCP server (verified): the
       // ListPostsSchema (mcp src/tools.ts) defaults limit to 20 (max 500),

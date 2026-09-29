@@ -8,12 +8,16 @@ from typing import Any
 from loguru import logger
 
 from app.services.fill_schedule.constants import (
-    SCHEDULE_KIND_BATCH,
     SLOT_FAILED,
     SLOT_READY,
 )
 from app.services.fill_schedule.store import ScheduleStore
-from app.services.fill_schedule.support import persona_for, slot_user_id, token_cost
+from app.services.fill_schedule.support import (
+    assert_batch_kind,
+    persona_for,
+    slot_user_id,
+    token_cost,
+)
 
 
 class BatchReconciler:
@@ -30,8 +34,7 @@ class BatchReconciler:
         updated = 0
         for slot in self.store.generating_slots():
             schedule = slot.get("schedules") or {}
-            if schedule.get("kind") != SCHEDULE_KIND_BATCH:
-                continue
+            assert_batch_kind(schedule)
             task = self.task_state.get_task(str(slot["task_id"]))
             if task is None:
                 continue

@@ -17,7 +17,7 @@ from app.services.fill_schedule.constants import (
 )
 from app.services.fill_schedule.metadata import metadata_for
 from app.services.fill_schedule.store import ScheduleStore
-from app.services.fill_schedule.support import notify_safe
+from app.services.fill_schedule.support import assert_batch_kind, notify_safe
 
 
 class BatchPublisher:
@@ -56,6 +56,7 @@ class BatchPublisher:
         published = 0
         for slot in self.store.ready_due_slots(now):
             schedule = slot.get("schedules") or {}
+            assert_batch_kind(schedule)
             topic = slot.get("topic") or "Scheduled post"
             persona_name = (schedule.get("personas") or {}).get("name", "Persona")
             if not self.store.claim_ready_slot(str(slot["id"])):

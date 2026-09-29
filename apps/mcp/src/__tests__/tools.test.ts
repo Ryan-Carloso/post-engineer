@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import {
-  missingProviderAccountIds,
   handleCreatePersona,
   handleListPersonaImages,
   handleAddPersonaImage,
@@ -16,11 +15,8 @@ import {
   handleListPosts,
   handleCancelSchedule,
   handleGetTokenBalance,
-  handleScheduleVideo,
   handleConnectAccount,
   ListPostsSchema,
-  ScheduleVideoSchema,
-  ScheduleVideoShape,
   CreatePersonaSchema,
   CreatePersonaShape,
   UpdatePersonaSchema,
@@ -54,7 +50,6 @@ describe('MCP Tool Handlers', () => {
     cancelSchedule: vi.fn(),
     getTokenBalance: vi.fn(),
     getVideoStatus: vi.fn(),
-    createSchedule: vi.fn(),
     getOAuthConnectUrl: vi.fn(),
     connectBlueskyAccount: vi.fn(),
   } as unknown as PostEngineerClient;
@@ -255,24 +250,6 @@ describe('MCP Tool Handlers', () => {
     expect(textOf(response)).toContain('8');
   });
 
-  it('handleScheduleVideo returns error when < 24h constraint violated', async () => {
-    vi.mocked(mockClient.createSchedule).mockRejectedValue(
-      new Error('Scheduled time must be at least 24 hours in advance.')
-    );
-
-    const response = await handleScheduleVideo(
-      mockClient,
-      ScheduleVideoSchema.parse({
-        personaId: 'persona-123',
-        providers: ['youtube'],
-        youtubeAccountIds: ['yt-1'],
-        scheduledAt: '2026-09-18T12:00:00.000Z',
-      })
-    );
-
-    expect(response.isError).toBe(true);
-    expect(textOf(response)).toMatch(/at least 24 hours/i);
-  });
 
   it('handleConnectAccount returns the OAuth authorization URL with instructions', async () => {
     vi.mocked(mockClient.getOAuthConnectUrl).mockResolvedValue({
@@ -364,136 +341,6 @@ describe('MCP Tool Handlers', () => {
   });
 });
 
-describe('schedule account validation', () => {
-  const baseArgs = {
-    personaId: 'persona-123',
-    providers: ['youtube'] as const,
-    scheduledAt: '2026-10-18T12:00:00.000Z',
-  };
-
-  it('ScheduleVideoSchema rejects a provider with no account IDs', () => {
-    const result = ScheduleVideoSchema.safeParse({
-      ...baseArgs,
-      providers: ['youtube'],
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('ScheduleVideoSchema accepts a provider with account IDs', () => {
-    const result = ScheduleVideoSchema.safeParse({
-      ...baseArgs,
-      providers: ['youtube'],
-      youtubeAccountIds: ['yt-1'],
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('ScheduleVideoSchema accepts bluesky with blueskyAccountIds', () => {
-    const result = ScheduleVideoSchema.safeParse({
-      ...baseArgs,
-      providers: ['bluesky'],
-      blueskyAccountIds: ['did:plc:xyz'],
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('ScheduleVideoSchema rejects bluesky with no account IDs', () => {
-    const result = ScheduleVideoSchema.safeParse({
-      ...baseArgs,
-      providers: ['bluesky'],
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('missingProviderAccountIds flags bluesky without account IDs', () => {
-    expect(
-      missingProviderAccountIds({ providers: ['bluesky'], blueskyAccountIds: [] })
-    ).toEqual(['bluesky']);
-    expect(
-      missingProviderAccountIds({ providers: ['bluesky'], blueskyAccountIds: ['did:plc:xyz'] })
-    ).toEqual([]);
-  });
-
-  it('missingProviderAccountIds treats undefined and [] the same for bluesky', () => {
-    expect(missingProviderAccountIds({ providers: ['bluesky'] })).toEqual(['bluesky']);
-    expect(
-      missingProviderAccountIds({ providers: ['bluesky'], blueskyAccountIds: [] })
-    ).toEqual(['bluesky']);
-  });
-
-  it('account-ID fields pin which list_social_accounts field to use (recordId is the trap)', () => {
-    // list_social_accounts returns both `recordId` (internal row uuid) and the
-    // provider's real account id; agents must use the latter. Pin the wording
-    // so a future "cleanup" cannot silently drop the warning.
-    expect(ScheduleVideoShape.youtubeAccountIds.description).toContain('channelId');
-    expect(ScheduleVideoShape.youtubeAccountIds.description).toContain('NOT recordId');
-    expect(ScheduleVideoShape.instagramAccountIds.description).toContain('igUserId');
-    expect(ScheduleVideoShape.instagramAccountIds.description).toContain('NOT recordId');
-    expect(ScheduleVideoShape.linkedinAccountIds.description).toContain('providerAccountId');
-    expect(ScheduleVideoShape.linkedinAccountIds.description).toContain('NOT recordId');
-    expect(ScheduleVideoShape.blueskyAccountIds.description).toContain('did');
-    expect(ScheduleVideoShape.blueskyAccountIds.description).toContain('NOT recordId');
-  });
-
-  it('ScheduleVideoSchema rejects UUID-shaped blueskyAccountIds with a did hint', () => {
-    // A bare UUID is a list_social_accounts `recordId` pasted into the wrong
-    // field — no Bluesky DID is ever UUID-shaped, so this is safe to reject.
-    const result = ScheduleVideoSchema.safeParse({
-      ...baseArgs,
-      providers: ['bluesky'],
-      blueskyAccountIds: ['550e8400-e29b-41d4-a716-446655440000'],
-    });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      const message = result.error.issues.map((issue) => issue.message).join(' ');
-      expect(message).toContain('did');
-      expect(message).toContain('recordId');
-    }
-  });
-
-  it('ScheduleVideoSchema still accepts did:plc: and did:web: bluesky IDs', () => {
-    for (const did of ['did:plc:xyz123', 'did:web:example.com']) {
-      const result = ScheduleVideoSchema.safeParse({
-        ...baseArgs,
-        providers: ['bluesky'],
-        blueskyAccountIds: [did],
-      });
-      expect(result.success).toBe(true);
-    }
-  });
-
-  it('handleScheduleVideo fails fast on recordId-shaped bluesky IDs without calling the API', async () => {
-    const client = { createSchedule: vi.fn() } as unknown as PostEngineerClient;
-    const response = await handleScheduleVideo(client, {
-      personaId: 'persona-123',
-      providers: ['bluesky'],
-      blueskyAccountIds: ['550e8400-e29b-41d4-a716-446655440000'],
-    } as z.infer<typeof ScheduleVideoSchema>);
-    expect(response.isError).toBe(true);
-    expect(client.createSchedule).not.toHaveBeenCalled();
-    const text = textOf(response);
-    expect(text).toContain('did');
-    expect(text).toContain('recordId');
-  });
-
-  it('handleScheduleVideo fails fast without calling the API when account IDs are missing', async () => {
-    const client = { createSchedule: vi.fn() } as unknown as PostEngineerClient;
-    const response = await handleScheduleVideo(client, {
-      personaId: 'persona-123',
-      providers: ['youtube'],
-      youtubeAccountIds: [],
-      instagramAccountIds: [],
-      linkedinAccountIds: [],
-      blueskyAccountIds: [],
-      scheduledAt: '2026-10-18T12:00:00.000Z',
-      timezone: 'UTC',
-    });
-
-    expect(response.isError).toBe(true);
-    expect(textOf(response)).toMatch(/youtube.*account|account.*youtube/i);
-    expect(client.createSchedule).not.toHaveBeenCalled();
-  });
-});
 
 describe('faceless video generation', () => {
   it('GenerateVideoSchema accepts a missing personaId (faceless)', () => {

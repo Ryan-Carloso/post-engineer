@@ -315,7 +315,7 @@ class PublishDueTests(unittest.TestCase):
             "id": "slot-1",
             "topic": "Tokyo coffee",
             "task_id": "t-1",
-            "schedules": {"user_id": "user-1", "providers": ["youtube"]},
+            "schedules": {"kind": "batch", "user_id": "user-1", "providers": ["youtube"]},
         }
 
     def test_due_slot_is_published_and_marked(self):
@@ -502,6 +502,7 @@ class NotifyIntegrationTests(unittest.TestCase):
             "topic": "Tokyo coffee",
             "task_id": "t-1",
             "schedules": {
+                "kind": "batch",
                 "user_id": "user-1",
                 "providers": ["youtube", "instagram"],
                 "personas": {"name": "Ana"},
@@ -538,6 +539,7 @@ class NotifyIntegrationTests(unittest.TestCase):
             "topic": "Tokyo coffee",
             "task_id": "t-1",
             "schedules": {
+                "kind": "batch",
                 "user_id": "user-1",
                 "providers": ["youtube"],
                 "personas": {"name": "Ana"},
@@ -611,6 +613,7 @@ class CoverageGapTests(unittest.TestCase):
             "topic": "Tokyo coffee",
             "task_id": "t-1",
             "schedules": {
+                "kind": "batch",
                 "user_id": "user-1",
                 "providers": ["youtube"],
                 "personas": {"name": "Ana"},
@@ -669,7 +672,7 @@ class CoverageGapTests(unittest.TestCase):
     def test_due_slot_without_videos_fails(self):
         store = _FakeStore()
         store.ready_due_slots = lambda now: [
-            {"id": "slot-x", "topic": "T", "task_id": "t-1", "schedules": {"user_id": "u1", "providers": []}}
+            {"id": "slot-x", "topic": "T", "task_id": "t-1", "schedules": {"kind": "batch", "user_id": "u1", "providers": []}}
         ]
         state = MagicMock()
         state.get_task.return_value = {"state": 1, "videos": []}
@@ -686,7 +689,9 @@ class CoverageGapTests(unittest.TestCase):
     # -- reconcile com task inexistente ---------------------------------------
     def test_reconcile_skips_unknown_task(self):
         store = _FakeStore()
-        store.generating_slots = lambda: [{"id": "slot-1", "task_id": "ghost"}]
+        store.generating_slots = lambda: [
+            {"id": "slot-1", "task_id": "ghost", "schedules": {"kind": "batch"}}
+        ]
         state = MagicMock()
         state.get_task.return_value = None
         scheduler = fs.FillScheduleScheduler(
@@ -955,6 +960,41 @@ class CoverageGapTests(unittest.TestCase):
             f"expected an ERROR record about the failed stage, got: {[r['message'] for r in records]}",
         )
 
+
+
+
+class FailFastKindTests(unittest.TestCase):
+    """Non-batch schedules must raise, never be silently skipped."""
+
+    def _scheduler(self, store):
+        return fs.FillScheduleScheduler(
+            store=store, task_state=MagicMock(), publish_video=MagicMock(),
+        )
+
+    def test_generate_raises_on_non_batch_schedule(self):
+        slot = {"id": "slot-1", "schedules": {"id": "s-1", "kind": "recurring"}}
+        store = _FakeStore()
+        store.pending_slots = lambda now: [slot]
+        scheduler = self._scheduler(store)
+        with self.assertRaises(ValueError):
+            scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+
+    def test_reconcile_raises_on_non_batch_schedule(self):
+        slot = {"id": "slot-1", "task_id": "t-1", "schedules": {"id": "s-1", "kind": "recurring"}}
+        store = _FakeStore()
+        store.generating_slots = lambda: [slot]
+        scheduler = self._scheduler(store)
+        with self.assertRaises(ValueError):
+            scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+
+    def test_publish_raises_on_non_batch_schedule(self):
+        slot = {"id": "slot-1", "task_id": "t-1", "schedules": {"id": "s-1", "kind": "recurring"}}
+        store = _FakeStore()
+        store.ready_due_slots = lambda now: [slot]
+        with patch.dict(os.environ, {"MPT_UPLOAD_API_BASE_URL": "https://x", "MONEYPRINT_API_SECRET": "s"}):
+            scheduler = self._scheduler(store)
+            with self.assertRaises(ValueError):
+                scheduler.publish_due(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
 
 
 
