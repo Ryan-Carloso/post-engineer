@@ -351,6 +351,15 @@ Follow these so the same issues don't come back:
   would pay a storage round-trip per edit for no consumer. The comment
   on the handler says so explicitly.
 
+## MCP review learnings, PR #17 (2026-09-29)
+- **Sanitize engine errors before surfacing them to the agent.** The
+  `error` field added to `get_video_task_progress` passed the engine
+  failure reason straight through; provider exceptions can echo bearer
+  tokens, DSNs, or api_key query params into it. `sanitizeEngineError`
+  (tools.ts) redacts credential-shaped fragments while keeping the
+  human-readable reason intact — same convention as the app-password
+  redaction in client.ts.
+
 ## MCP review learnings, round 5 (2026-09-28)
 - **Export shared limits from the client module.** MAX_LIBRARY_IMAGES/
   MAX_LIBRARY_IMAGE_BYTES lived unexported in client.ts while tools.ts
