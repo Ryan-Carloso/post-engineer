@@ -20,7 +20,6 @@ from app.services.fill_schedule.generate import BatchGenerator
 from app.services.fill_schedule.publish import BatchPublisher
 from app.services.fill_schedule.reconcile import BatchReconciler
 from app.services.fill_schedule.store import ScheduleStore
-from app.services.fill_schedule.support import token_cost
 
 
 class FillScheduleScheduler:
@@ -76,11 +75,6 @@ class FillScheduleScheduler:
         if any(value != 0 for value in results.values()):
             logger.info(f"fill_schedule tick: {results}")
         return results
-
-    @staticmethod
-    def _token_cost(face_mix_percent: float, face_quality: str) -> int:
-        """Per-video token cost (also used by the batch billing flow)."""
-        return token_cost(face_mix_percent, face_quality)
 
 
 def start_fill_schedule_thread(scheduler: FillScheduleScheduler) -> threading.Thread:
