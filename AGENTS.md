@@ -997,6 +997,13 @@ Follow these so the same issues don't come back:
   primary attempt only; the fallback keeps its upload (its artifacts are the
   useful ones). Verified against run 36537786650 (single artifact from the
   primary, fallback 409).
+- **OCR review exits 1 on informational-only findings (2026-09-29):** with the
+  409 fixed, a run can still go red with just two `low` severity comments that
+  explicitly say "no code quality concerns" (verified: PR #17, run 36538879908,
+  both notes praised the docs). The action exits 1 whenever its comments list
+  is non-empty. A red ocr-review check is NOT actionable until the findings are
+  read: download the `ocr-review-result-<run_id>-1` artifact and inspect
+  `ocr-result.json`'s `comments[].content` before touching code.
 
 ## Test quirks (vitest 4.1)
 
