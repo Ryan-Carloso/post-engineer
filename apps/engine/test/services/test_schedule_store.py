@@ -96,12 +96,12 @@ class StoreRequestsTests(unittest.TestCase):
         self.assertEqual(kwargs["params"]["status"], f"eq.{fs.SLOT_GENERATING}")
         self.assertEqual(kwargs["params"]["task_id"], "not.is.null")
 
-    def test_generating_slots_embeds_schedule_kind(self):
-        # The reconciler needs the schedule kind to refund batch slots under
-        # `batch:{scheduleId}` — without the embed the batch path is dead.
+    def test_generating_slots_embeds_schedule_id(self):
+        # The reconciler refunds batch slots under `batch:{scheduleId}` —
+        # without the schedule embed the batch path is dead.
         self.store.generating_slots()
         _, _, kwargs = self._last_call()
-        self.assertIn("schedules(id,kind)", kwargs["params"]["select"])
+        self.assertIn("schedules(id)", kwargs["params"]["select"])
 
     def test_ready_due_slots_filters_due_time(self):
         self.store.ready_due_slots(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
