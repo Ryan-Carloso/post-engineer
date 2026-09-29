@@ -1113,3 +1113,16 @@ Follow these so the same issues don't come back:
 - Lesson: this reviewer re-reviews the whole PR diff on every push and
   its line numbers go stale fast — always re-locate each cited finding
   in the current tree before acting.
+
+## Docs-sync review learnings, round 1 (2026-09-28, PR #16)
+- **Verify the reviewer's line numbers before touching code.** OpenCode
+  cited docs-sync.test.ts lines 316-318 for a "missing webhookUrl param
+  assertion" — the file has 45 lines. The premise was stale/hallucinated;
+  the finding was declined after verifying webhookUrl IS documented in
+  both surfaces (README + mcp-docs-section.tsx EN/PT) and the test's
+  contract is tool-name sync, not per-parameter pinning.
+- **Decline scope-creep findings explicitly.** A docs test designed to pin
+  tool-list sync across surfaces should not grow per-parameter assertions
+  for one param of two tools — that is a different test with a different
+  contract. Record the decline; do not expand the test to satisfy the
+  reviewer.

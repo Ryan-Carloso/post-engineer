@@ -229,13 +229,17 @@ def persona_lipsync_active(params: VideoParams) -> bool:
     return persona.photo_url is not None or persona.avatar_url is not None
 
 
-def persona_hook_end_seconds(
+def _find_hook_end_seconds(
     video_script: str,
     subtitles: Sequence[tuple[int, str, str]],
-    minimum_seconds: float = 3.0,
-    maximum_seconds: float = 6.0,
 ) -> float:
-    """Return the subtitle boundary that completes the first script paragraph."""
+    """Return the raw subtitle end boundary of the first script paragraph.
+
+    Raises ValueError for structural problems (fewer than two paragraphs,
+    hook without terminal punctuation, hook not found in the subtitles).
+    The 3-6s window check lives in persona_hook_end_seconds so callers that
+    need the raw measurement (e.g. the hook retry) can decide for themselves.
+    """
     paragraphs = [
         paragraph.strip()
         for paragraph in re.split(r"\n\s*\n", video_script.strip())
@@ -260,20 +264,127 @@ def persona_hook_end_seconds(
             continue
         spoken += normalize(text)
         if hook and hook in spoken:
-            end_seconds = (
+            return (
                 int(match.group(1)) * 3600
                 + int(match.group(2)) * 60
                 + int(match.group(3))
                 + int(match.group(4)) / 1000
             )
-            if not minimum_seconds <= end_seconds <= maximum_seconds:
-                raise ValueError(
-                    f"persona hook must end between {minimum_seconds:g} and "
-                    f"{maximum_seconds:g} seconds, got {end_seconds:g}"
-                )
-            return end_seconds
 
     raise ValueError("could not locate hook paragraph in subtitle timestamps")
+
+
+def persona_hook_end_seconds(
+    video_script: str,
+    subtitles: Sequence[tuple[int, str, str]],
+    minimum_seconds: float = 3.0,
+    maximum_seconds: float = 6.0,
+) -> float:
+    """Return the subtitle boundary that completes the first script paragraph."""
+    end_seconds = _find_hook_end_seconds(video_script, subtitles)
+    if not minimum_seconds <= end_seconds <= maximum_seconds:
+        raise ValueError(
+            f"persona hook must end between {minimum_seconds:g} and "
+            f"{maximum_seconds:g} seconds, got {end_seconds:g}"
+        )
+    return end_seconds
+
+
+# Regeneration attempts for an overshooting persona hook before the task
+# fails. Each attempt costs one LLM call plus one TTS call; the hook prompt
+# already targets the 3-6s window, so retries should be rare.
+_PERSONA_HOOK_MAX_RETRIES = 2
+_PERSONA_HOOK_MIN_WORDS = 8
+_PERSONA_HOOK_MAX_WORDS = 12
+
+
+def _regenerate_fitting_hook(
+    params: VideoParams, video_script: str, measured_seconds: float
+) -> str:
+    """Regenerate only the hook paragraph, sized toward the 3-6s window.
+
+    The rest of the script (body paragraphs) is kept verbatim: only the
+    hook timing was wrong.
+    """
+    paragraphs = [
+        paragraph.strip()
+        for paragraph in re.split(r"\n\s*\n", video_script.strip())
+        if paragraph.strip()
+    ]
+    hook_words = len(paragraphs[0].split())
+    # Aim for ~4.5s (window center): scale the observed word count by the
+    # target/measured ratio, clamped to a sane hook size.
+    if measured_seconds > 0:
+        word_cap = round(hook_words * 4.5 / measured_seconds)
+    else:
+        word_cap = 10
+    word_cap = max(_PERSONA_HOOK_MIN_WORDS, min(_PERSONA_HOOK_MAX_WORDS, word_cap))
+    logger.warning(
+        f"persona hook ended at {measured_seconds:g}s ({hook_words} words), "
+        f"outside the 3-6s window; regenerating a hook of at most {word_cap} words"
+    )
+    hook = llm.generate_script(
+        video_subject=params.video_subject,
+        language=params.video_language,
+        paragraph_number=1,
+        video_script_prompt=(
+            f"{params.video_script_prompt} Return only a standalone hook paragraph: "
+            f"one complete sentence of at most {word_cap} words ending with terminal "
+            "punctuation, designed to take 3 to 6 seconds when spoken."
+        ),
+        custom_system_prompt=params.custom_system_prompt,
+        target_words_min=_PERSONA_HOOK_MIN_WORDS,
+        target_words_max=word_cap,
+    )
+    return _limit_generated_script(f"{hook.strip()}\n\n" + "\n\n".join(paragraphs[1:]))
+
+
+def _ensure_persona_hook_fits(
+    task_id: str,
+    params: VideoParams,
+    video_script: str,
+    audio_file: str | None,
+    audio_duration: float | None,
+    sub_maker,
+    subtitle_path: str,
+):
+    """Validate the persona hook duration right after subtitles exist.
+
+    The lip-sync intro needs the hook to end between 3 and 6 seconds. When
+    TTS generated the audio, an overshooting hook is LLM variance — regenerate
+    a shorter hook (plus its audio/subtitles) instead of failing the whole
+    task. With custom audio the hook timing is fixed by the user's recording,
+    so an overshoot still fails the task as before.
+
+    Returns the (possibly regenerated) script/audio/subtitle tuple. A
+    (None, None, None) audio triple means generate_audio already failed the
+    task; the caller handles it through the normal audio-failure path.
+    """
+    if not persona_lipsync_active(params) or sub_maker is None:
+        return video_script, audio_file, audio_duration, sub_maker, subtitle_path
+    attempts = _PERSONA_HOOK_MAX_RETRIES + 1
+    for attempt in range(attempts):
+        try:
+            end_seconds = _find_hook_end_seconds(
+                video_script, subtitle.file_to_subtitles(subtitle_path)
+            )
+        except ValueError:
+            # Structural hook problem (missing paragraph, no terminal
+            # punctuation, hook not found in subtitles): regenerating a
+            # shorter hook cannot fix it — fail the task as before.
+            raise
+        if 3.0 <= end_seconds <= 6.0:
+            return video_script, audio_file, audio_duration, sub_maker, subtitle_path
+        if attempt + 1 >= attempts:
+            raise ValueError(
+                f"persona hook must end between 3 and 6 seconds, got {end_seconds:g}"
+            )
+        video_script = _regenerate_fitting_hook(params, video_script, end_seconds)
+        audio_file, audio_duration, sub_maker = generate_audio(task_id, params, video_script)
+        if not audio_file:
+            return video_script, None, None, None, subtitle_path
+        subtitle_path = generate_subtitle(task_id, params, video_script, sub_maker, audio_file)
+    raise AssertionError("unreachable: hook retry loop always returns or raises")
 
 
 def generate_script(task_id, params):
@@ -283,7 +394,7 @@ def generate_script(task_id, params):
         script_prompt = params.video_script_prompt
         if persona_lipsync_active(params):
             script_prompt = (
-                f"{script_prompt} Start with a standalone hook paragraph of 8 to 16 words, "
+                f"{script_prompt} Start with a standalone hook paragraph of 8 to 12 words, "
                 "designed to take 3 to 6 seconds when spoken. End the hook with terminal "
                 "punctuation, then add exactly one blank line before the main content."
             ).strip()
@@ -315,12 +426,12 @@ def generate_script(task_id, params):
                 video_script_prompt=(
                     f"{params.video_script_prompt} Regenerate the entire script. "
                     "Return only the standalone first paragraph: a complete "
-                    "3 to 6 second hook of 8 to 16 words ending with terminal "
+                    "3 to 6 second hook of 8 to 12 words ending with terminal "
                     "punctuation."
                 ),
                 custom_system_prompt=params.custom_system_prompt,
                 target_words_min=8,
-                target_words_max=16,
+                target_words_max=12,
             )
             body = llm.generate_script(
                 video_subject=params.video_subject,
@@ -920,6 +1031,29 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         if stop_at == "subtitle":
             _complete_task(task_id, params, subtitle_path=subtitle_path)
             return {"subtitle_path": subtitle_path}
+
+        # 4b. Persona hook guard: the lip-sync intro needs the hook to end
+        # between 3 and 6 seconds. Validate now — before the expensive
+        # material/download/combine stages — and regenerate an overshooting
+        # hook instead of failing the whole task. A ValueError here keeps
+        # the previous behavior: the task fails with the hook error.
+        script_before_hook_guard = video_script
+        (
+            video_script,
+            audio_file,
+            audio_duration,
+            sub_maker,
+            subtitle_path,
+        ) = _ensure_persona_hook_fits(
+            task_id, params, video_script, audio_file, audio_duration,
+            sub_maker, subtitle_path,
+        )
+        if not audio_file:
+            _fail_task(task_id, "failed to generate audio", params, stage="audio")
+            cleanup_task_intermediates(task_id, ())
+            return
+        if video_script != script_before_hook_guard:
+            save_script_data(task_id, video_script, video_terms, params)
 
         sm.state.update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=40)
 

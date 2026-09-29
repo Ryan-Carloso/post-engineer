@@ -833,6 +833,26 @@ describe('video batch + task progress tools', () => {
     expect(text).toContain('"stage": "audio"');
   });
 
+  it('handleGetVideoTaskProgress surfaces the engine error when the task failed', async () => {
+    const { handleGetVideoTaskProgress } = await import('../tools.js');
+    vi.mocked(mockClient.getVideoStatus).mockResolvedValue({
+      status: 200,
+      message: 'success',
+      data: {
+        task_id: 'task-1',
+        state: -1,
+        progress: 75,
+        stage: 'render',
+        error: 'persona hook must end between 3 and 6 seconds, got 6.55',
+      },
+    });
+
+    const response = await handleGetVideoTaskProgress(mockClient, { taskId: 'task-1' });
+    const text = textOf(response);
+    expect(text).toContain('"state": -1');
+    expect(text).toContain('"error": "persona hook must end between 3 and 6 seconds, got 6.55"');
+  });
+
   it('handleGetVideoTaskProgress reports explicit nulls when the task payload is missing', async () => {
     const { handleGetVideoTaskProgress } = await import('../tools.js');
     vi.mocked(mockClient.getVideoStatus).mockResolvedValue({ ok: true });
@@ -843,6 +863,7 @@ describe('video batch + task progress tools', () => {
     expect(text).toContain('"state": null');
     expect(text).toContain('"progress": null');
     expect(text).toContain('"stage": null');
+    expect(text).toContain('"error": null');
   });
 
   it('handleGenerateVideo passes webhookUrl through to the client', async () => {

@@ -161,9 +161,9 @@ class TestPersonaHookBoundary:
         assert generate.call_count == 3
         initial_prompt = generate.call_args_list[0].kwargs["video_script_prompt"]
         assert "3 to 6 seconds" in initial_prompt
-        assert "8 to 16 words" in initial_prompt
+        assert "8 to 12 words" in initial_prompt
         assert generate.call_args_list[1].kwargs["target_words_min"] == 8
-        assert generate.call_args_list[1].kwargs["target_words_max"] == 16
+        assert generate.call_args_list[1].kwargs["target_words_max"] == 12
         assert generate.call_args_list[2].kwargs["target_words_min"] == 72
         assert generate.call_args_list[2].kwargs["target_words_max"] == 94
 
@@ -236,3 +236,114 @@ class TestPersonaHookGate:
 
         assert result == "A single paragraph without hook rules."
         assert generate.call_count == 1
+
+
+class TestPersonaHookRetry:
+    """An overshooting persona hook must be regenerated, not fail the task.
+
+    The engine appends its own hook instruction ("8 to 12 words, 3 to 6
+    seconds") to the user's prompt, so LLM variance can still produce a
+    hook the TTS speaks in >6s. Regenerating a shorter hook (plus its
+    audio/subtitles) is cheaper than failing the whole task.
+    """
+
+    _LONG_HOOK = "This is a much longer hook paragraph written for testing purposes here today"
+    _BODY = "The rest of the video script body goes here."
+
+    def _script(self, hook):
+        return f"{hook}.\n\n{self._BODY}"
+
+    def _subs(self, hook_text, end_seconds):
+        minutes, seconds = divmod(end_seconds, 60)
+        end = f"00:{int(minutes):02d}:{seconds:06.3f}".replace(".", ",")
+        return [(1, f"00:00:00,000 --> {end}", hook_text)]
+
+    def _run_guard(self, params, script, subs_side_effect, hook_regen="Short hook here."):
+        from app.services.task import _ensure_persona_hook_fits
+
+        sub_maker = object()
+        with (
+            patch.object(task_service.subtitle, "file_to_subtitles", side_effect=subs_side_effect),
+            patch.object(task_service.llm, "generate_script", return_value=hook_regen) as gen_hook,
+            patch.object(task_service, "generate_audio", return_value=("audio2.mp3", 30, sub_maker)) as gen_audio,
+            patch.object(task_service, "generate_subtitle", return_value="subtitle.srt") as gen_sub,
+        ):
+            result = _ensure_persona_hook_fits(
+                "task-1", params, script, "audio.mp3", 40, sub_maker, "subtitle.srt"
+            )
+        return result, gen_hook, gen_audio, gen_sub
+
+    def test_hook_within_window_passes_without_regeneration(self):
+        params = _params(name="Ana", voice_id="calm")
+        script = self._script(self._LONG_HOOK)
+        subs = self._subs(self._LONG_HOOK + ".", 5.0)
+
+        result, gen_hook, gen_audio, _ = self._run_guard(params, script, [subs])
+
+        assert result[0] == script
+        gen_hook.assert_not_called()
+        gen_audio.assert_not_called()
+
+    def test_overshooting_hook_is_regenerated_with_shorter_audio(self):
+        params = _params(name="Ana", voice_id="calm")
+        script = self._script(self._LONG_HOOK)
+        overshoot = self._subs(self._LONG_HOOK + ".", 6.5)
+        fixed = self._subs("Short hook here.", 5.0)
+
+        (new_script, audio_file, _, _, _), gen_hook, gen_audio, gen_sub = self._run_guard(
+            params, script, [overshoot, fixed]
+        )
+
+        assert new_script.startswith("Short hook here.")
+        assert self._BODY in new_script
+        assert audio_file == "audio2.mp3"
+        gen_hook.assert_called_once()
+        gen_audio.assert_called_once()
+        gen_sub.assert_called_once()
+        # The regeneration asks for fewer words than the overshooting hook.
+        assert gen_hook.call_args.kwargs["target_words_max"] < len(self._LONG_HOOK.split())
+
+    def test_retry_exhausted_raises_the_hook_error(self):
+        params = _params(name="Ana", voice_id="calm")
+        script = self._script(self._LONG_HOOK)
+        overshoot = self._subs(self._LONG_HOOK + ".", 6.5)
+
+        with pytest.raises(ValueError, match="between 3 and 6 seconds"):
+            self._run_guard(
+                params,
+                script,
+                [overshoot, overshoot, overshoot],
+                hook_regen=self._LONG_HOOK + ".",
+            )
+
+    def test_custom_audio_skips_retry(self):
+        """With custom audio the hook timing is fixed by the user's recording;
+        regenerating text cannot change it, so no retry is attempted."""
+        from app.services.task import _ensure_persona_hook_fits
+
+        params = _params(name="Ana", voice_id="calm")
+        script = self._script(self._LONG_HOOK)
+        overshoot = self._subs(self._LONG_HOOK + ".", 6.5)
+        with (
+            patch.object(task_service.subtitle, "file_to_subtitles", return_value=overshoot),
+            patch.object(task_service, "generate_audio") as gen_audio,
+        ):
+            result = _ensure_persona_hook_fits(
+                "task-1", params, script, "custom.mp3", 40, None, "subtitle.srt"
+            )
+
+        assert result[0] == script
+        gen_audio.assert_not_called()
+
+    def test_lipsync_inactive_skips_retry(self):
+        from app.services.task import _ensure_persona_hook_fits
+
+        params = _params()  # no persona: faceless
+        script = self._script(self._LONG_HOOK)
+        with patch.object(task_service, "generate_audio") as gen_audio:
+            result = _ensure_persona_hook_fits(
+                "task-1", params, script, "audio.mp3", 40, object(), "subtitle.srt"
+            )
+
+        assert result[0] == script
+        gen_audio.assert_not_called()
