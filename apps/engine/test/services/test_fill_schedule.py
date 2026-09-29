@@ -81,8 +81,7 @@ class BatchScheduleTests(unittest.TestCase):
             "topic": topic,
             "schedules": {
                 "id": "sched-batch-1",
-                "kind": "batch",
-                "user_id": "user-1",
+                                "user_id": "user-1",
                 "providers": ["youtube"],
                 "youtube_account_ids": ["yt-1"],
                 "personas": {
@@ -213,7 +212,7 @@ class BatchScheduleTests(unittest.TestCase):
 
 class ReconcileTests(unittest.TestCase):
     def test_complete_task_becomes_ready(self):
-        slot = {"id": "slot-1", "task_id": "t-1", "schedules": {"kind": "batch"}}
+        slot = {"id": "slot-1", "task_id": "t-1", "schedules": {}}
         store = _FakeStore()
         store.generating_slots = lambda: [slot]
         state = MagicMock()
@@ -232,8 +231,7 @@ class ReconcileTests(unittest.TestCase):
             "user_id": "user-1",
             "schedules": {
                 "id": "sched-1",
-                "kind": "batch",
-                "user_id": "user-1",
+                                "user_id": "user-1",
                 "personas": {"name": "Ana", "face_mix_percent": 0, "face_quality": "ok"},
             },
         }
@@ -258,8 +256,7 @@ class ReconcileTests(unittest.TestCase):
             "task_id": "t-b1",
             "schedules": {
                 "id": "sched-b1",
-                "kind": "batch",
-                "user_id": "user-1",
+                                "user_id": "user-1",
                 "personas": {"face_mix_percent": 0, "face_quality": "ok"},
             },
         }
@@ -287,8 +284,7 @@ class ReconcileTests(unittest.TestCase):
             "task_id": "t-b2",
             "schedules": {
                 "id": "sched-b2",
-                "kind": "batch",
-                "personas": {"face_mix_percent": 0, "face_quality": "ok"},
+                                "personas": {"face_mix_percent": 0, "face_quality": "ok"},
             },
         }
         store = _FakeStore()
@@ -315,7 +311,7 @@ class PublishDueTests(unittest.TestCase):
             "id": "slot-1",
             "topic": "Tokyo coffee",
             "task_id": "t-1",
-            "schedules": {"kind": "batch", "user_id": "user-1", "providers": ["youtube"]},
+            "schedules": {"user_id": "user-1", "providers": ["youtube"]},
         }
 
     def test_due_slot_is_published_and_marked(self):
@@ -416,8 +412,7 @@ class NotifyIntegrationTests(unittest.TestCase):
             "topic": "Batch topic one",
             "schedules": {
                 "id": "sched-1",
-                "kind": "batch",
-                "user_id": "user-1",
+                                "user_id": "user-1",
                 "providers": ["youtube"],
                 "youtube_account_ids": ["yt-1"],
                 "personas": {"name": "Ana", "niche": "travel", "language": "en", "voice_id": "calm"},
@@ -444,8 +439,7 @@ class NotifyIntegrationTests(unittest.TestCase):
             "topic": "Batch topic",
             "schedules": {
                 "id": "sched-2",
-                "kind": "batch",
-                "user_id": "user-1",
+                                "user_id": "user-1",
                 "providers": ["youtube"],
                 "youtube_account_ids": ["yt-1"],
                 "personas": {"name": "Ana", "voice_id": "calm"},
@@ -475,8 +469,7 @@ class NotifyIntegrationTests(unittest.TestCase):
             "topic": "Batch topic",
             "schedules": {
                 "id": "sched-3",
-                "kind": "batch",
-                "user_id": "user-1",
+                                "user_id": "user-1",
                 "providers": [],
                 "personas": {"name": "Ana"},
             },
@@ -502,8 +495,7 @@ class NotifyIntegrationTests(unittest.TestCase):
             "topic": "Tokyo coffee",
             "task_id": "t-1",
             "schedules": {
-                "kind": "batch",
-                "user_id": "user-1",
+                                "user_id": "user-1",
                 "providers": ["youtube", "instagram"],
                 "personas": {"name": "Ana"},
             },
@@ -539,8 +531,7 @@ class NotifyIntegrationTests(unittest.TestCase):
             "topic": "Tokyo coffee",
             "task_id": "t-1",
             "schedules": {
-                "kind": "batch",
-                "user_id": "user-1",
+                                "user_id": "user-1",
                 "providers": ["youtube"],
                 "personas": {"name": "Ana"},
             },
@@ -570,8 +561,7 @@ class NotifyIntegrationTests(unittest.TestCase):
             "topic": "Batch topic",
             "schedules": {
                 "id": "sched-1",
-                "kind": "batch",
-                "user_id": "user-1",
+                                "user_id": "user-1",
                 "providers": ["youtube"],
                 "youtube_account_ids": ["yt-1"],
                 "personas": {"name": "Ana", "niche": "travel", "language": "en", "voice_id": "calm"},
@@ -613,8 +603,7 @@ class CoverageGapTests(unittest.TestCase):
             "topic": "Tokyo coffee",
             "task_id": "t-1",
             "schedules": {
-                "kind": "batch",
-                "user_id": "user-1",
+                                "user_id": "user-1",
                 "providers": ["youtube"],
                 "personas": {"name": "Ana"},
             },
@@ -672,7 +661,7 @@ class CoverageGapTests(unittest.TestCase):
     def test_due_slot_without_videos_fails(self):
         store = _FakeStore()
         store.ready_due_slots = lambda now: [
-            {"id": "slot-x", "topic": "T", "task_id": "t-1", "schedules": {"kind": "batch", "user_id": "u1", "providers": []}}
+            {"id": "slot-x", "topic": "T", "task_id": "t-1", "schedules": {"user_id": "u1", "providers": []}}
         ]
         state = MagicMock()
         state.get_task.return_value = {"state": 1, "videos": []}
@@ -690,7 +679,7 @@ class CoverageGapTests(unittest.TestCase):
     def test_reconcile_skips_unknown_task(self):
         store = _FakeStore()
         store.generating_slots = lambda: [
-            {"id": "slot-1", "task_id": "ghost", "schedules": {"kind": "batch"}}
+            {"id": "slot-1", "task_id": "ghost", "schedules": {}}
         ]
         state = MagicMock()
         state.get_task.return_value = None
@@ -872,8 +861,7 @@ class CoverageGapTests(unittest.TestCase):
             "topic": "Batch topic",
             "schedules": {
                 "id": "sched-1",
-                "kind": "batch",
-                "user_id": "user-1",
+                                "user_id": "user-1",
                 "providers": ["youtube"],
                 "youtube_account_ids": ["yt-1"],
                 "personas": {"name": "Ana", "niche": "travel", "language": "en", "voice_id": "calm"},
@@ -925,7 +913,7 @@ class CoverageGapTests(unittest.TestCase):
         store = _FakeStore()
         store.pending_slots = MagicMock(side_effect=RuntimeError("supabase down"))
         store.generating_slots = lambda: [
-            {"id": "s1", "task_id": "t1", "schedules": {"kind": "batch"}}
+            {"id": "s1", "task_id": "t1", "schedules": {}}
         ]
         store.ready_due_slots = lambda now: []
         state = MagicMock()
@@ -963,38 +951,6 @@ class CoverageGapTests(unittest.TestCase):
 
 
 
-class FailFastKindTests(unittest.TestCase):
-    """Non-batch schedules must raise, never be silently skipped."""
-
-    def _scheduler(self, store):
-        return fs.FillScheduleScheduler(
-            store=store, task_state=MagicMock(), publish_video=MagicMock(),
-        )
-
-    def test_generate_raises_on_non_batch_schedule(self):
-        slot = {"id": "slot-1", "schedules": {"id": "s-1", "kind": "recurring"}}
-        store = _FakeStore()
-        store.pending_slots = lambda now: [slot]
-        scheduler = self._scheduler(store)
-        with self.assertRaises(ValueError):
-            scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
-
-    def test_reconcile_raises_on_non_batch_schedule(self):
-        slot = {"id": "slot-1", "task_id": "t-1", "schedules": {"id": "s-1", "kind": "recurring"}}
-        store = _FakeStore()
-        store.generating_slots = lambda: [slot]
-        scheduler = self._scheduler(store)
-        with self.assertRaises(ValueError):
-            scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
-
-    def test_publish_raises_on_non_batch_schedule(self):
-        slot = {"id": "slot-1", "task_id": "t-1", "schedules": {"id": "s-1", "kind": "recurring"}}
-        store = _FakeStore()
-        store.ready_due_slots = lambda now: [slot]
-        with patch.dict(os.environ, {"MPT_UPLOAD_API_BASE_URL": "https://x", "MONEYPRINT_API_SECRET": "s"}):
-            scheduler = self._scheduler(store)
-            with self.assertRaises(ValueError):
-                scheduler.publish_due(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
 
 
 

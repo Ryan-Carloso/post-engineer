@@ -13,5 +13,3 @@ SLOT_FAILED = "failed"
 
 # Manual video batches (POST /api/schedule/batch): finite, user-requested,
 # prepaid at request time. Their slots carry the topic chosen by the user.
-# This is the only schedule kind the pipeline processes.
-SCHEDULE_KIND_BATCH = "batch"

@@ -15,7 +15,7 @@ import { logger } from '@/lib/logger';
 // deducted in one atomic spend_tokens call BEFORE anything is created.
 // Insufficient balance -> 400 INSUFFICIENT with have/need, zero side effects.
 //
-// On accept: one schedules row (kind='batch') + N scheduled_posts rows with
+// On accept: one schedules row + N scheduled_posts rows with
 // exact slot datetimes (next N occurrences of `times` in `timezone`).
 // Tokens are prepaid, so the engine generate() pass at the 06h UTC cutoff
 // uses each slot's stored topic with no LLM call and no further spend.
@@ -348,13 +348,12 @@ export async function POST(request: Request): Promise<NextResponse> {
       id: scheduleId,
       user_id: auth.userId,
       persona_id: personaId,
-      kind: 'batch',
       providers,
       youtube_account_ids: accountIds.youtube,
       instagram_account_ids: accountIds.instagram,
       linkedin_account_ids: accountIds.linkedin,
-      // days_of_week/start_hour/end_hour/posts_per_day are inert for batches
-      // (plan() skips kind='batch'); they only satisfy NOT NULL/CHECK.
+      // days_of_week/start_hour/end_hour/posts_per_day are inert for batches;
+      // they only satisfy NOT NULL/CHECK.
       days_of_week: [],
       start_hour: 0,
       end_hour: 23,

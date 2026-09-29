@@ -1,9 +1,9 @@
 """Batch scheduling pipeline (formerly "fill schedule").
 
-Only manual batch schedules (kind='batch', created by POST
-/api/schedule/batch) are processed: the user requests N videos, the
-pipeline generates them and publishes each at its scheduled time.
-There is no automatic recurring scheduling.
+Only manual batch schedules (created by POST /api/schedule/batch) are
+processed: the user requests N videos, the pipeline generates them and
+publishes each at its scheduled time. There is no automatic recurring
+scheduling.
 
 Components:
 - store: Supabase read/write client (ScheduleStore).
@@ -20,7 +20,6 @@ Components:
 
 from app.services.fill_schedule.constants import (
     GENERATION_HORIZON_HOURS,
-    SCHEDULE_KIND_BATCH,
     SIGNED_URL_EXPIRES_SECONDS,
     SLOT_FAILED,
     SLOT_GENERATING,
@@ -49,7 +48,6 @@ from app.services.fill_schedule.support import (
 
 __all__ = [
     "GENERATION_HORIZON_HOURS",
-    "SCHEDULE_KIND_BATCH",
     "SIGNED_URL_EXPIRES_SECONDS",
     "SLOT_FAILED",
     "SLOT_GENERATING",

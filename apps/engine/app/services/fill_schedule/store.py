@@ -31,7 +31,7 @@ class ScheduleStore:
 
     SLOT_SELECT = (
         "*,schedules!inner("
-        "id,user_id,kind,providers,youtube_account_ids,"
+        "id,user_id,providers,youtube_account_ids,"
         "instagram_account_ids,linkedin_account_ids,"
         "personas(name,niche,script_prompt,language,video_aspect,"
         "photo_path,avatar_url,voice_id,voice_audio_path,paragraph_number,face_mix_percent,face_quality)"
@@ -100,15 +100,14 @@ class ScheduleStore:
         return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
 
     def generating_slots(self) -> list[dict[str, Any]]:
-        # Includes the schedule kind: the reconciler only processes batch
-        # schedules and refunds under `batch:{scheduleId}`.
+        # The reconciler refunds under `batch:{scheduleId}`.
         rows = self._request(
             "GET",
             "scheduled_posts",
             params={
                 "status": f"eq.{SLOT_GENERATING}",
                 "task_id": "not.is.null",
-                "select": "*,schedules(id,kind)",
+                "select": "*,schedules(id)",
             },
         )
         return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []

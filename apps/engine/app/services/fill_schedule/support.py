@@ -6,23 +6,7 @@ from typing import Any
 
 from loguru import logger
 
-from app.services.fill_schedule.constants import SCHEDULE_KIND_BATCH
 from app.services.fill_schedule.store import ScheduleStore
-
-
-def assert_batch_kind(schedule: dict[str, Any]) -> None:
-    """Fail fast on any non-batch schedule reaching the pipeline.
-
-    The old recurring/one-off flow was deleted: no code path creates
-    non-batch schedules anymore. Silently skipping them would hide that
-    bug — a loud error surfaces it instead.
-    """
-    kind = schedule.get("kind")
-    if kind != SCHEDULE_KIND_BATCH:
-        raise ValueError(
-            f"schedule {schedule.get('id')} has kind={kind!r}; "
-            f"only kind={SCHEDULE_KIND_BATCH!r} is supported"
-        )
 
 
 def token_cost(face_mix_percent: float, face_quality: str) -> int:

@@ -13,7 +13,6 @@ from app.services.fill_schedule.constants import (
 )
 from app.services.fill_schedule.store import ScheduleStore
 from app.services.fill_schedule.support import (
-    assert_batch_kind,
     persona_for,
     slot_user_id,
     token_cost,
@@ -34,7 +33,6 @@ class BatchReconciler:
         updated = 0
         for slot in self.store.generating_slots():
             schedule = slot.get("schedules") or {}
-            assert_batch_kind(schedule)
             task = self.task_state.get_task(str(slot["task_id"]))
             if task is None:
                 continue

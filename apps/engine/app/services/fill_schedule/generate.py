@@ -18,7 +18,6 @@ from app.services.fill_schedule.constants import (
 from app.services.fill_schedule.metadata import validate_publish_plan
 from app.services.fill_schedule.store import ScheduleStore
 from app.services.fill_schedule.support import (
-    assert_batch_kind,
     build_persona_params,
     notify_safe,
     persona_for,
@@ -59,7 +58,6 @@ class BatchGenerator:
         enqueued_topics: list[str] = []
         for slot in self.store.pending_slots(now):
             schedule = slot.get("schedules") or {}
-            assert_batch_kind(schedule)
             persona = persona_for(schedule)
             try:
                 # Prepaid at request time: the topic was chosen by the user
