@@ -211,6 +211,10 @@ jobs:
           # name the primary already created — killing a successful review
           # before its comments are posted. The fallback keeps its upload.
           upload_artifacts: 'false'
+          # Gentle on z.ai's free-tier rate limits (429s observed 2026-09-29
+          # on both endpoints): 2 concurrent review requests instead of the
+          # default 8. Kept identical on both attempts.
+          review_concurrency: '2'
           ocr_version: "1.12.9" # pinned 2026-09-25; action default is npm `latest`
 
       - name: Run OpenCodeReview (free-model fallback)
@@ -228,4 +232,7 @@ jobs:
           llm_auth_token: ${{ secrets.ZAI_API_KEY }}
           llm_model: glm-4.7-flash
           llm_use_anthropic: "false"
+          # Same gentle concurrency as the primary (see above): z.ai's free
+          # tier 429s under the default burst of 8 concurrent requests.
+          review_concurrency: '2'
           ocr_version: "1.12.9" # pinned 2026-09-25; action default is npm `latest`
