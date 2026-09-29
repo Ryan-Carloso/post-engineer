@@ -87,12 +87,21 @@ else:
     logger.warning("BUGSINK_DSN is not set — Bugsink error tracking disabled")
 
 
-def start_fill_schedule_scheduler() -> None:
-    """Automatic Fill Schedule — starts with the app (no env flag).
+# Values that disable the fill schedule scheduler via FILL_SCHEDULE_ENABLED.
+_FILL_SCHEDULE_DISABLED_VALUES = frozenset({"false", "0", "no", "off"})
 
-    Only depends on the Supabase envs: without them the ScheduleStore fails
-    and the scheduler is skipped with a log, without breaking boot.
+
+def start_fill_schedule_scheduler() -> None:
+    """Automatic Fill Schedule — starts with the app unless disabled.
+
+    FILL_SCHEDULE_ENABLED=false skips the scheduler (no automatic
+    scheduling) with a log. Otherwise it only depends on the Supabase
+    envs: without them the ScheduleStore fails and the scheduler is
+    skipped with a log, without breaking boot.
     """
+    if os.getenv("FILL_SCHEDULE_ENABLED", "true").strip().lower() in _FILL_SCHEDULE_DISABLED_VALUES:
+        logger.info("fill schedule scheduler disabled: FILL_SCHEDULE_ENABLED=false")
+        return
 
     try:
         scheduler = FillScheduleScheduler(

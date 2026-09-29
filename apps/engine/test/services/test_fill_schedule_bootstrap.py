@@ -1,8 +1,8 @@
 """Tests for the fill schedule bootstrap in asgi (app/asgi.py).
 
-The scheduler starts on its own at app boot — no env flag — when the
-Supabase envs are present. Without the envs → skip with a log, never a
-boot crash.
+The scheduler starts on its own at app boot when the Supabase envs are
+present, unless FILL_SCHEDULE_ENABLED=false. Without the envs → skip
+with a log, never a boot crash.
 """
 
 import os
@@ -37,6 +37,25 @@ class StartFillScheduleSchedulerTests(unittest.TestCase):
                 # Must not raise — app boot continues.
                 asgi.start_fill_schedule_scheduler()
         thread.assert_not_called()
+
+    def test_disabled_flag_skips_without_starting_thread(self):
+        asgi = self._import_asgi()
+        env = {**SUPABASE_ENV, "FILL_SCHEDULE_ENABLED": "false"}
+        with patch.dict(os.environ, env, clear=False):
+            with patch.object(asgi, "start_fill_schedule_thread") as thread, \
+                 patch.object(asgi, "ScheduleStore") as store_cls:
+                asgi.start_fill_schedule_scheduler()
+        thread.assert_not_called()
+        store_cls.assert_not_called()
+
+    def test_disabled_flag_case_insensitive(self):
+        asgi = self._import_asgi()
+        for value in ("False", "FALSE", "0", "no"):
+            env = {**SUPABASE_ENV, "FILL_SCHEDULE_ENABLED": value}
+            with patch.dict(os.environ, env, clear=False):
+                with patch.object(asgi, "start_fill_schedule_thread") as thread:
+                    asgi.start_fill_schedule_scheduler()
+            thread.assert_not_called()
 
     def test_starts_thread_and_notifies_discord(self):
         asgi = self._import_asgi()
