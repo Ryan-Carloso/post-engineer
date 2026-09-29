@@ -987,6 +987,16 @@ Follow these so the same issues don't come back:
   with `fail-on-error: 'false'` (that input only downgrades *upload* errors,
   e.g. Code Quality not enabled). The coverage-generation step must actually
   produce the file, or CI goes red.
+- **OCR review 409 artifact conflict (2026-09-29):** the `alibaba/open-code-review`
+  action's "Upload review artifacts" step runs `always()` with a fixed per-run
+  name (`ocr-review-result-<run_id>-<run_attempt>`). Our workflow invokes the
+  action twice (primary + free-model fallback), so when the primary fails and
+  the fallback runs, the fallback's upload 409s on the name the primary already
+  created — the job goes red and "Post review comments" is skipped even though
+  the fallback review SUCCEEDED. Fix: `upload_artifacts: 'false'` on the
+  primary attempt only; the fallback keeps its upload (its artifacts are the
+  useful ones). Verified against run 36537786650 (single artifact from the
+  primary, fallback 409).
 
 ## Test quirks (vitest 4.1)
 
