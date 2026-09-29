@@ -58,57 +58,10 @@ class StoreRequestsTests(unittest.TestCase):
         self.requests = self.store._requests
         self.requests.request.return_value = _response(json_data=[])
 
-    def test_active_schedules_gets_personas_embed(self):
-        self.requests.request.return_value = _response(
-            json_data=[{"id": "sched-1", "personas": {"name": "Ana"}}]
-        )
-        schedules = self.store.active_schedules()
-        self.assertEqual(len(schedules), 1)
-        method, url, kwargs = self._last_call()
-        self.assertEqual(method, "GET")
-        self.assertEqual(url, "https://supabase.example/rest/v1/schedules")
-        self.assertIn("personas(", kwargs["params"]["select"])
-        self.assertIn("niche", kwargs["params"]["select"])
-        self.assertIn("voice_id", kwargs["params"]["select"])
-        self.assertIn("paragraph_number", kwargs["params"]["select"])
-        self.assertEqual(kwargs["params"]["active"], "eq.true")
-        self.assertEqual(kwargs["headers"]["apikey"], "service-key")
-        self.assertEqual(kwargs["headers"]["Authorization"], "Bearer service-key")
 
-    def test_active_schedules_selects_recurring_and_one_off_fields(self):
-        self.store.active_schedules()
-        _, _, kwargs = self._last_call()
-        select = kwargs["params"]["select"]
-        for field in (
-            "scheduled_at",
-            "days_of_week",
-            "start_hour",
-            "end_hour",
-            "posts_per_day",
-            "times",
-            "timezone",
-        ):
-            self.assertIn(field, select)
 
-    def test_select_includes_linkedin_account_ids(self):
-        self.store.active_schedules()
-        _, _, kwargs = self._last_call()
-        self.assertIn("linkedin_account_ids", kwargs["params"]["select"])
 
-    def test_insert_slots_uses_ignore_duplicates(self):
-        self.requests.request.return_value = _response(status_code=201, json_data=[])
-        self.store.insert_slots_ignore_duplicates(
-            [{"schedule_id": "s1", "user_id": "u1", "slot_at": "2026-09-07T12:00:00+00:00"}]
-        )
-        method, url, kwargs = self._last_call()
-        self.assertEqual(method, "POST")
-        self.assertEqual(url, "https://supabase.example/rest/v1/scheduled_posts")
-        self.assertIn("resolution=ignore-duplicates", kwargs["headers"]["Prefer"])
-        self.assertEqual(kwargs["params"]["on_conflict"], "schedule_id,slot_at")
 
-    def test_insert_slots_skips_empty_rows(self):
-        self.store.insert_slots_ignore_duplicates([])
-        self.requests.request.assert_not_called()
 
     def test_pending_slots_filters_status_and_horizon(self):
         self.store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
@@ -143,6 +96,13 @@ class StoreRequestsTests(unittest.TestCase):
         self.assertEqual(kwargs["params"]["status"], f"eq.{fs.SLOT_GENERATING}")
         self.assertEqual(kwargs["params"]["task_id"], "not.is.null")
 
+    def test_generating_slots_embeds_schedule_kind(self):
+        # The reconciler needs the schedule kind to refund batch slots under
+        # `batch:{scheduleId}` — without the embed the batch path is dead.
+        self.store.generating_slots()
+        _, _, kwargs = self._last_call()
+        self.assertIn("schedules(id,kind)", kwargs["params"]["select"])
+
     def test_ready_due_slots_filters_due_time(self):
         self.store.ready_due_slots(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
         _, _, kwargs = self._last_call()
@@ -159,14 +119,6 @@ class StoreRequestsTests(unittest.TestCase):
         self.assertEqual(kwargs["params"]["id"], "eq.slot-1")
         self.assertEqual(kwargs["json"]["status"], "published")
 
-    def test_deactivate_schedule_patches_active_false(self):
-        self.requests.request.return_value = _response(status_code=204)
-        self.store.deactivate_schedule("schedule-1")
-        method, url, kwargs = self._last_call()
-        self.assertEqual(method, "PATCH")
-        self.assertEqual(url, "https://supabase.example/rest/v1/schedules")
-        self.assertEqual(kwargs["params"]["id"], "eq.schedule-1")
-        self.assertEqual(kwargs["json"], {"active": False})
 
     def test_claim_ready_slot_is_conditional_on_ready(self):
         # C2: atomic claim — only transitions if the slot is still 'ready'.
@@ -218,8 +170,8 @@ class StoreRequestsTests(unittest.TestCase):
 
     def test_non_dict_rows_filtered(self):
         self.requests.request.return_value = _response(json_data=[{"id": "s1"}, "junk", 42])
-        schedules = self.store.active_schedules()
-        self.assertEqual(len(schedules), 1)
+        slots = self.store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=timezone.utc))
+        self.assertEqual(len(slots), 1)
 
     def _last_call(self):
         call = self.requests.request.call_args
