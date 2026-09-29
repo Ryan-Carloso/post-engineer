@@ -44,14 +44,19 @@
 #
 # LLM: the primary attempt uses the z.ai coding endpoint (glm-5.3-flash, same
 # model as the OpenCode review); if that attempt fails (e.g. quota
-# exhausted), a fallback attempt retries with the permanently-free
-# glm-4.7-flash on z.ai's standard OpenAI-compatible endpoint. Same
-# ZAI_API_KEY secret for both. Skips gracefully when the secret is not set.
-# NOTE: the fallback does NOT cover action infra failures (e.g. the action
+# exhausted), a first fallback retries with the permanently-free
+# glm-4.7-flash on z.ai's standard OpenAI-compatible endpoint, and if that
+# also fails, a second fallback retries with glm-4.5-flash (the same free
+# chain the opencode-review workflow uses: 5.3 -> 4.7 -> 4.5). Same
+# ZAI_API_KEY secret for all. Skips gracefully when the secret is not set.
+# NOTE: the fallbacks do NOT cover action infra failures (e.g. the action
 # failing to resolve its own ocr_version): those fail before any LLM call,
-# so both attempts fail the same way and the job stays red, as it should.
+# so all attempts fail the same way and the job stays red, as it should.
 # ocr_version is pinned (1.12.9, verified working 2026-09-25) because the
 # action defaults to npm `latest`, which would float the reviewed binary.
+# Only the LAST attempt uploads review artifacts: the action's upload step
+# runs `always()` with a fixed per-run name, so an earlier attempt uploading
+# would 409-conflict with a later one (observed 2026-09-29).
 #
 # OCR posts its own sticky summary (marked <!-- ocr-summary -->) and inline
 # comments, branded "OpenCodeReview"; the opencode review comment is untouched.
@@ -217,7 +222,7 @@ jobs:
           review_concurrency: '2'
           ocr_version: "1.12.9" # pinned 2026-09-25; action default is npm `latest`
 
-      - name: Run OpenCodeReview (free-model fallback)
+      - name: Run OpenCodeReview (free-model fallback 1)
         id: ocr-fallback
         # Same fail-closed gate as the primary, plus: only runs when the
         # primary attempt actually failed. Retries with the permanently-free
@@ -226,13 +231,40 @@ jobs:
         # if the action itself is broken, this attempt fails too and the
         # job stays red.
         if: steps.key-check.outputs.present == 'true' && steps.env-guard.outputs.blocked == 'false' && steps.ocr-primary.outcome == 'failure'
+        # continue-on-error: a failure here must not fail the job before the
+        # second fallback below gets its chance. steps.ocr-fallback.outcome
+        # still records 'failure', so the next gate stays accurate.
+        continue-on-error: true
         uses: alibaba/open-code-review@486022daaf14f7142275eddb9b3cacc3cc5dadfa # pinned 2026-09-25
         with:
           llm_url: https://api.z.ai/api/paas/v4
           llm_auth_token: ${{ secrets.ZAI_API_KEY }}
           llm_model: glm-4.7-flash
           llm_use_anthropic: "false"
+          # No artifact upload here either: only the LAST attempt uploads
+          # (fixed per-run artifact name would 409-conflict otherwise).
+          upload_artifacts: 'false'
           # Same gentle concurrency as the primary (see above): z.ai's free
           # tier 429s under the default burst of 8 concurrent requests.
+          review_concurrency: '2'
+          ocr_version: "1.12.9" # pinned 2026-09-25; action default is npm `latest`
+
+      - name: Run OpenCodeReview (free-model fallback 2)
+        id: ocr-fallback-2
+        # Same fail-closed gate as the other attempts, plus: only runs when
+        # BOTH previous attempts actually failed. Last resort with
+        # glm-4.5-flash on z.ai's standard endpoint (same free chain as
+        # opencode-review: 5.3 -> 4.7 -> 4.5). No continue-on-error: if this
+        # attempt fails, the job stays red, as it should.
+        if: steps.key-check.outputs.present == 'true' && steps.env-guard.outputs.blocked == 'false' && steps.ocr-primary.outcome == 'failure' && steps.ocr-fallback.outcome == 'failure'
+        uses: alibaba/open-code-review@486022daaf14f7142275eddb9b3cacc3cc5dadfa # pinned 2026-09-25
+        with:
+          llm_url: https://api.z.ai/api/paas/v4
+          llm_auth_token: ${{ secrets.ZAI_API_KEY }}
+          llm_model: glm-4.5-flash
+          llm_use_anthropic: "false"
+          # This is the last attempt, so it keeps the artifact upload (the
+          # only uploader in the run — earlier attempts must stay disabled).
+          # Same gentle concurrency as the other attempts.
           review_concurrency: '2'
           ocr_version: "1.12.9" # pinned 2026-09-25; action default is npm `latest`
