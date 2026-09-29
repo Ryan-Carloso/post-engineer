@@ -93,7 +93,6 @@ describe('McpDocsSection', () => {
       'remove_persona_image',
       'list_social_accounts',
       'connect_account',
-      'schedule_video',
       'list_schedules',
       'list_posts',
       'cancel_schedule',
@@ -111,7 +110,7 @@ describe('McpDocsSection', () => {
     const prompt = vi.mocked(window.navigator.clipboard.writeText).mock.calls[0][0] as string;
     expect(prompt).toContain('post-engineer');
     expect(prompt).toContain('POST_ENGINEER_API_KEY');
-    expect(prompt).toContain('schedule_video');
+    expect(prompt).toContain('generate_persona_video_batch');
     expect(prompt).toContain('"command": ["npx", "-y", "post-engineer-mcp"]');
     expect(prompt).toContain('list_personas');
     expect(prompt).toContain('list_voices');

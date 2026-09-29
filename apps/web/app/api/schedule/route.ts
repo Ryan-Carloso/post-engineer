@@ -4,7 +4,6 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { isPersonaAllowed } from '@/lib/api-keys';
-import { validateScheduleWindow } from '@/lib/schedule-window';
 import { logger } from '@/lib/logger';
 
 //---------------
@@ -93,12 +92,6 @@ export function parseAccountIds(value: unknown): string[] {
   return [...new Set(value.filter((item): item is string => typeof item === 'string' && item.trim() !== '').map((item) => item.trim()))];
 }
 
-export function parsePostsPerDay(value: unknown): number | null {
-  if (typeof value !== 'number') return null;
-  const postsPerDay = Math.floor(value);
-  return Number.isInteger(postsPerDay) && postsPerDay >= 1 && postsPerDay <= 10 ? postsPerDay : null;
-}
-
 type ScheduleSupabaseClient =
   | Awaited<ReturnType<typeof createSupabaseServerClient>>
   | ReturnType<typeof createSupabaseServiceClient>;
@@ -121,8 +114,8 @@ const ACCOUNT_ID_HINTS: Record<(typeof VALID_PROVIDERS)[number], string> = {
 // registered to the caller. Queries social_accounts per provider and requires
 // an exact match between the requested ids and the user's own ones. Returns
 // an actionable error message, or null when every selection is owned.
-// Shared by POST (request selections) and PATCH (merged final selection),
-// so a PATCH cannot point a schedule at another user's account.
+// Used by PATCH (merged final selection), so a PATCH cannot point a
+// schedule at another user's account.
 //---------------
 async function assertAccountsOwned(
   supabase: ScheduleSupabaseClient,
@@ -194,152 +187,6 @@ export async function GET(request?: Request): Promise<NextResponse> {
   );
 
   return NextResponse.json({ success: true, schedules });
-}
-
-export async function POST(request: Request): Promise<NextResponse> {
-  const { auth, error: authError } = await requireSupabaseSession(request);
-  if (authError || !auth) return authError;
-  const user = { id: auth.userId };
-  const supabase = auth.isApiKey === true
-    ? createSupabaseServiceClient()
-    : await createSupabaseServerClient();
-
-  let body: ScheduleRequestBody;
-  try {
-    body = (await request.json()) as ScheduleRequestBody;
-  } catch {
-    return errorResponse(400, 'Invalid JSON payload.');
-  }
-
-  const personaId = typeof body.personaId === 'string' ? body.personaId : null;
-  if (!personaId) return errorResponse(400, 'personaId is required.');
-  if (!isPersonaAllowed(auth.personaIds, personaId)) {
-    return errorResponse(403, 'This API key does not have access to this persona.');
-  }
-
-  // Schedule window (same rule as the MCP server): when a target datetime
-  // is provided (e.g. via MCP schedule_video), it must be between
-  // 24h and 30 days ahead. Absent = recurring schedule, no restriction.
-  if (body.scheduledAt !== undefined && body.scheduledAt !== null) {
-    const windowCheck = validateScheduleWindow(body.scheduledAt);
-    if (!windowCheck.ok) return errorResponse(400, windowCheck.error);
-  }
-
-  const providers = Array.isArray(body.providers)
-    ? body.providers.filter(
-      (provider): provider is (typeof VALID_PROVIDERS)[number] =>
-        typeof provider === 'string' &&
-          (VALID_PROVIDERS as readonly string[]).includes(provider),
-    )
-    : [];
-  if (providers.length === 0) {
-    return errorResponse(400, 'providers must contain youtube, instagram, linkedin and/or bluesky.');
-  }
-  const youtubeAccountIds = parseAccountIds(body.youtubeAccountIds);
-  const instagramAccountIds = parseAccountIds(body.instagramAccountIds);
-  const linkedinAccountIds = parseAccountIds(body.linkedinAccountIds);
-  const blueskyAccountIds = parseAccountIds(body.blueskyAccountIds);
-  if (providers.includes('youtube') && youtubeAccountIds.length === 0) {
-    return errorResponse(400, 'youtubeAccountIds must contain at least one account.');
-  }
-  if (providers.includes('instagram') && instagramAccountIds.length === 0) {
-    return errorResponse(400, 'instagramAccountIds must contain at least one account.');
-  }
-  if (providers.includes('linkedin') && linkedinAccountIds.length === 0) {
-    return errorResponse(400, 'linkedinAccountIds must contain at least one account.');
-  }
-  if (providers.includes('bluesky') && blueskyAccountIds.length === 0) {
-    return errorResponse(400, 'blueskyAccountIds must contain at least one account.');
-  }
-
-  const isOneOff = body.scheduledAt !== undefined && body.scheduledAt !== null;
-  const scheduledAt = typeof body.scheduledAt === 'string' ? new Date(body.scheduledAt) : null;
-  const daysOfWeek = parseDaysOfWeek(body.daysOfWeek);
-  if (!isOneOff && !daysOfWeek) return errorResponse(400, 'daysOfWeek must be a non-empty array of 0–6.');
-
-  const startHour = parseHour(body.startHour);
-  const endHour = parseHour(body.endHour);
-  if (!isOneOff && (startHour === null || endHour === null || startHour > endHour)) {
-    return errorResponse(400, 'startHour/endHour must be hours 0–23 with startHour ≤ endHour.');
-  }
-
-  const postsPerDay = typeof body.postsPerDay === 'number' ? Math.floor(body.postsPerDay) : 1;
-  if (!Number.isInteger(postsPerDay) || postsPerDay < 1 || postsPerDay > 10) {
-    return errorResponse(400, 'postsPerDay must be between 1 and 10.');
-  }
-
-  // M2: explicit times — without them the engine spreads across the window.
-  const times = parseTimes(body.times);
-  if (times === null) {
-    return errorResponse(400, 'times must be an array of "HH:MM" strings (00:00–23:59).');
-  }
-  if (times.length > postsPerDay) {
-    return errorResponse(400, 'times cannot contain more entries than postsPerDay.');
-  }
-
-  const timezone = typeof body.timezone === 'string' && body.timezone ? body.timezone : 'UTC';
-
-  // The persona must exist and belong to the user (RLS enforces it too).
-  const { data: persona } = await supabase
-    .from('personas')
-    .select('id')
-    .eq('id', personaId)
-    .eq('user_id', user.id)
-    .single();
-  if (!persona) return errorResponse(404, 'Persona not found.');
-
-  const { data: existing } = await supabase
-    .from('schedules')
-    .select('id')
-    .eq('persona_id', personaId)
-    .maybeSingle();
-  if (existing) return errorResponse(409, 'This persona already has a schedule.');
-
-  const accountIdsByProvider = {
-    youtube: youtubeAccountIds,
-    instagram: instagramAccountIds,
-    linkedin: linkedinAccountIds,
-    bluesky: blueskyAccountIds,
-  } as const;
-  // Only the selected providers carry an account requirement.
-  const ownedError = await assertAccountsOwned(
-    supabase,
-    user.id,
-    VALID_PROVIDERS.map((provider) => ({
-      provider,
-      ids: providers.includes(provider) ? accountIdsByProvider[provider] : [],
-    })),
-  );
-  if (ownedError) return errorResponse(400, ownedError);
-
-  const { data: schedule, error: insertError } = await supabase
-    .from('schedules')
-    .insert({
-      user_id: user.id,
-      persona_id: personaId,
-      providers,
-      youtube_account_ids: youtubeAccountIds,
-      instagram_account_ids: instagramAccountIds,
-      linkedin_account_ids: linkedinAccountIds,
-      bluesky_account_ids: blueskyAccountIds,
-      days_of_week: isOneOff ? null : daysOfWeek,
-      start_hour: isOneOff ? null : startHour,
-      end_hour: isOneOff ? null : endHour,
-      posts_per_day: postsPerDay,
-      times,
-      timezone,
-      scheduled_at: isOneOff && scheduledAt ? scheduledAt.toISOString() : null,
-      active: true,
-    })
-    .select('id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, days_of_week, start_hour, end_hour, posts_per_day, times, timezone, scheduled_at, active')
-    .single();
-
-  if (insertError || !schedule) {
-    logger.error('[api/schedule] insert failed', insertError);
-    return errorResponse(500, 'Failed to create schedule.');
-  }
-
-  return NextResponse.json({ success: true, schedule }, { status: 201 });
 }
 
 export async function PATCH(request: Request): Promise<NextResponse> {

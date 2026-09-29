@@ -11,7 +11,7 @@ vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
 }));
 
-import { GET, POST, PATCH, DELETE } from '../route';
+import { GET, PATCH, DELETE } from '../route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
@@ -116,19 +116,7 @@ function mockSupabase(handlers: {
   return Object.assign(client, { insertedRows, updatedRows, selectArgs });
 }
 
-const validBody = {
-  personaId: 'p-1',
-  providers: ['youtube'],
-  youtubeAccountIds: ['yt-1', 'yt-2'],
-  instagramAccountIds: [],
-  daysOfWeek: [1, 3, 5],
-  startHour: 9,
-  endHour: 18,
-  postsPerDay: 2,
-  timezone: 'America/Sao_Paulo',
-};
-
-function jsonRequest(body: unknown, method = 'POST'): Request {
+function jsonRequest(body: unknown, method = 'PATCH'): Request {
   return new Request('http://localhost/api/schedule', { method, body: JSON.stringify(body) });
 }
 
@@ -155,55 +143,10 @@ describe('/api/schedule', () => {
     expect(body.schedules).toHaveLength(1);
   });
 
-  it('POST cria agenda válida', async () => {
-    mockSupabase({
-      persona: { data: { id: 'p-1' } },
-      existing: { data: null },
-      insert: { data: { id: 's-1', active: true }, error: null },
-      accounts: { data: [{ provider_account_id: 'yt-1' }, { provider_account_id: 'yt-2' }], error: null },
-    });
-    const res = await POST(jsonRequest({ ...validBody, times: ['09:30', '18:00'] }));
-    expect(res.status).toBe(201);
-    const body = (await res.json()) as { success: boolean; schedule: { id: string } };
-    expect(body.success).toBe(true);
-    expect(body.schedule.id).toBe('s-1');
-  });
 
-  it('POST persiste times quando enviados (M2: engine obedece os horários)', async () => {
-    const db = mockSupabase({
-      persona: { data: { id: 'p-1' } },
-      existing: { data: null },
-      insert: { data: { id: 's-1', active: true }, error: null },
-      accounts: { data: [{ provider_account_id: 'yt-1' }, { provider_account_id: 'yt-2' }], error: null },
-    });
-    const res = await POST(jsonRequest({ ...validBody, postsPerDay: 3, times: ['08:15', '12:45', '20:00'] }));
-    expect(res.status).toBe(201);
-    expect(db.insertedRows[0].times).toEqual(['08:15', '12:45', '20:00']);
-  });
 
-  it('POST sem times persiste array vazio (engine usa janela+posts_per_day)', async () => {
-    const db = mockSupabase({
-      persona: { data: { id: 'p-1' } },
-      existing: { data: null },
-      insert: { data: { id: 's-1', active: true }, error: null },
-      accounts: { data: [{ provider_account_id: 'yt-1' }, { provider_account_id: 'yt-2' }], error: null },
-    });
-    const res = await POST(jsonRequest(validBody));
-    expect(res.status).toBe(201);
-    expect(db.insertedRows[0].times).toEqual([]);
-  });
 
-  it('POST rejeita times com formato inválido', async () => {
-    mockSupabase({ persona: { data: { id: 'p-1' } }, existing: { data: null } });
-    const res = await POST(jsonRequest({ ...validBody, times: ['9h', '25:00', ''] }));
-    expect(res.status).toBe(400);
-  });
 
-  it('POST rejeita mais times que postsPerDay', async () => {
-    mockSupabase({ persona: { data: { id: 'p-1' } }, existing: { data: null } });
-    const res = await POST(jsonRequest({ ...validBody, postsPerDay: 2, times: ['09:00', '12:00', '18:00'] }));
-    expect(res.status).toBe(400);
-  });
 
   it('PATCH atualiza times', async () => {
     const db = mockSupabase({
@@ -222,192 +165,20 @@ describe('/api/schedule', () => {
     expect(res.status).toBe(400);
   });
 
-  it('POST exige pelo menos uma conta para cada provider selecionado', async () => {
-    mockSupabase({ persona: { data: { id: 'p-1' } } });
-    const res = await POST(jsonRequest({ ...validBody, youtubeAccountIds: [] }));
-    expect(res.status).toBe(400);
-  });
 
-  it('POST rejeita daysOfWeek inválido', async () => {
-    mockSupabase({});
-    const res = await POST(jsonRequest({ ...validBody, daysOfWeek: [7] }));
-    expect(res.status).toBe(400);
-  });
 
-  it('POST rejeita janela invertida', async () => {
-    mockSupabase({});
-    const res = await POST(jsonRequest({ ...validBody, startHour: 18, endHour: 9 }));
-    expect(res.status).toBe(400);
-  });
 
-  it('POST rejeita provider inválido', async () => {
-    mockSupabase({});
-    const res = await POST(jsonRequest({ ...validBody, providers: ['tiktok'] }));
-    expect(res.status).toBe(400);
-  });
 
-  it('POST rejeita scheduledAt com menos de 24h de antecedência', async () => {
-    mockSupabase({});
-    const tooSoon = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
-    const res = await POST(jsonRequest({ ...validBody, scheduledAt: tooSoon }));
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toMatch(/at least 24 hours/i);
-  });
 
-  it('POST rejeita scheduledAt além de 30 dias', async () => {
-    mockSupabase({});
-    const tooFar = new Date(Date.now() + 31 * 24 * 60 * 60 * 1000).toISOString();
-    const res = await POST(jsonRequest({ ...validBody, scheduledAt: tooFar }));
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toMatch(/more than 30 days/i);
-  });
 
-  it('POST rejeita scheduledAt com formato inválido', async () => {
-    mockSupabase({});
-    const res = await POST(jsonRequest({ ...validBody, scheduledAt: 'not-a-date' }));
-    expect(res.status).toBe(400);
-  });
 
-  it('POST aceita scheduledAt dentro da janela 24h..30d', async () => {
-    mockSupabase({
-      persona: { data: { id: 'p-1' } },
-      existing: { data: null },
-      insert: { data: { id: 's-1', active: true }, error: null },
-      accounts: { data: [{ provider_account_id: 'yt-1' }, { provider_account_id: 'yt-2' }], error: null },
-    });
-    const inWindow = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString();
-    const res = await POST(jsonRequest({ ...validBody, scheduledAt: inWindow }));
-    expect(res.status).toBe(201);
-  });
 
-  it('POST aceita one-off schedule with API key and persists scheduled_at', async () => {
-    const db = mockSupabase({
-      persona: { data: { id: 'p-1' } },
-      existing: { data: null },
-      insert: { data: { id: 's-once', active: true }, error: null },
-      accounts: { data: [{ provider_account_id: 'yt-1' }], error: null },
-    });
-    vi.mocked(requireSupabaseSession).mockResolvedValue({
-      auth: { userId: USER_ID, accessToken: 'pe_live_test', isApiKey: true },
-      error: null,
-    });
-    const scheduledAt = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString();
 
-    const res = await POST(jsonRequest({
-      personaId: 'p-1',
-      providers: ['youtube'],
-      youtubeAccountIds: ['yt-1'],
-      scheduledAt,
-    }));
 
-    expect(res.status).toBe(201);
-    expect(db.insertedRows[0]).toMatchObject({
-      scheduled_at: scheduledAt,
-      days_of_week: null,
-      start_hour: null,
-      end_hour: null,
-    });
-  });
 
-  it('POST cria agenda com provider linkedin e persiste linkedin_account_ids', async () => {
-    const db = mockSupabase({
-      persona: { data: { id: 'p-1' } },
-      existing: { data: null },
-      insert: { data: { id: 's-1', active: true }, error: null },
-      accountsByProvider: {
-        youtube: [{ provider_account_id: 'yt-1' }, { provider_account_id: 'yt-2' }],
-        linkedin: [{ provider_account_id: 'urn:li:person:1' }],
-      },
-    });
-    const res = await POST(jsonRequest({
-      ...validBody,
-      providers: ['youtube', 'linkedin'],
-      linkedinAccountIds: ['urn:li:person:1'],
-    }));
-    expect(res.status).toBe(201);
-    expect(db.insertedRows[0]).toMatchObject({
-      youtube_account_ids: ['yt-1', 'yt-2'],
-      linkedin_account_ids: ['urn:li:person:1'],
-      providers: ['youtube', 'linkedin'],
-    });
-  });
 
-  it('POST com linkedin sem contas retorna 400', async () => {
-    mockSupabase({ persona: { data: { id: 'p-1' } } });
-    const res = await POST(jsonRequest({
-      ...validBody,
-      providers: ['youtube', 'linkedin'],
-      linkedinAccountIds: [],
-    }));
-    expect(res.status).toBe(400);
-  });
 
-  it('POST rejeita conta linkedin de outro usuário', async () => {
-    mockSupabase({
-      persona: { data: { id: 'p-1' } },
-      accountsByProvider: {
-        youtube: [{ provider_account_id: 'yt-1' }, { provider_account_id: 'yt-2' }],
-        linkedin: [],
-      },
-    });
-    const res = await POST(jsonRequest({
-      ...validBody,
-      providers: ['youtube', 'linkedin'],
-      linkedinAccountIds: ['urn:li:person:outro'],
-    }));
-    expect(res.status).toBe(400);
-  });
 
-  it('POST cria agenda com provider bluesky e persiste bluesky_account_ids', async () => {
-    const db = mockSupabase({
-      persona: { data: { id: 'p-1' } },
-      existing: { data: null },
-      insert: { data: { id: 's-1', active: true }, error: null },
-      accountsByProvider: {
-        youtube: [{ provider_account_id: 'yt-1' }, { provider_account_id: 'yt-2' }],
-        bluesky: [{ provider_account_id: 'did:plc:abc' }],
-      },
-    });
-    const res = await POST(jsonRequest({
-      ...validBody,
-      providers: ['youtube', 'bluesky'],
-      blueskyAccountIds: ['did:plc:abc'],
-    }));
-    expect(res.status).toBe(201);
-    expect(db.insertedRows[0]).toMatchObject({
-      youtube_account_ids: ['yt-1', 'yt-2'],
-      bluesky_account_ids: ['did:plc:abc'],
-      providers: ['youtube', 'bluesky'],
-    });
-  });
-
-  it('POST com bluesky sem contas retorna 400', async () => {
-    mockSupabase({ persona: { data: { id: 'p-1' } } });
-    const res = await POST(jsonRequest({
-      ...validBody,
-      providers: ['youtube', 'bluesky'],
-      blueskyAccountIds: [],
-    }));
-    expect(res.status).toBe(400);
-  });
-
-  it('POST rejeita conta bluesky de outro usuário', async () => {
-    mockSupabase({
-      persona: { data: { id: 'p-1' } },
-      accountsByProvider: {
-        youtube: [{ provider_account_id: 'yt-1' }, { provider_account_id: 'yt-2' }],
-        bluesky: [],
-      },
-    });
-    const res = await POST(jsonRequest({
-      ...validBody,
-      providers: ['youtube', 'bluesky'],
-      blueskyAccountIds: ['did:plc:outro'],
-    }));
-    expect(res.status).toBe(400);
-  });
 
   it('GET inclui bluesky_account_ids no select', async () => {
     const db = mockSupabase({ list: { data: [], error: null } });
@@ -565,20 +336,7 @@ describe('/api/schedule', () => {
     expect(res.status).toBe(404);
   });
 
-  it('POST retorna 404 quando persona não é do usuário', async () => {
-    mockSupabase({ persona: { data: null } });
-    const res = await POST(jsonRequest(validBody));
-    expect(res.status).toBe(404);
-  });
 
-  it('POST retorna 409 quando persona já tem agenda', async () => {
-    mockSupabase({
-      persona: { data: { id: 'p-1' } },
-      existing: { data: { id: 's-0' } },
-    });
-    const res = await POST(jsonRequest(validBody));
-    expect(res.status).toBe(409);
-  });
 
   it('PATCH com active=false pausa a agenda', async () => {
     mockSupabase({ update: { error: null } });

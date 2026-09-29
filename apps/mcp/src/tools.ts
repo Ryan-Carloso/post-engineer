@@ -11,38 +11,6 @@ import { getErrorMessage } from './errors.js';
 
 export type McpToolResponse = CallToolResult;
 
-// Each provider in `providers` must map to a non-empty account-ID list.
-export function missingProviderAccountIds(args: {
-  providers: string[];
-  youtubeAccountIds?: string[];
-  instagramAccountIds?: string[];
-  linkedinAccountIds?: string[];
-  blueskyAccountIds?: string[];
-}): string[] {
-  const idsByProvider: Record<string, string[] | undefined> = {
-    youtube: args.youtubeAccountIds,
-    instagram: args.instagramAccountIds,
-    linkedin: args.linkedinAccountIds,
-    bluesky: args.blueskyAccountIds,
-  };
-  return args.providers.filter((provider) => (idsByProvider[provider] ?? []).length === 0);
-}
-
-// A bare UUID in an account-ID field is a list_social_accounts `recordId`
-// (the internal row id) pasted into the wrong field: no provider accepts a
-// UUID as an account id, and Bluesky DIDs always start with `did:`. Flag it
-// fail-fast with a pointer to the right field instead of letting it travel
-// to the API as a confusing 400.
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export function recordIdShapedBlueskyIds(blueskyAccountIds: readonly string[] | undefined): string[] {
-  return (blueskyAccountIds ?? []).filter((id) => UUID_PATTERN.test(id));
-}
-
-function recordIdBlueskyHint(ids: readonly string[]): string {
-  return `blueskyAccountIds contains recordId-shaped values (${ids.join(', ')}) — pass the account's did field from list_social_accounts instead (Bluesky DIDs start with "did:").`;
-}
-
 // Shared field definitions: path/tag/description limits appear in both the
 // create-persona images array and add_persona_image — define once so the
 // limits and descriptions can't drift apart.
@@ -253,61 +221,6 @@ export const GenerateVideoBatchShape = {
 
 export const GenerateVideoBatchSchema = z.object(GenerateVideoBatchShape);
 
-export const ScheduleVideoShape = {
-  personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona'),
-  providers: z
-    .array(z.enum(['youtube', 'instagram', 'linkedin', 'bluesky']))
-    .min(1, 'At least one provider required')
-    .describe('Target social platforms'),
-  // list_social_accounts returns both `recordId` (internal row id) and the
-  // provider's real account id; the describes name the field to use so
-  // agents do not paste the recordId into these fields.
-  youtubeAccountIds: z
-    .array(z.string())
-    .optional()
-    .default([])
-    .describe('YouTube channel IDs — use the channelId field from list_social_accounts, NOT recordId'),
-  instagramAccountIds: z
-    .array(z.string())
-    .optional()
-    .default([])
-    .describe('Instagram user IDs — use the igUserId field from list_social_accounts, NOT recordId'),
-  linkedinAccountIds: z
-    .array(z.string())
-    .optional()
-    .default([])
-    .describe('LinkedIn account IDs — use the providerAccountId field from list_social_accounts, NOT recordId'),
-  blueskyAccountIds: z
-    .array(z.string())
-    .optional()
-    .default([])
-    .describe('Bluesky account DIDs — use the did field from list_social_accounts, NOT recordId'),
-  scheduledAt: z
-    .string()
-    .describe('Target ISO date time for scheduling. Must be between 24h and 30 days in the future.'),
-  daysOfWeek: z.array(z.number().int().min(0).max(6)).optional(),
-  startHour: z.number().int().min(0).max(23).optional(),
-  endHour: z.number().int().min(0).max(23).optional(),
-  postsPerDay: z.number().int().min(1).max(10).optional(),
-  timezone: z.string().optional().default('UTC'),
-};
-
-// The cross-field "each provider needs account IDs" rule cannot live in the
-// MCP registration (the SDK only accepts raw shapes, not refined schemas), so
-// it stays here for handler-level validation and handleScheduleVideo enforces
-// it fail-fast before any API call.
-export const ScheduleVideoSchema = z
-  .object(ScheduleVideoShape)
-  .refine((args) => missingProviderAccountIds(args).length === 0, (args) => ({
-    message: `Each provider requires at least one account ID — missing for: ${missingProviderAccountIds(args).join(', ')}. Discover them with list_social_accounts first.`,
-  }))
-  // The MCP SDK parses tool args against the raw shape, so this refine only
-  // fires on ScheduleVideoSchema.parse (tests, programmatic callers); the
-  // same check runs fail-fast inside handleScheduleVideo for the tool path.
-  .refine((args) => recordIdShapedBlueskyIds(args.blueskyAccountIds).length === 0, (args) => ({
-    message: recordIdBlueskyHint(recordIdShapedBlueskyIds(args.blueskyAccountIds)),
-  }));
-
 export async function handleCreatePersona(
   client: PostEngineerClient,
   args: z.infer<typeof CreatePersonaSchema>
@@ -508,9 +421,9 @@ export async function handleGenerateVideo(
 
 /** Shared wrapper for the persona-image handlers: same try/catch + text
  * response shape, differing only in the client call and the message verbs.
- * Older handlers (handleConnectAccount, handleScheduleVideo) keep inline
- * try/catch because they pre-validate args before the client call — the
- * wrapper only covers the call itself. */
+ * Older handlers (handleConnectAccount) keep inline
+ * try/catch because they pre-validate args before the client call —
+ * the wrapper only covers the call itself. */
 async function handleLibraryCall(
   clientCall: () => Promise<unknown>,
   errorVerb: string,
@@ -678,56 +591,3 @@ export async function handleGenerateVideoBatch(
   );
 }
 
-export async function handleScheduleVideo(
-  client: PostEngineerClient,
-  args: z.infer<typeof ScheduleVideoSchema>
-): Promise<McpToolResponse> {
-  // Fail fast on recordIds pasted into blueskyAccountIds: the SDK parses
-  // tool args against the raw shape, so the schema refine above never runs
-  // on the tool path — enforce it here before any API call.
-  const recordIdShaped = recordIdShapedBlueskyIds(args.blueskyAccountIds);
-  if (recordIdShaped.length > 0) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error: ${recordIdBlueskyHint(recordIdShaped)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
-  const missing = missingProviderAccountIds(args);
-  if (missing.length > 0) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error: each provider requires at least one account ID — missing for: ${missing.join(', ')}. Discover them with list_social_accounts first.`,
-        },
-      ],
-      isError: true,
-    };
-  }
-  try {
-    const result = await client.createSchedule(args);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Video schedule created successfully: ${JSON.stringify(result, null, 2)}`,
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error scheduling video: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
-}

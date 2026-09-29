@@ -1,4 +1,3 @@
-import { validateScheduleAdvance } from './validator.js';
 import { getErrorMessage, ImageTooLargeError } from './errors.js';
 import { MAX_LIBRARY_IMAGE_BYTES, MAX_LIBRARY_IMAGE_MB } from './limits.js';
 
@@ -81,21 +80,6 @@ export interface UpdatePersonaInput {
   scriptPrompt?: string;
   paragraphNumber?: number;
   niche?: string;
-}
-
-export interface CreateScheduleInput {
-  personaId: string;
-  providers: ('youtube' | 'instagram' | 'linkedin' | 'bluesky')[];
-  youtubeAccountIds?: string[];
-  instagramAccountIds?: string[];
-  linkedinAccountIds?: string[];
-  blueskyAccountIds?: string[];
-  scheduledAt?: string | Date;
-  daysOfWeek?: number[];
-  startHour?: number;
-  endHour?: number;
-  postsPerDay?: number;
-  timezone?: string;
 }
 
 const PRODUCTION_API_URL = 'https://post-engineer.com';
@@ -627,38 +611,6 @@ export class PostEngineerClient {
       `/api/persona/images?id=${encodeURIComponent(id)}`,
       { method: 'DELETE', headers: this.getHeaders() },
       'delete persona image'
-    );
-  }
-
-  async createSchedule(input: CreateScheduleInput): Promise<unknown> {
-    if (input.scheduledAt) {
-      const validation = validateScheduleAdvance(input.scheduledAt, this.now());
-      if (!validation.isValid) {
-        throw new Error(validation.error);
-      }
-    }
-
-    return this.request(
-      '/api/schedule',
-      {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify({
-          personaId: input.personaId,
-          providers: input.providers,
-          youtubeAccountIds: input.youtubeAccountIds ?? [],
-          instagramAccountIds: input.instagramAccountIds ?? [],
-          linkedinAccountIds: input.linkedinAccountIds ?? [],
-          blueskyAccountIds: input.blueskyAccountIds ?? [],
-          scheduledAt: input.scheduledAt,
-          daysOfWeek: input.daysOfWeek,
-          startHour: input.startHour,
-          endHour: input.endHour,
-          postsPerDay: input.postsPerDay,
-          timezone: input.timezone ?? 'UTC',
-        }),
-      },
-      'create schedule'
     );
   }
 }

@@ -1169,3 +1169,16 @@ Follow these so the same issues don't come back:
   for one param of two tools — that is a different test with a different
   contract. Record the decline; do not expand the test to satisfy the
   reviewer.
+
+## Simplify always: delete dead code, fail fast (2026-09-29)
+- When a flow is removed, delete the ENTIRE path: API route + client
+  functions + MCP tool + docs + i18n keys + tests. A half-deleted flow
+  (e.g. POST /api/schedule gone but MCP schedule_video still calling it)
+  is worse than the old code — it breaks loudly at runtime instead of
+  failing at build time.
+- Never silently ignore invalid states (`if kind != 'batch': continue`).
+  Fail fast with a loud error (assert_batch_kind raises ValueError) so a
+  resurrected dead path surfaces immediately instead of hiding as dead
+  rows in the DB.
+- If an endpoint/tool isn't used, it shouldn't exist. "Keep it por agora"
+  is how garbage accumulates.

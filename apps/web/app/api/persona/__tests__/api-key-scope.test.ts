@@ -33,7 +33,6 @@ import { gateGeneration } from '@/lib/generation/video-generation';
 import { GET as listPersonas } from '../list/route';
 import { POST as createPersona, PATCH as patchPersona, DELETE as deletePersona } from '../route';
 import { POST as videoJob } from '../video-job/route';
-import { POST as createSchedule } from '../../schedule/route';
 
 const USER_ID = 'user-1';
 const ALLOWED_ID = '11111111-1111-4111-8111-111111111111';
@@ -181,14 +180,6 @@ describe('persona scope enforcement for scoped api keys', () => {
       method: 'DELETE',
     });
     const response = await deletePersona(request);
-    expect(response.status).toBe(403);
-  });
-
-  it('blocks schedule creation for personas outside the scope', async () => {
-    mockScopedAuth();
-    const response = await createSchedule(
-      jsonRequest('http://localhost:3434/api/schedule', { personaId: DENIED_ID, providers: ['youtube'] }),
-    );
     expect(response.status).toBe(403);
   });
 

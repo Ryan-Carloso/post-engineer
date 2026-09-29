@@ -320,10 +320,9 @@ describe('POST /api/schedule/batch', () => {
     const generationId = (spendCalls[0].params as Record<string, unknown>).p_generation_id as string;
     expect(generationId.startsWith('batch:')).toBe(true);
 
-    // One schedule row, kind='batch'
+    // One schedule row
     expect(calls.scheduleRows).toHaveLength(1);
     const scheduleRow = calls.scheduleRows[0] as Record<string, unknown>;
-    expect(scheduleRow.kind).toBe('batch');
     expect(scheduleRow.persona_id).toBe(PERSONA_ID);
     expect(scheduleRow.providers).toEqual(['youtube']);
 

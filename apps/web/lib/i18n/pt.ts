@@ -327,7 +327,7 @@ export const ptDictionary = {
     docsStepsTitle: 'Como conectar',
     docsStep1: 'Gere uma API Key acima e copie o valor completo.',
     docsStep2: 'Adicione o servidor MCP ao seu agente usando o comando de instalação abaixo.',
-    docsStep3: 'Pronto! O agente terá acesso às tools: create_persona, list_personas, generate_video_from_persona, get_video_status e schedule_video.',
+    docsStep3: 'Pronto! O agente terá acesso às tools: create_persona, list_personas, generate_video_from_persona, get_video_status e generate_persona_video_batch.',
     docsCopyPrompt: 'Copiar prompt de instalação',
     docsCopied: 'Copiado!',
     docsSecurityNote:
@@ -375,7 +375,6 @@ export const ptDictionary = {
     toolDescRemovePersonaImage: 'Remova uma imagem da biblioteca',
     toolDescConnectAccount: 'Conecte uma conta social',
     toolDescListSocialAccounts: 'Liste contas sociais conectadas',
-    toolDescScheduleVideo: 'Agende um vídeo para publicar',
     toolDescListSchedules: 'Liste agendamentos automáticos',
     toolDescListPosts: 'Liste posts futuros e passados',
     toolDescCancelSchedule: 'Cancele um agendamento',

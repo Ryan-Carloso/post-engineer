@@ -20,7 +20,6 @@ import {
   GetVideoStatusShape,
   GetVideoTaskProgressShape,
   GenerateVideoBatchShape,
-  ScheduleVideoShape,
   ListPersonaImagesShape,
   AddPersonaImageShape,
   UpdatePersonaImageShape,
@@ -40,7 +39,6 @@ import {
   handleGetVideoStatus,
   handleGetVideoTaskProgress,
   handleGenerateVideoBatch,
-  handleScheduleVideo,
   handleListPersonaImages,
   handleAddPersonaImage,
   handleUpdatePersonaImage,
@@ -113,7 +111,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
 
   server.tool(
     'list_social_accounts',
-    'List connected social accounts (YouTube, Instagram, LinkedIn, Bluesky) with the account IDs needed for schedule_video.',
+    'List connected social accounts (YouTube, Instagram, LinkedIn, Bluesky) with the account IDs needed for batch posting.',
     ListSocialAccountsShape,
     async () => {
       return handleListSocialAccounts(apiClient);
@@ -234,15 +232,6 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
     RemovePersonaImageShape,
     async (args) => {
       return handleRemovePersonaImage(apiClient, args);
-    }
-  );
-
-  server.tool(
-    'schedule_video',
-    'Schedule automated video generation and posting to social channels. IMPORTANT: Schedules must be between 24h and 30 days in advance. Each provider requires at least one account ID — discover them with list_social_accounts first.',
-    ScheduleVideoShape,
-    async (args) => {
-      return handleScheduleVideo(apiClient, args);
     }
   );
 
