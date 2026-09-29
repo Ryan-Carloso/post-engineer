@@ -1014,6 +1014,15 @@ Follow these so the same issues don't come back:
   `reason: "provider or subtask request failed"` in the artifact's
   `ocr-result.json`, it's z.ai throttling, not our code — re-run the job
   later rather than "fixing" anything.
+- **OCR fallback chain mirrors opencode-review (2026-09-29):** ocr-review now
+  retries 5.3-flash -> 4.7-flash -> 4.5-flash, same as opencode-review's
+  ZAI_FREE_MODEL -> ZAI_FREE_MODEL_FALLBACK. Invariants the validator pins:
+  all invocations share one action pin (max 3), every fallback carries the
+  fail-closed gates (key-check + env-guard) plus the previous-attempts-failed
+  conditions, non-final attempts have `continue-on-error: true` (otherwise a
+  mid-chain failure ends the job before the next fallback runs) and
+  `upload_artifacts: 'false'` (only the LAST attempt uploads — fixed per-run
+  artifact name would 409-conflict otherwise).
 
 ## Test quirks (vitest 4.1)
 
