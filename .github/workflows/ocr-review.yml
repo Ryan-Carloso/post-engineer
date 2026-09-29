@@ -204,6 +204,13 @@ jobs:
           llm_auth_token: ${{ secrets.ZAI_API_KEY }}
           llm_model: glm-5.3-flash
           llm_use_anthropic: "false"
+          # No artifact upload on the primary attempt: the action's upload
+          # step runs `always()` with a fixed per-run name
+          # (ocr-review-result-<run_id>-<run_attempt>), so when the primary
+          # fails and the fallback runs, the fallback's upload 409s on the
+          # name the primary already created — killing a successful review
+          # before its comments are posted. The fallback keeps its upload.
+          upload_artifacts: 'false'
           ocr_version: "1.12.9" # pinned 2026-09-25; action default is npm `latest`
 
       - name: Run OpenCodeReview (free-model fallback)
