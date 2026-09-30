@@ -33,6 +33,17 @@ class _FakeStore:
         self.spent = []
         self.refunded = []
         self.refund_batch_calls = []
+        self.oneoff_pending = []
+        self.generating = []
+
+    def pending_slots(self, now):
+        raise AssertionError("override pending_slots per test")
+
+    def pending_oneoff_slots(self):
+        return self.oneoff_pending
+
+    def generating_slots(self):
+        return self.generating
 
     def active_schedules(self):
         return self.schedules
@@ -956,3 +967,173 @@ class CoverageGapTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OneOffSequentialTests(unittest.TestCase):
+    """One-off schedules (schedules.scheduled_at IS NOT NULL): sequential
+    generation — slot N+1 dispatches only after slot N leaves generating.
+    Generation starts at creation (horizon bypass); publishing still waits
+    for slot_at. Batch slots keep parallel dispatch within the horizon.
+    """
+
+    def _batch_slot(self, topic="Batch topic one"):
+        return {
+            "id": "slot-batch-1",
+            "slot_at": "2026-09-08T09:00:00+00:00",
+            "topic": topic,
+            "schedules": {
+                "id": "sched-batch-1",
+                "user_id": "user-1",
+                "scheduled_at": None,
+                "providers": ["youtube"],
+                "youtube_account_ids": ["yt-1"],
+                "personas": {
+                    "name": "Ana",
+                    "niche": "travel",
+                    "script_prompt": "",
+                    "language": "en",
+                    "video_aspect": "9:16",
+                    "photo_path": "user-1/foto.png",
+                    "avatar_url": None,
+                    "voice_id": "calm",
+                    "voice_audio_path": None,
+                    "paragraph_number": 1,
+                    "face_mix_percent": 50,
+                    "face_quality": "ok",
+                },
+            },
+        }
+
+    def _oneoff_slot(self, slot_id, slot_at, topic="One-off topic", schedule_id="sched-oneoff-1"):
+        return {
+            "id": slot_id,
+            "slot_at": slot_at,
+            "topic": topic,
+            "schedules": {
+                "id": schedule_id,
+                "user_id": "user-1",
+                "scheduled_at": "2026-09-10T09:00:00+00:00",
+                "providers": ["youtube"],
+                "youtube_account_ids": ["yt-1"],
+                "personas": {
+                    "name": "Ana",
+                    "niche": "travel",
+                    "script_prompt": "",
+                    "language": "en",
+                    "video_aspect": "9:16",
+                    "photo_path": "user-1/foto.png",
+                    "avatar_url": None,
+                    "voice_id": "calm",
+                    "voice_audio_path": None,
+                    "paragraph_number": 1,
+                    "face_mix_percent": 50,
+                    "face_quality": "ok",
+                },
+            },
+        }
+
+    def _scheduler(self, store):
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=MagicMock(), publish_video=MagicMock()
+        )
+        scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
+        return scheduler
+
+    def test_oneoff_slot_bypasses_horizon(self):
+        # slot_at 5 days out — far beyond the 24h generation horizon.
+        slot = self._oneoff_slot("slot-1", "2026-09-11T09:00:00+00:00")
+        store = _FakeStore()
+        store.pending_slots = lambda now: []
+        store.oneoff_pending = [slot]
+        scheduler = self._scheduler(store)
+        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        self.assertEqual(enqueued, 1)
+        dispatch.assert_called_once()
+
+    def test_batch_slot_beyond_horizon_is_not_dispatched(self):
+        slot = self._batch_slot()
+        slot["slot_at"] = "2026-09-11T09:00:00+00:00"  # beyond the horizon
+        slot["schedules"]["scheduled_at"] = None  # batch schedule
+        store = _FakeStore()
+        # pending_slots is horizon-filtered by the store; an empty result
+        # means the batch slot stays untouched.
+        store.pending_slots = lambda now: []
+        scheduler = self._scheduler(store)
+        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        self.assertEqual(enqueued, 0)
+        dispatch.assert_not_called()
+
+    def test_oneoff_dispatches_only_first_pending_slot_per_schedule(self):
+        slot1 = self._oneoff_slot("slot-1", "2026-09-10T09:00:00+00:00", topic="First")
+        slot2 = self._oneoff_slot("slot-2", "2026-09-10T18:00:00+00:00", topic="Second")
+        store = _FakeStore()
+        store.pending_slots = lambda now: []
+        store.oneoff_pending = [slot2, slot1]  # out of order on purpose
+        scheduler = self._scheduler(store)
+        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        self.assertEqual(enqueued, 1)
+        dispatch.assert_called_once()
+        _, request, _ = dispatch.call_args.args
+        self.assertIn("First", request.model_dump_json())
+        self.assertNotIn("Second", request.model_dump_json())
+
+    def test_oneoff_second_slot_waits_while_first_is_generating(self):
+        slot2 = self._oneoff_slot("slot-2", "2026-09-10T18:00:00+00:00", topic="Second")
+        store = _FakeStore()
+        store.pending_slots = lambda now: []
+        # slot-1 already dispatched and still generating; slot-2 pending.
+        store.oneoff_pending = [slot2]
+        store.generating = [{"id": "slot-1", "task_id": "task-1", "schedules": {"id": "sched-oneoff-1"}}]
+        scheduler = self._scheduler(store)
+        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        self.assertEqual(enqueued, 0)
+        dispatch.assert_not_called()
+
+    def test_oneoff_second_slot_dispatches_after_first_is_done(self):
+        slot2 = self._oneoff_slot("slot-2", "2026-09-10T18:00:00+00:00", topic="Second")
+        store = _FakeStore()
+        store.pending_slots = lambda now: []
+        # slot-1 finished (ready, no longer generating) — nothing generating.
+        store.oneoff_pending = [slot2]
+        store.generating = []
+        scheduler = self._scheduler(store)
+        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        self.assertEqual(enqueued, 1)
+        dispatch.assert_called_once()
+        _, request, _ = dispatch.call_args.args
+        self.assertIn("Second", request.model_dump_json())
+
+    def test_batch_slots_keep_parallel_dispatch(self):
+        slot1 = self._batch_slot()
+        slot1["id"] = "slot-b1"
+        slot1["schedules"]["scheduled_at"] = None
+        slot2 = self._batch_slot()
+        slot2["id"] = "slot-b2"
+        slot2["schedules"]["scheduled_at"] = None
+        store = _FakeStore()
+        store.pending_slots = lambda now: [slot1, slot2]
+        scheduler = self._scheduler(store)
+        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        self.assertEqual(enqueued, 2)
+        self.assertEqual(dispatch.call_count, 2)
+
+    def test_oneoff_and_batch_schedules_do_not_block_each_other(self):
+        oneoff = self._oneoff_slot("slot-1", "2026-09-10T09:00:00+00:00")
+        batch = self._batch_slot()
+        batch["schedules"]["scheduled_at"] = None
+        store = _FakeStore()
+        store.pending_slots = lambda now: [batch]
+        store.oneoff_pending = [oneoff]
+        # A generating slot on ANOTHER schedule must not block either.
+        store.generating = [{"id": "slot-x", "task_id": "t-x", "schedules": {"id": "sched-other"}}]
+        scheduler = self._scheduler(store)
+        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        self.assertEqual(enqueued, 2)
+        self.assertEqual(dispatch.call_count, 2)

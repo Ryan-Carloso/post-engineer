@@ -239,3 +239,40 @@ class GenerationHorizonTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OneOffSlotsTests(unittest.TestCase):
+    """One-off schedule slots: dispatched immediately, ignoring the horizon.
+
+    Discriminator (no schema change): the joined schedule carries
+    scheduled_at (batch schedules leave it NULL).
+    """
+
+    def setUp(self):
+        with patch.dict(os.environ, ENV, clear=True):
+            self.store = fs.ScheduleStore(requests_module=MagicMock())
+        self.requests = self.store._requests
+        self.requests.request.return_value = _response(json_data=[])
+
+    def _last_call(self):
+        call = self.requests.request.call_args
+        return call.args[0], call.args[1], call.kwargs
+
+    def test_slot_select_includes_scheduled_at_and_bluesky_account_ids(self):
+        self.assertIn("scheduled_at", fs.ScheduleStore.SLOT_SELECT)
+        self.assertIn("bluesky_account_ids", fs.ScheduleStore.SLOT_SELECT)
+
+    def test_pending_oneoff_slots_filters_null_topic_schedules_not_null(self):
+        self.store.pending_oneoff_slots()
+        _, _, kwargs = self._last_call()
+        params = kwargs["params"]
+        self.assertEqual(params["status"], f"eq.{fs.SLOT_PENDING}")
+        self.assertEqual(params["schedules.scheduled_at"], "not.is.null")
+        # No horizon filter: one-off slots dispatch at creation, however
+        # far out their slot_at is.
+        self.assertNotIn("slot_at", params)
+
+    def test_pending_oneoff_slots_returns_rows(self):
+        rows = [{"id": "slot-1", "topic": "T"}]
+        self.requests.request.return_value = _response(json_data=rows)
+        self.assertEqual(self.store.pending_oneoff_slots(), rows)

@@ -31,8 +31,8 @@ class ScheduleStore:
 
     SLOT_SELECT = (
         "*,schedules!inner("
-        "id,user_id,providers,youtube_account_ids,"
-        "instagram_account_ids,linkedin_account_ids,"
+        "id,user_id,scheduled_at,providers,youtube_account_ids,"
+        "instagram_account_ids,linkedin_account_ids,bluesky_account_ids,"
         "personas(name,niche,script_prompt,language,video_aspect,"
         "photo_path,avatar_url,voice_id,voice_audio_path,paragraph_number,face_mix_percent,face_quality)"
         ")"
@@ -93,6 +93,27 @@ class ScheduleStore:
             params={
                 "status": f"eq.{SLOT_PENDING}",
                 "slot_at": f"lte.{horizon}",
+                "select": self.SLOT_SELECT,
+                "order": "slot_at.asc",
+            },
+        )
+        return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+
+    def pending_oneoff_slots(self) -> list[dict[str, Any]]:
+        """Pending slots of one-off schedules (``schedules.scheduled_at`` set).
+
+        Dispatched immediately, ignoring the generation horizon: the user
+        asked for generation at creation time so a failure surfaces before
+        publish time, not when the video is due. Publishing still waits for
+        ``slot_at``. Batch schedules (``scheduled_at`` NULL) keep the
+        horizon behavior via :meth:`pending_slots`.
+        """
+        rows = self._request(
+            "GET",
+            "scheduled_posts",
+            params={
+                "status": f"eq.{SLOT_PENDING}",
+                "schedules.scheduled_at": "not.is.null",
                 "select": self.SLOT_SELECT,
                 "order": "slot_at.asc",
             },
