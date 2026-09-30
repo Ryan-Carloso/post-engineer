@@ -1,20 +1,19 @@
 """Application implementation - ASGI."""
 
 import os
+import traceback
 
-import sentry_sdk
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
-from sentry_sdk.integrations.fastapi import FastApiIntegration
-from sentry_sdk.integrations.starlette import StarletteIntegration
 
 from app.config import config
 from app.models.exception import HttpException
 from app.router import root_api_router
+from app.services.analytics import track_event
 from app.services.fill_schedule import (
     FillScheduleScheduler,
     ScheduleStore,
@@ -31,60 +30,59 @@ def should_init_error_tracking() -> bool:
     """True when production error tracking should be initialized.
 
     Never under pytest: importing this module during test collection runs
-    load_dotenv(), which loads the tracked .env with the real BUGSINK_DSN,
-    and the test process must not report to production error tracking.
+    load_dotenv(), and the test process must not report to production
+    error tracking.
     """
-    return not notify.running_under_test() and bool(os.getenv("BUGSINK_DSN"))
+    return not notify.running_under_test() and bool(os.getenv("POSTHOG_API_KEY"))
 
 
 #---------------
-# Bugsink Cloud (Sentry-compatible). Without a DSN: warn and continue
-# without error tracking (the engine also runs in dev/tests without a
-# complete .env). Under pytest the init is always skipped (see
-# should_init_error_tracking): the tracked .env carries the real DSN.
+# PostHog error tracking. Without a key: warn and continue without error
+# tracking (the engine also runs in dev/tests without a complete .env).
+# Under pytest the init is always skipped (see should_init_error_tracking).
 #---------------
-def _loguru_bugsink_sink(message) -> None:
-    """Forward ERROR+ loguru records to Bugsink.
+def _loguru_posthog_sink(message) -> None:
+    """Forward ERROR+ loguru records to PostHog as $exception events.
 
-    sentry_sdk's stdlib logging integration never sees loguru records, so
-    without this sink every handled engine error (fill-scheduler slot and
-    stage failures, cross-post failures, ...) would only exist in the
-    process logs. Telemetry must never break the app: every failure inside
-    this sink is swallowed.
+    Telemetry must never break the app: every failure inside this sink
+    is swallowed.
     """
     try:
         record = message.record
         exception = record.get("exception")
+        properties: dict[str, object] = {
+            "message": str(record.get("message", "")),
+        }
         if exception is not None:
             # loguru stores the exception as a (type, value, traceback) tuple
-            sentry_sdk.capture_exception(exception[1])
-        else:
-            sentry_sdk.capture_message(str(record.get("message", "")), level="error")
+            exc_value = exception[1]
+            properties["exception_type"] = type(exc_value).__name__
+            properties["exception_message"] = str(exc_value)
+            try:
+                properties["stacktrace"] = "".join(
+                    traceback.format_exception(type(exc_value), exc_value, exc_value.__traceback__)
+                )[:5000]
+            except Exception:
+                pass
+        track_event("$exception", properties)  # type: ignore[arg-type]
     except Exception:
         pass
 
 
 if should_init_error_tracking():
-    sentry_sdk.init(
-        dsn=os.environ["BUGSINK_DSN"],
-        integrations=[StarletteIntegration(), FastApiIntegration()],
-        traces_sample_rate=0.0,
-        send_default_pii=False,
-    )
-    # Loguru records bypass the SDK's stdlib logging integration entirely;
-    # without this sink, handled errors would never reach Bugsink.
-    logger.add(_loguru_bugsink_sink, level="ERROR")
-    logger.info("Bugsink error tracking enabled")
+    # Loguru records are forwarded to PostHog via the sink below.
+    logger.add(_loguru_posthog_sink, level="ERROR")
+    logger.info("PostHog error tracking enabled")
 elif notify.running_under_test():
     if notify.test_skip_is_suspicious():
         # The guard fired with no test runner behind it (bare pytest import
         # or a leaked ENGINE_UNDER_TEST in a production environment): every
         # error report would silently stop. Loud, not debug.
-        logger.warning("Bugsink error tracking skipped: no test runner detected — tracking disabled outside a test run")
+        logger.warning("PostHog error tracking skipped: no test runner detected — tracking disabled outside a test run")
     else:
-        logger.debug("Bugsink error tracking skipped: running under pytest")
+        logger.debug("PostHog error tracking skipped: running under pytest")
 else:
-    logger.warning("BUGSINK_DSN is not set — Bugsink error tracking disabled")
+    logger.warning("POSTHOG_API_KEY is not set — PostHog error tracking disabled")
 
 
 def start_fill_schedule_scheduler() -> None:
