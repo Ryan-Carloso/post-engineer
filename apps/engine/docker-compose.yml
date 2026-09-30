@@ -28,6 +28,10 @@ services:
     volumes:
       - engine_storage:/app/storage
       - ./config.toml:/app/config.toml:ro
+      # Platform version (single source of truth, bumped per PR): mounted
+      # read-only so /health and the startup log always report the live
+      # version with no rebuild needed.
+      - ../../VERSION:/app/VERSION:ro
     deploy:
       resources:
         limits:

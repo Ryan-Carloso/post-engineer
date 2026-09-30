@@ -1,8 +1,27 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs/config";
+import fs from "node:fs";
+import path from "node:path";
+
+//---------------
+// Platform version: the repo-root VERSION file is the single source of
+// truth (bumped on every PR). Read once at build time and inlined into the
+// bundle via env — no external service involved. Falls back to 'dev' when
+// the file is unreadable (e.g. a partial checkout).
+//---------------
+function readPlatformVersion(): string {
+  try {
+    return fs.readFileSync(path.join(__dirname, "..", "..", "VERSION"), "utf8").trim() || "dev";
+  } catch {
+    return "dev";
+  }
+}
 
 const nextConfig: NextConfig = {
   /* config options here */
+  env: {
+    APP_VERSION: readPlatformVersion(),
+  },
   serverExternalPackages: ['googleapis', 'google-auth-library'],
   images: {
     remotePatterns: [

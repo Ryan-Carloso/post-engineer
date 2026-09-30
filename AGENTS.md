@@ -12,6 +12,12 @@
   new or updated tests, and the relevant suite is green before committing.
 - Keep PRs small and focused; CI must be green and review threads resolved
   before merge.
+- **Every PR bumps the repo-root `VERSION` file** (minor for features,
+  patch for fixes). It is the single source of truth for the deployed
+  platform version: `GET /api/version` (web) and `GET /health` (engine)
+  report it, and both log it at startup — so a bug can always be mapped
+  to the version (and PR) that introduced it. No external service or
+  manual deploy step is involved.
 
 # Env Files Policy (NEVER commit real secrets)
 
