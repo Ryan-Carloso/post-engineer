@@ -156,7 +156,7 @@ class ErrorTrackingInitTests(unittest.TestCase):
         self.assertIn("no test runner detected", output)
 
     def test_asgi_import_enables_tracking_with_dsn_outside_tests(self):
-        # Sanity: without any guard trigger and a DSN set, tracking
+        # Sanity: without any guard trigger and a PostHog key set, tracking
         # initializes (info log) — the warning above is specific to the
         # guard firing without a runner.
         env = {
@@ -164,7 +164,7 @@ class ErrorTrackingInitTests(unittest.TestCase):
             for k, v in os.environ.items()
             if k not in ("PYTEST_CURRENT_TEST", "ENGINE_UNDER_TEST")
         }
-        env["BUGSINK_DSN"] = "https://x@y/1"
+        env["POSTHOG_API_KEY"] = "phc_test_key"
         proc = subprocess.run(
             [sys.executable, "-c", "import app.asgi"],
             capture_output=True,
@@ -175,7 +175,7 @@ class ErrorTrackingInitTests(unittest.TestCase):
         )
         output = proc.stdout + proc.stderr
         self.assertEqual(proc.returncode, 0, output[-2000:])
-        self.assertIn("Bugsink error tracking enabled", output)
+        self.assertIn("PostHog error tracking enabled", output)
         self.assertNotIn("no test runner detected", output)
 
 
