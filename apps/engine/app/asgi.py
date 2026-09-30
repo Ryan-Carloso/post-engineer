@@ -162,6 +162,7 @@ def health() -> dict[str, str]:
     """Public liveness + version probe (no auth): identifies the deployed commit."""
     return {"status": "ok", "version": get_deployed_version()}
 
+
 public_dir = utils.public_dir()
 app.mount("/", StaticFiles(directory=public_dir, html=True), name="")
 

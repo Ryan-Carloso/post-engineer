@@ -29,6 +29,7 @@ test_*.py
 !test/controllers/test_*.py
 !test/test_modal_cpu_app.py
 !test/test_asgi_bugsink.py
+!test/test_asgi_health.py
 streamlit.log
 /docs/superpowers
 .understand-anything
