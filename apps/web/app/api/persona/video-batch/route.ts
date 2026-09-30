@@ -15,6 +15,7 @@ import { IMAGE_BUCKET, recordRecentImageId, resolveVideoImage } from '@/lib/pers
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { MAX_BATCH_TOPICS } from '@/lib/video-batch';
 import { logger } from '@/lib/logger';
+import { apiErrorResponse } from '@/lib/api-error';
 
 //---------------
 // POST /api/persona/video-batch — one request, N persona videos (1..10).
@@ -200,21 +201,21 @@ async function resolveJsonBatch(
 ): Promise<{ ok: true; resolved: ResolvedBatchRequest } | { ok: false; response: NextResponse }> {
   const topics = parseTopics(body.topics);
   if (!topics.ok) {
-    return { ok: false, response: NextResponse.json({ success: false, error: topics.error }, { status: 400 }) };
+    return { ok: false, response: apiErrorResponse(400, topics.error, { route: 'UNKNOWN /api/persona/video-batch' }) };
   }
   const webhookParam = pickDualParam(body, 'webhook_url', 'webhookUrl');
   if (!webhookParam.ok) {
-    return { ok: false, response: NextResponse.json({ success: false, error: webhookParam.error }, { status: 400 }) };
+    return { ok: false, response: apiErrorResponse(400, webhookParam.error, { route: 'UNKNOWN /api/persona/video-batch' }) };
   }
   const webhook = parseWebhookUrl(webhookParam.value);
   if (!webhook.ok) {
-    return { ok: false, response: NextResponse.json({ success: false, error: webhook.error }, { status: 400 }) };
+    return { ok: false, response: apiErrorResponse(400, webhook.error, { route: 'UNKNOWN /api/persona/video-batch' }) };
   }
 
   const personaId = body.personaId;
   const faceless = personaId === undefined || personaId === null;
   if (!faceless && (typeof personaId !== 'string' || personaId.length === 0)) {
-    return { ok: false, response: NextResponse.json({ success: false, error: 'personaId is required.' }, { status: 400 }) };
+    return { ok: false, response: apiErrorResponse(400, 'personaId is required.', { route: 'UNKNOWN /api/persona/video-batch' }) };
   }
 
   const supabase: SupabaseClient = createSupabaseServiceClient();
@@ -223,11 +224,11 @@ async function resolveJsonBatch(
   // could resolve against — reject loudly instead of silently discarding.
   const imageParam = pickDualParam(body, 'image_id', 'imageId');
   if (!imageParam.ok) {
-    return { ok: false, response: NextResponse.json({ success: false, error: imageParam.error }, { status: 400 }) };
+    return { ok: false, response: apiErrorResponse(400, imageParam.error, { route: 'UNKNOWN /api/persona/video-batch' }) };
   }
   const rawImageId = imageParam.value;
   if (rawImageId !== undefined && (typeof rawImageId !== 'string' || rawImageId.trim().length === 0)) {
-    return { ok: false, response: NextResponse.json({ success: false, error: 'image_id must be a non-empty string.' }, { status: 400 }) };
+    return { ok: false, response: apiErrorResponse(400, 'image_id must be a non-empty string.', { route: 'UNKNOWN /api/persona/video-batch' }) };
   }
   const requestedImageId = typeof rawImageId === 'string' ? rawImageId.trim() : null;
 
@@ -242,15 +243,15 @@ async function resolveJsonBatch(
       };
     }
     if (requestedImageId !== null) {
-      return { ok: false, response: NextResponse.json({ success: false, error: 'image_id requires a personaId: faceless videos have no image library.' }, { status: 400 }) };
+      return { ok: false, response: apiErrorResponse(400, 'image_id requires a personaId: faceless videos have no image library.', { route: 'UNKNOWN /api/persona/video-batch' }) };
     }
     const voiceParam = pickDualParam(body, 'voice_id', 'voiceId');
     if (!voiceParam.ok) {
-      return { ok: false, response: NextResponse.json({ success: false, error: voiceParam.error }, { status: 400 }) };
+      return { ok: false, response: apiErrorResponse(400, voiceParam.error, { route: 'UNKNOWN /api/persona/video-batch' }) };
     }
     const voiceId = voiceParam.value;
     if (voiceId !== undefined && voiceId !== null && (typeof voiceId !== 'string' || voiceId.trim().length === 0)) {
-      return { ok: false, response: NextResponse.json({ success: false, error: 'voice_id must be a non-empty string when provided.' }, { status: 400 }) };
+      return { ok: false, response: apiErrorResponse(400, 'voice_id must be a non-empty string when provided.', { route: 'UNKNOWN /api/persona/video-batch' }) };
     }
     const resolvedVoiceId = typeof voiceId === 'string' && voiceId.trim().length > 0 ? voiceId.trim() : undefined;
     // V1: batch faceless runs on a house voice only — no custom audio_url
@@ -258,7 +259,7 @@ async function resolveJsonBatch(
     if (!resolvedVoiceId) {
       return {
         ok: false,
-        response: NextResponse.json({ success: false, error: 'No voice available: batch faceless generation requires voice_id.' }, { status: 400 }),
+        response: apiErrorResponse(400, 'No voice available: batch faceless generation requires voice_id.', { route: 'UNKNOWN /api/persona/video-batch' }),
       };
     }
     return {
@@ -279,7 +280,7 @@ async function resolveJsonBatch(
 
   const id = personaId as string;
   if (!isPersonaAllowed(auth.personaIds, id)) {
-    return { ok: false, response: NextResponse.json({ success: false, error: 'This API key does not have access to this persona.' }, { status: 403 }) };
+    return { ok: false, response: apiErrorResponse(403, 'This API key does not have access to this persona.', { route: 'UNKNOWN /api/persona/video-batch' }) };
   }
 
   const { data: persona, error: personaError } = await supabase
@@ -295,24 +296,24 @@ async function resolveJsonBatch(
     // bare 404 would tell the client to stop retrying and leave zero
     // diagnostic trail, so log it and report 500.
     if (personaError.code === 'PGRST116') {
-      return { ok: false, response: NextResponse.json({ success: false, error: 'Persona not found.' }, { status: 404 }) };
+      return { ok: false, response: apiErrorResponse(404, 'Persona not found.', { route: 'UNKNOWN /api/persona/video-batch' }) };
     }
     logger.error('[video-batch] persona lookup failed', personaError, { personaId: id });
-    return { ok: false, response: NextResponse.json({ success: false, error: 'Failed to load persona.' }, { status: 500 }) };
+    return { ok: false, response: apiErrorResponse(500, 'Failed to load persona.', { route: 'UNKNOWN /api/persona/video-batch' }) };
   }
   if (!persona) {
-    return { ok: false, response: NextResponse.json({ success: false, error: 'Persona not found.' }, { status: 404 }) };
+    return { ok: false, response: apiErrorResponse(404, 'Persona not found.', { route: 'UNKNOWN /api/persona/video-batch' }) };
   }
 
   // Stored-value caps — same as the single-video route: a legacy row must
   // not reach the engine (opaque 502) after the batch is billed.
   const personaNiche = persona.niche as string | null;
   if (typeof personaNiche === 'string' && personaNiche.trim().length > 0 && personaNiche.length > 300) {
-    return { ok: false, response: NextResponse.json({ success: false, error: 'persona niche must be at most 300 characters: update the persona.' }, { status: 400 }) };
+    return { ok: false, response: apiErrorResponse(400, 'persona niche must be at most 300 characters: update the persona.', { route: 'UNKNOWN /api/persona/video-batch' }) };
   }
   const personaLanguage = persona.language as string | null;
   if (typeof personaLanguage === 'string' && personaLanguage.trim().length > 0 && personaLanguage.length > 35) {
-    return { ok: false, response: NextResponse.json({ success: false, error: 'persona language must be at most 35 characters: update the persona.' }, { status: 400 }) };
+    return { ok: false, response: apiErrorResponse(400, 'persona language must be at most 35 characters: update the persona.', { route: 'UNKNOWN /api/persona/video-batch' }) };
   }
   const personaVideoAspect = persona.video_aspect as string | null;
   if (
@@ -338,14 +339,14 @@ async function resolveJsonBatch(
       personaParagraphNumber < 1 ||
       personaParagraphNumber > 10)
   ) {
-    return { ok: false, response: NextResponse.json({ success: false, error: 'persona paragraph_number must be an integer between 1 and 10: update the persona.' }, { status: 400 }) };
+    return { ok: false, response: apiErrorResponse(400, 'persona paragraph_number must be an integer between 1 and 10: update the persona.', { route: 'UNKNOWN /api/persona/video-batch' }) };
   }
   if (
     personaFaceMix !== null &&
     personaFaceMix !== undefined &&
     (typeof personaFaceMix !== 'number' || !Number.isFinite(personaFaceMix) || personaFaceMix < 0 || personaFaceMix > 100)
   ) {
-    return { ok: false, response: NextResponse.json({ success: false, error: 'persona face_mix_percent must be a number between 0 and 100: update the persona.' }, { status: 400 }) };
+    return { ok: false, response: apiErrorResponse(400, 'persona face_mix_percent must be a number between 0 and 100: update the persona.', { route: 'UNKNOWN /api/persona/video-batch' }) };
   }
 
   const voiceAudioUrl = await signedUrl(supabase, persona.voice_audio_path as string | null);
@@ -383,7 +384,7 @@ async function resolveJsonBatch(
     imageId: requestedImageId,
   });
   if (!selection.ok) {
-    return { ok: false, response: NextResponse.json({ success: false, error: selection.error }, { status: selection.status }) };
+    return { ok: false, response: apiErrorResponse(selection.status, selection.error, { route: 'POST /api/persona/video-batch' }) };
   }
   let libraryImageId: string | null = null;
   let photoUrl: string | null = null;
@@ -488,11 +489,11 @@ async function resolveDebugBatch(
     const field = formData.get('topics');
     rawTopics = typeof field === 'string' ? JSON.parse(field) : field;
   } catch {
-    return { ok: false, response: NextResponse.json({ success: false, error: 'topics must be a JSON array of 1 to 10 video topics.' }, { status: 400 }) };
+    return { ok: false, response: apiErrorResponse(400, 'topics must be a JSON array of 1 to 10 video topics.', { route: 'UNKNOWN /api/persona/video-batch' }) };
   }
   const topics = parseTopics(rawTopics);
   if (!topics.ok) {
-    return { ok: false, response: NextResponse.json({ success: false, error: topics.error }, { status: 400 }) };
+    return { ok: false, response: apiErrorResponse(400, topics.error, { route: 'UNKNOWN /api/persona/video-batch' }) };
   }
   const webhookSnake = formData.get('webhook_url');
   const webhookCamel = formData.get('webhookUrl');
@@ -511,12 +512,12 @@ async function resolveDebugBatch(
   }
   const webhook = parseWebhookUrl(webhookSnake ?? webhookCamel);
   if (!webhook.ok) {
-    return { ok: false, response: NextResponse.json({ success: false, error: webhook.error }, { status: 400 }) };
+    return { ok: false, response: apiErrorResponse(400, webhook.error, { route: 'UNKNOWN /api/persona/video-batch' }) };
   }
 
   const parsed = parsePersonaForm(formData, 'debug');
   if (!parsed.ok) {
-    return { ok: false, response: NextResponse.json({ success: false, error: parsed.error }, { status: 400 }) };
+    return { ok: false, response: apiErrorResponse(400, parsed.error, { route: 'UNKNOWN /api/persona/video-batch' }) };
   }
   const form = parsed.value;
   const v = form.values;
@@ -542,7 +543,7 @@ async function resolveDebugBatch(
       // TEMPORARY storage in the engine (TTL 1h) — nothing goes to Supabase.
       const tempUrl = await uploadEngineTempAsset(userId, form.photo, form.photoExtension);
       if (!tempUrl) {
-        return { ok: false, response: NextResponse.json({ success: false, error: 'Failed to upload debug photo.' }, { status: 502 }) };
+        return { ok: false, response: apiErrorResponse(502, 'Failed to upload debug photo.', { route: 'UNKNOWN /api/persona/video-batch' }) };
       }
       photoUrl = tempUrl;
     }
@@ -609,7 +610,7 @@ async function finalizeBatch(
       { expected: resolved.topics.length },
     );
     return engineBatch.ok
-      ? NextResponse.json({ success: false, error: 'Video service returned no task IDs.' }, { status: 502 })
+      ? apiErrorResponse(502, 'Video service returned no task IDs.', { route: 'UNKNOWN /api/persona/video-batch' })
       : engineBatch.response;
   }
 
@@ -659,7 +660,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     try {
       formData = await request.formData();
     } catch {
-      return NextResponse.json({ success: false, error: 'Invalid multipart payload.' }, { status: 400 });
+      return apiErrorResponse(400, 'Invalid multipart payload.', { route: 'POST /api/persona/video-batch' });
     }
     const resolved = await resolveDebugBatch(formData, auth.userId);
     if (!resolved.ok) return resolved.response;
@@ -670,7 +671,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     requestBody = (await request.json()) as Record<string, unknown>;
   } catch {
-    return NextResponse.json({ success: false, error: 'Invalid JSON payload.' }, { status: 400 });
+    return apiErrorResponse(400, 'Invalid JSON payload.', { route: 'POST /api/persona/video-batch' });
   }
 
   const resolved = await resolveJsonBatch(requestBody, auth, auth.userId);

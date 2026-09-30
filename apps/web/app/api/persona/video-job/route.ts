@@ -13,6 +13,7 @@ import { recordRecentImageId, resolveVideoImage } from '@/lib/persona-images';
 import { normalizeDebugTaskResponse } from '@/lib/debug-video';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
+import { apiErrorResponse } from '@/lib/api-error';
 
 //---------------
 // POST /api/persona/video-job — proxy to money-print.
@@ -877,7 +878,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       tokensRefunded: true,
     });
     return engineTask.ok
-      ? NextResponse.json({ success: false, error: 'Video service returned no task ID.' }, { status: 502 })
+      ? apiErrorResponse(502, 'Video service returned no task ID.', { route: 'POST /api/persona/video-job' })
       : engineTask.response;
   }
 
@@ -914,7 +915,7 @@ async function debugVideoJob(request: Request, userId: string): Promise<NextResp
   try {
     formData = await request.formData();
   } catch {
-    return NextResponse.json({ success: false, error: 'Invalid multipart payload.' }, { status: 400 });
+    return apiErrorResponse(400, 'Invalid multipart payload.', { route: 'POST /api/persona/video-job' });
   }
 
   // image_id is persona-scoped: the debug flow builds an in-memory persona
@@ -930,7 +931,7 @@ async function debugVideoJob(request: Request, userId: string): Promise<NextResp
 
   const parsed = parsePersonaForm(formData, 'debug');
   if (!parsed.ok) {
-    return NextResponse.json({ success: false, error: parsed.error }, { status: 400 });
+    return apiErrorResponse(400, parsed.error, { route: 'POST /api/persona/video-job' });
   }
   const form = parsed.value;
   const v = form.values;
@@ -972,7 +973,7 @@ async function debugVideoJob(request: Request, userId: string): Promise<NextResp
       // TEMPORARY storage in the engine (TTL 1h) — nothing goes to Supabase.
       const tempUrl = await uploadEngineTempAsset(userId, form.photo, form.photoExtension);
       if (!tempUrl) {
-        return NextResponse.json({ success: false, error: 'Failed to upload debug photo.' }, { status: 502 });
+        return apiErrorResponse(502, 'Failed to upload debug photo.', { route: 'POST /api/persona/video-job' });
       }
       photoUrl = tempUrl;
     }
@@ -1023,7 +1024,7 @@ async function debugVideoJob(request: Request, userId: string): Promise<NextResp
       tokensRefunded: true,
     });
     return engineTask.ok
-      ? NextResponse.json({ success: false, error: 'Video service returned no task ID.' }, { status: 502 })
+      ? apiErrorResponse(502, 'Video service returned no task ID.', { route: 'POST /api/persona/video-job' })
       : engineTask.response;
   }
 

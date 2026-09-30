@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { getStripePriceId, isTokenPackId, TOKEN_PACKS, type TokenPackId } from '@/lib/billing';
 import { logger } from '@/lib/logger';
+import { apiErrorResponse } from '@/lib/api-error';
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY;
@@ -13,12 +14,12 @@ export async function POST(request: Request): Promise<NextResponse> {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!webhookSecret) {
     logger.error('[api/billing/webhook] STRIPE_WEBHOOK_SECRET is not defined');
-    return NextResponse.json({ success: false, error: 'Webhook not configured.' }, { status: 500 });
+    return apiErrorResponse(500, 'Webhook not configured.', { route: 'POST /api/billing/webhook' });
   }
 
   const signature = request.headers.get('stripe-signature');
   if (!signature) {
-    return NextResponse.json({ success: false, error: 'Missing stripe-signature header.' }, { status: 400 });
+    return apiErrorResponse(400, 'Missing stripe-signature header.', { route: 'POST /api/billing/webhook' });
   }
 
   let stripe;
@@ -26,7 +27,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     stripe = await getStripe();
   } catch (error) {
     logger.error('[api/billing/webhook] stripe init failed', error);
-    return NextResponse.json({ success: false, error: 'Payment system unavailable.' }, { status: 500 });
+    return apiErrorResponse(500, 'Payment system unavailable.', { route: 'POST /api/billing/webhook' });
   }
 
   let event;
@@ -34,7 +35,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     event = stripe.webhooks.constructEvent(await request.text(), signature, webhookSecret);
   } catch (error) {
     logger.error('[api/billing/webhook] signature verification failed', error);
-    return NextResponse.json({ success: false, error: 'Invalid signature.' }, { status: 400 });
+    return apiErrorResponse(400, 'Invalid signature.', { route: 'POST /api/billing/webhook' });
   }
 
   const supabase = createSupabaseServiceClient();
@@ -49,7 +50,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   if (eventError) {
     logger.error('[api/billing/webhook] event persistence failed', eventError, { eventId: event.id });
-    return NextResponse.json({ success: false, error: 'Webhook persistence failed.' }, { status: 500 });
+    return apiErrorResponse(500, 'Webhook persistence failed.', { route: 'POST /api/billing/webhook' });
   }
   if (!recordedEvent) return NextResponse.json({ success: true, duplicate: true });
 
@@ -67,7 +68,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       logger.error('[api/billing/webhook] failed to release event for retry', deleteError, { eventId: event.id });
     }
     logger.error('[api/billing/webhook] fulfillment failed', error, { eventId: event.id });
-    return NextResponse.json({ success: false, error: 'Webhook handler failed.' }, { status: 500 });
+    return apiErrorResponse(500, 'Webhook handler failed.', { route: 'POST /api/billing/webhook' });
   }
 
   return NextResponse.json({ success: true });

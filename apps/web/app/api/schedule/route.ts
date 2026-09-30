@@ -9,6 +9,7 @@ import { validateScheduleWindow } from '@/lib/schedule-window';
 import { isValidTimezone, parseZonedDateTime, zonedTimeOnDate } from '@/lib/timezone';
 import { computeVideoTokens, toFiniteNumber, type FaceQuality } from '@/lib/tokens';
 import { logger } from '@/lib/logger';
+import { apiErrorResponse } from '@/lib/api-error';
 
 //---------------
 // /api/schedule — CRUD for the automatic fill-schedule timetables.
@@ -40,8 +41,13 @@ interface ScheduleRequestBody {
   scheduledAt?: unknown;
 }
 
-function errorResponse(status: number, error: string, extra?: Record<string, unknown>): NextResponse {
-  return NextResponse.json({ success: false, error, ...extra }, { status });
+function errorResponse(
+  status: number,
+  error: string,
+  route: string,
+  extra?: Record<string, unknown>,
+): NextResponse {
+  return apiErrorResponse(status, error, { route, extra });
 }
 
 //---------------
@@ -55,6 +61,7 @@ async function assertScheduleScope(
   personaScope: readonly string[] | null | undefined,
   scheduleId: string,
   userId: string,
+  method: string,
 ): Promise<NextResponse | null> {
   const { data, error } = await supabase
     .from('schedules')
@@ -64,11 +71,11 @@ async function assertScheduleScope(
     .single();
   if (error && error.code !== 'PGRST116') {
     logger.error('[api/schedule] assertScheduleScope failed', error);
-    return errorResponse(500, 'Failed to fetch schedule.');
+    return errorResponse(500, 'Failed to fetch schedule.', `${method} /api/schedule`);
   }
-  if (!data) return errorResponse(404, 'Schedule not found.');
+  if (!data) return errorResponse(404, 'Schedule not found.', `${method} /api/schedule`);
   if (!isPersonaAllowed(personaScope, data.persona_id)) {
-    return errorResponse(403, 'This API key does not have access to this schedule.');
+    return errorResponse(403, 'This API key does not have access to this schedule.', `${method} /api/schedule`);
   }
   return null;
 }
@@ -280,7 +287,7 @@ export async function GET(request?: Request): Promise<NextResponse> {
 
   if (error) {
     logger.error('[api/schedule] list failed', error);
-    return errorResponse(500, 'Failed to list schedules.');
+    return errorResponse(500, 'Failed to list schedules.', 'GET /api/schedule');
   }
 
   // Persona-scoped API keys may only see schedules of their own personas.
@@ -312,13 +319,13 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     body = (await request.json()) as ScheduleRequestBody;
   } catch {
-    return errorResponse(400, 'Invalid JSON payload.');
+    return errorResponse(400, 'Invalid JSON payload.', 'POST /api/schedule');
   }
 
   const personaId = typeof body.personaId === 'string' ? body.personaId : null;
-  if (!personaId) return errorResponse(400, 'personaId is required.');
+  if (!personaId) return errorResponse(400, 'personaId is required.', 'POST /api/schedule');
   if (!isPersonaAllowed(auth.personaIds, personaId)) {
-    return errorResponse(403, 'This API key does not have access to this persona.');
+    return errorResponse(403, 'This API key does not have access to this persona.', 'POST /api/schedule');
   }
 
   // One-off schedules always carry a target datetime (same rule as the MCP
@@ -329,19 +336,19 @@ export async function POST(request: Request): Promise<NextResponse> {
   // spec). An explicit offset (Z or ±hh:mm) is respected as-is.
   const timezone = typeof body.timezone === 'string' && body.timezone ? body.timezone : 'UTC';
   if (!isValidTimezone(timezone)) {
-    return errorResponse(400, 'timezone must be a valid IANA timezone (e.g. "Europe/Lisbon").');
+    return errorResponse(400, 'timezone must be a valid IANA timezone (e.g. "Europe/Lisbon").', 'POST /api/schedule');
   }
   if (body.scheduledAt === undefined || body.scheduledAt === null) {
-    return errorResponse(400, 'scheduledAt is required.');
+    return errorResponse(400, 'scheduledAt is required.', 'POST /api/schedule');
   }
   const scheduledAt = parseZonedDateTime(body.scheduledAt, timezone);
   if (!scheduledAt) {
-    return errorResponse(400, 'scheduledAt must be a valid ISO date.');
+    return errorResponse(400, 'scheduledAt must be a valid ISO date.', 'POST /api/schedule');
   }
   // The 24h/30d window is validated against the converted instant, so a
   // wall clock in UTC+14 is not measured as if it were UTC.
   const windowCheck = validateScheduleWindow(scheduledAt);
-  if (!windowCheck.ok) return errorResponse(400, windowCheck.error);
+  if (!windowCheck.ok) return errorResponse(400, windowCheck.error, 'POST /api/schedule');
 
   const providers = Array.isArray(body.providers)
     ? body.providers.filter(
@@ -351,28 +358,28 @@ export async function POST(request: Request): Promise<NextResponse> {
     )
     : [];
   if (providers.length === 0) {
-    return errorResponse(400, 'providers must contain youtube, instagram, linkedin and/or bluesky.');
+    return errorResponse(400, 'providers must contain youtube, instagram, linkedin and/or bluesky.', 'POST /api/schedule');
   }
   const youtubeAccountIds = parseAccountIds(body.youtubeAccountIds);
   const instagramAccountIds = parseAccountIds(body.instagramAccountIds);
   const linkedinAccountIds = parseAccountIds(body.linkedinAccountIds);
   const blueskyAccountIds = parseAccountIds(body.blueskyAccountIds);
   if (providers.includes('youtube') && youtubeAccountIds.length === 0) {
-    return errorResponse(400, 'youtubeAccountIds must contain at least one account.');
+    return errorResponse(400, 'youtubeAccountIds must contain at least one account.', 'POST /api/schedule');
   }
   if (providers.includes('instagram') && instagramAccountIds.length === 0) {
-    return errorResponse(400, 'instagramAccountIds must contain at least one account.');
+    return errorResponse(400, 'instagramAccountIds must contain at least one account.', 'POST /api/schedule');
   }
   if (providers.includes('linkedin') && linkedinAccountIds.length === 0) {
-    return errorResponse(400, 'linkedinAccountIds must contain at least one account.');
+    return errorResponse(400, 'linkedinAccountIds must contain at least one account.', 'POST /api/schedule');
   }
   if (providers.includes('bluesky') && blueskyAccountIds.length === 0) {
-    return errorResponse(400, 'blueskyAccountIds must contain at least one account.');
+    return errorResponse(400, 'blueskyAccountIds must contain at least one account.', 'POST /api/schedule');
   }
 
   const postsPerDay = typeof body.postsPerDay === 'number' ? Math.floor(body.postsPerDay) : 1;
   if (!Number.isInteger(postsPerDay) || postsPerDay < 1 || postsPerDay > 10) {
-    return errorResponse(400, 'postsPerDay must be between 1 and 10.');
+    return errorResponse(400, 'postsPerDay must be between 1 and 10.', 'POST /api/schedule');
   }
 
   // One topic per video, up front: the engine generates each slot from its
@@ -380,10 +387,10 @@ export async function POST(request: Request): Promise<NextResponse> {
   // never a silent slot that fails at publish time.
   const topics = parseTopics(body.topics);
   if (!topics) {
-    return errorResponse(400, 'topics must be a non-empty array of 1–10 non-empty strings, one per video.');
+    return errorResponse(400, 'topics must be a non-empty array of 1–10 non-empty strings, one per video.', 'POST /api/schedule');
   }
   if (postsPerDay !== topics.length) {
-    return errorResponse(400, `postsPerDay (${postsPerDay}) must equal the number of topics (${topics.length}).`);
+    return errorResponse(400, `postsPerDay (${postsPerDay}) must equal the number of topics (${topics.length}).`, 'POST /api/schedule');
   }
 
   // Explicit times pair 1:1 with topics (computeOneOffSlots enforces the
@@ -393,7 +400,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (times === null) {
     return errorResponse(
       400,
-      'times must be an array of "HH:MM" strings (00:00–23:59) or full ISO datetimes ("2026-10-02T15:00").',
+      'times must be an array of "HH:MM" strings (00:00–23:59) or full ISO datetimes ("2026-10-02T15:00").', 'POST /api/schedule',
     );
   }
   // Explicit datetimes are independent instants: each must sit inside the
@@ -404,10 +411,10 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (t.kind !== 'datetime') continue;
     const at = parseZonedDateTime(t.at, timezone);
     if (!at) {
-      return errorResponse(400, `times[${i}] ("${t.at}") is not a valid ISO datetime.`);
+      return errorResponse(400, `times[${i}] ("${t.at}") is not a valid ISO datetime.`, 'POST /api/schedule');
     }
     if (!validateScheduleWindow(at).ok) {
-      return errorResponse(400, `times[${i}] ("${t.at}") must be between 24 hours and 30 days ahead.`);
+      return errorResponse(400, `times[${i}] ("${t.at}") must be between 24 hours and 30 days ahead.`, 'POST /api/schedule');
     }
   }
   const slots = computeOneOffSlots(topics, times, scheduledAt, timezone);
@@ -416,7 +423,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       400,
       times.length > 0
         ? `times (${times.length}) must contain exactly one entry per topic (${topics.length}).`
-        : 'provide times for multiple videos: topics has more than one entry but times is empty.',
+        : 'provide times for multiple videos: topics has more than one entry but times is empty.', 'POST /api/schedule',
     );
   }
 
@@ -429,7 +436,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     .eq('id', personaId)
     .eq('user_id', user.id)
     .single();
-  if (!persona) return errorResponse(404, 'Persona not found.');
+  if (!persona) return errorResponse(404, 'Persona not found.', 'POST /api/schedule');
 
   // Multiple schedules per persona are allowed: each one-off schedule is an
   // independent set of slots (own times, own providers, prepaid tokens), so
@@ -451,7 +458,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       ids: providers.includes(provider) ? accountIdsByProvider[provider] : [],
     })),
   );
-  if (ownedError) return errorResponse(400, ownedError);
+  if (ownedError) return errorResponse(400, ownedError, 'POST /api/schedule');
 
   // Fail-fast token charging, mirroring POST /api/schedule/batch: the whole
   // schedule is prepaid in ONE atomic spend BEFORE anything is created, so a
@@ -484,14 +491,14 @@ export async function POST(request: Request): Promise<NextResponse> {
   });
   if (spendError) {
     logger.error('[api/schedule] spend failed', spendError);
-    return errorResponse(500, 'Failed to process tokens. Please try again.');
+    return errorResponse(500, 'Failed to process tokens. Please try again.', 'POST /api/schedule');
   }
   const spendRecord = (spendData ?? {}) as Record<string, unknown>;
   if (spendRecord.spent !== true) {
     const have = toFiniteNumber(spendRecord.balance, 0);
     return errorResponse(
       400,
-      `INSUFFICIENT_TOKENS: schedule needs ${totalCost} tokens but the balance is ${have}.`,
+      `INSUFFICIENT_TOKENS: schedule needs ${totalCost} tokens but the balance is ${have}.`, 'POST /api/schedule',
       { code: 'INSUFFICIENT', have, need: totalCost },
     );
   }
@@ -537,7 +544,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (insertError || !schedule) {
     logger.error('[api/schedule] insert failed', insertError);
     await refundCharge('Schedule insert failed; tokens refunded');
-    return errorResponse(500, 'Failed to create schedule.');
+    return errorResponse(500, 'Failed to create schedule.', 'POST /api/schedule');
   }
 
   // One row per video: the engine's tick picks pending slots up immediately
@@ -571,7 +578,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     await supabase.from('scheduled_posts').delete().eq('schedule_id', scheduleId).eq('user_id', user.id);
     await supabase.from('schedules').delete().eq('id', scheduleId).eq('user_id', user.id);
     await refundCharge('Schedule slots insert failed; tokens refunded');
-    return errorResponse(500, 'Failed to create schedule.');
+    return errorResponse(500, 'Failed to create schedule.', 'POST /api/schedule');
   }
 
   return NextResponse.json(
@@ -608,15 +615,15 @@ export async function PATCH(request: Request): Promise<NextResponse> {
   try {
     body = (await request.json()) as ScheduleRequestBody & { id?: unknown };
   } catch {
-    return errorResponse(400, 'Invalid JSON payload.');
+    return errorResponse(400, 'Invalid JSON payload.', 'PATCH /api/schedule');
   }
   const scheduleId = typeof body?.id === 'string' ? body.id : null;
-  if (!scheduleId) return errorResponse(400, 'id is required.');
+  if (!scheduleId) return errorResponse(400, 'id is required.', 'PATCH /api/schedule');
 
   // A persona-scoped API key may only touch schedules of its own personas.
   // Sessions and unrestricted keys keep the previous behavior (no lookup).
   if (auth.isApiKey === true && Array.isArray(auth.personaIds)) {
-    const scopeError = await assertScheduleScope(supabase, auth.personaIds, scheduleId, user.id);
+    const scopeError = await assertScheduleScope(supabase, auth.personaIds, scheduleId, user.id, 'PATCH');
     if (scopeError) return scopeError;
   }
 
@@ -630,13 +637,13 @@ export async function PATCH(request: Request): Promise<NextResponse> {
       )
       : [];
     if (providers.length === 0) {
-      return errorResponse(400, 'providers must contain youtube, instagram, linkedin and/or bluesky.');
+      return errorResponse(400, 'providers must contain youtube, instagram, linkedin and/or bluesky.', 'PATCH /api/schedule');
     }
     updates.providers = providers;
   }
   if (body.daysOfWeek !== undefined) {
     const daysOfWeek = parseDaysOfWeek(body.daysOfWeek);
-    if (!daysOfWeek) return errorResponse(400, 'daysOfWeek must be a non-empty array of 0–6.');
+    if (!daysOfWeek) return errorResponse(400, 'daysOfWeek must be a non-empty array of 0–6.', 'PATCH /api/schedule');
     updates.days_of_week = daysOfWeek;
   }
   if (body.startHour !== undefined || body.endHour !== undefined) {
@@ -647,11 +654,11 @@ export async function PATCH(request: Request): Promise<NextResponse> {
       .eq('id', scheduleId)
       .eq('user_id', user.id)
       .single();
-    if (!current) return errorResponse(404, 'Schedule not found.');
+    if (!current) return errorResponse(404, 'Schedule not found.', 'PATCH /api/schedule');
     const startHour = body.startHour !== undefined ? parseHour(body.startHour) : current.start_hour;
     const endHour = body.endHour !== undefined ? parseHour(body.endHour) : current.end_hour;
     if (startHour === null || endHour === null || startHour > endHour) {
-      return errorResponse(400, 'startHour/endHour must be hours 0–23 with startHour ≤ endHour.');
+      return errorResponse(400, 'startHour/endHour must be hours 0–23 with startHour ≤ endHour.', 'PATCH /api/schedule');
     }
     updates.start_hour = startHour;
     updates.end_hour = endHour;
@@ -659,7 +666,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
   if (body.postsPerDay !== undefined) {
     const postsPerDay = typeof body.postsPerDay === 'number' ? Math.floor(body.postsPerDay) : Number.NaN;
     if (!Number.isInteger(postsPerDay) || postsPerDay < 1 || postsPerDay > 10) {
-      return errorResponse(400, 'postsPerDay must be between 1 and 10.');
+      return errorResponse(400, 'postsPerDay must be between 1 and 10.', 'PATCH /api/schedule');
     }
     updates.posts_per_day = postsPerDay;
   }
@@ -668,7 +675,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     if (times === null) {
       return errorResponse(
         400,
-        'times must be an array of "HH:MM" strings (00:00–23:59) or full ISO datetimes ("2026-10-02T15:00").',
+        'times must be an array of "HH:MM" strings (00:00–23:59) or full ISO datetimes ("2026-10-02T15:00").', 'PATCH /api/schedule',
       );
     }
     const postsPerDay =
@@ -684,20 +691,20 @@ export async function PATCH(request: Request): Promise<NextResponse> {
           if (!current) return null;
           return typeof current.posts_per_day === 'number' ? current.posts_per_day : null;
         })();
-    if (postsPerDay === null) return errorResponse(404, 'Schedule not found.');
+    if (postsPerDay === null) return errorResponse(404, 'Schedule not found.', 'PATCH /api/schedule');
     if (times.length > postsPerDay) {
-      return errorResponse(400, 'times cannot contain more entries than postsPerDay.');
+      return errorResponse(400, 'times cannot contain more entries than postsPerDay.', 'PATCH /api/schedule');
     }
     updates.times = times.map(slotTimeToString);
   }
   if (body.timezone !== undefined) {
     if (typeof body.timezone !== 'string' || !body.timezone) {
-      return errorResponse(400, 'timezone must be a non-empty string.');
+      return errorResponse(400, 'timezone must be a non-empty string.', 'PATCH /api/schedule');
     }
     updates.timezone = body.timezone;
   }
   if (body.active !== undefined) {
-    if (typeof body.active !== 'boolean') return errorResponse(400, 'active must be a boolean.');
+    if (typeof body.active !== 'boolean') return errorResponse(400, 'active must be a boolean.', 'PATCH /api/schedule');
     updates.active = body.active;
   }
   if (
@@ -714,7 +721,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
       .eq('id', scheduleId)
       .eq('user_id', user.id)
       .single();
-    if (!current) return errorResponse(404, 'Schedule not found.');
+    if (!current) return errorResponse(404, 'Schedule not found.', 'PATCH /api/schedule');
     const youtubeAccountIds =
       body.youtubeAccountIds !== undefined
         ? parseAccountIds(body.youtubeAccountIds)
@@ -732,7 +739,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
         ? parseAccountIds(body.blueskyAccountIds)
         : current.bluesky_account_ids ?? [];
     if (youtubeAccountIds.length === 0 && instagramAccountIds.length === 0 && linkedinAccountIds.length === 0 && blueskyAccountIds.length === 0) {
-      return errorResponse(400, 'At least one publishing account is required.');
+      return errorResponse(400, 'At least one publishing account is required.', 'PATCH /api/schedule');
     }
     // Ownership holds for the merged final selection: sent fields carry new
     // values, kept fields were validated at creation time but are re-checked
@@ -743,7 +750,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
       { provider: 'linkedin', ids: linkedinAccountIds },
       { provider: 'bluesky', ids: blueskyAccountIds },
     ]);
-    if (ownedError) return errorResponse(400, ownedError);
+    if (ownedError) return errorResponse(400, ownedError, 'PATCH /api/schedule');
     updates.youtube_account_ids = youtubeAccountIds;
     updates.instagram_account_ids = instagramAccountIds;
     updates.linkedin_account_ids = linkedinAccountIds;
@@ -757,7 +764,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
   }
 
   if (Object.keys(updates).length === 0) {
-    return errorResponse(400, 'Nothing to update.');
+    return errorResponse(400, 'Nothing to update.', 'PATCH /api/schedule');
   }
   updates.updated_at = new Date().toISOString();
 
@@ -769,7 +776,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
 
   if (updateError) {
     logger.error('[api/schedule] update failed', updateError);
-    return errorResponse(500, 'Failed to update schedule.');
+    return errorResponse(500, 'Failed to update schedule.', 'PATCH /api/schedule');
   }
   return NextResponse.json({ success: true });
 }
@@ -783,12 +790,12 @@ export async function DELETE(request: Request): Promise<NextResponse> {
     : await createSupabaseServerClient();
 
   const scheduleId = new URL(request.url).searchParams.get('id');
-  if (!scheduleId) return errorResponse(400, 'id query param is required.');
+  if (!scheduleId) return errorResponse(400, 'id query param is required.', 'DELETE /api/schedule');
 
   // A persona-scoped API key may only delete schedules of its own personas.
   // Sessions and unrestricted keys keep the previous behavior (no lookup).
   if (auth.isApiKey === true && Array.isArray(auth.personaIds)) {
-    const scopeError = await assertScheduleScope(supabase, auth.personaIds, scheduleId, user.id);
+    const scopeError = await assertScheduleScope(supabase, auth.personaIds, scheduleId, user.id, 'DELETE');
     if (scopeError) return scopeError;
   }
 
@@ -800,7 +807,7 @@ export async function DELETE(request: Request): Promise<NextResponse> {
 
   if (deleteError) {
     logger.error('[api/schedule] delete failed', deleteError);
-    return errorResponse(500, 'Failed to delete schedule.');
+    return errorResponse(500, 'Failed to delete schedule.', 'DELETE /api/schedule');
   }
   return NextResponse.json({ success: true });
 }

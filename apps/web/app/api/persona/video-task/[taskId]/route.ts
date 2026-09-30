@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
 import { logger } from '@/lib/logger';
+import { apiErrorResponse } from '@/lib/api-error';
 
 //---------------
 // DELETE /api/persona/video-task/:taskId — cancela/remove task no motor.
@@ -18,12 +19,12 @@ export async function DELETE(
 
   const baseUrl = process.env.MONEYPRINT_API_URL;
   if (!baseUrl) {
-    return NextResponse.json({ success: false, error: 'MONEYPRINT_API_URL is not defined' }, { status: 500 });
+    return apiErrorResponse(500, 'MONEYPRINT_API_URL is not defined', { route: 'DELETE /api/persona/video-task' });
   }
   const { taskId } = await context.params;
 
   if (!SAFE_TASK_ID.test(taskId)) {
-    return NextResponse.json({ success: false, error: 'Invalid taskId.' }, { status: 400 });
+    return apiErrorResponse(400, 'Invalid taskId.', { route: 'DELETE /api/persona/video-task' });
   }
 
   try {
@@ -35,6 +36,6 @@ export async function DELETE(
     return NextResponse.json(body, { status: response.ok ? 200 : 502 });
   } catch (error) {
     logger.error('[api/persona/video-task] upstream unavailable', error);
-    return NextResponse.json({ success: false, error: 'Video service is unavailable.' }, { status: 502 });
+    return apiErrorResponse(502, 'Video service is unavailable.', { route: 'DELETE /api/persona/video-task' });
   }
 }
