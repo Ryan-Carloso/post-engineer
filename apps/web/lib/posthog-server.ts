@@ -1,5 +1,3 @@
-import 'server-only';
-
 import { PostHog } from 'posthog-node';
 
 //---------------
@@ -8,6 +6,13 @@ import { PostHog } from 'posthog-node';
 // posthog-node is the server SDK: the browser posthog-js SDK must never
 // run in Node API routes (it depends on browser APIs and on
 // session-persistence semantics that don't apply server-side).
+//
+// Note: this module is imported by lib/logger.ts, which is also imported
+// by client components (e.g. lib/api.ts). There is deliberately NO
+// `import 'server-only'` here — instead getPostHogServer() returns null
+// when running in the browser (typeof window !== 'undefined'), making
+// client-side telemetry a safe no-op. The browser PostHog instance
+// (instrumentation-client.ts) handles client-side capture separately.
 //
 // Reads configuration from environment variables:
 // - POSTHOG_API_KEY (server-side, preferred) or NEXT_PUBLIC_POSTHOG_KEY (fallback)
@@ -57,6 +62,9 @@ function toClient(client: PostHog): ServerPostHogClient {
 }
 
 export function getPostHogServer(): ServerPostHogClient | null {
+  // Client bundle safety: this module is reachable from client components
+  // via lib/logger.ts. Never initialize the server SDK in the browser.
+  if (typeof window !== 'undefined') return null;
   if (attempted) return cached;
   attempted = true;
 

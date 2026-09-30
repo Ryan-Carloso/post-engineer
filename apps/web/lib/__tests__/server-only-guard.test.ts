@@ -19,10 +19,11 @@ const SERVER_ONLY_MODULES: readonly string[] = [
   'lib/supabase/middleware.ts',
   'lib/rate-limit.ts',
   'lib/upload/handlers.ts',
-  // posthog-node (the server SDK) must never be bundled into client code:
-  // client components report through the browser posthog-js SDK instead
-  // (see lib/client-logger.ts).
-  'lib/posthog-server.ts',
+  // Note: lib/posthog-server.ts is intentionally NOT in this list. It is
+  // imported by lib/logger.ts, which client components also import (via
+  // lib/api.ts). Instead of `import 'server-only'` (which would break the
+  // client bundle), getPostHogServer() returns null in the browser via a
+  // `typeof window` runtime guard — client telemetry is a safe no-op.
 ];
 
 describe('server-only guard', () => {
