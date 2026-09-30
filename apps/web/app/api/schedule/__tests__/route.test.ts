@@ -41,7 +41,7 @@ function mockSupabase(handlers: {
     grant?: { data: unknown; error: unknown };
     refund?: { data: unknown; error: unknown };
   };
-  slotsInsert?: { error: unknown };
+  slotsInsert?: { error?: unknown; returnedRows?: Record<string, unknown>[] };
 }) {
   const insertedRows: Record<string, unknown>[] = [];
   const updatedRows: Record<string, unknown>[] = [];
@@ -103,7 +103,7 @@ function mockSupabase(handlers: {
             slotRows.push(...withIds);
             const result = handlers.slotsInsert?.error
               ? { data: null, error: handlers.slotsInsert.error }
-              : { data: withIds, error: null };
+              : { data: handlers.slotsInsert?.returnedRows ?? withIds, error: null };
             return {
               select: vi.fn(() => Promise.resolve(result)),
             };
@@ -992,6 +992,23 @@ describe('POST /api/schedule topics → slots → charging', () => {
     expect(db.slotRows).toHaveLength(0);
     const refunds = db.rpcCalls.filter((c) => c.name === 'refund_generation_tokens');
     expect(refunds).toHaveLength(1);
+  });
+
+  it('select de ids retorna menos linhas que o insert → rollback (apaga schedule+slots) e refund', async () => {
+    // The insert succeeds but .select('id') comes back short: same
+    // compensating path as a failed insert — 500, both deletes, refund.
+    const db = oneOffSupabase({ slotsInsert: { returnedRows: [{ id: 'db-slot-1' }] } });
+    const res = await POST(
+      jsonRequest(
+        { ...validOneOffBody, postsPerDay: 2, topics: ['t1', 't2'], times: ['09:00', '18:00'] },
+        'POST',
+      ),
+    );
+    expect(res.status).toBe(500);
+    const refunds = db.rpcCalls.filter((c) => c.name === 'refund_generation_tokens');
+    expect(refunds).toHaveLength(1);
+    expect(db.deleteCalls.filter((c) => c.table === 'scheduled_posts')).toHaveLength(1);
+    expect(db.deleteCalls.filter((c) => c.table === 'schedules')).toHaveLength(1);
   });
 });
 

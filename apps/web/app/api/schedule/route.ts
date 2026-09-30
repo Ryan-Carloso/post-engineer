@@ -558,7 +558,16 @@ export async function POST(request: Request): Promise<NextResponse> {
     .insert(slotRows)
     .select('id');
   if (slotsError || !insertedSlots || insertedSlots.length !== slotRows.length) {
-    logger.error('[api/schedule] slots insert failed', slotsError);
+    // Log the mismatch distinctly: when the insert succeeded but .select
+    // came back short/empty, slotsError is null and the generic message
+    // would send triage chasing a nonexistent insert failure.
+    if (slotsError) {
+      logger.error('[api/schedule] slots insert failed', slotsError);
+    } else {
+      logger.error(
+        `[api/schedule] slots insert returned ${insertedSlots?.length ?? 0} ids for ${slotRows.length} rows`,
+      );
+    }
     await supabase.from('scheduled_posts').delete().eq('schedule_id', scheduleId).eq('user_id', user.id);
     await supabase.from('schedules').delete().eq('id', scheduleId).eq('user_id', user.id);
     await refundCharge('Schedule slots insert failed; tokens refunded');
