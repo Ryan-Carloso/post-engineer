@@ -35,9 +35,11 @@ describe('trackEvent', () => {
     resetAnalyticsForTesting();
   });
 
-  it('captures mcp_tool_called with the tool name', () => {
+  it('captures mcp_tool_called with the tool name', async () => {
     vi.stubEnv('POSTHOG_API_KEY', 'phc_test_key');
     trackEvent('mcp_tool_called', { toolName: 'generate_video' });
+    // trackEvent is fire-and-forget (async lazy SDK load); wait a tick.
+    await new Promise((resolve) => setImmediate(resolve));
     expect(mockCapture).toHaveBeenCalledWith(
       expect.objectContaining({
         event: 'mcp_tool_called',
@@ -53,13 +55,14 @@ describe('trackEvent', () => {
     expect(mockCapture).not.toHaveBeenCalled();
   });
 
-  it('redacts secret-bearing property keys', () => {
+  it('redacts secret-bearing property keys', async () => {
     vi.stubEnv('POSTHOG_API_KEY', 'phc_test_key');
     trackEvent('mcp_tool_called', {
       toolName: 'x',
       password: 'secret123',
       apiKey: 'sk-secret',
     });
+    await new Promise((resolve) => setImmediate(resolve));
     const call = mockCapture.mock.calls[0][0] as {
       properties: Record<string, unknown>;
     };
