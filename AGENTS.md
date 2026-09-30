@@ -1185,9 +1185,41 @@ Follow these so the same issues don't come back:
   (e.g. POST /api/schedule gone but MCP schedule_video still calling it)
   is worse than the old code — it breaks loudly at runtime instead of
   failing at build time.
-- Never silently ignore invalid states (`if kind != 'batch': continue`).
-  Fail fast with a loud error (assert_batch_kind raises ValueError) so a
+- Never silently ignore invalid states. Fail fast with a loud error so a
   resurrected dead path surfaces immediately instead of hiding as dead
   rows in the DB.
 - If an endpoint/tool isn't used, it shouldn't exist. "Keep it por agora"
   is how garbage accumulates.
+
+## Verify web-edited commits before merging (2026-09-29)
+- A GitHub web edit ("Atualizar o tools.ts" on PR #18) duplicated JSDoc
+  lines and left tools.ts unparseable — CI on the old head never caught it
+  because the edit landed after the last green run. Cherry-picking the
+  branch surfaced the break locally via vitest.
+- Rule: after cherry-picking or merging a branch that contains web-made
+  commits, run the affected test suite + typecheck locally before pushing.
+  A green CI badge on an older head means nothing for a newer edit.
+
+## PR #27 review learnings (2026-09-30, OpenCode — 1 fixed, 4 rebutted)
+- **OpenCode line numbers can be hallucinated — grep the file.** Two
+  findings cited lines beyond EOF (route.ts:1082-1083 in a 723-line file;
+  batch test 1226-1248 in a 477-line file); a third described a
+  NO_CONNECTED_ACCOUNTS gap that the implementation already covers
+  (batch/route.ts:227, tests green). Always verify the location exists
+  before engaging with the argument.
+- **Verify the reviewer's premise about types.** "Unnecessary type
+  assertion" on `(persona as Record<string, unknown>)` was false: the
+  Supabase client is the bare untyped `SupabaseClient`, so `data` is
+  `any` and the assertion is the project-blessed any→unknown narrowing,
+  not dead code.
+- **A 201-with-warnings suggestion can be incoherent — read it fully.**
+  The reviewer asked to keep the schedule and return 201 on slots-insert
+  failure, but its own snippet returned the never-inserted slot ids as
+  created AND refunded the tokens. The approved contract is atomic
+  creation (rollback + refund + 500); the 500 is honest because nothing
+  remains after the rollback.
+- **Fixed (MAJOR 2): test names must match their assertions.** The slots-
+  failure test was named "rollback (apaga schedule)" but only asserted
+  the 500 + refund. The mock now tracks `deleteCalls` per table and the
+  test asserts both compensating deletes run — removing either delete
+  from the route fails the test.
