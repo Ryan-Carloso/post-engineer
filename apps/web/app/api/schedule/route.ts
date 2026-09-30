@@ -5,6 +5,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { isPersonaAllowed } from '@/lib/api-keys';
 import { validateScheduleWindow } from '@/lib/schedule-window';
+import { isValidTimezone, parseZonedDateTime } from '@/lib/timezone';
 import { logger } from '@/lib/logger';
 
 //---------------
@@ -220,12 +221,25 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   // One-off schedules always carry a target datetime (same rule as the MCP
   // server): it must be between 24h and 30 days ahead.
+  //
+  // Timezone rule: a naive "2026-10-01T14:00:00" is a wall clock in
+  // `timezone`, NOT 14:00 UTC (`new Date(naive)` would assume UTC per
+  // spec). An explicit offset (Z or ±hh:mm) is respected as-is.
+  const timezone = typeof body.timezone === 'string' && body.timezone ? body.timezone : 'UTC';
+  if (!isValidTimezone(timezone)) {
+    return errorResponse(400, 'timezone must be a valid IANA timezone (e.g. "Europe/Lisbon").');
+  }
   if (body.scheduledAt === undefined || body.scheduledAt === null) {
     return errorResponse(400, 'scheduledAt is required.');
   }
-  const windowCheck = validateScheduleWindow(body.scheduledAt);
+  const scheduledAt = parseZonedDateTime(body.scheduledAt, timezone);
+  if (!scheduledAt) {
+    return errorResponse(400, 'scheduledAt must be a valid ISO date.');
+  }
+  // The 24h/30d window is validated against the converted instant, so a
+  // wall clock in UTC+14 is not measured as if it were UTC.
+  const windowCheck = validateScheduleWindow(scheduledAt);
   if (!windowCheck.ok) return errorResponse(400, windowCheck.error);
-  const scheduledAt = new Date(body.scheduledAt as string);
 
   const providers = Array.isArray(body.providers)
     ? body.providers.filter(
@@ -268,7 +282,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     return errorResponse(400, 'times cannot contain more entries than postsPerDay.');
   }
 
-  const timezone = typeof body.timezone === 'string' && body.timezone ? body.timezone : 'UTC';
+  // `timezone` was validated above (before scheduledAt parsing).
 
   // The persona must exist and belong to the user (RLS enforces it too).
   const { data: persona } = await supabase

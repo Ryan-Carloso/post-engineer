@@ -680,3 +680,95 @@ describe('/api/schedule persona scoping (scoped API keys)', () => {
     expect(res.status).toBe(404);
   });
 });
+
+//---------------
+// Timezone-aware scheduledAt (fix 1b): a naive "2026-10-01T14:00:00" sent
+// with timezone "Europe/Lisbon" must be stored as 14:00 in Lisbon
+// (13:00Z in October), not as 14:00 UTC.
+//---------------
+function naiveWallClock(msFromNow: number, hh = 14, mm = 0): string {
+  const d = new Date(Date.now() + msFromNow);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}T${p(hh)}:${p(mm)}:00`;
+}
+
+function wallClockIn(instant: string, tz: string): string {
+  return new Intl.DateTimeFormat('sv-SE', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(instant));
+}
+
+describe('POST /api/schedule timezone handling', () => {
+  it('converte scheduledAt naive para o timezone enviado em vez de assumir UTC', async () => {
+    const db = oneOffSupabase({});
+    // America/Sao_Paulo is fixed UTC-3 (no DST): 14:00 wall clock is 17:00Z.
+    const naive = naiveWallClock(3 * 86400000);
+    const res = await POST(
+      jsonRequest({ ...validOneOffBody, scheduledAt: naive, timezone: 'America/Sao_Paulo' }, 'POST'),
+    );
+    expect(res.status).toBe(201);
+    const [datePart] = naive.split('T');
+    expect(db.insertedRows[0]).toMatchObject({ scheduled_at: `${datePart}T17:00:00.000Z` });
+  });
+
+  it('preserva o wall clock no timezone enviado (regressão do bug reportado)', async () => {
+    const db = oneOffSupabase({});
+    const naive = naiveWallClock(3 * 86400000);
+    const res = await POST(
+      jsonRequest({ ...validOneOffBody, scheduledAt: naive, timezone: 'Europe/Lisbon' }, 'POST'),
+    );
+    expect(res.status).toBe(201);
+    const stored = (db.insertedRows[0] as Record<string, unknown>).scheduled_at as string;
+    const [datePart] = naive.split('T');
+    expect(wallClockIn(stored, 'Europe/Lisbon')).toBe(`${datePart} 14:00`);
+  });
+
+  it('respeita offset explícito em scheduledAt, ignorando o timezone', async () => {
+    const db = oneOffSupabase({});
+    const res = await POST(
+      jsonRequest(
+        { ...validOneOffBody, scheduledAt: '2026-10-05T14:00:00+01:00', timezone: 'America/Sao_Paulo' },
+        'POST',
+      ),
+    );
+    expect(res.status).toBe(201);
+    expect(db.insertedRows[0]).toMatchObject({ scheduled_at: '2026-10-05T13:00:00.000Z' });
+  });
+
+  it('rejeita timezone inválido com 400 sem criar nada', async () => {
+    const db = oneOffSupabase({});
+    const res = await POST(
+      jsonRequest({ ...validOneOffBody, timezone: 'Mars/Olympus' }, 'POST'),
+    );
+    expect(res.status).toBe(400);
+    expect(db.insertedRows).toHaveLength(0);
+  });
+
+  it('valida a janela de 24h sobre o instante convertido, não sobre o naive', async () => {
+    const db = oneOffSupabase({});
+    // 23h out as a naive wall clock; in America/Sao_Paulo (-3) the real
+    // instant is 26h out — inside the window. The old code (naive as UTC)
+    // would reject it with 400.
+    const naive = new Date(Date.now() + 23 * 3600000).toISOString().slice(0, 19);
+    const res = await POST(
+      jsonRequest({ ...validOneOffBody, scheduledAt: naive, timezone: 'America/Sao_Paulo' }, 'POST'),
+    );
+    expect(res.status).toBe(201);
+    expect(db.insertedRows).toHaveLength(1);
+  });
+
+  it('rejeita scheduledAt inválido com 400', async () => {
+    const db = oneOffSupabase({});
+    const res = await POST(
+      jsonRequest({ ...validOneOffBody, scheduledAt: 'not-a-date' }, 'POST'),
+    );
+    expect(res.status).toBe(400);
+    expect(db.insertedRows).toHaveLength(0);
+  });
+});
