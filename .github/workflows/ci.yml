@@ -206,10 +206,10 @@ jobs:
         run: uv run python -m compileall -q app cli.py main.py
 
       - name: Mypy (import-not-found fatal, selected codes disabled)
-        run: uv run mypy app
+        run: uv run mypy app cli.py main.py
 
       - name: Import smoke test (catches ModuleNotFoundError from removed deps)
-        run: uv run python -c "from app import asgi; print('asgi imports OK')"
+        run: uv run python -c "import cli; from app import asgi; print('imports OK')"
 
       - name: Tests
         run: uv run coverage run -m pytest -q && uv run coverage xml -o coverage.xml

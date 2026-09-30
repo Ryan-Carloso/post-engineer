@@ -127,7 +127,7 @@ def publish_task_videos(
         task_id, state=const.TASK_STATE_PROCESSING, status="publishing"
     )
 
-    results = []
+    results: list[dict[str, object]] = []
     for provider in metadata.providers:
         provider_metadata = (
             metadata.youtube
