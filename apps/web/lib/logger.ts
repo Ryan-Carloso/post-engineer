@@ -82,7 +82,7 @@ function sanitizeReportBody(value: unknown): unknown {
 // Telemetry must never break the request path.
 //---------------
 
-function reportErrorToPostHog(message: string, cause: unknown, metadata?: Record<string, unknown>): void {
+function reportErrorToPostHog(message: string, cause: unknown, metadata?: Record<string, unknown>, logId?: string): void {
   if (!isProduction()) return;
   try {
     const client = getPostHogServer();
@@ -103,6 +103,9 @@ function reportErrorToPostHog(message: string, cause: unknown, metadata?: Record
       $exception_type: error.name,
       $exception_stacktrace: error.stack ? redactCredentialFragments(error.stack) : error.stack,
       log_message: message,
+      // Correlation ID: the errorId returned to API clients. Search PostHog
+      // for this value to find the exact event a user reported.
+      logId,
       ...safeMetadata,
     };
     if (!(cause instanceof Error) && cause !== undefined) properties['cause'] = sanitizeReportBody(cause);
@@ -112,7 +115,7 @@ function reportErrorToPostHog(message: string, cause: unknown, metadata?: Record
   }
 }
 
-function reportWarningToPostHog(message: string, metadata?: Record<string, unknown>): void {
+function reportWarningToPostHog(message: string, metadata?: Record<string, unknown>, logId?: string): void {
   if (!isProduction()) return;
   try {
     const client = getPostHogServer();
@@ -125,6 +128,7 @@ function reportWarningToPostHog(message: string, metadata?: Record<string, unkno
     }
     client.capture('server_warning', {
       message: redactCredentialFragments(message),
+      logId,
       ...safeMetadata,
     });
   } catch {
@@ -151,8 +155,11 @@ function writeConsole(
   const timestamp = new Date().toISOString();
   const logId = `${timestamp.slice(0, 10)}_${timestamp.slice(11, 19).replace(/:/g, '')}_${Math.random().toString(36).substring(2, 8)}`;
 
-  const args: unknown[] = [message];
-  if (metadata !== undefined) args.push(metadata);
+  // The logId is the correlation ID returned to API clients as `errorId`.
+  // Merge it into metadata so Vercel logs and PostHog events are searchable
+  // by it. Message shape is preserved (tests assert exact messages).
+  const metaWithId = { logId, ...(metadata ?? {}) };
+  const args: unknown[] = [message, metaWithId];
   if (error !== undefined) args.push(error);
 
   if (level === 'ERROR') {
@@ -197,7 +204,7 @@ class Logger {
 
   warn(message: string, metadata?: Record<string, unknown>): string {
     const logId = writeConsole('WARN', message, metadata);
-    reportWarningToPostHog(message, metadata);
+    reportWarningToPostHog(message, metadata, logId);
     return logId;
   }
 
@@ -206,7 +213,7 @@ class Logger {
     // given: toHaveBeenCalledWith(msg, meta) assertions require the exact
     // argument list.
     const logId = writeConsole('ERROR', message, metadata, cause === undefined ? undefined : toError(cause));
-    reportErrorToPostHog(message, cause, metadata);
+    reportErrorToPostHog(message, cause, metadata, logId);
     return logId;
   }
 

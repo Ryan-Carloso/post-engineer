@@ -12,7 +12,7 @@
 //---------------
 
 import { getPostHogServer } from './posthog-server';
-import { scrubSecrets } from './scrub';
+import { scrubSecrets, redactCredentialFragments } from './scrub';
 
 //---------------
 // Public API
@@ -29,6 +29,11 @@ export function trackApiEvent(eventName: string, properties?: Record<string, unk
     const client = getPostHogServer();
     if (!client) return;
     const props = scrubSecrets({ ...(properties ?? {}) });
+    // Fragment redaction for symmetry with logger.ts: string values can
+    // carry credential-shaped fragments that key-name scrubbing misses.
+    for (const [k, v] of Object.entries(props)) {
+      if (typeof v === 'string') props[k] = redactCredentialFragments(v).slice(0, 500);
+    }
     // Server-side distinct id: the API itself is the actor. Per-user
     // attribution happens client-side; here we track aggregate usage.
     client.capture(eventName, { ...props, $lib: 'posthog-server' });

@@ -79,11 +79,12 @@ describe('logger', () => {
     expect(console.log).toHaveBeenCalled();
   });
 
-  it('info without metadata does not include a meta string', () => {
+  it('info without metadata includes only the logId in meta', () => {
     logger.info('message only');
     const [message, meta] = (console.log as ReturnType<typeof vi.fn>).mock.calls[0] as [string, unknown];
     expect(message).toBe('message only');
-    expect(meta).toBeUndefined();
+    // logId is always present for correlation, even without caller metadata.
+    expect(meta).toMatchObject({ logId: expect.any(String) });
   });
 
   it('repeated generateLogId calls produce distinct ids', () => {
@@ -119,6 +120,19 @@ describe('logger production routing', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
+  });
+
+  it('errorId correlates: returned logId appears in PostHog properties', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const logId = logger.error('insert failed', new Error('db down'));
+
+    expect(capture).toHaveBeenCalledTimes(1);
+    const [, props] = capture.mock.calls[0] as [string, Record<string, unknown>];
+    // The errorId returned to API clients must match the logId in the
+    // PostHog event — otherwise users cannot correlate their report.
+    expect(props['logId']).toBe(logId);
+    expect(typeof logId).toBe('string');
+    expect(logId.length).toBeGreaterThan(0);
   });
 
   it('production error() reports to PostHog and keeps console output', () => {
