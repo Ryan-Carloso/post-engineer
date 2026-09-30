@@ -205,6 +205,12 @@ jobs:
       - name: Typecheck
         run: uv run python -m compileall -q app cli.py main.py
 
+      - name: Mypy (incremental — import errors fatal, other codes advisory)
+        run: uv run mypy app
+
+      - name: Import smoke test (catches ModuleNotFoundError from removed deps)
+        run: uv run python -c "from app import asgi; print('asgi imports OK')"
+
       - name: Tests
         run: uv run coverage run -m pytest -q && uv run coverage xml -o coverage.xml
 
