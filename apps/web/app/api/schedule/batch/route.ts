@@ -5,6 +5,11 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { isPersonaAllowed } from '@/lib/api-keys';
 import { computeVideoTokens, toFiniteNumber, type FaceQuality } from '@/lib/tokens';
+import {
+  datePartsInTimezone,
+  isValidTimezone,
+  zonedTimeToUtc,
+} from '@/lib/timezone';
 import { logger } from '@/lib/logger';
 
 //---------------
@@ -46,21 +51,6 @@ type ParseResult = { ok: true; value: ParsedBatchBody } | { ok: false; error: st
 
 function errorResponse(status: number, error: string, extra?: Record<string, unknown>): NextResponse {
   return NextResponse.json({ success: false, error, ...extra }, { status });
-}
-
-//---------------
-// isValidTimezone — IANA zone check. Uses the Intl constructor (which
-// throws RangeError on unknown zones) instead of supportedValuesOf, whose
-// list omits 'UTC' on some ICU builds.
-//---------------
-export function isValidTimezone(timezone: string): boolean {
-  if (!timezone) return false;
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone: timezone });
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 //---------------
@@ -129,65 +119,9 @@ export function parseBatchBody(body: unknown): ParseResult {
 //---------------
 // Timezone math (pure): next N occurrences of `times` in `timezone`,
 // strictly after `now`, ascending. Skips times already past today.
+// Wall-clock conversion lives in `@/lib/timezone` (shared with the
+// one-off schedule route).
 //---------------
-function timezoneOffsetMs(timeZone: string, date: Date): number {
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat('en-US', {
-      timeZone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    })
-      .formatToParts(date)
-      .map((part) => [part.type, part.value]),
-  );
-  const asUtc = Date.UTC(
-    Number(parts.year),
-    Number(parts.month) - 1,
-    Number(parts.day),
-    Number(parts.hour) % 24,
-    Number(parts.minute),
-    Number(parts.second),
-  );
-  return asUtc - date.getTime();
-}
-
-function zonedTimeToUtc(
-  year: number,
-  month: number,
-  day: number,
-  hour: number,
-  minute: number,
-  timeZone: string,
-): Date {
-  const guess = Date.UTC(year, month - 1, day, hour, minute);
-  let utc = guess;
-  // Fixed-point iteration: utc = localWallClock - offset(utc). Three
-  // passes converge even across DST transitions.
-  for (let i = 0; i < 3; i++) {
-    utc = guess - timezoneOffsetMs(timeZone, new Date(utc));
-  }
-  return new Date(utc);
-}
-
-function datePartsInTimezone(date: Date, timeZone: string): { year: number; month: number; day: number } {
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat('en-US', {
-      timeZone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    })
-      .formatToParts(date)
-      .map((part) => [part.type, part.value]),
-  );
-  return { year: Number(parts.year), month: Number(parts.month), day: Number(parts.day) };
-}
-
 export function computeBatchSlotDatetimes(
   times: string[],
   timezone: string,

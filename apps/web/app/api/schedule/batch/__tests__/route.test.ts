@@ -10,7 +10,8 @@ vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
 }));
 
-import { POST, parseBatchBody, computeBatchSlotDatetimes, isValidTimezone } from '../route';
+import { POST, parseBatchBody, computeBatchSlotDatetimes } from '../route';
+import { isValidTimezone } from '@/lib/timezone';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 
