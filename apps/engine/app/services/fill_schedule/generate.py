@@ -1,4 +1,5 @@
-"""Batch video generation: dispatch pending batch slots to the video pipeline."""
+"""Video generation dispatch: pending batch slots (parallel) and one-off
+schedule slots (sequential per schedule) to the video pipeline."""
 
 from __future__ import annotations
 

@@ -339,7 +339,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     return errorResponse(400, `postsPerDay (${postsPerDay}) must equal the number of topics (${topics.length}).`);
   }
 
-  // M2: explicit times — without them the engine spreads across the window.
+  // Explicit times pair 1:1 with topics (computeOneOffSlots enforces the
+  // count); without times exactly one topic is allowed (single slot at
+  // scheduledAt).
   const times = parseTimes(body.times);
   if (times === null) {
     return errorResponse(400, 'times must be an array of "HH:MM" strings (00:00–23:59).');
