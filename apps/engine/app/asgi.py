@@ -51,15 +51,15 @@ def _loguru_posthog_sink(message) -> None:
         record = message.record
         exception = record.get("exception")
         properties: dict[str, object] = {
-            "message": scrub_secret_values(str(record.get("message", ""))),
+            "$exception_message": scrub_secret_values(str(record.get("message", ""))),
         }
         if exception is not None:
             # loguru stores the exception as a (type, value, traceback) tuple
             exc_value = exception[1]
-            properties["exception_type"] = type(exc_value).__name__
-            properties["exception_message"] = scrub_secret_values(str(exc_value))
+            properties["$exception_type"] = type(exc_value).__name__
+            properties["$exception_message"] = scrub_secret_values(str(exc_value))
             try:
-                properties["stacktrace"] = scrub_secret_values("".join(
+                properties["$exception_stacktrace"] = scrub_secret_values("".join(
                     traceback.format_exception(type(exc_value), exc_value, exc_value.__traceback__)
                 )[:5000])
             except Exception:

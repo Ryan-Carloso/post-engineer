@@ -42,37 +42,40 @@ interface PostHogClient {
 
 let client: PostHogClient | null = null;
 let warned = false;
-let attempted = false;
+let clientPromise: Promise<PostHogClient | null> | null = null;
 
 async function getClient(): Promise<PostHogClient | null> {
   if (client !== null) return client;
-  if (attempted) return null;
-  attempted = true;
-
-  const apiKey = process.env['POSTHOG_API_KEY'];
-  if (typeof apiKey !== 'string' || apiKey.length === 0) {
-    if (!warned) {
-      warned = true;
-      console.warn('[mcp-analytics] POSTHOG_API_KEY not set — analytics disabled');
+  // Cache the in-flight promise: concurrent trackEvent calls during the
+  // lazy import wait for the same load instead of dropping events.
+  if (clientPromise !== null) return clientPromise;
+  clientPromise = (async (): Promise<PostHogClient | null> => {
+    const apiKey = process.env['POSTHOG_API_KEY'];
+    if (typeof apiKey !== 'string' || apiKey.length === 0) {
+      if (!warned) {
+        warned = true;
+        console.warn('[mcp-analytics] POSTHOG_API_KEY not set — analytics disabled');
+      }
+      return null;
     }
-    return null;
-  }
 
-  try {
-    // Dynamic import: a missing or incompatible posthog-node never breaks
-    // module load. The MCP server declares node >=20.10; posthog-node 5.x
-    // wants >=20.20 — on older Node this catch degrades to disabled.
-    const { PostHog } = await import('posthog-node');
-    const host = process.env['POSTHOG_HOST'] ?? 'https://us.i.posthog.com';
-    client = new PostHog(apiKey, { host }) as unknown as PostHogClient;
-    return client;
-  } catch (error) {
-    if (!warned) {
-      warned = true;
-      console.warn('[mcp-analytics] PostHog init failed — analytics disabled:', error);
+    try {
+      // Dynamic import: a missing or incompatible posthog-node never breaks
+      // module load. The MCP server declares node >=20.10; posthog-node 5.x
+      // wants >=20.20 — on older Node this catch degrades to disabled.
+      const { PostHog } = await import('posthog-node');
+      const host = process.env['POSTHOG_HOST'] ?? 'https://us.i.posthog.com';
+      client = new PostHog(apiKey, { host }) as unknown as PostHogClient;
+      return client;
+    } catch (error) {
+      if (!warned) {
+        warned = true;
+        console.warn('[mcp-analytics] PostHog init failed — analytics disabled:', error);
+      }
+      return null;
     }
-    return null;
-  }
+  })();
+  return clientPromise;
 }
 
 //---------------
@@ -111,5 +114,5 @@ export function trackEvent(eventName: string, properties?: Record<string, unknow
 export function resetAnalyticsForTesting(): void {
   client = null;
   warned = false;
-  attempted = false;
+  clientPromise = null;
 }
