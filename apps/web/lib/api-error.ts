@@ -19,7 +19,7 @@
 
 import { NextResponse } from 'next/server';
 import { logger } from './logger';
-import { scrubSecrets } from './scrub';
+import { scrubSecrets, redactCredentialFragments } from './scrub';
 
 export interface ApiErrorOptions {
   // Route identifier for debugging, e.g. 'POST /api/schedule'.
@@ -61,10 +61,11 @@ function fallbackErrorId(): string {
 // Errors serialize to their message; other values are JSON-stringified
 // (truncated) so PostHog shows something useful.
 function serializeCause(cause: unknown): string {
-  if (cause instanceof Error) return cause.message;
+  if (cause instanceof Error) return redactCredentialFragments(cause.message).slice(0, 300);
   try {
     const text = JSON.stringify(cause) ?? '[unserializable]';
-    return text.length > 300 ? `${text.slice(0, 300)}...` : text;
+    const capped = text.length > 300 ? `${text.slice(0, 300)}...` : text;
+    return redactCredentialFragments(capped);
   } catch {
     return '[unserializable]';
   }
@@ -90,6 +91,13 @@ export function apiErrorResponse(
   try {
     if (status >= 500) {
       errorId = logger.error(message, options?.cause, metadata);
+    } else if (status === 401 || status === 403) {
+      // Auth failures are console-only (no PostHog): unauthenticated scanner
+      // traffic would otherwise become billable analytics volume. The
+      // errorId is still returned so clients get a consistent shape.
+      // eslint-disable-next-line no-console
+      console.warn(`[${route}] ${status} ${logMessage}`, metadata);
+      errorId = fallbackErrorId();
     } else if (options?.cause !== undefined) {
       // 4xx can carry a cause too (e.g. Stripe signature verification
       // failure) — logger.warn has no cause parameter, so serialize it

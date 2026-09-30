@@ -5,6 +5,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { isPersonaAllowed } from '@/lib/api-keys';
 import { apiErrorResponse } from '@/lib/api-error';
+import { logger } from '@/lib/logger';
 import { computeVideoTokens, toFiniteNumber, type FaceQuality } from '@/lib/tokens';
 import {
   datePartsInTimezone,
@@ -334,13 +335,24 @@ export async function POST(request: Request): Promise<NextResponse> {
     })),
   );
   if (slotsError) {
-    await supabase.from('scheduled_posts').delete().eq('schedule_id', scheduleId);
-    await supabase.from('schedules').delete().eq('id', scheduleId);
-    await serviceSupabase.rpc('refund_generation_tokens', {
+    // Rollback failures are loud: unchecked deletes can leave orphaned
+    // pending slots that the engine tick picks up after a refund.
+    const { error: delSlotsError } = await supabase.from('scheduled_posts').delete().eq('schedule_id', scheduleId);
+    const { error: delScheduleError } = await supabase.from('schedules').delete().eq('id', scheduleId);
+    const { error: refundError } = await serviceSupabase.rpc('refund_generation_tokens', {
       p_user_id: auth.userId,
       p_generation_id: generationId,
       p_reason: 'Batch slots insert failed; tokens refunded',
     });
+    if (delSlotsError || delScheduleError || refundError) {
+      logger.error('[schedule/batch] rollback failed after slots insert failure', undefined, {
+        route: 'POST /api/schedule/batch',
+        scheduleId,
+        delSlotsError: delSlotsError?.message,
+        delScheduleError: delScheduleError?.message,
+        refundError: refundError?.message,
+      });
+    }
     return errorResponse(500, 'Failed to create batch. Please try again.', 'POST /api/schedule/batch', undefined, {
       cause: slotsError,
     });

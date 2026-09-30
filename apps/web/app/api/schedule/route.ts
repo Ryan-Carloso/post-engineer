@@ -9,6 +9,7 @@ import { validateScheduleWindow } from '@/lib/schedule-window';
 import { isValidTimezone, parseZonedDateTime, zonedTimeOnDate } from '@/lib/timezone';
 import { computeVideoTokens, toFiniteNumber, type FaceQuality } from '@/lib/tokens';
 import { apiErrorResponse } from '@/lib/api-error';
+import { logger } from '@/lib/logger';
 import { trackApiEvent } from '@/lib/analytics';
 
 //---------------
@@ -513,12 +514,13 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
-  const refundCharge = async (reason: string) => {
-    await serviceSupabase.rpc('refund_generation_tokens', {
+  const refundCharge = async (reason: string): Promise<boolean> => {
+    const { error } = await serviceSupabase.rpc('refund_generation_tokens', {
       p_user_id: user.id,
       p_generation_id: generationId,
       p_reason: reason,
     });
+    return !error;
   };
 
   const { data: schedule, error: insertError } = await supabase
@@ -533,6 +535,13 @@ export async function POST(request: Request): Promise<NextResponse> {
       // schedules_persona_owner_recurring would reject the persona's
       // second schedule with a 500 (the app-level 409 guard is gone since
       // PR #28, but the DB guard still fires on the default).
+      //
+      // Backfill note: one-off schedules created before this fix keep
+      // kind='recurring' and still trip the index. One-time manual fix in
+      // the Supabase dashboard SQL editor:
+      //   update schedules set kind='batch' where kind='recurring'
+      //   and id not in (select schedule_id from scheduled_posts ...);
+      // (Scope the WHERE to actual one-off rows for the affected personas.)
       kind: 'batch',
       providers,
       youtube_account_ids: youtubeAccountIds,
@@ -582,9 +591,26 @@ export async function POST(request: Request): Promise<NextResponse> {
     // slotsError is null: log a distinct message with observed vs expected
     // counts instead of the misleading generic insert failure.
     const mismatch = !slotsError;
-    await supabase.from('scheduled_posts').delete().eq('schedule_id', scheduleId).eq('user_id', user.id);
-    await supabase.from('schedules').delete().eq('id', scheduleId).eq('user_id', user.id);
-    await refundCharge('Schedule slots insert failed; tokens refunded');
+    // Rollback failures are loud: if a compensating delete fails, the engine
+    // tick could pick up orphaned pending slots and generate videos whose
+    // charge was refunded. Log both results.
+    const { error: delSlotsError } = await supabase.from('scheduled_posts').delete().eq('schedule_id', scheduleId).eq('user_id', user.id);
+    const { error: delScheduleError } = await supabase.from('schedules').delete().eq('id', scheduleId).eq('user_id', user.id);
+    if (delSlotsError || delScheduleError) {
+      logger.error('[schedule] rollback deletes failed after slot insert failure', undefined, {
+        route: 'POST /api/schedule',
+        scheduleId,
+        delSlotsError: delSlotsError?.message,
+        delScheduleError: delScheduleError?.message,
+      });
+    }
+    const refunded = await refundCharge('Schedule slots insert failed; tokens refunded');
+    if (!refunded) {
+      logger.error('[schedule] token refund failed after slot insert failure', undefined, {
+        route: 'POST /api/schedule',
+        scheduleId,
+      });
+    }
     return errorResponse(500, 'Failed to create schedule.', 'POST /api/schedule', undefined, {
       cause: slotsError ?? undefined,
       logMessage: mismatch

@@ -9,7 +9,7 @@
 //---------------
 
 import { getPostHogServer } from './posthog-server';
-import { scrubSecrets } from './scrub';
+import { scrubSecrets, redactCredentialFragments } from './scrub';
 
 //---------------
 // Environment routing (read at call time so tests can stub it)
@@ -58,14 +58,6 @@ function toError(cause: unknown): Error {
 
 const MAX_REPORT_BODY_CHARS = 200;
 
-function redactCredentialFragments(text: string): string {
-  return text
-    .replace(/\bBearer\s+[^\s]+/gi, 'Bearer [redacted]')
-    .replace(/(https?:\/\/)[^\s/@]+@/gi, '$1[redacted]@')
-    .replace(/([?&](?:api[_-]?key|access[_-]?token|token)=)[^\s&]+/gi, '$1[redacted]')
-    .replace(/\bsk-[A-Za-z0-9_-]{20,}/g, '[redacted]');
-}
-
 function sanitizeReportBody(value: unknown): unknown {
   if (typeof value === 'string') {
     return redactCredentialFragments(value).slice(0, MAX_REPORT_BODY_CHARS);
@@ -97,14 +89,19 @@ function reportErrorToPostHog(message: string, cause: unknown, metadata?: Record
     if (!client) return;
     const error = toError(cause);
     // PostHog error tracking ingests $exception events with these properties.
-    // Metadata is scrubbed for secret-bearing keys before sending — never
-    // trust caller-provided objects blindly. The cause is sanitized
-    // separately (credential fragments redacted, length capped).
+    // Everything is redacted: error messages/stacks can echo credentials
+    // (e.g. ?api_key= in upstream errors), metadata keys are scrubbed via
+    // scrubSecrets, and string metadata values go through sanitizeReportBody.
     const safeMetadata = metadata ? scrubSecrets(metadata) : {};
+    // Redact credential fragments inside string metadata values too —
+    // key-name scrubbing alone misses e.g. { body: "...api_key=..." }.
+    for (const [k, v] of Object.entries(safeMetadata)) {
+      if (typeof v === 'string') safeMetadata[k] = sanitizeReportBody(v);
+    }
     const properties: Record<string, unknown> = {
-      $exception_message: error.message,
+      $exception_message: redactCredentialFragments(error.message),
       $exception_type: error.name,
-      $exception_stacktrace: error.stack,
+      $exception_stacktrace: error.stack ? redactCredentialFragments(error.stack) : error.stack,
       log_message: message,
       ...safeMetadata,
     };

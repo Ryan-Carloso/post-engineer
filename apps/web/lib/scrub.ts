@@ -40,3 +40,17 @@ export function scrubSecrets(metadata: Record<string, unknown>, depth = 0): Reco
   }
   return scrubbed;
 }
+
+//---------------
+// Redact credential-shaped fragments inside free-text strings.
+// Catches Bearer tokens, userinfo in URLs, api_key query params, and
+// sk-... secrets that key-name scrubbing misses (e.g. inside message
+// strings or upstream bodies).
+//---------------
+export function redactCredentialFragments(text: string): string {
+  return text
+    .replace(/\bBearer\s+[^\s]+/gi, 'Bearer [redacted]')
+    .replace(/(https?:\/\/)[^\s/@]+@/gi, '$1[redacted]@')
+    .replace(/([?&](?:api[_-]?key|access[_-]?token|token)=)[^\s&]+/gi, '$1[redacted]')
+    .replace(/\bsk-[A-Za-z0-9_-]{20,}/g, '[redacted]');
+}
