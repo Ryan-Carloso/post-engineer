@@ -147,6 +147,21 @@ app = get_application()
 # No CORS: the engine is internal — browsers never hit it directly; every
 # call goes through Next.js (same origin as the app) with the Supabase JWT.
 
+
+def get_deployed_version() -> str:
+    """Deployed build identity, for /health and the startup log.
+
+    Baked into the image at build time via the GIT_SHA build arg
+    (Dockerfile maps it to APP_VERSION); dev/test default to "dev".
+    """
+    return os.environ.get("APP_VERSION") or "dev"
+
+
+@app.get("/health")
+def health() -> dict[str, str]:
+    """Public liveness + version probe (no auth): identifies the deployed commit."""
+    return {"status": "ok", "version": get_deployed_version()}
+
 public_dir = utils.public_dir()
 app.mount("/", StaticFiles(directory=public_dir, html=True), name="")
 
@@ -158,5 +173,5 @@ def shutdown_event():
 
 @app.on_event("startup")
 def startup_event():
-    logger.info("startup event")
+    logger.info(f"startup event (version {get_deployed_version()})")
     start_fill_schedule_scheduler()

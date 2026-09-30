@@ -13,6 +13,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # Stamps the image with the built commit (see Dockerfile): build with
+      #   GIT_SHA=$(git rev-parse HEAD) docker compose build
+      args:
+        GIT_SHA: ${GIT_SHA:-dev}
     container_name: mpt-engine-cpu
     restart: unless-stopped
     ports:
