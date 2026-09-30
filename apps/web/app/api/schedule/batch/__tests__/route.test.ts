@@ -326,6 +326,10 @@ describe('POST /api/schedule/batch', () => {
     const scheduleRow = calls.scheduleRows[0] as Record<string, unknown>;
     expect(scheduleRow.persona_id).toBe(PERSONA_ID);
     expect(scheduleRow.providers).toEqual(['youtube']);
+    // kind='batch': never the kind='recurring' default, or the partial
+    // unique index schedules_persona_owner_recurring would reject the
+    // persona's next schedule with a 500.
+    expect(scheduleRow.kind).toBe('batch');
 
     // N slots, topics in request order, future datetimes
     expect(calls.slotRows).toHaveLength(1);

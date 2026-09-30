@@ -282,6 +282,11 @@ export async function POST(request: Request): Promise<NextResponse> {
       id: scheduleId,
       user_id: auth.userId,
       persona_id: personaId,
+      // kind='batch': a finite prepaid set of slots. Never leave the
+      // kind='recurring' default: the partial unique index
+      // schedules_persona_owner_recurring would reject the persona's next
+      // schedule with a 500.
+      kind: 'batch',
       providers,
       youtube_account_ids: accountIds.youtube,
       instagram_account_ids: accountIds.instagram,

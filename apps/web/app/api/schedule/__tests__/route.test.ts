@@ -46,6 +46,7 @@ function mockSupabase(handlers: {
   const insertedRows: Record<string, unknown>[] = [];
   const updatedRows: Record<string, unknown>[] = [];
   const slotRows: Record<string, unknown>[] = [];
+  const sentSlotRows: Record<string, unknown>[] = [];
   const deleteCalls: { table: string }[] = [];
   const rpcCalls: { name: string; params: unknown }[] = [];
   const selectArgs: string[] = [];
@@ -90,14 +91,22 @@ function mockSupabase(handlers: {
           ),
         };
       }
-      // scheduled_posts — slots created by POST (one row per video)
+      // scheduled_posts — slots created by POST (one row per video).
+      // scheduled_posts.id is database-generated: the mock assigns ids
+      // itself, like the real table, and records exactly what the route
+      // sent in sentSlotRows.
       if (table === 'scheduled_posts') {
         return {
           insert: vi.fn((rows: Record<string, unknown>[]) => {
-            slotRows.push(...rows);
-            if (handlers.slotsInsert?.error)
-              return Promise.resolve({ data: null, error: handlers.slotsInsert.error });
-            return Promise.resolve({ data: rows, error: null });
+            sentSlotRows.push(...rows);
+            const withIds = rows.map((row, index) => ({ ...row, id: `db-slot-${index + 1}` }));
+            slotRows.push(...withIds);
+            const result = handlers.slotsInsert?.error
+              ? { data: null, error: handlers.slotsInsert.error }
+              : { data: withIds, error: null };
+            return {
+              select: vi.fn(() => Promise.resolve(result)),
+            };
           }),
           delete: vi.fn(() => {
             deleteCalls.push({ table: 'scheduled_posts' });
@@ -154,7 +163,7 @@ function mockSupabase(handlers: {
     error: null,
   });
   vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
-  return Object.assign(client, { insertedRows, updatedRows, slotRows, deleteCalls, rpcCalls, selectArgs });
+  return Object.assign(client, { insertedRows, updatedRows, slotRows, sentSlotRows, deleteCalls, rpcCalls, selectArgs });
 }
 
 function jsonRequest(body: unknown, method = 'PATCH'): Request {
@@ -1073,6 +1082,31 @@ describe('POST /api/schedule multi-day times (one request, several days)', () =>
     expect(db.slotRows).toHaveLength(0);
   });
 
+  it('persists kind=batch so the recurring partial unique index never blocks a second schedule', async () => {
+    const db = oneOffSupabase({});
+    const res = await POST(
+      jsonRequest(
+        {
+          ...validOneOffBody,
+          postsPerDay: 3,
+          topics: ['Day 1 video', 'Day 2 video', 'Day 3 video'],
+          times: [
+            wallClockInSP(2 * DAY_MS, '15:00'),
+            wallClockInSP(3 * DAY_MS, '10:30'),
+            wallClockInSP(4 * DAY_MS, '20:00'),
+          ],
+        },
+        'POST',
+      ),
+    );
+    expect(res.status).toBe(201);
+    // One-off rows must not fall back to the kind='recurring' default: the
+    // partial unique index schedules_persona_owner_recurring would reject
+    // the persona's second schedule with a 500 (PR #28 removed the 409
+    // guard, but the DB guard still fires on the default).
+    expect(db.insertedRows[0]).toMatchObject({ kind: 'batch' });
+  });
+
   it('rejeita data sem hora como ambígua', async () => {
     oneOffSupabase({});
     const res = await POST(
@@ -1126,5 +1160,27 @@ describe('POST /api/schedule multi-day times (one request, several days)', () =>
     }).format(scheduledAt);
     expect(db.slotRows[0]).toMatchObject({ topic: 'Morning', slot_at: `${datePart}T12:00:00.000Z` });
     expect(db.slotRows[1]).toMatchObject({ topic: 'Later day', slot_at: spToUtcIso(t2) });
+  });
+});
+
+describe('POST /api/schedule slots insert (database-generated id)', () => {
+  it('não envia id próprio no insert de slots; resposta usa os ids do banco', async () => {
+    const db = oneOffSupabase({});
+    const res = await POST(
+      jsonRequest(
+        { ...validOneOffBody, postsPerDay: 2, topics: ['t1', 't2'], times: ['09:00', '18:00'] },
+        'POST',
+      ),
+    );
+    expect(res.status).toBe(201);
+    // scheduled_posts.id is database-generated (like the batch route): the
+    // route must not send client-generated uuids — the insert breaks.
+    for (const row of db.sentSlotRows) {
+      expect(row).not.toHaveProperty('id');
+    }
+    // The response carries the database-assigned ids.
+    const body = (await res.json()) as { slots: { id: unknown }[] };
+    expect(body.slots[0].id).toBe('db-slot-1');
+    expect(body.slots[1].id).toBe('db-slot-2');
   });
 });

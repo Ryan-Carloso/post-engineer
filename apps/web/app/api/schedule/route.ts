@@ -510,6 +510,13 @@ export async function POST(request: Request): Promise<NextResponse> {
       id: scheduleId,
       user_id: user.id,
       persona_id: personaId,
+      // kind='batch': a one-off schedule is a finite prepaid set of slots,
+      // exactly what the DB's kind values mean. Never leave the
+      // kind='recurring' default: the partial unique index
+      // schedules_persona_owner_recurring would reject the persona's
+      // second schedule with a 500 (the app-level 409 guard is gone since
+      // PR #28, but the DB guard still fires on the default).
+      kind: 'batch',
       providers,
       youtube_account_ids: youtubeAccountIds,
       instagram_account_ids: instagramAccountIds,
@@ -536,16 +543,21 @@ export async function POST(request: Request): Promise<NextResponse> {
   // One row per video: the engine's tick picks pending slots up immediately
   // (generation starts at creation, not at publish time) and publishes each
   // at its slot_at. Topics are stored up front — no LLM fallback.
+  // NOTE: no explicit `id` — scheduled_posts.id is database-generated
+  // (the batch route omits it too); sending a client uuid breaks the insert.
+  // The assigned ids come back through .select('id').
   const slotRows = slots.map((slot) => ({
-    id: randomUUID(),
     schedule_id: scheduleId,
     user_id: user.id,
     slot_at: slot.slotAt.toISOString(),
     status: 'pending',
     topic: slot.topic,
   }));
-  const { error: slotsError } = await supabase.from('scheduled_posts').insert(slotRows);
-  if (slotsError) {
+  const { data: insertedSlots, error: slotsError } = await supabase
+    .from('scheduled_posts')
+    .insert(slotRows)
+    .select('id');
+  if (slotsError || !insertedSlots || insertedSlots.length !== slotRows.length) {
     logger.error('[api/schedule] slots insert failed', slotsError);
     await supabase.from('scheduled_posts').delete().eq('schedule_id', scheduleId).eq('user_id', user.id);
     await supabase.from('schedules').delete().eq('id', scheduleId).eq('user_id', user.id);
@@ -559,10 +571,10 @@ export async function POST(request: Request): Promise<NextResponse> {
       schedule,
       // Slots are created pending, presented as awaiting; the generation
       // queue starts here, so the position follows creation order.
-      slots: slotRows.map((row, index) => ({
-        id: row.id,
-        topic: row.topic,
-        slotAt: row.slot_at,
+      slots: insertedSlots.map((row, index) => ({
+        id: (row as { id: unknown }).id,
+        topic: slotRows[index].topic,
+        slotAt: slotRows[index].slot_at,
         status: 'awaiting',
         progress: 0,
         stage: null,
