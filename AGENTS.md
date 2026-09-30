@@ -13,11 +13,13 @@
 - Keep PRs small and focused; CI must be green and review threads resolved
   before merge.
 - **Every PR bumps the repo-root `VERSION` file** (minor for features,
-  patch for fixes). It is the single source of truth for the deployed
-  platform version: `GET /api/version` (web) and `GET /health` (engine)
-  report it, and both log it at startup — so a bug can always be mapped
-  to the version (and PR) that introduced it. No external service or
-  manual deploy step is involved.
+  patch for fixes) via `scripts/bump-version.sh [patch|minor|major]` — it
+  updates `VERSION`, `apps/mcp/package.json`, `apps/web/package.json` and
+  `apps/engine/pyproject.toml` in one go. CI (`version-check` workflow)
+  fails the PR if the locations diverge or if `VERSION` was not bumped —
+  this is the enforcement, not agent memory. The MCP already advertises
+  its package.json version in the protocol handshake, so it stays unified
+  automatically.
 
 # Env Files Policy (NEVER commit real secrets)
 
