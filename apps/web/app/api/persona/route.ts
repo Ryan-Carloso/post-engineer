@@ -26,7 +26,6 @@ import {
   type LibraryImageInput,
 } from '@/lib/persona-images';
 import { logger } from '@/lib/logger';
-import { apiErrorResponse } from '@/lib/api-error';
 import { trackApiEvent } from '@/lib/analytics';
 
 //---------------
@@ -36,20 +35,15 @@ import { trackApiEvent } from '@/lib/analytics';
 // Validation = shared zod schema (lib/persona-schema.ts).
 //---------------
 
-function errorResponse(
-  status: number,
-  error: string,
-  route: string,
-  options?: { cause?: unknown; logMessage?: string; metadata?: Record<string, unknown> },
-): NextResponse {
-  return apiErrorResponse(status, error, { route, ...options });
+function errorResponse(status: number, error: string): NextResponse {
+  return NextResponse.json({ success: false, error }, { status });
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
   if (isScopedApiKey(auth)) {
-    return errorResponse(403, 'This API key is restricted to specific personas and cannot create new ones.', 'POST /api/persona');
+    return errorResponse(403, 'This API key is restricted to specific personas and cannot create new ones.');
   }
   const user = { id: auth.userId };
   const supabase = auth.isApiKey === true
@@ -60,11 +54,11 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     formData = await request.formData();
   } catch {
-    return errorResponse(400, 'Invalid multipart payload.', 'POST /api/persona');
+    return errorResponse(400, 'Invalid multipart payload.');
   }
   const parsed = parsePersonaForm(formData, 'create');
   if (!parsed.ok) {
-    return errorResponse(400, parsed.error, 'POST /api/persona');
+    return errorResponse(400, parsed.error);
   }
   const body = parsed.value;
 
@@ -77,12 +71,12 @@ export async function POST(request: Request): Promise<NextResponse> {
     hasAvatarUrl,
   );
   if (visualError) {
-    return errorResponse(400, visualError, 'POST /api/persona');
+    return errorResponse(400, visualError);
   }
 
   const voiceError = validateVoiceSource(body.values.voiceId);
   if (voiceError) {
-    return errorResponse(400, voiceError, 'POST /api/persona');
+    return errorResponse(400, voiceError);
   }
 
   // Optional image library at creation: `images` (files) with parallel
@@ -95,7 +89,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   // non-file entry is a hard 400, not a silent filter.
   const allImageEntries = formData.getAll('images');
   if (allImageEntries.some((value) => !isFileLike(value))) {
-    return errorResponse(400, 'images must be a list of image files.', 'POST /api/persona');
+    return errorResponse(400, 'images must be a list of image files.');
   }
   const libraryFiles = allImageEntries.filter((value): value is File => isFileLike(value));
   // Parsed once: parseJsonStringArray is pure JSON parsing, no need to
@@ -106,7 +100,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     imageTags = parseJsonStringArray(formData.get('imageTags'));
     imageDescriptions = parseJsonStringArray(formData.get('imageDescriptions'));
   } catch (error) {
-    return errorResponse(400, error instanceof Error ? error.message : 'Invalid imageTags/imageDescriptions.', 'POST /api/persona');
+    return errorResponse(400, error instanceof Error ? error.message : 'Invalid imageTags/imageDescriptions.');
   }
   // Tags/descriptions are matched to files by index: a non-empty array that
   // does not cover every file is a client bug, not a silent default.
@@ -114,7 +108,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     (imageTags.length > 0 && imageTags.length !== libraryFiles.length) ||
     (imageDescriptions.length > 0 && imageDescriptions.length !== libraryFiles.length)
   ) {
-    return errorResponse(400, 'imageTags/imageDescriptions must match the number of images.', 'POST /api/persona');
+    return errorResponse(400, 'imageTags/imageDescriptions must match the number of images.');
   }
   const libraryInputs: LibraryImageInput[] = libraryFiles.map((file, index) => ({
     file,
@@ -130,11 +124,11 @@ export async function POST(request: Request): Promise<NextResponse> {
   } catch (error) {
     return errorResponse(
       400,
-      error instanceof Error ? error.message : 'Invalid imagePrimaryIndex.', 'POST /api/persona',
+      error instanceof Error ? error.message : 'Invalid imagePrimaryIndex.',
     );
   }
   if (primaryIndex !== null && primaryIndex >= libraryFiles.length) {
-    return errorResponse(400, 'imagePrimaryIndex is out of range for the provided images.', 'POST /api/persona');
+    return errorResponse(400, 'imagePrimaryIndex is out of range for the provided images.');
   }
   const libraryValidation = await validateLibraryInputs(
     body.values.personaMode,
@@ -142,7 +136,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     libraryInputs,
   );
   if ('error' in libraryValidation) {
-    return errorResponse(400, libraryValidation.error, 'POST /api/persona');
+    return errorResponse(400, libraryValidation.error);
   }
   const validatedLibraryInputs = libraryValidation.inputs;
 
@@ -151,7 +145,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       ? await uploadFile(supabase, user.id, body.photo, body.photoExtension)
       : null;
   if (body.photo && !photoPath) {
-    return errorResponse(500, 'Failed to upload photo.', 'POST /api/persona');
+    return errorResponse(500, 'Failed to upload photo.');
   }
 
   const { data: persona, error: insertError } = await supabase
@@ -179,9 +173,8 @@ export async function POST(request: Request): Promise<NextResponse> {
     .single();
 
   if (insertError || !persona) {
-    return errorResponse(500, 'Failed to create persona.', 'POST /api/persona', {
-      cause: insertError,
-    });
+    logger.error('[api/persona] insert failed', insertError);
+    return errorResponse(500, 'Failed to create persona.');
   }
 
   let libraryImageIds: string[] = [];
@@ -245,7 +238,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           logger.error('[api/persona] photo rollback failed', photoRollbackError);
         }
       }
-      return errorResponse(added.status, added.error, 'POST /api/persona');
+      return errorResponse(added.status, added.error);
     }
     libraryImageIds = added.images.map((image) => image.id);
     // Defensive: addLibraryImages rolls back partial work and returns exactly
@@ -272,12 +265,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   // The web UI never sends images[] at creation (the library is edit-only),
   // so warnings only reach direct API-key callers — but the response shape
   // is shared, and the web CreatePersonaResult type describes it.
-  // Product analytics: a persona was created successfully.
-  trackApiEvent('persona_created', {
-    personaId: persona.id,
-    imageCount: libraryImageIds.length,
-  });
-
+  trackApiEvent('persona_created', { personaId: persona.id });
   return NextResponse.json({
     success: true,
     personaId: persona.id,
@@ -381,13 +369,13 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     : await createSupabaseServerClient();
 
   const personaId = new URL(request.url).searchParams.get('personaId');
-  if (!personaId) return errorResponse(400, 'personaId is required.', 'PATCH /api/persona');
+  if (!personaId) return errorResponse(400, 'personaId is required.');
   if (!isPersonaAllowed(auth.personaIds, personaId)) {
-    return errorResponse(403, 'This API key does not have access to this persona.', 'PATCH /api/persona');
+    return errorResponse(403, 'This API key does not have access to this persona.');
   }
 
   const parsedPatch = await parsePatchBody(request);
-  if (!parsedPatch.ok) return errorResponse(400, parsedPatch.error, 'PATCH /api/persona');
+  if (!parsedPatch.ok) return errorResponse(400, parsedPatch.error);
   const patch = parsedPatch.value;
 
   const { data: persona, error: selectError } = await supabase
@@ -396,7 +384,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     .eq('id', personaId)
     .eq('user_id', user.id)
     .single();
-  if (selectError || !persona) return errorResponse(404, 'Persona not found.', 'PATCH /api/persona');
+  if (selectError || !persona) return errorResponse(404, 'Persona not found.');
 
   const updates: Record<string, unknown> = {};
   const stalePaths: string[] = [];
@@ -407,7 +395,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
 
   if (patch.photo && patch.photoExtension) {
     const photoPath = await uploadFile(supabase, user.id, patch.photo, patch.photoExtension);
-    if (!photoPath) return errorResponse(500, 'Failed to upload photo.', 'PATCH /api/persona');
+    if (!photoPath) return errorResponse(500, 'Failed to upload photo.');
     updates.photo_path = photoPath;
     updates.avatar_url = null;
     if (typeof persona.photo_path === 'string' && persona.photo_path) {
@@ -435,7 +423,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
   if (patch.niche !== null) updates.niche = patch.niche;
 
   if (Object.keys(updates).length === 0) {
-    return errorResponse(400, 'Nothing to update.', 'PATCH /api/persona');
+    return errorResponse(400, 'Nothing to update.');
   }
 
   const { error: updateError } = await supabase
@@ -444,7 +432,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     .eq('id', personaId);
   if (updateError) {
     logger.error('[api/persona] update failed', updateError);
-    return errorResponse(500, 'Failed to update persona.', 'PATCH /api/persona');
+    return errorResponse(500, 'Failed to update persona.');
   }
 
   if (stalePaths.length > 0) {
@@ -544,9 +532,9 @@ export async function DELETE(request: Request): Promise<NextResponse> {
     : await createSupabaseServerClient();
 
   const personaId = new URL(request.url).searchParams.get('personaId');
-  if (!personaId) return errorResponse(400, 'personaId is required.', 'DELETE /api/persona');
+  if (!personaId) return errorResponse(400, 'personaId is required.');
   if (!isPersonaAllowed(auth.personaIds, personaId)) {
-    return errorResponse(403, 'This API key does not have access to this persona.', 'DELETE /api/persona');
+    return errorResponse(403, 'This API key does not have access to this persona.');
   }
 
   const { data: persona, error: selectError } = await supabase
@@ -555,7 +543,7 @@ export async function DELETE(request: Request): Promise<NextResponse> {
     .eq('id', personaId)
     .eq('user_id', user.id)
     .single();
-  if (selectError || !persona) return errorResponse(404, 'Persona not found.', 'DELETE /api/persona');
+  if (selectError || !persona) return errorResponse(404, 'Persona not found.');
 
   const paths = [persona.photo_path, persona.voice_audio_path].filter(
     (value): value is string => typeof value === 'string' && value.length > 0,
@@ -569,7 +557,7 @@ export async function DELETE(request: Request): Promise<NextResponse> {
     .eq('persona_id', personaId);
   if (libraryError) {
     logger.error('[api/persona] library image cleanup lookup failed', libraryError);
-    return errorResponse(500, 'Failed to remove persona files.', 'DELETE /api/persona');
+    return errorResponse(500, 'Failed to remove persona files.');
   }
   for (const row of libraryRows ?? []) {
     if (typeof row.image_path === 'string' && row.image_path.length > 0) {
@@ -588,7 +576,7 @@ export async function DELETE(request: Request): Promise<NextResponse> {
     .eq('user_id', user.id);
   if (deleteError) {
     logger.error('[api/persona] delete failed', deleteError);
-    return errorResponse(500, 'Failed to delete persona.', 'DELETE /api/persona');
+    return errorResponse(500, 'Failed to delete persona.');
   }
   if (paths.length > 0) {
     const { error: storageError } = await supabase.storage.from(IMAGE_BUCKET).remove(paths);

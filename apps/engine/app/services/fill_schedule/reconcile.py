@@ -11,6 +11,7 @@ from app.services.fill_schedule.constants import (
     SLOT_FAILED,
     SLOT_READY,
 )
+from app.services.analytics import track_event
 from app.services.fill_schedule.store import ScheduleStore
 from app.services.fill_schedule.support import (
     persona_for,
@@ -39,6 +40,7 @@ class BatchReconciler:
             if task.get("state") == const.TASK_STATE_COMPLETE:
                 self.store.update_slot(slot["id"], status=SLOT_READY)
                 updated += 1
+                track_event("video_generated", {"slotId": str(slot["id"])})
             elif task.get("state") == const.TASK_STATE_FAILED:
                 user_id = slot_user_id(slot)
                 # The batch was prepaid under `batch:{scheduleId}` — refund

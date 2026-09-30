@@ -34,12 +34,6 @@ export function scrubSecrets(metadata: Record<string, unknown>, depth = 0): Reco
       scrubbed[key] = value.map((item) =>
         isPlainRecord(item) ? scrubSecrets(item, depth + 1) : item,
       );
-    } else if (value instanceof Error) {
-      // Errors have no enumerable own properties — Object.entries would
-      // yield {}. Preserve the message instead of silently emptying.
-      scrubbed[key] = { message: value.message, name: value.name };
-    } else if (value instanceof Date) {
-      scrubbed[key] = value.toISOString();
     } else {
       scrubbed[key] = value;
     }
