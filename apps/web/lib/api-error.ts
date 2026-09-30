@@ -95,8 +95,10 @@ export function apiErrorResponse(
       // Auth failures are console-only (no PostHog): unauthenticated scanner
       // traffic would otherwise become billable analytics volume. The
       // errorId is still returned so clients get a consistent shape.
+      // Use %s format to avoid CodeQL format-string warning on the
+      // interpolated route/status/message.
       // eslint-disable-next-line no-console
-      console.warn(`[${route}] ${status} ${logMessage}`, metadata);
+      console.warn('%s', `[${route}] ${status} ${logMessage}`, metadata);
       errorId = fallbackErrorId();
     } else if (options?.cause !== undefined) {
       // 4xx can carry a cause too (e.g. Stripe signature verification
