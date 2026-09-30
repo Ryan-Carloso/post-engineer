@@ -77,9 +77,10 @@ dev = [
 ]
 
 [tool.mypy]
-# Incremental adoption: catch fatal import errors, be lenient on other codes.
-# TODO: gradually re-enable stricter checks as type hints are added.
-ignore_missing_imports = true
+# Incremental adoption: import-not-found is fatal (catches removed deps),
+# other codes are selectively disabled. Third-party deps without stubs
+# are enumerated in the overrides below — do NOT set ignore_missing_imports
+# globally, it would silence first-party import errors too.
 disable_error_code = [
     "arg-type",
     "attr-defined",
@@ -92,9 +93,23 @@ disable_error_code = [
     "union-attr",
     "var-annotated",
 ]
-# Optional dependencies without stubs
+# Third-party dependencies without type stubs. Enumerated explicitly so
+# first-party import-not-found errors remain fatal (catches removed deps).
 [[tool.mypy.overrides]]
-module = ["twelvelabs.*", "g4f.*"]
+module = [
+    "twelvelabs.*",
+    "g4f.*",
+    "moviepy.*",
+    "pydub.*",
+    "faster_whisper.*",
+    "imageio_ffmpeg.*",
+    "requests.*",
+    "azure.*",
+    "dashscope.*",
+    "edge_tts.*",
+    "litellm.*",
+    "loguru.*",
+]
 ignore_missing_imports = true
 
 [tool.ruff]

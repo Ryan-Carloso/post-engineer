@@ -205,7 +205,7 @@ jobs:
       - name: Typecheck
         run: uv run python -m compileall -q app cli.py main.py
 
-      - name: Mypy (incremental — import errors fatal, other codes advisory)
+      - name: Mypy (import-not-found fatal, selected codes disabled)
         run: uv run mypy app
 
       - name: Import smoke test (catches ModuleNotFoundError from removed deps)
