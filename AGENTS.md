@@ -1229,3 +1229,18 @@ Follow these so the same issues don't come back:
   the 500 + refund. The mock now tracks `deleteCalls` per table and the
   test asserts both compensating deletes run — removing either delete
   from the route fails the test.
+
+## PR #30 review learnings (2026-09-30, OpenCode — 0 fixed, 4 rebutted)
+- **A reviewer's "observability gap" fix can be worse than the gap.** The
+  reviewer wanted a `logger.warn` on every swallowed `OSError` in
+  `get_deployed_version()`; but `/app/VERSION` is legitimately absent in
+  local dev, so the warning would fire on every `/health` hit there (log
+  spam), and the startup event already logs the resolved version — the
+  diagnostic trail the finding claimed was missing. Check what boot-time
+  logging already records before accepting an observability-gap premise.
+- **Cross-language hallucinations are a tell.** The CRITICAL finding told a
+  TypeScript vitest suite to mock `fs.readFileSync` throwing `OSError`
+  (a Python exception) for a function that reads env vars, not files —
+  and cited lines 136-147 in a 27-line file. When a finding mixes
+  languages or cites impossible lines, rebut it; don't mine it for a
+  grain of truth.
