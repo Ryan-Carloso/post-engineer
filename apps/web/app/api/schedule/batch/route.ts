@@ -26,10 +26,10 @@ import { logger } from '@/lib/logger';
 // stored topic with no LLM call and no further spend.
 //---------------
 
-// Bluesky is intentionally NOT offered here: batch publishing requires
-// per-provider account ids and the engine has no bluesky target support
-// (no bluesky_account_ids column, unlike youtube/instagram/linkedin).
-const BATCH_PROVIDERS = ['youtube', 'instagram', 'linkedin'] as const;
+// Bluesky IS offered here: the engine's fill-schedule pipeline publishes
+// to Bluesky (metadata.py builds BlueskyMetadata from the schedule's
+// bluesky_account_ids and upload_publisher.py posts it).
+const BATCH_PROVIDERS = ['youtube', 'instagram', 'linkedin', 'bluesky'] as const;
 type BatchProvider = (typeof BATCH_PROVIDERS)[number];
 
 const MAX_BATCH_ITEMS = 30;
@@ -198,15 +198,15 @@ export async function POST(request: Request): Promise<NextResponse> {
   const perVideoCost = computeVideoTokens(faceMix, faceQuality);
   const totalCost = items.length * perVideoCost;
 
-  // Fail-fast: every requested provider (youtube/instagram/linkedin) needs
-  // at least one connected account; the batch stores ALL of the user's
-  // accounts per provider.
-  const accountIds: Record<'youtube' | 'instagram' | 'linkedin', string[]> = {
+  // Fail-fast: every requested provider needs at least one connected
+  // account; the batch stores ALL of the user's accounts per provider.
+  const accountIds: Record<BatchProvider, string[]> = {
     youtube: [],
     instagram: [],
     linkedin: [],
+    bluesky: [],
   };
-  for (const provider of ['youtube', 'instagram', 'linkedin'] as const) {
+  for (const provider of BATCH_PROVIDERS) {
     if (!providers.includes(provider)) continue;
     const { data: accounts, error: accountsError } = await supabase
       .from('social_accounts')
@@ -286,6 +286,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       youtube_account_ids: accountIds.youtube,
       instagram_account_ids: accountIds.instagram,
       linkedin_account_ids: accountIds.linkedin,
+      bluesky_account_ids: accountIds.bluesky,
       // days_of_week/start_hour/end_hour/posts_per_day are inert for batches;
       // they only satisfy NOT NULL/CHECK.
       days_of_week: [],

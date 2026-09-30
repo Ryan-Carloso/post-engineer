@@ -355,6 +355,56 @@ describe('POST /api/schedule/batch', () => {
     expect(refundCalls).toHaveLength(1);
   });
 
+  it('collects connected bluesky accounts and persists bluesky_account_ids', async () => {
+    mockAuth();
+    const { client, calls } = mockSupabase({
+      persona: { data: PERSONA_ROW },
+      rpc: { spend: { data: { spent: true, balance: 96 }, error: null } },
+      socialAccounts: { bluesky: ['did:plc:abc'] },
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    const req = new Request('http://localhost/api/schedule/batch', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        personaId: PERSONA_ID,
+        items: [{ topic: 'Bluesky topic' }],
+        providers: ['bluesky'],
+        times: ['09:00'],
+        timezone: 'UTC',
+      }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const scheduleRow = calls.scheduleRows[0] as Record<string, unknown>;
+    expect(scheduleRow.providers).toEqual(['bluesky']);
+    expect(scheduleRow.bluesky_account_ids).toEqual(['did:plc:abc']);
+  });
+
+  it('returns 400 when bluesky is requested but no account is connected', async () => {
+    mockAuth();
+    const { client } = mockSupabase({
+      persona: { data: PERSONA_ROW },
+      socialAccounts: {},
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    const req = new Request('http://localhost/api/schedule/batch', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        personaId: PERSONA_ID,
+        items: [{ topic: 'Bluesky topic' }],
+        providers: ['bluesky'],
+        times: ['09:00'],
+        timezone: 'UTC',
+      }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.code).toBe('NO_CONNECTED_ACCOUNTS');
+  });
+
   it('stores the derived connected account ids on the batch schedule', async () => {
     mockAuth();
     const { client, calls } = mockSupabase({
@@ -409,5 +459,19 @@ describe('POST /api/schedule/batch', () => {
     expect(calls.rpc.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
     expect(calls.scheduleRows).toHaveLength(0);
     expect(calls.slotRows).toHaveLength(0);
+  });
+});
+
+describe('parseBatchBody bluesky', () => {
+  it('accepts bluesky as a provider (engine publishes to Bluesky)', () => {
+    const parsed = parseBatchBody({
+      personaId: PERSONA_ID,
+      items: [{ topic: 'Bluesky topic' }],
+      providers: ['bluesky'],
+      times: ['09:00'],
+      timezone: 'Europe/Lisbon',
+    });
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) expect(parsed.value.providers).toEqual(['bluesky']);
   });
 });
