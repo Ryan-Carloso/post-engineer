@@ -367,12 +367,10 @@ export async function POST(request: Request): Promise<NextResponse> {
     .single();
   if (!persona) return errorResponse(404, 'Persona not found.');
 
-  const { data: existing } = await supabase
-    .from('schedules')
-    .select('id')
-    .eq('persona_id', personaId)
-    .maybeSingle();
-  if (existing) return errorResponse(409, 'This persona already has a schedule.');
+  // Multiple schedules per persona are allowed: each one-off schedule is an
+  // independent set of slots (own times, own providers, prepaid tokens), so
+  // a persona can hold e.g. a 15h Bluesky schedule and a 17h
+  // YouTube+Bluesky schedule at the same time.
 
   const accountIdsByProvider = {
     youtube: youtubeAccountIds,

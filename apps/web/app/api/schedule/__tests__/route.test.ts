@@ -384,10 +384,11 @@ describe('/api/schedule', () => {
     expect(res.status).toBe(404);
   });
 
-  it('POST retorna 409 quando persona já tem agenda', async () => {
-    oneOffSupabase({ existing: { data: { id: 's-0' } } });
+  it('POST permite várias agendas para a mesma persona', async () => {
+    const db = oneOffSupabase({ existing: { data: { id: 's-0' } } });
     const res = await POST(jsonRequest(validOneOffBody, 'POST'));
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(201);
+    expect(db.insertedRows).toHaveLength(1);
   });
 
   it('POST retorna 500 quando o insert falha', async () => {
