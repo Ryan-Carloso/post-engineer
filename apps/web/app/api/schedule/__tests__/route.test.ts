@@ -11,7 +11,7 @@ vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
 }));
 
-import { GET, PATCH, DELETE } from '../route';
+import { GET, POST, PATCH, DELETE } from '../route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
@@ -120,6 +120,29 @@ function jsonRequest(body: unknown, method = 'PATCH'): Request {
   return new Request('http://localhost/api/schedule', { method, body: JSON.stringify(body) });
 }
 
+//---------------
+// One-off POST body — recurring fields (daysOfWeek/startHour/endHour) no
+// longer exist; POST is one-off-only since PR #21.
+//---------------
+const validOneOffBody = {
+  personaId: 'p-1',
+  providers: ['youtube'],
+  youtubeAccountIds: ['yt-1', 'yt-2'],
+  scheduledAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
+  postsPerDay: 2,
+  timezone: 'America/Sao_Paulo',
+};
+
+function oneOffSupabase(dbHandlers: Parameters<typeof mockSupabase>[0]) {
+  return mockSupabase({
+    persona: { data: { id: 'p-1' } },
+    existing: { data: null },
+    insert: { data: { id: 's-1', active: true }, error: null },
+    accounts: { data: [{ provider_account_id: 'yt-1' }, { provider_account_id: 'yt-2' }], error: null },
+    ...dbHandlers,
+  });
+}
+
 describe('/api/schedule', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -141,6 +164,184 @@ describe('/api/schedule', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { schedules: unknown[] };
     expect(body.schedules).toHaveLength(1);
+  });
+
+  it('POST cria agenda one-off válida', async () => {
+    oneOffSupabase({});
+    const res = await POST(jsonRequest(validOneOffBody, 'POST'));
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { success: boolean; schedule: { id: string } };
+    expect(body.success).toBe(true);
+    expect(body.schedule.id).toBe('s-1');
+  });
+
+  it('POST persiste scheduled_at e ignora campos de recorrência (PR #21)', async () => {
+    const db = oneOffSupabase({});
+    const res = await POST(jsonRequest({
+      ...validOneOffBody,
+      daysOfWeek: [1, 3, 5],
+      startHour: 9,
+      endHour: 18,
+    }, 'POST'));
+    expect(res.status).toBe(201);
+    expect(db.insertedRows[0]).toMatchObject({
+      user_id: USER_ID,
+      persona_id: 'p-1',
+      scheduled_at: validOneOffBody.scheduledAt,
+      days_of_week: null,
+      start_hour: null,
+      end_hour: null,
+      active: true,
+    });
+  });
+
+  it('POST persiste times quando enviados', async () => {
+    const db = oneOffSupabase({});
+    const res = await POST(jsonRequest({ ...validOneOffBody, postsPerDay: 3, times: ['08:15', '12:45', '20:00'] }, 'POST'));
+    expect(res.status).toBe(201);
+    expect(db.insertedRows[0].times).toEqual(['08:15', '12:45', '20:00']);
+  });
+
+  it('POST sem times persiste array vazio', async () => {
+    const db = oneOffSupabase({});
+    const res = await POST(jsonRequest(validOneOffBody, 'POST'));
+    expect(res.status).toBe(201);
+    expect(db.insertedRows[0].times).toEqual([]);
+  });
+
+  it('POST rejeita times com formato inválido', async () => {
+    oneOffSupabase({});
+    const res = await POST(jsonRequest({ ...validOneOffBody, times: ['9h', '25:00'] }, 'POST'));
+    expect(res.status).toBe(400);
+  });
+
+  it('POST rejeita mais times que postsPerDay', async () => {
+    oneOffSupabase({});
+    const res = await POST(jsonRequest({ ...validOneOffBody, postsPerDay: 2, times: ['09:00', '12:00', '18:00'] }, 'POST'));
+    expect(res.status).toBe(400);
+  });
+
+  it('POST sem scheduledAt retorna 400 (recorrência removida na PR #21)', async () => {
+    mockSupabase({});
+    const { scheduledAt: _ignored, ...noDate } = validOneOffBody;
+    const res = await POST(jsonRequest(noDate, 'POST'));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/scheduledAt is required/i);
+  });
+
+  it('POST rejeita scheduledAt com menos de 24h de antecedência', async () => {
+    mockSupabase({});
+    const tooSoon = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+    const res = await POST(jsonRequest({ ...validOneOffBody, scheduledAt: tooSoon }, 'POST'));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/at least 24 hours/i);
+  });
+
+  it('POST rejeita scheduledAt além de 30 dias', async () => {
+    mockSupabase({});
+    const tooFar = new Date(Date.now() + 31 * 24 * 60 * 60 * 1000).toISOString();
+    const res = await POST(jsonRequest({ ...validOneOffBody, scheduledAt: tooFar }, 'POST'));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/more than 30 days/i);
+  });
+
+  it('POST rejeita scheduledAt com formato inválido', async () => {
+    mockSupabase({});
+    const res = await POST(jsonRequest({ ...validOneOffBody, scheduledAt: 'not-a-date' }, 'POST'));
+    expect(res.status).toBe(400);
+  });
+
+  it('POST retorna 401 sem sessão', async () => {
+    mockSupabase({ noSession: true });
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: null,
+      error: NextResponse.json({ success: false }, { status: 401 }),
+    });
+    const res = await POST(jsonRequest(validOneOffBody, 'POST'));
+    expect(res.status).toBe(401);
+  });
+
+  it('POST com JSON inválido retorna 400', async () => {
+    mockSupabase({});
+    const res = await POST(new Request('http://localhost/api/schedule', { method: 'POST', body: '{invalid' }));
+    expect(res.status).toBe(400);
+  });
+
+  it('POST sem personaId retorna 400', async () => {
+    mockSupabase({});
+    const res = await POST(jsonRequest({ ...validOneOffBody, personaId: undefined }, 'POST'));
+    expect(res.status).toBe(400);
+  });
+
+  it('POST rejeita provider inválido', async () => {
+    mockSupabase({});
+    const res = await POST(jsonRequest({ ...validOneOffBody, providers: ['tiktok'] }, 'POST'));
+    expect(res.status).toBe(400);
+  });
+
+  it('POST exige conta para o provider selecionado (bluesky sem contas → 400)', async () => {
+    oneOffSupabase({});
+    const res = await POST(jsonRequest({
+      ...validOneOffBody,
+      providers: ['bluesky'],
+      blueskyAccountIds: [],
+    }, 'POST'));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/blueskyAccountIds/i);
+  });
+
+  it('POST cria agenda com provider bluesky e persiste bluesky_account_ids', async () => {
+    const db = oneOffSupabase({
+      accountsByProvider: {
+        youtube: [{ provider_account_id: 'yt-1' }, { provider_account_id: 'yt-2' }],
+        bluesky: [{ provider_account_id: 'did:plc:abc' }],
+      },
+    });
+    const res = await POST(jsonRequest({
+      ...validOneOffBody,
+      providers: ['youtube', 'bluesky'],
+      blueskyAccountIds: ['did:plc:abc'],
+    }, 'POST'));
+    expect(res.status).toBe(201);
+    expect(db.insertedRows[0]).toMatchObject({
+      bluesky_account_ids: ['did:plc:abc'],
+      providers: ['youtube', 'bluesky'],
+    });
+  });
+
+  it('POST rejeita conta de outro usuário', async () => {
+    oneOffSupabase({
+      accountsByProvider: { youtube: [{ provider_account_id: 'yt-1' }, { provider_account_id: 'yt-2' }] },
+    });
+    const res = await POST(jsonRequest({
+      ...validOneOffBody,
+      youtubeAccountIds: ['yt-outro'],
+    }, 'POST'));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/Invalid youtube account selection/);
+  });
+
+  it('POST retorna 404 quando persona não é do usuário', async () => {
+    oneOffSupabase({ persona: { data: null } });
+    const res = await POST(jsonRequest(validOneOffBody, 'POST'));
+    expect(res.status).toBe(404);
+  });
+
+  it('POST retorna 409 quando persona já tem agenda', async () => {
+    oneOffSupabase({ existing: { data: { id: 's-0' } } });
+    const res = await POST(jsonRequest(validOneOffBody, 'POST'));
+    expect(res.status).toBe(409);
+  });
+
+  it('POST retorna 500 quando o insert falha', async () => {
+    oneOffSupabase({ insert: { data: null, error: { message: 'boom' } } });
+    const res = await POST(jsonRequest(validOneOffBody, 'POST'));
+    expect(res.status).toBe(500);
   });
 
 
@@ -409,6 +610,20 @@ describe('/api/schedule persona scoping (scoped API keys)', () => {
     const res = await GET(new Request('http://localhost/api/schedule'));
     const body = (await res.json()) as { schedules: { id: string }[] };
     expect(body.schedules.map((s) => s.id)).toEqual(['s-1', 's-2']);
+  });
+
+  it('POST rejects an out-of-scope persona with 403', async () => {
+    scopedSupabase({
+      persona: { data: { id: 'p-allowed' } },
+    });
+    const scheduledAt = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString();
+    const res = await POST(jsonRequest({
+      personaId: 'p-other',
+      providers: ['youtube'],
+      youtubeAccountIds: ['yt-1'],
+      scheduledAt,
+    }, 'POST'));
+    expect(res.status).toBe(403);
   });
 
   it('PATCH rejects an out-of-scope schedule with 403', async () => {
