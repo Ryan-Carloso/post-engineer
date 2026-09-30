@@ -1111,7 +1111,7 @@ describe('POST /api/schedule topics → slots → charging', () => {
   it('rollback delete failure is logged loudly (not swallowed)', async () => {
     // If a compensating delete fails, the engine tick could pick up orphaned
     // pending slots. The failure must be visible in telemetry.
-    const db = oneOffSupabase({
+    oneOffSupabase({
       slotsInsert: { returnedRows: [{ id: 'db-slot-1' }] },
       deleteError: new Error('delete blocked'),
     });

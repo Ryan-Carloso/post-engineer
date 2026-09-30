@@ -97,7 +97,6 @@ export function apiErrorResponse(
       // errorId is still returned so clients get a consistent shape.
       // Use %s format to avoid CodeQL format-string warning on the
       // interpolated route/status/message.
-      // eslint-disable-next-line no-console
       console.warn('%s', `[${route}] ${status} ${logMessage}`, metadata);
       errorId = fallbackErrorId();
     } else if (options?.cause !== undefined) {
