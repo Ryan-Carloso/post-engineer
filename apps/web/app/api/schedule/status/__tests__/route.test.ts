@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextResponse } from 'next/server';
 
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
+  engineAuthHeaders: (userId: string) => ({ 'x-user-id': userId }),
 }));
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn(),
@@ -59,7 +60,7 @@ describe('parseLimit', () => {
 
 const USER_ID = 'user-1';
 
-function mockPostsClient(upcoming: unknown[], recent: unknown[]) {
+function mockPostsClient(upcoming: unknown[], recent: unknown[], queue: unknown[] = []) {
   let limitCalls = 0;
   const chain = {
     select: vi.fn().mockReturnThis(),
@@ -68,6 +69,9 @@ function mockPostsClient(upcoming: unknown[], recent: unknown[]) {
     gte: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     limit: vi.fn(async () => ({ data: limitCalls++ === 0 ? upcoming : recent, error: null })),
+    // The queue-positions query is awaited without .limit() (the real
+    // Supabase chain is thenable); it resolves the queue fixture.
+    then: (resolve: (value: unknown) => void) => resolve({ data: queue, error: null }),
   };
   const from = vi.fn(() => chain);
   return { from, chain };
@@ -81,7 +85,7 @@ function mockAuthSession(auth: unknown, error: unknown) {
 // Scoped-key mock: from('schedules') resolves the allowed schedule ids,
 // from('scheduled_posts') captures the .in('schedule_id', …) filter.
 //---------------
-function mockScopedPostsClient(allowedScheduleIds: string[], upcoming: unknown[], recent: unknown[]) {
+function mockScopedPostsClient(allowedScheduleIds: string[], upcoming: unknown[], recent: unknown[], queue: unknown[] = []) {
   let limitCalls = 0;
   const postsChain = {
     select: vi.fn().mockReturnThis(),
@@ -90,6 +94,9 @@ function mockScopedPostsClient(allowedScheduleIds: string[], upcoming: unknown[]
     gte: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     limit: vi.fn(async () => ({ data: limitCalls++ === 0 ? upcoming : recent, error: null })),
+    // Thenable like the real Supabase chain: the queue-positions query is
+    // awaited without .limit().
+    then: (resolve: (value: unknown) => void) => resolve({ data: queue, error: null }),
   };
   const schedulesChain = {
     select: vi.fn().mockReturnThis(),
@@ -121,7 +128,26 @@ describe('GET auth', () => {
     expect(client.chain.eq).toHaveBeenCalledWith('user_id', USER_ID);
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body).toEqual({ success: true, upcoming, recent });
+    expect(body).toEqual({
+      success: true,
+      upcoming: upcoming.map((slot) => ({
+        ...slot,
+        status: 'awaiting',
+        progress: 0,
+        stage: null,
+        queuePosition: null,
+        queueTotal: null,
+        retryable: null,
+      })),
+      recent: recent.map((slot) => ({
+        ...slot,
+        progress: 100,
+        stage: 'done',
+        queuePosition: null,
+        queueTotal: null,
+        retryable: null,
+      })),
+    });
   });
 
   it('keeps working with a cookie session through the server client', async () => {
@@ -136,7 +162,26 @@ describe('GET auth', () => {
     expect(client.chain.eq).toHaveBeenCalledWith('user_id', USER_ID);
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body).toEqual({ success: true, upcoming, recent });
+    expect(body).toEqual({
+      success: true,
+      upcoming: upcoming.map((slot) => ({
+        ...slot,
+        status: 'awaiting',
+        progress: 0,
+        stage: null,
+        queuePosition: null,
+        queueTotal: null,
+        retryable: null,
+      })),
+      recent: recent.map((slot) => ({
+        ...slot,
+        progress: 100,
+        stage: 'done',
+        queuePosition: null,
+        queueTotal: null,
+        retryable: null,
+      })),
+    });
   });
 
   it('returns 401 when authentication fails', async () => {
@@ -164,7 +209,26 @@ describe('GET auth', () => {
     expect(createSupabaseServerClient).not.toHaveBeenCalled();
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body).toEqual({ success: true, upcoming, recent });
+    expect(body).toEqual({
+      success: true,
+      upcoming: upcoming.map((slot) => ({
+        ...slot,
+        status: 'awaiting',
+        progress: 0,
+        stage: null,
+        queuePosition: null,
+        queueTotal: null,
+        retryable: null,
+      })),
+      recent: recent.map((slot) => ({
+        ...slot,
+        progress: 100,
+        stage: 'done',
+        queuePosition: null,
+        queueTotal: null,
+        retryable: null,
+      })),
+    });
   });
 
   it('restricts a persona-scoped API key to its allowed schedules', async () => {
@@ -187,7 +251,26 @@ describe('GET auth', () => {
     // Both post queries are restricted to the allowed schedule ids.
     expect(client.postsChain.in).toHaveBeenCalledWith('schedule_id', ['s1']);
     const body = await response.json();
-    expect(body).toEqual({ success: true, upcoming: allowedUpcoming, recent: allowedRecent });
+    expect(body).toEqual({
+      success: true,
+      upcoming: allowedUpcoming.map((slot) => ({
+        ...slot,
+        status: 'awaiting',
+        progress: 0,
+        stage: null,
+        queuePosition: null,
+        queueTotal: null,
+        retryable: null,
+      })),
+      recent: allowedRecent.map((slot) => ({
+        ...slot,
+        progress: 100,
+        stage: 'done',
+        queuePosition: null,
+        queueTotal: null,
+        retryable: null,
+      })),
+    });
   });
 
   it('returns empty lists for a scoped key with no allowed schedules', async () => {
@@ -204,5 +287,224 @@ describe('GET auth', () => {
     const body = await response.json();
     expect(body).toEqual({ success: true, upcoming: [], recent: [] });
     expect(client.from).not.toHaveBeenCalledWith('scheduled_posts');
+  });
+});
+
+describe('GET progress linkage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('selects task_id on upcoming slots so callers can poll get_video_task_progress', async () => {
+    const upcoming = [
+      { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'generating', topic: 'Next', schedule_id: 's1', task_id: 'task-1' },
+    ];
+    const client = mockPostsClient(upcoming, []);
+    mockAuthSession({ userId: USER_ID, accessToken: 'pe_test_key', isApiKey: true }, null);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/status'));
+    expect(response.status).toBe(200);
+    // The upcoming select must include task_id: the engine sets it when
+    // generation dispatches, and agents poll progress with it.
+    const selectCalls = client.chain.select.mock.calls.map((c) => String(c[0]));
+    expect(selectCalls.some((s) => s.includes('task_id'))).toBe(true);
+    const body = (await response.json()) as { upcoming: { task_id: string }[] };
+    expect(body.upcoming[0].task_id).toBe('task-1');
+  });
+});
+
+describe('GET slot progress (0–100)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
+    vi.stubEnv('MONEYPRINT_API_SECRET', 'secret');
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  function mockEngine(body: unknown, ok = true) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok, status: ok ? 200 : 502, json: async () => body })),
+    );
+  }
+
+  async function getStatus(upcoming: unknown[], recent: unknown[] = [], queue: unknown[] = []) {
+    const client = mockPostsClient(upcoming, recent, queue);
+    mockAuthSession({ userId: USER_ID, accessToken: 'pe_test_key', isApiKey: true }, null);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    const response = await GET(new Request('https://example.com/api/schedule/status'));
+    expect(response.status).toBe(200);
+    return (await response.json()) as {
+      upcoming: SlotPresentation[];
+      recent: SlotPresentation[];
+    };
+  }
+
+  interface SlotPresentation {
+    id: string;
+    status: string;
+    progress: number;
+    stage: string | null;
+    queuePosition: number | null;
+    queueTotal: number | null;
+    retryable: boolean | null;
+    error?: string;
+  }
+
+  it('pending → 0 sem chamar o engine', async () => {
+    mockEngine({ data: { progress: 99 } });
+    const body = await getStatus([
+      { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'pending', topic: 'Next', schedule_id: 's1' },
+    ]);
+    expect(body.upcoming[0].progress).toBe(0);
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+
+  it('generating → progresso live do engine via task_id', async () => {
+    mockEngine({ data: { progress: 45, state: 4 } });
+    const body = await getStatus([
+      { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'generating', topic: 'Next', schedule_id: 's1', task_id: 'task-1' },
+    ]);
+    expect(body.upcoming[0].progress).toBe(45);
+    const url = vi.mocked(fetch).mock.calls[0][0] as string;
+    expect(url).toContain('/api/v1/tasks/task-1');
+  });
+
+  it('generating sem task_id → 0 sem chamar o engine', async () => {
+    mockEngine({ data: { progress: 45 } });
+    const body = await getStatus([
+      { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'generating', topic: 'Next', schedule_id: 's1' },
+    ]);
+    expect(body.upcoming[0].progress).toBe(0);
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+
+  it('ready/publishing/published → 100', async () => {
+    mockEngine({ data: { progress: 10 } });
+    const body = await getStatus(
+      [
+        { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'ready', topic: 'A', schedule_id: 's1' },
+        { id: 'up-2', slot_at: '2026-09-24T11:00:00Z', status: 'publishing', topic: 'B', schedule_id: 's1' },
+      ],
+      [{ id: 're-1', slot_at: '2026-09-20T10:00:00Z', status: 'published', topic: 'C', schedule_id: 's1' }],
+    );
+    expect(body.upcoming.map((s) => s.progress)).toEqual([100, 100]);
+    expect(body.recent[0].progress).toBe(100);
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+
+  it('busca os progressos em concorrência, não em série', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        inFlight++;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((r) => setTimeout(r, 10));
+        inFlight--;
+        return { ok: true, status: 200, json: async () => ({ data: { progress: 50 } }) };
+      }),
+    );
+    const upcoming = [1, 2, 3, 4].map((i) => ({
+      id: `up-${i}`, slot_at: '2026-09-24T10:00:00Z', status: 'generating',
+      topic: 'T', schedule_id: 's1', task_id: `task-${i}`,
+    }));
+    const body = await getStatus(upcoming);
+    expect(body.upcoming.map((s) => s.progress)).toEqual([50, 50, 50, 50]);
+    expect(maxInFlight).toBeGreaterThan(1);
+  });
+
+  it('mapeia pending do banco para "awaiting" com posição na fila', async () => {
+    mockEngine({ data: { progress: 99 } });
+    const queue = [
+      { id: 'up-1', schedule_id: 's1', slot_at: '2026-09-24T10:00:00Z' },
+      { id: 'up-2', schedule_id: 's1', slot_at: '2026-09-24T11:00:00Z' },
+    ];
+    const body = await getStatus(
+      [
+        { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'pending', topic: 'Next', schedule_id: 's1' },
+        { id: 'up-2', slot_at: '2026-09-24T11:00:00Z', status: 'pending', topic: 'After', schedule_id: 's1' },
+      ],
+      [],
+      queue,
+    );
+    expect(body.upcoming[0].status).toBe('awaiting');
+    expect(body.upcoming[0].progress).toBe(0);
+    expect(body.upcoming[0].stage).toBeNull();
+    expect(body.upcoming[0].queuePosition).toBe(1);
+    expect(body.upcoming[0].queueTotal).toBe(2);
+    expect(body.upcoming[1].queuePosition).toBe(2);
+    expect(body.upcoming[1].queueTotal).toBe(2);
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+
+  it('generating repassa o stage do engine e não expõe posição de fila', async () => {
+    mockEngine({ data: { progress: 45, stage: 'lipsync' } });
+    const queue = [
+      { id: 'gen-1', schedule_id: 's1', slot_at: '2026-09-24T10:00:00Z' },
+      { id: 'up-1', schedule_id: 's1', slot_at: '2026-09-24T11:00:00Z' },
+    ];
+    const body = await getStatus(
+      [
+        { id: 'gen-1', slot_at: '2026-09-24T10:00:00Z', status: 'generating', topic: 'Now', schedule_id: 's1', task_id: 'task-1' },
+        { id: 'up-1', slot_at: '2026-09-24T11:00:00Z', status: 'pending', topic: 'Next', schedule_id: 's1' },
+      ],
+      [],
+      queue,
+    );
+    expect(body.upcoming[0].status).toBe('generating');
+    expect(body.upcoming[0].progress).toBe(45);
+    expect(body.upcoming[0].stage).toBe('lipsync');
+    expect(body.upcoming[0].queuePosition).toBeNull();
+    expect(body.upcoming[0].queueTotal).toBeNull();
+    // O generating conta na fila: o awaiting vem depois dele.
+    expect(body.upcoming[1].status).toBe('awaiting');
+    expect(body.upcoming[1].queuePosition).toBe(2);
+    expect(body.upcoming[1].queueTotal).toBe(2);
+  });
+
+  it('ready/publishing/published têm stage "done"', async () => {
+    const body = await getStatus(
+      [{ id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'ready', topic: 'A', schedule_id: 's1' }],
+      [{ id: 're-1', slot_at: '2026-09-20T10:00:00Z', status: 'published', topic: 'B', schedule_id: 's1' }],
+    );
+    expect(body.upcoming[0].stage).toBe('done');
+    expect(body.recent[0].stage).toBe('done');
+  });
+
+  it('failed mantém error, último progresso e retryable pela categoria', async () => {
+    mockEngine({ data: { progress: 80, state: -1 } });
+    const body = await getStatus(
+      [],
+      [
+        { id: 're-1', slot_at: '2026-09-20T10:00:00Z', status: 'failed', topic: 'A', schedule_id: 's1', task_id: 'task-9', error: 'Video service is unavailable.' },
+        { id: 're-2', slot_at: '2026-09-19T10:00:00Z', status: 'failed', topic: 'B', schedule_id: 's1', error: 'custom audio file is invalid' },
+      ],
+    );
+    expect(body.recent[0].status).toBe('failed');
+    expect(body.recent[0].progress).toBe(80);
+    expect(body.recent[0].error).toBe('Video service is unavailable.');
+    expect(body.recent[0].retryable).toBe(true);
+    expect(body.recent[0].stage).toBeNull();
+    expect(body.recent[1].progress).toBe(0);
+    expect(body.recent[1].retryable).toBe(false);
+  });
+
+  it('engine fora do ar degrada o slot sem falhar o request', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('down'); }));
+    const body = await getStatus(
+      [{ id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'generating', topic: 'Next', schedule_id: 's1', task_id: 'task-1' }],
+      [{ id: 're-1', slot_at: '2026-09-20T10:00:00Z', status: 'failed', topic: 'Old', schedule_id: 's1', task_id: 'task-9', error: 'boom' }],
+    );
+    expect(body.upcoming[0].progress).toBe(0);
+    expect(body.upcoming[0].stage).toBeNull();
+    expect(body.recent[0].progress).toBe(0);
+    expect(body.recent[0].retryable).toBe(false);
   });
 });

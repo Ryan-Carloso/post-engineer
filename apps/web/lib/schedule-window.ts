@@ -1,7 +1,11 @@
 //---------------
 // schedule-window — valid window for target date/time scheduling.
-// Product rule (mirrors the MCP server in apps/mcp/src/validator.ts):
-// minimum 24h in advance, maximum 30 days ahead.
+// Product rule: minimum 24h in advance, maximum 30 days ahead.
+//
+// Callers pass the CONVERTED instant (a Date): timezone-aware parsing
+// happens before this validator runs — see parseZonedDateTime in
+// lib/timezone.ts, used by POST /api/schedule so a naive wall clock in
+// the caller's timezone is not measured as if it were UTC.
 //---------------
 
 export const SCHEDULE_MIN_ADVANCE_HOURS = 24;

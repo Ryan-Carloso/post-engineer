@@ -647,10 +647,25 @@ export interface ScheduledSlot {
   id: string;
   scheduleId: string;
   slotAt: string;
-  status: 'pending' | 'generating' | 'ready' | 'published' | 'failed';
+  // The API presents the DB 'pending' state as 'awaiting'.
+  status: 'awaiting' | 'generating' | 'ready' | 'publishing' | 'published' | 'failed';
   topic: string | null;
   error?: string | null;
   publishedAt?: string | null;
+  // Engine task id, set when generation dispatches — poll progress with it.
+  taskId?: string | null;
+  // Numeric 0–100 progress: 0 awaiting, 100 ready/publishing/published,
+  // live engine progress while generating (last known when failed).
+  progress: number;
+  // Engine pipeline stage while generating (e.g. "lipsync"), "done" once
+  // complete, null otherwise.
+  stage: string | null;
+  // 1-based position among the schedule's awaiting+generating slots
+  // (awaiting slots only, null otherwise) and the schedule total.
+  queuePosition: number | null;
+  queueTotal: number | null;
+  // Failed slots only: whether the failure looks transient/retryable.
+  retryable: boolean | null;
 }
 
 interface ScheduleRow {
@@ -678,6 +693,12 @@ interface SlotRow {
   topic: string | null;
   error?: string | null;
   published_at?: string | null;
+  task_id?: string | null;
+  progress?: number;
+  stage?: string | null;
+  queuePosition?: number | null;
+  queueTotal?: number | null;
+  retryable?: boolean | null;
 }
 
 function mapSchedule(row: ScheduleRow): ScheduleConfig {
@@ -757,6 +778,12 @@ function mapSlot(row: SlotRow): ScheduledSlot {
     topic: row.topic,
     error: row.error,
     publishedAt: row.published_at,
+    taskId: row.task_id ?? null,
+    progress: typeof row.progress === 'number' ? row.progress : 0,
+    stage: typeof row.stage === 'string' ? row.stage : null,
+    queuePosition: typeof row.queuePosition === 'number' ? row.queuePosition : null,
+    queueTotal: typeof row.queueTotal === 'number' ? row.queueTotal : null,
+    retryable: typeof row.retryable === 'boolean' ? row.retryable : null,
   };
 }
 

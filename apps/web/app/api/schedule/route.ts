@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { isPersonaAllowed } from '@/lib/api-keys';
 import { validateScheduleWindow } from '@/lib/schedule-window';
+import { isValidTimezone, parseZonedDateTime, zonedTimeOnDate } from '@/lib/timezone';
+import { computeVideoTokens, toFiniteNumber, type FaceQuality } from '@/lib/tokens';
 import { logger } from '@/lib/logger';
 
 //---------------
@@ -32,12 +35,13 @@ interface ScheduleRequestBody {
   endHour?: unknown;
   postsPerDay?: unknown;
   times?: unknown;
+  topics?: unknown;
   timezone?: unknown;
   scheduledAt?: unknown;
 }
 
-function errorResponse(status: number, error: string): NextResponse {
-  return NextResponse.json({ success: false, error }, { status });
+function errorResponse(status: number, error: string, extra?: Record<string, unknown>): NextResponse {
+  return NextResponse.json({ success: false, error, ...extra }, { status });
 }
 
 //---------------
@@ -161,6 +165,58 @@ export function parseTimes(value: unknown): string[] | null {
   return [...times].sort();
 }
 
+//---------------
+// parseTopics — one explicit topic per video (1–10 non-empty strings).
+// The engine generates each slot's video from its stored topic; there is
+// no LLM fallback, so topics are required up front (fail fast).
+//---------------
+export function parseTopics(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 10) return null;
+  const topics: string[] = [];
+  for (const item of value) {
+    if (typeof item !== 'string' || item.trim() === '') return null;
+    topics.push(item.trim());
+  }
+  return topics;
+}
+
+export interface OneOffSlot {
+  topic: string;
+  slotAt: Date;
+}
+
+//---------------
+// computeOneOffSlots — (topic, slotAt) pairs for the one-off contract:
+// - times given: one slot per (time, topic) pair, each on the scheduledAt
+//   calendar date in `timezone`;
+// - times empty: exactly one topic → a single slot at scheduledAt.
+// Returns null when the combination is invalid (the caller maps it to a
+// 400 with a specific message).
+//---------------
+export function computeOneOffSlots(
+  topics: string[],
+  times: string[],
+  scheduledAt: Date,
+  timezone: string,
+): OneOffSlot[] | null {
+  if (times.length > 0) {
+    if (times.length !== topics.length) return null;
+    const slots: OneOffSlot[] = [];
+    for (let i = 0; i < topics.length; i++) {
+      const slotAt = zonedTimeOnDate(scheduledAt, times[i], timezone);
+      if (!slotAt) return null;
+      slots.push({ topic: topics[i], slotAt });
+    }
+    return slots;
+  }
+  if (topics.length !== 1) return null;
+  return [{ topic: topics[0], slotAt: scheduledAt }];
+}
+
+function parseFaceQuality(value: unknown): FaceQuality | null {
+  return value === 'ok' || value === 'very_good' ? value : null;
+}
+
 export async function GET(request?: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
@@ -220,12 +276,25 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   // One-off schedules always carry a target datetime (same rule as the MCP
   // server): it must be between 24h and 30 days ahead.
+  //
+  // Timezone rule: a naive "2026-10-01T14:00:00" is a wall clock in
+  // `timezone`, NOT 14:00 UTC (`new Date(naive)` would assume UTC per
+  // spec). An explicit offset (Z or ±hh:mm) is respected as-is.
+  const timezone = typeof body.timezone === 'string' && body.timezone ? body.timezone : 'UTC';
+  if (!isValidTimezone(timezone)) {
+    return errorResponse(400, 'timezone must be a valid IANA timezone (e.g. "Europe/Lisbon").');
+  }
   if (body.scheduledAt === undefined || body.scheduledAt === null) {
     return errorResponse(400, 'scheduledAt is required.');
   }
-  const windowCheck = validateScheduleWindow(body.scheduledAt);
+  const scheduledAt = parseZonedDateTime(body.scheduledAt, timezone);
+  if (!scheduledAt) {
+    return errorResponse(400, 'scheduledAt must be a valid ISO date.');
+  }
+  // The 24h/30d window is validated against the converted instant, so a
+  // wall clock in UTC+14 is not measured as if it were UTC.
+  const windowCheck = validateScheduleWindow(scheduledAt);
   if (!windowCheck.ok) return errorResponse(400, windowCheck.error);
-  const scheduledAt = new Date(body.scheduledAt as string);
 
   const providers = Array.isArray(body.providers)
     ? body.providers.filter(
@@ -259,21 +328,40 @@ export async function POST(request: Request): Promise<NextResponse> {
     return errorResponse(400, 'postsPerDay must be between 1 and 10.');
   }
 
-  // M2: explicit times — without them the engine spreads across the window.
+  // One topic per video, up front: the engine generates each slot from its
+  // stored topic (no LLM fallback), so a missing topic is a 400 here —
+  // never a silent slot that fails at publish time.
+  const topics = parseTopics(body.topics);
+  if (!topics) {
+    return errorResponse(400, 'topics must be a non-empty array of 1–10 non-empty strings, one per video.');
+  }
+  if (postsPerDay !== topics.length) {
+    return errorResponse(400, `postsPerDay (${postsPerDay}) must equal the number of topics (${topics.length}).`);
+  }
+
+  // Explicit times pair 1:1 with topics (computeOneOffSlots enforces the
+  // count); without times exactly one topic is allowed (single slot at
+  // scheduledAt).
   const times = parseTimes(body.times);
   if (times === null) {
     return errorResponse(400, 'times must be an array of "HH:MM" strings (00:00–23:59).');
   }
-  if (times.length > postsPerDay) {
-    return errorResponse(400, 'times cannot contain more entries than postsPerDay.');
+  const slots = computeOneOffSlots(topics, times, scheduledAt, timezone);
+  if (!slots) {
+    return errorResponse(
+      400,
+      times.length > 0
+        ? `times (${times.length}) must contain exactly one entry per topic (${topics.length}).`
+        : 'provide times for multiple videos: topics has more than one entry but times is empty.',
+    );
   }
 
-  const timezone = typeof body.timezone === 'string' && body.timezone ? body.timezone : 'UTC';
+  // `timezone` was validated above (before scheduledAt parsing).
 
   // The persona must exist and belong to the user (RLS enforces it too).
   const { data: persona } = await supabase
     .from('personas')
-    .select('id')
+    .select('id, face_mix_percent, face_quality')
     .eq('id', personaId)
     .eq('user_id', user.id)
     .single();
@@ -303,9 +391,61 @@ export async function POST(request: Request): Promise<NextResponse> {
   );
   if (ownedError) return errorResponse(400, ownedError);
 
+  // Fail-fast token charging, mirroring POST /api/schedule/batch: the whole
+  // schedule is prepaid in ONE atomic spend BEFORE anything is created, so a
+  // generation failure later is a per-slot refund, never an unpaid video.
+  // generation_id = batch:{scheduleId} reuses the engine's existing
+  // per-slot refund path (refund_batch_tokens) unchanged.
+  const faceMix = toFiniteNumber((persona as Record<string, unknown>).face_mix_percent, 0);
+  const faceQuality = parseFaceQuality((persona as Record<string, unknown>).face_quality) ?? 'ok';
+  const perVideoCost = computeVideoTokens(faceMix, faceQuality);
+  const totalCost = slots.length * perVideoCost;
+
+  const scheduleId = randomUUID();
+  const generationId = `batch:${scheduleId}`;
+
+  // Token RPCs (spend_tokens, refund_generation_tokens, grant_signup_bonus)
+  // are service_role-only, so they must always run through the service
+  // client; table writes stay on the caller's client.
+  const serviceSupabase = createSupabaseServiceClient();
+  try {
+    await serviceSupabase.rpc('grant_signup_bonus', { p_user_id: user.id });
+  } catch {
+    // Best-effort: the spend below is the real gate.
+  }
+
+  const { data: spendData, error: spendError } = await serviceSupabase.rpc('spend_tokens', {
+    p_user_id: user.id,
+    p_amount: totalCost,
+    p_generation_id: generationId,
+    p_reason: `One-off schedule (${slots.length} video${slots.length === 1 ? '' : 's'})`,
+  });
+  if (spendError) {
+    logger.error('[api/schedule] spend failed', spendError);
+    return errorResponse(500, 'Failed to process tokens. Please try again.');
+  }
+  const spendRecord = (spendData ?? {}) as Record<string, unknown>;
+  if (spendRecord.spent !== true) {
+    const have = toFiniteNumber(spendRecord.balance, 0);
+    return errorResponse(
+      400,
+      `INSUFFICIENT_TOKENS: schedule needs ${totalCost} tokens but the balance is ${have}.`,
+      { code: 'INSUFFICIENT', have, need: totalCost },
+    );
+  }
+
+  const refundCharge = async (reason: string) => {
+    await serviceSupabase.rpc('refund_generation_tokens', {
+      p_user_id: user.id,
+      p_generation_id: generationId,
+      p_reason: reason,
+    });
+  };
+
   const { data: schedule, error: insertError } = await supabase
     .from('schedules')
     .insert({
+      id: scheduleId,
       user_id: user.id,
       persona_id: personaId,
       providers,
@@ -327,10 +467,50 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   if (insertError || !schedule) {
     logger.error('[api/schedule] insert failed', insertError);
+    await refundCharge('Schedule insert failed; tokens refunded');
     return errorResponse(500, 'Failed to create schedule.');
   }
 
-  return NextResponse.json({ success: true, schedule }, { status: 201 });
+  // One row per video: the engine's tick picks pending slots up immediately
+  // (generation starts at creation, not at publish time) and publishes each
+  // at its slot_at. Topics are stored up front — no LLM fallback.
+  const slotRows = slots.map((slot) => ({
+    id: randomUUID(),
+    schedule_id: scheduleId,
+    user_id: user.id,
+    slot_at: slot.slotAt.toISOString(),
+    status: 'pending',
+    topic: slot.topic,
+  }));
+  const { error: slotsError } = await supabase.from('scheduled_posts').insert(slotRows);
+  if (slotsError) {
+    logger.error('[api/schedule] slots insert failed', slotsError);
+    await supabase.from('scheduled_posts').delete().eq('schedule_id', scheduleId).eq('user_id', user.id);
+    await supabase.from('schedules').delete().eq('id', scheduleId).eq('user_id', user.id);
+    await refundCharge('Schedule slots insert failed; tokens refunded');
+    return errorResponse(500, 'Failed to create schedule.');
+  }
+
+  return NextResponse.json(
+    {
+      success: true,
+      schedule,
+      // Slots are created pending, presented as awaiting; the generation
+      // queue starts here, so the position follows creation order.
+      slots: slotRows.map((row, index) => ({
+        id: row.id,
+        topic: row.topic,
+        slotAt: row.slot_at,
+        status: 'awaiting',
+        progress: 0,
+        stage: null,
+        queuePosition: index + 1,
+        queueTotal: slotRows.length,
+        retryable: null,
+      })),
+    },
+    { status: 201 },
+  );
 }
 
 export async function PATCH(request: Request): Promise<NextResponse> {
