@@ -199,4 +199,23 @@ describe('apiErrorResponse', () => {
     expect(serialized).not.toContain('abcd-efgh');
     expect(serialized).not.toContain('sk-live-123');
   });
+
+  it('includes a 4xx cause in warning metadata instead of dropping it', () => {
+    // Security-relevant 4xx (e.g. Stripe signature verification failure)
+    // must keep their cause: logger.warn has no cause parameter, so the
+    // responder serializes it into metadata.
+    const cause = new Error('No signatures found matching the expected signature');
+
+    apiErrorResponse(400, 'Invalid signature.', {
+      route: 'POST /api/billing/webhook',
+      cause,
+    });
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.error).not.toHaveBeenCalled();
+
+    const warnCall = vi.mocked(logger.warn).mock.calls[0];
+    const loggedMetadata = warnCall[1] as Record<string, unknown>;
+    expect(loggedMetadata['cause']).toBe('No signatures found matching the expected signature');
+  });
 });

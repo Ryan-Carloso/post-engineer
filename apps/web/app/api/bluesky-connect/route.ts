@@ -5,7 +5,6 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { encryptTokens } from '@/lib/token-crypto';
 import { BlueskyError, loginToBluesky } from '@/lib/bluesky';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { logger } from '@/lib/logger';
 import { apiErrorResponse } from '@/lib/api-error';
 
 //---------------
@@ -24,8 +23,13 @@ import { apiErrorResponse } from '@/lib/api-error';
 // Bluesky's servers before saving.
 //---------------
 
-function errorResponse(status: number, error: string, route: string): NextResponse {
-  return apiErrorResponse(status, error, { route });
+function errorResponse(
+  status: number,
+  error: string,
+  route: string,
+  options?: { cause?: unknown; logMessage?: string; metadata?: Record<string, unknown> },
+): NextResponse {
+  return apiErrorResponse(status, error, { route, ...options });
 }
 
 async function readCredentials(request: Request): Promise<
@@ -109,10 +113,12 @@ export async function POST(request: Request): Promise<NextResponse> {
       .single();
 
     if (insertError || !inserted) {
-      // Log the full PostgREST error object (not just the message) so the
-      // Bugsink issue carries code/details/hint for diagnosis.
-      logger.error('[api/bluesky-connect] insert failed', insertError, { userId: auth.userId });
-      return errorResponse(500, 'Could not save the Bluesky account.', 'POST /api/bluesky-connect');
+      // The full PostgREST error object (not just the message) is threaded
+      // as cause so the Bugsink issue carries code/details/hint.
+      return errorResponse(500, 'Could not save the Bluesky account.', 'POST /api/bluesky-connect', {
+        cause: insertError,
+        metadata: { userId: auth.userId },
+      });
     }
 
     return NextResponse.json({ success: true, accountId: inserted.id, did });
@@ -123,8 +129,10 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (isInvalidCredentials) {
       return errorResponse(401, 'Invalid Bluesky handle or app password.', 'POST /api/bluesky-connect');
     }
-    const message = error instanceof Error ? error.message : 'Unknown error.';
-    logger.error('[api/bluesky-connect] failed', undefined, { userId: auth.userId, message });
-    return errorResponse(500, 'Could not connect the Bluesky account.', 'POST /api/bluesky-connect');
+    return errorResponse(500, 'Could not connect the Bluesky account.', 'POST /api/bluesky-connect', {
+      cause: error,
+      metadata: { userId: auth.userId },
+      logMessage: 'Bluesky connection failed.',
+    });
   }
 }

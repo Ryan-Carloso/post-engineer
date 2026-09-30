@@ -37,8 +37,11 @@ export async function POST(request: Request): Promise<NextResponse> {
   let event;
   try {
     event = stripe.webhooks.constructEvent(await request.text(), signature, webhookSecret);
-  } catch {
-    return apiErrorResponse(400, 'Invalid signature.', { route: 'POST /api/billing/webhook' });
+  } catch (error) {
+    return apiErrorResponse(400, 'Invalid signature.', {
+      route: 'POST /api/billing/webhook',
+      cause: error,
+    });
   }
 
   const supabase = createSupabaseServiceClient();

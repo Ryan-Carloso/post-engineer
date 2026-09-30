@@ -35,8 +35,13 @@ import { apiErrorResponse } from '@/lib/api-error';
 // Validation = shared zod schema (lib/persona-schema.ts).
 //---------------
 
-function errorResponse(status: number, error: string, route: string): NextResponse {
-  return apiErrorResponse(status, error, { route });
+function errorResponse(
+  status: number,
+  error: string,
+  route: string,
+  options?: { cause?: unknown; logMessage?: string; metadata?: Record<string, unknown> },
+): NextResponse {
+  return apiErrorResponse(status, error, { route, ...options });
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
@@ -173,8 +178,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     .single();
 
   if (insertError || !persona) {
-    logger.error('[api/persona] insert failed', insertError);
-    return errorResponse(500, 'Failed to create persona.', 'POST /api/persona');
+    return errorResponse(500, 'Failed to create persona.', 'POST /api/persona', {
+      cause: insertError,
+    });
   }
 
   let libraryImageIds: string[] = [];

@@ -77,6 +77,13 @@ describe('POST /api/persona insert failure', () => {
     expect(body.error).toMatch(/failed to create persona/i);
     expect(JSON.stringify(body)).not.toContain('23505');
 
-    expect(logger.error).toHaveBeenCalledWith('[api/persona] insert failed', dbError);
+    // The cause is threaded through apiErrorResponse: a single logger.error
+    // with the real DB error, and the errorId points at that event.
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(logger.error).toHaveBeenCalledWith(
+      '[POST /api/persona] 500 Failed to create persona.',
+      dbError,
+      expect.objectContaining({ route: 'POST /api/persona' }),
+    );
   });
 });

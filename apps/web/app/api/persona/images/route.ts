@@ -30,8 +30,13 @@ import { logger } from '@/lib/logger';
 // DELETE ?id=         — remove the image (also deletes the storage file)
 //---------------
 
-function errorResponse(status: number, error: string, route: string): NextResponse {
-  return apiErrorResponse(status, error, { route });
+function errorResponse(
+  status: number,
+  error: string,
+  route: string,
+  options?: { cause?: unknown; logMessage?: string; metadata?: Record<string, unknown> },
+): NextResponse {
+  return apiErrorResponse(status, error, { route, ...options });
 }
 
 interface Authed {
@@ -103,8 +108,10 @@ async function assertPersonaOwned(
     if (error.code === 'PGRST116') {
       return { response: errorResponse(404, 'Persona not found.', `${method} /api/persona/images`) };
     }
-    logger.error('[api/persona/images] persona ownership lookup failed', error, { personaId });
-    return { response: errorResponse(500, 'Failed to load persona.', `${method} /api/persona/images`) };
+    return { response: errorResponse(500, 'Failed to load persona.', `${method} /api/persona/images`, {
+      cause: error,
+      metadata: { personaId },
+    }) };
   }
   if (!data) return { response: errorResponse(404, 'Persona not found.', `${method} /api/persona/images`) };
   return { persona: data as OwnedPersona };
@@ -182,8 +189,10 @@ async function getOwnedImage(
     if (error.code === 'PGRST116') {
       return { image: null, error: errorResponse(404, 'Image not found.', `${method} /api/persona/images`) };
     }
-    logger.error('[api/persona/images] image lookup failed', error, { imageId });
-    return { image: null, error: errorResponse(500, 'Failed to load image.', `${method} /api/persona/images`) };
+    return { image: null, error: errorResponse(500, 'Failed to load image.', `${method} /api/persona/images`, {
+      cause: error,
+      metadata: { imageId },
+    }) };
   }
   if (!image) {
     return { image: null, error: errorResponse(404, 'Image not found.', `${method} /api/persona/images`) };
@@ -198,8 +207,10 @@ async function getOwnedImage(
     if (personaError.code === 'PGRST116') {
       return { image: null, error: errorResponse(404, 'Image not found.', `${method} /api/persona/images`) };
     }
-    logger.error('[api/persona/images] image ownership lookup failed', personaError, { imageId });
-    return { image: null, error: errorResponse(500, 'Failed to load image.', `${method} /api/persona/images`) };
+    return { image: null, error: errorResponse(500, 'Failed to load image.', `${method} /api/persona/images`, {
+      cause: personaError,
+      metadata: { imageId },
+    }) };
   }
   if (!persona) {
     return { image: null, error: errorResponse(404, 'Image not found.', `${method} /api/persona/images`) };
@@ -253,8 +264,9 @@ export async function GET(request: Request): Promise<NextResponse> {
     .order('created_at', { ascending: true })
     .order('id', { ascending: true });
   if (error) {
-    logger.error('[api/persona/images] list failed', error);
-    return errorResponse(500, 'Failed to list images.', 'GET /api/persona/images');
+    return errorResponse(500, 'Failed to list images.', 'GET /api/persona/images', {
+      cause: error,
+    });
   }
   // The bucket is private: the UI needs signed URLs to render thumbnails.
   // Project only the fields the UI needs; the internal storage path
@@ -539,8 +551,9 @@ export async function DELETE(request: Request): Promise<NextResponse> {
     .delete()
     .eq('id', id);
   if (deleteError) {
-    logger.error('[api/persona/images] delete failed', deleteError);
-    return errorResponse(500, 'Failed to delete image.', 'DELETE /api/persona/images');
+    return errorResponse(500, 'Failed to delete image.', 'DELETE /api/persona/images', {
+      cause: deleteError,
+    });
   }
   // Deleting the primary image intentionally leaves the library with zero
   // primaries: persona-image-select.ts falls back deterministically (oldest

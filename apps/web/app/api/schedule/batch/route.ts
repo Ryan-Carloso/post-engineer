@@ -11,7 +11,6 @@ import {
   isValidTimezone,
   zonedTimeToUtc,
 } from '@/lib/timezone';
-import { logger } from '@/lib/logger';
 
 //---------------
 // POST /api/schedule/batch — manual video batch (finite, user-requested).
@@ -55,8 +54,9 @@ function errorResponse(
   error: string,
   route: string,
   extra?: Record<string, unknown>,
+  options?: { cause?: unknown; logMessage?: string; metadata?: Record<string, unknown> },
 ): NextResponse {
-  return apiErrorResponse(status, error, { route, extra });
+  return apiErrorResponse(status, error, { route, extra, ...options });
 }
 
 //---------------
@@ -220,8 +220,10 @@ export async function POST(request: Request): Promise<NextResponse> {
       .eq('user_id', auth.userId)
       .eq('provider', provider);
     if (accountsError) {
-      logger.error('[api/schedule/batch] connected accounts lookup failed', accountsError, { provider });
-      return errorResponse(500, 'Failed to check connected accounts. Please try again.', 'POST /api/schedule/batch');
+      return errorResponse(500, 'Failed to check connected accounts. Please try again.', 'POST /api/schedule/batch', undefined, {
+        cause: accountsError,
+        metadata: { provider },
+      });
     }
     const ids = (accounts ?? [])
       .map((row) => (row as Record<string, unknown>).provider_account_id)
@@ -257,8 +259,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     p_reason: `Manual video batch (${items.length} videos)`,
   });
   if (spendError) {
-    logger.error('[api/schedule/batch] spend failed', spendError);
-    return errorResponse(500, 'Failed to process tokens. Please try again.', 'POST /api/schedule/batch');
+    return errorResponse(500, 'Failed to process tokens. Please try again.', 'POST /api/schedule/batch', undefined, {
+      cause: spendError,
+    });
   }
   const spendRecord = (spendData ?? {}) as Record<string, unknown>;
   if (spendRecord.spent !== true) {
@@ -311,13 +314,14 @@ export async function POST(request: Request): Promise<NextResponse> {
     .select('id')
     .single();
   if (scheduleError) {
-    logger.error('[api/schedule/batch] schedule insert failed', scheduleError);
     await serviceSupabase.rpc('refund_generation_tokens', {
       p_user_id: auth.userId,
       p_generation_id: generationId,
       p_reason: 'Batch schedule insert failed; tokens refunded',
     });
-    return errorResponse(500, 'Failed to create batch. Please try again.', 'POST /api/schedule/batch');
+    return errorResponse(500, 'Failed to create batch. Please try again.', 'POST /api/schedule/batch', undefined, {
+      cause: scheduleError,
+    });
   }
 
   const { error: slotsError } = await supabase.from('scheduled_posts').insert(
@@ -330,7 +334,6 @@ export async function POST(request: Request): Promise<NextResponse> {
     })),
   );
   if (slotsError) {
-    logger.error('[api/schedule/batch] slots insert failed', slotsError);
     await supabase.from('scheduled_posts').delete().eq('schedule_id', scheduleId);
     await supabase.from('schedules').delete().eq('id', scheduleId);
     await serviceSupabase.rpc('refund_generation_tokens', {
@@ -338,7 +341,9 @@ export async function POST(request: Request): Promise<NextResponse> {
       p_generation_id: generationId,
       p_reason: 'Batch slots insert failed; tokens refunded',
     });
-    return errorResponse(500, 'Failed to create batch. Please try again.', 'POST /api/schedule/batch');
+    return errorResponse(500, 'Failed to create batch. Please try again.', 'POST /api/schedule/batch', undefined, {
+      cause: slotsError,
+    });
   }
 
   return NextResponse.json({

@@ -1,10 +1,11 @@
 //---------------
 // Shared API error responder.
 //
-// Every Web API error response (4xx and 5xx) flows through apiErrorResponse
-// so Bugsink receives enough structured context to debug the real cause,
-// while clients only see safe public messages. The returned errorId is the
-// logger's logId: users can report it and we can find the exact event.
+// Migrated Web API error responses (4xx and 5xx) flow through
+// apiErrorResponse so Bugsink receives enough structured context to debug
+// the real cause, while clients only see safe public messages. The returned
+// errorId is the logger's logId: users can report it and we can find the
+// exact event.
 //
 // Safety rules:
 // - 4xx (user/input errors) are logged as warnings; 5xx as errors with the
@@ -22,8 +23,10 @@ import { logger } from './logger';
 export interface ApiErrorOptions {
   // Route identifier for debugging, e.g. 'POST /api/schedule'.
   route?: string;
-  // Underlying failure for 5xx — reported to Bugsink as the exception cause.
-  // Keep it out of the client response: only the public message is returned.
+  // Underlying failure — reported to Bugsink as the exception cause on 5xx,
+  // and as a serialized string in metadata on 4xx (logger.warn has no
+  // cause parameter). Keep it out of the client response: only the public
+  // message is returned.
   cause?: unknown;
   // Stable template for the Bugsink log message. When the public error
   // embeds user-controlled input (e.g. a malformed field value), pass a
@@ -79,6 +82,20 @@ function fallbackErrorId(): string {
   return `fallback_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8)}`;
 }
 
+// Serialize a cause for 4xx metadata. logger.warn has no cause parameter,
+// so the cause rides in metadata instead of being silently dropped.
+// Errors serialize to their message; other values are JSON-stringified
+// (truncated) so Bugsink shows something useful.
+function serializeCause(cause: unknown): string {
+  if (cause instanceof Error) return cause.message;
+  try {
+    const text = JSON.stringify(cause) ?? '[unserializable]';
+    return text.length > 300 ? `${text.slice(0, 300)}...` : text;
+  } catch {
+    return '[unserializable]';
+  }
+}
+
 export function apiErrorResponse(
   status: number,
   error: string,
@@ -99,6 +116,11 @@ export function apiErrorResponse(
   try {
     if (status >= 500) {
       errorId = logger.error(message, options?.cause, metadata);
+    } else if (options?.cause !== undefined) {
+      // 4xx can carry a cause too (e.g. Stripe signature verification
+      // failure) — logger.warn has no cause parameter, so serialize it
+      // into metadata instead of silently dropping it.
+      errorId = logger.warn(message, { ...metadata, cause: serializeCause(options.cause) });
     } else {
       errorId = logger.warn(message, metadata);
     }

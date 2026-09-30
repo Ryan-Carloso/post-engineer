@@ -607,13 +607,22 @@ async function finalizeBatch(
         { status: 402 },
       );
     }
-    logger.error(
-      '[video-batch] engine did not return the expected task ids',
-      engineBatch.ok ? undefined : engineBatch.upstreamBody,
-      { expected: resolved.topics.length },
-    );
+    // When the engine call failed (ok=false), the upstream response is
+    // returned directly without apiErrorResponse, so log the diagnostic
+    // here. When ok=true, apiErrorResponse logs it (with cause) below.
+    if (!engineBatch.ok) {
+      logger.error(
+        '[video-batch] engine did not return the expected task ids',
+        engineBatch.upstreamBody,
+        { expected: resolved.topics.length },
+      );
+    }
     return engineBatch.ok
-      ? apiErrorResponse(502, 'Video service returned no task IDs.', { route: 'UNKNOWN /api/persona/video-batch' })
+      ? apiErrorResponse(502, 'Video service returned no task IDs.', {
+        route: 'UNKNOWN /api/persona/video-batch',
+        metadata: { expected: resolved.topics.length },
+        logMessage: 'engine did not return the expected task ids',
+      })
       : engineBatch.response;
   }
 
