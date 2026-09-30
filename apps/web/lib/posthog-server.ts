@@ -112,6 +112,7 @@ function toClient(sdk: PostHogNodeClient): ServerPostHogClient {
 
 let cachedClient: ServerPostHogClient | null = null;
 let clientReady = false;
+let queuingClient: ServerPostHogClient | null = null;
 
 export function getPostHogServer(): ServerPostHogClient | null {
   // Client bundle safety: this module is reachable from client components
@@ -119,10 +120,17 @@ export function getPostHogServer(): ServerPostHogClient | null {
   if (typeof window !== 'undefined') return null;
   if (clientReady) return cachedClient;
 
+  // If no API key is configured, return null immediately (don't queue).
+  // getConfig() warns once via warnOnce.
+  if (!getConfig()) return null;
+
+  // Return the same queuing client on repeated calls (singleton).
+  if (queuingClient) return queuingClient;
+
   // Kick off the async load; return a queuing client immediately.
   // Events captured before the SDK loads are sent once it's ready.
   const pending: Array<() => void> = [];
-  const queuingClient: ServerPostHogClient = {
+  queuingClient = {
     capture: (event, properties) => {
       pending.push(() => cachedClient?.capture(event, properties));
     },
@@ -177,6 +185,7 @@ export async function flushPostHog(): Promise<void> {
 export function __resetPostHogServerForTests(): void {
   cachedClient = null;
   clientReady = false;
+  queuingClient = null;
   sdkPromise = null;
   warned = false;
 }
