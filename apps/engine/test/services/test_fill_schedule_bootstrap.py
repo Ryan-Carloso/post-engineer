@@ -111,14 +111,14 @@ class ErrorTrackingInitTests(unittest.TestCase):
     def test_error_tracking_disabled_under_pytest(self):
         # Regression: importing app.asgi during pytest collection runs
         # load_dotenv(), which loads the tracked .env with the real
-        # BUGSINK_DSN. The test process must never attach production
+        # POSTHOG_API_KEY. The test process must never attach production
         # error tracking.
         asgi = self._import_asgi()
         self.assertFalse(asgi.should_init_error_tracking())
 
     def test_error_tracking_enabled_with_dsn_outside_pytest(self):
         asgi = self._import_asgi()
-        with patch.dict(os.environ, _env_without_pytest({"BUGSINK_DSN": "https://x@y/1"}), clear=True), \
+        with patch.dict(os.environ, _env_without_pytest({"POSTHOG_API_KEY": "phc_test_key"}), clear=True), \
              _without_pytest_modules():
             self.assertNotIn("PYTEST_CURRENT_TEST", os.environ)
             self.assertNotIn("pytest", sys.modules)
@@ -127,7 +127,7 @@ class ErrorTrackingInitTests(unittest.TestCase):
     def test_error_tracking_disabled_without_dsn(self):
         asgi = self._import_asgi()
         with patch.dict(os.environ, {}, clear=True), _without_pytest_modules():
-            self.assertNotIn("BUGSINK_DSN", os.environ)
+            self.assertNotIn("POSTHOG_API_KEY", os.environ)
             self.assertFalse(asgi.should_init_error_tracking())
 
     def test_asgi_import_warns_when_guard_fires_without_runner(self):
@@ -142,7 +142,7 @@ class ErrorTrackingInitTests(unittest.TestCase):
             if k not in ("PYTEST_CURRENT_TEST",)
         }
         env["ENGINE_UNDER_TEST"] = "1"
-        env["BUGSINK_DSN"] = "https://x@y/1"
+        env["POSTHOG_API_KEY"] = "phc_test_key"
         proc = subprocess.run(
             [sys.executable, "-c", "import app.asgi"],
             capture_output=True,
