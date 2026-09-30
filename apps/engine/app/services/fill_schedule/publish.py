@@ -10,7 +10,7 @@ from loguru import logger
 
 from app.services import notify as notify_module
 from app.services import upload_publisher
-from app.services.analytics import track_event
+from app.services.analytics import scrub_secret_values, track_event
 from app.services.fill_schedule.constants import (
     SLOT_FAILED,
     SLOT_PUBLISHED,
@@ -119,7 +119,7 @@ class BatchPublisher:
                     "video_publish_failed",
                     {
                         "slotId": str(slot["id"]),
-                        "reason": str(exc)[:200],
+                        "reason": scrub_secret_values(str(exc)[:200]),
                         "retryable": True,
                     },
                 )
