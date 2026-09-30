@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import * as Sentry from '@sentry/nextjs';
 import { logger } from '@/lib/logger';
+import { getPostHogServer } from '@/lib/posthog-server';
 
-vi.mock('@sentry/nextjs', () => ({
-  captureException: vi.fn(),
-  captureMessage: vi.fn(),
+vi.mock('@/lib/posthog-server', () => ({
+  getPostHogServer: vi.fn(),
 }));
 
 //---------------
@@ -103,15 +102,18 @@ describe('logger', () => {
 
 //---------------
 // logger — production routing: dev/test go to console only,
-// production errors/warnings also go to Bugsink (Sentry)
+// production errors/warnings also go to PostHog
 //---------------
 
 describe('logger production routing', () => {
+  const capture = vi.fn();
+
   beforeEach(() => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.clearAllMocks();
+    (getPostHogServer as ReturnType<typeof vi.fn>).mockReturnValue({ capture });
   });
 
   afterEach(() => {
@@ -119,23 +121,26 @@ describe('logger production routing', () => {
     vi.restoreAllMocks();
   });
 
-  it('production error() reports to Bugsink and keeps console output', () => {
+  it('production error() reports to PostHog and keeps console output', () => {
     vi.stubEnv('NODE_ENV', 'production');
     const err = new Error('insert boom');
     logger.error('insert failed', err, { endpoint: '/api/schedule' });
 
-    expect(Sentry.captureException).toHaveBeenCalledTimes(1);
-    const [reported, context] = (Sentry.captureException as ReturnType<typeof vi.fn>).mock.calls[0] as [Error, { extra?: Record<string, unknown> }];
-    expect(reported).toBe(err);
-    expect(context.extra).toMatchObject({ message: 'insert failed', endpoint: '/api/schedule' });
+    expect(capture).toHaveBeenCalledTimes(1);
+    const [event, props] = capture.mock.calls[0] as [string, Record<string, unknown>];
+    expect(event).toBe('$exception');
+    expect(props).toMatchObject({
+      $exception_message: 'insert boom',
+      log_message: 'insert failed',
+      endpoint: '/api/schedule',
+    });
     expect(console.error).toHaveBeenCalled();
   });
 
-  it('non-production error() never touches Sentry', () => {
+  it('non-production error() never touches PostHog', () => {
     vi.stubEnv('NODE_ENV', 'test');
     logger.error('insert failed', new Error('x'));
-    expect(Sentry.captureException).not.toHaveBeenCalled();
-    expect(Sentry.captureMessage).not.toHaveBeenCalled();
+    expect(capture).not.toHaveBeenCalled();
     expect(console.error).toHaveBeenCalled();
   });
 
@@ -144,56 +149,63 @@ describe('logger production routing', () => {
     const pgError = { message: 'new row violates check constraint "schedules_providers_check"', code: '23514' };
     logger.error('insert failed', pgError);
 
-    expect(Sentry.captureException).toHaveBeenCalledTimes(1);
-    const [reported, context] = (Sentry.captureException as ReturnType<typeof vi.fn>).mock.calls[0] as [Error, { extra?: Record<string, unknown> }];
-    expect(reported).toBeInstanceOf(Error);
-    expect(reported.message).toContain('schedules_providers_check');
-    // The raw PostgREST object stays visible in the Bugsink issue.
-    expect(context.extra).toMatchObject({ cause: pgError });
+    expect(capture).toHaveBeenCalledTimes(1);
+    const [event, props] = capture.mock.calls[0] as [string, Record<string, unknown>];
+    expect(event).toBe('$exception');
+    expect(props['$exception_message']).toContain('schedules_providers_check');
+    // The raw PostgREST object stays visible in the PostHog issue.
+    expect(props['cause']).toBe(pgError);
   });
 
-  it('production warn() sends a warning to Bugsink and keeps console output', () => {
+  it('production warn() sends a warning to PostHog and keeps console output', () => {
     vi.stubEnv('NODE_ENV', 'production');
     logger.warn('price changed', { packId: 'p1' });
 
-    expect(Sentry.captureMessage).toHaveBeenCalledTimes(1);
-    const [message, context] = (Sentry.captureMessage as ReturnType<typeof vi.fn>).mock.calls[0] as [string, { level?: string; extra?: Record<string, unknown> }];
-    expect(message).toBe('price changed');
-    expect(context.level).toBe('warning');
-    expect(context.extra).toMatchObject({ packId: 'p1' });
+    expect(capture).toHaveBeenCalledTimes(1);
+    const [event, props] = capture.mock.calls[0] as [string, Record<string, unknown>];
+    expect(event).toBe('server_warning');
+    expect(props).toMatchObject({ message: 'price changed', packId: 'p1' });
     expect(console.warn).toHaveBeenCalled();
   });
 
-  it('non-production warn() does not touch Sentry', () => {
+  it('non-production warn() does not touch PostHog', () => {
     vi.stubEnv('NODE_ENV', 'development');
     logger.warn('price changed');
-    expect(Sentry.captureMessage).not.toHaveBeenCalled();
+    expect(capture).not.toHaveBeenCalled();
     expect(console.warn).toHaveBeenCalled();
   });
 
-  it('info/debug never report to Sentry even in production', () => {
+  it('info/debug never report to PostHog even in production', () => {
     vi.stubEnv('NODE_ENV', 'production');
     logger.info('hello');
     logger.debug('detail');
-    expect(Sentry.captureException).not.toHaveBeenCalled();
-    expect(Sentry.captureMessage).not.toHaveBeenCalled();
+    expect(capture).not.toHaveBeenCalled();
     expect(console.log).toHaveBeenCalledTimes(2);
   });
 
-  it('production specialized error helpers report to Bugsink', () => {
+  it('production specialized error helpers report to PostHog', () => {
     vi.stubEnv('NODE_ENV', 'production');
     logger.logUploadError('log-id', new Error('upload boom'), { provider: 'youtube' });
     logger.logOAuthError('log-id', new Error('oauth boom'));
-    expect(Sentry.captureException).toHaveBeenCalledTimes(2);
+    expect(capture).toHaveBeenCalledTimes(2);
     expect(console.error).toHaveBeenCalledTimes(2);
   });
 
-  it('a Bugsink outage never breaks logging', () => {
+  it('a PostHog outage never breaks logging', () => {
     vi.stubEnv('NODE_ENV', 'production');
-    (Sentry.captureException as ReturnType<typeof vi.fn>).mockImplementation(() => {
-      throw new Error('bugsink down');
+    capture.mockImplementation(() => {
+      throw new Error('posthog down');
     });
     expect(() => logger.error('boom', new Error('x'))).not.toThrow();
     expect(console.error).toHaveBeenCalled();
+  });
+
+  it('missing PostHog client never breaks logging', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    (getPostHogServer as ReturnType<typeof vi.fn>).mockReturnValue(null);
+    expect(() => logger.error('boom', new Error('x'))).not.toThrow();
+    expect(() => logger.warn('careful')).not.toThrow();
+    expect(console.error).toHaveBeenCalled();
+    expect(console.warn).toHaveBeenCalled();
   });
 });

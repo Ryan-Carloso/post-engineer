@@ -1,7 +1,7 @@
 //---------------
 // apiErrorResponse — shared API error responder.
 //
-// Every Web API error (4xx and 5xx) flows through here so Bugsink gets
+// Every Web API error (4xx and 5xx) flows through here so PostHog gets
 // enough context to debug, while clients only see safe messages.
 //---------------
 
@@ -52,7 +52,7 @@ describe('apiErrorResponse', () => {
     expect(logger.error).toHaveBeenCalledTimes(1);
     expect(logger.warn).not.toHaveBeenCalled();
 
-    // The cause reaches the logger so Bugsink captures the real failure.
+    // The cause reaches the logger so PostHog captures the real failure.
     const errorCall = vi.mocked(logger.error).mock.calls[0];
     expect(errorCall[1]).toBe(cause);
 
@@ -151,7 +151,7 @@ describe('apiErrorResponse', () => {
 
   it('logs a stable logMessage instead of the user-facing error when provided', async () => {
     // User input embedded in the public message would create a distinct
-    // Bugsink issue per malformed value; the stable template keeps
+    // PostHog issue per malformed value; the stable template keeps
     // grouping bounded while metadata carries the raw value.
     const res = apiErrorResponse(400, 'times[2] ("garbage") is not a valid ISO datetime.', {
       route: 'POST /api/schedule',
@@ -161,7 +161,7 @@ describe('apiErrorResponse', () => {
 
     expect(res.status).toBe(400);
 
-    // Bugsink sees the stable template, not the interpolated input.
+    // PostHog sees the stable template, not the interpolated input.
     const warnCall = vi.mocked(logger.warn).mock.calls[0];
     expect(warnCall[0]).toContain('times[i] is not a valid ISO datetime.');
     expect(warnCall[0]).not.toContain('garbage');

@@ -2,13 +2,13 @@
 // Central application logger.
 //
 // Development/test: console only.
-// Production: errors and warnings are also reported to Bugsink
-// (Sentry-compatible) so handled failures show up as issues there,
+// Production: errors and warnings are also reported to PostHog
+// (error tracking + analytics) so handled failures show up there,
 // not only in Vercel logs. info/debug stay console-only in every
-// environment to keep Bugsink free of noise.
+// environment to keep PostHog free of noise.
 //---------------
 
-import * as Sentry from '@sentry/nextjs';
+import { getPostHogServer } from './posthog-server';
 
 //---------------
 // Environment routing (read at call time so tests can stub it)
@@ -21,7 +21,7 @@ function isProduction(): boolean {
 //---------------
 // Supabase/PostgREST failures arrive as plain objects
 // ({ message, code, details, hint }), not Error instances.
-// Normalize them so Bugsink groups issues with a useful message.
+// Normalize them so PostHog groups issues with a useful message.
 //---------------
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -47,27 +47,39 @@ function toError(cause: unknown): Error {
 }
 
 //---------------
-// Bugsink reporters — production only, and never allowed to throw.
+// PostHog reporters — production only, and never allowed to throw.
 // Telemetry must never break the request path.
 //---------------
 
-function reportErrorToBugsink(message: string, cause: unknown, metadata?: Record<string, unknown>): void {
+function reportErrorToPostHog(message: string, cause: unknown, metadata?: Record<string, unknown>): void {
   if (!isProduction()) return;
   try {
+    const client = getPostHogServer();
+    if (!client) return;
+    const error = toError(cause);
+    // PostHog error tracking ingests $exception events with these properties.
     // Keep the raw failure (e.g. the PostgREST { message, code, details, hint }
-    // object) in extra so the Bugsink issue shows the real database error.
-    const extra: Record<string, unknown> = { message, ...metadata };
-    if (!(cause instanceof Error) && cause !== undefined) extra.cause = cause;
-    Sentry.captureException(toError(cause), { extra });
+    // object) in properties so the PostHog issue shows the real database error.
+    const properties: Record<string, unknown> = {
+      $exception_message: error.message,
+      $exception_type: error.name,
+      $exception_stacktrace: error.stack,
+      log_message: message,
+      ...metadata,
+    };
+    if (!(cause instanceof Error) && cause !== undefined) properties['cause'] = cause;
+    client.capture('$exception', properties);
   } catch {
     // Telemetry must never break the request path.
   }
 }
 
-function reportWarningToBugsink(message: string, metadata?: Record<string, unknown>): void {
+function reportWarningToPostHog(message: string, metadata?: Record<string, unknown>): void {
   if (!isProduction()) return;
   try {
-    Sentry.captureMessage(message, { level: 'warning', extra: metadata });
+    const client = getPostHogServer();
+    if (!client) return;
+    client.capture('server_warning', { message, ...metadata });
   } catch {
     // Telemetry must never break the request path.
   }
@@ -138,7 +150,7 @@ class Logger {
 
   warn(message: string, metadata?: Record<string, unknown>): string {
     const logId = writeConsole('WARN', message, metadata);
-    reportWarningToBugsink(message, metadata);
+    reportWarningToPostHog(message, metadata);
     return logId;
   }
 
@@ -147,13 +159,13 @@ class Logger {
     // given: toHaveBeenCalledWith(msg, meta) assertions require the exact
     // argument list.
     const logId = writeConsole('ERROR', message, metadata, cause === undefined ? undefined : toError(cause));
-    reportErrorToBugsink(message, cause, metadata);
+    reportErrorToPostHog(message, cause, metadata);
     return logId;
   }
 
   //---------------
   // Public API: specialized logging methods (void return, drop-in compatible).
-  // Console format is unchanged; error variants also report to Bugsink.
+  // Console format is unchanged; error variants also report to PostHog.
   //---------------
 
   logUploadStart(logId: string, metadata: Record<string, unknown>): void {
@@ -170,7 +182,7 @@ class Logger {
 
   logUploadError(logId: string, error: Error, metadata: Record<string, unknown>): void {
     console.error('[ERROR] [UPLOAD_ERROR]', messageWithLogId(logId, 'Upload error'), metadata, error);
-    reportErrorToBugsink('Upload error', error, { logId, ...metadata });
+    reportErrorToPostHog('Upload error', error, { logId, ...metadata });
   }
 
   logOAuthStart(logId: string): void {
@@ -190,7 +202,7 @@ class Logger {
 
   logOAuthError(logId: string, error: Error): void {
     console.error('[ERROR] [OAUTH_ERROR]', messageWithLogId(logId, 'OAuth flow error'), error);
-    reportErrorToBugsink('OAuth flow error', error, { logId });
+    reportErrorToPostHog('OAuth flow error', error, { logId });
   }
 
   logInstagramAuthStart(logId: string): void {
@@ -207,7 +219,7 @@ class Logger {
 
   logInstagramAuthError(logId: string, error: Error): void {
     console.error('[ERROR] [INSTAGRAM_OAUTH_ERROR]', messageWithLogId(logId, 'Instagram OAuth flow error'), error);
-    reportErrorToBugsink('Instagram OAuth flow error', error, { logId });
+    reportErrorToPostHog('Instagram OAuth flow error', error, { logId });
   }
 
   logInstagramPostStart(logId: string, igUserId: string): void {
@@ -220,7 +232,7 @@ class Logger {
 
   logInstagramPostError(logId: string, error: Error): void {
     console.error('[ERROR] [INSTAGRAM_POST_ERROR]', messageWithLogId(logId, 'Error creating Instagram post'), error);
-    reportErrorToBugsink('Error creating Instagram post', error, { logId });
+    reportErrorToPostHog('Error creating Instagram post', error, { logId });
   }
 }
 

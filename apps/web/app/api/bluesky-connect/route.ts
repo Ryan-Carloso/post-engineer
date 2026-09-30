@@ -114,7 +114,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     if (insertError || !inserted) {
       // The full PostgREST error object (not just the message) is threaded
-      // as cause so the Bugsink issue carries code/details/hint.
+      // as cause so the PostHog issue carries code/details/hint.
       return errorResponse(500, 'Could not save the Bluesky account.', 'POST /api/bluesky-connect', {
         cause: insertError,
         metadata: { userId: auth.userId },

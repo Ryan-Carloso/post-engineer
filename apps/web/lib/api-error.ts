@@ -2,14 +2,14 @@
 // Shared API error responder.
 //
 // Migrated Web API error responses (4xx and 5xx) flow through
-// apiErrorResponse so Bugsink receives enough structured context to debug
+// apiErrorResponse so PostHog receives enough structured context to debug
 // the real cause, while clients only see safe public messages. The returned
 // errorId is the logger's logId: users can report it and we can find the
 // exact event.
 //
 // Safety rules:
 // - 4xx (user/input errors) are logged as warnings; 5xx as errors with the
-//   underlying cause, so Bugsink captures the real failure.
+//   underlying cause, so PostHog captures the real failure.
 // - Metadata keys that look secret-bearing (tokens, passwords, auth
 //   headers, ...) are redacted before logging — never pass raw request
 //   bodies, signed URLs, or credentials here.
@@ -23,20 +23,20 @@ import { logger } from './logger';
 export interface ApiErrorOptions {
   // Route identifier for debugging, e.g. 'POST /api/schedule'.
   route?: string;
-  // Underlying failure — reported to Bugsink as the exception cause on 5xx,
+  // Underlying failure — reported to PostHog as the exception cause on 5xx,
   // and as a serialized string in metadata on 4xx (logger.warn has no
   // cause parameter). Keep it out of the client response: only the public
   // message is returned.
   cause?: unknown;
-  // Stable template for the Bugsink log message. When the public error
+  // Stable template for the PostHog log message. When the public error
   // embeds user-controlled input (e.g. a malformed field value), pass a
-  // stable template here so Bugsink groups by the template instead of
+  // stable template here so PostHog groups by the template instead of
   // creating one issue per distinct input; put the raw value (truncated)
   // in metadata. Defaults to the public error message.
   logMessage?: string;
   // Safe metadata only: ids, counts, validated enums. Never auth headers,
   // tokens, passwords, app passwords, raw request bodies, or signed URLs.
-  // Logged to Bugsink, never returned to the client.
+  // Logged to PostHog, never returned to the client.
   metadata?: Record<string, unknown>;
   // Extra client-safe fields merged into the JSON response body
   // (e.g. { code: 'INSUFFICIENT_TOKENS' }). Also logged for debugging.
@@ -85,7 +85,7 @@ function fallbackErrorId(): string {
 // Serialize a cause for 4xx metadata. logger.warn has no cause parameter,
 // so the cause rides in metadata instead of being silently dropped.
 // Errors serialize to their message; other values are JSON-stringified
-// (truncated) so Bugsink shows something useful.
+// (truncated) so PostHog shows something useful.
 function serializeCause(cause: unknown): string {
   if (cause instanceof Error) return cause.message;
   try {
@@ -106,7 +106,7 @@ export function apiErrorResponse(
   // defense in depth against a caller accidentally passing something secret.
   const extra = scrubSecrets({ ...(options?.extra ?? {}) });
   const metadata = scrubSecrets({ route, ...(options?.metadata ?? {}), ...extra });
-  // The Bugsink message uses the stable template when provided, so
+  // The PostHog message uses the stable template when provided, so
   // user-controlled input in the public error doesn't create one issue
   // per distinct value. The client still receives the detailed message.
   const logMessage = options?.logMessage ?? error;

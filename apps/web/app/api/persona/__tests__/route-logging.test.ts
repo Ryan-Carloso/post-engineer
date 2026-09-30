@@ -62,7 +62,7 @@ describe('POST /api/persona insert failure', () => {
     vi.clearAllMocks();
   });
 
-  it('logs the database error to Bugsink and returns a sanitized 500', async () => {
+  it('logs the database error to PostHog and returns a sanitized 500', async () => {
     // The faceless mode needs no photo/avatar, so the request reaches the
     // personas insert with a minimal mock.
     const dbError = { message: 'duplicate key value violates unique constraint', code: '23505' };

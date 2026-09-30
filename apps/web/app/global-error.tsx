@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect } from "react";
-import * as Sentry from "@sentry/nextjs";
+import { logger } from "@/lib/logger";
 
 //---------------
-// Error boundary raiz (global-error): reporta erros de render do React ao
-// Bugsink e oferece recarregar a página. Precisa renderizar <html>/<body>.
+// Root error boundary (global-error): reports React render errors to
+// PostHog and offers a page reload. Must render <html>/<body>.
 //---------------
 
 export default function GlobalError({
@@ -16,7 +16,9 @@ export default function GlobalError({
   reset: () => void;
 }): React.JSX.Element {
   useEffect(() => {
-    Sentry.captureException(error);
+    logger.error("React render error (global-error boundary)", error, {
+      digest: error.digest,
+    });
   }, [error]);
 
   return (
@@ -25,7 +27,7 @@ export default function GlobalError({
         <div className="flex flex-col items-center gap-4 text-center">
           <h1 className="text-lg font-semibold">Algo deu errado</h1>
           <p className="text-muted-foreground text-sm">
-            O erro foi registrado no Bugsink.
+            O erro foi registrado.
           </p>
           <button
             type="button"

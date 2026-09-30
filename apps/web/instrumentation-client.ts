@@ -1,21 +1,26 @@
-import * as Sentry from "@sentry/nextjs";
+import posthog from "posthog-js";
 
 //---------------
-// Bugsink Cloud (Sentry-compatible) — client/browser. DSN obrigatório, sem fallback.
+// PostHog — client/browser telemetry (error tracking, analytics,
+// feature flags). Optional: the app runs fine without the key
+// configured (warns once, skips initialization).
+// Configuration from environment variables, never hardcoded:
+// NEXT_PUBLIC_POSTHOG_KEY and NEXT_PUBLIC_POSTHOG_HOST
+// (defaults to https://us.i.posthog.com).
 //---------------
 
-const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
+const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
 
-if (!dsn) {
-  throw new Error(
-    "NEXT_PUBLIC_SENTRY_DSN é obrigatória (Bugsink). Defina-a no .env.",
+if (!key) {
+  console.warn(
+    "[posthog] NEXT_PUBLIC_POSTHOG_KEY not set — PostHog telemetry disabled",
   );
+} else {
+  posthog.init(key, {
+    api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "https://us.i.posthog.com",
+    // Error tracking: capture unhandled exceptions automatically.
+    capture_exceptions: true,
+  });
 }
 
-Sentry.init({
-  dsn,
-  environment: process.env.NODE_ENV,
-  tracesSampleRate: 0,
-});
-
-export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;
+export default posthog;
