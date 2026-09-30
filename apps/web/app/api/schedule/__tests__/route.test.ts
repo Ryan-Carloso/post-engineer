@@ -869,8 +869,17 @@ describe('POST /api/schedule topics → slots → charging', () => {
     expect(body.slots[0]).toMatchObject({ topic: 't1' });
     expect(typeof body.slots[0].id).toBe('string');
     expect(typeof body.slots[0].slotAt).toBe('string');
-    // Slots are all pending at creation: progress starts at 0.
-    expect(body.slots.every((slot) => slot.progress === 0)).toBe(true);
+    // Slots are all awaiting at creation: progress starts at 0, stage is
+    // null, and the queue position follows creation order.
+    expect(body.slots[0]).toMatchObject({
+      status: 'awaiting',
+      progress: 0,
+      stage: null,
+      queuePosition: 1,
+      queueTotal: 2,
+      retryable: null,
+    });
+    expect(body.slots[1]).toMatchObject({ status: 'awaiting', queuePosition: 2, queueTotal: 2 });
   });
 
   it('rejeita topics ausente com 400 sem criar nada nem gastar tokens', async () => {

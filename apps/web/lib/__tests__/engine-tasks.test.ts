@@ -125,4 +125,22 @@ describe('fetchEngineTaskProgress', () => {
       vi.useRealTimers();
     }
   });
+
+  it('repasses the engine stage as-is', async () => {
+    mockEngine({ data: { progress: 45, stage: 'lipsync' } });
+    const result = await fetchEngineTaskProgress(TASK_ID, 'user-1');
+    expect(result.stage).toBe('lipsync');
+  });
+
+  it('returns null stage when the payload carries none', async () => {
+    mockEngine({ data: { progress: 45 } });
+    const result = await fetchEngineTaskProgress(TASK_ID, 'user-1');
+    expect(result.stage).toBeNull();
+  });
+
+  it('returns null stage for non-string stage values', async () => {
+    mockEngine({ data: { progress: 45, stage: 42 } });
+    const result = await fetchEngineTaskProgress(TASK_ID, 'user-1');
+    expect(result.stage).toBeNull();
+  });
 });

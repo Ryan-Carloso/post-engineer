@@ -425,10 +425,10 @@ describe('api', () => {
         return jsonResponse({
           success: true,
           upcoming: [
-            { id: 'up-1', schedule_id: 's-1', slot_at: '2026-09-24T10:00:00Z', status: 'generating', topic: 'T', task_id: 'task-1', progress: 45 },
+            { id: 'up-1', schedule_id: 's-1', slot_at: '2026-09-24T10:00:00Z', status: 'awaiting', topic: 'T', task_id: 'task-1', progress: 45, stage: null, queuePosition: 2, queueTotal: 3, retryable: null },
           ],
           recent: [
-            { id: 're-1', schedule_id: 's-1', slot_at: '2026-09-20T10:00:00Z', status: 'published', topic: 'O', progress: 100 },
+            { id: 're-1', schedule_id: 's-1', slot_at: '2026-09-20T10:00:00Z', status: 'failed', topic: 'O', progress: 80, stage: null, queuePosition: null, queueTotal: null, retryable: true, error: 'boom' },
           ],
         });
       }
@@ -441,7 +441,11 @@ describe('api', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.upcoming[0]?.progress).toBe(45);
+    expect(result.current.data?.upcoming[0]?.status).toBe('awaiting');
     expect(result.current.data?.upcoming[0]?.taskId).toBe('task-1');
-    expect(result.current.data?.recent[0]?.progress).toBe(100);
+    expect(result.current.data?.upcoming[0]?.queuePosition).toBe(2);
+    expect(result.current.data?.upcoming[0]?.queueTotal).toBe(3);
+    expect(result.current.data?.recent[0]?.progress).toBe(80);
+    expect(result.current.data?.recent[0]?.retryable).toBe(true);
   });
 });

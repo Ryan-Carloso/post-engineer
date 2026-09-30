@@ -495,13 +495,18 @@ export async function POST(request: Request): Promise<NextResponse> {
     {
       success: true,
       schedule,
-      // Slots are created pending; progress starts at 0 — the engine
-      // only reports progress once generation dispatches.
-      slots: slotRows.map((row) => ({
+      // Slots are created pending, presented as awaiting; the generation
+      // queue starts here, so the position follows creation order.
+      slots: slotRows.map((row, index) => ({
         id: row.id,
         topic: row.topic,
         slotAt: row.slot_at,
+        status: 'awaiting',
         progress: 0,
+        stage: null,
+        queuePosition: index + 1,
+        queueTotal: slotRows.length,
+        retryable: null,
       })),
     },
     { status: 201 },

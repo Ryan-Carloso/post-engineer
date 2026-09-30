@@ -31,6 +31,7 @@ export function clampProgress(value: unknown): number {
 
 export interface EngineTaskProgress {
   progress: number;
+  stage: string | null;
   state: number | null;
 }
 
@@ -57,6 +58,14 @@ function taskState(task: Record<string, unknown>): number | null {
     }
   }
   return null;
+}
+
+//---------------
+// taskStage — the engine reports the current pipeline stage as a string
+// (e.g. "lipsync"); repass non-empty strings as-is, null otherwise.
+//---------------
+function taskStage(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
 //---------------
@@ -97,6 +106,7 @@ export async function fetchEngineTaskProgress(
     const task = taskPayload(body);
     return {
       progress: task ? clampProgress(task.progress) : 0,
+      stage: task ? taskStage(task.stage) : null,
       state: task ? taskState(task) : null,
     };
   } finally {

@@ -31,57 +31,138 @@ export function parseLimit(value: string | null): number {
 }
 
 import { fetchEngineTaskProgress } from '@/lib/engine-tasks';
+import { isRetryableGenerationError } from '@/lib/generation/generation-errors';
 
 //---------------
-// slotProgress — numeric 0–100 progress for a schedule slot.
-//
-// Terminal-success states (ready/publishing/published) are 100, pending is
-// 0. For generating (and failed) slots the live engine task progress is
-// fetched read-only via the shared engine-tasks helper — which, unlike the
-// video-status route, performs NO refunds or history writes. A failed
-// lookup degrades that single slot to 0 instead of failing the request.
+// presentStatus — the DB and the engine keep the 'pending' string (no
+// migration); the API presents it as the friendlier 'awaiting'. Every
+// other state passes through unchanged.
 //---------------
-async function slotProgress(
-  slot: { status?: unknown; task_id?: unknown },
+function presentStatus(dbStatus: string): string {
+  return dbStatus === 'pending' ? 'awaiting' : dbStatus;
+}
+
+interface SlotEnrichment {
+  status: string;
+  progress: number;
+  stage: string | null;
+  queuePosition: number | null;
+  queueTotal: number | null;
+  retryable: boolean | null;
+}
+
+type QueuePositions = Map<string, Map<string, { position: number; total: number }>>;
+
+//---------------
+// buildQueuePositions — 1-based position of every awaiting+generating
+// slot within its schedule, ordered by slot_at, plus the schedule total.
+// The queue query is already ordered by slot_at, so positions follow row
+// order. Malformed rows are skipped instead of failing the request.
+//---------------
+function buildQueuePositions(rows: unknown): QueuePositions {
+  const idsBySchedule = new Map<string, string[]>();
+  if (Array.isArray(rows)) {
+    for (const row of rows) {
+      if (typeof row !== 'object' || row === null) continue;
+      const record = row as Record<string, unknown>;
+      const scheduleId = record.schedule_id;
+      const id = record.id;
+      if (typeof scheduleId !== 'string' || typeof id !== 'string') continue;
+      const list = idsBySchedule.get(scheduleId) ?? [];
+      list.push(id);
+      idsBySchedule.set(scheduleId, list);
+    }
+  }
+  const positions: QueuePositions = new Map();
+  for (const [scheduleId, ids] of idsBySchedule) {
+    const byId = new Map<string, { position: number; total: number }>();
+    ids.forEach((id, index) => byId.set(id, { position: index + 1, total: ids.length }));
+    positions.set(scheduleId, byId);
+  }
+  return positions;
+}
+
+//---------------
+// enrichSlot — attach the presentation fields to a schedule slot row.
+//
+// progress/stage come from the live engine task for generating slots,
+// fetched read-only via the shared engine-tasks helper — which, unlike
+// the video-status route, performs NO refunds or history writes. A failed
+// lookup degrades that single slot (progress 0, stage null) instead of
+// failing the request. Failed slots report their last known engine
+// progress plus a retryable flag derived from the error category.
+//---------------
+async function enrichSlot(
+  slot: { status?: unknown; task_id?: unknown; error?: unknown; schedule_id?: unknown; id?: unknown },
   userId: string,
-): Promise<number> {
-  const status = typeof slot.status === 'string' ? slot.status : 'pending';
-  switch (status) {
-    case 'ready':
-    case 'publishing':
-    case 'published':
-      return 100;
+  queuePositions: QueuePositions,
+): Promise<SlotEnrichment> {
+  const dbStatus = typeof slot.status === 'string' ? slot.status : 'pending';
+  const enrichment: SlotEnrichment = {
+    status: presentStatus(dbStatus),
+    progress: 0,
+    stage: null,
+    queuePosition: null,
+    queueTotal: null,
+    retryable: null,
+  };
+  switch (dbStatus) {
+    case 'pending': {
+      const scheduleId = typeof slot.schedule_id === 'string' ? slot.schedule_id : null;
+      const id = typeof slot.id === 'string' ? slot.id : null;
+      const queue = scheduleId && id ? queuePositions.get(scheduleId)?.get(id) : undefined;
+      enrichment.queuePosition = queue?.position ?? null;
+      enrichment.queueTotal = queue?.total ?? null;
+      return enrichment;
+    }
     case 'generating':
     case 'failed': {
       const taskId = typeof slot.task_id === 'string' ? slot.task_id : null;
-      if (!taskId) return 0;
-      try {
-        const { progress } = await fetchEngineTaskProgress(taskId, userId);
-        return progress;
-      } catch (error) {
-        logger.warn('[api/schedule/status] engine task progress unavailable', {
-          taskId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        return 0;
+      if (taskId) {
+        try {
+          const task = await fetchEngineTaskProgress(taskId, userId);
+          enrichment.progress = task.progress;
+          if (dbStatus === 'generating') enrichment.stage = task.stage;
+        } catch (error) {
+          logger.warn('[api/schedule/status] engine task progress unavailable', {
+            taskId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
+      if (dbStatus === 'failed') {
+        enrichment.retryable = isRetryableGenerationError(
+          typeof slot.error === 'string' ? slot.error : null,
+        );
+      }
+      return enrichment;
     }
+    case 'ready':
+    case 'publishing':
+    case 'published':
+      enrichment.progress = 100;
+      enrichment.stage = 'done';
+      return enrichment;
     default:
-      return 0;
+      return enrichment;
   }
 }
 
 //---------------
-// withSlotProgress — attach progress to every slot. Task lookups run
-// concurrently (Promise.all): sequential one-off generation means at most
-// one generating slot per schedule, but a caller may list many schedules.
+// withSlotPresentation — attach the presentation fields to every slot.
+// Engine task lookups run concurrently (Promise.all): sequential one-off
+// generation means at most one generating slot per schedule, but a caller
+// may list many schedules.
 //---------------
-async function withSlotProgress<T extends { status?: unknown; task_id?: unknown }>(
+async function withSlotPresentation<T extends { status?: unknown; task_id?: unknown }>(
   slots: T[],
   userId: string,
-): Promise<(T & { progress: number })[]> {
-  const progresses = await Promise.all(slots.map((slot) => slotProgress(slot, userId)));
-  return slots.map((slot, index) => ({ ...slot, progress: progresses[index] }));
+  queuePositions: QueuePositions,
+): Promise<(T & SlotEnrichment)[]> {
+  const enrichments = await Promise.all(
+    slots.map((slot) => enrichSlot(slot, userId, queuePositions)),
+  );
+  return slots.map((slot, index) => ({ ...slot, ...enrichments[index] }));
 }
 
 export async function GET(request?: Request): Promise<NextResponse> {
@@ -145,9 +226,23 @@ export async function GET(request?: Request): Promise<NextResponse> {
     recentQuery = recentQuery.in('schedule_id', scheduleIds);
   }
 
-  const [upcoming, recent] = await Promise.all([
+  // Queue positions come from a dedicated un-limited query: the paginated
+  // upcoming list can cut a schedule's queue mid-way, which would corrupt
+  // positions computed from the returned page alone.
+  let queueQuery = supabase
+    .from('scheduled_posts')
+    .select('id, schedule_id, slot_at')
+    .eq('user_id', userId)
+    .in('status', ['pending', 'generating'])
+    .order('slot_at', { ascending: true });
+  if (scheduleIds) {
+    queueQuery = queueQuery.in('schedule_id', scheduleIds);
+  }
+
+  const [upcoming, recent, queueResult] = await Promise.all([
     upcomingQuery.limit(limit),
     recentQuery.limit(limit),
+    queueQuery,
   ]);
 
   if (upcoming.error || recent.error) {
@@ -160,10 +255,16 @@ export async function GET(request?: Request): Promise<NextResponse> {
       { status: 500 },
     );
   }
+  // A failed queue lookup degrades queuePosition/queueTotal to null — the
+  // status itself still resolves.
+  if (queueResult.error) {
+    logger.warn('[api/schedule/status] queue lookup failed', { error: queueResult.error });
+  }
+  const queuePositions = buildQueuePositions(queueResult.error ? [] : (queueResult.data ?? []));
 
   return NextResponse.json({
     success: true,
-    upcoming: await withSlotProgress(upcoming.data ?? [], userId),
-    recent: await withSlotProgress(recent.data ?? [], userId),
+    upcoming: await withSlotPresentation(upcoming.data ?? [], userId, queuePositions),
+    recent: await withSlotPresentation(recent.data ?? [], userId, queuePositions),
   });
 }

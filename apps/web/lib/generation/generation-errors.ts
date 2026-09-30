@@ -25,3 +25,28 @@ export function categorizeGenerationError(
   if (text.includes('invalid task response')) return 'invalid_task_response';
   return 'unknown';
 }
+
+//---------------
+// isRetryableGenerationError — does this failure look transient, i.e.
+// would retrying the generation plausibly succeed? Documented mapping:
+//   engine_unavailable    -> true  (transient: the engine/network blipped)
+//   invalid_task_response -> true  (transient: a malformed response)
+//   custom_audio_invalid  -> false (validation: the input audio is bad)
+//   engine_rejected       -> false (the engine refused the job)
+//   no_task_id            -> false (internal bookkeeping bug, not the job)
+//   unknown               -> keyword scan: rate-limit/network/timeout-like
+//                            text is retryable; everything else (auth,
+//                            quota, unrecognized) fails closed at false.
+//---------------
+const RETRYABLE_CATEGORIES: ReadonlySet<GenerationErrorCode> = new Set([
+  'engine_unavailable',
+  'invalid_task_response',
+]);
+
+const TRANSIENT_KEYWORDS = /rate.?limit|429|timeout|timed out|network|econn|socket/i;
+
+export function isRetryableGenerationError(raw: string | null | undefined): boolean {
+  const category = categorizeGenerationError(raw);
+  if (category !== 'unknown') return RETRYABLE_CATEGORIES.has(category);
+  return TRANSIENT_KEYWORDS.test(raw ?? '');
+}
