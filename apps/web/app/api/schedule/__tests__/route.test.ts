@@ -36,9 +36,17 @@ function mockSupabase(handlers: {
   update?: { error: unknown };
   remove?: { error: unknown };
   noSession?: boolean;
+  rpc?: {
+    spend?: { data: unknown; error: unknown };
+    grant?: { data: unknown; error: unknown };
+    refund?: { data: unknown; error: unknown };
+  };
+  slotsInsert?: { error: unknown };
 }) {
   const insertedRows: Record<string, unknown>[] = [];
   const updatedRows: Record<string, unknown>[] = [];
+  const slotRows: Record<string, unknown>[] = [];
+  const rpcCalls: { name: string; params: unknown }[] = [];
   const selectArgs: string[] = [];
   const client = {
     auth: {
@@ -48,6 +56,16 @@ function mockSupabase(handlers: {
           : { data: { user: { id: USER_ID } }, error: null },
       ),
     },
+    rpc: vi.fn(async (name: string, params: unknown) => {
+      rpcCalls.push({ name, params });
+      if (name === 'spend_tokens')
+        return handlers.rpc?.spend ?? { data: { spent: true, balance: 100 }, error: null };
+      if (name === 'grant_signup_bonus')
+        return handlers.rpc?.grant ?? { data: {}, error: null };
+      if (name === 'refund_generation_tokens')
+        return handlers.rpc?.refund ?? { data: { refunded: true }, error: null };
+      return { data: null, error: null };
+    }),
     from: vi.fn((table: string) => {
       if (table === 'personas') {
         return {
@@ -69,6 +87,22 @@ function mockSupabase(handlers: {
               ? { data: handlers.accountsByProvider[providerFilter] ?? [], error: null }
               : handlers.accounts ?? { data: [], error: null },
           ),
+        };
+      }
+      // scheduled_posts — slots created by POST (one row per video)
+      if (table === 'scheduled_posts') {
+        return {
+          insert: vi.fn((rows: Record<string, unknown>[]) => {
+            slotRows.push(...rows);
+            if (handlers.slotsInsert?.error)
+              return Promise.resolve({ data: null, error: handlers.slotsInsert.error });
+            return Promise.resolve({ data: rows, error: null });
+          }),
+          delete: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => Promise.resolve({ error: null })),
+            })),
+          })),
         };
       }
       // schedules — a distinct flow per operation
@@ -113,7 +147,7 @@ function mockSupabase(handlers: {
     error: null,
   });
   vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
-  return Object.assign(client, { insertedRows, updatedRows, selectArgs });
+  return Object.assign(client, { insertedRows, updatedRows, slotRows, rpcCalls, selectArgs });
 }
 
 function jsonRequest(body: unknown, method = 'PATCH'): Request {
@@ -129,13 +163,14 @@ const validOneOffBody = {
   providers: ['youtube'],
   youtubeAccountIds: ['yt-1', 'yt-2'],
   scheduledAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
-  postsPerDay: 2,
+  postsPerDay: 1,
+  topics: ['Launch video'],
   timezone: 'America/Sao_Paulo',
 };
 
 function oneOffSupabase(dbHandlers: Parameters<typeof mockSupabase>[0]) {
   return mockSupabase({
-    persona: { data: { id: 'p-1' } },
+    persona: { data: { id: 'p-1', face_mix_percent: 50, face_quality: 'ok' } },
     existing: { data: null },
     insert: { data: { id: 's-1', active: true }, error: null },
     accounts: { data: [{ provider_account_id: 'yt-1' }, { provider_account_id: 'yt-2' }], error: null },
@@ -197,7 +232,7 @@ describe('/api/schedule', () => {
 
   it('POST persiste times quando enviados', async () => {
     const db = oneOffSupabase({});
-    const res = await POST(jsonRequest({ ...validOneOffBody, postsPerDay: 3, times: ['08:15', '12:45', '20:00'] }, 'POST'));
+    const res = await POST(jsonRequest({ ...validOneOffBody, postsPerDay: 3, topics: ['t1', 't2', 't3'], times: ['08:15', '12:45', '20:00'] }, 'POST'));
     expect(res.status).toBe(201);
     expect(db.insertedRows[0].times).toEqual(['08:15', '12:45', '20:00']);
   });
@@ -215,10 +250,20 @@ describe('/api/schedule', () => {
     expect(res.status).toBe(400);
   });
 
-  it('POST rejeita mais times que postsPerDay', async () => {
+  it('POST rejeita times com tamanho diferente do número de topics', async () => {
     oneOffSupabase({});
-    const res = await POST(jsonRequest({ ...validOneOffBody, postsPerDay: 2, times: ['09:00', '12:00', '18:00'] }, 'POST'));
+    const res = await POST(jsonRequest({ ...validOneOffBody, topics: ['t1'], times: ['09:00', '12:00', '18:00'] }, 'POST'));
     expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/times.*topic/i);
+  });
+
+  it('POST rejeita múltiplos topics sem times', async () => {
+    oneOffSupabase({});
+    const res = await POST(jsonRequest({ ...validOneOffBody, postsPerDay: 2, topics: ['t1', 't2'] }, 'POST'));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/times/i);
   });
 
   it('POST sem scheduledAt retorna 400 (recorrência removida na PR #21)', async () => {
@@ -770,5 +815,151 @@ describe('POST /api/schedule timezone handling', () => {
     );
     expect(res.status).toBe(400);
     expect(db.insertedRows).toHaveLength(0);
+  });
+});
+
+describe('POST /api/schedule topics → slots → charging', () => {
+  it('cria um scheduled_posts por topic, com topic persistido e status pending', async () => {
+    const db = oneOffSupabase({});
+    const res = await POST(
+      jsonRequest(
+        {
+          ...validOneOffBody,
+          postsPerDay: 2,
+          topics: ['Morning video', 'Evening video'],
+          times: ['09:00', '18:00'],
+        },
+        'POST',
+      ),
+    );
+    expect(res.status).toBe(201);
+    expect(db.slotRows).toHaveLength(2);
+    expect(db.slotRows[0]).toMatchObject({ topic: 'Morning video', status: 'pending' });
+    expect(db.slotRows[1]).toMatchObject({ topic: 'Evening video', status: 'pending' });
+    // Slots land on the scheduledAt calendar date in the caller's timezone:
+    // 09:00 America/Sao_Paulo (UTC-3) is 12:00Z on that date.
+    const scheduledAt = new Date(validOneOffBody.scheduledAt);
+    const datePart = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(scheduledAt);
+    expect(db.slotRows[0]).toMatchObject({ slot_at: `${datePart}T12:00:00.000Z` });
+    expect(db.slotRows[1]).toMatchObject({ slot_at: `${datePart}T21:00:00.000Z` });
+  });
+
+  it('retorna os slots criados (id, topic, slotAt) para polling de progresso', async () => {
+    oneOffSupabase({});
+    const res = await POST(
+      jsonRequest(
+        { ...validOneOffBody, postsPerDay: 2, topics: ['t1', 't2'], times: ['09:00', '18:00'] },
+        'POST',
+      ),
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as {
+      success: boolean;
+      schedule: { id: string };
+      slots: { id: string; topic: string; slotAt: string }[];
+    };
+    expect(body.success).toBe(true);
+    expect(body.schedule.id).toBe('s-1');
+    expect(body.slots).toHaveLength(2);
+    expect(body.slots[0]).toMatchObject({ topic: 't1' });
+    expect(typeof body.slots[0].id).toBe('string');
+    expect(typeof body.slots[0].slotAt).toBe('string');
+  });
+
+  it('rejeita topics ausente com 400 sem criar nada nem gastar tokens', async () => {
+    const db = oneOffSupabase({});
+    const { topics: _ignored, ...noTopics } = validOneOffBody;
+    const res = await POST(jsonRequest(noTopics, 'POST'));
+    expect(res.status).toBe(400);
+    expect(db.insertedRows).toHaveLength(0);
+    expect(db.slotRows).toHaveLength(0);
+    expect(db.rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+  });
+
+  it('rejeita topics vazio, com mais de 10, ou com strings vazias', async () => {
+    for (const topics of [[], Array.from({ length: 11 }, (_, i) => `t${i}`), ['ok', '  ']]) {
+      const db = oneOffSupabase({});
+      const res = await POST(
+        jsonRequest({ ...validOneOffBody, postsPerDay: 1, topics }, 'POST'),
+      );
+      expect(res.status).toBe(400);
+      expect(db.insertedRows).toHaveLength(0);
+      expect(db.slotRows).toHaveLength(0);
+    }
+  });
+
+  it('rejeita postsPerDay diferente do número de topics', async () => {
+    const db = oneOffSupabase({});
+    const res = await POST(
+      jsonRequest({ ...validOneOffBody, postsPerDay: 2, topics: ['only-one'] }, 'POST'),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/postsPerDay/i);
+    expect(db.insertedRows).toHaveLength(0);
+  });
+
+  it('cobra os tokens adiantado (fail-fast) antes de criar qualquer row', async () => {
+    const db = oneOffSupabase({});
+    const res = await POST(
+      jsonRequest(
+        { ...validOneOffBody, postsPerDay: 2, topics: ['t1', 't2'], times: ['09:00', '18:00'] },
+        'POST',
+      ),
+    );
+    expect(res.status).toBe(201);
+    const spend = db.rpcCalls.filter((c) => c.name === 'spend_tokens');
+    expect(spend).toHaveLength(1);
+    const params = spend[0].params as Record<string, unknown>;
+    // face_mix 50% @ ok = 2 tokens/video × 2 videos; generation id reuses
+    // the batch refund path in the engine.
+    expect(params.p_amount).toBe(4);
+    expect(params.p_generation_id).toMatch(/^batch:/);
+  });
+
+  it('saldo insuficiente → 400 INSUFFICIENT sem criar schedule nem slots', async () => {
+    const db = oneOffSupabase({
+      rpc: { spend: { data: { spent: false, balance: 1 }, error: null } },
+    });
+    const res = await POST(
+      jsonRequest(
+        { ...validOneOffBody, postsPerDay: 2, topics: ['t1', 't2'], times: ['09:00', '18:00'] },
+        'POST',
+      ),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; code: string; have: number; need: number };
+    expect(body.code).toBe('INSUFFICIENT');
+    expect(body.have).toBe(1);
+    expect(body.need).toBe(4);
+    expect(db.insertedRows).toHaveLength(0);
+    expect(db.slotRows).toHaveLength(0);
+  });
+
+  it('falha no insert dos slots → rollback (apaga schedule) e refund', async () => {
+    const db = oneOffSupabase({ slotsInsert: { error: { message: 'slots boom' } } });
+    const res = await POST(
+      jsonRequest(
+        { ...validOneOffBody, postsPerDay: 2, topics: ['t1', 't2'], times: ['09:00', '18:00'] },
+        'POST',
+      ),
+    );
+    expect(res.status).toBe(500);
+    const refunds = db.rpcCalls.filter((c) => c.name === 'refund_generation_tokens');
+    expect(refunds).toHaveLength(1);
+  });
+
+  it('falha no insert do schedule → refund sem criar slots', async () => {
+    const db = oneOffSupabase({ insert: { data: null, error: { message: 'boom' } } });
+    const res = await POST(jsonRequest(validOneOffBody, 'POST'));
+    expect(res.status).toBe(500);
+    expect(db.slotRows).toHaveLength(0);
+    const refunds = db.rpcCalls.filter((c) => c.name === 'refund_generation_tokens');
+    expect(refunds).toHaveLength(1);
   });
 });
