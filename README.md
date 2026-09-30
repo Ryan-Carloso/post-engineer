@@ -98,7 +98,7 @@ cp apps/engine/config.example.toml apps/engine/config.toml
 | File | Purpose | Key variables |
 |---|---|---|
 | `apps/web/.env` | Web app + API routes | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server-only), `TOKEN_ENCRYPTION_KEY` (generate: `openssl rand -base64 32`), `MONEYPRINT_API_SECRET`, `MONEYPRINT_API_URL`, OAuth client ids/secrets + redirect URIs, Stripe keys, `MCP_OAUTH_PRIVATE_KEY_PEM` |
-| `apps/engine/.env` | Engine runtime | `MONEYPRINT_API_SECRET` (must be **identical** to the web value), `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (for the in-process fill scheduler), optional `DISCORD_WEBHOOK_URL`, `BUGSINK_DSN` |
+| `apps/engine/.env` | Engine runtime | `MONEYPRINT_API_SECRET` (must be **identical** to the web value), `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (for the in-process fill scheduler), optional `DISCORD_WEBHOOK_URL` |
 | `apps/engine/config.toml` | Engine behavior config | LLM/TTS/stock-footage provider keys (OpenAI-compatible, Pexels, Pixabay, …), `listen_port` (default `8080`) |
 
 The app fails fast on missing variables (no silent fallbacks) — see
@@ -211,7 +211,7 @@ full tool list, OpenCode timeout tips, and local development).
 | `MONEYPRINT_API_SECRET` | **Yes** | Web ↔ engine auth | Generate yourself (`openssl rand -hex 32`) |
 | `TOKEN_ENCRYPTION_KEY` | **Yes** | Encrypts OAuth tokens at rest | Generate yourself (`openssl rand -base64 32`) |
 | `MCP_OAUTH_PRIVATE_KEY_PEM` | For MCP server OAuth | Signs MCP tokens | Generate yourself (EC key, see above) |
-| Sentry / Bugsink DSN | Optional | Error tracking | sentry.io or self-hosted Bugsink |
+| PostHog | Optional | Error tracking + product analytics | `NEXT_PUBLIC_POSTHOG_KEY` (browser), `POSTHOG_API_KEY` (server), `NEXT_PUBLIC_POSTHOG_HOST` — see `apps/web/.env.example` |
 | Discord webhook | Optional | Fill-schedule notifications | Discord channel settings |
 | `ZAI_API_KEY` | CI only | AI code-review workflow | Not a runtime dependency |
 

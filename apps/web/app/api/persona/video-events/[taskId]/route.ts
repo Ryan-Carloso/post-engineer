@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
-import { logger } from '@/lib/logger';
+import { apiErrorResponse } from '@/lib/api-error';
 
 //---------------
 // GET /api/persona/video-events/:taskId — SSE progress proxy.
@@ -24,13 +24,13 @@ export async function GET(
 
   const baseUrl = process.env.MONEYPRINT_API_URL;
   if (!baseUrl) {
-    return NextResponse.json({ success: false, error: 'MONEYPRINT_API_URL is not defined' }, { status: 500 });
+    return apiErrorResponse(500, 'MONEYPRINT_API_URL is not defined', { route: 'GET /api/persona/video-events' });
   }
 
   const { taskId } = await context.params;
 
   if (!SAFE_TASK_ID.test(taskId)) {
-    return NextResponse.json({ success: false, error: 'Invalid taskId.' }, { status: 400 });
+    return apiErrorResponse(400, 'Invalid taskId.', { route: 'GET /api/persona/video-events' });
   }
 
   try {
@@ -53,7 +53,9 @@ export async function GET(
       },
     });
   } catch (error) {
-    logger.error('[api/persona/video-events] upstream unavailable', error);
-    return NextResponse.json({ success: false, error: 'Video service is unavailable.' }, { status: 502 });
+    return apiErrorResponse(502, 'Video service is unavailable.', {
+      route: 'GET /api/persona/video-events',
+      cause: error,
+    });
   }
 }

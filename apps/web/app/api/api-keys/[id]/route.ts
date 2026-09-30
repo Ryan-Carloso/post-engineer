@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@/lib/logger';
+import { apiErrorResponse } from '@/lib/api-error';
 
 export async function DELETE(
   request: Request,
@@ -20,7 +21,7 @@ export async function DELETE(
 
   const { id } = await context.params;
   if (!id || typeof id !== 'string') {
-    return NextResponse.json({ success: false, error: 'Invalid key ID.' }, { status: 400 });
+    return apiErrorResponse(400, 'Invalid key ID.', { route: 'DELETE /api/api-keys/[id]' });
   }
 
   const supabase = createSupabaseServiceClient();

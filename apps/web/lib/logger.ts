@@ -2,13 +2,14 @@
 // Central application logger.
 //
 // Development/test: console only.
-// Production: errors and warnings are also reported to Bugsink
-// (Sentry-compatible) so handled failures show up as issues there,
+// Production: errors and warnings are also reported to PostHog
+// (error tracking + analytics) so handled failures show up there,
 // not only in Vercel logs. info/debug stay console-only in every
-// environment to keep Bugsink free of noise.
+// environment to keep PostHog free of noise.
 //---------------
 
-import * as Sentry from '@sentry/nextjs';
+import { getPostHogServer } from './posthog-server';
+import { scrubSecrets, redactCredentialFragments } from './scrub';
 
 //---------------
 // Environment routing (read at call time so tests can stub it)
@@ -21,7 +22,7 @@ function isProduction(): boolean {
 //---------------
 // Supabase/PostgREST failures arrive as plain objects
 // ({ message, code, details, hint }), not Error instances.
-// Normalize them so Bugsink groups issues with a useful message.
+// Normalize them so PostHog groups issues with a useful message.
 //---------------
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -47,27 +48,89 @@ function toError(cause: unknown): Error {
 }
 
 //---------------
-// Bugsink reporters — production only, and never allowed to throw.
+// Raw upstream bodies (engine responses, provider errors) can echo
+// credential-shaped fragments: api_key query params, Bearer <redacted>,
+// DSN userinfo, sk- secrets. Mirror the MCP's sanitizeEngineError
+// convention: redact the fragments, then cap the length, before anything
+// reaches PostHog. Applied here in the reporter so every logger.error
+// caller is protected, not just the one that remembered to sanitize.
+//---------------
+
+const MAX_REPORT_BODY_CHARS = 200;
+
+function sanitizeReportBody(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return redactCredentialFragments(value).slice(0, MAX_REPORT_BODY_CHARS);
+  }
+  if (value !== null && typeof value === 'object') {
+    // Object causes (e.g. PostgREST { message, code, details, hint }) are
+    // serialized to JSON, scrubbed for secret-bearing keys, then capped.
+    // Never send raw objects to a third-party cloud unsanitized.
+    try {
+      const scrubbed = scrubSecrets(value as Record<string, unknown>);
+      const json = JSON.stringify(scrubbed) ?? '[unserializable]';
+      return redactCredentialFragments(json).slice(0, MAX_REPORT_BODY_CHARS);
+    } catch {
+      return '[unserializable]';
+    }
+  }
+  return value;
+}
+
+//---------------
+// PostHog reporters — production only, and never allowed to throw.
 // Telemetry must never break the request path.
 //---------------
 
-function reportErrorToBugsink(message: string, cause: unknown, metadata?: Record<string, unknown>): void {
+function reportErrorToPostHog(message: string, cause: unknown, metadata?: Record<string, unknown>, logId?: string): void {
   if (!isProduction()) return;
   try {
-    // Keep the raw failure (e.g. the PostgREST { message, code, details, hint }
-    // object) in extra so the Bugsink issue shows the real database error.
-    const extra: Record<string, unknown> = { message, ...metadata };
-    if (!(cause instanceof Error) && cause !== undefined) extra.cause = cause;
-    Sentry.captureException(toError(cause), { extra });
+    const client = getPostHogServer();
+    if (!client) return;
+    const error = toError(cause);
+    // PostHog error tracking ingests $exception events with these properties.
+    // Everything is redacted: error messages/stacks can echo credentials
+    // (e.g. ?api_key= in upstream errors), metadata keys are scrubbed via
+    // scrubSecrets, and string metadata values go through sanitizeReportBody.
+    const safeMetadata = metadata ? scrubSecrets(metadata) : {};
+    // Redact credential fragments inside string metadata values too —
+    // key-name scrubbing alone misses e.g. { body: "...api_key=..." }.
+    for (const [k, v] of Object.entries(safeMetadata)) {
+      if (typeof v === 'string') safeMetadata[k] = sanitizeReportBody(v);
+    }
+    const properties: Record<string, unknown> = {
+      $exception_message: redactCredentialFragments(error.message),
+      $exception_type: error.name,
+      $exception_stacktrace: error.stack ? redactCredentialFragments(error.stack) : error.stack,
+      log_message: message,
+      // Correlation ID: the errorId returned to API clients. Search PostHog
+      // for this value to find the exact event a user reported.
+      logId,
+      ...safeMetadata,
+    };
+    if (!(cause instanceof Error) && cause !== undefined) properties['cause'] = sanitizeReportBody(cause);
+    client.capture('$exception', properties);
   } catch {
     // Telemetry must never break the request path.
   }
 }
 
-function reportWarningToBugsink(message: string, metadata?: Record<string, unknown>): void {
+function reportWarningToPostHog(message: string, metadata?: Record<string, unknown>, logId?: string): void {
   if (!isProduction()) return;
   try {
-    Sentry.captureMessage(message, { level: 'warning', extra: metadata });
+    const client = getPostHogServer();
+    if (!client) return;
+    const safeMetadata = metadata ? scrubSecrets(metadata) : {};
+    // Symmetry with the error reporter: redact credential fragments inside
+    // string values, not just key names.
+    for (const [k, v] of Object.entries(safeMetadata)) {
+      if (typeof v === 'string') safeMetadata[k] = sanitizeReportBody(v);
+    }
+    client.capture('server_warning', {
+      message: redactCredentialFragments(message),
+      logId,
+      ...safeMetadata,
+    });
   } catch {
     // Telemetry must never break the request path.
   }
@@ -92,8 +155,11 @@ function writeConsole(
   const timestamp = new Date().toISOString();
   const logId = `${timestamp.slice(0, 10)}_${timestamp.slice(11, 19).replace(/:/g, '')}_${Math.random().toString(36).substring(2, 8)}`;
 
-  const args: unknown[] = [message];
-  if (metadata !== undefined) args.push(metadata);
+  // The logId is the correlation ID returned to API clients as `errorId`.
+  // Merge it into metadata so Vercel logs and PostHog events are searchable
+  // by it. Message shape is preserved (tests assert exact messages).
+  const metaWithId = { logId, ...(metadata ?? {}) };
+  const args: unknown[] = [message, metaWithId];
   if (error !== undefined) args.push(error);
 
   if (level === 'ERROR') {
@@ -138,7 +204,7 @@ class Logger {
 
   warn(message: string, metadata?: Record<string, unknown>): string {
     const logId = writeConsole('WARN', message, metadata);
-    reportWarningToBugsink(message, metadata);
+    reportWarningToPostHog(message, metadata, logId);
     return logId;
   }
 
@@ -147,13 +213,13 @@ class Logger {
     // given: toHaveBeenCalledWith(msg, meta) assertions require the exact
     // argument list.
     const logId = writeConsole('ERROR', message, metadata, cause === undefined ? undefined : toError(cause));
-    reportErrorToBugsink(message, cause, metadata);
+    reportErrorToPostHog(message, cause, metadata, logId);
     return logId;
   }
 
   //---------------
   // Public API: specialized logging methods (void return, drop-in compatible).
-  // Console format is unchanged; error variants also report to Bugsink.
+  // Console format is unchanged; error variants also report to PostHog.
   //---------------
 
   logUploadStart(logId: string, metadata: Record<string, unknown>): void {
@@ -170,7 +236,7 @@ class Logger {
 
   logUploadError(logId: string, error: Error, metadata: Record<string, unknown>): void {
     console.error('[ERROR] [UPLOAD_ERROR]', messageWithLogId(logId, 'Upload error'), metadata, error);
-    reportErrorToBugsink('Upload error', error, { logId, ...metadata });
+    reportErrorToPostHog('Upload error', error, { logId, ...metadata });
   }
 
   logOAuthStart(logId: string): void {
@@ -190,7 +256,7 @@ class Logger {
 
   logOAuthError(logId: string, error: Error): void {
     console.error('[ERROR] [OAUTH_ERROR]', messageWithLogId(logId, 'OAuth flow error'), error);
-    reportErrorToBugsink('OAuth flow error', error, { logId });
+    reportErrorToPostHog('OAuth flow error', error, { logId });
   }
 
   logInstagramAuthStart(logId: string): void {
@@ -207,7 +273,7 @@ class Logger {
 
   logInstagramAuthError(logId: string, error: Error): void {
     console.error('[ERROR] [INSTAGRAM_OAUTH_ERROR]', messageWithLogId(logId, 'Instagram OAuth flow error'), error);
-    reportErrorToBugsink('Instagram OAuth flow error', error, { logId });
+    reportErrorToPostHog('Instagram OAuth flow error', error, { logId });
   }
 
   logInstagramPostStart(logId: string, igUserId: string): void {
@@ -220,7 +286,7 @@ class Logger {
 
   logInstagramPostError(logId: string, error: Error): void {
     console.error('[ERROR] [INSTAGRAM_POST_ERROR]', messageWithLogId(logId, 'Error creating Instagram post'), error);
-    reportErrorToBugsink('Error creating Instagram post', error, { logId });
+    reportErrorToPostHog('Error creating Instagram post', error, { logId });
   }
 }
 

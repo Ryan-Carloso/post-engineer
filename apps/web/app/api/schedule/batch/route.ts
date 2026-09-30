@@ -4,13 +4,14 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { isPersonaAllowed } from '@/lib/api-keys';
+import { apiErrorResponse } from '@/lib/api-error';
+import { logger } from '@/lib/logger';
 import { computeVideoTokens, toFiniteNumber, type FaceQuality } from '@/lib/tokens';
 import {
   datePartsInTimezone,
   isValidTimezone,
   zonedTimeToUtc,
 } from '@/lib/timezone';
-import { logger } from '@/lib/logger';
 
 //---------------
 // POST /api/schedule/batch — manual video batch (finite, user-requested).
@@ -49,8 +50,14 @@ export interface ParsedBatchBody {
 
 type ParseResult = { ok: true; value: ParsedBatchBody } | { ok: false; error: string };
 
-function errorResponse(status: number, error: string, extra?: Record<string, unknown>): NextResponse {
-  return NextResponse.json({ success: false, error, ...extra }, { status });
+function errorResponse(
+  status: number,
+  error: string,
+  route: string,
+  extra?: Record<string, unknown>,
+  options?: { cause?: unknown; logMessage?: string; metadata?: Record<string, unknown> },
+): NextResponse {
+  return apiErrorResponse(status, error, { route, extra, ...options });
 }
 
 //---------------
@@ -172,15 +179,15 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     body = await request.json();
   } catch {
-    return errorResponse(400, 'Invalid JSON payload.');
+    return errorResponse(400, 'Invalid JSON payload.', 'POST /api/schedule/batch');
   }
 
   const parsed = parseBatchBody(body);
-  if (!parsed.ok) return errorResponse(400, parsed.error);
+  if (!parsed.ok) return errorResponse(400, parsed.error, 'POST /api/schedule/batch');
   const { personaId, items, providers, times, timezone } = parsed.value;
 
   if (!isPersonaAllowed(auth.personaIds, personaId)) {
-    return errorResponse(403, 'This API key does not have access to this persona.');
+    return errorResponse(403, 'This API key does not have access to this persona.', 'POST /api/schedule/batch');
   }
 
   const { data: persona } = await supabase
@@ -190,7 +197,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     .eq('user_id', auth.userId)
     .single();
   if (!persona) {
-    return errorResponse(404, 'Persona not found.');
+    return errorResponse(404, 'Persona not found.', 'POST /api/schedule/batch');
   }
 
   const faceMix = toFiniteNumber((persona as Record<string, unknown>).face_mix_percent, 0);
@@ -214,8 +221,10 @@ export async function POST(request: Request): Promise<NextResponse> {
       .eq('user_id', auth.userId)
       .eq('provider', provider);
     if (accountsError) {
-      logger.error('[api/schedule/batch] connected accounts lookup failed', accountsError, { provider });
-      return errorResponse(500, 'Failed to check connected accounts. Please try again.');
+      return errorResponse(500, 'Failed to check connected accounts. Please try again.', 'POST /api/schedule/batch', undefined, {
+        cause: accountsError,
+        metadata: { provider },
+      });
     }
     const ids = (accounts ?? [])
       .map((row) => (row as Record<string, unknown>).provider_account_id)
@@ -223,7 +232,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (ids.length === 0) {
       return errorResponse(
         400,
-        `No connected ${provider} account. Connect one before scheduling a batch.`,
+        `No connected ${provider} account. Connect one before scheduling a batch.`, 'POST /api/schedule/batch',
         { code: 'NO_CONNECTED_ACCOUNTS', provider },
       );
     }
@@ -251,13 +260,14 @@ export async function POST(request: Request): Promise<NextResponse> {
     p_reason: `Manual video batch (${items.length} videos)`,
   });
   if (spendError) {
-    logger.error('[api/schedule/batch] spend failed', spendError);
-    return errorResponse(500, 'Failed to process tokens. Please try again.');
+    return errorResponse(500, 'Failed to process tokens. Please try again.', 'POST /api/schedule/batch', undefined, {
+      cause: spendError,
+    });
   }
   const spendRecord = (spendData ?? {}) as Record<string, unknown>;
   if (spendRecord.spent !== true) {
     const have = toFiniteNumber(spendRecord.balance, 0);
-    return errorResponse(400, `INSUFFICIENT_TOKENS: batch needs ${totalCost} tokens but the balance is ${have}.`, {
+    return errorResponse(400, `INSUFFICIENT_TOKENS: batch needs ${totalCost} tokens but the balance is ${have}.`, 'POST /api/schedule/batch', {
       code: 'INSUFFICIENT',
       have,
       need: totalCost,
@@ -273,7 +283,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       p_generation_id: generationId,
       p_reason: 'Batch slot computation failed; tokens refunded',
     });
-    return errorResponse(500, 'Failed to schedule batch. Please try again.');
+    return errorResponse(500, 'Failed to schedule batch. Please try again.', 'POST /api/schedule/batch');
   }
 
   const { error: scheduleError } = await supabase
@@ -282,6 +292,11 @@ export async function POST(request: Request): Promise<NextResponse> {
       id: scheduleId,
       user_id: auth.userId,
       persona_id: personaId,
+      // kind='batch': a finite prepaid set of slots. Never leave the
+      // kind='recurring' default: the partial unique index
+      // schedules_persona_owner_recurring would reject the persona's next
+      // schedule with a 500.
+      kind: 'batch',
       providers,
       youtube_account_ids: accountIds.youtube,
       instagram_account_ids: accountIds.instagram,
@@ -300,13 +315,14 @@ export async function POST(request: Request): Promise<NextResponse> {
     .select('id')
     .single();
   if (scheduleError) {
-    logger.error('[api/schedule/batch] schedule insert failed', scheduleError);
     await serviceSupabase.rpc('refund_generation_tokens', {
       p_user_id: auth.userId,
       p_generation_id: generationId,
       p_reason: 'Batch schedule insert failed; tokens refunded',
     });
-    return errorResponse(500, 'Failed to create batch. Please try again.');
+    return errorResponse(500, 'Failed to create batch. Please try again.', 'POST /api/schedule/batch', undefined, {
+      cause: scheduleError,
+    });
   }
 
   const { error: slotsError } = await supabase.from('scheduled_posts').insert(
@@ -319,15 +335,27 @@ export async function POST(request: Request): Promise<NextResponse> {
     })),
   );
   if (slotsError) {
-    logger.error('[api/schedule/batch] slots insert failed', slotsError);
-    await supabase.from('scheduled_posts').delete().eq('schedule_id', scheduleId);
-    await supabase.from('schedules').delete().eq('id', scheduleId);
-    await serviceSupabase.rpc('refund_generation_tokens', {
+    // Rollback failures are loud: unchecked deletes can leave orphaned
+    // pending slots that the engine tick picks up after a refund.
+    const { error: delSlotsError } = await supabase.from('scheduled_posts').delete().eq('schedule_id', scheduleId);
+    const { error: delScheduleError } = await supabase.from('schedules').delete().eq('id', scheduleId);
+    const { error: refundError } = await serviceSupabase.rpc('refund_generation_tokens', {
       p_user_id: auth.userId,
       p_generation_id: generationId,
       p_reason: 'Batch slots insert failed; tokens refunded',
     });
-    return errorResponse(500, 'Failed to create batch. Please try again.');
+    if (delSlotsError || delScheduleError || refundError) {
+      logger.error('[schedule/batch] rollback failed after slots insert failure', undefined, {
+        route: 'POST /api/schedule/batch',
+        scheduleId,
+        delSlotsError: delSlotsError?.message,
+        delScheduleError: delScheduleError?.message,
+        refundError: refundError?.message,
+      });
+    }
+    return errorResponse(500, 'Failed to create batch. Please try again.', 'POST /api/schedule/batch', undefined, {
+      cause: slotsError,
+    });
   }
 
   return NextResponse.json({

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
-import { logger } from '@/lib/logger';
+import { apiErrorResponse } from '@/lib/api-error';
 
 type DownloadContext = {
   params: Promise<{ taskId: string; path: string[] }>;
@@ -19,12 +19,12 @@ export async function GET(request: Request, context: DownloadContext): Promise<N
 
   const baseUrl = process.env.MONEYPRINT_API_URL?.replace(/\/+$/, '');
   if (!baseUrl) {
-    return NextResponse.json({ success: false, error: 'MONEYPRINT_API_URL is not defined' }, { status: 500 });
+    return apiErrorResponse(500, 'MONEYPRINT_API_URL is not defined', { route: 'GET /api/persona/video-download' });
   }
 
   const { taskId, path } = await context.params;
   if (!isSafePath(taskId, path)) {
-    return NextResponse.json({ success: false, error: 'Invalid video filename.' }, { status: 400 });
+    return apiErrorResponse(400, 'Invalid video filename.', { route: 'GET /api/persona/video-download' });
   }
 
   const source = new URL(request.url).searchParams.get('source') === 'stream' ? 'stream' : 'download';
@@ -37,8 +37,10 @@ export async function GET(request: Request, context: DownloadContext): Promise<N
   try {
     upstream = await fetch(upstreamUrl, { headers: upstreamHeaders, cache: 'no-store' });
   } catch (error) {
-    logger.error('[api/persona/video-download] upstream unavailable', error);
-    return NextResponse.json({ success: false, error: 'Video service is unavailable.' }, { status: 502 });
+    return apiErrorResponse(502, 'Video service is unavailable.', {
+      route: 'GET /api/persona/video-download',
+      cause: error,
+    });
   }
 
   const responseHeaders = new Headers();

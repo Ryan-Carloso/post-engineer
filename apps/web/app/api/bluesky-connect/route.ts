@@ -5,7 +5,7 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { encryptTokens } from '@/lib/token-crypto';
 import { BlueskyError, loginToBluesky } from '@/lib/bluesky';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { logger } from '@/lib/logger';
+import { apiErrorResponse } from '@/lib/api-error';
 
 //---------------
 // POST /api/bluesky-connect — connects a Bluesky account via app password.
@@ -23,8 +23,13 @@ import { logger } from '@/lib/logger';
 // Bluesky's servers before saving.
 //---------------
 
-function errorResponse(status: number, error: string): NextResponse {
-  return NextResponse.json({ success: false, error }, { status });
+function errorResponse(
+  status: number,
+  error: string,
+  route: string,
+  options?: { cause?: unknown; logMessage?: string; metadata?: Record<string, unknown> },
+): NextResponse {
+  return apiErrorResponse(status, error, { route, ...options });
 }
 
 async function readCredentials(request: Request): Promise<
@@ -73,12 +78,12 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) {
-    return errorResponse(401, 'Authentication required.');
+    return errorResponse(401, 'Authentication required.', 'POST /api/bluesky-connect');
   }
 
   const credentials = await readCredentials(request);
   if (!credentials.ok) {
-    return errorResponse(400, credentials.error);
+    return errorResponse(400, credentials.error, 'POST /api/bluesky-connect');
   }
   const { handle, appPassword } = credentials;
 
@@ -108,10 +113,12 @@ export async function POST(request: Request): Promise<NextResponse> {
       .single();
 
     if (insertError || !inserted) {
-      // Log the full PostgREST error object (not just the message) so the
-      // Bugsink issue carries code/details/hint for diagnosis.
-      logger.error('[api/bluesky-connect] insert failed', insertError, { userId: auth.userId });
-      return errorResponse(500, 'Could not save the Bluesky account.');
+      // The full PostgREST error object (not just the message) is threaded
+      // as cause so the PostHog issue carries code/details/hint.
+      return errorResponse(500, 'Could not save the Bluesky account.', 'POST /api/bluesky-connect', {
+        cause: insertError,
+        metadata: { userId: auth.userId },
+      });
     }
 
     return NextResponse.json({ success: true, accountId: inserted.id, did });
@@ -120,10 +127,12 @@ export async function POST(request: Request): Promise<NextResponse> {
       (error instanceof BlueskyError && error.code === 'invalid_credentials') ||
       (error instanceof Error && error.name === 'BlueskyError' && /Invalid Bluesky/i.test(error.message));
     if (isInvalidCredentials) {
-      return errorResponse(401, 'Invalid Bluesky handle or app password.');
+      return errorResponse(401, 'Invalid Bluesky handle or app password.', 'POST /api/bluesky-connect');
     }
-    const message = error instanceof Error ? error.message : 'Unknown error.';
-    logger.error('[api/bluesky-connect] failed', undefined, { userId: auth.userId, message });
-    return errorResponse(500, 'Could not connect the Bluesky account.');
+    return errorResponse(500, 'Could not connect the Bluesky account.', 'POST /api/bluesky-connect', {
+      cause: error,
+      metadata: { userId: auth.userId },
+      logMessage: 'Bluesky connection failed.',
+    });
   }
 }

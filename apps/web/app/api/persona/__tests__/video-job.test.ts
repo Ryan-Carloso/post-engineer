@@ -803,7 +803,10 @@ describe('POST /api/persona/video-job', () => {
         (fetchMock.mock.calls[0]?.[1]?.body ?? '{}') as string,
       ) as Record<string, unknown>;
       expect(forwarded.face_mix_percent).toBe(100);
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('face_mix_percent'));
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('face_mix_percent'),
+        expect.objectContaining({ logId: expect.any(String) }),
+      );
     } finally {
       warnSpy.mockRestore();
     }
@@ -1796,6 +1799,7 @@ describe('POST /api/persona/video-job', () => {
       expect(warnSpy).toHaveBeenCalledTimes(1);
       expect(warnSpy).toHaveBeenCalledWith(
         '[video-job] dropping 2 unknown request field(s): "video_duration", "voice_volume"',
+        expect.objectContaining({ logId: expect.any(String) }),
       );
     } finally {
       warnSpy.mockRestore();

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { isPersonaAllowed } from '@/lib/api-keys';
+import { apiErrorResponse } from '@/lib/api-error';
 import {
   addLibraryImages,
   IMAGE_BUCKET,
@@ -29,8 +30,13 @@ import { logger } from '@/lib/logger';
 // DELETE ?id=         — remove the image (also deletes the storage file)
 //---------------
 
-function errorResponse(status: number, error: string): NextResponse {
-  return NextResponse.json({ success: false, error }, { status });
+function errorResponse(
+  status: number,
+  error: string,
+  route: string,
+  options?: { cause?: unknown; logMessage?: string; metadata?: Record<string, unknown> },
+): NextResponse {
+  return apiErrorResponse(status, error, { route, ...options });
 }
 
 interface Authed {
@@ -44,7 +50,7 @@ async function getAuth(request: Request): Promise<
 > {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) {
-    return { response: errorResponse(401, 'Authentication required.') };
+    return { response: errorResponse(401, 'Authentication required.', `${request.method} /api/persona/images`) };
   }
   // NOTE: for API-key callers this is the service-role client, which bypasses
   // RLS. Ownership below is enforced by the application-level helpers
@@ -79,10 +85,11 @@ async function assertPersonaOwned(
   supabase: SupabaseClient,
   auth: Authed,
   personaId: string,
+  method: string,
 ): Promise<{ response: NextResponse } | { persona: OwnedPersona }> {
   if (!isPersonaAllowed(auth.personaIds, personaId)) {
     return {
-      response: errorResponse(403, 'This API key does not have access to this persona.'),
+      response: errorResponse(403, 'This API key does not have access to this persona.', `${method} /api/persona/images`),
     };
   }
   // face_mix_percent rides along so POST can run its faceless check on the
@@ -99,12 +106,14 @@ async function assertPersonaOwned(
     // bare 404 would tell the client to stop retrying and leave zero
     // diagnostic trail, so log it and report 500.
     if (error.code === 'PGRST116') {
-      return { response: errorResponse(404, 'Persona not found.') };
+      return { response: errorResponse(404, 'Persona not found.', `${method} /api/persona/images`) };
     }
-    logger.error('[api/persona/images] persona ownership lookup failed', error, { personaId });
-    return { response: errorResponse(500, 'Failed to load persona.') };
+    return { response: errorResponse(500, 'Failed to load persona.', `${method} /api/persona/images`, {
+      cause: error,
+      metadata: { personaId },
+    }) };
   }
-  if (!data) return { response: errorResponse(404, 'Persona not found.') };
+  if (!data) return { response: errorResponse(404, 'Persona not found.', `${method} /api/persona/images`) };
   return { persona: data as OwnedPersona };
 }
 
@@ -163,6 +172,7 @@ async function getOwnedImage(
   supabase: SupabaseClient,
   auth: Authed,
   imageId: string,
+  method: string,
 ): Promise<
   | { image: OwnedRow; error: null }
   | { image: null; error: NextResponse }
@@ -177,13 +187,15 @@ async function getOwnedImage(
     // Same PGRST116-vs-DB-failure split as assertPersonaOwned: zero rows
     // is 404, anything else is a logged 500.
     if (error.code === 'PGRST116') {
-      return { image: null, error: errorResponse(404, 'Image not found.') };
+      return { image: null, error: errorResponse(404, 'Image not found.', `${method} /api/persona/images`) };
     }
-    logger.error('[api/persona/images] image lookup failed', error, { imageId });
-    return { image: null, error: errorResponse(500, 'Failed to load image.') };
+    return { image: null, error: errorResponse(500, 'Failed to load image.', `${method} /api/persona/images`, {
+      cause: error,
+      metadata: { imageId },
+    }) };
   }
   if (!image) {
-    return { image: null, error: errorResponse(404, 'Image not found.') };
+    return { image: null, error: errorResponse(404, 'Image not found.', `${method} /api/persona/images`) };
   }
   const { data: persona, error: personaError } = await supabase
     .from('personas')
@@ -193,18 +205,20 @@ async function getOwnedImage(
     .single();
   if (personaError) {
     if (personaError.code === 'PGRST116') {
-      return { image: null, error: errorResponse(404, 'Image not found.') };
+      return { image: null, error: errorResponse(404, 'Image not found.', `${method} /api/persona/images`) };
     }
-    logger.error('[api/persona/images] image ownership lookup failed', personaError, { imageId });
-    return { image: null, error: errorResponse(500, 'Failed to load image.') };
+    return { image: null, error: errorResponse(500, 'Failed to load image.', `${method} /api/persona/images`, {
+      cause: personaError,
+      metadata: { imageId },
+    }) };
   }
   if (!persona) {
-    return { image: null, error: errorResponse(404, 'Image not found.') };
+    return { image: null, error: errorResponse(404, 'Image not found.', `${method} /api/persona/images`) };
   }
   if (!isPersonaAllowed(auth.personaIds, image.persona_id)) {
     return {
       image: null,
-      error: errorResponse(403, 'This API key does not have access to this persona.'),
+      error: errorResponse(403, 'This API key does not have access to this persona.', `${method} /api/persona/images`),
     };
   }
   return { image, error: null };
@@ -236,8 +250,8 @@ export async function GET(request: Request): Promise<NextResponse> {
   const { auth, supabase } = authed;
 
   const personaId = new URL(request.url).searchParams.get('personaId');
-  if (!personaId) return errorResponse(400, 'personaId is required.');
-  const owned = await assertPersonaOwned(supabase, auth, personaId);
+  if (!personaId) return errorResponse(400, 'personaId is required.', 'GET /api/persona/images');
+  const owned = await assertPersonaOwned(supabase, auth, personaId, 'GET');
   if ('response' in owned) return owned.response;
 
   const { data, error } = await supabase
@@ -250,8 +264,9 @@ export async function GET(request: Request): Promise<NextResponse> {
     .order('created_at', { ascending: true })
     .order('id', { ascending: true });
   if (error) {
-    logger.error('[api/persona/images] list failed', error);
-    return errorResponse(500, 'Failed to list images.');
+    return errorResponse(500, 'Failed to list images.', 'GET /api/persona/images', {
+      cause: error,
+    });
   }
   // The bucket is private: the UI needs signed URLs to render thumbnails.
   // Project only the fields the UI needs; the internal storage path
@@ -297,14 +312,14 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     formData = await request.formData();
   } catch {
-    return errorResponse(400, 'Invalid multipart payload.');
+    return errorResponse(400, 'Invalid multipart payload.', 'POST /api/persona/images');
   }
 
   const personaId = formData.get('personaId');
   if (typeof personaId !== 'string' || personaId.length === 0) {
-    return errorResponse(400, 'personaId is required.');
+    return errorResponse(400, 'personaId is required.', 'POST /api/persona/images');
   }
-  const owned = await assertPersonaOwned(supabase, auth, personaId);
+  const owned = await assertPersonaOwned(supabase, auth, personaId, 'POST');
   if ('response' in owned) return owned.response;
 
   // Creation rejects library images for faceless personas; the same rule
@@ -315,12 +330,12 @@ export async function POST(request: Request): Promise<NextResponse> {
   // library images would reintroduce the backdoor.
   // The row rides along from assertPersonaOwned — no second personas query.
   if (owned.persona.face_mix_percent === 0 || owned.persona.face_mix_percent === null) {
-    return errorResponse(400, 'Faceless persona must not include library images.');
+    return errorResponse(400, 'Faceless persona must not include library images.', 'POST /api/persona/images');
   }
 
   const file = formData.get('image');
   if (!isFileLike(file) || file.size === 0) {
-    return errorResponse(400, 'An image file is required.');
+    return errorResponse(400, 'An image file is required.', 'POST /api/persona/images');
   }
   const tag = formData.get('tag');
   const description = formData.get('description');
@@ -328,10 +343,10 @@ export async function POST(request: Request): Promise<NextResponse> {
   // Silently coercing a File to '' would lose the caller's metadata with a
   // 201; fail loudly instead. Missing fields are fine (they default to '').
   if (tag !== null && typeof tag !== 'string') {
-    return errorResponse(400, 'tag must be a string.');
+    return errorResponse(400, 'tag must be a string.', 'POST /api/persona/images');
   }
   if (description !== null && typeof description !== 'string') {
-    return errorResponse(400, 'description must be a string.');
+    return errorResponse(400, 'description must be a string.', 'POST /api/persona/images');
   }
   // The form field is a string: anything other than the exact 'true'/'false'
   // literals ('1', 'yes', 'True') is a client bug. Silently coercing to
@@ -340,7 +355,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   let isPrimary = false;
   if (rawIsPrimary !== null) {
     if (rawIsPrimary !== 'true' && rawIsPrimary !== 'false') {
-      return errorResponse(400, "isPrimary must be 'true' or 'false'.");
+      return errorResponse(400, "isPrimary must be 'true' or 'false'.", 'POST /api/persona/images');
     }
     isPrimary = rawIsPrimary === 'true';
   }
@@ -372,7 +387,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       route: 'api/persona/images',
       personaId,
     });
-    return errorResponse(added.status, added.error);
+    return errorResponse(added.status, added.error, 'POST /api/persona/images');
   }
   const image = added.images[0];
   const warnings: string[] = [];
@@ -415,33 +430,33 @@ export async function PATCH(request: Request): Promise<NextResponse> {
       ? (body as { id: unknown }).id
       : undefined;
   if (typeof id !== 'string' || id.length === 0) {
-    return errorResponse(400, 'id is required.');
+    return errorResponse(400, 'id is required.', 'PATCH /api/persona/images');
   }
-  const { image, error: ownershipError } = await getOwnedImage(supabase, auth, id);
+  const { image, error: ownershipError } = await getOwnedImage(supabase, auth, id, 'PATCH');
   if (ownershipError) return ownershipError;
 
   const updates: Record<string, unknown> = {};
   if (typeof body === 'object' && body !== null) {
     const patch = body as { tag?: unknown; description?: unknown; isPrimary?: unknown };
     if (patch.tag !== undefined) {
-      if (typeof patch.tag !== 'string') return errorResponse(400, 'tag must be a string.');
+      if (typeof patch.tag !== 'string') return errorResponse(400, 'tag must be a string.', 'PATCH /api/persona/images');
       if (patch.tag.trim().length > MAX_TAG_LENGTH) {
-        return errorResponse(400, `tag must be at most ${MAX_TAG_LENGTH} characters.`);
+        return errorResponse(400, `tag must be at most ${MAX_TAG_LENGTH} characters.`, 'PATCH /api/persona/images');
       }
       updates.tag = patch.tag.trim();
     }
     if (patch.description !== undefined) {
       if (typeof patch.description !== 'string') {
-        return errorResponse(400, 'description must be a string.');
+        return errorResponse(400, 'description must be a string.', 'PATCH /api/persona/images');
       }
       if (patch.description.trim().length > MAX_DESCRIPTION_LENGTH) {
-        return errorResponse(400, `description must be at most ${MAX_DESCRIPTION_LENGTH} characters.`);
+        return errorResponse(400, `description must be at most ${MAX_DESCRIPTION_LENGTH} characters.`, 'PATCH /api/persona/images');
       }
       updates.description = patch.description.trim();
     }
     if (patch.isPrimary !== undefined) {
       if (typeof patch.isPrimary !== 'boolean') {
-        return errorResponse(400, 'isPrimary must be a boolean.');
+        return errorResponse(400, 'isPrimary must be a boolean.', 'PATCH /api/persona/images');
       }
       // Demoting to false is rejected: with no demote-only target the
       // library would end up with zero primary images, and every consumer
@@ -450,14 +465,14 @@ export async function PATCH(request: Request): Promise<NextResponse> {
       if (patch.isPrimary === false) {
         return errorResponse(
           400,
-          'isPrimary cannot be set to false. Mark another image as primary instead.',
+          'isPrimary cannot be set to false. Mark another image as primary instead.', 'PATCH /api/persona/images',
         );
       }
       updates.is_primary = patch.isPrimary;
     }
   }
   if (Object.keys(updates).length === 0) {
-    return errorResponse(400, 'Nothing to update.');
+    return errorResponse(400, 'Nothing to update.', 'PATCH /api/persona/images');
   }
 
   // The warning-style success below is only honest when a primary swap
@@ -471,7 +486,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     // reimplementing the unset-others swap inline.
     const personaId = image.persona_id;
     const primaryError = await setPrimaryLibraryImage(supabase, personaId, id, auth.userId);
-    if (primaryError) return errorResponse(primaryError.status, primaryError.error);
+    if (primaryError) return errorResponse(primaryError.status, primaryError.error, 'PATCH /api/persona/images');
     primarySwapCommitted = true;
     delete updates.is_primary;
   }
@@ -502,10 +517,10 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     // update (concurrent delete): report 404, not 500.
     const rowGone = updateError?.code === 'PGRST116';
     if (rowGone && !primarySwapCommitted) {
-      return errorResponse(404, 'Image not found.');
+      return errorResponse(404, 'Image not found.', 'PATCH /api/persona/images');
     }
     if (!primarySwapCommitted) {
-      return errorResponse(500, 'Failed to update image.');
+      return errorResponse(500, 'Failed to update image.', 'PATCH /api/persona/images');
     }
     // The primary swap above already committed atomically: a 500 here would
     // hide that from the caller. Report the true row state with a warning
@@ -527,8 +542,8 @@ export async function DELETE(request: Request): Promise<NextResponse> {
   // faceless must remain deletable. Only POST is blocked for faceless.
 
   const id = new URL(request.url).searchParams.get('id');
-  if (!id) return errorResponse(400, 'id is required.');
-  const { image, error: ownershipError } = await getOwnedImage(supabase, auth, id);
+  if (!id) return errorResponse(400, 'id is required.', 'DELETE /api/persona/images');
+  const { image, error: ownershipError } = await getOwnedImage(supabase, auth, id, 'DELETE');
   if (ownershipError) return ownershipError;
 
   const { error: deleteError } = await supabase
@@ -536,8 +551,9 @@ export async function DELETE(request: Request): Promise<NextResponse> {
     .delete()
     .eq('id', id);
   if (deleteError) {
-    logger.error('[api/persona/images] delete failed', deleteError);
-    return errorResponse(500, 'Failed to delete image.');
+    return errorResponse(500, 'Failed to delete image.', 'DELETE /api/persona/images', {
+      cause: deleteError,
+    });
   }
   // Deleting the primary image intentionally leaves the library with zero
   // primaries: persona-image-select.ts falls back deterministically (oldest

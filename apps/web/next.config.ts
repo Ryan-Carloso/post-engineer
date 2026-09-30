@@ -1,5 +1,4 @@
 import type { NextConfig } from "next";
-import { withSentryConfig } from "@sentry/nextjs/config";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -92,10 +91,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withSentryConfig(nextConfig, {
-  // Bugsink Cloud: no source map upload and no telemetry sent to sentry.io
-  telemetry: false,
-  sourcemaps: { disable: true },
-  webpack: { treeshake: { removeDebugLogging: true } },
-  silent: true,
-});
+export default nextConfig;

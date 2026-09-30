@@ -62,7 +62,7 @@ describe('POST /api/persona insert failure', () => {
     vi.clearAllMocks();
   });
 
-  it('logs the database error to Bugsink and returns a sanitized 500', async () => {
+  it('logs the database error to PostHog and returns a sanitized 500', async () => {
     // The faceless mode needs no photo/avatar, so the request reaches the
     // personas insert with a minimal mock.
     const dbError = { message: 'duplicate key value violates unique constraint', code: '23505' };
@@ -77,6 +77,13 @@ describe('POST /api/persona insert failure', () => {
     expect(body.error).toMatch(/failed to create persona/i);
     expect(JSON.stringify(body)).not.toContain('23505');
 
-    expect(logger.error).toHaveBeenCalledWith('[api/persona] insert failed', dbError);
+    // The cause is threaded through apiErrorResponse: a single logger.error
+    // with the real DB error, and the errorId points at that event.
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(logger.error).toHaveBeenCalledWith(
+      '[POST /api/persona] 500 Failed to create persona.',
+      dbError,
+      expect.objectContaining({ route: 'POST /api/persona' }),
+    );
   });
 });
