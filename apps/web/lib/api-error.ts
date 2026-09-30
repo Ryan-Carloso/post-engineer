@@ -25,6 +25,12 @@ export interface ApiErrorOptions {
   // Underlying failure for 5xx — reported to Bugsink as the exception cause.
   // Keep it out of the client response: only the public message is returned.
   cause?: unknown;
+  // Stable template for the Bugsink log message. When the public error
+  // embeds user-controlled input (e.g. a malformed field value), pass a
+  // stable template here so Bugsink groups by the template instead of
+  // creating one issue per distinct input; put the raw value (truncated)
+  // in metadata. Defaults to the public error message.
+  logMessage?: string;
   // Safe metadata only: ids, counts, validated enums. Never auth headers,
   // tokens, passwords, app passwords, raw request bodies, or signed URLs.
   // Logged to Bugsink, never returned to the client.
@@ -43,10 +49,28 @@ const SECRET_KEY_PATTERN =
 
 const REDACTED = '[redacted]';
 
-function scrubSecrets(metadata: Record<string, unknown>): Record<string, unknown> {
+// Maximum recursion depth for scrubSecrets — metadata is caller-controlled
+// and flat by contract, so this is defense in depth, not a hot path.
+const MAX_SCRUB_DEPTH = 5;
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function scrubSecrets(metadata: Record<string, unknown>, depth = 0): Record<string, unknown> {
   const scrubbed: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(metadata)) {
-    scrubbed[key] = SECRET_KEY_PATTERN.test(key) ? REDACTED : value;
+    if (SECRET_KEY_PATTERN.test(key)) {
+      scrubbed[key] = REDACTED;
+    } else if (depth < MAX_SCRUB_DEPTH && isPlainRecord(value)) {
+      scrubbed[key] = scrubSecrets(value, depth + 1);
+    } else if (depth < MAX_SCRUB_DEPTH && Array.isArray(value)) {
+      scrubbed[key] = value.map((item) =>
+        isPlainRecord(item) ? scrubSecrets(item, depth + 1) : item,
+      );
+    } else {
+      scrubbed[key] = value;
+    }
   }
   return scrubbed;
 }
@@ -65,7 +89,11 @@ export function apiErrorResponse(
   // defense in depth against a caller accidentally passing something secret.
   const extra = scrubSecrets({ ...(options?.extra ?? {}) });
   const metadata = scrubSecrets({ route, ...(options?.metadata ?? {}), ...extra });
-  const message = `[${route}] ${status} ${error}`;
+  // The Bugsink message uses the stable template when provided, so
+  // user-controlled input in the public error doesn't create one issue
+  // per distinct value. The client still receives the detailed message.
+  const logMessage = options?.logMessage ?? error;
+  const message = `[${route}] ${status} ${logMessage}`;
 
   let errorId: string;
   try {

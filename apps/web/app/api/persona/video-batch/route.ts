@@ -298,8 +298,11 @@ async function resolveJsonBatch(
     if (personaError.code === 'PGRST116') {
       return { ok: false, response: apiErrorResponse(404, 'Persona not found.', { route: 'UNKNOWN /api/persona/video-batch' }) };
     }
-    logger.error('[video-batch] persona lookup failed', personaError, { personaId: id });
-    return { ok: false, response: apiErrorResponse(500, 'Failed to load persona.', { route: 'UNKNOWN /api/persona/video-batch' }) };
+    return { ok: false, response: apiErrorResponse(500, 'Failed to load persona.', {
+      route: 'UNKNOWN /api/persona/video-batch',
+      cause: personaError,
+      metadata: { personaId: id },
+    }) };
   }
   if (!persona) {
     return { ok: false, response: apiErrorResponse(404, 'Persona not found.', { route: 'UNKNOWN /api/persona/video-batch' }) };

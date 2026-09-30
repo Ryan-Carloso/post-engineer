@@ -8,7 +8,6 @@ import { isPersonaAllowed } from '@/lib/api-keys';
 import { validateScheduleWindow } from '@/lib/schedule-window';
 import { isValidTimezone, parseZonedDateTime, zonedTimeOnDate } from '@/lib/timezone';
 import { computeVideoTokens, toFiniteNumber, type FaceQuality } from '@/lib/tokens';
-import { logger } from '@/lib/logger';
 import { apiErrorResponse } from '@/lib/api-error';
 
 //---------------
@@ -46,8 +45,9 @@ function errorResponse(
   error: string,
   route: string,
   extra?: Record<string, unknown>,
+  options?: { cause?: unknown; logMessage?: string; metadata?: Record<string, unknown> },
 ): NextResponse {
-  return apiErrorResponse(status, error, { route, extra });
+  return apiErrorResponse(status, error, { route, extra, ...options });
 }
 
 //---------------
@@ -70,8 +70,9 @@ async function assertScheduleScope(
     .eq('user_id', userId)
     .single();
   if (error && error.code !== 'PGRST116') {
-    logger.error('[api/schedule] assertScheduleScope failed', error);
-    return errorResponse(500, 'Failed to fetch schedule.', `${method} /api/schedule`);
+    return errorResponse(500, 'Failed to fetch schedule.', `${method} /api/schedule`, undefined, {
+      cause: error,
+    });
   }
   if (!data) return errorResponse(404, 'Schedule not found.', `${method} /api/schedule`);
   if (!isPersonaAllowed(personaScope, data.persona_id)) {
@@ -286,8 +287,9 @@ export async function GET(request?: Request): Promise<NextResponse> {
     .order('created_at', { ascending: true });
 
   if (error) {
-    logger.error('[api/schedule] list failed', error);
-    return errorResponse(500, 'Failed to list schedules.', 'GET /api/schedule');
+    return errorResponse(500, 'Failed to list schedules.', 'GET /api/schedule', undefined, {
+      cause: error,
+    });
   }
 
   // Persona-scoped API keys may only see schedules of their own personas.
@@ -411,10 +413,16 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (t.kind !== 'datetime') continue;
     const at = parseZonedDateTime(t.at, timezone);
     if (!at) {
-      return errorResponse(400, `times[${i}] ("${t.at}") is not a valid ISO datetime.`, 'POST /api/schedule');
+      return errorResponse(400, `times[${i}] ("${t.at}") is not a valid ISO datetime.`, 'POST /api/schedule', undefined, {
+        logMessage: 'times[i] is not a valid ISO datetime.',
+        metadata: { index: i, value: String(t.at).slice(0, 100) },
+      });
     }
     if (!validateScheduleWindow(at).ok) {
-      return errorResponse(400, `times[${i}] ("${t.at}") must be between 24 hours and 30 days ahead.`, 'POST /api/schedule');
+      return errorResponse(400, `times[${i}] ("${t.at}") must be between 24 hours and 30 days ahead.`, 'POST /api/schedule', undefined, {
+        logMessage: 'times[i] is outside the 24h-30d scheduling window.',
+        metadata: { index: i, value: String(t.at).slice(0, 100) },
+      });
     }
   }
   const slots = computeOneOffSlots(topics, times, scheduledAt, timezone);
@@ -490,8 +498,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     p_reason: `One-off schedule (${slots.length} video${slots.length === 1 ? '' : 's'})`,
   });
   if (spendError) {
-    logger.error('[api/schedule] spend failed', spendError);
-    return errorResponse(500, 'Failed to process tokens. Please try again.', 'POST /api/schedule');
+    return errorResponse(500, 'Failed to process tokens. Please try again.', 'POST /api/schedule', undefined, {
+      cause: spendError,
+    });
   }
   const spendRecord = (spendData ?? {}) as Record<string, unknown>;
   if (spendRecord.spent !== true) {
@@ -542,9 +551,10 @@ export async function POST(request: Request): Promise<NextResponse> {
     .single();
 
   if (insertError || !schedule) {
-    logger.error('[api/schedule] insert failed', insertError);
     await refundCharge('Schedule insert failed; tokens refunded');
-    return errorResponse(500, 'Failed to create schedule.', 'POST /api/schedule');
+    return errorResponse(500, 'Failed to create schedule.', 'POST /api/schedule', undefined, {
+      cause: insertError,
+    });
   }
 
   // One row per video: the engine's tick picks pending slots up immediately
@@ -565,20 +575,22 @@ export async function POST(request: Request): Promise<NextResponse> {
     .insert(slotRows)
     .select('id');
   if (slotsError || !insertedSlots || insertedSlots.length !== slotRows.length) {
-    // Log the mismatch distinctly: when the insert succeeded but .select
-    // came back short/empty, slotsError is null and the generic message
-    // would send triage chasing a nonexistent insert failure.
-    if (slotsError) {
-      logger.error('[api/schedule] slots insert failed', slotsError);
-    } else {
-      logger.error(
-        `[api/schedule] slots insert returned ${insertedSlots?.length ?? 0} ids for ${slotRows.length} rows`,
-      );
-    }
+    // When the insert succeeded but .select came back short/empty,
+    // slotsError is null: log a distinct message with observed vs expected
+    // counts instead of the misleading generic insert failure.
+    const mismatch = !slotsError;
     await supabase.from('scheduled_posts').delete().eq('schedule_id', scheduleId).eq('user_id', user.id);
     await supabase.from('schedules').delete().eq('id', scheduleId).eq('user_id', user.id);
     await refundCharge('Schedule slots insert failed; tokens refunded');
-    return errorResponse(500, 'Failed to create schedule.', 'POST /api/schedule');
+    return errorResponse(500, 'Failed to create schedule.', 'POST /api/schedule', undefined, {
+      cause: slotsError ?? undefined,
+      logMessage: mismatch
+        ? `slots insert returned ${insertedSlots?.length ?? 0} ids for ${slotRows.length} rows`
+        : undefined,
+      metadata: mismatch
+        ? { returnedIds: insertedSlots?.length ?? 0, expectedRows: slotRows.length }
+        : undefined,
+    });
   }
 
   return NextResponse.json(
@@ -775,8 +787,9 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     .eq('user_id', user.id);
 
   if (updateError) {
-    logger.error('[api/schedule] update failed', updateError);
-    return errorResponse(500, 'Failed to update schedule.', 'PATCH /api/schedule');
+    return errorResponse(500, 'Failed to update schedule.', 'PATCH /api/schedule', undefined, {
+      cause: updateError,
+    });
   }
   return NextResponse.json({ success: true });
 }
@@ -806,8 +819,9 @@ export async function DELETE(request: Request): Promise<NextResponse> {
     .eq('user_id', user.id);
 
   if (deleteError) {
-    logger.error('[api/schedule] delete failed', deleteError);
-    return errorResponse(500, 'Failed to delete schedule.', 'DELETE /api/schedule');
+    return errorResponse(500, 'Failed to delete schedule.', 'DELETE /api/schedule', undefined, {
+      cause: deleteError,
+    });
   }
   return NextResponse.json({ success: true });
 }

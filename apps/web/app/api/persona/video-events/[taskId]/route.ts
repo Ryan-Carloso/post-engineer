@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
-import { logger } from '@/lib/logger';
 import { apiErrorResponse } from '@/lib/api-error';
 
 //---------------
@@ -54,7 +53,9 @@ export async function GET(
       },
     });
   } catch (error) {
-    logger.error('[api/persona/video-events] upstream unavailable', error);
-    return apiErrorResponse(502, 'Video service is unavailable.', { route: 'GET /api/persona/video-events' });
+    return apiErrorResponse(502, 'Video service is unavailable.', {
+      route: 'GET /api/persona/video-events',
+      cause: error,
+    });
   }
 }

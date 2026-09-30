@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
-import { logger } from '@/lib/logger';
 import { apiErrorResponse } from '@/lib/api-error';
 
 type DownloadContext = {
@@ -38,8 +37,10 @@ export async function GET(request: Request, context: DownloadContext): Promise<N
   try {
     upstream = await fetch(upstreamUrl, { headers: upstreamHeaders, cache: 'no-store' });
   } catch (error) {
-    logger.error('[api/persona/video-download] upstream unavailable', error);
-    return apiErrorResponse(502, 'Video service is unavailable.', { route: 'GET /api/persona/video-download' });
+    return apiErrorResponse(502, 'Video service is unavailable.', {
+      route: 'GET /api/persona/video-download',
+      cause: error,
+    });
   }
 
   const responseHeaders = new Headers();

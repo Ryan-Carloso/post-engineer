@@ -10,11 +10,20 @@ vi.mock('@/lib/supabase/service', () => ({
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
 }));
+vi.mock('@/lib/logger', () => ({
+  logger: {
+    warn: vi.fn(() => 'test-warn-id'),
+    error: vi.fn(() => 'test-error-id'),
+    info: vi.fn(),
+    debug: vi.fn(),
+  },
+}));
 
 import { GET, POST, PATCH, DELETE } from '../route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
+import { logger } from '@/lib/logger';
 
 const USER_ID = 'user-1';
 
@@ -836,6 +845,10 @@ describe('POST /api/schedule timezone handling', () => {
 });
 
 describe('POST /api/schedule topics → slots → charging', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('cria um scheduled_posts por topic, com topic persistido e status pending', async () => {
     const db = oneOffSupabase({});
     const res = await POST(
@@ -1009,6 +1022,12 @@ describe('POST /api/schedule topics → slots → charging', () => {
     expect(refunds).toHaveLength(1);
     expect(db.deleteCalls.filter((c) => c.table === 'scheduled_posts')).toHaveLength(1);
     expect(db.deleteCalls.filter((c) => c.table === 'schedules')).toHaveLength(1);
+
+    // The mismatch logs a distinct message with observed vs expected counts,
+    // not the generic 'slots insert failed' (which would imply a null error).
+    const errorCalls = vi.mocked(logger.error).mock.calls;
+    expect(errorCalls).toHaveLength(1);
+    expect(errorCalls[0][0]).toContain('slots insert returned 1 ids for 2 rows');
   });
 });
 

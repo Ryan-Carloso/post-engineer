@@ -13,8 +13,10 @@ function getStripe() {
 export async function POST(request: Request): Promise<NextResponse> {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!webhookSecret) {
-    logger.error('[api/billing/webhook] STRIPE_WEBHOOK_SECRET is not defined');
-    return apiErrorResponse(500, 'Webhook not configured.', { route: 'POST /api/billing/webhook' });
+    return apiErrorResponse(500, 'Webhook not configured.', {
+      route: 'POST /api/billing/webhook',
+      cause: new Error('STRIPE_WEBHOOK_SECRET is not defined'),
+    });
   }
 
   const signature = request.headers.get('stripe-signature');
@@ -26,15 +28,16 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     stripe = await getStripe();
   } catch (error) {
-    logger.error('[api/billing/webhook] stripe init failed', error);
-    return apiErrorResponse(500, 'Payment system unavailable.', { route: 'POST /api/billing/webhook' });
+    return apiErrorResponse(500, 'Payment system unavailable.', {
+      route: 'POST /api/billing/webhook',
+      cause: error,
+    });
   }
 
   let event;
   try {
     event = stripe.webhooks.constructEvent(await request.text(), signature, webhookSecret);
-  } catch (error) {
-    logger.error('[api/billing/webhook] signature verification failed', error);
+  } catch {
     return apiErrorResponse(400, 'Invalid signature.', { route: 'POST /api/billing/webhook' });
   }
 
@@ -49,8 +52,11 @@ export async function POST(request: Request): Promise<NextResponse> {
     .maybeSingle();
 
   if (eventError) {
-    logger.error('[api/billing/webhook] event persistence failed', eventError, { eventId: event.id });
-    return apiErrorResponse(500, 'Webhook persistence failed.', { route: 'POST /api/billing/webhook' });
+    return apiErrorResponse(500, 'Webhook persistence failed.', {
+      route: 'POST /api/billing/webhook',
+      cause: eventError,
+      metadata: { eventId: event.id },
+    });
   }
   if (!recordedEvent) return NextResponse.json({ success: true, duplicate: true });
 
@@ -67,8 +73,11 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (deleteError) {
       logger.error('[api/billing/webhook] failed to release event for retry', deleteError, { eventId: event.id });
     }
-    logger.error('[api/billing/webhook] fulfillment failed', error, { eventId: event.id });
-    return apiErrorResponse(500, 'Webhook handler failed.', { route: 'POST /api/billing/webhook' });
+    return apiErrorResponse(500, 'Webhook handler failed.', {
+      route: 'POST /api/billing/webhook',
+      cause: error,
+      metadata: { eventId: event.id },
+    });
   }
 
   return NextResponse.json({ success: true });

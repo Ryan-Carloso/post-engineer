@@ -148,4 +148,55 @@ describe('apiErrorResponse', () => {
     const warnCall = vi.mocked(logger.warn).mock.calls[0];
     expect(warnCall[1]).toMatchObject({ code: 'INSUFFICIENT', have: 10, need: 50 });
   });
+
+  it('logs a stable logMessage instead of the user-facing error when provided', async () => {
+    // User input embedded in the public message would create a distinct
+    // Bugsink issue per malformed value; the stable template keeps
+    // grouping bounded while metadata carries the raw value.
+    const res = apiErrorResponse(400, 'times[2] ("garbage") is not a valid ISO datetime.', {
+      route: 'POST /api/schedule',
+      logMessage: 'times[i] is not a valid ISO datetime.',
+      metadata: { index: 2, value: 'garbage' },
+    });
+
+    expect(res.status).toBe(400);
+
+    // Bugsink sees the stable template, not the interpolated input.
+    const warnCall = vi.mocked(logger.warn).mock.calls[0];
+    expect(warnCall[0]).toContain('times[i] is not a valid ISO datetime.');
+    expect(warnCall[0]).not.toContain('garbage');
+    expect(warnCall[1]).toMatchObject({ index: 2, value: 'garbage' });
+
+    // The client still gets the helpful detailed message.
+    const body = await res.json();
+    expect(body.error).toBe('times[2] ("garbage") is not a valid ISO datetime.');
+  });
+
+  it('redacts secret-bearing keys in nested metadata objects', () => {
+    apiErrorResponse(500, 'Failed.', {
+      route: 'POST /api/test',
+      metadata: {
+        provider: { appPassword: 'abcd-efgh', method: 'oauth' },
+        config: { nested: { apiKey: 'sk-live-123' } },
+        userId: 'user-789',
+      },
+    });
+
+    const errorCall = vi.mocked(logger.error).mock.calls[0];
+    const loggedMetadata = errorCall[2] as Record<string, unknown>;
+
+    const provider = loggedMetadata['provider'] as Record<string, unknown>;
+    expect(provider['appPassword']).toBe('[redacted]');
+    expect(provider['method']).toBe('oauth');
+
+    const config = loggedMetadata['config'] as Record<string, unknown>;
+    const nested = config['nested'] as Record<string, unknown>;
+    expect(nested['apiKey']).toBe('[redacted]');
+
+    expect(loggedMetadata['userId']).toBe('user-789');
+
+    const serialized = JSON.stringify(errorCall);
+    expect(serialized).not.toContain('abcd-efgh');
+    expect(serialized).not.toContain('sk-live-123');
+  });
 });
