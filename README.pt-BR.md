@@ -100,7 +100,7 @@ cp apps/engine/config.example.toml apps/engine/config.toml
 | Arquivo | Finalidade | Variáveis principais |
 |---|---|---|
 | `apps/web/.env` | App web + rotas de API | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (somente servidor), `TOKEN_ENCRYPTION_KEY` (gere com: `openssl rand -base64 32`), `MONEYPRINT_API_SECRET`, `MONEYPRINT_API_URL`, client ids/secrets de OAuth + redirect URIs, chaves do Stripe, `MCP_OAUTH_PRIVATE_KEY_PEM` |
-| `apps/engine/.env` | Runtime do motor | `MONEYPRINT_API_SECRET` (deve ser **idêntico** ao valor do web), `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (para o agendador de preenchimento in-process), opcionais `DISCORD_WEBHOOK_URL`, `BUGSINK_DSN` |
+| `apps/engine/.env` | Runtime do motor | `MONEYPRINT_API_SECRET` (deve ser **idêntico** ao valor do web), `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (para o agendador de preenchimento in-process), opcionais `DISCORD_WEBHOOK_URL`, `POSTHOG_API_KEY` (rastreamento de erros + funil de analytics) |
 | `apps/engine/config.toml` | Configuração de comportamento do motor | Chaves de provedores de LLM/TTS/vídeos de banco (OpenAI-compatible, Pexels, Pixabay, …), `listen_port` (padrão `8080`) |
 
 O app falha rapidamente em caso de variáveis ausentes (sem fallbacks silenciosos)
@@ -214,7 +214,7 @@ lista completa de tools, dicas de timeout no OpenCode e desenvolvimento local).
 | `MONEYPRINT_API_SECRET` | **Sim** | Autenticação web ↔ motor | Gere você mesmo (`openssl rand -hex 32`) |
 | `TOKEN_ENCRYPTION_KEY` | **Sim** | Criptografa tokens OAuth em repouso | Gere você mesmo (`openssl rand -base64 32`) |
 | `MCP_OAUTH_PRIVATE_KEY_PEM` | Para OAuth do servidor MCP | Assina tokens MCP | Gere você mesmo (chave EC, veja acima) |
-| Sentry / Bugsink DSN | Opcional | Rastreamento de erros | sentry.io ou Bugsink self-hosted |
+| Chave de projeto PostHog (`NEXT_PUBLIC_POSTHOG_KEY`) | Opcional | Rastreamento de erros + analytics de produto | Configurações do projeto PostHog |
 | Webhook do Discord | Opcional | Notificações de preenchimento de agenda | Configurações do canal do Discord |
 | `ZAI_API_KEY` | Somente CI | Workflow de code-review com IA | Não é dependência de runtime |
 

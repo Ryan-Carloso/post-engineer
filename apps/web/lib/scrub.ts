@@ -1,7 +1,7 @@
 //---------------
 // Shared secret-scrubbing for PostHog-bound metadata.
 //
-// One policy for every reporter (api-error.ts, analytics.ts, logger.ts):
+// One policy for every reporter (analytics.ts, logger.ts):
 // metadata keys that look secret-bearing (tokens, passwords, auth
 // headers, ...) are redacted before logging — never pass raw request
 // bodies, signed URLs, or credentials here.

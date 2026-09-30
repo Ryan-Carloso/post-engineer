@@ -18,6 +18,13 @@ Public MCP (Model Context Protocol) server for [Post Engineer](https://post-engi
 - Node.js 20.10+
 - API key generated at https://post-engineer.com/api-keys
 
+### Telemetry (optional)
+
+Set `POSTHOG_API_KEY` (and optionally `POSTHOG_HOST`, defaults to
+`https://us.i.posthog.com`) to send `mcp_tool_called` analytics events to
+PostHog. Without it, the server runs normally with telemetry disabled.
+The key is read from the environment only — never hardcoded.
+
 ## Use
 
 Configure your agent (`opencode.json`, `claude_desktop_config.json`, `.mcp.json`, or Cursor settings):

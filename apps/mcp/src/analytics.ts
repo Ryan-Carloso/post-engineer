@@ -1,10 +1,12 @@
-import { PostHog } from 'posthog-node';
-
 //---------------
 // MCP analytics: track tool invocations as PostHog product-analytics events.
 //
 // The MCP server is a local stdio process used heavily by AI agents; these
 // events show which tools are actually used (1M/month free).
+//
+// posthog-node is lazy-loaded (dynamic import) so a missing/incompatible
+// SDK never breaks module load — the MCP server must start even on older
+// Node versions. Telemetry degrades to disabled.
 //
 // Safety rules:
 // - Never throws: telemetry must never break the MCP server.
@@ -30,11 +32,19 @@ function scrubSecrets(properties: Record<string, unknown>): Record<string, unkno
   return scrubbed;
 }
 
-let client: PostHog | null = null;
+interface PostHogClient {
+  capture(args: {
+    distinctId: string;
+    event: string;
+    properties?: Record<string, unknown>;
+  }): void;
+}
+
+let client: PostHogClient | null = null;
 let warned = false;
 let attempted = false;
 
-function getClient(): PostHog | null {
+async function getClient(): Promise<PostHogClient | null> {
   if (client !== null) return client;
   if (attempted) return null;
   attempted = true;
@@ -49,8 +59,12 @@ function getClient(): PostHog | null {
   }
 
   try {
+    // Dynamic import: a missing or incompatible posthog-node never breaks
+    // module load. The MCP server declares node >=20.10; posthog-node 5.x
+    // wants >=20.20 — on older Node this catch degrades to disabled.
+    const { PostHog } = await import('posthog-node');
     const host = process.env['POSTHOG_HOST'] ?? 'https://us.i.posthog.com';
-    client = new PostHog(apiKey, { host });
+    client = new PostHog(apiKey, { host }) as unknown as PostHogClient;
     return client;
   } catch (error) {
     if (!warned) {
@@ -69,13 +83,20 @@ function getClient(): PostHog | null {
 
 export function trackEvent(eventName: string, properties?: Record<string, unknown>): void {
   try {
-    const posthog = getClient();
-    if (posthog === null) return;
     const props = scrubSecrets({ ...(properties ?? {}) });
-    posthog.capture({
-      distinctId: 'post-engineer-mcp',
-      event: eventName,
-      properties: props,
+    // Fire-and-forget: the lazy SDK load happens async. Telemetry must
+    // never block or break the MCP server.
+    void getClient().then((posthog) => {
+      if (posthog === null) return;
+      try {
+        posthog.capture({
+          distinctId: 'post-engineer-mcp',
+          event: eventName,
+          properties: props,
+        });
+      } catch {
+        // Telemetry must never break the MCP server.
+      }
     });
   } catch {
     // Telemetry must never break the MCP server.
