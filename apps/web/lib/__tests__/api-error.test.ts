@@ -73,7 +73,9 @@ describe('apiErrorResponse', () => {
   });
 
   it('redacts secret-bearing metadata keys instead of logging them raw', () => {
-    apiErrorResponse(401, 'Unauthorized.', {
+    // Note: 401/403 are console-only (no PostHog) by design — use 400 here
+    // to exercise the PostHog warning path.
+    apiErrorResponse(400, 'Bad request.', {
       route: 'GET /api/account',
       metadata: {
         authorization: 'Bearer super-secret-token',
