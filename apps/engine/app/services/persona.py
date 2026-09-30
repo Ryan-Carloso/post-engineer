@@ -76,7 +76,7 @@ PERSONA_SAMPLE_VOICES: dict[str, dict[str, str]] = {
 # Rate (speed multiplier) and pitch matching each house voice personality.
 # deep is "low/deep": pitch lowered so it sounds distinct from energetic when
 # the two share a locale's only male voice.
-HOUSE_VOICE_STYLES: dict[str, dict[str, str]] = {
+HOUSE_VOICE_STYLES: dict[str, dict[str, str | float]] = {
     "calm": {"rate": 0.85, "pitch": "+0Hz"},
     "energetic": {"rate": 1.2, "pitch": "+5Hz"},
     "young": {"rate": 1.0, "pitch": "+0Hz"},
