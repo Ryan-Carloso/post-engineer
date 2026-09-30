@@ -79,9 +79,11 @@ export function getPostHogServer(): ServerPostHogClient | null {
   const host = process.env.NEXT_PUBLIC_POSTHOG_HOST ?? DEFAULT_HOST;
 
   try {
-    // Serverless (Vercel): flush immediately. The default buffers up to 20
-    // events / ~10s, but the instance can freeze right after the response,
-    // dropping the rare 5xx events this telemetry exists to capture.
+    // Serverless (Vercel): best-effort immediate flush. flushAt: 1 starts an
+    // async flush on every capture, but the function can freeze after the
+    // response before the network write lands — rare 5xx $exception events
+    // may still be dropped. Best posthog-node offers without wiring
+    // await shutdown() into the request lifecycle.
     cached = toClient(new PostHog(key, { host, flushAt: 1 }));
   } catch {
     warnOnce('[posthog] Failed to initialize PostHog client — telemetry disabled');

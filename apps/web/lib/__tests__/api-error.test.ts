@@ -21,6 +21,31 @@ describe('apiErrorResponse', () => {
     vi.clearAllMocks();
   });
 
+  it('401/403 are console-only: no PostHog, errorId still returned', async () => {
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const res = apiErrorResponse(401, 'Authentication required.', {
+        route: 'POST /api/bluesky-connect',
+      });
+
+      expect(res.status).toBe(401);
+      // Bypasses logger.warn/error entirely — no billable PostHog volume
+      // from unauthenticated scanner traffic.
+      expect(logger.warn).not.toHaveBeenCalled();
+      expect(logger.error).not.toHaveBeenCalled();
+      // Console warning still emitted for Vercel logs.
+      expect(consoleWarn).toHaveBeenCalledTimes(1);
+      // Response shape unchanged: errorId is a fallback string.
+      const body = await res.json();
+      expect(typeof body.errorId).toBe('string');
+      expect(body.errorId.length).toBeGreaterThan(0);
+      expect(body.error).toBe('Authentication required.');
+      expect(body.success).toBe(false);
+    } finally {
+      consoleWarn.mockRestore();
+    }
+  });
+
   it('logs 4xx as a warning (not an error) and returns the public message', async () => {
     const res = apiErrorResponse(400, 'personaId is required.', {
       route: 'POST /api/schedule',

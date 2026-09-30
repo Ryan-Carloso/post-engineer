@@ -118,7 +118,15 @@ function reportWarningToPostHog(message: string, metadata?: Record<string, unkno
     const client = getPostHogServer();
     if (!client) return;
     const safeMetadata = metadata ? scrubSecrets(metadata) : {};
-    client.capture('server_warning', { message, ...safeMetadata });
+    // Symmetry with the error reporter: redact credential fragments inside
+    // string values, not just key names.
+    for (const [k, v] of Object.entries(safeMetadata)) {
+      if (typeof v === 'string') safeMetadata[k] = sanitizeReportBody(v);
+    }
+    client.capture('server_warning', {
+      message: redactCredentialFragments(message),
+      ...safeMetadata,
+    });
   } catch {
     // Telemetry must never break the request path.
   }

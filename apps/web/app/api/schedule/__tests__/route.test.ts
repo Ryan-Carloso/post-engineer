@@ -48,6 +48,7 @@ function mockSupabase(handlers: {
   current?: { data: unknown };
   update?: { error: unknown };
   remove?: { error: unknown };
+  deleteError?: unknown;
   noSession?: boolean;
   rpc?: {
     spend?: { data: unknown; error: unknown };
@@ -131,7 +132,7 @@ function mockSupabase(handlers: {
             deleteCalls.push({ table: 'scheduled_posts' });
             return {
               eq: vi.fn(() => ({
-                eq: vi.fn(() => Promise.resolve({ error: null })),
+                eq: vi.fn(() => Promise.resolve({ error: handlers.deleteError ?? null })),
               })),
             };
           }),
@@ -1105,6 +1106,27 @@ describe('POST /api/schedule topics → slots → charging', () => {
     const errorCalls = vi.mocked(logger.error).mock.calls;
     expect(errorCalls).toHaveLength(1);
     expect(errorCalls[0][0]).toContain('slots insert returned 1 ids for 2 rows');
+  });
+
+  it('rollback delete failure is logged loudly (not swallowed)', async () => {
+    // If a compensating delete fails, the engine tick could pick up orphaned
+    // pending slots. The failure must be visible in telemetry.
+    const db = oneOffSupabase({
+      slotsInsert: { returnedRows: [{ id: 'db-slot-1' }] },
+      deleteError: new Error('delete blocked'),
+    });
+    const res = await POST(
+      jsonRequest(
+        { ...validOneOffBody, postsPerDay: 2, topics: ['t1', 't2'], times: ['09:00', '18:00'] },
+        'POST',
+      ),
+    );
+    expect(res.status).toBe(500);
+    const errorCalls = vi.mocked(logger.error).mock.calls;
+    const rollbackLogs = errorCalls.filter((c) =>
+      String(c[0]).includes('rollback deletes failed'),
+    );
+    expect(rollbackLogs).toHaveLength(1);
   });
 });
 
