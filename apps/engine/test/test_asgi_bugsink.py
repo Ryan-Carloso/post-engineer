@@ -25,8 +25,8 @@ class PostHogSinkTests(unittest.TestCase):
         track_event.assert_called_once()
         event_name, properties = track_event.call_args[0]
         assert event_name == "$exception"
-        assert properties["message"] == "boom"
-        assert "exception_type" not in properties
+        assert properties["$exception_message"] == "boom"
+        assert "$exception_type" not in properties
 
     def test_record_with_exception_forwards_exception_details(self):
         error = ValueError("kaput")
@@ -35,8 +35,8 @@ class PostHogSinkTests(unittest.TestCase):
         track_event.assert_called_once()
         event_name, properties = track_event.call_args[0]
         assert event_name == "$exception"
-        assert properties["exception_type"] == "ValueError"
-        assert properties["exception_message"] == "kaput"
+        assert properties["$exception_type"] == "ValueError"
+        assert properties["$exception_message"] == "kaput"
 
     def test_sink_never_raises(self):
         class BadMessage:
