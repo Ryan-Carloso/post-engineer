@@ -49,6 +49,15 @@
 - Do not provide default values or fallback configurations
 - Use strict type checking - no `any` types allowed
 
+### Exception: PostHog telemetry keys (2026-09-30)
+PostHog (`POSTHOG_API_KEY` / `NEXT_PUBLIC_POSTHOG_KEY` / `NEXT_PUBLIC_POSTHOG_HOST`)
+is intentionally warn-and-continue, not fail-fast. Rationale: telemetry must
+never break the app — if the key is missing or PostHog is down, the app keeps
+serving requests and logs to console/Vercel only. The `??` chain across the two
+key vars is not a "fallback value" in the banned sense (no hardcoded default);
+it reflects that the server accepts either the server-side or the public key.
+This is a deliberate, documented exception to the fail-fast rule.
+
 ## Environment Variables
 
 All environment variables must be defined or throw explicit errors:
