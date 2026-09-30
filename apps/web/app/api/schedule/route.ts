@@ -145,24 +145,67 @@ async function assertAccountsOwned(
 }
 
 //---------------
-// parseTimes — validates and normalizes explicit "HH:MM" times (0–23:0–59),
-// unique and sorted. Empty/absent array → [] (the engine uses the window +
-// posts_per_day). Returns null when any item is invalid.
+// SlotTime — one entry of the `times` array:
+// - { kind: 'time', time } — a wall-clock "HH:MM" applied to scheduledAt's
+//   calendar date in the request timezone (legacy behavior);
+// - { kind: 'datetime', at } — a full ISO datetime, so a single request can
+//   batch videos across several different days. Naive wall clocks are read
+//   in the request timezone; an explicit offset (Z or ±hh:mm) is respected
+//   as-is, exactly like scheduledAt.
 //---------------
-export function parseTimes(value: unknown): string[] | null {
+export type SlotTime = { kind: 'time'; time: string } | { kind: 'datetime'; at: string };
+
+//---------------
+// parseTimes — validates and normalizes the `times` array. Each entry is
+// either "HH:MM" (00:00–23:59) or a full ISO datetime with a time part
+// ("2026-10-02T15:00", "2026-10-02T15:00:00+01:00"); a bare date is
+// rejected as ambiguous. Entries are unique. Pure "HH:MM" arrays keep the
+// legacy chronological sort; arrays with explicit datetimes keep input
+// order so topics stay paired with the day the caller sent. Empty/absent
+// array → []. Returns null when any item is invalid.
+//---------------
+export function parseTimes(value: unknown): SlotTime[] | null {
   if (value === undefined || value === null) return [];
   if (!Array.isArray(value)) return null;
-  const times = new Set<string>();
+  const out: SlotTime[] = [];
+  const seen = new Set<string>();
+  let hasDatetime = false;
   for (const item of value) {
     if (typeof item !== 'string') return null;
-    const match = /^(\d{1,2}):(\d{2})$/.exec(item.trim());
-    if (!match) return null;
-    const hour = Number.parseInt(match[1], 10);
-    const minute = Number.parseInt(match[2], 10);
-    if (hour > 23 || minute > 59) return null;
-    times.add(`${String(hour).padStart(2, '0')}:${match[2]}`);
+    const text = item.trim();
+    const hm = /^(\d{1,2}):(\d{2})$/.exec(text);
+    if (hm) {
+      const hour = Number.parseInt(hm[1], 10);
+      const minute = Number.parseInt(hm[2], 10);
+      if (hour > 23 || minute > 59) return null;
+      const norm = `${String(hour).padStart(2, '0')}:${hm[2]}`;
+      const key = `t:${norm}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        out.push({ kind: 'time', time: norm });
+      }
+      continue;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(Z|[+-]\d{2}:?\d{2})?$/.test(text)) return null;
+    hasDatetime = true;
+    const key = `d:${text}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push({ kind: 'datetime', at: text });
+    }
   }
-  return [...times].sort();
+  if (!hasDatetime) {
+    out.sort((a, b) => (a.kind === 'time' && b.kind === 'time' ? a.time.localeCompare(b.time) : 0));
+  }
+  return out;
+}
+
+//---------------
+// slotTimeToString — the string persisted on the schedules row for a
+// SlotTime ("HH:MM" stays as-is; datetimes keep the caller's input).
+//---------------
+export function slotTimeToString(t: SlotTime): string {
+  return t.kind === 'time' ? t.time : t.at;
 }
 
 //---------------
@@ -187,15 +230,17 @@ export interface OneOffSlot {
 
 //---------------
 // computeOneOffSlots — (topic, slotAt) pairs for the one-off contract:
-// - times given: one slot per (time, topic) pair, each on the scheduledAt
-//   calendar date in `timezone`;
+// - times given: one slot per (time, topic) pair. "HH:MM" entries land on
+//   the scheduledAt calendar date in `timezone`; explicit datetime entries
+//   are parsed in `timezone` (or via their own offset), so one request can
+//   span several days.
 // - times empty: exactly one topic → a single slot at scheduledAt.
 // Returns null when the combination is invalid (the caller maps it to a
 // 400 with a specific message).
 //---------------
 export function computeOneOffSlots(
   topics: string[],
-  times: string[],
+  times: SlotTime[],
   scheduledAt: Date,
   timezone: string,
 ): OneOffSlot[] | null {
@@ -203,7 +248,9 @@ export function computeOneOffSlots(
     if (times.length !== topics.length) return null;
     const slots: OneOffSlot[] = [];
     for (let i = 0; i < topics.length; i++) {
-      const slotAt = zonedTimeOnDate(scheduledAt, times[i], timezone);
+      const t = times[i];
+      const slotAt =
+        t.kind === 'time' ? zonedTimeOnDate(scheduledAt, t.time, timezone) : parseZonedDateTime(t.at, timezone);
       if (!slotAt) return null;
       slots.push({ topic: topics[i], slotAt });
     }
@@ -344,7 +391,24 @@ export async function POST(request: Request): Promise<NextResponse> {
   // scheduledAt).
   const times = parseTimes(body.times);
   if (times === null) {
-    return errorResponse(400, 'times must be an array of "HH:MM" strings (00:00–23:59).');
+    return errorResponse(
+      400,
+      'times must be an array of "HH:MM" strings (00:00–23:59) or full ISO datetimes ("2026-10-02T15:00").',
+    );
+  }
+  // Explicit datetimes are independent instants: each must sit inside the
+  // 24h–30d scheduling window ("HH:MM" entries ride on scheduledAt's date,
+  // which was validated above). Fail fast naming the offending entry.
+  for (let i = 0; i < times.length; i++) {
+    const t = times[i];
+    if (t.kind !== 'datetime') continue;
+    const at = parseZonedDateTime(t.at, timezone);
+    if (!at) {
+      return errorResponse(400, `times[${i}] ("${t.at}") is not a valid ISO datetime.`);
+    }
+    if (!validateScheduleWindow(at).ok) {
+      return errorResponse(400, `times[${i}] ("${t.at}") must be between 24 hours and 30 days ahead.`);
+    }
   }
   const slots = computeOneOffSlots(topics, times, scheduledAt, timezone);
   if (!slots) {
@@ -455,7 +519,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       start_hour: null,
       end_hour: null,
       posts_per_day: postsPerDay,
-      times,
+      times: times.map(slotTimeToString),
       timezone,
       scheduled_at: scheduledAt.toISOString(),
       active: true,
@@ -581,7 +645,10 @@ export async function PATCH(request: Request): Promise<NextResponse> {
   if (body.times !== undefined) {
     const times = parseTimes(body.times);
     if (times === null) {
-      return errorResponse(400, 'times must be an array of "HH:MM" strings (00:00–23:59).');
+      return errorResponse(
+        400,
+        'times must be an array of "HH:MM" strings (00:00–23:59) or full ISO datetimes ("2026-10-02T15:00").',
+      );
     }
     const postsPerDay =
       typeof updates.posts_per_day === 'number'
@@ -600,7 +667,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     if (times.length > postsPerDay) {
       return errorResponse(400, 'times cannot contain more entries than postsPerDay.');
     }
-    updates.times = times;
+    updates.times = times.map(slotTimeToString);
   }
   if (body.timezone !== undefined) {
     if (typeof body.timezone !== 'string' || !body.timezone) {

@@ -985,3 +985,146 @@ describe('POST /api/schedule topics → slots → charging', () => {
     expect(refunds).toHaveLength(1);
   });
 });
+
+describe('POST /api/schedule multi-day times (one request, several days)', () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const TZ = 'America/Sao_Paulo';
+
+  //---------------
+  // wallClockInSP — "YYYY-MM-DDTHH:MM:SS" wall clock in America/Sao_Paulo,
+  // on the SP calendar date `msAhead` from now. Naive (no offset): the API
+  // interprets it in the request's `timezone`.
+  //---------------
+  function wallClockInSP(msAhead: number, hhmm: string): string {
+    const d = new Date(Date.now() + msAhead);
+    const datePart = new Intl.DateTimeFormat('en-CA', {
+      timeZone: TZ,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(d);
+    return `${datePart}T${hhmm}:00`;
+  }
+
+  // Expected UTC instant for a naive SP wall clock (SP has no DST: UTC-3).
+  function spToUtcIso(wallClock: string): string {
+    return new Date(`${wallClock}-03:00`).toISOString();
+  }
+
+  it('cria slots em dias diferentes num único request', async () => {
+    const db = oneOffSupabase({});
+    const t1 = wallClockInSP(2 * DAY_MS, '15:00');
+    const t2 = wallClockInSP(3 * DAY_MS, '10:30');
+    const t3 = wallClockInSP(4 * DAY_MS, '20:00');
+    const res = await POST(
+      jsonRequest(
+        {
+          ...validOneOffBody,
+          postsPerDay: 3,
+          topics: ['Day 1 video', 'Day 2 video', 'Day 3 video'],
+          times: [t1, t2, t3],
+        },
+        'POST',
+      ),
+    );
+    expect(res.status).toBe(201);
+    expect(db.slotRows).toHaveLength(3);
+    expect(db.slotRows[0]).toMatchObject({ topic: 'Day 1 video', slot_at: spToUtcIso(t1), status: 'pending' });
+    expect(db.slotRows[1]).toMatchObject({ topic: 'Day 2 video', slot_at: spToUtcIso(t2), status: 'pending' });
+    expect(db.slotRows[2]).toMatchObject({ topic: 'Day 3 video', slot_at: spToUtcIso(t3), status: 'pending' });
+    // The parent row persists the datetime strings as given.
+    expect(db.insertedRows[0].times).toEqual([t1, t2, t3]);
+    // All three videos are charged upfront.
+    const spends = db.rpcCalls.filter((c) => c.name === 'spend_tokens');
+    expect(spends).toHaveLength(1);
+  });
+
+  it('rejeita datetime além de 30 dias nomeando a entrada, sem criar nada nem gastar', async () => {
+    const db = oneOffSupabase({});
+    const bad = wallClockInSP(40 * DAY_MS, '10:00');
+    const res = await POST(
+      jsonRequest(
+        {
+          ...validOneOffBody,
+          postsPerDay: 2,
+          topics: ['t1', 't2'],
+          times: [wallClockInSP(2 * DAY_MS, '10:00'), bad],
+        },
+        'POST',
+      ),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/times\[1\]/);
+    expect(db.insertedRows).toHaveLength(0);
+    expect(db.slotRows).toHaveLength(0);
+    expect(db.rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+  });
+
+  it('rejeita datetime com menos de 24h de antecedência', async () => {
+    const db = oneOffSupabase({});
+    const soon = wallClockInSP(2 * 60 * 60 * 1000, '10:00');
+    const res = await POST(
+      jsonRequest({ ...validOneOffBody, times: [soon] }, 'POST'),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/times\[0\]/);
+    expect(db.slotRows).toHaveLength(0);
+  });
+
+  it('rejeita data sem hora como ambígua', async () => {
+    oneOffSupabase({});
+    const res = await POST(
+      jsonRequest({ ...validOneOffBody, times: ['2026-10-05'] }, 'POST'),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('aceita offset explícito no datetime', async () => {
+    const db = oneOffSupabase({});
+    // 15:00 at +01:00 is an explicit instant; the request timezone is ignored.
+    const at = new Date(Date.now() + 3 * DAY_MS);
+    const datePart = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'UTC',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(at);
+    const withOffset = `${datePart}T15:00:00+01:00`;
+    const res = await POST(
+      jsonRequest({ ...validOneOffBody, times: [withOffset] }, 'POST'),
+    );
+    expect(res.status).toBe(201);
+    expect(db.slotRows).toHaveLength(1);
+    expect(db.slotRows[0]).toMatchObject({ slot_at: new Date(withOffset).toISOString() });
+  });
+
+  it('mistura HH:MM (no dia do scheduledAt) com datetime explícito', async () => {
+    const db = oneOffSupabase({});
+    const t2 = wallClockInSP(3 * DAY_MS, '18:00');
+    const res = await POST(
+      jsonRequest(
+        {
+          ...validOneOffBody,
+          postsPerDay: 2,
+          topics: ['Morning', 'Later day'],
+          times: ['09:00', t2],
+        },
+        'POST',
+      ),
+    );
+    expect(res.status).toBe(201);
+    expect(db.slotRows).toHaveLength(2);
+    // '09:00' lands on the scheduledAt calendar date in the caller timezone.
+    const scheduledAt = new Date(validOneOffBody.scheduledAt);
+    const datePart = new Intl.DateTimeFormat('en-CA', {
+      timeZone: TZ,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(scheduledAt);
+    expect(db.slotRows[0]).toMatchObject({ topic: 'Morning', slot_at: `${datePart}T12:00:00.000Z` });
+    expect(db.slotRows[1]).toMatchObject({ topic: 'Later day', slot_at: spToUtcIso(t2) });
+  });
+});
