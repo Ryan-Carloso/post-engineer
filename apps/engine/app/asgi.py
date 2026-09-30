@@ -147,6 +147,34 @@ app = get_application()
 # No CORS: the engine is internal — browsers never hit it directly; every
 # call goes through Next.js (same origin as the app) with the Supabase JWT.
 
+# Platform version file: the repo-root VERSION (single source of truth,
+# bumped on every PR) is mounted read-only into the container by
+# docker-compose (see ../../docker-compose.yml volumes).
+VERSION_FILE = "/app/VERSION"
+
+
+def get_deployed_version() -> str:
+    """Deployed platform version, for /health and the startup log.
+
+    Reads the mounted VERSION file; falls back to the APP_VERSION env
+    (manual override) and then "dev". Never raises: version reporting
+    must not break the app.
+    """
+    try:
+        with open(VERSION_FILE, encoding="utf-8") as handle:
+            version = handle.read().strip()
+            if version:
+                return version
+    except OSError:
+        pass
+    return os.environ.get("APP_VERSION") or "dev"
+
+
+@app.get("/health")
+def health() -> dict[str, str]:
+    """Public liveness + version probe (no auth): identifies the live version."""
+    return {"status": "ok", "version": get_deployed_version()}
+
 public_dir = utils.public_dir()
 app.mount("/", StaticFiles(directory=public_dir, html=True), name="")
 
@@ -158,5 +186,5 @@ def shutdown_event():
 
 @app.on_event("startup")
 def startup_event():
-    logger.info("startup event")
+    logger.info(f"startup event (version {get_deployed_version()})")
     start_fill_schedule_scheduler()

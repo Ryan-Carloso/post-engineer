@@ -1,0 +1,32 @@
+name: version-check
+
+# Enforces the unified platform version: the repo-root VERSION file is the
+# single source of truth and every release location must agree with it.
+# No agent (human or AI) can forget the bump or leave locations diverged.
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  version-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
+        with:
+          fetch-depth: 0
+
+      - name: All version locations in sync
+        run: bash scripts/bump-version.sh check
+
+      - name: PR bumps VERSION
+        run: |
+          set -euo pipefail
+          base="${{ github.event.pull_request.base.sha }}"
+          if git diff --quiet "$base"...HEAD -- VERSION; then
+            echo "::error::This PR does not bump VERSION. Run 'scripts/bump-version.sh [patch|minor|major]' and commit the result."
+            exit 1
+          fi
+          echo "VERSION bumped in this PR."
