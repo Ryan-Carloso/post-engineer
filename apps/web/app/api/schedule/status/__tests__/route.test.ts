@@ -206,3 +206,27 @@ describe('GET auth', () => {
     expect(client.from).not.toHaveBeenCalledWith('scheduled_posts');
   });
 });
+
+describe('GET progress linkage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('selects task_id on upcoming slots so callers can poll get_video_task_progress', async () => {
+    const upcoming = [
+      { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'generating', topic: 'Next', schedule_id: 's1', task_id: 'task-1' },
+    ];
+    const client = mockPostsClient(upcoming, []);
+    mockAuthSession({ userId: USER_ID, accessToken: 'pe_test_key', isApiKey: true }, null);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/status'));
+    expect(response.status).toBe(200);
+    // The upcoming select must include task_id: the engine sets it when
+    // generation dispatches, and agents poll progress with it.
+    const selectCalls = client.chain.select.mock.calls.map((c) => String(c[0]));
+    expect(selectCalls.some((s) => s.includes('task_id'))).toBe(true);
+    const body = (await response.json()) as { upcoming: { task_id: string }[] };
+    expect(body.upcoming[0].task_id).toBe('task-1');
+  });
+});

@@ -651,6 +651,8 @@ export interface ScheduledSlot {
   topic: string | null;
   error?: string | null;
   publishedAt?: string | null;
+  // Engine task id, set when generation dispatches — poll progress with it.
+  taskId?: string | null;
 }
 
 interface ScheduleRow {
@@ -678,6 +680,7 @@ interface SlotRow {
   topic: string | null;
   error?: string | null;
   published_at?: string | null;
+  task_id?: string | null;
 }
 
 function mapSchedule(row: ScheduleRow): ScheduleConfig {
@@ -757,6 +760,7 @@ function mapSlot(row: SlotRow): ScheduledSlot {
     topic: row.topic,
     error: row.error,
     publishedAt: row.published_at,
+    taskId: row.task_id ?? null,
   };
 }
 
