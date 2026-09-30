@@ -19,6 +19,7 @@
 
 import { NextResponse } from 'next/server';
 import { logger } from './logger';
+import { scrubSecrets } from './scrub';
 
 export interface ApiErrorOptions {
   // Route identifier for debugging, e.g. 'POST /api/schedule'.
@@ -44,39 +45,12 @@ export interface ApiErrorOptions {
   extra?: Record<string, unknown>;
 }
 
-// Metadata keys matching this pattern are redacted before logging.
-// Matched case-insensitively; the value is replaced, the key is kept so
-// the presence of the field stays visible for debugging.
-const SECRET_KEY_PATTERN =
-  /password|passwd|secret|token|authorization|auth\b|api[-_]?key|bearer|credential|private[-_]?key|session/i;
+// Secret-scrubbing policy lives in ./scrub.ts (shared with analytics.ts):
+// metadata keys that look secret-bearing are redacted before logging.
 
-const REDACTED = '[redacted]';
-
-// Maximum recursion depth for scrubSecrets — metadata is caller-controlled
-// and flat by contract, so this is defense in depth, not a hot path.
-const MAX_SCRUB_DEPTH = 5;
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function scrubSecrets(metadata: Record<string, unknown>, depth = 0): Record<string, unknown> {
-  const scrubbed: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(metadata)) {
-    if (SECRET_KEY_PATTERN.test(key)) {
-      scrubbed[key] = REDACTED;
-    } else if (depth < MAX_SCRUB_DEPTH && isPlainRecord(value)) {
-      scrubbed[key] = scrubSecrets(value, depth + 1);
-    } else if (depth < MAX_SCRUB_DEPTH && Array.isArray(value)) {
-      scrubbed[key] = value.map((item) =>
-        isPlainRecord(item) ? scrubSecrets(item, depth + 1) : item,
-      );
-    } else {
-      scrubbed[key] = value;
-    }
-  }
-  return scrubbed;
-}
+//---------------
+// Public API: ApiErrorOptions
+//---------------
 
 function fallbackErrorId(): string {
   return `fallback_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8)}`;

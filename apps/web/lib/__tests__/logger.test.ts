@@ -32,7 +32,7 @@ describe('logger', () => {
     expect(console.log).toHaveBeenCalled();
   });
 
-  it('warn usa console.warn e debug usa console.log', () => {
+  it('warn uses console.warn and debug uses console.log', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     logger.warn('warning');
@@ -49,7 +49,7 @@ describe('logger', () => {
     expect(console.error).toHaveBeenCalled();
   });
 
-  it('logUploadStart / Progress / Success usam console.log', () => {
+  it('logUploadStart / Progress / Success use console.log', () => {
     const logId = '2026_101010_abc123';
     logger.logUploadStart(logId, { provider: 'youtube' });
     logger.logUploadProgress(logId, { uploadedBytes: 1, totalBytes: 2, percentage: 50 });
@@ -62,7 +62,7 @@ describe('logger', () => {
     expect(console.error).toHaveBeenCalled();
   });
 
-  it('logOAuth* cobrem start/callback/success/error', () => {
+  it('logOAuth* cover start/callback/success/error', () => {
     const logId = 'id';
     logger.logOAuthStart(logId);
     logger.logOAuthCallback(logId, 'code-1');
@@ -74,7 +74,7 @@ describe('logger', () => {
     expect(console.error).toHaveBeenCalledTimes(1);
   });
 
-  it('logInstagramAuthStart registra', () => {
+  it('logInstagramAuthStart records', () => {
     logger.logInstagramAuthStart('id');
     expect(console.log).toHaveBeenCalled();
   });
@@ -86,7 +86,7 @@ describe('logger', () => {
     expect(meta).toBeUndefined();
   });
 
-  it('generateLogId de chamadas repetidas gera ids distintos', () => {
+  it('repeated generateLogId calls produce distinct ids', () => {
     const id1 = logger.generateLogId();
     const id2 = logger.generateLogId();
     expect(id1).not.toBe(id2);
@@ -189,6 +189,51 @@ describe('logger production routing', () => {
     logger.logOAuthError('log-id', new Error('oauth boom'));
     expect(capture).toHaveBeenCalledTimes(2);
     expect(console.error).toHaveBeenCalledTimes(2);
+  });
+
+  it('sanitizes string causes: redacts credential-shaped fragments (api_key, Bearer)', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    logger.error(
+      'engine failed',
+      'upstream 500: invalid request https://engine.internal/run?api_key=sk-live-secret-12345 detail',
+    );
+
+    expect(capture).toHaveBeenCalledTimes(1);
+    const [, props] = capture.mock.calls[0] as [string, Record<string, unknown>];
+    const cause = props['cause'] as string;
+    expect(cause).not.toContain('sk-live-secret-12345');
+    expect(cause).toContain('api_key=[redacted]');
+  });
+
+  it('sanitizes string causes: redacts Bearer <redacted> and URL userinfo', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    logger.error(
+      'engine failed',
+      'call failed: Authorization Bearer abcdef123456, dsn https://user:pass@host/db',
+    );
+
+    const [, props] = capture.mock.calls[0] as [string, Record<string, unknown>];
+    const cause = props['cause'] as string;
+    expect(cause).not.toContain('abcdef123456');
+    expect(cause).toContain('Bearer [redacted]');
+    expect(cause).toContain('https://[redacted]@host/db');
+  });
+
+  it('sanitizes string causes: truncates to 200 chars (MCP sanitizeEngineError convention)', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    logger.error('engine failed', `prefix ${'x'.repeat(500)}`);
+
+    const [, props] = capture.mock.calls[0] as [string, Record<string, unknown>];
+    expect((props['cause'] as string).length).toBeLessThanOrEqual(200);
+  });
+
+  it('leaves non-string causes untouched', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const pgError = { message: 'boom', code: '23514' };
+    logger.error('insert failed', pgError);
+
+    const [, props] = capture.mock.calls[0] as [string, Record<string, unknown>];
+    expect(props['cause']).toBe(pgError);
   });
 
   it('a PostHog outage never breaks logging', () => {

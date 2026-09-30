@@ -9,6 +9,7 @@ import { validateScheduleWindow } from '@/lib/schedule-window';
 import { isValidTimezone, parseZonedDateTime, zonedTimeOnDate } from '@/lib/timezone';
 import { computeVideoTokens, toFiniteNumber, type FaceQuality } from '@/lib/tokens';
 import { apiErrorResponse } from '@/lib/api-error';
+import { trackApiEvent } from '@/lib/analytics';
 
 //---------------
 // /api/schedule — CRUD for the automatic fill-schedule timetables.
@@ -562,7 +563,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   // at its slot_at. Topics are stored up front — no LLM fallback.
   // NOTE: no explicit `id` — scheduled_posts.id is database-generated
   // (the batch route omits it too); sending a client uuid breaks the insert.
-  // The assigned ids come back through .select('id').
+  // The response is built from the rows the database returned (id, topic,
+  // slot_at) — never by zipping the insert payload with the returned ids,
+  // because INSERT order is not a pairing contract.
   const slotRows = slots.map((slot) => ({
     schedule_id: scheduleId,
     user_id: user.id,
@@ -573,7 +576,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   const { data: insertedSlots, error: slotsError } = await supabase
     .from('scheduled_posts')
     .insert(slotRows)
-    .select('id');
+    .select('id, topic, slot_at');
   if (slotsError || !insertedSlots || insertedSlots.length !== slotRows.length) {
     // When the insert succeeded but .select came back short/empty,
     // slotsError is null: log a distinct message with observed vs expected
@@ -593,23 +596,36 @@ export async function POST(request: Request): Promise<NextResponse> {
     });
   }
 
+  // Product analytics: a schedule was created successfully.
+  trackApiEvent('schedule_created', {
+    scheduleId,
+    slots: insertedSlots.length,
+    providers: providers.length,
+    personaId,
+  });
+
   return NextResponse.json(
     {
       success: true,
       schedule,
       // Slots are created pending, presented as awaiting; the generation
-      // queue starts here, so the position follows creation order.
-      slots: insertedSlots.map((row, index) => ({
-        id: (row as { id: unknown }).id,
-        topic: slotRows[index].topic,
-        slotAt: slotRows[index].slot_at,
-        status: 'awaiting',
-        progress: 0,
-        stage: null,
-        queuePosition: index + 1,
-        queueTotal: slotRows.length,
-        retryable: null,
-      })),
+      // queue starts here, so the position follows the returned order.
+      // Every field comes from the inserted row itself — see the note on
+      // the .select() above.
+      slots: insertedSlots.map((row, index) => {
+        const inserted = row as { id: unknown; topic: string; slot_at: string };
+        return {
+          id: inserted.id,
+          topic: inserted.topic,
+          slotAt: inserted.slot_at,
+          status: 'awaiting',
+          progress: 0,
+          stage: null,
+          queuePosition: index + 1,
+          queueTotal: insertedSlots.length,
+          retryable: null,
+        };
+      }),
     },
     { status: 201 },
   );

@@ -47,6 +47,30 @@ function toError(cause: unknown): Error {
 }
 
 //---------------
+// Raw upstream bodies (engine responses, provider errors) can echo
+// credential-shaped fragments: api_key query params, Bearer <redacted>,
+// DSN userinfo, sk- secrets. Mirror the MCP's sanitizeEngineError
+// convention: redact the fragments, then cap the length, before anything
+// reaches PostHog. Applied here in the reporter so every logger.error
+// caller is protected, not just the one that remembered to sanitize.
+//---------------
+
+const MAX_REPORT_BODY_CHARS = 200;
+
+function redactCredentialFragments(text: string): string {
+  return text
+    .replace(/\bBearer\s+[^\s]+/gi, 'Bearer [redacted]')
+    .replace(/(https?:\/\/)[^\s/@]+@/gi, '$1[redacted]@')
+    .replace(/([?&](?:api[_-]?key|access[_-]?token|token)=)[^\s&]+/gi, '$1[redacted]')
+    .replace(/\bsk-[A-Za-z0-9_-]{20,}/g, '[redacted]');
+}
+
+function sanitizeReportBody(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  return redactCredentialFragments(value).slice(0, MAX_REPORT_BODY_CHARS);
+}
+
+//---------------
 // PostHog reporters — production only, and never allowed to throw.
 // Telemetry must never break the request path.
 //---------------
@@ -60,6 +84,8 @@ function reportErrorToPostHog(message: string, cause: unknown, metadata?: Record
     // PostHog error tracking ingests $exception events with these properties.
     // Keep the raw failure (e.g. the PostgREST { message, code, details, hint }
     // object) in properties so the PostHog issue shows the real database error.
+    // String causes (raw upstream bodies) are sanitized first: credential
+    // fragments redacted, length capped — see sanitizeReportBody.
     const properties: Record<string, unknown> = {
       $exception_message: error.message,
       $exception_type: error.name,
@@ -67,7 +93,7 @@ function reportErrorToPostHog(message: string, cause: unknown, metadata?: Record
       log_message: message,
       ...metadata,
     };
-    if (!(cause instanceof Error) && cause !== undefined) properties['cause'] = cause;
+    if (!(cause instanceof Error) && cause !== undefined) properties['cause'] = sanitizeReportBody(cause);
     client.capture('$exception', properties);
   } catch {
     // Telemetry must never break the request path.

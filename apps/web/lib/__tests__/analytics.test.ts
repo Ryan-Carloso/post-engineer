@@ -45,6 +45,15 @@ describe('trackApiEvent', () => {
     expect(props['safe']).toBe('ok');
   });
 
+  it('redacts secret-bearing keys in nested properties (shared recursive scrub)', () => {
+    const capture = vi.fn();
+    (getPostHogServer as ReturnType<typeof vi.fn>).mockReturnValue({ capture });
+    trackApiEvent('test', { outer: { apiKey: 'sk-123', n: 1 } });
+    const [, props] = (capture as ReturnType<typeof vi.fn>).mock.calls[0] as [string, Record<string, unknown>];
+    expect((props['outer'] as Record<string, unknown>)['apiKey']).toBe('[redacted]');
+    expect((props['outer'] as Record<string, unknown>)['n']).toBe(1);
+  });
+
   it('never throws even if capture throws', () => {
     (getPostHogServer as ReturnType<typeof vi.fn>).mockReturnValue({
       capture: () => { throw new Error('boom'); },

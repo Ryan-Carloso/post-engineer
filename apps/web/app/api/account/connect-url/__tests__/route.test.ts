@@ -161,13 +161,47 @@ describe('POST /api/account/connect-url', () => {
     expect(body.error).toBe('state_store_failed');
   });
 
-  it('returns 500 + generic code on unexpected failure', async () => {
+  it('reports the redirect-URI 500 once: cause threaded through apiErrorResponse, no pre-logging', async () => {
+    mockAuth(true);
+    vi.mocked(resolveOAuthRedirectUri).mockImplementationOnce(() => {
+      throw new Error('redirect env missing');
+    });
+    const res = await POST(makeRequest({ provider: 'instagram' }));
+    expect(res.status).toBe(500);
+    // No double-reporting: the failure is logged exactly once, by
+    // apiErrorResponse, with the underlying cause attached.
+    expect(logger.logOAuthError).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    const [, cause] = vi.mocked(logger.error).mock.calls[0] as [string, unknown];
+    expect(cause).toBeInstanceOf(Error);
+    expect((cause as Error).message).toBe('redirect env missing');
+  });
+
+  it('reports the provider-not-configured 500 once, with the build failure as cause', async () => {
+    mockAuth(true);
+    vi.mocked(buildOAuthConnectUrl).mockResolvedValue({
+      ok: false,
+      error: 'Instagram credentials are not configured.',
+    });
+    const res = await POST(makeRequest({ provider: 'instagram' }));
+    expect(res.status).toBe(500);
+    expect(logger.logOAuthError).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    const [, cause] = vi.mocked(logger.error).mock.calls[0] as [string, unknown];
+    expect((cause as Error).message).toContain('Instagram credentials are not configured.');
+  });
+
+  it('reports unexpected failures once, with the thrown error as cause', async () => {
     mockAuth(true);
     vi.mocked(buildOAuthConnectUrl).mockRejectedValueOnce(new Error('boom'));
     const res = await POST(makeRequest({ provider: 'instagram' }));
     expect(res.status).toBe(500);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe('internal_error');
+    expect(logger.logOAuthError).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    const [, cause] = vi.mocked(logger.error).mock.calls[0] as [string, unknown];
+    expect((cause as Error).message).toBe('boom');
   });
 
   it('logs the issuance with provider, userId and state reference', async () => {

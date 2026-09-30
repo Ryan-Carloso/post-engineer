@@ -12,23 +12,7 @@
 //---------------
 
 import { getPostHogServer } from './posthog-server';
-
-//---------------
-// Secret scrubbing (same policy as api-error.ts: defense in depth).
-//---------------
-
-const SECRET_KEY_PATTERN =
-  /password|passwd|secret|token|authorization|auth\b|api[-_]?key|bearer|credential|private[-_]?key|session/i;
-
-const REDACTED = '[redacted]';
-
-function scrubSecrets(properties: Record<string, unknown>): Record<string, unknown> {
-  const scrubbed: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(properties)) {
-    scrubbed[key] = SECRET_KEY_PATTERN.test(key) ? REDACTED : value;
-  }
-  return scrubbed;
-}
+import { scrubSecrets } from './scrub';
 
 //---------------
 // Public API

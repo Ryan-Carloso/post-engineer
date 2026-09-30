@@ -329,6 +329,14 @@ describe('POST /api/schedule/batch', () => {
     // kind='batch': never the kind='recurring' default, or the partial
     // unique index schedules_persona_owner_recurring would reject the
     // persona's next schedule with a 500.
+    //
+    // DB schema anchor: migration 0026
+    // (apps/web/supabase/migrations/0026_schedule_batch_kind.sql) defines
+    // CONSTRAINT schedules_kind_check CHECK (kind IN ('recurring', 'batch')).
+    // The inserted literal must be one of those two values — and 'batch'
+    // for batch rows — or the insert fails at the database.
+    const SCHEDULE_KIND_CHECK_VALUES = ['recurring', 'batch'] as const;
+    expect(SCHEDULE_KIND_CHECK_VALUES).toContain(scheduleRow.kind);
     expect(scheduleRow.kind).toBe('batch');
 
     // N slots, topics in request order, future datetimes

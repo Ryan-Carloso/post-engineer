@@ -1,11 +1,15 @@
 "use client";
 
 import { useEffect } from "react";
-import { logger } from "@/lib/logger";
+import { logClientError } from "@/lib/client-logger";
 
 //---------------
 // Root error boundary (global-error): reports React render errors to
 // PostHog and offers a page reload. Must render <html>/<body>.
+//
+// Client component: reports through the browser PostHog SDK
+// (lib/client-logger.ts). The server logger is server-only
+// (posthog-node) and cannot be imported here.
 //---------------
 
 export default function GlobalError({
@@ -16,7 +20,7 @@ export default function GlobalError({
   reset: () => void;
 }): React.JSX.Element {
   useEffect(() => {
-    logger.error("React render error (global-error boundary)", error, {
+    logClientError("React render error (global-error boundary)", error, {
       digest: error.digest,
     });
   }, [error]);

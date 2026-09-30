@@ -18,12 +18,16 @@ vi.mock('@/lib/logger', () => ({
     debug: vi.fn(),
   },
 }));
+vi.mock('@/lib/analytics', () => ({
+  trackApiEvent: vi.fn(),
+}));
 
 import { GET, POST, PATCH, DELETE } from '../route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { logger } from '@/lib/logger';
+import { trackApiEvent } from '@/lib/analytics';
 
 const USER_ID = 'user-1';
 
@@ -59,6 +63,9 @@ function mockSupabase(handlers: {
   const deleteCalls: { table: string }[] = [];
   const rpcCalls: { name: string; params: unknown }[] = [];
   const selectArgs: string[] = [];
+  // Column list requested by the scheduled_posts insert's .select() —
+  // pins that the route reads back id, topic AND slot_at (MINOR 7).
+  const slotSelectArgs: string[] = [];
   const client = {
     auth: {
       getUser: vi.fn(async () =>
@@ -114,7 +121,10 @@ function mockSupabase(handlers: {
               ? { data: null, error: handlers.slotsInsert.error }
               : { data: handlers.slotsInsert?.returnedRows ?? withIds, error: null };
             return {
-              select: vi.fn(() => Promise.resolve(result)),
+              select: vi.fn((cols: string) => {
+                slotSelectArgs.push(String(cols));
+                return Promise.resolve(result);
+              }),
             };
           }),
           delete: vi.fn(() => {
@@ -172,7 +182,7 @@ function mockSupabase(handlers: {
     error: null,
   });
   vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
-  return Object.assign(client, { insertedRows, updatedRows, slotRows, sentSlotRows, deleteCalls, rpcCalls, selectArgs });
+  return Object.assign(client, { insertedRows, updatedRows, slotRows, sentSlotRows, slotSelectArgs, deleteCalls, rpcCalls, selectArgs });
 }
 
 function jsonRequest(body: unknown, method = 'PATCH'): Request {
@@ -208,7 +218,7 @@ describe('/api/schedule', () => {
     vi.clearAllMocks();
   });
 
-  it('GET retorna 401 sem sessão', async () => {
+  it('GET returns 401 without a session', async () => {
     mockSupabase({ noSession: true });
     vi.mocked(requireSupabaseSession).mockResolvedValue({
       auth: null,
@@ -218,7 +228,7 @@ describe('/api/schedule', () => {
     expect(res.status).toBe(401);
   });
 
-  it('GET lista as agendas do usuário', async () => {
+  it('GET lists the user schedules', async () => {
     mockSupabase({ list: { data: [{ id: 's-1' }], error: null } });
     const res = await GET();
     expect(res.status).toBe(200);
@@ -226,7 +236,7 @@ describe('/api/schedule', () => {
     expect(body.schedules).toHaveLength(1);
   });
 
-  it('POST cria agenda one-off válida', async () => {
+  it('POST creates a valid one-off schedule', async () => {
     oneOffSupabase({});
     const res = await POST(jsonRequest(validOneOffBody, 'POST'));
     expect(res.status).toBe(201);
@@ -235,7 +245,7 @@ describe('/api/schedule', () => {
     expect(body.schedule.id).toBe('s-1');
   });
 
-  it('POST persiste scheduled_at e ignora campos de recorrência (PR #21)', async () => {
+  it('POST persists scheduled_at and ignores recurring fields (PR #21)', async () => {
     const db = oneOffSupabase({});
     const res = await POST(jsonRequest({
       ...validOneOffBody,
@@ -255,27 +265,27 @@ describe('/api/schedule', () => {
     });
   });
 
-  it('POST persiste times quando enviados', async () => {
+  it('POST persists times when sent', async () => {
     const db = oneOffSupabase({});
     const res = await POST(jsonRequest({ ...validOneOffBody, postsPerDay: 3, topics: ['t1', 't2', 't3'], times: ['08:15', '12:45', '20:00'] }, 'POST'));
     expect(res.status).toBe(201);
     expect(db.insertedRows[0].times).toEqual(['08:15', '12:45', '20:00']);
   });
 
-  it('POST sem times persiste array vazio', async () => {
+  it('POST without times persists an empty array', async () => {
     const db = oneOffSupabase({});
     const res = await POST(jsonRequest(validOneOffBody, 'POST'));
     expect(res.status).toBe(201);
     expect(db.insertedRows[0].times).toEqual([]);
   });
 
-  it('POST rejeita times com formato inválido', async () => {
+  it('POST rejects times with an invalid format', async () => {
     oneOffSupabase({});
     const res = await POST(jsonRequest({ ...validOneOffBody, times: ['9h', '25:00'] }, 'POST'));
     expect(res.status).toBe(400);
   });
 
-  it('POST rejeita times com tamanho diferente do número de topics', async () => {
+  it('POST rejects times whose length differs from the topics count', async () => {
     oneOffSupabase({});
     const res = await POST(jsonRequest({ ...validOneOffBody, topics: ['t1'], times: ['09:00', '12:00', '18:00'] }, 'POST'));
     expect(res.status).toBe(400);
@@ -283,7 +293,7 @@ describe('/api/schedule', () => {
     expect(body.error).toMatch(/times.*topic/i);
   });
 
-  it('POST rejeita múltiplos topics sem times', async () => {
+  it('POST rejects multiple topics without times', async () => {
     oneOffSupabase({});
     const res = await POST(jsonRequest({ ...validOneOffBody, postsPerDay: 2, topics: ['t1', 't2'] }, 'POST'));
     expect(res.status).toBe(400);
@@ -291,7 +301,7 @@ describe('/api/schedule', () => {
     expect(body.error).toMatch(/times/i);
   });
 
-  it('POST sem scheduledAt retorna 400 (recorrência removida na PR #21)', async () => {
+  it('POST without scheduledAt returns 400 (recurrence removed in PR #21)', async () => {
     mockSupabase({});
     const { scheduledAt: _ignored, ...noDate } = validOneOffBody;
     const res = await POST(jsonRequest(noDate, 'POST'));
@@ -300,7 +310,7 @@ describe('/api/schedule', () => {
     expect(body.error).toMatch(/scheduledAt is required/i);
   });
 
-  it('POST rejeita scheduledAt com menos de 24h de antecedência', async () => {
+  it('POST rejects scheduledAt less than 24h ahead', async () => {
     mockSupabase({});
     const tooSoon = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
     const res = await POST(jsonRequest({ ...validOneOffBody, scheduledAt: tooSoon }, 'POST'));
@@ -309,7 +319,7 @@ describe('/api/schedule', () => {
     expect(body.error).toMatch(/at least 24 hours/i);
   });
 
-  it('POST rejeita scheduledAt além de 30 dias', async () => {
+  it('POST rejects scheduledAt beyond 30 days', async () => {
     mockSupabase({});
     const tooFar = new Date(Date.now() + 31 * 24 * 60 * 60 * 1000).toISOString();
     const res = await POST(jsonRequest({ ...validOneOffBody, scheduledAt: tooFar }, 'POST'));
@@ -318,13 +328,13 @@ describe('/api/schedule', () => {
     expect(body.error).toMatch(/more than 30 days/i);
   });
 
-  it('POST rejeita scheduledAt com formato inválido', async () => {
+  it('POST rejects scheduledAt with an invalid format', async () => {
     mockSupabase({});
     const res = await POST(jsonRequest({ ...validOneOffBody, scheduledAt: 'not-a-date' }, 'POST'));
     expect(res.status).toBe(400);
   });
 
-  it('POST retorna 401 sem sessão', async () => {
+  it('POST returns 401 without a session', async () => {
     mockSupabase({ noSession: true });
     vi.mocked(requireSupabaseSession).mockResolvedValue({
       auth: null,
@@ -334,25 +344,25 @@ describe('/api/schedule', () => {
     expect(res.status).toBe(401);
   });
 
-  it('POST com JSON inválido retorna 400', async () => {
+  it('POST with invalid JSON returns 400', async () => {
     mockSupabase({});
     const res = await POST(new Request('http://localhost/api/schedule', { method: 'POST', body: '{invalid' }));
     expect(res.status).toBe(400);
   });
 
-  it('POST sem personaId retorna 400', async () => {
+  it('POST without personaId returns 400', async () => {
     mockSupabase({});
     const res = await POST(jsonRequest({ ...validOneOffBody, personaId: undefined }, 'POST'));
     expect(res.status).toBe(400);
   });
 
-  it('POST rejeita provider inválido', async () => {
+  it('POST rejects an invalid provider', async () => {
     mockSupabase({});
     const res = await POST(jsonRequest({ ...validOneOffBody, providers: ['tiktok'] }, 'POST'));
     expect(res.status).toBe(400);
   });
 
-  it('POST exige conta para o provider selecionado (bluesky sem contas → 400)', async () => {
+  it('POST requires an account for the selected provider (bluesky without accounts → 400)', async () => {
     oneOffSupabase({});
     const res = await POST(jsonRequest({
       ...validOneOffBody,
@@ -364,7 +374,7 @@ describe('/api/schedule', () => {
     expect(body.error).toMatch(/blueskyAccountIds/i);
   });
 
-  it('POST cria agenda com provider bluesky e persiste bluesky_account_ids', async () => {
+  it('POST creates a schedule with the bluesky provider and persists bluesky_account_ids', async () => {
     const db = oneOffSupabase({
       accountsByProvider: {
         youtube: [{ provider_account_id: 'yt-1' }, { provider_account_id: 'yt-2' }],
@@ -383,7 +393,7 @@ describe('/api/schedule', () => {
     });
   });
 
-  it('POST rejeita conta de outro usuário', async () => {
+  it('POST rejects another user account', async () => {
     oneOffSupabase({
       accountsByProvider: { youtube: [{ provider_account_id: 'yt-1' }, { provider_account_id: 'yt-2' }] },
     });
@@ -396,20 +406,20 @@ describe('/api/schedule', () => {
     expect(body.error).toMatch(/Invalid youtube account selection/);
   });
 
-  it('POST retorna 404 quando persona não é do usuário', async () => {
+  it('POST returns 404 when the persona is not the user\'s', async () => {
     oneOffSupabase({ persona: { data: null } });
     const res = await POST(jsonRequest(validOneOffBody, 'POST'));
     expect(res.status).toBe(404);
   });
 
-  it('POST permite várias agendas para a mesma persona', async () => {
+  it('POST allows several schedules for the same persona', async () => {
     const db = oneOffSupabase({ existing: { data: { id: 's-0' } } });
     const res = await POST(jsonRequest(validOneOffBody, 'POST'));
     expect(res.status).toBe(201);
     expect(db.insertedRows).toHaveLength(1);
   });
 
-  it('POST retorna 500 quando o insert falha', async () => {
+  it('POST returns 500 when the insert fails', async () => {
     oneOffSupabase({ insert: { data: null, error: { message: 'boom' } } });
     const res = await POST(jsonRequest(validOneOffBody, 'POST'));
     expect(res.status).toBe(500);
@@ -420,7 +430,7 @@ describe('/api/schedule', () => {
 
 
 
-  it('PATCH atualiza times', async () => {
+  it('PATCH updates times', async () => {
     const db = mockSupabase({
       list: { data: [], error: null },
       current: { data: { posts_per_day: 2 } },
@@ -431,7 +441,7 @@ describe('/api/schedule', () => {
     expect(db.updatedRows[0].times).toEqual(['07:00']);
   });
 
-  it('PATCH rejeita times inválidos', async () => {
+  it('PATCH rejects invalid times', async () => {
     mockSupabase({ list: { data: [], error: null }, update: { error: null } });
     const res = await PATCH(jsonRequest({ id: 's-1', times: ['bad'] }, 'PATCH'));
     expect(res.status).toBe(400);
@@ -452,13 +462,13 @@ describe('/api/schedule', () => {
 
 
 
-  it('GET inclui bluesky_account_ids no select', async () => {
+  it('GET includes bluesky_account_ids in the select', async () => {
     const db = mockSupabase({ list: { data: [], error: null } });
     await GET();
     expect(db.selectArgs.some((arg) => arg.includes('bluesky_account_ids'))).toBe(true);
   });
 
-  it('PATCH linkedinAccountIds atualiza coluna e recalcula providers', async () => {
+  it('PATCH linkedinAccountIds updates the column and recalculates providers', async () => {
     const db = mockSupabase({
       current: {
         data: { youtube_account_ids: ['yt-1'], instagram_account_ids: ['ig-1'], linkedin_account_ids: [] },
@@ -483,7 +493,7 @@ describe('/api/schedule', () => {
     });
   });
 
-  it('PATCH blueskyAccountIds atualiza coluna e recalcula providers', async () => {
+  it('PATCH blueskyAccountIds updates the column and recalculates providers', async () => {
     const db = mockSupabase({
       current: {
         data: { youtube_account_ids: ['yt-1'], instagram_account_ids: [], linkedin_account_ids: [], bluesky_account_ids: [] },
@@ -508,7 +518,7 @@ describe('/api/schedule', () => {
     });
   });
 
-  it('PATCH parcial preserva contas bluesky não enviadas', async () => {
+  it('PATCH partial preserves unsent bluesky accounts', async () => {
     const db = mockSupabase({
       current: {
         data: { youtube_account_ids: ['yt-1'], instagram_account_ids: [], linkedin_account_ids: [], bluesky_account_ids: ['did:plc:abc'] },
@@ -532,7 +542,7 @@ describe('/api/schedule', () => {
       providers: ['youtube', 'linkedin', 'bluesky'],
     });
   });
-  it('PATCH parcial preserva contas das redes não enviadas', async () => {
+  it('PATCH partial preserves unsent network accounts', async () => {
     const db = mockSupabase({
       current: {
         data: { youtube_account_ids: ['yt-1'], instagram_account_ids: ['ig-1'], linkedin_account_ids: [] },
@@ -557,7 +567,7 @@ describe('/api/schedule', () => {
     });
   });
 
-  it('PATCH rejeita conta de outra pessoa (ownership validado no merge final)', async () => {
+  it('PATCH rejects another person\'s account (ownership validated on the final merge)', async () => {
     mockSupabase({
       current: {
         data: { youtube_account_ids: ['yt-1'], instagram_account_ids: [], linkedin_account_ids: [], bluesky_account_ids: [] },
@@ -581,7 +591,7 @@ describe('/api/schedule', () => {
     expect(body.error).toContain('recordId');
   });
 
-  it('PATCH rejeita conta mantida que não é mais do usuário', async () => {
+  it('PATCH rejects a kept account that is no longer the user\'s', async () => {
     // Kept (not sent) fields are re-checked against social_accounts whenever
     // any account field is sent, so a revoked account cannot linger in the
     // merged selection.
@@ -602,7 +612,7 @@ describe('/api/schedule', () => {
     expect(body.error).toContain('recordId');
   });
 
-  it('PATCH retorna 404 quando schedule não existe', async () => {
+  it('PATCH returns 404 when the schedule does not exist', async () => {
     mockSupabase({});
     const res = await PATCH(jsonRequest({ id: 's-404', linkedinAccountIds: ['x'] }, 'PATCH'));
     expect(res.status).toBe(404);
@@ -610,25 +620,25 @@ describe('/api/schedule', () => {
 
 
 
-  it('PATCH com active=false pausa a agenda', async () => {
+  it('PATCH with active=false pauses the schedule', async () => {
     mockSupabase({ update: { error: null } });
     const res = await PATCH(jsonRequest({ id: 's-1', active: false }, 'PATCH'));
     expect(res.status).toBe(200);
   });
 
-  it('PATCH sem nada para atualizar retorna 400', async () => {
+  it('PATCH with nothing to update returns 400', async () => {
     mockSupabase({});
     const res = await PATCH(jsonRequest({ id: 's-1' }, 'PATCH'));
     expect(res.status).toBe(400);
   });
 
-  it('DELETE remove por id', async () => {
+  it('DELETE removes by id', async () => {
     mockSupabase({ remove: { error: null } });
     const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
     expect(res.status).toBe(200);
   });
 
-  it('DELETE sem id retorna 400', async () => {
+  it('DELETE without id returns 400', async () => {
     mockSupabase({});
     const res = await DELETE(new Request('http://localhost/api/schedule'));
     expect(res.status).toBe(400);
@@ -776,7 +786,7 @@ function wallClockIn(instant: string, tz: string): string {
 }
 
 describe('POST /api/schedule timezone handling', () => {
-  it('converte scheduledAt naive para o timezone enviado em vez de assumir UTC', async () => {
+  it('converts naive scheduledAt to the sent timezone instead of assuming UTC', async () => {
     const db = oneOffSupabase({});
     // America/Sao_Paulo is fixed UTC-3 (no DST): 14:00 wall clock is 17:00Z.
     const naive = naiveWallClock(3 * 86400000);
@@ -788,7 +798,7 @@ describe('POST /api/schedule timezone handling', () => {
     expect(db.insertedRows[0]).toMatchObject({ scheduled_at: `${datePart}T17:00:00.000Z` });
   });
 
-  it('preserva o wall clock no timezone enviado (regressão do bug reportado)', async () => {
+  it('preserves the wall clock in the sent timezone (reported-bug regression)', async () => {
     const db = oneOffSupabase({});
     const naive = naiveWallClock(3 * 86400000);
     const res = await POST(
@@ -800,7 +810,7 @@ describe('POST /api/schedule timezone handling', () => {
     expect(wallClockIn(stored, 'Europe/Lisbon')).toBe(`${datePart} 14:00`);
   });
 
-  it('respeita offset explícito em scheduledAt, ignorando o timezone', async () => {
+  it('respects an explicit offset in scheduledAt, ignoring the timezone', async () => {
     const db = oneOffSupabase({});
     const res = await POST(
       jsonRequest(
@@ -812,7 +822,7 @@ describe('POST /api/schedule timezone handling', () => {
     expect(db.insertedRows[0]).toMatchObject({ scheduled_at: '2026-10-05T13:00:00.000Z' });
   });
 
-  it('rejeita timezone inválido com 400 sem criar nada', async () => {
+  it('rejects an invalid timezone with 400 without creating anything', async () => {
     const db = oneOffSupabase({});
     const res = await POST(
       jsonRequest({ ...validOneOffBody, timezone: 'Mars/Olympus' }, 'POST'),
@@ -821,7 +831,7 @@ describe('POST /api/schedule timezone handling', () => {
     expect(db.insertedRows).toHaveLength(0);
   });
 
-  it('valida a janela de 24h sobre o instante convertido, não sobre o naive', async () => {
+  it('validates the 24h window on the converted instant, not on the naive value', async () => {
     const db = oneOffSupabase({});
     // 23h out as a naive wall clock; in America/Sao_Paulo (-3) the real
     // instant is 26h out — inside the window. The old code (naive as UTC)
@@ -834,7 +844,7 @@ describe('POST /api/schedule timezone handling', () => {
     expect(db.insertedRows).toHaveLength(1);
   });
 
-  it('rejeita scheduledAt inválido com 400', async () => {
+  it('rejects invalid scheduledAt with 400', async () => {
     const db = oneOffSupabase({});
     const res = await POST(
       jsonRequest({ ...validOneOffBody, scheduledAt: 'not-a-date' }, 'POST'),
@@ -849,7 +859,7 @@ describe('POST /api/schedule topics → slots → charging', () => {
     vi.clearAllMocks();
   });
 
-  it('cria um scheduled_posts por topic, com topic persistido e status pending', async () => {
+  it('creates one scheduled_posts per topic, with topic persisted and status pending', async () => {
     const db = oneOffSupabase({});
     const res = await POST(
       jsonRequest(
@@ -879,7 +889,7 @@ describe('POST /api/schedule topics → slots → charging', () => {
     expect(db.slotRows[1]).toMatchObject({ slot_at: `${datePart}T21:00:00.000Z` });
   });
 
-  it('retorna os slots criados (id, topic, slotAt) para polling de progresso', async () => {
+  it('returns the created slots (id, topic, slotAt) for progress polling', async () => {
     oneOffSupabase({});
     const res = await POST(
       jsonRequest(
@@ -912,7 +922,74 @@ describe('POST /api/schedule topics → slots → charging', () => {
     expect(body.slots[1]).toMatchObject({ status: 'awaiting', queuePosition: 2, queueTotal: 2 });
   });
 
-  it('rejeita topics ausente com 400 sem criar nada nem gastar tokens', async () => {
+  it('reads back id, topic and slot_at for the inserted slots (never zips the insert payload)', async () => {
+    const db = oneOffSupabase({});
+    const res = await POST(
+      jsonRequest(
+        { ...validOneOffBody, postsPerDay: 1, topics: ['t1'], times: ['09:00'] },
+        'POST',
+      ),
+    );
+    expect(res.status).toBe(201);
+    expect(db.slotSelectArgs).toContain('id, topic, slot_at');
+  });
+
+  it('builds the slots response from the returned rows only', async () => {
+    // The database echoes back its own topic/slot_at values: if the route
+    // zipped the insert payload with the returned ids, the response would
+    // show the request values instead of these.
+    const returnedRows = [
+      { id: 'db-slot-9', topic: 'Stored A', slot_at: '2026-10-02T12:00:00.000Z', status: 'pending' },
+      { id: 'db-slot-7', topic: 'Stored B', slot_at: '2026-10-02T18:00:00.000Z', status: 'pending' },
+    ];
+    oneOffSupabase({ slotsInsert: { returnedRows } });
+    const res = await POST(
+      jsonRequest(
+        { ...validOneOffBody, postsPerDay: 2, topics: ['t1', 't2'], times: ['09:00', '18:00'] },
+        'POST',
+      ),
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as {
+      slots: { id: string; topic: string; slotAt: string; queueTotal: number }[];
+    };
+    expect(body.slots).toHaveLength(2);
+    expect(body.slots[0]).toMatchObject({
+      id: 'db-slot-9',
+      topic: 'Stored A',
+      slotAt: '2026-10-02T12:00:00.000Z',
+    });
+    expect(body.slots[1]).toMatchObject({
+      id: 'db-slot-7',
+      topic: 'Stored B',
+      slotAt: '2026-10-02T18:00:00.000Z',
+    });
+    expect(body.slots[0].queueTotal).toBe(2);
+  });
+
+  it('tracks schedule_created on success (2xx product analytics)', async () => {
+    oneOffSupabase({});
+    const res = await POST(
+      jsonRequest(
+        { ...validOneOffBody, postsPerDay: 2, topics: ['t1', 't2'], times: ['09:00', '18:00'] },
+        'POST',
+      ),
+    );
+    expect(res.status).toBe(201);
+    expect(trackApiEvent).toHaveBeenCalledWith(
+      'schedule_created',
+      expect.objectContaining({ slots: 2, providers: 1, personaId: 'p-1' }),
+    );
+  });
+
+  it('does not track schedule_created when creation fails', async () => {
+    oneOffSupabase({ persona: { data: null } });
+    const res = await POST(jsonRequest(validOneOffBody, 'POST'));
+    expect(res.status).toBe(404);
+    expect(trackApiEvent).not.toHaveBeenCalled();
+  });
+
+  it('rejects a missing topics with 400 without creating anything or spending tokens', async () => {
     const db = oneOffSupabase({});
     const { topics: _ignored, ...noTopics } = validOneOffBody;
     const res = await POST(jsonRequest(noTopics, 'POST'));
@@ -922,7 +999,7 @@ describe('POST /api/schedule topics → slots → charging', () => {
     expect(db.rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
   });
 
-  it('rejeita topics vazio, com mais de 10, ou com strings vazias', async () => {
+  it('rejects empty topics, more than 10, or blank strings', async () => {
     for (const topics of [[], Array.from({ length: 11 }, (_, i) => `t${i}`), ['ok', '  ']]) {
       const db = oneOffSupabase({});
       const res = await POST(
@@ -934,7 +1011,7 @@ describe('POST /api/schedule topics → slots → charging', () => {
     }
   });
 
-  it('rejeita postsPerDay diferente do número de topics', async () => {
+  it('rejects postsPerDay different from the number of topics', async () => {
     const db = oneOffSupabase({});
     const res = await POST(
       jsonRequest({ ...validOneOffBody, postsPerDay: 2, topics: ['only-one'] }, 'POST'),
@@ -945,7 +1022,7 @@ describe('POST /api/schedule topics → slots → charging', () => {
     expect(db.insertedRows).toHaveLength(0);
   });
 
-  it('cobra os tokens adiantado (fail-fast) antes de criar qualquer row', async () => {
+  it('charges the tokens upfront (fail-fast) before creating any row', async () => {
     const db = oneOffSupabase({});
     const res = await POST(
       jsonRequest(
@@ -963,7 +1040,7 @@ describe('POST /api/schedule topics → slots → charging', () => {
     expect(params.p_generation_id).toMatch(/^batch:/);
   });
 
-  it('saldo insuficiente → 400 INSUFFICIENT sem criar schedule nem slots', async () => {
+  it('insufficient balance → 400 INSUFFICIENT without creating schedule or slots', async () => {
     const db = oneOffSupabase({
       rpc: { spend: { data: { spent: false, balance: 1 }, error: null } },
     });
@@ -982,7 +1059,7 @@ describe('POST /api/schedule topics → slots → charging', () => {
     expect(db.slotRows).toHaveLength(0);
   });
 
-  it('falha no insert dos slots → rollback (apaga schedule) e refund', async () => {
+  it('slots insert failure → rollback (deletes schedule) and refund', async () => {
     const db = oneOffSupabase({ slotsInsert: { error: { message: 'slots boom' } } });
     const res = await POST(
       jsonRequest(
@@ -993,12 +1070,12 @@ describe('POST /api/schedule topics → slots → charging', () => {
     expect(res.status).toBe(500);
     const refunds = db.rpcCalls.filter((c) => c.name === 'refund_generation_tokens');
     expect(refunds).toHaveLength(1);
-    // O rollback apaga os slots parciais e o schedule já criado.
+    // The rollback deletes the partial slots and the already-created schedule.
     expect(db.deleteCalls.filter((c) => c.table === 'scheduled_posts')).toHaveLength(1);
     expect(db.deleteCalls.filter((c) => c.table === 'schedules')).toHaveLength(1);
   });
 
-  it('falha no insert do schedule → refund sem criar slots', async () => {
+  it('schedule insert failure → refund without creating slots', async () => {
     const db = oneOffSupabase({ insert: { data: null, error: { message: 'boom' } } });
     const res = await POST(jsonRequest(validOneOffBody, 'POST'));
     expect(res.status).toBe(500);
@@ -1007,8 +1084,8 @@ describe('POST /api/schedule topics → slots → charging', () => {
     expect(refunds).toHaveLength(1);
   });
 
-  it('select de ids retorna menos linhas que o insert → rollback (apaga schedule+slots) e refund', async () => {
-    // The insert succeeds but .select('id') comes back short: same
+  it('id select returns fewer rows than the insert → rollback (deletes schedule+slots) and refund', async () => {
+    // The insert succeeds but the .select comes back short: same
     // compensating path as a failed insert — 500, both deletes, refund.
     const db = oneOffSupabase({ slotsInsert: { returnedRows: [{ id: 'db-slot-1' }] } });
     const res = await POST(
@@ -1056,7 +1133,7 @@ describe('POST /api/schedule multi-day times (one request, several days)', () =>
     return new Date(`${wallClock}-03:00`).toISOString();
   }
 
-  it('cria slots em dias diferentes num único request', async () => {
+  it('creates slots on different days in a single request', async () => {
     const db = oneOffSupabase({});
     const t1 = wallClockInSP(2 * DAY_MS, '15:00');
     const t2 = wallClockInSP(3 * DAY_MS, '10:30');
@@ -1084,7 +1161,7 @@ describe('POST /api/schedule multi-day times (one request, several days)', () =>
     expect(spends).toHaveLength(1);
   });
 
-  it('rejeita datetime além de 30 dias nomeando a entrada, sem criar nada nem gastar', async () => {
+  it('rejects datetime beyond 30 days naming the entry, without creating or spending', async () => {
     const db = oneOffSupabase({});
     const bad = wallClockInSP(40 * DAY_MS, '10:00');
     const res = await POST(
@@ -1106,7 +1183,7 @@ describe('POST /api/schedule multi-day times (one request, several days)', () =>
     expect(db.rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
   });
 
-  it('rejeita datetime com menos de 24h de antecedência', async () => {
+  it('rejects datetime less than 24h ahead', async () => {
     const db = oneOffSupabase({});
     const soon = wallClockInSP(2 * 60 * 60 * 1000, '10:00');
     const res = await POST(
@@ -1140,10 +1217,19 @@ describe('POST /api/schedule multi-day times (one request, several days)', () =>
     // partial unique index schedules_persona_owner_recurring would reject
     // the persona's second schedule with a 500 (PR #28 removed the 409
     // guard, but the DB guard still fires on the default).
+    //
+    // DB schema anchor: migration 0026
+    // (apps/web/supabase/migrations/0026_schedule_batch_kind.sql) defines
+    // CONSTRAINT schedules_kind_check CHECK (kind IN ('recurring', 'batch')).
+    // The inserted literal must be one of those two values — and 'batch'
+    // for one-off rows — or the insert fails at the database.
+    const SCHEDULE_KIND_CHECK_VALUES = ['recurring', 'batch'] as const;
+    const kind = (db.insertedRows[0] as Record<string, unknown>)['kind'];
+    expect(SCHEDULE_KIND_CHECK_VALUES).toContain(kind);
     expect(db.insertedRows[0]).toMatchObject({ kind: 'batch' });
   });
 
-  it('rejeita data sem hora como ambígua', async () => {
+  it('rejects a date without time as ambiguous', async () => {
     oneOffSupabase({});
     const res = await POST(
       jsonRequest({ ...validOneOffBody, times: ['2026-10-05'] }, 'POST'),
@@ -1151,7 +1237,7 @@ describe('POST /api/schedule multi-day times (one request, several days)', () =>
     expect(res.status).toBe(400);
   });
 
-  it('aceita offset explícito no datetime', async () => {
+  it('accepts an explicit offset in datetime', async () => {
     const db = oneOffSupabase({});
     // 15:00 at +01:00 is an explicit instant; the request timezone is ignored.
     const at = new Date(Date.now() + 3 * DAY_MS);
@@ -1170,7 +1256,7 @@ describe('POST /api/schedule multi-day times (one request, several days)', () =>
     expect(db.slotRows[0]).toMatchObject({ slot_at: new Date(withOffset).toISOString() });
   });
 
-  it('mistura HH:MM (no dia do scheduledAt) com datetime explícito', async () => {
+  it('mixes HH:MM (on the scheduledAt day) with explicit datetime', async () => {
     const db = oneOffSupabase({});
     const t2 = wallClockInSP(3 * DAY_MS, '18:00');
     const res = await POST(
@@ -1200,7 +1286,7 @@ describe('POST /api/schedule multi-day times (one request, several days)', () =>
 });
 
 describe('POST /api/schedule slots insert (database-generated id)', () => {
-  it('não envia id próprio no insert de slots; resposta usa os ids do banco', async () => {
+  it('sends no own id on the slots insert; the response uses the database ids', async () => {
     const db = oneOffSupabase({});
     const res = await POST(
       jsonRequest(

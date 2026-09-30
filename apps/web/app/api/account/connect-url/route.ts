@@ -43,8 +43,16 @@ export const CONNECT_URL_ERRORS = {
 export type ConnectUrlErrorCode =
   (typeof CONNECT_URL_ERRORS)[keyof typeof CONNECT_URL_ERRORS];
 
-function errorResponse(status: number, error: ConnectUrlErrorCode, route: string): NextResponse {
-  return apiErrorResponse(status, error, { route });
+function errorResponse(
+  status: number,
+  error: ConnectUrlErrorCode,
+  route: string,
+  cause?: unknown,
+): NextResponse {
+  // The cause is threaded through apiErrorResponse (which logs it once),
+  // never pre-logged here: pre-logging would emit two PostHog events for
+  // one failure.
+  return apiErrorResponse(status, error, { route, cause });
 }
 
 const REDIRECT_ENV: Record<OAuthConnectProvider, [string, string]> = {
@@ -83,17 +91,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     try {
       redirectUri = resolveOAuthRedirectUri(request, localEnv, prodEnv);
     } catch (redirectError) {
-      logger.logOAuthError(
-        logId,
-        redirectError instanceof Error ? redirectError : new Error('Failed to resolve OAuth redirect URI.')
-      );
-      return errorResponse(500, CONNECT_URL_ERRORS.REDIRECT_URI_UNAVAILABLE, 'POST /api/account/connect-url');
+      return errorResponse(500, CONNECT_URL_ERRORS.REDIRECT_URI_UNAVAILABLE, 'POST /api/account/connect-url', redirectError);
     }
 
     const built = await buildOAuthConnectUrl(provider, redirectUri);
     if (!built.ok) {
-      logger.logOAuthError(logId, new Error(`OAuth connect URL build failed: ${built.error}`));
-      return errorResponse(500, CONNECT_URL_ERRORS.PROVIDER_NOT_CONFIGURED, 'POST /api/account/connect-url');
+      return errorResponse(
+        500,
+        CONNECT_URL_ERRORS.PROVIDER_NOT_CONFIGURED,
+        'POST /api/account/connect-url',
+        new Error(`OAuth connect URL build failed: ${built.error}`),
+      );
     }
 
     const supabase = createSupabaseServiceClient();
@@ -106,11 +114,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         redirectUri,
       });
     } catch (storeError) {
-      logger.logOAuthError(
-        logId,
-        storeError instanceof Error ? storeError : new Error('Failed to store OAuth state.')
+      return errorResponse(
+        500,
+        CONNECT_URL_ERRORS.STATE_STORE_FAILED,
+        'POST /api/account/connect-url',
+        storeError instanceof Error ? storeError : new Error('Failed to store OAuth state.'),
       );
-      return errorResponse(500, CONNECT_URL_ERRORS.STATE_STORE_FAILED, 'POST /api/account/connect-url');
     }
 
     // Correlation id for the callback logs: the raw state never leaves
@@ -126,8 +135,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json({ success: true, auth_url: built.authUrl });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error.';
-    logger.logOAuthError(logId, new Error(message));
-    return errorResponse(500, CONNECT_URL_ERRORS.INTERNAL_ERROR, 'POST /api/account/connect-url');
+    const cause = error instanceof Error ? error : new Error('Unknown error.');
+    return errorResponse(500, CONNECT_URL_ERRORS.INTERNAL_ERROR, 'POST /api/account/connect-url', cause);
   }
 }

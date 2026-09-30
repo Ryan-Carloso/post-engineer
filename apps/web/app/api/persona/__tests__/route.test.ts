@@ -20,12 +20,16 @@ vi.mock('@/lib/supabase/service', () => ({
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
 }));
+vi.mock('@/lib/analytics', () => ({
+  trackApiEvent: vi.fn(),
+}));
 
 import { POST, PATCH, DELETE } from '../route';
 import { DEFAULT_FACE_MIX_PERCENT } from '@/lib/persona-schema';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
+import { trackApiEvent } from '@/lib/analytics';
 
 const USER_ID = 'user-uuid-1';
 
@@ -144,7 +148,7 @@ describe('POST /api/persona — modo faceless (100% stock, sem avatar)', () => {
     expect(res.status).toBe(400);
   });
 
-  it('rejeita personaMode inválido', async () => {
+  it('rejects an invalid personaMode', async () => {
     mockSupabase();
 
     const res = await POST(
@@ -162,7 +166,7 @@ describe('POST /api/persona', () => {
     vi.clearAllMocks();
   });
 
-  it('retorna 401 quando não há sessão', async () => {
+  it('returns 401 without a session', async () => {
     mockSupabase({ user: null });
     vi.mocked(requireSupabaseSession).mockResolvedValue({
       auth: null,
@@ -195,7 +199,7 @@ describe('POST /api/persona', () => {
     expect(res.status).toBe(400);
   });
 
-  it('retorna 400 sem voz (voiceId ausente)', async () => {
+  it('returns 400 without a voice (missing voiceId)', async () => {
     mockSupabase();
 
     const res = await POST(formRequest({ name: 'Ana' }, [photo()]));
@@ -203,7 +207,7 @@ describe('POST /api/persona', () => {
     expect(res.status).toBe(400);
   });
 
-  it('retorna 400 com formato de foto não suportado', async () => {
+  it('returns 400 with an unsupported photo format', async () => {
     mockSupabase();
     const gif = new File(['gif'], 'foto.gif', { type: 'image/gif' });
 
@@ -212,7 +216,7 @@ describe('POST /api/persona', () => {
     expect(res.status).toBe(400);
   });
 
-  it('cria persona com foto enviada: sobe pro Storage e insere na tabela', async () => {
+  it('creates a persona with an uploaded photo: uploads to Storage and inserts the row', async () => {
     const { uploaded, inserted } = mockSupabase();
 
     const res = await POST(formRequest({ name: 'Ana', voiceId: 'voz-1' }, [photo()]));
@@ -232,7 +236,7 @@ describe('POST /api/persona', () => {
     });
   });
 
-  it('cria persona com avatar IA (avatarUrl em vez de foto)', async () => {
+  it('creates a persona with an AI avatar (avatarUrl instead of photo)', async () => {
     const { uploaded, inserted } = mockSupabase();
 
     const res = await POST(
@@ -252,6 +256,29 @@ describe('POST /api/persona', () => {
       avatar_url: 'data:image/png;base64,IA',
       voice_id: 'voz-1',
     });
+  });
+
+  it('tracks persona_created on success (2xx product analytics)', async () => {
+    mockSupabase();
+
+    const res = await POST(formRequest({ name: 'Ana', voiceId: 'voz-1' }, [photo()]));
+    const body = (await res.json()) as { success: boolean; personaId?: string };
+
+    expect(res.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(trackApiEvent).toHaveBeenCalledWith(
+      'persona_created',
+      expect.objectContaining({ personaId: 'persona-uuid-1', imageCount: 0 }),
+    );
+  });
+
+  it('does not track persona_created when creation fails', async () => {
+    mockSupabase({ insertError: { message: 'db down' } });
+
+    const res = await POST(formRequest({ name: 'Ana', voiceId: 'voz-1' }, [photo()]));
+
+    expect(res.status).toBe(500);
+    expect(trackApiEvent).not.toHaveBeenCalled();
   });
 
   it('retorna 500 quando o upload no Storage falha', async () => {
@@ -281,7 +308,7 @@ describe('POST /api/persona', () => {
   // as defaults in the video job.
   //---------------
 
-  it('cria persona com preferências de conteúdo completas', async () => {
+  it('creates a persona with full content preferences', async () => {
     const { inserted } = mockSupabase();
 
     const res = await POST(
@@ -304,7 +331,7 @@ describe('POST /api/persona', () => {
     });
   });
 
-  it('cria persona sem preferências: colunas ficam null (padrão da casa)', async () => {
+  it('creates a persona without preferences: columns stay null (house default)', async () => {
     const { inserted } = mockSupabase();
 
     const res = await POST(formRequest({ name: 'Ana', voiceId: 'voz-1' }, [photo()]));
@@ -318,7 +345,7 @@ describe('POST /api/persona', () => {
     });
   });
 
-  it('retorna 400 com videoAspect inválido', async () => {
+  it('returns 400 with an invalid videoAspect', async () => {
     mockSupabase();
 
     const res = await POST(
@@ -374,7 +401,7 @@ describe('POST /api/persona', () => {
     expect(body.error).toContain('paragraphNumber');
   });
 
-  it('retorna 400 com paragraphNumber não numérico', async () => {
+  it('returns 400 with a non-numeric paragraphNumber', async () => {
     mockSupabase();
 
     const res = await POST(
@@ -390,7 +417,7 @@ describe('POST /api/persona — mix faceless/face (híbrido) e qualidade', () =>
     vi.clearAllMocks();
   });
 
-  it('cria persona híbrida: persiste faceMixPercent e faceQuality', async () => {
+  it('creates a hybrid persona: persists faceMixPercent and faceQuality', async () => {
     const { inserted } = mockSupabase();
 
     const res = await POST(
@@ -442,7 +469,7 @@ describe('POST /api/persona — mix faceless/face (híbrido) e qualidade', () =>
     expect(inserted[0]).toMatchObject({ face_mix_percent: 0 });
   });
 
-  it('rejeita foto quando o mix é 0 (sem face)', async () => {
+  it('rejects a photo when the mix is 0 (faceless)', async () => {
     mockSupabase();
 
     const res = await POST(
@@ -475,7 +502,7 @@ describe('POST /api/persona — mix faceless/face (híbrido) e qualidade', () =>
     expect(body.error).toContain('faceMixPercent');
   });
 
-  it('retorna 400 com faceMixPercent não numérico', async () => {
+  it('returns 400 with a non-numeric faceMixPercent', async () => {
     mockSupabase();
 
     const res = await POST(
@@ -489,7 +516,7 @@ describe('POST /api/persona — mix faceless/face (híbrido) e qualidade', () =>
     expect(res.status).toBe(400);
   });
 
-  it('retorna 400 com faceQuality inválido', async () => {
+  it('returns 400 with an invalid faceQuality', async () => {
     mockSupabase();
 
     const res = await POST(
@@ -705,7 +732,7 @@ describe('PATCH /api/persona', () => {
     expect(res.status).toBe(401);
   });
 
-  it('retorna 400 sem personaId na query', async () => {
+  it('returns 400 without personaId in the query', async () => {
     mockSupabaseForPatch();
     const request = new Request('http://localhost/api/persona', {
       method: 'PATCH',
@@ -717,7 +744,7 @@ describe('PATCH /api/persona', () => {
     expect(res.status).toBe(400);
   });
 
-  it('retorna 404 quando a persona não existe ou não é do usuário', async () => {
+  it('returns 404 when the persona does not exist or is not the user\'s', async () => {
     mockSupabaseForPatch({ existing: null });
 
     const res = await PATCH(patchRequest('persona-uuid-1', { name: 'Nova' }));
@@ -725,7 +752,7 @@ describe('PATCH /api/persona', () => {
     expect(res.status).toBe(404);
   });
 
-  it('retorna 400 quando nada é enviado para atualizar', async () => {
+  it('returns 400 when nothing is sent to update', async () => {
     mockSupabaseForPatch();
 
     const res = await PATCH(patchRequest('persona-uuid-1'));
@@ -775,7 +802,7 @@ describe('PATCH /api/persona', () => {
     expect(removed).toContain(`${USER_ID}/voz-antiga.mp3`);
   });
 
-  it('retorna 400 com formato de foto não suportado', async () => {
+  it('returns 400 with an unsupported photo format', async () => {
     mockSupabaseForPatch();
     const gif = new File(['gif'], 'foto.gif', { type: 'image/gif' });
 
@@ -809,7 +836,7 @@ describe('PATCH /api/persona', () => {
       voice_audio_path: null,
     };
 
-    it('mudar só o nome preserva foto e voz: update contém apenas name', async () => {
+    it('changing only the name preserves photo and voice: update contains only name', async () => {
       const { updated, removed } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
 
       const res = await PATCH(patchRequest('persona-uuid-1', { name: 'Só Nome' }));
@@ -820,7 +847,7 @@ describe('PATCH /api/persona', () => {
       expect(removed).toEqual([]);
     });
 
-    it('mudar só a voz preserva nome e foto: update não cita campos de foto', async () => {
+    it('changing only the voice preserves name and photo: update omits photo fields', async () => {
       const { updated, removed } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
 
       const res = await PATCH(patchRequest('persona-uuid-1', { voiceId: 'voz-nova' }));
@@ -831,7 +858,7 @@ describe('PATCH /api/persona', () => {
       expect(removed).toEqual([]);
     });
 
-    it('mudar só a foto preserva nome e voz: update não cita campos de voz', async () => {
+    it('changing only the photo preserves name and voice: update omits voice fields', async () => {
       const { updated, removed } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
 
       const res = await PATCH(patchRequest('persona-uuid-1', {}, [photo()]));
@@ -854,7 +881,7 @@ describe('PATCH /api/persona', () => {
       expect(removed).toEqual([]);
     });
 
-    it('mudar apenas o nome não sobe nenhum arquivo novo', async () => {
+    it('changing only the name uploads no new file', async () => {
       const { uploaded } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
 
       await PATCH(patchRequest('persona-uuid-1', { name: 'Só Nome' }));
@@ -862,7 +889,7 @@ describe('PATCH /api/persona', () => {
       expect(uploaded).toEqual([]);
     });
 
-    it('preferências: atualizar language atualiza só language', async () => {
+    it('preferences: updating language updates only language', async () => {
       const { updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
 
       const res = await PATCH(patchRequest('persona-uuid-1', { language: 'en' }));
@@ -872,7 +899,7 @@ describe('PATCH /api/persona', () => {
       expect(updated[0].language).toBe('en');
     });
 
-    it('preferências: atualiza videoAspect, scriptPrompt e paragraphNumber juntos', async () => {
+    it('preferences: updates videoAspect, scriptPrompt and paragraphNumber together', async () => {
       const { updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
 
       const res = await PATCH(
@@ -892,7 +919,7 @@ describe('PATCH /api/persona', () => {
       });
     });
 
-    it('nicho: atualiza só o nicho', async () => {
+    it('niche: updates only the niche', async () => {
       const { updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
 
       const res = await PATCH(patchRequest('persona-uuid-1', { niche: 'viagens de motorhome' }));
@@ -902,7 +929,7 @@ describe('PATCH /api/persona', () => {
       expect(updated[0].niche).toBe('viagens de motorhome');
     });
 
-    it('nicho: string vazia é tratada como campo ausente', async () => {
+    it('niche: an empty string is treated as a missing field', async () => {
       mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
 
       const res = await PATCH(patchRequest('persona-uuid-1', { niche: '' }));
@@ -922,7 +949,7 @@ describe('PATCH /api/persona', () => {
       expect(body.error).toContain('niche');
     });
 
-    it('preferências: atualizar language preserva foto e voz intactas', async () => {
+    it('preferences: updating language preserves photo and voice intact', async () => {
       const { uploaded, removed, updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
 
       await PATCH(patchRequest('persona-uuid-1', { language: 'es' }));
@@ -932,7 +959,7 @@ describe('PATCH /api/persona', () => {
       expect(removed).toEqual([]);
     });
 
-    it('preferências: retorna 400 com videoAspect inválido no PATCH', async () => {
+    it('preferences: returns 400 with an invalid videoAspect on PATCH', async () => {
       mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
 
       const res = await PATCH(patchRequest('persona-uuid-1', { videoAspect: '21:9' }));
@@ -942,7 +969,7 @@ describe('PATCH /api/persona', () => {
       expect(body.error).toContain('videoAspect');
     });
 
-    it('preferências: retorna 400 com paragraphNumber inválido no PATCH', async () => {
+    it('preferences: returns 400 with an invalid paragraphNumber on PATCH', async () => {
       mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
 
       const res = await PATCH(patchRequest('persona-uuid-1', { paragraphNumber: '0' }));

@@ -27,6 +27,7 @@ import {
 } from '@/lib/persona-images';
 import { logger } from '@/lib/logger';
 import { apiErrorResponse } from '@/lib/api-error';
+import { trackApiEvent } from '@/lib/analytics';
 
 //---------------
 // POST /api/persona — creates the user's persona:
@@ -271,6 +272,12 @@ export async function POST(request: Request): Promise<NextResponse> {
   // The web UI never sends images[] at creation (the library is edit-only),
   // so warnings only reach direct API-key callers — but the response shape
   // is shared, and the web CreatePersonaResult type describes it.
+  // Product analytics: a persona was created successfully.
+  trackApiEvent('persona_created', {
+    personaId: persona.id,
+    imageCount: libraryImageIds.length,
+  });
+
   return NextResponse.json({
     success: true,
     personaId: persona.id,
