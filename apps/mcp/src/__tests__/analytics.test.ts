@@ -21,7 +21,7 @@ vi.mock('posthog-node', () => ({
   },
 }));
 
-import { trackEvent, resetAnalyticsForTesting } from '../analytics';
+import { trackEvent, resetAnalyticsForTesting } from '../analytics.js';
 
 describe('trackEvent', () => {
   beforeEach(() => {
