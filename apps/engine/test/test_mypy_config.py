@@ -36,7 +36,6 @@ class MypyConfigPinTests(unittest.TestCase):
         self.assertNotIn("import-untyped", disabled)
 
     def test_no_app_override(self):
-        config = _load_mypy_config()
         # The overrides are a list of tables; check via raw TOML structure
         pyproject = Path(__file__).parent.parent / "pyproject.toml"
         text = pyproject.read_text()
