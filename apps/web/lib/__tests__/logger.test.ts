@@ -153,8 +153,12 @@ describe('logger production routing', () => {
     const [event, props] = capture.mock.calls[0] as [string, Record<string, unknown>];
     expect(event).toBe('$exception');
     expect(props['$exception_message']).toContain('schedules_providers_check');
-    // The raw PostgREST object stays visible in the PostHog issue.
-    expect(props['cause']).toBe(pgError);
+    // Object causes are serialized to sanitized JSON (never raw objects to
+    // a third-party cloud). The failure stays visible in the PostHog issue.
+    const cause = props['cause'] as string;
+    expect(typeof cause).toBe('string');
+    expect(cause).toContain('schedules_providers_check');
+    expect(JSON.parse(cause)).toMatchObject({ code: '23514' });
   });
 
   it('production warn() sends a warning to PostHog and keeps console output', () => {
@@ -227,13 +231,25 @@ describe('logger production routing', () => {
     expect((props['cause'] as string).length).toBeLessThanOrEqual(200);
   });
 
-  it('leaves non-string causes untouched', () => {
+  it('serializes object causes to sanitized JSON (never raw objects)', () => {
     vi.stubEnv('NODE_ENV', 'production');
     const pgError = { message: 'boom', code: '23514' };
     logger.error('insert failed', pgError);
 
     const [, props] = capture.mock.calls[0] as [string, Record<string, unknown>];
-    expect(props['cause']).toBe(pgError);
+    const cause = props['cause'] as string;
+    expect(typeof cause).toBe('string');
+    expect(JSON.parse(cause)).toEqual(pgError);
+  });
+
+  it('redacts secret-bearing keys inside object causes', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    logger.error('insert failed', { message: 'boom', api_key: 'sk-secret' });
+
+    const [, props] = capture.mock.calls[0] as [string, Record<string, unknown>];
+    const cause = props['cause'] as string;
+    expect(cause).not.toContain('sk-secret');
+    expect(cause).toContain('[redacted]');
   });
 
   it('a PostHog outage never breaks logging', () => {

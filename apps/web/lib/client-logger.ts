@@ -1,9 +1,9 @@
 //---------------
 // Client-safe error reporter for "use client" components.
 //
-// The server logger (lib/logger.ts) pulls in posthog-node via
-// lib/posthog-server.ts, which declares `import 'server-only'` and must
-// never be bundled into client components. This module mirrors the
+// The server logger (lib/logger.ts) uses posthog-node via
+// lib/posthog-server.ts. That module returns null in the browser (runtime
+// guard), so client components must not rely on it. This module mirrors the
 // server logger's error() call shape but reports to the browser PostHog
 // SDK (initialized once by instrumentation-client.ts).
 //

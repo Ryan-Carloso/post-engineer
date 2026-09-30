@@ -9,6 +9,7 @@
 //---------------
 
 import { getPostHogServer } from './posthog-server';
+import { scrubSecrets } from './scrub';
 
 //---------------
 // Environment routing (read at call time so tests can stub it)
@@ -66,8 +67,22 @@ function redactCredentialFragments(text: string): string {
 }
 
 function sanitizeReportBody(value: unknown): unknown {
-  if (typeof value !== 'string') return value;
-  return redactCredentialFragments(value).slice(0, MAX_REPORT_BODY_CHARS);
+  if (typeof value === 'string') {
+    return redactCredentialFragments(value).slice(0, MAX_REPORT_BODY_CHARS);
+  }
+  if (value !== null && typeof value === 'object') {
+    // Object causes (e.g. PostgREST { message, code, details, hint }) are
+    // serialized to JSON, scrubbed for secret-bearing keys, then capped.
+    // Never send raw objects to a third-party cloud unsanitized.
+    try {
+      const scrubbed = scrubSecrets(value as Record<string, unknown>);
+      const json = JSON.stringify(scrubbed) ?? '[unserializable]';
+      return redactCredentialFragments(json).slice(0, MAX_REPORT_BODY_CHARS);
+    } catch {
+      return '[unserializable]';
+    }
+  }
+  return value;
 }
 
 //---------------
@@ -82,16 +97,16 @@ function reportErrorToPostHog(message: string, cause: unknown, metadata?: Record
     if (!client) return;
     const error = toError(cause);
     // PostHog error tracking ingests $exception events with these properties.
-    // Keep the raw failure (e.g. the PostgREST { message, code, details, hint }
-    // object) in properties so the PostHog issue shows the real database error.
-    // String causes (raw upstream bodies) are sanitized first: credential
-    // fragments redacted, length capped — see sanitizeReportBody.
+    // Metadata is scrubbed for secret-bearing keys before sending — never
+    // trust caller-provided objects blindly. The cause is sanitized
+    // separately (credential fragments redacted, length capped).
+    const safeMetadata = metadata ? scrubSecrets(metadata) : {};
     const properties: Record<string, unknown> = {
       $exception_message: error.message,
       $exception_type: error.name,
       $exception_stacktrace: error.stack,
       log_message: message,
-      ...metadata,
+      ...safeMetadata,
     };
     if (!(cause instanceof Error) && cause !== undefined) properties['cause'] = sanitizeReportBody(cause);
     client.capture('$exception', properties);
@@ -105,7 +120,8 @@ function reportWarningToPostHog(message: string, metadata?: Record<string, unkno
   try {
     const client = getPostHogServer();
     if (!client) return;
-    client.capture('server_warning', { message, ...metadata });
+    const safeMetadata = metadata ? scrubSecrets(metadata) : {};
+    client.capture('server_warning', { message, ...safeMetadata });
   } catch {
     // Telemetry must never break the request path.
   }

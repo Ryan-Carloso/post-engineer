@@ -51,10 +51,11 @@ describe('server-only guard', () => {
   });
 
   it('client components use the client logger, never the server logger', () => {
-    // lib/logger.ts pulls in posthog-node via lib/posthog-server.ts, which
-    // declares `import 'server-only'`: a client component importing it would
-    // break the browser bundle. Client components report through
-    // lib/client-logger.ts (browser posthog-js) instead.
+    // lib/logger.ts uses posthog-node via lib/posthog-server.ts, which
+    // returns null in the browser (runtime guard): a client component
+    // importing the server logger would silently lose telemetry. Client
+    // components report through lib/client-logger.ts (browser posthog-js)
+    // instead.
     const clientComponents: readonly string[] = [
       'app/global-error.tsx',
       'app/(main)/persona/persona-image-library.tsx',

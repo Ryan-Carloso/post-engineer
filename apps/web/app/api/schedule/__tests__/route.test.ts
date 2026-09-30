@@ -1218,9 +1218,11 @@ describe('POST /api/schedule multi-day times (one request, several days)', () =>
     // the persona's second schedule with a 500 (PR #28 removed the 409
     // guard, but the DB guard still fires on the default).
     //
-    // DB schema anchor: migration 0026
-    // (apps/web/supabase/migrations/0026_schedule_batch_kind.sql) defines
-    // CONSTRAINT schedules_kind_check CHECK (kind IN ('recurring', 'batch')).
+    // DB schema anchor: the `schedules.kind` CHECK constraint allows
+    // ('recurring', 'batch') with a partial unique index
+    // `schedules_persona_owner_recurring` on the 'recurring' rows.
+    // (Applied manually in the Supabase dashboard SQL editor; the repo
+    // tracks only persona-images.sql in-repo.)
     // The inserted literal must be one of those two values — and 'batch'
     // for one-off rows — or the insert fails at the database.
     const SCHEDULE_KIND_CHECK_VALUES = ['recurring', 'batch'] as const;
