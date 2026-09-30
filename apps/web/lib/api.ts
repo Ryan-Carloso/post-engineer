@@ -653,6 +653,9 @@ export interface ScheduledSlot {
   publishedAt?: string | null;
   // Engine task id, set when generation dispatches — poll progress with it.
   taskId?: string | null;
+  // Numeric 0–100 progress: 0 pending, 100 ready/publishing/published,
+  // live engine progress while generating (last known when failed).
+  progress: number;
 }
 
 interface ScheduleRow {
@@ -681,6 +684,7 @@ interface SlotRow {
   error?: string | null;
   published_at?: string | null;
   task_id?: string | null;
+  progress?: number;
 }
 
 function mapSchedule(row: ScheduleRow): ScheduleConfig {
@@ -761,6 +765,7 @@ function mapSlot(row: SlotRow): ScheduledSlot {
     error: row.error,
     publishedAt: row.published_at,
     taskId: row.task_id ?? null,
+    progress: typeof row.progress === 'number' ? row.progress : 0,
   };
 }
 

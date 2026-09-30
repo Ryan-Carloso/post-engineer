@@ -138,7 +138,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
 
   server.tool(
     'list_posts',
-    'List upcoming (scheduled) and past (published/failed) posts across all connected accounts. Returns two lists: upcoming slots (id, slot_at, status, topic, schedule_id) and recent results (id, slot_at, status, topic, error, published_at, schedule_id). Use when the user asks about their posts — what is coming next, what already went out, or why a post failed. Combine with list_schedules or list_social_accounts when persona/account names are needed.',
+    'List upcoming (scheduled) and past (published/failed) posts across all connected accounts. Returns two lists: upcoming slots (id, slot_at, status, topic, schedule_id, task_id, progress) and recent results (id, slot_at, status, topic, error, published_at, schedule_id, task_id, progress). progress is a number 0-100: 0 for pending, 100 for ready/publishing/published, live engine progress for generating slots, last known progress for failed slots (0 if unknown). Use when the user asks about their posts — what is coming next, what already went out, how far a video has generated, or why a post failed. Combine with list_schedules or list_social_accounts when persona/account names are needed.',
     ListPostsShape,
     async (args) => {
       return handleListPosts(apiClient, args);

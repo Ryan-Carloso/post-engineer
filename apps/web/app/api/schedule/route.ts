@@ -495,7 +495,14 @@ export async function POST(request: Request): Promise<NextResponse> {
     {
       success: true,
       schedule,
-      slots: slotRows.map((row) => ({ id: row.id, topic: row.topic, slotAt: row.slot_at })),
+      // Slots are created pending; progress starts at 0 — the engine
+      // only reports progress once generation dispatches.
+      slots: slotRows.map((row) => ({
+        id: row.id,
+        topic: row.topic,
+        slotAt: row.slot_at,
+        progress: 0,
+      })),
     },
     { status: 201 },
   );

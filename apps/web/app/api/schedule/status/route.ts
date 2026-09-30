@@ -30,6 +30,60 @@ export function parseLimit(value: string | null): number {
   return Math.min(parsed, MAX_LIMIT);
 }
 
+import { fetchEngineTaskProgress } from '@/lib/engine-tasks';
+
+//---------------
+// slotProgress — numeric 0–100 progress for a schedule slot.
+//
+// Terminal-success states (ready/publishing/published) are 100, pending is
+// 0. For generating (and failed) slots the live engine task progress is
+// fetched read-only via the shared engine-tasks helper — which, unlike the
+// video-status route, performs NO refunds or history writes. A failed
+// lookup degrades that single slot to 0 instead of failing the request.
+//---------------
+async function slotProgress(
+  slot: { status?: unknown; task_id?: unknown },
+  userId: string,
+): Promise<number> {
+  const status = typeof slot.status === 'string' ? slot.status : 'pending';
+  switch (status) {
+    case 'ready':
+    case 'publishing':
+    case 'published':
+      return 100;
+    case 'generating':
+    case 'failed': {
+      const taskId = typeof slot.task_id === 'string' ? slot.task_id : null;
+      if (!taskId) return 0;
+      try {
+        const { progress } = await fetchEngineTaskProgress(taskId, userId);
+        return progress;
+      } catch (error) {
+        logger.warn('[api/schedule/status] engine task progress unavailable', {
+          taskId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return 0;
+      }
+    }
+    default:
+      return 0;
+  }
+}
+
+//---------------
+// withSlotProgress — attach progress to every slot. Task lookups run
+// concurrently (Promise.all): sequential one-off generation means at most
+// one generating slot per schedule, but a caller may list many schedules.
+//---------------
+async function withSlotProgress<T extends { status?: unknown; task_id?: unknown }>(
+  slots: T[],
+  userId: string,
+): Promise<(T & { progress: number })[]> {
+  const progresses = await Promise.all(slots.map((slot) => slotProgress(slot, userId)));
+  return slots.map((slot, index) => ({ ...slot, progress: progresses[index] }));
+}
+
 export async function GET(request?: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
@@ -68,9 +122,11 @@ export async function GET(request?: Request): Promise<NextResponse> {
   );
   const nowIso = new Date().toISOString();
 
-  // task_id is included so callers can poll per-video progress: the
-  // engine sets it on the slot when generation dispatches, and the MCP
-  // get_video_task_progress tool reads the engine task by that id.
+  // task_id is included on BOTH selects so callers can poll per-video
+  // progress: the engine sets it on the slot when generation dispatches,
+  // and the MCP get_video_task_progress tool reads the engine task by
+  // that id. The recent select needs it too — failed slots report their
+  // last known engine progress.
   let upcomingQuery = supabase
     .from('scheduled_posts')
     .select('id, slot_at, status, topic, schedule_id, task_id')
@@ -80,7 +136,7 @@ export async function GET(request?: Request): Promise<NextResponse> {
     .order('slot_at', { ascending: true });
   let recentQuery = supabase
     .from('scheduled_posts')
-    .select('id, slot_at, status, topic, error, published_at, schedule_id')
+    .select('id, slot_at, status, topic, error, published_at, schedule_id, task_id')
     .eq('user_id', userId)
     .in('status', ['published', 'failed'])
     .order('slot_at', { ascending: false });
@@ -107,7 +163,7 @@ export async function GET(request?: Request): Promise<NextResponse> {
 
   return NextResponse.json({
     success: true,
-    upcoming: upcoming.data ?? [],
-    recent: recent.data ?? [],
+    upcoming: await withSlotProgress(upcoming.data ?? [], userId),
+    recent: await withSlotProgress(recent.data ?? [], userId),
   });
 }

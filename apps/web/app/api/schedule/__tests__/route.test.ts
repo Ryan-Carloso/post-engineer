@@ -861,7 +861,7 @@ describe('POST /api/schedule topics → slots → charging', () => {
     const body = (await res.json()) as {
       success: boolean;
       schedule: { id: string };
-      slots: { id: string; topic: string; slotAt: string }[];
+      slots: { id: string; topic: string; slotAt: string; progress: number }[];
     };
     expect(body.success).toBe(true);
     expect(body.schedule.id).toBe('s-1');
@@ -869,6 +869,8 @@ describe('POST /api/schedule topics → slots → charging', () => {
     expect(body.slots[0]).toMatchObject({ topic: 't1' });
     expect(typeof body.slots[0].id).toBe('string');
     expect(typeof body.slots[0].slotAt).toBe('string');
+    // Slots are all pending at creation: progress starts at 0.
+    expect(body.slots.every((slot) => slot.progress === 0)).toBe(true);
   });
 
   it('rejeita topics ausente com 400 sem criar nada nem gastar tokens', async () => {
