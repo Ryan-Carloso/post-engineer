@@ -13,7 +13,7 @@ from loguru import logger
 from app.config import config
 from app.models.exception import HttpException
 from app.router import root_api_router
-from app.services.analytics import track_event
+from app.services.analytics import scrub_secret_values, track_event
 from app.services.fill_schedule import (
     FillScheduleScheduler,
     ScheduleStore,
@@ -51,17 +51,17 @@ def _loguru_posthog_sink(message) -> None:
         record = message.record
         exception = record.get("exception")
         properties: dict[str, object] = {
-            "message": str(record.get("message", "")),
+            "message": scrub_secret_values(str(record.get("message", ""))),
         }
         if exception is not None:
             # loguru stores the exception as a (type, value, traceback) tuple
             exc_value = exception[1]
             properties["exception_type"] = type(exc_value).__name__
-            properties["exception_message"] = str(exc_value)
+            properties["exception_message"] = scrub_secret_values(str(exc_value))
             try:
-                properties["stacktrace"] = "".join(
+                properties["stacktrace"] = scrub_secret_values("".join(
                     traceback.format_exception(type(exc_value), exc_value, exc_value.__traceback__)
-                )[:5000]
+                )[:5000])
             except Exception:
                 pass
         track_event("$exception", properties)  # type: ignore[arg-type]

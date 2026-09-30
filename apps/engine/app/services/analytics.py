@@ -28,7 +28,25 @@ _SECRET_KEY_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# Values matching this pattern have the secret portion redacted.
+# Catches `key=secret`, `key: secret`, `Bearer secret` in free text.
+_SECRET_VALUE_PATTERN = re.compile(
+    r"(password|passwd|secret|token|api[-_]?key|credential|private[-_]?key|session)\s*[:=]\s*([^\s,;\"']+)"
+    r"|(bearer)\s+([^\s,;\"']+)",
+    re.IGNORECASE,
+)
+
 _REDACTED = "[redacted]"
+
+
+def scrub_secret_values(text: str) -> str:
+    """Redact secret values from free-text strings (exception messages, stacktraces)."""
+    def _replace(m: re.Match[str]) -> str:
+        # Group 1/3 is the key name; preserve it, redact the value.
+        key = m.group(1) or m.group(3)
+        sep = "=" if m.group(1) else " "
+        return f"{key}{sep}[redacted]"
+    return _SECRET_VALUE_PATTERN.sub(_replace, text)
 
 _DEFAULT_HOST = "https://us.i.posthog.com"
 

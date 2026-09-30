@@ -73,3 +73,14 @@ def test_track_event_never_raises_on_init_failure():
             side_effect=RuntimeError("init failed"),
         ):
             analytics.track_event("video_generated", {"slotId": "s1"})
+
+
+def test_scrub_secret_values_redacts_key_value_pairs():
+    assert analytics.scrub_secret_values("api_key=sk-12345") == "api_key=[redacted]"
+    assert analytics.scrub_secret_values("token: abc123") == "token=[redacted]"
+    assert analytics.scrub_secret_values("Bearer xyz789") == "Bearer [redacted]"
+
+
+def test_scrub_secret_values_leaves_clean_text():
+    text = "Connection failed: timeout after 30s"
+    assert analytics.scrub_secret_values(text) == text
