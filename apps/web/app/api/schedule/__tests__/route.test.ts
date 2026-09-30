@@ -46,6 +46,7 @@ function mockSupabase(handlers: {
   const insertedRows: Record<string, unknown>[] = [];
   const updatedRows: Record<string, unknown>[] = [];
   const slotRows: Record<string, unknown>[] = [];
+  const deleteCalls: { table: string }[] = [];
   const rpcCalls: { name: string; params: unknown }[] = [];
   const selectArgs: string[] = [];
   const client = {
@@ -98,11 +99,14 @@ function mockSupabase(handlers: {
               return Promise.resolve({ data: null, error: handlers.slotsInsert.error });
             return Promise.resolve({ data: rows, error: null });
           }),
-          delete: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              eq: vi.fn(() => Promise.resolve({ error: null })),
-            })),
-          })),
+          delete: vi.fn(() => {
+            deleteCalls.push({ table: 'scheduled_posts' });
+            return {
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => Promise.resolve({ error: null })),
+              })),
+            };
+          }),
         };
       }
       // schedules — a distinct flow per operation
@@ -133,11 +137,14 @@ function mockSupabase(handlers: {
             })),
           };
         }),
-        delete: vi.fn(() => ({
-          eq: vi.fn(() => ({
-            eq: vi.fn(() => Promise.resolve({ error: handlers.remove?.error ?? null })),
-          })),
-        })),
+        delete: vi.fn(() => {
+          deleteCalls.push({ table: 'schedules' });
+          return {
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => Promise.resolve({ error: handlers.remove?.error ?? null })),
+            })),
+          };
+        }),
       };
     }),
   };
@@ -147,7 +154,7 @@ function mockSupabase(handlers: {
     error: null,
   });
   vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
-  return Object.assign(client, { insertedRows, updatedRows, slotRows, rpcCalls, selectArgs });
+  return Object.assign(client, { insertedRows, updatedRows, slotRows, deleteCalls, rpcCalls, selectArgs });
 }
 
 function jsonRequest(body: unknown, method = 'PATCH'): Request {
@@ -963,6 +970,9 @@ describe('POST /api/schedule topics → slots → charging', () => {
     expect(res.status).toBe(500);
     const refunds = db.rpcCalls.filter((c) => c.name === 'refund_generation_tokens');
     expect(refunds).toHaveLength(1);
+    // O rollback apaga os slots parciais e o schedule já criado.
+    expect(db.deleteCalls.filter((c) => c.table === 'scheduled_posts')).toHaveLength(1);
+    expect(db.deleteCalls.filter((c) => c.table === 'schedules')).toHaveLength(1);
   });
 
   it('falha no insert do schedule → refund sem criar slots', async () => {
