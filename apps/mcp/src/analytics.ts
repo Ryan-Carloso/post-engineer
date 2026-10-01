@@ -37,7 +37,7 @@ function scrubSecrets(properties: Record<string, unknown>): Record<string, unkno
 // PostHog — every telemetry path in the MCP server reads it as the
 // fallback when POSTHOG_HOST is not set.
 //---------------
-export const DEFAULT_POSTHOG_HOST = 'https://us.i.posthog.com';
+export const DEFAULT_POSTHOG_HOST = 'https://eu.i.posthog.com';
 
 interface PostHogClient {
   capture(args: {

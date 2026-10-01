@@ -37,8 +37,8 @@ import { DEFAULT_POSTHOG_HOST } from '@/lib/posthog-config';
 import { __resetPostHogServerForTests } from '@/lib/posthog-server';
 
 describe('DEFAULT_POSTHOG_HOST', () => {
-  it('is the PostHog US ingest default', () => {
-    expect(DEFAULT_POSTHOG_HOST).toBe('https://us.i.posthog.com');
+  it('is the PostHog EU ingest default (our project region)', () => {
+    expect(DEFAULT_POSTHOG_HOST).toBe('https://eu.i.posthog.com');
   });
 });
 

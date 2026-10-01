@@ -51,7 +51,7 @@ def scrub_secret_values(text: str) -> str:
 # Default PostHog ingest host. Change this constant if you self-host
 # PostHog — every telemetry path in the engine reads it as the fallback
 # when POSTHOG_HOST is not set.
-DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com"
+DEFAULT_POSTHOG_HOST = "https://eu.i.posthog.com"
 
 _client: Any = None
 _warned = False
