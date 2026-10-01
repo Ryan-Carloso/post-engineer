@@ -36,16 +36,17 @@ class MypyConfigPinTests(unittest.TestCase):
         self.assertNotIn("import-untyped", disabled)
 
     def test_no_app_override(self):
-        # The overrides are a list of tables; check via raw TOML structure
-        pyproject = Path(__file__).parent.parent / "pyproject.toml"
-        text = pyproject.read_text()
-        # Simple check: no override module pattern starts with app
-        import re
-
-        for m in re.finditer(r'module\s*=\s*\[(.*?)\]', text, re.DOTALL):
-            modules = m.group(1)
-            self.assertNotRegex(
-                modules,
-                r'"app',
-                "Override must not silence first-party app.* modules.",
-            )
+        # Parse the TOML structure (not regex) so string-form modules and
+        # quoting variants are all covered.
+        config = _load_mypy_config()
+        overrides = config.get("overrides", [])
+        for override in overrides:
+            modules = override.get("module", [])
+            # Normalize: module can be a string or a list of strings.
+            if isinstance(modules, str):
+                modules = [modules]
+            for mod in modules:
+                self.assertFalse(
+                    mod == "app" or mod.startswith("app."),
+                    f"Override must not silence first-party modules: {mod}",
+                )
