@@ -53,6 +53,22 @@ export interface GenerateVideoJobInput {
   imageId?: string;
   /** Optional callback URL the server POSTs to when the video terminates. */
   webhookUrl?: string;
+  /**
+   * Optional unified scheduling: choose where/when to publish upfront.
+   * When present, the API creates a one-off schedule linked to the new
+   * video task; the engine publishes at scheduledAt.
+   */
+  schedule?: {
+    providers: ('youtube' | 'instagram' | 'linkedin' | 'bluesky')[];
+    youtubeAccountIds?: string[];
+    instagramAccountIds?: string[];
+    linkedinAccountIds?: string[];
+    blueskyAccountIds?: string[];
+    /** ISO datetime; naive values are wall-clock in timezone. */
+    scheduledAt: string;
+    /** IANA timezone, e.g. "Europe/Lisbon". Defaults to UTC. */
+    timezone?: string;
+  };
 }
 
 export interface GenerateVideoBatchInput {
@@ -487,6 +503,9 @@ export class PostEngineerClient {
           // carries webhook_url (a first-class TaskVideoRequest field) to the
           // engine's terminal dispatch. Undefined keys drop out of the JSON.
           webhook_url: input.webhookUrl,
+          // Unified generate+schedule: the web route validates and creates
+          // the one-off schedule linked to the new task.
+          schedule: input.schedule ?? undefined,
         }),
       },
       'generate video job'

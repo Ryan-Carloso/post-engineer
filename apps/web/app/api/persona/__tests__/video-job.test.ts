@@ -38,12 +38,17 @@ vi.mock('node:dns/promises', () => {
   return { lookup, default: { lookup } };
 });
 
+vi.mock('@/lib/schedule/create-from-task', () => ({
+  createScheduleFromTask: vi.fn(),
+}));
+
 import { POST } from '../video-job/route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { checkAndDeductTokens } from '@/lib/billing/token-check';
 import * as videoGeneration from '@/lib/generation/video-generation';
 import * as personaSchema from '@/lib/persona-schema';
+import { createScheduleFromTask } from '@/lib/schedule/create-from-task';
 import { lookup } from 'node:dns/promises';
 
 const lookupMock = vi.mocked(lookup);
@@ -94,6 +99,22 @@ function mockSupabase(persona: Record<string, unknown> | null, opts?: { noSessio
       getSession,
     },
     from: vi.fn((table: string) => {
+      // Social accounts ownership check (assertAccountsOwned): returns the
+      // requested ids as owned. The .in() terminal resolves directly.
+      if (table === 'social_accounts') {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                in: vi.fn(async (column: string, ids: string[]) => ({
+                  data: ids.map((id) => ({ provider_account_id: id })),
+                  error: null,
+                })),
+              })),
+            })),
+          })),
+        };
+      }
       // Persona image library: deterministic selection reads the library
       // ordered by creation. Default is empty so legacy behavior is tested
       // unless opts.libraryImages overrides it.
@@ -2445,6 +2466,166 @@ describe('POST /api/persona/video-job', () => {
 
       expect(res.status).toBe(502);
       expect(historyWrites(client)).toHaveLength(0);
+    });
+  });
+
+  describe('unified generate+schedule', () => {
+    const futureAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
+
+    function engineOk(): void {
+      fetchMock.mockResolvedValue(
+        new Response(JSON.stringify({ status: 200, data: { task_id: 't-1' } }), { status: 200 }),
+      );
+    }
+
+    it('creates a schedule when valid schedule params are provided', async () => {
+      mockSupabase(PERSONA);
+      engineOk();
+      vi.mocked(createScheduleFromTask).mockResolvedValue({
+        scheduleId: 's-1',
+        slotId: 'slot-1',
+        slotAt: futureAt,
+      });
+
+      const res = await POST(
+        jsonRequest({
+          personaId: 'p-1',
+          video_subject: 'launch video',
+          schedule: {
+            providers: ['youtube', 'bluesky'],
+            youtubeAccountIds: ['yt-1'],
+            blueskyAccountIds: ['did:plc:abc'],
+            scheduledAt: futureAt,
+            timezone: 'Europe/Lisbon',
+          },
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        success: boolean;
+        taskId: string;
+        schedule?: { scheduleId: string; slotId: string; slotAt: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.taskId).toBe('t-1');
+      expect(body.schedule).toMatchObject({ scheduleId: 's-1', slotId: 'slot-1' });
+      expect(vi.mocked(createScheduleFromTask)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: USER_ID,
+          personaId: 'p-1',
+          providers: ['youtube', 'bluesky'],
+          taskId: 't-1',
+          topic: 'launch video',
+        }),
+      );
+    });
+
+    it('returns 400 for schedule with no providers', async () => {
+      mockSupabase(PERSONA);
+      engineOk();
+
+      const res = await POST(
+        jsonRequest({
+          personaId: 'p-1',
+          video_subject: 'launch video',
+          schedule: { providers: [], scheduledAt: futureAt },
+        }),
+      );
+
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toMatch(/providers/);
+      expect(vi.mocked(createScheduleFromTask)).not.toHaveBeenCalled();
+      // The engine must not have been contacted: validation fails first.
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('returns 400 for schedule without scheduledAt', async () => {
+      mockSupabase(PERSONA);
+      engineOk();
+
+      const res = await POST(
+        jsonRequest({
+          personaId: 'p-1',
+          video_subject: 'launch video',
+          schedule: { providers: ['youtube'], youtubeAccountIds: ['yt-1'] },
+        }),
+      );
+
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toMatch(/scheduledAt/);
+      expect(vi.mocked(createScheduleFromTask)).not.toHaveBeenCalled();
+    });
+
+    it('returns the task without a schedule when schedule creation fails', async () => {
+      // The video is already generating; a schedule DB failure must not
+      // fail the generation — the caller gets the taskId and can retry
+      // the schedule via POST /api/schedule with taskId.
+      mockSupabase(PERSONA);
+      engineOk();
+      vi.mocked(createScheduleFromTask).mockRejectedValue(new Error('db down'));
+
+      const res = await POST(
+        jsonRequest({
+          personaId: 'p-1',
+          video_subject: 'launch video',
+          schedule: {
+            providers: ['youtube'],
+            youtubeAccountIds: ['yt-1'],
+            scheduledAt: futureAt,
+            timezone: 'Europe/Lisbon',
+          },
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { success: boolean; taskId: string; schedule?: unknown };
+      expect(body.success).toBe(true);
+      expect(body.taskId).toBe('t-1');
+      expect(body.schedule).toBeUndefined();
+    });
+
+    it('supports faceless generation with schedule (personaId null)', async () => {
+      mockSupabase(PERSONA);
+      // Faceless via audio_url: DNS + HEAD are mocked in this suite's
+      // mockAudioHead helper; reuse the engine-ok path.
+      fetchMock.mockImplementation(async (url) => {
+        if (String(url).includes('moneyprint')) {
+          return new Response(JSON.stringify({ status: 200, data: { task_id: 't-2' } }), { status: 200 });
+        }
+        return new Response(null, {
+          status: 200,
+          headers: { 'content-type': 'audio/mpeg', 'content-length': '12345' },
+        });
+      });
+      mockDns('93.184.216.34');
+      vi.mocked(createScheduleFromTask).mockResolvedValue({
+        scheduleId: 's-2',
+        slotId: 'slot-2',
+        slotAt: futureAt,
+      });
+
+      const res = await POST(
+        jsonRequest({
+          video_subject: 'faceless launch',
+          audio_url: 'https://cdn.test/narracao.mp3',
+          schedule: {
+            providers: ['bluesky'],
+            blueskyAccountIds: ['did:plc:abc'],
+            scheduledAt: futureAt,
+            timezone: 'Europe/Lisbon',
+          },
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { success: boolean; schedule?: { scheduleId: string } };
+      expect(body.schedule).toMatchObject({ scheduleId: 's-2' });
+      expect(vi.mocked(createScheduleFromTask)).toHaveBeenCalledWith(
+        expect.objectContaining({ personaId: null, taskId: 't-2' }),
+      );
     });
   });
 });

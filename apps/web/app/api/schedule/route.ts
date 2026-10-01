@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
-import { requireSupabaseSession } from '@/lib/request-auth';
+import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
 import { isPersonaAllowed } from '@/lib/api-keys';
 import { validateScheduleWindow } from '@/lib/schedule-window';
 import { isValidTimezone, parseZonedDateTime, zonedTimeOnDate } from '@/lib/timezone';
@@ -40,6 +40,11 @@ interface ScheduleRequestBody {
   topics?: unknown;
   timezone?: unknown;
   scheduledAt?: unknown;
+  // taskId: attach an already-generated video instead of generating a new
+  // one. The slot is created in 'generating' state with this task_id; the
+  // engine's reconcile loop flips it to 'ready' once the task is complete
+  // (or 'failed' if the task failed), then publishes at slot_at.
+  taskId?: unknown;
 }
 
 function errorResponse(
@@ -132,7 +137,7 @@ const ACCOUNT_ID_HINTS: Record<(typeof VALID_PROVIDERS)[number], string> = {
 // Used by PATCH (merged final selection), so a PATCH cannot point a
 // schedule at another user's account.
 //---------------
-async function assertAccountsOwned(
+export async function assertAccountsOwned(
   supabase: ScheduleSupabaseClient,
   userId: string,
   selections: ReadonlyArray<{ provider: (typeof VALID_PROVIDERS)[number]; ids: readonly string[] }>,
@@ -272,6 +277,34 @@ export function computeOneOffSlots(
 
 function parseFaceQuality(value: unknown): FaceQuality | null {
   return value === 'ok' || value === 'very_good' ? value : null;
+}
+
+//---------------
+// verifyEngineTask — checks a video task exists, belongs to the user, and
+// completed. Returns 'ok' | 'not_found' | 'not_complete' | 'error'.
+// The engine scopes tasks by user_id, so a 404 covers both "no such task"
+// and "another user's task".
+//---------------
+async function verifyEngineTask(
+  taskId: string,
+  userId: string,
+): Promise<'ok' | 'not_found' | 'not_complete' | 'error'> {
+  const baseUrl = process.env.MONEYPRINT_API_URL?.replace(/\/+$/, '');
+  if (!baseUrl) return 'error';
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}`, {
+      headers: engineAuthHeaders(userId),
+      cache: 'no-store',
+    });
+  } catch {
+    return 'error';
+  }
+  if (response.status === 404) return 'not_found';
+  if (!response.ok) return 'error';
+  const body = (await response.json().catch(() => null)) as { state?: unknown } | null;
+  // Engine task states: 1 = complete, -1 = failed, 0 = processing.
+  return body?.state === 1 ? 'ok' : 'not_complete';
 }
 
 export async function GET(request?: Request): Promise<NextResponse> {
@@ -454,6 +487,36 @@ export async function POST(request: Request): Promise<NextResponse> {
     .single();
   if (!persona) return errorResponse(404, 'Persona not found.', 'POST /api/schedule');
 
+  // taskId: attach an already-generated video instead of generating one.
+  // The task must exist, belong to the user, and be completed — verified
+  // against the engine before anything is created (fail fast, no orphan
+  // slots). Slots are created in 'generating' state with the task_id; the
+  // engine's reconcile loop flips them to 'ready' (task already complete)
+  // and the publish loop publishes at slot_at.
+  const SAFE_TASK_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+  const taskId = typeof body.taskId === 'string' && SAFE_TASK_ID.test(body.taskId) ? body.taskId : null;
+  if (body.taskId !== undefined && taskId === null) {
+    return errorResponse(400, 'taskId must be a valid video task ID.', 'POST /api/schedule');
+  }
+  if (taskId) {
+    const taskCheck = await verifyEngineTask(taskId, auth.userId);
+    if (taskCheck === 'not_found') {
+      return errorResponse(404, 'Video task not found.', 'POST /api/schedule');
+    }
+    if (taskCheck === 'not_complete') {
+      return errorResponse(400, 'Video task is not completed yet.', 'POST /api/schedule');
+    }
+    if (taskCheck === 'error') {
+      return errorResponse(502, 'Video service is unavailable.', 'POST /api/schedule');
+    }
+    // A taskId attaches one already-generated video: exactly one slot.
+    // Multiple topics would need multiple videos, which a single taskId
+    // cannot provide.
+    if (topics.length !== 1) {
+      return errorResponse(400, 'taskId schedules require exactly one topic (one video, one slot).', 'POST /api/schedule');
+    }
+  }
+
   // Multiple schedules per persona are allowed: each one-off schedule is an
   // independent set of slots (own times, own providers, prepaid tokens), so
   // a persona can hold e.g. a 15h Bluesky schedule and a 17h
@@ -481,10 +544,13 @@ export async function POST(request: Request): Promise<NextResponse> {
   // generation failure later is a per-slot refund, never an unpaid video.
   // generation_id = batch:{scheduleId} reuses the engine's existing
   // per-slot refund path (refund_batch_tokens) unchanged.
+  //
+  // taskId schedules skip the spend: the video is already generated (and
+  // was charged at generation time) — there is nothing to prepay.
   const faceMix = toFiniteNumber((persona as Record<string, unknown>).face_mix_percent, 0);
   const faceQuality = parseFaceQuality((persona as Record<string, unknown>).face_quality) ?? 'ok';
   const perVideoCost = computeVideoTokens(faceMix, faceQuality);
-  const totalCost = slots.length * perVideoCost;
+  const totalCost = taskId ? 0 : slots.length * perVideoCost;
 
   const scheduleId = randomUUID();
   const generationId = `batch:${scheduleId}`;
@@ -499,28 +565,32 @@ export async function POST(request: Request): Promise<NextResponse> {
     // Best-effort: the spend below is the real gate.
   }
 
-  const { data: spendData, error: spendError } = await serviceSupabase.rpc('spend_tokens', {
-    p_user_id: user.id,
-    p_amount: totalCost,
-    p_generation_id: generationId,
-    p_reason: `One-off schedule (${slots.length} video${slots.length === 1 ? '' : 's'})`,
-  });
-  if (spendError) {
-    return errorResponse(500, 'Failed to process tokens. Please try again.', 'POST /api/schedule', undefined, {
-      cause: spendError,
+  if (!taskId) {
+    const { data: spendData, error: spendError } = await serviceSupabase.rpc('spend_tokens', {
+      p_user_id: user.id,
+      p_amount: totalCost,
+      p_generation_id: generationId,
+      p_reason: `One-off schedule (${slots.length} video${slots.length === 1 ? '' : 's'})`,
     });
-  }
-  const spendRecord = (spendData ?? {}) as Record<string, unknown>;
-  if (spendRecord.spent !== true) {
-    const have = toFiniteNumber(spendRecord.balance, 0);
-    return errorResponse(
-      400,
-      `INSUFFICIENT_TOKENS: schedule needs ${totalCost} tokens but the balance is ${have}.`, 'POST /api/schedule',
-      { code: 'INSUFFICIENT', have, need: totalCost },
-    );
+    if (spendError) {
+      return errorResponse(500, 'Failed to process tokens. Please try again.', 'POST /api/schedule', undefined, {
+        cause: spendError,
+      });
+    }
+    const spendRecord = (spendData ?? {}) as Record<string, unknown>;
+    if (spendRecord.spent !== true) {
+      const have = toFiniteNumber(spendRecord.balance, 0);
+      return errorResponse(
+        400,
+        `INSUFFICIENT_TOKENS: schedule needs ${totalCost} tokens but the balance is ${have}.`, 'POST /api/schedule',
+        { code: 'INSUFFICIENT', have, need: totalCost },
+      );
+    }
   }
 
   const refundCharge = async (reason: string): Promise<boolean> => {
+    // No-op when nothing was charged (taskId schedules skip the spend).
+    if (taskId) return true;
     const { error } = await serviceSupabase.rpc('refund_generation_tokens', {
       p_user_id: user.id,
       p_generation_id: generationId,
@@ -585,7 +655,12 @@ export async function POST(request: Request): Promise<NextResponse> {
     schedule_id: scheduleId,
     user_id: user.id,
     slot_at: slot.slotAt.toISOString(),
-    status: 'pending',
+    // taskId schedules attach an already-generated video: the slot starts
+    // in 'generating' with the task_id, and the engine's reconcile loop
+    // flips it to 'ready' (the task is already complete). Otherwise the
+    // engine generates from the persona starting at 'pending'.
+    status: taskId ? 'generating' : 'pending',
+    ...(taskId ? { task_id: taskId } : {}),
     topic: slot.topic,
   }));
   const { data: insertedSlots, error: slotsError } = await supabase

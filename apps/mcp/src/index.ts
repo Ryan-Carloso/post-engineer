@@ -181,7 +181,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
 
   server.tool(
     'generate_video_from_persona',
-    'Trigger video generation using an existing persona. Optional scriptPrompt overrides the video script; optional audioUrl (public http(s) URL) supplies custom audio for this video, overriding the persona voice; optional imageId picks a specific image from the persona image library (see list_persona_images), overriding the deterministic per-video selection; optional webhookUrl is POSTed by the server once when the video reaches a terminal state. For faceless generation, omit personaId and provide videoSubject plus a voice source (audioUrl or voiceId).',
+    'Trigger video generation using an existing persona. Optional scriptPrompt overrides the video script; optional audioUrl (public http(s) URL) supplies custom audio for this video, overriding the persona voice; optional imageId picks a specific image from the persona image library (see list_persona_images), overriding the deterministic per-video selection; optional webhookUrl is POSTed by the server once when the video reaches a terminal state. For faceless generation, omit personaId and provide videoSubject plus a voice source (audioUrl or voiceId). Optional schedule ties generation to publishing: pass providers, account IDs, scheduledAt and timezone to have the video automatically published at the scheduled time.',
     GenerateVideoShape,
     withTracking('generate_video_from_persona', async (args) => {
       return handleGenerateVideo(apiClient, args);

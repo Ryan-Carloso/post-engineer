@@ -14,6 +14,10 @@ import { normalizeDebugTaskResponse } from '@/lib/debug-video';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 import { apiErrorResponse } from '@/lib/api-error';
+import { isValidTimezone, parseZonedDateTime } from '@/lib/timezone';
+import { validateScheduleWindow } from '@/lib/schedule-window';
+import { createScheduleFromTask } from '@/lib/schedule/create-from-task';
+import { assertAccountsOwned, VALID_SCHEDULE_PROVIDERS } from '@/app/api/schedule/route';
 
 //---------------
 // POST /api/persona/video-job — proxy to money-print.
@@ -290,6 +294,25 @@ export async function POST(request: Request): Promise<NextResponse> {
     customAudioUrl = requestBody.audio_url;
   }
   delete requestBody.audio_url;
+
+  // Unified generate+schedule: an optional `schedule` object chooses where
+  // and when to publish upfront (providers, accounts, datetime). When
+  // present, a one-off schedule is created after the video task starts;
+  // the engine publishes at the scheduled time. Deleted here so it never
+  // reaches the engine as a loose field.
+  const rawSchedule = requestBody.schedule;
+  delete requestBody.schedule;
+  let scheduleParams: Extract<ParsedSchedule, { ok: true }>['value'] | null = null;
+  if (rawSchedule !== undefined) {
+    const parsed = parseScheduleParam(rawSchedule);
+    if (!parsed.ok) {
+      return NextResponse.json(
+        { success: false, error: parsed.error },
+        { status: 400 },
+      );
+    }
+    scheduleParams = parsed.value;
+  }
 
   if (customAudioUrl !== undefined) {
     const audioCheck = await checkCustomAudioUrl(customAudioUrl);
@@ -901,7 +924,60 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
-  return NextResponse.json({ success: true, taskId: engineTask.taskId });
+  // Unified generate+schedule: the caller chose where/when to publish
+  // upfront. Create the one-off schedule now, linked to the new task; the
+  // engine publishes when the video completes and the time comes.
+  let schedule: { scheduleId: string; slotId: string; slotAt: string } | null = null;
+  if (scheduleParams) {
+    const ownedError = await assertAccountsOwned(
+      supabase,
+      user.id,
+      (['youtube', 'instagram', 'linkedin', 'bluesky'] as const).map((provider) => ({
+        provider,
+        ids: scheduleParams.providers.includes(provider)
+          ? scheduleParams[`${provider}AccountIds` as const]
+          : [],
+      })),
+    );
+    if (ownedError) {
+      return NextResponse.json({ success: false, error: ownedError }, { status: 400 });
+    }
+    try {
+      const created = await createScheduleFromTask({
+        supabase,
+        userId: user.id,
+        // The schedule's persona is the video's persona when there is one;
+        // faceless schedules carry null (no persona to notify).
+        personaId: recordPersonaId,
+        providers: scheduleParams.providers,
+        youtubeAccountIds: scheduleParams.youtubeAccountIds,
+        instagramAccountIds: scheduleParams.instagramAccountIds,
+        linkedinAccountIds: scheduleParams.linkedinAccountIds,
+        blueskyAccountIds: scheduleParams.blueskyAccountIds,
+        scheduledAt: scheduleParams.scheduledAt,
+        timezone: scheduleParams.timezone,
+        topic:
+          typeof jobPayload.video_subject === 'string' && jobPayload.video_subject
+            ? jobPayload.video_subject
+            : 'Scheduled video',
+        taskId: engineTask.taskId,
+      });
+      schedule = created;
+    } catch (error) {
+      // The video task is already running; a schedule failure must not
+      // fail the generation. Log and return the task without a schedule.
+      logger.error('[video-job] schedule creation failed after task start', error, {
+        route: 'POST /api/persona/video-job',
+        taskId: engineTask.taskId,
+      });
+    }
+  }
+
+  return NextResponse.json({
+    success: true,
+    taskId: engineTask.taskId,
+    ...(schedule ? { schedule } : {}),
+  });
 }
 
 //---------------
@@ -1069,6 +1145,89 @@ function isHttpUrl(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+//---------------
+// parseScheduleParam — validates the unified generate+schedule `schedule`
+// object: { providers, *AccountIds, scheduledAt, timezone }. Returns the
+// normalized params or a 400-ready error. Reuses the schedule route's
+// validation helpers so the rules stay in one place.
+//---------------
+type ParsedSchedule =
+  | { ok: true; value: {
+      providers: (typeof VALID_SCHEDULE_PROVIDERS)[number][];
+      youtubeAccountIds: string[];
+      instagramAccountIds: string[];
+      linkedinAccountIds: string[];
+      blueskyAccountIds: string[];
+      scheduledAt: Date;
+      timezone: string;
+    } }
+  | { ok: false; error: string };
+
+function parseScheduleParam(value: unknown): ParsedSchedule {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return { ok: false, error: 'schedule must be an object.' };
+  }
+  const s = value as Record<string, unknown>;
+
+  const providers = Array.isArray(s.providers)
+    ? s.providers.filter(
+      (p): p is (typeof VALID_SCHEDULE_PROVIDERS)[number] =>
+        typeof p === 'string' && (VALID_SCHEDULE_PROVIDERS as readonly string[]).includes(p),
+    )
+    : [];
+  if (providers.length === 0) {
+    return { ok: false, error: 'schedule.providers must contain youtube, instagram, linkedin and/or bluesky.' };
+  }
+
+  const parseIds = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((id): id is string => typeof id === 'string' && id.length > 0) : [];
+  const youtubeAccountIds = parseIds(s.youtubeAccountIds);
+  const instagramAccountIds = parseIds(s.instagramAccountIds);
+  const linkedinAccountIds = parseIds(s.linkedinAccountIds);
+  const blueskyAccountIds = parseIds(s.blueskyAccountIds);
+  if (providers.includes('youtube') && youtubeAccountIds.length === 0) {
+    return { ok: false, error: 'schedule.youtubeAccountIds must contain at least one account.' };
+  }
+  if (providers.includes('instagram') && instagramAccountIds.length === 0) {
+    return { ok: false, error: 'schedule.instagramAccountIds must contain at least one account.' };
+  }
+  if (providers.includes('linkedin') && linkedinAccountIds.length === 0) {
+    return { ok: false, error: 'schedule.linkedinAccountIds must contain at least one account.' };
+  }
+  if (providers.includes('bluesky') && blueskyAccountIds.length === 0) {
+    return { ok: false, error: 'schedule.blueskyAccountIds must contain at least one account.' };
+  }
+
+  const timezone = typeof s.timezone === 'string' && s.timezone ? s.timezone : 'UTC';
+  if (!isValidTimezone(timezone)) {
+    return { ok: false, error: 'schedule.timezone must be a valid IANA timezone (e.g. "Europe/Lisbon").' };
+  }
+  if (s.scheduledAt === undefined || s.scheduledAt === null) {
+    return { ok: false, error: 'schedule.scheduledAt is required.' };
+  }
+  const scheduledAt = parseZonedDateTime(s.scheduledAt, timezone);
+  if (!scheduledAt) {
+    return { ok: false, error: 'schedule.scheduledAt must be a valid ISO datetime.' };
+  }
+  const windowCheck = validateScheduleWindow(scheduledAt);
+  if (!windowCheck.ok) {
+    return { ok: false, error: `schedule.scheduledAt ${windowCheck.error ?? 'is outside the allowed window.'}` };
+  }
+
+  return {
+    ok: true,
+    value: {
+      providers,
+      youtubeAccountIds,
+      instagramAccountIds,
+      linkedinAccountIds,
+      blueskyAccountIds,
+      scheduledAt,
+      timezone,
+    },
+  };
 }
 
 async function signedUrl(

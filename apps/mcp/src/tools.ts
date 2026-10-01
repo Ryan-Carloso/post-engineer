@@ -128,6 +128,15 @@ export const GenerateVideoShape = {
   audioUrl: z.string().url('audioUrl must be a valid URL').optional().describe('Optional public URL of custom audio for this video (overrides the persona voice)'),
   imageId: z.string().min(1, 'imageId must be a non-empty string').optional().describe('Optional library image ID to use for this video (overrides the deterministic per-video image selection; see list_persona_images)'),
   webhookUrl: z.string().url('webhookUrl must be a valid URL').optional().describe('Optional callback URL the server POSTs to once when the video reaches a terminal state (completed/failed)'),
+  schedule: z.object({
+    providers: z.array(z.enum(['youtube', 'instagram', 'linkedin', 'bluesky'])).min(1).describe('Where to publish the video.'),
+    youtubeAccountIds: z.array(z.string().min(1)).optional().describe('YouTube channel IDs (the channelId field from list_social_accounts). Required when providers includes youtube.'),
+    instagramAccountIds: z.array(z.string().min(1)).optional().describe('Instagram account IDs. Required when providers includes instagram.'),
+    linkedinAccountIds: z.array(z.string().min(1)).optional().describe('LinkedIn account IDs. Required when providers includes linkedin.'),
+    blueskyAccountIds: z.array(z.string().min(1)).optional().describe('Bluesky DIDs (the did field from list_social_accounts). Required when providers includes bluesky.'),
+    scheduledAt: z.string().min(1).describe('When to publish: ISO datetime. A naive "2026-10-02T20:00:00" is wall-clock in timezone. Must be 24h–30d ahead.'),
+    timezone: z.string().min(1).optional().describe('IANA timezone for a naive scheduledAt, e.g. "Europe/Lisbon". Defaults to UTC.'),
+  }).optional().describe('Unified generate+schedule: choose where/when to publish upfront. The video is generated and then automatically published at scheduledAt. Omit to only generate (you can schedule later via the API taskId flow).'),
 };
 
 export const GenerateVideoSchema = z.object(GenerateVideoShape);

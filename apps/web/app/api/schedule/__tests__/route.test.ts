@@ -9,6 +9,7 @@ vi.mock('@/lib/supabase/service', () => ({
 }));
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
+  engineAuthHeaders: vi.fn(() => ({ authorization: 'Bearer test-engine-secret', 'x-user-id': 'test-user' })),
 }));
 vi.mock('@/lib/logger', () => ({
   logger: {
@@ -1330,5 +1331,85 @@ describe('POST /api/schedule slots insert (database-generated id)', () => {
     const body = (await res.json()) as { slots: { id: unknown }[] };
     expect(body.slots[0].id).toBe('db-slot-1');
     expect(body.slots[1].id).toBe('db-slot-2');
+  });
+});
+
+describe('POST /api/schedule with taskId (pre-generated video)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv('MONEYPRINT_API_URL', 'http://engine.internal:8080');
+    vi.stubEnv('MONEYPRINT_API_SECRET', 'test-engine-secret');
+  });
+
+  function mockEngineTask(state: number | 'not_found' | 'error') {
+    const fetchMock = vi.fn<typeof fetch>();
+    if (state === 'not_found') {
+      fetchMock.mockResolvedValue(new Response('not found', { status: 404 }));
+    } else if (state === 'error') {
+      fetchMock.mockRejectedValue(new Error('refused'));
+    } else {
+      fetchMock.mockResolvedValue(
+        new Response(JSON.stringify({ task_id: 'task-1', state }), { status: 200 }),
+      );
+    }
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+
+  it('creates the slot in generating state with task_id and skips the token spend', async () => {
+    const db = oneOffSupabase({});
+    mockEngineTask(1); // TASK_STATE_COMPLETE
+    const res = await POST(jsonRequest({ ...validOneOffBody, taskId: 'task-1' }, 'POST'));
+
+    expect(res.status).toBe(201);
+    expect(db.slotRows).toHaveLength(1);
+    expect(db.slotRows[0]).toMatchObject({ status: 'generating', task_id: 'task-1' });
+    // No generation to prepay: spend_tokens must not be called.
+    expect(db.rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+  });
+
+  it('returns 404 when the task does not exist', async () => {
+    oneOffSupabase({});
+    mockEngineTask('not_found');
+    const res = await POST(jsonRequest({ ...validOneOffBody, taskId: 'task-1' }, 'POST'));
+
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/not found/i);
+  });
+
+  it('returns 400 when the task is not completed', async () => {
+    oneOffSupabase({});
+    mockEngineTask(0); // TASK_STATE_PROCESSING
+    const res = await POST(jsonRequest({ ...validOneOffBody, taskId: 'task-1' }, 'POST'));
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/not completed/i);
+  });
+
+  it('returns 400 when multiple topics are given with a taskId', async () => {
+    oneOffSupabase({});
+    mockEngineTask(1);
+    const res = await POST(
+      jsonRequest(
+        { ...validOneOffBody, taskId: 'task-1', postsPerDay: 2, topics: ['t1', 't2'], times: ['09:00', '18:00'] },
+        'POST',
+      ),
+    );
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/exactly one topic/i);
+  });
+
+  it('returns 400 for a malformed taskId', async () => {
+    oneOffSupabase({});
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal('fetch', fetchMock);
+    const res = await POST(jsonRequest({ ...validOneOffBody, taskId: '../evil' }, 'POST'));
+
+    expect(res.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

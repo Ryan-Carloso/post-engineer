@@ -1066,6 +1066,27 @@ describe('PostEngineerClient persona image library', () => {
     expect('image_id' in body).toBe(false);
   });
 
+  it('generateVideoJob forwards schedule params for unified generate+schedule', async () => {
+    const schedule = {
+      providers: ['youtube', 'bluesky'] as ('youtube' | 'bluesky')[],
+      youtubeAccountIds: ['yt-1'],
+      blueskyAccountIds: ['did:plc:abc'],
+      scheduledAt: '2026-10-02T20:00:00',
+      timezone: 'Europe/Lisbon',
+    };
+    await client.generateVideoJob({ videoSubject: 'launch', voiceId: 'v-1', schedule });
+    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
+    const body = JSON.parse(String(request?.body));
+    expect(body.schedule).toEqual(schedule);
+  });
+
+  it('generateVideoJob omits schedule when not provided', async () => {
+    await client.generateVideoJob({ personaId: 'p-1' });
+    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
+    const body = JSON.parse(String(request?.body));
+    expect('schedule' in body).toBe(false);
+  });
+
   it('listPersonaImages hits the library endpoint', async () => {
     await client.listPersonaImages('p-1');
     expect(global.fetch).toHaveBeenCalledWith(
