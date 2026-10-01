@@ -1278,3 +1278,33 @@ Follow these so the same issues don't come back:
   A cosmetic commit restarts the full ~10min CI and risks orphan commits if
   the user merges mid-babysit. When the reviewer declines its own finding,
   record the decision and move on — don't churn for the reviewer's sake.
+
+## PR #35 review learnings, round 2 (2026-10-01, OpenCode on 27b5cbf — 3 fixed)
+
+- **Parallel literals across apps get a sync test.** When a change introduces
+  the same constant in multiple apps with no shared package (here
+  `DEFAULT_POSTHOG_HOST` in web/engine/mcp), a one-sided future edit
+  silently desyncs them — and analytics paths swallow delivery errors by
+  design, so nothing surfaces. Pin them with a file-parsing sync test that
+  asserts the literals match, mirroring the SQL-literals precedent
+  (`supabase/persona-images.sql` vs TS constants). The test comment must
+  spell out the self-hoster trade-off (change all three, or update the test
+  to assert the intended mapping) so a divergent host is always conscious.
+- **Delete env vars in tests via `vi.stubEnv(key, undefined)`, never a
+  manual `delete process.env.X`.** `vi.unstubAllEnvs()` only restores
+  *stubbed* values; a manual delete permanently removes the var for every
+  subsequently-run test file in that worker — on a self-hoster's machine,
+  where the var may genuinely be set, that's a leak. `stubEnv` with
+  `undefined` deletes the var and restores the original on unstub.
+- **Align the semver bump with the PR title.** Repo rule is minor-for-feat,
+  patch-for-fix: a `feat:`-titled PR that bumps patch is the misnomer (or
+  vice versa). When a PR mixes feat and fix commits, pick one and align the
+  other — here the title stayed `feat(posthog)` so the bump went
+  1.8.1 → 1.9.0. CI `version-check` only enforces sync, not the level, so
+  this is on the author/reviewer, not automation.
+- **The user merges mid-babysit — the pre-push `gh pr view` check keeps
+  paying off.** Round 2 ended the same way as #34: the user merged at
+  12:13:10Z while a fix commit was in flight; the check caught it before
+  the push, so the unpushed work (cross-app sync test) stayed local instead
+  of becoming orphan commits. Never skip the check, no matter how "safe"
+  the push looks.

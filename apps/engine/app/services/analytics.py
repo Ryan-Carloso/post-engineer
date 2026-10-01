@@ -50,7 +50,9 @@ def scrub_secret_values(text: str) -> str:
 
 # Default PostHog ingest host. Change this constant if you self-host
 # PostHog — every telemetry path in the engine reads it as the fallback
-# when POSTHOG_HOST is not set.
+# when POSTHOG_HOST is not set. Keep in sync with the web
+# (apps/web/lib/posthog-config.ts) and MCP (apps/mcp/src/analytics.ts)
+# constants — apps/web/lib/__tests__/posthog-config.test.ts enforces it.
 DEFAULT_POSTHOG_HOST = "https://eu.i.posthog.com"
 
 _client: Any = None
