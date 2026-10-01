@@ -23,7 +23,7 @@ const BASE_PARAMS = {
 };
 
 function mockClient(opts?: { slotError?: boolean }) {
-  const scheduleInsert = vi.fn(() => ({
+  const scheduleInsert = vi.fn((payload: unknown) => ({
     select: vi.fn(() => ({
       single: vi.fn(async () => ({ data: { id: 'sched-1' }, error: null })),
     })),
