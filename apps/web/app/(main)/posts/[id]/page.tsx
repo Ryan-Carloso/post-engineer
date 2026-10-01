@@ -5,18 +5,14 @@ import { useParams, useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import {
-  useScheduleStatusQuery,
-  useSchedulesQuery,
-  usePersonaListQuery,
+  useSlotDetailQuery,
+  useGenerationDetailQuery,
   useYouTubeAccountsQuery,
   useInstagramAccountsQuery,
   useLinkedinAccountsQuery,
-  useVideoGenerationsQuery,
   useUpdateSlotMutation,
   useDeleteSlotMutation,
   type ScheduledSlot,
-  type ScheduleConfig,
-  type VideoGeneration,
 } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -25,12 +21,13 @@ import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
 
 //---------------
-// PostDetailPage (/posts/[id]) — the full-page replacement for the old
-// detail modal: big video player when the engine produced one, live
-// progress while generating, topic editing for awaiting slots, delete for
-// awaiting/failed slots. The route param carries the id only; the slot or
-// generation is resolved from the React Query cache every render, so a
-// refetch updates the page in place.
+// PostDetailPage (/posts/[id]) — the full-page post detail: big video
+// player when the engine produced one, live progress while generating,
+// topic editing for awaiting slots, delete for awaiting/failed slots.
+// The entity is resolved by id through the detail endpoints
+// (GET /api/schedule/slots/:id and GET /api/persona/video-generations/:id)
+// — never by scanning the history lists, so any post is reachable no
+// matter how deep it sits in the history.
 //---------------
 
 interface AccountOption {
@@ -69,9 +66,6 @@ const GENERATION_ERROR_KEY: Record<string, TranslationKey> = {
   unknown: 'posts.errorUnknown',
 };
 
-const GENERATIONS_LIMIT = 200;
-const SLOTS_LIMIT = 200;
-
 function videoUrlFor(taskId: string | null | undefined): string | null {
   return taskId ? `/api/persona/video-download/${encodeURIComponent(taskId)}/final-1.mp4` : null;
 }
@@ -90,40 +84,21 @@ function accountInitials(label: string): string {
   return tokens.slice(0, 2).map((token) => token[0]?.toUpperCase() ?? '').join('');
 }
 
-function resolveSlotAccounts(
-  schedule: ScheduleConfig | undefined,
-  accounts: AccountOption[],
-): AccountOption[] {
-  if (!schedule) return [];
-  const ids = new Set([
-    ...schedule.youtubeAccountIds,
-    ...schedule.instagramAccountIds,
-    ...schedule.linkedinAccountIds,
-  ]);
-  return accounts.filter((account) => ids.has(account.id));
-}
-
 export default function PostDetailPage() {
   const { t, locale } = useI18n();
   const params = useParams();
   const id = typeof params.id === 'string' ? params.id : '';
 
-  const statusQuery = useScheduleStatusQuery(SLOTS_LIMIT);
-  const schedulesQuery = useSchedulesQuery();
-  const personasQuery = usePersonaListQuery();
-  const generationsQuery = useVideoGenerationsQuery(GENERATIONS_LIMIT);
+  // Both lookups run for the id: a scheduled post resolves through the
+  // slots endpoint, a manual generation through the generations one.
+  // A 404 resolves to null (not found); any other failure throws and is
+  // surfaced by the error state.
+  const slotQuery = useSlotDetailQuery(id);
+  const generationQuery = useGenerationDetailQuery(id);
   const youtubeQuery = useYouTubeAccountsQuery();
   const instagramQuery = useInstagramAccountsQuery();
   const linkedinQuery = useLinkedinAccountsQuery();
 
-  const scheduleById = useMemo(
-    () => new Map((schedulesQuery.data ?? []).map((schedule) => [schedule.id, schedule])),
-    [schedulesQuery.data],
-  );
-  const personaNameById = useMemo(
-    () => new Map((personasQuery.data ?? []).map((persona) => [persona.id, persona.name])),
-    [personasQuery.data],
-  );
   const accountOptions: AccountOption[] = useMemo(
     () => [
       ...(youtubeQuery.data?.accounts ?? []).map((account) => ({
@@ -145,22 +120,37 @@ export default function PostDetailPage() {
     [youtubeQuery.data, instagramQuery.data, linkedinQuery.data],
   );
 
-  const isLoading =
-    statusQuery.isLoading || schedulesQuery.isLoading || personasQuery.isLoading || generationsQuery.isLoading;
+  const slotDetail = slotQuery.data ?? null;
+  const generation = generationQuery.data ?? null;
+  const isLoading = slotQuery.isLoading || generationQuery.isLoading;
+  const isError = slotQuery.isError || generationQuery.isError;
 
-  const slot = useMemo(() => {
-    const all = [...(statusQuery.data?.upcoming ?? []), ...(statusQuery.data?.recent ?? [])];
-    return all.find((item) => item.id === id) ?? null;
-  }, [statusQuery.data, id]);
-  const generation = useMemo(
-    () => (generationsQuery.data ?? []).find((item) => item.id === id) ?? null,
-    [generationsQuery.data, id],
-  );
+  const accounts: AccountOption[] = useMemo(() => {
+    if (!slotDetail) return [];
+    const ids = new Set([
+      ...slotDetail.schedule.youtubeAccountIds,
+      ...slotDetail.schedule.instagramAccountIds,
+      ...slotDetail.schedule.linkedinAccountIds,
+    ]);
+    return accountOptions.filter((account) => ids.has(account.id));
+  }, [slotDetail, accountOptions]);
+
+  const slot = slotDetail?.slot ?? null;
+  const personaName = slotDetail?.persona?.name ?? generation?.personaName ?? t('posts.personaFallback');
 
   if (isLoading) return <DetailSkeleton />;
+
+  // Detail fetch failures carry the server's safe message; null results
+  // mean genuinely not found (404 from both endpoints).
+  const loadError =
+    (slotQuery.isError ? (slotQuery.error instanceof Error ? slotQuery.error.message : null) : null) ??
+    (generationQuery.isError ? (generationQuery.error instanceof Error ? generationQuery.error.message : null) : null);
+  if (loadError) {
+    return <DetailNotFound message={loadError} />;
+  }
   if (!slot && !generation) return <DetailNotFound />;
 
-  if (generation) {
+  if (generation && !slot) {
     const videoUrl = generation.status === 'completed' ? videoUrlFor(generation.engineTaskId) : null;
     return (
       <div className="mx-auto max-w-3xl">
@@ -192,18 +182,14 @@ export default function PostDetailPage() {
     );
   }
 
-  const slotEntity = slot as ScheduledSlot;
-  const schedule = scheduleById.get(slotEntity.scheduleId);
-  const personaName = personaNameById.get(schedule?.personaId ?? '') ?? t('posts.personaFallback');
-  const accounts = resolveSlotAccounts(schedule, accountOptions);
   return (
     <div className="mx-auto max-w-3xl">
       <DetailHeader
         title={personaName}
-        statusLabel={t(STATUS_KEY[slotEntity.status] ?? 'posts.statusPending')}
-        statusStyle={STATUS_STYLE[slotEntity.status] ?? STATUS_STYLE.pending}
+        statusLabel={t(STATUS_KEY[slot?.status ?? 'pending'] ?? 'posts.statusPending')}
+        statusStyle={STATUS_STYLE[slot?.status ?? 'pending'] ?? STATUS_STYLE.pending}
       />
-      <SlotDetail slot={slotEntity} accounts={accounts} locale={locale} />
+      {slot && <SlotDetail slot={slot} accounts={accounts} locale={locale} />}
     </div>
   );
 }
@@ -246,21 +232,78 @@ const DetailHeader = ({
 };
 
 //---------------
-// DetailPlayer — the full-width player section. No video yet (awaiting,
-// generating, failed or a generation that never completed) renders the
-// reason, never a broken player.
+// DetailPlayer — the full-width player section. The video keeps its
+// intrinsic aspect ratio (h-auto — faceless videos are often vertical
+// 9:16; a forced 16:9 box letterboxes them into a black rectangle). The
+// debug line below surfaces what the <video> element itself reports
+// (state, resolution, duration, media error code) so a black player is
+// never undiagnosable: if the proxy fails, the code shows up here.
+// No video yet (awaiting, generating, failed or a generation that never
+// completed) renders the reason, never a broken player.
 //---------------
-const DetailPlayer = ({ src, placeholder }: { src: string | null; placeholder: string }) => (
-  <div className="mt-4 overflow-hidden rounded-2xl bg-black">
-    {src ? (
-      <video src={src} controls preload="metadata" className="aspect-video w-full" />
-    ) : (
-      <div className="flex aspect-video w-full items-center justify-center text-sm font-medium text-[#8aa2b5]">
-        {placeholder}
+const DetailPlayer = ({ src, placeholder }: { src: string | null; placeholder: string }) => {
+  const { t } = useI18n();
+  const [debug, setDebug] = useState<{
+    status: 'loading' | 'ready' | 'error';
+    width: number;
+    height: number;
+    duration: number;
+    errorCode: number | null;
+  }>({ status: 'loading', width: 0, height: 0, duration: 0, errorCode: null });
+
+  const handleMetadata = (event: React.SyntheticEvent<HTMLVideoElement>): void => {
+    const el = event.currentTarget;
+    setDebug({
+      status: 'ready',
+      width: el.videoWidth,
+      height: el.videoHeight,
+      duration: el.duration,
+      errorCode: null,
+    });
+  };
+
+  // React nulls out event.currentTarget after the dispatch — capture the
+  // element (and its MediaError) synchronously, before the state updater
+  // runs, or Safari throws "null is not an object".
+  const handleError = (event: React.SyntheticEvent<HTMLVideoElement>): void => {
+    const el = event.target as HTMLVideoElement;
+    const code = el.error?.code ?? null;
+    setDebug((current) => ({
+      ...current,
+      status: 'error',
+      errorCode: code,
+    }));
+  };
+
+  return (
+    <div className="mt-4">
+      <div className="overflow-hidden rounded-2xl bg-black">
+        {src ? (
+          <video
+            src={src}
+            controls
+            preload="metadata"
+            onLoadedMetadata={handleMetadata}
+            onError={handleError}
+            className="h-auto w-full"
+          />
+        ) : (
+          <div className="flex aspect-video w-full items-center justify-center text-sm font-medium text-[#8aa2b5]">
+            {placeholder}
+          </div>
+        )}
       </div>
-    )}
-  </div>
-);
+      {src && (
+        <p data-testid="video-debug" className="mt-2 font-mono text-xs text-[#8aa2b5]">
+          {debug.status === 'ready' &&
+            `${debug.width}×${debug.height} · ${Math.round(debug.duration)}s · ${src}`}
+          {debug.status === 'error' && `${t('posts.videoLoadError')} (code ${debug.errorCode ?? '?'}) · ${src}`}
+          {debug.status === 'loading' && `loading… · ${src}`}
+        </p>
+      )}
+    </div>
+  );
+};
 
 //---------------
 // SlotDetail — the scheduled-post body: player or generating progress,
@@ -441,14 +484,15 @@ const SlotDetail = ({
 };
 
 //---------------
-// DetailNotFound — unknown id (deleted slot, another user's post): an
-// honest message and a way back, never a blank page.
+// DetailNotFound — unknown id (deleted slot, another user's post) or a
+// failed detail fetch: an honest message and a way back, never a blank
+// page.
 //---------------
-const DetailNotFound = () => {
+const DetailNotFound = ({ message }: { message?: string }) => {
   const { t } = useI18n();
   return (
     <div className="mx-auto max-w-3xl py-16 text-center">
-      <p className="text-sm font-semibold text-[#0d2b45]">{t('posts.notFound')}</p>
+      <p className="text-sm font-semibold text-[#0d2b45]">{message ?? t('posts.notFound')}</p>
       <Link href="/posts" className="mt-4 inline-block rounded-xl bg-[#0d2b45] px-4 py-2 text-sm font-semibold text-white hover:bg-[#123a5e]">
         {t('posts.back')}
       </Link>

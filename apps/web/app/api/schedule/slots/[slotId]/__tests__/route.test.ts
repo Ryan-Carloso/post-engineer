@@ -4,6 +4,12 @@ import { NextResponse } from 'next/server';
 
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
+  // The slot presentation lib reads live engine progress with these
+  // headers — the module mock must keep them available.
+  engineAuthHeaders: (userId: string) => ({ 'x-user-id': userId }),
+}));
+vi.mock('@/lib/logger', () => ({
+  logger: { error: vi.fn(() => 'log-id'), warn: vi.fn(() => 'log-id'), info: vi.fn(() => 'log-id') },
 }));
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn(),
@@ -12,7 +18,7 @@ vi.mock('@/lib/supabase/service', () => ({
   createSupabaseServiceClient: vi.fn(),
 }));
 
-import { DELETE, PATCH } from '../route';
+import { DELETE, GET, PATCH } from '../route';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 
@@ -32,12 +38,14 @@ interface ChainCall {
 
 //---------------
 // mockSlotsClient — records every (table, op) call so tests assert the
-// delete is scoped by user_id, and resolves the slot/schedule fixtures by
-// op order: select slot → select schedule → count remaining → delete.
+// delete is scoped by user_id, and resolves the slot/schedule/persona
+// fixtures per table (posts: single → slot; schedules: maybeSingle →
+// schedule; personas: single → persona).
 //---------------
 function mockSlotsClient(options: {
   slot?: unknown;
   schedule?: unknown;
+  persona?: unknown;
   remaining?: unknown[];
   deleteError?: unknown;
 }) {
@@ -53,7 +61,10 @@ function mockSlotsClient(options: {
       select: track('select'),
       eq: track('eq'),
       neq: track('neq'),
-      single: vi.fn(async () => ({ data: options.slot ?? null, error: options.slot ? null : { code: 'PGRST116' } })),
+      single: vi.fn(async () => ({
+        data: table === 'personas' ? (options.persona ?? null) : (options.slot ?? null),
+        error: (table === 'personas' ? options.persona : options.slot) ? null : { code: 'PGRST116' },
+      })),
       maybeSingle: vi.fn(async () => ({ data: options.schedule ?? null, error: null })),
       delete: track('delete'),
       update: track('update'),
@@ -63,8 +74,11 @@ function mockSlotsClient(options: {
   };
   const postsChain = makeChain('scheduled_posts');
   const schedulesChain = makeChain('schedules');
-  const from = vi.fn((table: string) => (table === 'scheduled_posts' ? postsChain : schedulesChain));
-  return { from, postsChain, schedulesChain, calls };
+  const personasChain = makeChain('personas');
+  const from = vi.fn((table: string) =>
+    table === 'scheduled_posts' ? postsChain : table === 'schedules' ? schedulesChain : personasChain,
+  );
+  return { from, postsChain, schedulesChain, personasChain, calls };
 }
 
 function mockAuth() {
@@ -256,5 +270,218 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
 
     expect(response.status).toBe(404);
     expect(client.calls.some((c) => c.op === 'update')).toBe(false);
+  });
+});
+
+//---------------
+// GET /api/schedule/slots/[slotId] — one post's full detail (slot +
+// schedule + persona) with the same presentation contract as
+// /api/schedule/status (pending→awaiting, live engine progress). A
+// 404 covers unknown ids AND other users' slots.
+//---------------
+
+const SLOT_DETAIL_ROW = {
+  id: 'slot-1',
+  schedule_id: 's1',
+  slot_at: '2030-06-01T10:00:00.000Z',
+  status: 'pending',
+  topic: 'Next big thing',
+  error: null,
+  published_at: null,
+  task_id: null,
+};
+
+const SCHEDULE_ROW = {
+  id: 's1',
+  persona_id: 'p1',
+  providers: ['youtube', 'instagram'],
+  youtube_account_ids: ['ch1'],
+  instagram_account_ids: ['ig1'],
+  linkedin_account_ids: [],
+};
+
+describe('GET /api/schedule/slots/[slotId]', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
+    vi.stubEnv('MONEYPRINT_API_SECRET', 'secret');
+  });
+
+  it('returns the slot with schedule and persona for the owner', async () => {
+    const client = mockSlotsClient({
+      slot: SLOT_DETAIL_ROW,
+      schedule: SCHEDULE_ROW,
+      persona: { id: 'p1', name: 'Viva Leve' },
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
+      params: Promise.resolve({ slotId: 'slot-1' }),
+    });
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      success: boolean;
+      slot: Record<string, unknown>;
+      schedule: Record<string, unknown>;
+      persona: { id: string; name: string };
+    };
+    expect(body.success).toBe(true);
+    expect(body.slot).toMatchObject({
+      id: 'slot-1',
+      scheduleId: 's1',
+      slotAt: '2030-06-01T10:00:00.000Z',
+      status: 'awaiting',
+      topic: 'Next big thing',
+      taskId: null,
+    });
+    expect(body.schedule).toMatchObject({
+      id: 's1',
+      personaId: 'p1',
+      youtubeAccountIds: ['ch1'],
+      instagramAccountIds: ['ig1'],
+    });
+    expect(body.persona).toEqual({ id: 'p1', name: 'Viva Leve' });
+  });
+
+  it('enriches a generating slot with live engine progress', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ data: { progress: 62, stage: 'lipsync' } }) })),
+    );
+    const client = mockSlotsClient({
+      slot: { ...SLOT_DETAIL_ROW, status: 'generating', task_id: 'task-1' },
+      schedule: SCHEDULE_ROW,
+      persona: { id: 'p1', name: 'Viva Leve' },
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
+      params: Promise.resolve({ slotId: 'slot-1' }),
+    });
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { slot: { progress: number; stage: string | null } };
+    expect(body.slot.progress).toBe(62);
+    expect(body.slot.stage).toBe('lipsync');
+  });
+
+  it('returns 404 for another user’s slot without leaking the row', async () => {
+    // The ownership probe reads the slot by (id, user_id); a foreign slot
+    // resolves no schedule row the caller owns → 404, never the row.
+    const client = mockSlotsClient({
+      slot: { ...SLOT_DETAIL_ROW, user_id: 'someone-else' },
+      schedule: null,
+      persona: { id: 'p1', name: 'Viva Leve' },
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
+      params: Promise.resolve({ slotId: 'slot-1' }),
+    });
+
+    expect(response.status).toBe(404);
+    const body = (await response.json()) as { success: boolean };
+    expect(body.success).toBe(false);
+  });
+
+  it('returns 401 when authentication fails', async () => {
+    const authError = NextResponse.json(
+      { success: false, error: 'Authentication required.' },
+      { status: 401 },
+    );
+    vi.mocked(requireSupabaseSession).mockResolvedValue({ auth: null, error: authError } as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
+      params: Promise.resolve({ slotId: 'slot-1' }),
+    });
+
+    expect(response.status).toBe(401);
+  });
+});
+
+//---------------
+// GET failure logging — a DB outage must NEVER masquerade as "not
+// found": PGRST116 (zero rows) is the only 404; anything else is a loud
+// logger.error with the real error and a 500.
+//---------------
+
+describe('GET /api/schedule/slots/[slotId] failure logging', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: USER_ID, accessToken: 'pe_test_key', isApiKey: true },
+      error: null,
+    } as never);
+  });
+
+  it('returns 500 and logs when the slot lookup fails (DB down, not missing)', async () => {
+    const { logger } = await import('@/lib/logger');
+    const chain = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn(async () => ({ data: null, error: { code: 'XX000', message: 'connection reset' } })),
+    };
+    const client = { from: vi.fn(() => chain) };
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
+      params: Promise.resolve({ slotId: 'slot-1' }),
+    });
+
+    expect(response.status).toBe(500);
+    expect(logger.error).toHaveBeenCalledWith(
+      '[api/schedule/slots] slot lookup failed',
+      expect.objectContaining({ code: 'XX000' }),
+    );
+  });
+
+  it('returns 500 and logs when the ownership/schedule lookup fails', async () => {
+    const { logger } = await import('@/lib/logger');
+    const postsChain = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn(async () => ({ data: SLOT_DETAIL_ROW, error: null })),
+    };
+    const schedulesChain = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn(async () => ({ data: null, error: { code: 'XX000', message: 'timeout' } })),
+    };
+    const client = {
+      from: vi.fn((table: string) => (table === 'scheduled_posts' ? postsChain : schedulesChain)),
+    };
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
+      params: Promise.resolve({ slotId: 'slot-1' }),
+    });
+
+    expect(response.status).toBe(500);
+    expect(logger.error).toHaveBeenCalledWith(
+      '[api/schedule/slots] schedule lookup failed',
+      expect.objectContaining({ code: 'XX000' }),
+    );
+  });
+
+  it('keeps PGRST116 as a plain 404 without an error log', async () => {
+    const { logger } = await import('@/lib/logger');
+    const chain = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn(async () => ({ data: null, error: { code: 'PGRST116' } })),
+    };
+    const client = { from: vi.fn(() => chain) };
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
+      params: Promise.resolve({ slotId: 'slot-1' }),
+    });
+
+    expect(response.status).toBe(404);
+    expect(logger.error).not.toHaveBeenCalled();
   });
 });

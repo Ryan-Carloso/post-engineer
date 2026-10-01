@@ -992,6 +992,80 @@ export function useDeleteSlotMutation() {
   });
 }
 
+//---------------
+// Detail endpoints — one post per request, so the Posts detail page never
+// needs to pull the whole history to find a single id. A 404 resolves to
+// null (not found — unknown id or another user's row); any other failure
+// throws and is surfaced by the page's error state.
+//---------------
+
+export interface SlotDetailPayload {
+  slot: {
+    id: string;
+    scheduleId: string;
+    slotAt: string;
+    status: ScheduledSlot['status'];
+    topic: string | null;
+    error: string | null;
+    publishedAt: string | null;
+    taskId: string | null;
+    progress: number;
+    stage: string | null;
+    retryable: boolean | null;
+    queuePosition: number | null;
+    queueTotal: number | null;
+  };
+  schedule: {
+    id: string;
+    personaId: string;
+    providers: string[];
+    youtubeAccountIds: string[];
+    instagramAccountIds: string[];
+    linkedinAccountIds: string[];
+  };
+  persona: { id: string; name: string } | null;
+}
+
+export async function fetchSlotDetail(slotId: string): Promise<SlotDetailPayload | null> {
+  const response = await fetch(`/api/schedule/slots/${encodeURIComponent(slotId)}`, {
+    method: 'GET',
+  });
+  if (response.status === 404) return null;
+  const data: { success: boolean; slot?: SlotDetailPayload['slot']; schedule?: SlotDetailPayload['schedule']; persona?: SlotDetailPayload['persona']; error?: string } = await response.json();
+  if (!response.ok || !data.success) throw new Error(data.error ?? 'Failed to load post.');
+  if (!data.slot || !data.schedule) throw new Error('Failed to load post.');
+  return { slot: data.slot, schedule: data.schedule, persona: data.persona ?? null };
+}
+
+export async function fetchGenerationDetail(generationId: string): Promise<VideoGeneration | null> {
+  const response = await fetch(`/api/persona/video-generations/${encodeURIComponent(generationId)}`, {
+    method: 'GET',
+  });
+  if (response.status === 404) return null;
+  const data: { success: boolean; generation?: VideoGeneration; error?: string } = await response.json();
+  if (!response.ok || !data.success) throw new Error(data.error ?? 'Failed to load post.');
+  if (!data.generation) throw new Error('Failed to load post.');
+  return data.generation;
+}
+
+export function useSlotDetailQuery(slotId: string) {
+  return useQuery<SlotDetailPayload | null>({
+    queryKey: ['schedule-slot', slotId],
+    queryFn: () => fetchSlotDetail(slotId),
+    enabled: slotId !== '',
+    staleTime: 30_000,
+  });
+}
+
+export function useGenerationDetailQuery(generationId: string) {
+  return useQuery<VideoGeneration | null>({
+    queryKey: ['video-generation', generationId],
+    queryFn: () => fetchGenerationDetail(generationId),
+    enabled: generationId !== '',
+    staleTime: 30_000,
+  });
+}
+
 export {
   fetchYouTubeAccounts,
   fetchInstagramAccounts,

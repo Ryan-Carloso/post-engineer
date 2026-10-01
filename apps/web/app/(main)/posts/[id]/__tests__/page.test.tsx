@@ -5,11 +5,10 @@ import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 
 //---------------
-// Tests for the post detail page (/posts/[id]) — a full page, not a
-// modal: big video player when the engine produced one, live progress
-// while generating, topic editing for awaiting slots, delete for
-// awaiting/failed slots. Route params carry the id only; the entities
-// come from the React Query cache.
+// Tests for the post detail page (/posts/[id]) — resolves the entity by
+// id through the detail endpoints (GET /api/schedule/slots/:id and
+// GET /api/persona/video-generations/:id), never by scanning the history
+// lists.
 //---------------
 
 const pushMock = vi.fn();
@@ -20,13 +19,11 @@ vi.mock('next/navigation', () => ({
 }));
 
 vi.mock('@/lib/api', () => ({
-  useScheduleStatusQuery: vi.fn(),
-  useSchedulesQuery: vi.fn(),
-  usePersonaListQuery: vi.fn(),
+  useSlotDetailQuery: vi.fn(),
+  useGenerationDetailQuery: vi.fn(),
   useYouTubeAccountsQuery: vi.fn(),
   useInstagramAccountsQuery: vi.fn(),
   useLinkedinAccountsQuery: vi.fn(),
-  useVideoGenerationsQuery: vi.fn(),
   useUpdateSlotMutation: vi.fn(),
   useDeleteSlotMutation: vi.fn(),
 }));
@@ -46,81 +43,66 @@ vi.mock('@/lib/i18n/provider', () => {
 
 import DetailPage from '../page';
 import {
-  useScheduleStatusQuery,
-  useSchedulesQuery,
-  usePersonaListQuery,
+  useSlotDetailQuery,
+  useGenerationDetailQuery,
   useYouTubeAccountsQuery,
   useInstagramAccountsQuery,
   useLinkedinAccountsQuery,
-  useVideoGenerationsQuery,
   useUpdateSlotMutation,
   useDeleteSlotMutation,
 } from '@/lib/api';
 import { useParams } from 'next/navigation';
 
-const SCHEDULE = {
+const SLOT_SCHEDULE = {
   id: 's1',
   personaId: 'p1',
   providers: ['youtube'],
   youtubeAccountIds: ['ch1'],
   instagramAccountIds: [],
   linkedinAccountIds: [],
-  blueskyAccountIds: [],
-  daysOfWeek: [1],
-  startHour: 9,
-  endHour: 17,
-  postsPerDay: 1,
-  timezone: 'UTC',
-  active: true,
-  scheduledAt: null,
 };
 
-const AWAITING_SLOT = {
-  id: 'u1',
-  scheduleId: 's1',
-  slotAt: '2030-06-01T10:00:00.000Z',
-  status: 'awaiting',
-  topic: 'Upcoming topic',
-  error: null,
-  publishedAt: null,
-  taskId: null,
-  progress: 0,
-  stage: null,
-  queuePosition: 1,
-  queueTotal: 2,
-  retryable: null,
-};
+function slotPayload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    slot: {
+      id: 'u1',
+      scheduleId: 's1',
+      slotAt: '2030-06-01T10:00:00.000Z',
+      status: 'awaiting',
+      topic: 'Upcoming topic',
+      error: null,
+      publishedAt: null,
+      taskId: null,
+      progress: 0,
+      stage: null,
+      retryable: null,
+      ...overrides,
+    },
+    schedule: SLOT_SCHEDULE,
+    persona: { id: 'p1', name: 'Viva Leve' },
+  };
+}
 
-const PUBLISHED_SLOT = {
+const PUBLISHED_PAYLOAD = slotPayload({
   id: 'r1',
-  scheduleId: 's1',
-  slotAt: '2020-01-01T10:00:00.000Z',
   status: 'published',
   topic: 'Past topic',
-  error: null,
   publishedAt: '2020-01-01T10:05:00.000Z',
   taskId: 'task-9',
   progress: 100,
   stage: 'done',
-  queuePosition: null,
-  queueTotal: null,
-  retryable: null,
-};
+});
 
-const GENERATING_SLOT = {
-  ...AWAITING_SLOT,
+const GENERATING_PAYLOAD = slotPayload({
   id: 'gen-slot',
   status: 'generating',
   topic: 'Cooking topic',
   taskId: 'task-7',
   progress: 45,
   stage: 'lipsync',
-  queuePosition: null,
-  queueTotal: null,
-};
+});
 
-const FAILED_SLOT = {
-  ...PUBLISHED_SLOT,
+const FAILED_PAYLOAD = slotPayload({
   id: 'r2',
   status: 'failed',
   topic: 'Failed topic',
@@ -128,10 +110,10 @@ const FAILED_SLOT = {
   error: 'Upload failed',
   progress: 80,
   publishedAt: null,
-};
+});
 
 const COMPLETED_GENERATION = {
-  id: 'g3',
+  id: 'row-1',
   generationId: 'gen-3',
   engineTaskId: 'task-3',
   personaName: 'Viva Leve',
@@ -144,31 +126,28 @@ const COMPLETED_GENERATION = {
 };
 
 function mockQueries(overrides: {
-  upcoming?: unknown[];
-  recent?: unknown[];
-  generations?: unknown[];
+  slot?: Record<string, unknown> | null;
+  generation?: Record<string, unknown> | null;
+  slotLoading?: boolean;
 } = {}) {
-  vi.mocked(useScheduleStatusQuery).mockReturnValue({
-    data: {
-      upcoming: (overrides.upcoming ?? [AWAITING_SLOT]) as never,
-      recent: (overrides.recent ?? []) as never,
-    },
-    isLoading: false,
-    isFetching: false,
-    isError: false,
-    refetch: vi.fn(),
-  } as never);
-  vi.mocked(useSchedulesQuery).mockReturnValue({
-    data: [SCHEDULE] as never,
-    isLoading: false,
-    isError: false,
-    refetch: vi.fn(),
-  } as never);
-  vi.mocked(usePersonaListQuery).mockReturnValue({
-    data: [{ id: 'p1', name: 'Viva Leve' }] as never,
+  vi.mocked(useSlotDetailQuery).mockImplementation((id: string) => {
+    // The page asks for the route id; 'u1' is the default fixture's id.
+    const isFixtureId = id === ((overrides.slot?.slot as { id?: string })?.id ?? 'u1');
+    if (overrides.slotLoading) {
+      return { data: undefined, isLoading: true, isError: false, error: null } as never;
+    }
+    return {
+      data: isFixtureId ? ((overrides.slot ?? slotPayload()) as never) : ((overrides.slot ?? null) as never),
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as never;
+  });
+  vi.mocked(useGenerationDetailQuery).mockReturnValue({
+    data: (overrides.generation ?? null) as never,
     isLoading: false,
     isError: false,
-    refetch: vi.fn(),
+    error: null,
   } as never);
   vi.mocked(useYouTubeAccountsQuery).mockReturnValue({
     data: { authenticated: true, accounts: [{ channelId: 'ch1', channelName: 'Europa Na Estrada' }] },
@@ -178,12 +157,6 @@ function mockQueries(overrides: {
   } as never);
   vi.mocked(useLinkedinAccountsQuery).mockReturnValue({
     data: { authenticated: true, accounts: [] },
-  } as never);
-  vi.mocked(useVideoGenerationsQuery).mockReturnValue({
-    data: (overrides.generations ?? []) as never,
-    isLoading: false,
-    isError: false,
-    refetch: vi.fn(),
   } as never);
 }
 
@@ -248,7 +221,7 @@ describe('PostDetailPage', () => {
   });
 
   it('plays the video full-width for a published slot and hides the actions', () => {
-    mockQueries({ upcoming: [], recent: [PUBLISHED_SLOT] });
+    mockQueries({ slot: PUBLISHED_PAYLOAD });
     vi.mocked(useParams).mockReturnValue({ id: 'r1' });
     render(<DetailPage />);
 
@@ -256,12 +229,47 @@ describe('PostDetailPage', () => {
     expect(video).not.toBeNull();
     expect(video?.getAttribute('src')).toBe('/api/persona/video-download/task-9/final-1.mp4');
     expect(video?.getAttribute('controls')).not.toBeNull();
+    // The player must keep the video's intrinsic aspect ratio — faceless
+    // videos are often vertical (9:16) and a forced 16:9 box letterboxes
+    // them into a black rectangle.
+    expect(video?.className).toContain('h-auto');
+    expect(video?.className).not.toContain('aspect-video');
     expect(screen.queryByRole('button', { name: 'posts.edit' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'posts.delete' })).not.toBeInTheDocument();
   });
 
+  it('shows visual debug info (resolution, duration) once the metadata loads', async () => {
+    mockQueries({ slot: PUBLISHED_PAYLOAD });
+    vi.mocked(useParams).mockReturnValue({ id: 'r1' });
+    render(<DetailPage />);
+
+    const video = screen.getByRole('region', { name: 'posts.detailsTitle' }).querySelector('video');
+    expect(video).not.toBeNull();
+    Object.defineProperty(video, 'videoWidth', { value: 1080 });
+    Object.defineProperty(video, 'videoHeight', { value: 1920 });
+    Object.defineProperty(video, 'duration', { value: 12.3 });
+    video?.dispatchEvent(new Event('loadedmetadata'));
+
+    expect(await screen.findByTestId('video-debug')).toHaveTextContent('1080×1920');
+    expect(screen.getByTestId('video-debug')).toHaveTextContent('12s');
+    expect(screen.getByTestId('video-debug')).toHaveTextContent('/api/persona/video-download/task-9/final-1.mp4');
+  });
+
+  it('shows a visible error state when the video fails to load', async () => {
+    mockQueries({ slot: PUBLISHED_PAYLOAD });
+    vi.mocked(useParams).mockReturnValue({ id: 'r1' });
+    render(<DetailPage />);
+
+    const video = screen.getByRole('region', { name: 'posts.detailsTitle' }).querySelector('video');
+    Object.defineProperty(video, 'error', { value: { code: 4 } });
+    video?.dispatchEvent(new Event('error'));
+
+    expect(await screen.findByTestId('video-debug')).toHaveTextContent('posts.videoLoadError');
+    expect(screen.getByTestId('video-debug')).toHaveTextContent('4');
+  });
+
   it('shows live progress and stage for a generating slot, without a player', () => {
-    mockQueries({ upcoming: [GENERATING_SLOT] });
+    mockQueries({ slot: GENERATING_PAYLOAD });
     vi.mocked(useParams).mockReturnValue({ id: 'gen-slot' });
     render(<DetailPage />);
 
@@ -272,7 +280,7 @@ describe('PostDetailPage', () => {
   });
 
   it('shows the error and allows deleting a failed slot after confirmation', async () => {
-    mockQueries({ upcoming: [], recent: [FAILED_SLOT] });
+    mockQueries({ slot: FAILED_PAYLOAD });
     vi.mocked(useParams).mockReturnValue({ id: 'r2' });
     const user = userEvent.setup();
     render(<DetailPage />);
@@ -286,7 +294,7 @@ describe('PostDetailPage', () => {
   });
 
   it('redirects back to /posts after a successful deletion', async () => {
-    mockQueries({ upcoming: [], recent: [FAILED_SLOT] });
+    mockQueries({ slot: FAILED_PAYLOAD });
     vi.mocked(useParams).mockReturnValue({ id: 'r2' });
     const user = userEvent.setup();
     render(<DetailPage />);
@@ -316,8 +324,8 @@ describe('PostDetailPage', () => {
   });
 
   it('resolves a completed generation with its video and no slot actions', () => {
-    mockQueries({ upcoming: [], generations: [COMPLETED_GENERATION] });
-    vi.mocked(useParams).mockReturnValue({ id: 'g3' });
+    mockQueries({ slot: null, generation: COMPLETED_GENERATION });
+    vi.mocked(useParams).mockReturnValue({ id: 'gen-3' });
     render(<DetailPage />);
 
     const video = screen.getByRole('region', { name: 'posts.detailsTitle' }).querySelector('video');
@@ -326,7 +334,8 @@ describe('PostDetailPage', () => {
     expect(screen.queryByRole('button', { name: 'posts.delete' })).not.toBeInTheDocument();
   });
 
-  it('shows a not-found state with a way back for an unknown id', () => {
+  it('shows a not-found state with a way back when both lookups return 404', () => {
+    mockQueries({ slot: null, generation: null });
     vi.mocked(useParams).mockReturnValue({ id: 'unknown-id' });
     render(<DetailPage />);
 
@@ -334,14 +343,8 @@ describe('PostDetailPage', () => {
     expect(screen.getByRole('link', { name: 'posts.back' })).toHaveAttribute('href', '/posts');
   });
 
-  it('shows a loading skeleton while the queries load', () => {
-    vi.mocked(useScheduleStatusQuery).mockReturnValue({
-      data: undefined,
-      isLoading: true,
-      isFetching: false,
-      isError: false,
-      refetch: vi.fn(),
-    } as never);
+  it('shows a loading skeleton while the detail queries load', () => {
+    mockQueries({ slotLoading: true });
     render(<DetailPage />);
 
     expect(screen.getByTestId('detail-skeleton')).toBeInTheDocument();

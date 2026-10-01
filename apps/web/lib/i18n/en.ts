@@ -83,6 +83,7 @@ export const enDictionary: Dictionary = {
     coverNoVideo: 'No video',
     back: 'Back to posts',
     notFound: 'Post not found — it may have been deleted.',
+    videoLoadError: 'The video could not be loaded.',
   },
 
   fillSchedule: {

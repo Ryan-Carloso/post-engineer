@@ -82,6 +82,7 @@ export const ptDictionary = {
     coverNoVideo: 'Sem vídeo',
     back: 'Voltar para posts',
     notFound: 'Post não encontrado — pode ter sido apagado.',
+    videoLoadError: 'Não foi possível carregar o vídeo.',
   },
 
   // Home / dashboard

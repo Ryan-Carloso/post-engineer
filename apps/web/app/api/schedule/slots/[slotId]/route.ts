@@ -3,6 +3,8 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { apiErrorResponse } from '@/lib/api-error';
+import { enrichSlot } from '@/lib/schedule-slot-presentation';
+import { logger } from '@/lib/logger';
 
 //---------------
 // /api/schedule/slots/:slotId — per-slot operations on scheduled posts.
@@ -38,7 +40,7 @@ async function loadOwnedSlot(
     .eq('user_id', userId)
     .single();
   if (error || !slot) {
-    return { error: apiErrorResponse(404, 'Slot not found.', { route: 'DELETE /api/schedule/slots' }) };
+    return { error: apiErrorResponse(404, 'Slot not found.', { route: 'SLOT_OPS /api/schedule/slots' }) };
   }
   const row = slot as SlotRow;
   const { data: schedule } = await supabase
@@ -50,9 +52,136 @@ async function loadOwnedSlot(
   // Explicit ownership check: the service client bypasses RLS, so the
   // schedule row must belong to the caller.
   if (!scheduleRow || scheduleRow.user_id !== userId) {
-    return { error: apiErrorResponse(404, 'Slot not found.', { route: 'DELETE /api/schedule/slots' }) };
+    return { error: apiErrorResponse(404, 'Slot not found.', { route: 'SLOT_OPS /api/schedule/slots' }) };
   }
   return { slot: row };
+}
+
+//---------------
+// GET — one post's full detail: the slot row, its schedule (providers +
+// account ids, so clients can resolve the target accounts) and the
+// persona. Presentation follows /api/schedule/status (pending→awaiting,
+// live engine progress for generating/failed slots via the shared
+// enrichSlot helper). Unknown id or another user's slot → 404, never the
+// row.
+//---------------
+export async function GET(
+  request: Request,
+  context: { params: Promise<{ slotId: string }> },
+): Promise<NextResponse> {
+  const { auth, error: authError } = await requireSupabaseSession(request);
+  if (authError || !auth) return authError;
+  const supabase = auth.isApiKey === true
+    ? createSupabaseServiceClient()
+    : await createSupabaseServerClient();
+
+  const { slotId } = await context.params;
+
+  const { data: slot, error: slotError } = await supabase
+    .from('scheduled_posts')
+    .select('id, schedule_id, slot_at, status, topic, error, published_at, task_id')
+    .eq('id', slotId)
+    .eq('user_id', auth.userId)
+    .single();
+  if (slotError) {
+    // PGRST116 (zero rows) is the only honest 404 — unknown id or another
+    // user's slot. Anything else is a DB failure: log loudly with the real
+    // error and return 500 so callers retry instead of giving up.
+    if ((slotError as { code?: string }).code === 'PGRST116') {
+      return apiErrorResponse(404, 'Slot not found.', { route: 'GET /api/schedule/slots' });
+    }
+    logger.error('[api/schedule/slots] slot lookup failed', slotError);
+    return apiErrorResponse(500, 'Failed to load post.', {
+      route: 'GET /api/schedule/slots',
+      cause: slotError,
+    });
+  }
+  const row = slot as {
+    id: string;
+    schedule_id: string;
+    slot_at: string;
+    status: string;
+    topic: string | null;
+    error: string | null;
+    published_at: string | null;
+    task_id: string | null;
+  };
+
+  const { data: schedule, error: scheduleError } = await supabase
+    .from('schedules')
+    .select('id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids')
+    .eq('id', row.schedule_id)
+    .eq('user_id', auth.userId)
+    .maybeSingle();
+  // Ownership re-check: the service client (API-key/OAuth callers)
+  // bypasses RLS, so the schedule must belong to the caller.
+  if (scheduleError) {
+    logger.error('[api/schedule/slots] schedule lookup failed', scheduleError);
+    return apiErrorResponse(500, 'Failed to load post.', {
+      route: 'GET /api/schedule/slots',
+      cause: scheduleError,
+    });
+  }
+  const scheduleRow = schedule as {
+    id: string;
+    persona_id: string;
+    providers: string[] | null;
+    youtube_account_ids: string[] | null;
+    instagram_account_ids: string[] | null;
+    linkedin_account_ids: string[] | null;
+  } | null;
+  // Ownership re-check: the service client (API-key/OAuth callers)
+  // bypasses RLS, so the schedule must belong to the caller.
+  if (!scheduleRow) {
+    return apiErrorResponse(404, 'Slot not found.', { route: 'GET /api/schedule/slots' });
+  }
+
+  const { data: persona, error: personaError } = await supabase
+    .from('personas')
+    .select('id, name')
+    .eq('id', scheduleRow.persona_id)
+    .single();
+  if (personaError && (personaError as { code?: string }).code !== 'PGRST116') {
+    // The persona name is cosmetic on the detail page — a failed lookup
+    // degrades to a null persona, but never silently.
+    logger.warn('[api/schedule/slots] persona lookup failed', {
+      code: personaError.code,
+      message: personaError.message,
+    });
+  }
+  const personaRow = persona as { id: string; name: string } | null;
+
+  const enrichment = await enrichSlot(row, auth.userId);
+
+  return NextResponse.json({
+    success: true,
+    slot: {
+      id: row.id,
+      scheduleId: row.schedule_id,
+      slotAt: row.slot_at,
+      status: enrichment.status,
+      topic: row.topic,
+      error: row.error,
+      publishedAt: row.published_at,
+      taskId: row.task_id,
+      progress: enrichment.progress,
+      stage: enrichment.stage,
+      retryable: enrichment.retryable,
+      // Queue position is a list concept (position among the schedule's
+      // pending slots); the detail view doesn't render it.
+      queuePosition: null,
+      queueTotal: null,
+    },
+    schedule: {
+      id: scheduleRow.id,
+      personaId: scheduleRow.persona_id,
+      providers: scheduleRow.providers ?? [],
+      youtubeAccountIds: scheduleRow.youtube_account_ids ?? [],
+      instagramAccountIds: scheduleRow.instagram_account_ids ?? [],
+      linkedinAccountIds: scheduleRow.linkedin_account_ids ?? [],
+    },
+    persona: personaRow ? { id: personaRow.id, name: personaRow.name } : null,
+  });
 }
 
 export async function DELETE(

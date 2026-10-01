@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
 import { apiErrorResponse } from '@/lib/api-error';
+import { logger } from '@/lib/logger';
 
 type DownloadContext = {
   params: Promise<{ taskId: string; path: string[] }>;
@@ -43,12 +44,91 @@ export async function GET(request: Request, context: DownloadContext): Promise<N
     });
   }
 
+  if (upstream.status === 404) {
+    // The guessed file name (final-1.mp4) is not what every engine task
+    // stores. Consult the task record and redirect to the actual video
+    // file so consumers never need to know the engine's naming. A miss is
+    // always logged with both paths.
+    const resolved = await resolveEngineVideoPath(taskId, auth.userId);
+    if (resolved) {
+      logger.warn('[video-download] requested file missing; redirecting', {
+        taskId,
+        requested: path.join('/'),
+        resolved: resolved.join('/'),
+      });
+      const target = `/api/persona/video-download/${encodeURIComponent(taskId)}/${resolved
+        .map(encodeURIComponent)
+        .join('/')}${source === 'stream' ? '?source=stream' : ''}`;
+      return NextResponse.redirect(new URL(target, request.url), 302);
+    }
+    logger.warn('[video-download] no video file found for task', {
+      taskId,
+      requested: path.join('/'),
+    });
+    return apiErrorResponse(404, 'Video file not found.', {
+      route: 'GET /api/persona/video-download',
+      metadata: { taskId },
+    });
+  }
+
   const responseHeaders = new Headers();
   for (const header of FORWARDED_RESPONSE_HEADERS) {
     const value = upstream.headers.get(header);
     if (value) responseHeaders.set(header, value);
   }
   return new NextResponse(upstream.body, { status: upstream.status, headers: responseHeaders });
+}
+
+//---------------
+// resolveEngineVideoPath — read-only lookup of the engine task record;
+// deep-walks the payload for the first internal video URL
+// (/api/v1/download|stream/{taskId}/file) and returns the file segments
+// (without the taskId). Null when the task exposes no video file.
+//---------------
+async function resolveEngineVideoPath(taskId: string, userId: string): Promise<string[] | null> {
+  const baseUrl = process.env.MONEYPRINT_API_URL?.replace(/\/+$/, '');
+  if (!baseUrl) return null;
+  const prefix = `${taskId}/`;
+  try {
+    const response = await fetch(`${baseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}`, {
+      headers: engineAuthHeaders(userId),
+      cache: 'no-store',
+    });
+    if (!response.ok) return null;
+    const body: unknown = await response.json().catch(() => null);
+    return findVideoSegments(body, prefix);
+  } catch (error) {
+    logger.warn('[video-download] task lookup failed during fallback', {
+      taskId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+function findVideoSegments(value: unknown, prefix: string): string[] | null {
+  if (typeof value === 'string') {
+    const match = value.match(/^\/api\/v1\/(?:download|stream)\/([^?\s]+)/);
+    if (match && match[1].startsWith(prefix)) {
+      const segments = match[1].slice(prefix.length).split('/');
+      return segments.length > 0 ? segments : null;
+    }
+    return null;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findVideoSegments(item, prefix);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (typeof value === 'object' && value !== null) {
+    for (const item of Object.values(value)) {
+      const found = findVideoSegments(item, prefix);
+      if (found) return found;
+    }
+  }
+  return null;
 }
 
 function isSafePath(taskId: string, path: string[]): boolean {

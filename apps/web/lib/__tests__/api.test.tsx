@@ -509,4 +509,84 @@ describe('api', () => {
     expect(invalidatedKeys).toContainEqual(['fill-schedule-status']);
     invalidateSpy.mockRestore();
   });
+
+  //---------------
+  // Detail endpoints — one post per request, so the detail page never
+  // needs to pull the whole history to find a single id. A 404 resolves
+  // to null (not found), other failures throw.
+  //---------------
+
+  it('fetchSlotDetail GETs /api/schedule/slots/:id and maps the payload', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
+      success: true,
+      slot: { id: 'slot-1', scheduleId: 's1', slotAt: '2030-06-01T10:00:00.000Z', status: 'awaiting', topic: 'T', error: null, publishedAt: null, taskId: null, progress: 0, stage: null, retryable: null },
+      schedule: { id: 's1', personaId: 'p1', providers: ['youtube'], youtubeAccountIds: ['ch1'], instagramAccountIds: [], linkedinAccountIds: [] },
+      persona: { id: 'p1', name: 'Viva Leve' },
+    }));
+    const { fetchSlotDetail } = await import('@/lib/api');
+    const detail = await fetchSlotDetail('slot-1');
+    expect(detail?.slot.id).toBe('slot-1');
+    expect(detail?.persona?.name).toBe('Viva Leve');
+    expect(fetch).toHaveBeenCalledWith('/api/schedule/slots/slot-1', expect.objectContaining({ method: 'GET' }));
+  });
+
+  it('fetchSlotDetail resolves null on 404 and throws on other failures', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({ success: false, error: 'Slot not found.' }, false, 404),
+    );
+    const { fetchSlotDetail } = await import('@/lib/api');
+    await expect(fetchSlotDetail('missing')).resolves.toBeNull();
+
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({ success: false, error: 'boom' }, false, 500),
+    );
+    await expect(fetchSlotDetail('slot-1')).rejects.toThrow('boom');
+  });
+
+  it('fetchGenerationDetail GETs /api/persona/video-generations/:id, null on 404', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
+      success: true,
+      generation: { id: 'row-1', generationId: 'gen-3', engineTaskId: 'task-3', personaName: 'Viva Leve', videoSubject: 'Launch recap', status: 'completed', errorCode: null, tokensRefunded: false, createdAt: '2026-09-23T12:00:00.000Z', completedAt: '2026-09-23T12:02:00.000Z' },
+    }));
+    const { fetchGenerationDetail } = await import('@/lib/api');
+    const detail = await fetchGenerationDetail('gen-3');
+    expect(detail?.engineTaskId).toBe('task-3');
+    expect(fetch).toHaveBeenCalledWith('/api/persona/video-generations/gen-3', expect.objectContaining({ method: 'GET' }));
+
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({ success: false, error: 'Generation not found.' }, false, 404),
+    );
+    await expect(fetchGenerationDetail('missing')).resolves.toBeNull();
+  });
+
+  it('detail queries are keyed by id and disabled without one', async () => {
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/schedule/slots/slot-1') {
+        return jsonResponse({ success: true, slot: { id: 'slot-1' }, schedule: { id: 's1' }, persona: null });
+      }
+      if (url === '/api/persona/video-generations/gen-3') {
+        return jsonResponse({ success: true, generation: { id: 'row-1', generationId: 'gen-3' } });
+      }
+      return jsonResponse({});
+    });
+    const { useSlotDetailQuery, useGenerationDetailQuery } = await import('@/lib/api');
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }): ReactNode => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+
+    const { result: slotResult } = renderHook(() => useSlotDetailQuery('slot-1'), { wrapper });
+    await waitFor(() => expect(slotResult.current.isSuccess).toBe(true));
+    expect(fetch).toHaveBeenCalledWith('/api/schedule/slots/slot-1', expect.anything());
+
+    const { result: genResult } = renderHook(() => useGenerationDetailQuery('gen-3'), { wrapper });
+    await waitFor(() => expect(genResult.current.isSuccess).toBe(true));
+    expect(fetch).toHaveBeenCalledWith('/api/persona/video-generations/gen-3', expect.anything());
+
+    // No id → the query stays idle (the route param can be missing while
+    // the page mounts).
+    const { result: idleResult } = renderHook(() => useSlotDetailQuery(''), { wrapper });
+    expect(idleResult.current.fetchStatus).toBe('idle');
+  });
 });
