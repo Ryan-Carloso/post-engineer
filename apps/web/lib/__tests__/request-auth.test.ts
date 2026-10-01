@@ -29,7 +29,7 @@ describe('requireSupabaseSession', () => {
       personaIds: null,
     });
 
-    const request = new Request('http://localhost:3434/api/persona/video-job', {
+    const request = new Request('http://localhost:3434/api/videos/generate-and-schedule', {
       headers: {
         authorization: 'Bearer pe_live_1234567890abcdef1234567890abcdef',
       },
@@ -52,7 +52,7 @@ describe('requireSupabaseSession', () => {
       personaIds,
     });
 
-    const request = new Request('http://localhost:3434/api/persona/video-job', {
+    const request = new Request('http://localhost:3434/api/videos/generate-and-schedule', {
       headers: {
         authorization: 'Bearer pe_live_1234567890abcdef1234567890abcdef',
       },
@@ -68,7 +68,7 @@ describe('requireSupabaseSession', () => {
     vi.mocked(createSupabaseServiceClient).mockReturnValue(mockServiceClient);
     vi.spyOn(apiKeysModule, 'resolveApiKey').mockResolvedValue(null);
 
-    const request = new Request('http://localhost:3434/api/persona/video-job', {
+    const request = new Request('http://localhost:3434/api/videos/generate-and-schedule', {
       headers: {
         authorization: 'Bearer pe_live_invalid_key_1234567890abcdef',
       },

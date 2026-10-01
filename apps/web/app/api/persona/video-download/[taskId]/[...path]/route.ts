@@ -14,7 +14,9 @@ const FORWARDED_RESPONSE_HEADERS = ['content-type', 'content-length', 'content-r
 // The upstream host remains server-side.
 //---------------
 export async function GET(request: Request, context: DownloadContext): Promise<NextResponse> {
-  const { auth, error: authError } = await requireSupabaseSession();
+  // Pass the request so API-key callers authenticate (without it only the
+  // cookie session is checked, and API keys get a 401).
+  const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
 
   const baseUrl = process.env.MONEYPRINT_API_URL?.replace(/\/+$/, '');

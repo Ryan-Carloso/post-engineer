@@ -1,8 +1,9 @@
 """Batch scheduling pipeline (formerly "fill schedule").
 
-Only manual batch schedules (created by POST /api/schedule/batch) are
-processed: the user requests N videos, the pipeline generates them and
-publishes each at its scheduled time. There is no automatic recurring
+Only unified generate+schedule operations (created by POST
+/api/videos/generate-and-schedule) are processed: the user requests N
+videos, the pipeline generates them and publishes each at its
+scheduled time. There is no automatic recurring
 scheduling.
 
 Components:

@@ -16,22 +16,10 @@ import {
 } from '@/components/ui/carousel';
 import { useVoicesQuery, useVoiceSampleLanguagesQuery, createPersona, useUpdatePersonaMutation, usePersonaListQuery } from '@/lib/api';
 import { resolveScriptLanguage, usePersonaStore } from '@/lib/store';
-import { useDebugStore } from '@/lib/debug-store';
-import { normalizeDebugTaskResponse } from '@/lib/debug-video';
-import { isTerminalSnapshot, type VideoTaskSnapshot } from '@/lib/video-task-events';
-import {
-  allBatchVideosTerminal,
-  batchVideosReducer,
-  initBatchVideos,
-  parseBatchTopicsText,
-  type BatchVideo,
-} from '@/lib/video-batch';
-import { parsePersonaForm, personaFormSchema } from '@/lib/persona-schema';
-import { openUpgradeDialogIfInsufficient } from '@/lib/upgrade-dialog-store';
+import { personaFormSchema } from '@/lib/persona-schema';
 import { useI18n } from '@/lib/i18n/provider';
 import { PersonaTokensSection } from './persona-tokens';
 import { PersonaImageLibrarySection, mapPersonaImageWarnings } from './persona-image-library';
-import { BatchVideoRow } from './debug-batch-video-row';
 import { scrollToErrorField } from '@/lib/scroll-to-error';
 import type { TranslationKey } from '@/lib/i18n';
 import { DEFAULT_PERSONA_FACE_IDS } from '@/lib/persona-faces';
@@ -45,7 +33,6 @@ import {
   SECTION_LABEL_CLASS,
   SpinnerIcon,
   UploadIcon,
-  BugIcon,
   formatFileSize,
   INPUT_CLASS,
 } from '@/lib/ui';
@@ -272,7 +259,6 @@ const PersonaPageError = () => {
 //---------------
 const PersonaHeader = ({ editing }: { editing: boolean }) => {
   const { t } = useI18n();
-  const debugMode = useDebugStore((s) => s.debugMode);
   return (
     <div className="flex items-center gap-3">
       <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent text-white">
@@ -281,11 +267,6 @@ const PersonaHeader = ({ editing }: { editing: boolean }) => {
       <div>
         <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight text-neutral-900">
           {t(editing ? 'personas.editTitle' : 'persona.title')}
-          {debugMode ? (
-            <span title="Debug mode ativo" aria-label="Debug mode ativo" className="flex size-6 items-center justify-center rounded-full bg-amber-100 text-amber-700">
-              <BugIcon />
-            </span>
-          ) : null}
         </h1>
         <p className="text-sm text-neutral-500">{t(editing ? 'personas.editSubtitle' : 'persona.subtitle')}</p>
       </div>
@@ -822,218 +803,6 @@ const PersonaPreferencesSection = () => {
 };
 
 //---------------
-// PersonaDebugSubmit — alternative debug-mode submit: generates 1..10
-// videos through the REAL flow (/api/persona/video-batch debug branch,
-// with moderation and token charging) without creating a persona/schedule.
-// One topic per line in the textarea; a single topic is a batch of 1 —
-// there is no separate single-video path.
-//
-// Each returned task id gets its own SSE stream
-// (/api/persona/video-events/:taskId); a terminal snapshot triggers one
-// final GET to /api/persona/video-status/:taskId per video so the
-// generation history and token refund side effects still run exactly
-// once. The engine runs the batch sequentially; a failed video never
-// stops the remaining ones.
-//---------------
-const PersonaDebugSubmit = () => {
-  const { t, locale } = useI18n();
-  const { handleSubmit } = useFormContext();
-  const [status, setStatus] = useState<'idle' | 'starting' | 'generating' | 'done' | 'error'>('idle');
-  const [topicsText, setTopicsText] = useState('');
-  const [videos, setVideos] = useState<BatchVideo[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [logs, setLogs] = useState<string[]>([]);
-  // Guards against late terminal fetches resolving after unmount/reset.
-  const generationRef = useRef(0);
-
-  const finishTerminal = async (taskId: string, generation: number): Promise<void> => {
-    try {
-      const response = await fetch(`/api/persona/video-status/${encodeURIComponent(taskId)}`, { cache: 'no-store' });
-      const body: unknown = await response.json().catch(() => null);
-      if (generationRef.current !== generation) return;
-      setLogs((current) => [...current, `GET status (terminal, ${taskId}, ${response.status})\n${JSON.stringify(body, null, 2)}`]);
-      if (!response.ok) {
-        setVideos((current) =>
-          batchVideosReducer(current, { type: 'terminal', taskId, outcome: 'failed', error: readDebugError(body) }),
-        );
-        return;
-      }
-      const task = normalizeDebugTaskResponse(body);
-      if (!task || typeof task.state !== 'number') {
-        setVideos((current) =>
-          batchVideosReducer(current, { type: 'terminal', taskId, outcome: 'failed', error: 'Invalid engine status response.' }),
-        );
-        return;
-      }
-      if (task.state === -1) {
-        setVideos((current) =>
-          batchVideosReducer(current, { type: 'terminal', taskId, outcome: 'failed', error: task.error ?? 'Task failed.' }),
-        );
-        return;
-      }
-      setVideos((current) =>
-        batchVideosReducer(current, {
-          type: 'terminal',
-          taskId,
-          outcome: 'done',
-          downloadUrl: `/api/persona/video-download/${encodeURIComponent(taskId)}/final-1.mp4`,
-        }),
-      );
-    } catch (requestError: unknown) {
-      if (generationRef.current !== generation) return;
-      setVideos((current) =>
-        batchVideosReducer(current, {
-          type: 'terminal',
-          taskId,
-          outcome: 'failed',
-          error: requestError instanceof Error ? requestError.message : String(requestError),
-        }),
-      );
-    }
-  };
-
-  const handleSnapshot = (taskId: string, snapshot: VideoTaskSnapshot): void => {
-    const generation = generationRef.current;
-    setLogs((current) => [...current, `SSE snapshot (${taskId})\n${JSON.stringify(snapshot, null, 2)}`]);
-    const terminal = isTerminalSnapshot(snapshot);
-    setVideos((current) =>
-      batchVideosReducer(current, {
-        type: 'snapshot',
-        taskId,
-        progress: snapshot.progress,
-        stage: snapshot.stage,
-        terminal,
-      }),
-    );
-    if (terminal) {
-      // The final status fetch records history/refund for this video.
-      void finishTerminal(taskId, generation);
-    }
-  };
-
-  const handleStreamError = (taskId: string): void => {
-    const generation = generationRef.current;
-    // A disconnect after a reset belongs to the previous generation.
-    setVideos((current) => {
-      if (generationRef.current !== generation) return current;
-      return batchVideosReducer(current, { type: 'stream-error', taskId });
-    });
-  };
-
-  // The batch is over when every video reached a terminal status.
-  useEffect(() => {
-    if (allBatchVideosTerminal(videos)) setStatus('done');
-  }, [videos]);
-
-  const generate = async (): Promise<void> => {
-    if (status === 'starting' || status === 'generating') return;
-    generationRef.current += 1;
-    const generation = generationRef.current;
-    setStatus('starting');
-    setError(null);
-    setVideos([]);
-    setLogs(['POST /api/persona/video-batch (debug)\nSending the persona form data.']);
-    try {
-      const topics = parseBatchTopicsText(topicsText);
-      if (!topics.ok) {
-        setError(topics.error);
-        setStatus('idle');
-        return;
-      }
-      const formData = usePersonaStore.getState().buildPersonaFormData(locale);
-      formData.append('debugMode', '1');
-      formData.set('topics', JSON.stringify(topics.topics));
-      // Same zod schema as the server — fails here, no round-trip.
-      const parsed = parsePersonaForm(formData, 'debug');
-      if (!parsed.ok) {
-        setError(
-          parsed.error === 'video_subject is required.'
-            ? t('persona.errSubjectMissing')
-            : parsed.error,
-        );
-        setStatus('idle');
-        scrollToErrorField('script');
-        return;
-      }
-      const response = await fetch('/api/persona/video-batch', { method: 'POST', body: formData });
-      const body: unknown = await response.json().catch(() => null);
-      setLogs((current) => [...current, `POST response (${response.status})\n${JSON.stringify(body, null, 2)}`]);
-      if (openUpgradeDialogIfInsufficient(response.status, (body as { code?: unknown } | null)?.code)) {
-        // Insufficient balance: global upgrade dialog.
-        setStatus('idle');
-        return;
-      }
-      if (
-        !response.ok ||
-        !isRecord(body) ||
-        !Array.isArray(body.taskIds) ||
-        body.taskIds.length === 0 ||
-        body.taskIds.some((taskId: unknown) => typeof taskId !== 'string')
-      ) {
-        setError(readDebugError(body));
-        setStatus('error');
-        return;
-      }
-      if (generationRef.current !== generation) return;
-      setVideos(initBatchVideos(body.taskIds as string[], topics.topics));
-      setStatus('generating');
-    } catch (requestError: unknown) {
-      setError(requestError instanceof Error ? requestError.message : String(requestError));
-      setStatus('error');
-    }
-  };
-
-  const doneCount = videos.filter((video) => video.status === 'done').length;
-  return (
-    <section className="space-y-4">
-      <label className="block space-y-1.5">
-        <span className="text-sm font-medium text-neutral-200">Tópicos dos vídeos (1 por linha, máx. 10)</span>
-        <textarea
-          data-testid="debug-topics"
-          value={topicsText}
-          onChange={(event) => setTopicsText(event.target.value)}
-          rows={4}
-          placeholder={'Um tópico por linha.\nEx:\nrotina da manhã\ntreino de pernas'}
-          className="w-full rounded-lg border border-neutral-700 bg-neutral-950 p-3 text-sm text-neutral-100 placeholder:text-neutral-500"
-        />
-      </label>
-      <button type="button" data-testid="debug-generate" onClick={handleSubmit(() => void generate())} disabled={status === 'starting' || status === 'generating'} className="flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60">
-        {status === 'generating' ? `Gerando vídeos (${doneCount}/${videos.length})...` : 'Gerar vídeos para download'}
-      </button>
-      {videos.length > 0 ? (
-        <div className="space-y-2">
-          {videos.map((video, index) => (
-            <BatchVideoRow
-              key={video.taskId}
-              video={video}
-              index={index}
-              total={videos.length}
-              onSnapshot={handleSnapshot}
-              onStreamError={handleStreamError}
-            />
-          ))}
-        </div>
-      ) : null}
-      {error ? <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
-      {logs.length > 0 ? <details open className="rounded-lg border border-neutral-800 bg-neutral-950 p-4 text-xs text-neutral-200"><summary className="cursor-pointer font-semibold text-amber-300">LOG DO DEBUG</summary><pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap">{logs.join('\n\n')}</pre></details> : null}
-    </section>
-  );
-};
-
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
-
-const readDebugError = (value: unknown): string => {
-  if (isRecord(value)) {
-    for (const key of ['error', 'message', 'detail', 'details']) {
-      if (typeof value[key] === 'string') return value[key];
-    }
-  }
-  if (typeof value === 'string') return value;
-  const serialized = JSON.stringify(value, null, 2);
-  return serialized ?? String(value);
-};
-
-//---------------
 // PersonaSubmit — persona validation and submit (create/edit).
 // Create: POST /api/persona (persona alone — scheduling is a separate flow,
 // at /schedule). Success → /schedule?personaId= to schedule right after.
@@ -1045,13 +814,8 @@ const PersonaSubmit = ({ editId }: { editId: string | null }) => {
   const router = useRouter();
   const queryClient = useQueryClient();
   const updateMutation = useUpdatePersonaMutation();
-  const debugMode = useDebugStore((s) => s.debugMode);
   const { handleSubmit: validateForm } = useFormContext();
   const [isPending, setIsPending] = useState(false);
-
-  if (debugMode) {
-    return <PersonaDebugSubmit />;
-  }
 
   // Same page serves create and edit: the id comes from ?edit= (current route)
   // or the legacy /personas/<id>/edit.

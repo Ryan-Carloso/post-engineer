@@ -6,7 +6,7 @@ import {
   handleAddPersonaImage,
   handleUpdatePersonaImage,
   handleRemovePersonaImage,
-  handleGenerateVideo,
+  handleGeneratePersonaVideos,
   handleListVoices,
   handleListFaces,
   handleUpdatePersona,
@@ -20,7 +20,7 @@ import {
   CreatePersonaSchema,
   CreatePersonaShape,
   UpdatePersonaSchema,
-  GenerateVideoSchema,
+  GeneratePersonaVideosSchema,
   ListPersonaImagesSchema,
   AddPersonaImageSchema,
   UpdatePersonaImageSchema,
@@ -40,7 +40,7 @@ describe('MCP Tool Handlers', () => {
   const mockClient = {
     createPersona: vi.fn(),
     listPersonas: vi.fn(),
-    generateVideoJob: vi.fn(),
+    generatePersonaVideos: vi.fn(),
     listVoices: vi.fn(),
     listFaces: vi.fn(),
     updatePersona: vi.fn(),
@@ -76,55 +76,6 @@ describe('MCP Tool Handlers', () => {
       expect.objectContaining({ name: 'Alex AI' })
     );
     expect(textOf(response)).toContain('persona-123');
-  });
-
-  it('handleGenerateVideo triggers job and returns taskId', async () => {
-    vi.mocked(mockClient.generateVideoJob).mockResolvedValue({
-      success: true,
-      taskId: 'task-789',
-    });
-
-    const response = await handleGenerateVideo(mockClient, {
-      personaId: 'persona-123',
-      scriptPrompt: 'Top 3 AI coding assistants in 2026',
-    });
-
-    expect(mockClient.generateVideoJob).toHaveBeenCalledWith({
-      personaId: 'persona-123',
-      scriptPrompt: 'Top 3 AI coding assistants in 2026',
-    });
-    expect(textOf(response)).toContain('task-789');
-  });
-
-  it('handleGenerateVideo renders the ok sentinel instead of "undefined" for empty-body success', async () => {
-    vi.mocked(mockClient.generateVideoJob).mockResolvedValue({ ok: true });
-
-    const response = await handleGenerateVideo(mockClient, {
-      personaId: 'persona-123',
-      scriptPrompt: 'Top 3 AI coding assistants in 2026',
-    });
-
-    const text = textOf(response);
-    expect(text).toContain('"ok": true');
-    expect(text).not.toContain('undefined');
-  });
-
-  it('handleGenerateVideo passes audioUrl through to the client', async () => {
-    vi.mocked(mockClient.generateVideoJob).mockResolvedValue({
-      success: true,
-      taskId: 'task-audio-2',
-    });
-
-    const response = await handleGenerateVideo(mockClient, {
-      personaId: 'persona-123',
-      audioUrl: 'https://cdn.example.com/narracao.mp3',
-    });
-
-    expect(mockClient.generateVideoJob).toHaveBeenCalledWith({
-      personaId: 'persona-123',
-      audioUrl: 'https://cdn.example.com/narracao.mp3',
-    });
-    expect(textOf(response)).toContain('task-audio-2');
   });
 
   it('handleListVoices returns the voice catalog', async () => {
@@ -342,86 +293,6 @@ describe('MCP Tool Handlers', () => {
 });
 
 
-describe('faceless video generation', () => {
-  it('GenerateVideoSchema accepts a missing personaId (faceless)', () => {
-    const result = GenerateVideoSchema.safeParse({
-      videoSubject: 'Top 5 AI tools',
-      voiceId: 'alloy',
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('GenerateVideoSchema still rejects an empty-string personaId', () => {
-    const result = GenerateVideoSchema.safeParse({
-      personaId: '',
-      videoSubject: 'Top 5 AI tools',
-      voiceId: 'alloy',
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('GenerateVideoSchema rejects an explicit null personaId (omit the field for faceless)', () => {
-    // Deliberate two-layer contract: the tool input uses omission for
-    // faceless; only the HTTP client maps that to the web API's explicit
-    // null sentinel (see client.ts). Do not add .nullable() here.
-    const result = GenerateVideoSchema.safeParse({
-      personaId: null,
-      videoSubject: 'Top 5 AI tools',
-      voiceId: 'alloy',
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('handleGenerateVideo fails fast for faceless without videoSubject', async () => {
-    const client = { generateVideoJob: vi.fn() } as unknown as PostEngineerClient;
-    const response = await handleGenerateVideo(client, { voiceId: 'alloy' });
-
-    expect(response.isError).toBe(true);
-    expect(textOf(response)).toMatch(/videoSubject/i);
-    expect(client.generateVideoJob).not.toHaveBeenCalled();
-  });
-
-  it('handleGenerateVideo fails fast for faceless without a voice source', async () => {
-    const client = { generateVideoJob: vi.fn() } as unknown as PostEngineerClient;
-    const response = await handleGenerateVideo(client, { videoSubject: 'Top 5 AI tools' });
-
-    expect(response.isError).toBe(true);
-    expect(textOf(response)).toMatch(/audioUrl|voiceId/i);
-    expect(client.generateVideoJob).not.toHaveBeenCalled();
-  });
-
-  it('handleGenerateVideo passes faceless args through to the client', async () => {
-    const client = { generateVideoJob: vi.fn() } as unknown as PostEngineerClient;
-    vi.mocked(client.generateVideoJob).mockResolvedValue({ success: true, taskId: 't-1' });
-
-    const response = await handleGenerateVideo(client, {
-      videoSubject: 'Top 5 AI tools',
-      audioUrl: 'https://cdn.example.com/narracao.mp3',
-    });
-
-    expect(response.isError).toBeUndefined();
-    expect(client.generateVideoJob).toHaveBeenCalledWith(
-      expect.objectContaining({
-        videoSubject: 'Top 5 AI tools',
-        audioUrl: 'https://cdn.example.com/narracao.mp3',
-      })
-    );
-    expect(textOf(response)).toContain('t-1');
-  });
-
-  it('handleGenerateVideo still works with a personaId', async () => {
-    const client = { generateVideoJob: vi.fn() } as unknown as PostEngineerClient;
-    vi.mocked(client.generateVideoJob).mockResolvedValue({ success: true, taskId: 't-2' });
-
-    const response = await handleGenerateVideo(client, { personaId: 'persona-123' });
-
-    expect(response.isError).toBeUndefined();
-    expect(client.generateVideoJob).toHaveBeenCalledWith(
-      expect.objectContaining({ personaId: 'persona-123' })
-    );
-  });
-});
-
 describe('schema bounds', () => {
   it('CreatePersonaSchema accepts paragraphNumber up to 10 (matches the API)', () => {
     const result = CreatePersonaSchema.safeParse({
@@ -453,7 +324,6 @@ describe('schema bounds', () => {
 describe('persona image library tools', () => {
   const mockClient = {
     createPersona: vi.fn(),
-    generateVideoJob: vi.fn(),
     listPersonaImages: vi.fn(),
     addPersonaImage: vi.fn(),
     updatePersonaImage: vi.fn(),
@@ -536,24 +406,6 @@ describe('persona image library tools', () => {
       expect(field.description).toMatch(/whitespace/i);
       expect(field.description).toMatch(/clear/i);
     }
-  });
-
-  it('generate_video_from_persona passes imageId through', async () => {
-    vi.mocked(mockClient.generateVideoJob).mockResolvedValue({ success: true, taskId: 't-1' });
-    const response = await handleGenerateVideo(
-      mockClient,
-      GenerateVideoSchema.parse({ personaId: 'p-1', imageId: 'img-123' })
-    );
-    expect(mockClient.generateVideoJob).toHaveBeenCalledWith(
-      expect.objectContaining({ imageId: 'img-123' })
-    );
-    expect(textOf(response)).toContain('t-1');
-  });
-
-  it('generate_video_from_persona rejects an empty imageId', () => {
-    expect(() =>
-      GenerateVideoSchema.parse({ personaId: 'p-1', imageId: '' })
-    ).toThrow();
   });
 
   it('list_persona_images returns the library', async () => {
@@ -651,10 +503,8 @@ describe('persona image library tools', () => {
   });
 });
 
-describe('video batch + task progress tools', () => {
+describe('video task progress tools', () => {
   const mockClient = {
-    generateVideoJob: vi.fn(),
-    generateVideoBatch: vi.fn(),
     getVideoStatus: vi.fn(),
   } as unknown as PostEngineerClient;
 
@@ -761,51 +611,255 @@ describe('video batch + task progress tools', () => {
     expect(text).toContain('"stage": null');
     expect(text).toContain('"error": null');
   });
+});
 
-  it('handleGenerateVideo passes webhookUrl through to the client', async () => {
-    vi.mocked(mockClient.generateVideoJob).mockResolvedValue({ success: true, taskId: 'task-1' });
+describe('generate_persona_videos tool', () => {
+  const mockClient = {
+    generatePersonaVideos: vi.fn(),
+  } as unknown as PostEngineerClient;
 
-    const response = await handleGenerateVideo(mockClient, {
-      personaId: 'persona-123',
-      webhookUrl: 'https://example.com/hook',
-    });
+  const baseArgs = {
+    personaId: 'persona-123',
+    topics: ['Launch a SaaS in days', 'Pricing lessons'],
+    providers: ['youtube', 'bluesky'] as ('youtube' | 'bluesky')[],
+    youtubeAccountIds: ['chan-1'],
+    blueskyAccountIds: ['did:plc:abc'],
+    startAt: '2026-10-05T20:00:00',
+    times: ['20:00'],
+    timezone: 'Europe/Lisbon',
+  };
 
-    expect(mockClient.generateVideoJob).toHaveBeenCalledWith(
-      expect.objectContaining({ webhookUrl: 'https://example.com/hook' }),
-    );
-    expect(textOf(response)).toContain('task-1');
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it('handleGenerateVideoBatch triggers the batch and returns the task ids', async () => {
-    const { handleGenerateVideoBatch } = await import('../tools.js');
-    vi.mocked(mockClient.generateVideoBatch).mockResolvedValue({
+  it('GeneratePersonaVideosSchema accepts a full valid call', () => {
+    const result = GeneratePersonaVideosSchema.safeParse(baseArgs);
+    expect(result.success).toBe(true);
+  });
+
+  it('GeneratePersonaVideosSchema requires personaId (even for faceless)', () => {
+    // Product rule: there is no standalone generation — a persona record
+    // always anchors the schedule, so personaId cannot be omitted.
+    const { personaId: _personaId, ...rest } = baseArgs;
+    expect(GeneratePersonaVideosSchema.safeParse(rest).success).toBe(false);
+    expect(
+      GeneratePersonaVideosSchema.safeParse({ ...baseArgs, personaId: '' }).success
+    ).toBe(false);
+  });
+
+  it('GeneratePersonaVideosSchema requires topics, providers, startAt, times', () => {
+    const { topics: _topics, ...noTopics } = baseArgs;
+    expect(GeneratePersonaVideosSchema.safeParse(noTopics).success).toBe(false);
+    const { providers: _providers, ...noProviders } = baseArgs;
+    expect(GeneratePersonaVideosSchema.safeParse(noProviders).success).toBe(false);
+    const { startAt: _startAt, ...noStartAt } = baseArgs;
+    expect(GeneratePersonaVideosSchema.safeParse(noStartAt).success).toBe(false);
+    const { times: _times, ...noTimes } = baseArgs;
+    expect(GeneratePersonaVideosSchema.safeParse(noTimes).success).toBe(false);
+  });
+
+  it('GeneratePersonaVideosSchema bounds topics to 1-10', () => {
+    expect(
+      GeneratePersonaVideosSchema.safeParse({ ...baseArgs, topics: [] }).success
+    ).toBe(false);
+    expect(
+      GeneratePersonaVideosSchema.safeParse({
+        ...baseArgs,
+        topics: Array.from({ length: 11 }, (_, i) => `topic ${i}`),
+      }).success
+    ).toBe(false);
+    expect(
+      GeneratePersonaVideosSchema.safeParse({
+        ...baseArgs,
+        topics: Array.from({ length: 10 }, (_, i) => `topic ${i}`),
+      }).success
+    ).toBe(true);
+    expect(
+      GeneratePersonaVideosSchema.safeParse({ ...baseArgs, topics: [''] }).success
+    ).toBe(false);
+  });
+
+  it('GeneratePersonaVideosSchema rejects an invalid startAt and non-HH:MM times', () => {
+    expect(
+      GeneratePersonaVideosSchema.safeParse({ ...baseArgs, startAt: 'not-a-date' }).success
+    ).toBe(false);
+    expect(
+      GeneratePersonaVideosSchema.safeParse({ ...baseArgs, times: ['9:30'] }).success
+    ).toBe(false);
+    expect(
+      GeneratePersonaVideosSchema.safeParse({ ...baseArgs, times: ['24:00'] }).success
+    ).toBe(false);
+    expect(
+      GeneratePersonaVideosSchema.safeParse({ ...baseArgs, times: ['09:30', '20:00'] }).success
+    ).toBe(true);
+  });
+
+  it('GeneratePersonaVideosSchema defaults timezone to UTC', () => {
+    const { timezone: _timezone, ...rest } = baseArgs;
+    const result = GeneratePersonaVideosSchema.safeParse(rest);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.timezone).toBe('UTC');
+  });
+
+  it('GeneratePersonaVideosSchema requires https (loopback http allowed) for audioUrl/webhookUrl', () => {
+    expect(
+      GeneratePersonaVideosSchema.safeParse({
+        ...baseArgs,
+        options: { audioUrl: 'https://cdn.example.com/narracao.mp3' },
+      }).success
+    ).toBe(true);
+    expect(
+      GeneratePersonaVideosSchema.safeParse({
+        ...baseArgs,
+        options: { audioUrl: 'http://cdn.example.com/narracao.mp3' },
+      }).success
+    ).toBe(false);
+    expect(
+      GeneratePersonaVideosSchema.safeParse({
+        ...baseArgs,
+        options: { webhookUrl: 'http://localhost:3000/hook' },
+      }).success
+    ).toBe(true);
+  });
+
+  it('handleGeneratePersonaVideos returns a human summary plus the machine JSON', async () => {
+    vi.mocked(mockClient.generatePersonaVideos).mockResolvedValue({
       success: true,
-      taskIds: ['task-1', 'task-2'],
+      schedule: { id: 'sched-1' },
+      slots: [
+        {
+          slotId: 'slot-1',
+          slotAt: '2026-10-05T20:00:00Z',
+          topic: 'Launch a SaaS in days',
+          taskId: 'task-1',
+          status: 'generating',
+        },
+        {
+          slotId: 'slot-2',
+          slotAt: '2026-10-06T20:00:00Z',
+          topic: 'Pricing lessons',
+          taskId: 'task-2',
+          status: 'awaiting',
+        },
+      ],
+      replayed: false,
     });
 
-    const response = await handleGenerateVideoBatch(mockClient, {
-      topics: ['topic one', 'topic two'],
-      personaId: 'persona-123',
-    });
+    const response = await handleGeneratePersonaVideos(
+      mockClient,
+      GeneratePersonaVideosSchema.parse(baseArgs)
+    );
 
-    expect(mockClient.generateVideoBatch).toHaveBeenCalledWith({
-      topics: ['topic one', 'topic two'],
-      personaId: 'persona-123',
-    });
+    expect(mockClient.generatePersonaVideos).toHaveBeenCalledWith(
+      expect.objectContaining({
+        personaId: 'persona-123',
+        topics: ['Launch a SaaS in days', 'Pricing lessons'],
+        providers: ['youtube', 'bluesky'],
+        startAt: '2026-10-05T20:00:00',
+        times: ['20:00'],
+        timezone: 'Europe/Lisbon',
+      })
+    );
+    expect(response.isError).toBeUndefined();
     const text = textOf(response);
+    expect(text).toContain('sched-1');
+    expect(text).toContain('Launch a SaaS in days');
     expect(text).toContain('task-1');
     expect(text).toContain('task-2');
+    expect(text).toContain('"replayed": false');
+    expect(text).toContain('"slotId": "slot-1"');
   });
 
-  it('handleGenerateVideoBatch fails fast for faceless without voiceId', async () => {
-    const { handleGenerateVideoBatch } = await import('../tools.js');
-
-    const response = await handleGenerateVideoBatch(mockClient, {
-      topics: ['topic one'],
+  it('handleGeneratePersonaVideos notes a replayed idempotent schedule', async () => {
+    vi.mocked(mockClient.generatePersonaVideos).mockResolvedValue({
+      success: true,
+      schedule: { id: 'sched-9' },
+      slots: [],
+      replayed: true,
     });
 
+    const response = await handleGeneratePersonaVideos(
+      mockClient,
+      GeneratePersonaVideosSchema.parse(baseArgs)
+    );
+
+    const text = textOf(response);
+    expect(text).toMatch(/replayed/i);
+    expect(text).toContain('"replayed": true');
+  });
+
+  it('handleGeneratePersonaVideos surfaces the structured API error as JSON (never a bare failure)', async () => {
+    const { ApiError } = await import('../errors.js');
+    vi.mocked(mockClient.generatePersonaVideos).mockRejectedValue(
+      new ApiError(
+        'Failed to generate and schedule videos: 422 Provide at least one video topic.',
+        'TOPICS_REQUIRED',
+        'topics'
+      )
+    );
+
+    const response = await handleGeneratePersonaVideos(
+      mockClient,
+      GeneratePersonaVideosSchema.parse(baseArgs)
+    );
+
     expect(response.isError).toBe(true);
-    expect(mockClient.generateVideoBatch).not.toHaveBeenCalled();
-    expect(textOf(response)).toContain('voiceId');
+    const text = textOf(response);
+    expect(text).toContain('"code":"TOPICS_REQUIRED"');
+    expect(text).toContain('"field":"topics"');
+    expect(text).toContain('Provide at least one video topic.');
+    expect(text).not.toMatch(/Tool execution failed/i);
+  });
+
+  it('handleGeneratePersonaVideos redacts credential-shaped fragments from the API error', async () => {
+    const { ApiError } = await import('../errors.js');
+    vi.mocked(mockClient.generatePersonaVideos).mockRejectedValue(
+      new ApiError(
+        'Failed to generate and schedule videos: 500 engine blew up for Bearer abc123XYZ',
+        'INTERNAL_ERROR',
+        null
+      )
+    );
+
+    const response = await handleGeneratePersonaVideos(
+      mockClient,
+      GeneratePersonaVideosSchema.parse(baseArgs)
+    );
+
+    const text = textOf(response);
+    expect(text).toContain('"code":"INTERNAL_ERROR"');
+    expect(text).toContain('Bearer [redacted]');
+    expect(text).not.toContain('abc123XYZ');
+  });
+
+  it('handleGeneratePersonaVideos surfaces non-API failures as isError', async () => {
+    vi.mocked(mockClient.generatePersonaVideos).mockRejectedValue(new Error('fetch failed'));
+
+    const response = await handleGeneratePersonaVideos(
+      mockClient,
+      GeneratePersonaVideosSchema.parse(baseArgs)
+    );
+
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('fetch failed');
+  });
+
+  it('handleGeneratePersonaVideos forwards a caller-supplied idempotencyKey', async () => {
+    vi.mocked(mockClient.generatePersonaVideos).mockResolvedValue({
+      success: true,
+      schedule: { id: 'sched-1' },
+      slots: [],
+      replayed: false,
+    });
+
+    await handleGeneratePersonaVideos(
+      mockClient,
+      GeneratePersonaVideosSchema.parse({ ...baseArgs, idempotencyKey: 'key-123' })
+    );
+
+    expect(mockClient.generatePersonaVideos).toHaveBeenCalledWith(
+      expect.objectContaining({ idempotencyKey: 'key-123' })
+    );
   });
 });

@@ -361,98 +361,151 @@ describe('PostEngineerClient', () => {
     expect(result).toEqual(mockBalance);
   });
 
-  it('triggers video job from persona successfully', async () => {
-    const mockJob = {
-      success: true,
-      taskId: 'task-abc-123',
-    };
+describe('generate and schedule videos client', () => {
+  const baseUrl = 'https://post-engineer.com';
+  let client: PostEngineerClient;
 
+  const baseInput = {
+    personaId: 'persona-123',
+    topics: ['Launch a SaaS in days', 'Pricing lessons'],
+    providers: ['youtube', 'bluesky'] as ('youtube' | 'bluesky')[],
+    youtubeAccountIds: ['chan-1'],
+    blueskyAccountIds: ['did:plc:abc'],
+    startAt: '2026-10-05T20:00:00',
+    times: ['20:00'],
+    timezone: 'Europe/Lisbon',
+  };
+
+  beforeEach(() => {
+    client = new PostEngineerClient({ apiKey: 'test-token-123' });
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      text: async () => JSON.stringify(mockJob),
+      text: async () => JSON.stringify({ success: true }),
     });
+  });
 
-    const result = await client.generateVideoJob({
-      personaId: 'persona-123',
-      scriptPrompt: 'Custom prompt for this specific video',
-    });
+  function requestBody(callIndex = 0): Record<string, unknown> {
+    const request = vi.mocked(global.fetch).mock.calls[callIndex]?.[1];
+    return JSON.parse(String(request?.body)) as Record<string, unknown>;
+  }
+
+  function lastRequestBody(): Record<string, unknown> {
+    const calls = vi.mocked(global.fetch).mock.calls;
+    return requestBody(calls.length - 1);
+  }
+
+  it('posts to the unified generate-and-schedule endpoint with the mapped body', async () => {
+    const result = await client.generatePersonaVideos(baseInput);
 
     expect(global.fetch).toHaveBeenCalledWith(
-      `${baseUrl}/api/persona/video-job`,
+      `${baseUrl}/api/videos/generate-and-schedule`,
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({
-          personaId: 'persona-123',
-          video_script_prompt: 'Custom prompt for this specific video',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer test-token-123',
+          'Content-Type': 'application/json',
         }),
       })
     );
-    expect(result).toEqual(mockJob);
+    const body = lastRequestBody();
+    expect(body.personaId).toBe('persona-123');
+    expect(body.topics).toEqual(['Launch a SaaS in days', 'Pricing lessons']);
+    expect(body.publishing).toEqual({
+      providers: ['youtube', 'bluesky'],
+      accounts: { youtube: ['chan-1'], bluesky: ['did:plc:abc'] },
+      schedule: {
+        startAt: '2026-10-05T20:00:00',
+        times: ['20:00'],
+        timezone: 'Europe/Lisbon',
+      },
+    });
+    expect(result).toEqual({ success: true });
   });
 
-  it('sends custom audio_url in the video job payload', async () => {
-    const mockJob = {
-      success: true,
-      taskId: 'task-audio-1',
-    };
+  it('nests each provider account array under publishing.accounts', async () => {
+    await client.generatePersonaVideos({
+      ...baseInput,
+      instagramAccountIds: ['ig-1'],
+      linkedinAccountIds: ['li-1'],
+    });
+    const publishing = lastRequestBody().publishing as Record<string, unknown>;
+    expect(publishing.accounts).toEqual({
+      youtube: ['chan-1'],
+      bluesky: ['did:plc:abc'],
+      instagram: ['ig-1'],
+      linkedin: ['li-1'],
+    });
+  });
 
+  it('sends an empty accounts record when no account arrays are provided', async () => {
+    const { youtubeAccountIds: _yt, blueskyAccountIds: _bsky, ...rest } = baseInput;
+    await client.generatePersonaVideos(rest);
+    const publishing = lastRequestBody().publishing as Record<string, unknown>;
+    expect(publishing.accounts).toEqual({});
+  });
+
+  it('defaults the schedule timezone to UTC when omitted', async () => {
+    const { timezone: _timezone, ...rest } = baseInput;
+    await client.generatePersonaVideos(rest);
+    const publishing = lastRequestBody().publishing as Record<string, unknown>;
+    expect((publishing.schedule as Record<string, unknown>).timezone).toBe('UTC');
+  });
+
+  it('forwards options and omits the key when options are absent', async () => {
+    await client.generatePersonaVideos({
+      ...baseInput,
+      options: { faceless: true, voiceId: 'v-1' },
+    });
+    expect(lastRequestBody().options).toEqual({ faceless: true, voiceId: 'v-1' });
+
+    await client.generatePersonaVideos(baseInput);
+    expect('options' in lastRequestBody()).toBe(false);
+  });
+
+  it('forwards a caller-supplied idempotencyKey', async () => {
+    await client.generatePersonaVideos({ ...baseInput, idempotencyKey: 'key-123' });
+    expect(lastRequestBody().idempotencyKey).toBe('key-123');
+  });
+
+  it('generates a UUID idempotencyKey per call when omitted', async () => {
+    await client.generatePersonaVideos(baseInput);
+    const first = requestBody(0).idempotencyKey;
+    await client.generatePersonaVideos(baseInput);
+    const second = requestBody(1).idempotencyKey;
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    expect(first).toMatch(uuid);
+    expect(second).toMatch(uuid);
+    expect(first).not.toBe(second);
+  });
+
+  it('throws a structured ApiError carrying code and field on API errors', async () => {
+    const { ApiError } = await import('../errors.js');
     global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify(mockJob),
-    });
-
-    const result = await client.generateVideoJob({
-      personaId: 'persona-123',
-      audioUrl: 'https://cdn.example.com/narracao.mp3',
-    });
-
-    expect(global.fetch).toHaveBeenCalledWith(
-      `${baseUrl}/api/persona/video-job`,
-      expect.objectContaining({
-        method: 'POST',
-        body: JSON.stringify({
-          personaId: 'persona-123',
-          audio_url: 'https://cdn.example.com/narracao.mp3',
+      ok: false,
+      status: 422,
+      text: async () =>
+        JSON.stringify({
+          success: false,
+          error: 'Provide at least one video topic.',
+          code: 'TOPICS_REQUIRED',
+          field: 'topics',
         }),
-      })
-    );
-    expect(result).toEqual(mockJob);
-  });
-
-  it('starts a faceless video job without personaId', async () => {
-    const mockJob = {
-      success: true,
-      taskId: 'task-faceless-1',
-    };
-
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify(mockJob),
     });
 
-    const result = await client.generateVideoJob({
-      videoSubject: 'Top 5 AI tools',
-      voiceId: 'alloy',
-    });
+    const error: unknown = await client
+      .generatePersonaVideos(baseInput)
+      .catch((e: unknown) => e);
 
-    // personaId: null selects the faceless flow in POST /api/persona/video-job;
-    // undefined keys are dropped by JSON.stringify, matching the route contract.
-    expect(global.fetch).toHaveBeenCalledWith(
-      `${baseUrl}/api/persona/video-job`,
-      expect.objectContaining({
-        method: 'POST',
-        body: JSON.stringify({
-          personaId: null,
-          video_subject: 'Top 5 AI tools',
-          voice_id: 'alloy',
-        }),
-      })
-    );
-    expect(result).toEqual(mockJob);
+    if (!(error instanceof ApiError)) {
+      throw new Error(`expected ApiError, got: ${String(error)}`);
+    }
+    expect(error.code).toBe('TOPICS_REQUIRED');
+    expect(error.field).toBe('topics');
+    expect(error.message).toContain('Failed to generate and schedule videos: 422');
+    expect(error.message).toContain('Provide at least one video topic.');
   });
+});
 
   it('retrieves video task status', async () => {
     const mockStatus = {
@@ -1051,21 +1104,6 @@ describe('PostEngineerClient persona image library', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('generateVideoJob sends image_id when provided', async () => {
-    await client.generateVideoJob({ personaId: 'p-1', imageId: 'img-123' });
-    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
-    const body = JSON.parse(String(request?.body));
-    expect(body.image_id).toBe('img-123');
-    expect(body.personaId).toBe('p-1');
-  });
-
-  it('generateVideoJob omits image_id when not provided', async () => {
-    await client.generateVideoJob({ personaId: 'p-1' });
-    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
-    const body = JSON.parse(String(request?.body));
-    expect('image_id' in body).toBe(false);
-  });
-
   it('listPersonaImages hits the library endpoint', async () => {
     await client.listPersonaImages('p-1');
     expect(global.fetch).toHaveBeenCalledWith(
@@ -1223,51 +1261,5 @@ describe('PostEngineerClient persona image library', () => {
       `${baseUrl}/api/persona/images?id=img-1`,
       expect.objectContaining({ method: 'DELETE' })
     );
-  });
-});
-
-describe('video batch client', () => {
-  const baseUrl = 'https://post-engineer.com';
-  let client: PostEngineerClient;
-
-  beforeEach(() => {
-    client = new PostEngineerClient({ apiKey: 'test-token-123' });
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ success: true }),
-    });
-  });
-
-  it('generateVideoJob maps webhookUrl to webhook_url', async () => {
-    await client.generateVideoJob({ personaId: 'p-1', webhookUrl: 'https://example.com/hook' });
-    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
-    const body = JSON.parse(String(request?.body));
-    expect(body.webhook_url).toBe('https://example.com/hook');
-    expect('webhookUrl' in body).toBe(false);
-  });
-
-  it('generateVideoJob omits webhook_url when not provided', async () => {
-    await client.generateVideoJob({ personaId: 'p-1' });
-    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
-    const body = JSON.parse(String(request?.body));
-    expect('webhook_url' in body).toBe(false);
-  });
-
-  it('generateVideoBatch posts topics to the web batch endpoint', async () => {
-    await client.generateVideoBatch({
-      topics: ['topic one', 'topic two'],
-      personaId: 'p-1',
-      webhookUrl: 'https://example.com/hook',
-    });
-    expect(global.fetch).toHaveBeenCalledWith(
-      `${baseUrl}/api/persona/video-batch`,
-      expect.objectContaining({ method: 'POST' }),
-    );
-    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
-    const body = JSON.parse(String(request?.body));
-    expect(body.topics).toEqual(['topic one', 'topic two']);
-    expect(body.personaId).toBe('p-1');
-    expect(body.webhookUrl).toBe('https://example.com/hook');
   });
 });

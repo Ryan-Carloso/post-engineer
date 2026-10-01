@@ -43,6 +43,13 @@ export interface ApiErrorOptions {
   // (e.g. { code: 'INSUFFICIENT_TOKENS' }). Also logged for debugging.
   // Must be client-safe: no internals, no secrets.
   extra?: Record<string, unknown>;
+  // Stable machine-readable error code (see lib/error-codes.ts), returned
+  // as a top-level `code` field so API, MCP and UI share one contract.
+  // `error` stays the human-readable message (backwards compatible).
+  code?: string;
+  // Request field the error belongs to (e.g. 'publishing.accounts.youtube'),
+  // so the UI can highlight the right input. Omitted when not field-specific.
+  field?: string;
 }
 
 // Secret-scrubbing policy lives in ./scrub.ts (shared with analytics.ts):
@@ -79,7 +86,13 @@ export function apiErrorResponse(
   const route = options?.route ?? 'unknown route';
   // Extra response fields are safe by contract, but scrub them anyway:
   // defense in depth against a caller accidentally passing something secret.
-  const extra = scrubSecrets({ ...(options?.extra ?? {}) });
+  // code/field are first-class: they ride in the body AND the logged
+  // metadata so PostHog can group by code.
+  const extra = scrubSecrets({
+    ...(options?.code !== undefined ? { code: options.code } : {}),
+    ...(options?.field !== undefined ? { field: options.field } : {}),
+    ...(options?.extra ?? {}),
+  });
   const metadata = scrubSecrets({ route, ...(options?.metadata ?? {}), ...extra });
   // The PostHog message uses the stable template when provided, so
   // user-controlled input in the public error doesn't create one issue

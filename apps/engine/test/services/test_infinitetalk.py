@@ -1,108 +1,14 @@
 import unittest
 import tempfile
-import types
 from pathlib import Path
 from unittest.mock import patch
 
 import requests
 
 from app.models.schema import (
-    ContentParams,
     LipSyncQuality,
-    PersonaParams,
-    PersonaVideoRequest,
 )
-from app.controllers.v1 import video as video_controller
 from app.services import infinitetalk
-from app.services import task as task_service
-
-
-class TestPersonaVideoContract(unittest.TestCase):
-    def test_accepts_frontend_persona_and_content_payload(self):
-        request = PersonaVideoRequest(
-            persona=PersonaParams(
-                id="ana",
-                name="Ana",
-                photo_url="https://example.com/ana.png",
-                voice_id="calm",
-                niche="finanças pessoais",
-                speaking_style="direta e didática",
-                audience="jovens",
-                language="pt-BR",
-            ),
-            content=ContentParams(
-                topic="Como organizar o salário",
-                goal="educar",
-                platform_ids=["234dd"],
-                video_quality=LipSyncQuality.ok,
-            ),
-        )
-
-        self.assertEqual(request.content.video_quality, LipSyncQuality.ok)
-        self.assertEqual(request.persona.language, "pt-BR")
-
-    def test_rejects_missing_persona(self):
-        with self.assertRaises(ValueError):
-            PersonaVideoRequest.model_validate(
-                {
-                    "content": {
-                        "topic": "x",
-                        "goal": "y",
-                        "platform_ids": ["account-1"],
-                    }
-                }
-            )
-
-    def test_public_controller_maps_nested_content_to_video_task(self):
-
-        body = PersonaVideoRequest(
-            persona=PersonaParams(
-                name="Ana",
-                photo_url="https://example.com/ana.png",
-                voice_id="calm",
-                niche="finanças",
-                speaking_style="direta",
-                audience="jovens",
-            ),
-            content=ContentParams(
-                topic="Poupar dinheiro",
-                goal="educar",
-                platform_ids=["account-1"],
-                video_quality=LipSyncQuality.very_good,
-            ),
-        )
-
-        with patch.object(
-            video_controller,
-            "process_persona_videos",
-            return_value=[("task-1", "params")],
-        ) as process:
-            request = types.SimpleNamespace(
-                state=types.SimpleNamespace(
-                    auth=video_controller.base.AuthContext(
-                        user_id="internal", auth_type="internal"
-                    )
-                )
-            )
-            result = video_controller.create_persona_video(request, body)
-
-        self.assertEqual(result, {"status": 200, "data": {"task_id": "task-1"}})
-        process.assert_called_once()
-        batch_body = process.call_args.args[1]
-        self.assertEqual(len(batch_body.items), 1)
-        item = batch_body.items[0]
-        self.assertEqual(item.topic, "Poupar dinheiro")
-        self.assertEqual(item.goal, "educar")
-        self.assertEqual(item.platform_ids, ["account-1"])
-        self.assertEqual(item.video_quality, LipSyncQuality.very_good)
-
-    def test_persona_script_is_limited_at_a_sentence_boundary(self):
-        long_script = "Primeira frase. " + ("palavra " * 100)
-
-        with patch.dict(task_service.config.app, {"max_video_script_characters": 30}):
-            result = task_service._limit_generated_script(long_script)
-
-        self.assertEqual(result, "Primeira frase.")
 
 
 class TestInfiniteTalkClient(unittest.TestCase):

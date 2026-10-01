@@ -7,7 +7,7 @@ import {
   MAX_LIBRARY_TAG_LENGTH,
   MAX_LIBRARY_DESCRIPTION_LENGTH,
 } from './client.js';
-import { getErrorMessage } from './errors.js';
+import { getErrorMessage, ApiError } from './errors.js';
 
 export type McpToolResponse = CallToolResult;
 
@@ -116,21 +116,93 @@ export const GetTokenBalanceShape = {};
 
 export const GetTokenBalanceSchema = z.object(GetTokenBalanceShape);
 
-export const GenerateVideoShape = {
-  // Omitting personaId selects the faceless flow (no persona loaded; the job
-  // runs fully faceless with face_mix_percent 0). Faceless generation then
-  // requires videoSubject plus a voice source (audioUrl or voiceId) — the
-  // web API has no stored persona to fall back to.
-  personaId: z.string().min(1, 'personaId must be a non-empty string').optional().describe('The ID of the persona to generate video with. Omit for faceless generation.'),
-  videoSubject: z.string().min(1).optional().describe('Video subject/topic. Required for faceless generation (no persona).'),
-  voiceId: z.string().min(1).optional().describe('Voice ID for faceless generation. Required when no audioUrl is given and no persona.'),
-  scriptPrompt: z.string().optional().describe('Optional specific prompt override for this video'),
-  audioUrl: z.string().url('audioUrl must be a valid URL').optional().describe('Optional public URL of custom audio for this video (overrides the persona voice)'),
-  imageId: z.string().min(1, 'imageId must be a non-empty string').optional().describe('Optional library image ID to use for this video (overrides the deterministic per-video image selection; see list_persona_images)'),
-  webhookUrl: z.string().url('webhookUrl must be a valid URL').optional().describe('Optional callback URL the server POSTs to once when the video reaches a terminal state (completed/failed)'),
+// Loopback hosts for which a plain http: media/webhook URL is tolerated
+// (local dev callbacks). Anything else must be https so the URL's content
+// never travels in cleartext.
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+
+function isHttpsOrLoopbackHttp(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol === 'https:') return true;
+  return parsed.protocol === 'http:' && LOOPBACK_HOSTS.has(parsed.hostname);
+}
+
+/** URL field for user-supplied media/webhook URLs: https, or http on loopback only. */
+function httpsUrlField(fieldName: string) {
+  return z
+    .string()
+    .url(`${fieldName} must be a valid URL`)
+    .refine(isHttpsOrLoopbackHttp, {
+      message: `${fieldName} must be an https URL (http is allowed only for loopback hosts like localhost)`,
+    });
+}
+
+// Shared per-provider account-id fields for generate_persona_videos.
+// Defined once so the four provider blocks can't drift apart; the server
+// enforces which providers need accounts, the client only maps them.
+const PublishingAccountIdsShape = {
+  youtubeAccountIds: z.array(z.string().min(1)).optional().describe('YouTube channel IDs (the channelId field from list_social_accounts). Required when providers includes youtube.'),
+  instagramAccountIds: z.array(z.string().min(1)).optional().describe('Instagram account IDs (the igUserId field from list_social_accounts). Required when providers includes instagram.'),
+  linkedinAccountIds: z.array(z.string().min(1)).optional().describe('LinkedIn account IDs (the providerAccountId field from list_social_accounts). Required when providers includes linkedin.'),
+  blueskyAccountIds: z.array(z.string().min(1)).optional().describe('Bluesky DIDs (the did field from list_social_accounts). Required when providers includes bluesky.'),
 };
 
-export const GenerateVideoSchema = z.object(GenerateVideoShape);
+export const GeneratePersonaVideosShape = {
+  // personaId is REQUIRED even for faceless videos: the API has no
+  // standalone-generation flow, so a persona record always anchors the
+  // schedule. Faceless drops the face via options.faceless (the persona
+  // voice, niche, and script prompt still apply).
+  personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona to generate videos with. REQUIRED even for faceless videos — set options.faceless to true to drop the face.'),
+  // The array bounds live in the shape (not a .refine): the MCP SDK parses
+  // tool args against the raw shape, so a whole-object refine would be a
+  // hollow claim on the tool path (round 26 learning).
+  topics: z
+    .array(z.string().min(1, 'Each topic must be a non-empty string'))
+    .min(1, 'Provide at least one video topic')
+    .max(10, 'At most 10 topics per call')
+    .describe('Video topics, one per video (1-10). The server assigns each topic a publish slot: topic i goes to day startAt\'s date + floor(i/times.length) at the i-th sorted time.'),
+  providers: z
+    .array(z.enum(['youtube', 'instagram', 'linkedin', 'bluesky']))
+    .min(1, 'Provide at least one provider')
+    .describe('Where to publish the videos.'),
+  ...PublishingAccountIdsShape,
+  startAt: z
+    .string()
+    .min(1, 'startAt is required')
+    .refine((value) => !Number.isNaN(Date.parse(value)), {
+      message: 'startAt must be a valid ISO datetime (e.g. "2026-10-02T20:00:00")',
+    })
+    .describe('When the first publish slot may start: ISO datetime. A naive "2026-10-02T20:00:00" is wall-clock in timezone. Slots before startAt are skipped; every slot must be 24h–30d ahead.'),
+  times: z
+    .array(
+      z
+        .string()
+        .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Each time must be HH:MM in 24-hour format (e.g. "09:30", "20:00")')
+    )
+    .min(1, 'Provide at least one publish time')
+    .describe('Daily publish times in HH:MM 24-hour format.'),
+  timezone: z.string().min(1).default('UTC').describe('IANA timezone for a naive startAt and the HH:MM times, e.g. "Europe/Lisbon". Defaults to UTC.'),
+  options: z
+    .object({
+      faceless: z.boolean().optional().describe('Generate faceless (no face). personaId is still required: the persona voice, niche, and script prompt still apply.'),
+      audioUrl: httpsUrlField('audioUrl').optional().describe('Public URL of custom audio for the videos (overrides the persona voice).'),
+      imageId: z.string().min(1, 'imageId must be a non-empty string').optional().describe('Library image ID to use for every video (overrides the deterministic per-video selection; see list_persona_images).'),
+      scriptPrompt: z.string().optional().describe('Script prompt override applied to every video in this call.'),
+      scriptPrompts: z.array(z.string().min(1)).optional().describe('Per-topic script prompt overrides; must have one entry per topic.'),
+      voiceId: z.string().min(1, 'voiceId must be a non-empty string').optional().describe('Voice ID override (see list_voices).'),
+      webhookUrl: httpsUrlField('webhookUrl').optional().describe('Callback URL the server POSTs to when each video reaches a terminal state (completed/failed).'),
+    })
+    .optional()
+    .describe('Generation options applied to the videos in this call.'),
+  idempotencyKey: z.string().min(1).optional().describe('Idempotency key: retrying the call with the same key returns the original schedule (replayed: true) instead of generating again. A UUID is generated automatically when omitted.'),
+};
+
+export const GeneratePersonaVideosSchema = z.object(GeneratePersonaVideosShape);
 
 export const ListPersonaImagesShape = {
   personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona whose image library to list'),
@@ -203,23 +275,6 @@ export const GetVideoTaskProgressShape = {
 };
 
 export const GetVideoTaskProgressSchema = z.object(GetVideoTaskProgressShape);
-
-export const GenerateVideoBatchShape = {
-  // The array bound lives in the shape (not a .refine): the MCP SDK parses
-  // tool args against the raw shape, so a refine would be a hollow claim on
-  // the tool path (round 26 learning).
-  topics: z
-    .array(z.string().min(1, 'Each topic must be a non-empty string'))
-    .min(1, 'Provide at least one video topic')
-    .max(10, 'A batch holds at most 10 videos')
-    .describe('Video topics, one per video (1-10). The videos generate sequentially in order.'),
-  personaId: z.string().min(1, 'personaId must be a non-empty string').optional().describe('The ID of the persona to generate videos with. Omit for faceless generation (then voiceId is required).'),
-  voiceId: z.string().min(1).optional().describe('Voice ID for faceless generation. Required when personaId is omitted and no persona voice exists.'),
-  imageId: z.string().min(1, 'imageId must be a non-empty string').optional().describe('Optional library image ID to use for every video in the batch (overrides the deterministic per-video selection; see list_persona_images). Rejected for faceless generation.'),
-  webhookUrl: z.string().url('webhookUrl must be a valid URL').optional().describe('Optional callback URL the server POSTs to once when each video reaches a terminal state (completed/failed)'),
-};
-
-export const GenerateVideoBatchSchema = z.object(GenerateVideoBatchShape);
 
 export async function handleCreatePersona(
   client: PostEngineerClient,
@@ -384,41 +439,6 @@ export async function handleGetTokenBalance(
   return handleLibraryCall(() => client.getTokenBalance(), 'getting token balance');
 }
 
-export async function handleGenerateVideo(
-  client: PostEngineerClient,
-  args: z.infer<typeof GenerateVideoSchema>
-): Promise<McpToolResponse> {
-  // Faceless flow (no personaId): the web API has no stored persona to fall
-  // back to, so the subject and a voice source must come with the request.
-  // Fail fast here instead of surfacing the API 400.
-  const faceless = args.personaId === undefined || args.personaId === null;
-  if (faceless) {
-    if (!args.videoSubject || args.videoSubject.trim().length === 0) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: 'Error: faceless generation requires videoSubject (no persona to take the topic from).',
-          },
-        ],
-        isError: true,
-      };
-    }
-    if (!args.audioUrl && !args.voiceId) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: 'Error: faceless generation requires a voice source — audioUrl or voiceId (no persona voice to fall back to).',
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
-  return handleLibraryCall(() => client.generateVideoJob(args), 'generating video', 'Video generation task started');
-}
-
 /** Shared wrapper for the persona-image handlers: same try/catch + text
  * response shape, differing only in the client call and the message verbs.
  * Older handlers (handleConnectAccount) keep inline
@@ -579,29 +599,123 @@ export async function handleGetVideoTaskProgress(
   );
 }
 
-export async function handleGenerateVideoBatch(
+export async function handleGeneratePersonaVideos(
   client: PostEngineerClient,
-  args: z.infer<typeof GenerateVideoBatchSchema>
+  args: z.infer<typeof GeneratePersonaVideosSchema>
 ): Promise<McpToolResponse> {
-  // Faceless flow (no personaId): the batch web API resolves no persona voice
-  // and accepts no custom audio per video in V1, so a voice source is
-  // required. Fail fast here instead of surfacing the API 400.
-  const faceless = args.personaId === undefined || args.personaId === null;
-  if (faceless && (args.voiceId === undefined || args.voiceId === null)) {
+  try {
+    const narrowed = narrowScheduledVideos(
+      await client.generatePersonaVideos({
+        personaId: args.personaId,
+        topics: args.topics,
+        providers: args.providers,
+        youtubeAccountIds: args.youtubeAccountIds,
+        instagramAccountIds: args.instagramAccountIds,
+        linkedinAccountIds: args.linkedinAccountIds,
+        blueskyAccountIds: args.blueskyAccountIds,
+        startAt: args.startAt,
+        times: args.times,
+        timezone: args.timezone,
+        options: args.options,
+        idempotencyKey: args.idempotencyKey,
+      })
+    );
+    // Keeps its own try/catch (like handleConnectAccount): success renders a
+    // concise human summary plus the machine JSON, and API errors surface
+    // the structured { code, message, field } — the handleLibraryCall
+    // wrapper covers neither.
+    const slotCount = narrowed.slots.length;
+    const scheduleId = narrowed.schedule.id ?? '(unknown id)';
+    const humanSummary = narrowed.replayed
+      ? `Replayed idempotent schedule ${scheduleId}: ${slotCount} publish slot(s) (no new videos generated).`
+      : `Scheduled ${slotCount} video(s) in schedule ${scheduleId}: each video is generated and auto-published at its slot.`;
+    const slotLines = narrowed.slots.map(
+      (slot, i) =>
+        `${i + 1}. ${slot.topic ?? '(untitled)'} → ${slot.slotAt ?? '(unscheduled)'} [${slot.status ?? 'unknown'}${slot.taskId ? `, task ${slot.taskId}` : ''}]`
+    );
     return {
       content: [
         {
           type: 'text',
-          text: 'Error: faceless batch generation requires voiceId (no persona voice to fall back to, and batches accept no custom audio_url per video).',
+          text: `${humanSummary}\n${slotLines.join('\n')}\n${JSON.stringify(narrowed, null, 2)}`,
+        },
+      ],
+    };
+  } catch (error) {
+    // The API error contract carries a stable code: surface it as
+    // { code, message, field } JSON instead of rewording the platform's
+    // own human message — never a bare "Tool execution failed". The
+    // message is capped at 200 chars by the client and credential-shaped
+    // fragments are redacted before reaching the agent.
+    if (error instanceof ApiError && error.code !== null) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error generating and scheduling videos: ${JSON.stringify({
+              code: error.code,
+              message: sanitizeEngineError(getErrorMessage(error)),
+              field: error.field,
+            })}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error generating and scheduling videos: ${getErrorMessage(error)}`,
         },
       ],
       isError: true,
     };
   }
-  return handleLibraryCall(
-    () => client.generateVideoBatch(args),
-    'generating video batch',
-    'Video batch started'
-  );
+}
+
+/** Narrows the generate-and-schedule success envelope to the fields the
+ * tool contract promises: the schedule id, one row per publish slot, and
+ * the replayed flag. Anything the API adds later rides through unparsed —
+ * the projection only pins what the tool renders and documents. */
+function narrowScheduledVideos(result: unknown): {
+  schedule: { id: string | null };
+  slots: Array<{
+    slotId: string | null;
+    slotAt: string | null;
+    topic: string | null;
+    taskId: string | null;
+    status: string | null;
+  }>;
+  replayed: boolean | null;
+} {
+  const record =
+    typeof result === 'object' && result !== null
+      ? (result as Record<string, unknown>)
+      : {};
+  const schedule =
+    typeof record.schedule === 'object' && record.schedule !== null
+      ? (record.schedule as Record<string, unknown>)
+      : {};
+  const rawSlots = Array.isArray(record.slots) ? record.slots : [];
+  const str = (value: unknown): string | null =>
+    typeof value === 'string' ? value : null;
+  return {
+    schedule: { id: str(schedule.id) },
+    slots: rawSlots.map((slot) => {
+      const s =
+        typeof slot === 'object' && slot !== null
+          ? (slot as Record<string, unknown>)
+          : {};
+      return {
+        slotId: str(s.slotId),
+        slotAt: str(s.slotAt),
+        topic: str(s.topic),
+        taskId: str(s.taskId),
+        status: str(s.status),
+      };
+    }),
+    replayed: typeof record.replayed === 'boolean' ? record.replayed : null,
+  };
 }
 
