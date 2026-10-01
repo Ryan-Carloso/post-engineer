@@ -35,7 +35,10 @@ function scrubSecrets(properties: Record<string, unknown>): Record<string, unkno
 //---------------
 // Default PostHog ingest host. Change this constant if you self-host
 // PostHog — every telemetry path in the MCP server reads it as the
-// fallback when POSTHOG_HOST is not set.
+// fallback when POSTHOG_HOST is not set. Keep in sync with the web
+// (apps/web/lib/posthog-config.ts) and engine
+// (apps/engine/app/services/analytics.py) constants —
+// apps/web/lib/__tests__/posthog-config.test.ts enforces it.
 //---------------
 export const DEFAULT_POSTHOG_HOST = 'https://eu.i.posthog.com';
 

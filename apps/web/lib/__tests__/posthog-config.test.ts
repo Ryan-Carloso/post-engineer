@@ -45,6 +45,63 @@ describe('DEFAULT_POSTHOG_HOST', () => {
   });
 });
 
+describe('DEFAULT_POSTHOG_HOST cross-app sync', () => {
+  it('keeps the three apps pointing at the same PostHog host', async () => {
+    // The three apps each declare their own DEFAULT_POSTHOG_HOST literal
+    // (no shared package between web/engine/mcp). A one-sided change would
+    // silently route one app's events to the wrong region — and every
+    // analytics path swallows delivery errors by design, so nothing would
+    // surface. This test parses the three files and asserts the literals
+    // match, mirroring the SQL-literals sync test precedent.
+    //
+    // Self-hosters: change the constant in all three apps. If you
+    // intentionally point them at different hosts, update this test to
+    // assert your intended mapping instead of deleting it — a divergent
+    // host should always be a conscious choice.
+    const { readFileSync } = await import('node:fs');
+    const { join, dirname } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const repoRoot = join(
+      dirname(fileURLToPath(import.meta.url)),
+      '..',
+      '..',
+      '..',
+      '..',
+    );
+
+    const webSrc = readFileSync(
+      join(repoRoot, 'apps', 'web', 'lib', 'posthog-config.ts'),
+      'utf8',
+    );
+    const mcpSrc = readFileSync(
+      join(repoRoot, 'apps', 'mcp', 'src', 'analytics.ts'),
+      'utf8',
+    );
+    const engineSrc = readFileSync(
+      join(repoRoot, 'apps', 'engine', 'app', 'services', 'analytics.py'),
+      'utf8',
+    );
+
+    const webHost = webSrc.match(
+      /export const DEFAULT_POSTHOG_HOST = '([^']+)'/,
+    )?.[1];
+    const mcpHost = mcpSrc.match(
+      /export const DEFAULT_POSTHOG_HOST = '([^']+)'/,
+    )?.[1];
+    const engineHost = engineSrc.match(
+      /^DEFAULT_POSTHOG_HOST = "([^"]+)"/m,
+    )?.[1];
+
+    expect(webHost).toBeDefined();
+    expect(mcpHost).toBeDefined();
+    expect(engineHost).toBeDefined();
+    expect(mcpHost).toBe(webHost);
+    expect(engineHost).toBe(webHost);
+    // The imported constant is the parsed web value (regex sanity check).
+    expect(DEFAULT_POSTHOG_HOST).toBe(webHost);
+  });
+});
+
 describe('server client host resolution', () => {
   const originalEnv = { ...process.env };
 
