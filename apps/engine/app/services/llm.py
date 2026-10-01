@@ -159,7 +159,7 @@ class LLMResponseError(Exception):
 
 # OpenAI-compatible client: with 1 SDK-internal retry, a hung gateway
 # (accepts TCP but never responds) fails in ~2 min — and only then does the
-# fallback to Z.ai kick in. Without this, the SDK default (600s x 3 attempts)
+# fallback to OpenRouter kick in. Without this, the SDK default (600s x 3 attempts)
 # would make the caller wait ~30 min for the fallback.
 LLM_CLIENT_TIMEOUT_SECONDS = 60.0
 LLM_CLIENT_MAX_RETRIES = 1
