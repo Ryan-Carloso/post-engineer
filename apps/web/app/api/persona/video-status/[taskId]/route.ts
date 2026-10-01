@@ -5,6 +5,7 @@ import { refundTokens } from '@/lib/billing/token-check';
 import { recordGenerationUpdate } from '@/lib/generation/video-generation';
 import { categorizeGenerationError } from '@/lib/generation/generation-errors';
 import { apiErrorResponse } from '@/lib/api-error';
+import { rewriteVideoUrls } from '@/lib/video-urls';
 
 //---------------
 // GET /api/persona/video-status/:taskId — engine status proxy.
@@ -170,29 +171,4 @@ function extractTaskError(value: unknown): string | null {
   return typeof candidate === 'string' && candidate.length > 0 ? candidate : null;
 }
 
-function rewriteVideoUrls(body: unknown, taskId: string, baseUrl: string): unknown {
-  if (typeof body === 'string') {
-    let candidate = body;
-    let internalAbsolute = false;
-    try {
-      const absolute = new URL(body);
-      if (absolute.origin === new URL(baseUrl).origin) {
-        candidate = `${absolute.pathname}${absolute.search}`;
-        internalAbsolute = true;
-      }
-    } catch {
-      // Non-URL strings are ordinary status data.
-    }
-    const relative = candidate.match(/^\/api\/v1\/(download|stream)\/([^?]+)(\?.*)?$/);
-    if (relative) {
-      const path = relative[2].split('/');
-      if (path[0] === taskId) path.shift();
-      if (path.length === 0) return body;
-      return `/api/persona/video-download/${encodeURIComponent(taskId)}/${path.map(encodeURIComponent).join('/')}${relative[1] === 'stream' ? '?source=stream' : ''}`;
-    }
-    return internalAbsolute ? null : body;
-  }
-  if (Array.isArray(body)) return body.map((item) => rewriteVideoUrls(item, taskId, baseUrl));
-  if (typeof body !== 'object' || body === null) return body;
-  return Object.fromEntries(Object.entries(body).map(([key, value]) => [key, rewriteVideoUrls(value, taskId, baseUrl)]));
-}
+// (rewriteVideoUrls lives in lib/video-urls.ts — shared with delete-preview.)

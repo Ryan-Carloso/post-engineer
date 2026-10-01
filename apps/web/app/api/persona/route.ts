@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
-import { requireSupabaseSession } from '@/lib/request-auth';
+import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
 import { isPersonaAllowed, isScopedApiKey } from '@/lib/api-keys';
 import {
   parsePersonaForm,
@@ -27,6 +27,7 @@ import {
 } from '@/lib/persona-images';
 import { logger } from '@/lib/logger';
 import { apiErrorResponse } from '@/lib/api-error';
+import { ERROR_CODES } from '@/lib/error-codes';
 import { trackApiEvent } from '@/lib/analytics';
 
 //---------------
@@ -532,26 +533,53 @@ async function parsePatchBody(request: Request): Promise<ParsePatchResult> {
 }
 
 export async function DELETE(request: Request): Promise<NextResponse> {
+  const ROUTE = 'DELETE /api/persona';
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
   const user = { id: auth.userId };
+  // Service-role bypasses RLS: every query below is re-scoped by user_id,
+  // and the persona row itself is the ownership proof.
   const supabase = auth.isApiKey === true
     ? createSupabaseServiceClient()
     : await createSupabaseServerClient();
 
   const personaId = new URL(request.url).searchParams.get('personaId');
-  if (!personaId) return errorResponse(400, 'personaId is required.', 'DELETE /api/persona');
+  if (!personaId) {
+    return apiErrorResponse(400, 'personaId is required.', {
+      route: ROUTE,
+      code: ERROR_CODES.VALIDATION_FAILED,
+      field: 'personaId',
+    });
+  }
   if (!isPersonaAllowed(auth.personaIds, personaId)) {
-    return errorResponse(403, 'This API key does not have access to this persona.', 'DELETE /api/persona');
+    return apiErrorResponse(403, 'This API key cannot access this persona.', {
+      route: ROUTE,
+      code: ERROR_CODES.PERSONA_SCOPE_DENIED,
+      field: 'personaId',
+    });
   }
 
   const { data: persona, error: selectError } = await supabase
     .from('personas')
-    .select('id, photo_path, voice_audio_path')
+    .select('id, name, photo_path, voice_audio_path')
     .eq('id', personaId)
     .eq('user_id', user.id)
     .single();
-  if (selectError || !persona) return errorResponse(404, 'Persona not found.', 'DELETE /api/persona');
+  if (selectError || !persona) {
+    // PGRST116 = zero rows: missing or belongs to someone else. Any other
+    // error is a real DB failure — a bare 404 would hide it.
+    if (selectError?.code === 'PGRST116') {
+      return apiErrorResponse(404, 'Persona not found.', {
+        route: ROUTE,
+        code: ERROR_CODES.PERSONA_NOT_FOUND,
+      });
+    }
+    logger.error('[api/persona] persona lookup failed', selectError);
+    return apiErrorResponse(500, 'Failed to load persona.', {
+      route: ROUTE,
+      code: ERROR_CODES.INTERNAL_ERROR,
+    });
+  }
 
   const paths = [persona.photo_path, persona.voice_audio_path].filter(
     (value): value is string => typeof value === 'string' && value.length > 0,
@@ -565,13 +593,96 @@ export async function DELETE(request: Request): Promise<NextResponse> {
     .eq('persona_id', personaId);
   if (libraryError) {
     logger.error('[api/persona] library image cleanup lookup failed', libraryError);
-    return errorResponse(500, 'Failed to remove persona files.', 'DELETE /api/persona');
+    return apiErrorResponse(500, 'Failed to remove persona files.', {
+      route: ROUTE,
+      code: ERROR_CODES.INTERNAL_ERROR,
+    });
   }
   for (const row of libraryRows ?? []) {
     if (typeof row.image_path === 'string' && row.image_path.length > 0) {
       paths.push(row.image_path);
     }
   }
+  const imagesDeleted = libraryRows?.length ?? 0;
+
+  //--------------- Cascade delete: children before parents.
+  //
+  // Deleting a persona used to leave schedules, slots and generation rows
+  // orphaned (a real orphan schedule kept failing the engine's reconcile
+  // tick every 60s). Everything tied to the persona goes now, in
+  // dependency order: slots -> schedules -> generations -> persona row
+  // (persona_images rows vanish via ON DELETE CASCADE).
+  //
+  // No token refunds, ever: spent tokens bought generation and publishing
+  // work that already happened. Deleting the persona does not undo that
+  // cost. This is a deliberate product decision, stated here and in the
+  // UI confirmation dialog.
+  //
+  // PostgREST has no multi-statement transactions, so a mid-cascade
+  // failure cannot roll back. completedSteps names what already went
+  // through — the 500 is loud, never a silent half-delete.
+  //---------------
+  const completedSteps: string[] = [];
+  const cascadeFail = (step: string, error: unknown): NextResponse => {
+    logger.error(`[api/persona] cascade delete failed at ${step}`, error, {
+      personaId,
+      completedSteps,
+    });
+    return apiErrorResponse(500, 'Failed to delete persona.', {
+      route: ROUTE,
+      code: ERROR_CODES.INTERNAL_ERROR,
+    });
+  };
+
+  const { data: scheduleRows, error: schedulesError } = await supabase
+    .from('schedules')
+    .select('id')
+    .eq('persona_id', personaId)
+    .eq('user_id', user.id);
+  if (schedulesError) return cascadeFail('schedules-select', schedulesError);
+  const scheduleIds = (scheduleRows ?? [])
+    .map((row) => (typeof row === 'object' && row !== null ? (row as { id: unknown }).id : null))
+    .filter((id): id is string => typeof id === 'string');
+
+  let slotsDeleted = 0;
+  if (scheduleIds.length > 0) {
+    const { error: slotsError, count: slotsCount } = await supabase
+      .from('scheduled_posts')
+      .delete({ count: 'exact' })
+      .in('schedule_id', scheduleIds);
+    if (slotsError) return cascadeFail('scheduled_posts', slotsError);
+    slotsDeleted = slotsCount ?? 0;
+  }
+  completedSteps.push('scheduled_posts');
+
+  const { error: schedulesDeleteError, count: schedulesCount } = await supabase
+    .from('schedules')
+    .delete({ count: 'exact' })
+    .eq('persona_id', personaId)
+    .eq('user_id', user.id);
+  if (schedulesDeleteError) return cascadeFail('schedules', schedulesDeleteError);
+  completedSteps.push('schedules');
+
+  // Engine task ids are collected before the generation rows die, so the
+  // engine's task directories can be cleaned up best-effort below.
+  const { data: generationRows, error: generationsSelectError } = await supabase
+    .from('video_generations')
+    .select('engine_task_id')
+    .eq('persona_id', personaId)
+    .eq('user_id', user.id);
+  if (generationsSelectError) return cascadeFail('video_generations-select', generationsSelectError);
+  const engineTaskIds = (generationRows ?? [])
+    .map((row) =>
+      typeof row === 'object' && row !== null ? (row as { engine_task_id: unknown }).engine_task_id : null,
+    )
+    .filter((id): id is string => typeof id === 'string' && id.length > 0);
+  const { error: generationsError, count: generationsCount } = await supabase
+    .from('video_generations')
+    .delete({ count: 'exact' })
+    .eq('persona_id', personaId)
+    .eq('user_id', user.id);
+  if (generationsError) return cascadeFail('video_generations', generationsError);
+  completedSteps.push('video_generations');
 
   // Row first, storage second: if the row delete fails, nothing is lost; if
   // the storage remove fails afterwards, the persona is already gone and the
@@ -583,16 +694,62 @@ export async function DELETE(request: Request): Promise<NextResponse> {
     .eq('id', personaId)
     .eq('user_id', user.id);
   if (deleteError) {
-    logger.error('[api/persona] delete failed', deleteError);
-    return errorResponse(500, 'Failed to delete persona.', 'DELETE /api/persona');
+    return cascadeFail('personas', deleteError);
   }
+  completedSteps.push('personas');
+
   if (paths.length > 0) {
     const { error: storageError } = await supabase.storage.from(IMAGE_BUCKET).remove(paths);
     if (storageError) {
       logger.error('[api/persona] storage cleanup failed after delete', storageError, { paths });
     }
   }
-  return NextResponse.json({ success: true });
+
+  // Engine task directories would orphan on the engine host now that their
+  // generation rows are gone. Best-effort: a down engine must never fail
+  // the persona delete.
+  const engineBaseUrl = process.env.MONEYPRINT_API_URL;
+  if (engineBaseUrl && engineTaskIds.length > 0) {
+    for (const taskId of engineTaskIds) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      try {
+        const res = await fetch(
+          `${engineBaseUrl.replace(/\/+$/, '')}/api/v1/tasks/${encodeURIComponent(taskId)}`,
+          {
+            method: 'DELETE',
+            headers: engineAuthHeaders(user.id),
+            signal: controller.signal,
+          },
+        );
+        if (!res.ok) {
+          logger.warn('[api/persona] engine task cleanup failed', { taskId, status: res.status });
+        }
+      } catch (error) {
+        logger.warn('[api/persona] engine task cleanup failed', { taskId, error });
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+  }
+
+  trackApiEvent('persona_deleted', {
+    userId: user.id,
+    personaId,
+    schedulesDeleted: schedulesCount ?? scheduleIds.length,
+    slotsDeleted,
+    videosDeleted: generationsCount ?? engineTaskIds.length,
+  });
+
+  return NextResponse.json({
+    success: true,
+    deleted: {
+      schedules: schedulesCount ?? scheduleIds.length,
+      slots: slotsDeleted,
+      videos: generationsCount ?? 0,
+      images: imagesDeleted,
+    },
+  });
 }
 
 function asFile(value: FormDataEntryValue | null): File | null {

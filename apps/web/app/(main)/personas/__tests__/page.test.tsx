@@ -17,6 +17,8 @@ vi.mock('next/image', () => ({
 vi.mock('@/lib/api', () => ({
   usePersonaListQuery: vi.fn(),
   useDeletePersonaMutation: vi.fn(),
+  fetchDeletePreview: vi.fn(),
+  deletePersona: vi.fn(),
 }));
 
 vi.mock('@/lib/ui', () => ({
@@ -42,7 +44,7 @@ vi.mock('@/lib/i18n/provider', () => {
 });
 
 import PersonasPage from '../page';
-import { usePersonaListQuery, useDeletePersonaMutation } from '@/lib/api';
+import { usePersonaListQuery, fetchDeletePreview, deletePersona } from '@/lib/api';
 import { I18nProvider } from '@/lib/i18n/provider';
 
 function createWrapper() {
@@ -68,11 +70,6 @@ beforeEach(() => {
   vi.mocked(usePersonaListQuery).mockReturnValue({
     data: PERSONAS,
     isLoading: false,
-  } as never);
-  vi.mocked(useDeletePersonaMutation).mockReturnValue({
-    mutate: vi.fn(),
-    mutateAsync: vi.fn(),
-    isPending: false,
   } as never);
 });
 
@@ -148,14 +145,12 @@ describe('app/(main)/personas/page — PersonasPage', () => {
     expect(screen.queryByTestId('icon-pencil')).toBeNull();
   });
 
-  it('cartão tem botão de deletar e pede confirmação antes de deletar', async () => {
-    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
-    vi.mocked(useDeletePersonaMutation).mockReturnValue({
-      mutate: vi.fn(),
-      mutateAsync,
-      isPending: false,
-    } as never);
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+  it('cartão tem botão de deletar que abre o modal de confirmação', async () => {
+    vi.mocked(fetchDeletePreview).mockResolvedValue({
+      success: true,
+      counts: { schedules: 0, upcomingSlots: 0, generatedVideos: 0, personaImages: 0 },
+      videos: [],
+    });
     render(<PersonasPage />, { wrapper: createWrapper() });
 
     const deleteButtons = screen.getAllByRole('button', { name: 'personas.delete' });
@@ -163,41 +158,50 @@ describe('app/(main)/personas/page — PersonasPage', () => {
 
     fireEvent.click(deleteButtons[0]);
     await waitFor(() => {
-      expect(mutateAsync).toHaveBeenCalledWith('p-1');
+      expect(fetchDeletePreview).toHaveBeenCalledWith('p-1');
     });
-    confirmSpy.mockRestore();
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
+    expect(screen.getByText('personas.deleteDialogNoRefund')).toBeInTheDocument();
   });
 
-  it('refetch da lista após deletar com sucesso', async () => {
-    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
-    vi.mocked(useDeletePersonaMutation).mockReturnValue({
-      mutate: vi.fn(),
-      mutateAsync,
-      isPending: false,
-    } as never);
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+  it('deleta após digitar o nome e fecha o modal', async () => {
+    vi.mocked(fetchDeletePreview).mockResolvedValue({
+      success: true,
+      counts: { schedules: 0, upcomingSlots: 0, generatedVideos: 0, personaImages: 0 },
+      videos: [],
+    });
+    vi.mocked(deletePersona).mockResolvedValue({ success: true });
     render(<PersonasPage />, { wrapper: createWrapper() });
 
     fireEvent.click(screen.getAllByRole('button', { name: 'personas.delete' })[0]);
+    await screen.findByRole('alertdialog');
+    fireEvent.change(screen.getByLabelText('personas.deleteDialogTypeName'), {
+      target: { value: 'Ana Voyeur' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'personas.deleteConfirm' }));
+
     await waitFor(() => {
-      expect(mutateAsync).toHaveBeenCalled();
+      expect(deletePersona).toHaveBeenCalledWith('p-1');
     });
-    confirmSpy.mockRestore();
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    });
   });
 
-  it('não deleta quando o usuário cancela a confirmação', () => {
-    const mutate = vi.fn();
-    vi.mocked(useDeletePersonaMutation).mockReturnValue({
-      mutate,
-      mutateAsync: vi.fn(),
-      isPending: false,
-    } as never);
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  it('não deleta quando o usuário fecha o modal sem confirmar', async () => {
+    vi.mocked(fetchDeletePreview).mockResolvedValue({
+      success: true,
+      counts: { schedules: 0, upcomingSlots: 0, generatedVideos: 0, personaImages: 0 },
+      videos: [],
+    });
     render(<PersonasPage />, { wrapper: createWrapper() });
 
     fireEvent.click(screen.getAllByRole('button', { name: 'personas.delete' })[0]);
-    expect(mutate).not.toHaveBeenCalled();
-    confirmSpy.mockRestore();
+    await screen.findByRole('alertdialog');
+    fireEvent.click(screen.getByRole('button', { name: 'personas.cancel' }));
+
+    expect(deletePersona).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
   });
 
   it('mostra badges de idioma e formato quando a persona tem preferências', () => {

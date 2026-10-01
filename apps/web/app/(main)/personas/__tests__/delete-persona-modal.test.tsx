@@ -1,0 +1,139 @@
+import '@testing-library/jest-dom/vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import type { ReactNode } from 'react';
+
+//---------------
+// DeletePersonaModal behavioral tests.
+// Network (lib/api) is mocked; the component owns loading, preview,
+// type-to-confirm, delete, and error states.
+//---------------
+
+vi.mock('@/lib/api', () => ({
+  fetchDeletePreview: vi.fn(),
+  deletePersona: vi.fn(),
+}));
+
+vi.mock('@/lib/i18n/provider', () => {
+  const t = (key: string) => key;
+  function I18nProvider({ children }: { children: ReactNode }) {
+    return <>{children}</>;
+  }
+  I18nProvider.displayName = 'I18nProvider';
+  return {
+    useI18n: () => ({ t, locale: 'en', setLocale: vi.fn() }),
+    I18nProvider,
+  };
+});
+
+import { DeletePersonaModal } from '../delete-persona-modal';
+import { fetchDeletePreview, deletePersona } from '@/lib/api';
+
+const PERSONA = { id: 'persona-1', name: 'Ryan' };
+
+const PREVIEW = {
+  success: true,
+  persona: { id: 'persona-1', name: 'Ryan' },
+  counts: { schedules: 2, upcomingSlots: 3, generatedVideos: 2, personaImages: 1 },
+  videos: [
+    { taskId: 'task-aaa', topic: 'Topic one', status: 'completed', downloadUrl: '/dl/task-aaa/f.mp4' },
+    { taskId: 'task-bbb', topic: 'Topic two', status: 'failed', downloadUrl: null },
+  ],
+};
+
+function renderModal(props: Partial<Parameters<typeof DeletePersonaModal>[0]> = {}) {
+  return render(
+    <DeletePersonaModal
+      persona={PERSONA}
+      onClose={vi.fn()}
+      onDeleted={vi.fn()}
+      {...props}
+    />,
+  );
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(fetchDeletePreview).mockResolvedValue(PREVIEW);
+  vi.mocked(deletePersona).mockResolvedValue({ success: true });
+});
+
+describe('DeletePersonaModal', () => {
+  it('renders nothing when closed', () => {
+    renderModal({ persona: null });
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(fetchDeletePreview).not.toHaveBeenCalled();
+  });
+
+  it('shows counts and the no-refund warning from the preview', async () => {
+    renderModal();
+    await waitFor(() => expect(fetchDeletePreview).toHaveBeenCalledWith('persona-1'));
+    expect(await screen.findByText('personas.deleteDialogNoRefund')).toBeInTheDocument();
+    // Counts render as <strong> values next to the (mocked) i18n keys.
+    expect(screen.getAllByText('2').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('3')).toBeInTheDocument();
+  });
+
+  it('lists videos with download links, unavailable when no URL', async () => {
+    renderModal();
+    const link = await screen.findByRole('link', { name: 'personas.deleteDialogDownload' });
+    expect(link).toHaveAttribute('href', '/dl/task-aaa/f.mp4');
+    expect(
+      await screen.findByText('personas.deleteDialogDownloadUnavailable'),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps Delete disabled until the typed name matches exactly', async () => {
+    renderModal();
+    await screen.findByText('personas.deleteDialogNoRefund');
+    const confirm = screen.getByRole('button', { name: 'personas.deleteConfirm' });
+    expect(confirm).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText('personas.deleteDialogTypeName'), {
+      target: { value: 'rya' },
+    });
+    expect(confirm).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText('personas.deleteDialogTypeName'), {
+      target: { value: 'Ryan' },
+    });
+    expect(confirm).toBeEnabled();
+  });
+
+  it('deletes on confirm and notifies the parent', async () => {
+    const onClose = vi.fn();
+    const onDeleted = vi.fn();
+    renderModal({ onClose, onDeleted });
+    await screen.findByText('personas.deleteDialogNoRefund');
+    fireEvent.change(screen.getByLabelText('personas.deleteDialogTypeName'), {
+      target: { value: 'Ryan' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'personas.deleteConfirm' }));
+
+    await waitFor(() => expect(deletePersona).toHaveBeenCalledWith('persona-1'));
+    expect(onDeleted).toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('shows an error when the delete fails and stays open', async () => {
+    const onClose = vi.fn();
+    vi.mocked(deletePersona).mockResolvedValue({ success: false, error: 'boom' });
+    renderModal({ onClose });
+    await screen.findByText('personas.deleteDialogNoRefund');
+    fireEvent.change(screen.getByLabelText('personas.deleteDialogTypeName'), {
+      target: { value: 'Ryan' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'personas.deleteConfirm' }));
+
+    expect(await screen.findByText('personas.deleteDialogDeleteError')).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('shows an error with retry when the preview fails to load', async () => {
+    vi.mocked(fetchDeletePreview).mockResolvedValue({ success: false, error: 'db down' });
+    renderModal();
+    expect(await screen.findByText('personas.deleteDialogLoadError')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'personas.tryAgain' }));
+    await waitFor(() => expect(fetchDeletePreview).toHaveBeenCalledTimes(2));
+  });
+});

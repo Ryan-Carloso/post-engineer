@@ -190,6 +190,33 @@ export interface DeletePersonaResult {
   error?: string;
 }
 
+export interface DeletePreviewVideo {
+  taskId: string | null;
+  topic: string | null;
+  status: string;
+  downloadUrl: string | null;
+}
+
+export interface DeletePreview {
+  success: boolean;
+  persona?: { id: string; name: string };
+  counts?: {
+    schedules: number;
+    upcomingSlots: number;
+    generatedVideos: number;
+    personaImages: number;
+  };
+  videos?: DeletePreviewVideo[];
+  error?: string;
+}
+
+export async function fetchDeletePreview(personaId: string): Promise<DeletePreview> {
+  const response = await fetch(
+    `/api/persona/delete-preview?personaId=${encodeURIComponent(personaId)}`,
+  );
+  return response.json();
+}
+
 export async function deletePersona(personaId: string): Promise<DeletePersonaResult> {
   const response = await fetch(
     `/api/persona?personaId=${encodeURIComponent(personaId)}`,
@@ -224,16 +251,6 @@ export function useUpdatePersonaMutation() {
   return useMutation({
     mutationFn: (input: UpdatePersonaInput) =>
       updatePersona(input.personaId, input.formData),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['persona-list'] });
-    },
-  });
-}
-
-export function useDeletePersonaMutation() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: deletePersona,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['persona-list'] });
     },
