@@ -1337,16 +1337,27 @@ class TestAIRequestTracking(unittest.TestCase):
         self.assertEqual(llm._resolve_model_name("openrouter"), "openai/gpt-4o")
 
     def test_resolve_model_name_uses_provider_default(self):
-        config.app["omniroute_model_name"] = ""
-        config.app["openrouter_model_name"] = ""
-        config.app["zai_model_name"] = ""
-        config.app["gemini_model_name"] = ""
-        config.app["pollinations_model_name"] = ""
-        self.assertEqual(llm._resolve_model_name("omniroute"), "auto")
-        self.assertEqual(llm._resolve_model_name("openrouter"), "openrouter/auto")
-        self.assertEqual(llm._resolve_model_name("zai"), "glm-5.3-flash")
-        self.assertEqual(llm._resolve_model_name("gemini"), "gemini-2.5-flash")
-        self.assertEqual(llm._resolve_model_name("pollinations"), "openai-fast")
+        # Pins every _PROVIDER_DEFAULT_MODELS entry, so a one-sided drift
+        # between a provider branch default and this dict fails the suite.
+        for provider in llm._PROVIDER_DEFAULT_MODELS:
+            config.app[f"{provider}_model_name"] = ""
+        expected = {
+            "g4f": "gpt-3.5-turbo-16k-0613",
+            "omniroute": "auto",
+            "aihubmix": "gpt-5.4-mini",
+            "aimlapi": "openai/gpt-4o-mini",
+            "groq": "llama-3.3-70b-versatile",
+            "evolink": "gpt-5.5",
+            "mimo": "mimo-v2.5-pro",
+            "volcengine": "doubao-seed-2-1-turbo-260628",
+            "zai": "glm-5.3-flash",
+            "openrouter": "openrouter/auto",
+            "gemini": "gemini-2.5-flash",
+            "pollinations": "openai-fast",
+        }
+        self.assertEqual(dict(llm._PROVIDER_DEFAULT_MODELS), expected)
+        for provider, model in expected.items():
+            self.assertEqual(llm._resolve_model_name(provider), model)
 
     def test_resolve_model_name_maps_deprecated_gemini(self):
         # The gemini branch rewrites retired model names to the current

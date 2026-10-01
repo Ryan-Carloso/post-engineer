@@ -193,9 +193,9 @@ LLM_CLIENT_MAX_RETRIES = 1
 # Default model per provider, mirroring the provider branches in
 # _generate_response_inner below. _resolve_model_name prefers the explicit
 # config value; this dict only fills the gap when the branch applies a
-# default. Keep both in sync when adding or changing provider branches —
-# the tests below pin these values, but new branches must add their
-# entry here too.
+# default. Every entry here must match its branch default: the test below
+# pins each entry's value, so a one-sided drift fails the suite. When
+# adding or changing a provider branch, add/update its entry here too.
 _PROVIDER_DEFAULT_MODELS = {
     "g4f": "gpt-3.5-turbo-16k-0613",
     "omniroute": "auto",
@@ -250,8 +250,8 @@ def _track_llm_request(
     Free-text fields are scrubbed for credential-shaped fragments before
     sending (response_preview carries truncated model output, which can
     echo secrets). Telemetry never raises (see track_ai_request).
-    cost_usd is only present when the provider reports it (OpenRouter);
-    token counts default to 0.
+    cost_usd is None when the provider doesn't report it (OpenRouter
+    reports it); token counts default to 0.
     """
     usage = usage or {}
     track_ai_request(

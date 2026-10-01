@@ -110,3 +110,26 @@ def test_get_client_prefers_posthog_host_env():
             analytics.track_event("video_generated", {"slotId": "s1"})
             _, kwargs = mock_cls.call_args
             assert kwargs["host"] == "https://eu.i.posthog.com"
+
+
+def test_track_event_keeps_token_usage_counters_intact():
+    # prompt_tokens/completion_tokens/total_tokens are legitimate analytics
+    # counters — the "token" secret-key substring must not redact them,
+    # while a real secret-bearing key still is.
+    with mock.patch.dict(os.environ, {"POSTHOG_API_KEY": "phc_test_key"}):
+        with mock.patch("posthog.Posthog") as mock_cls:
+            instance = mock_cls.return_value
+            analytics.track_event(
+                "ai_request",
+                {
+                    "prompt_tokens": 12,
+                    "completion_tokens": 34,
+                    "total_tokens": 46,
+                    "api_key": "sk-should-be-redacted",
+                },
+            )
+            props = instance.capture.call_args.kwargs["properties"]
+            assert props["prompt_tokens"] == 12
+            assert props["completion_tokens"] == 34
+            assert props["total_tokens"] == 46
+            assert props["api_key"] == "[redacted]"

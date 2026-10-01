@@ -10,6 +10,12 @@ Safety rules:
 - Secret-bearing property keys are redacted before capture.
 - Never log PII, credentials, or raw request bodies in properties.
 - Configuration comes from environment variables only — never hardcode.
+
+Deliberate exception (user-requested, 2026-10-01): the ai_request event
+carries response_preview, up to 500 chars of truncated model output, so
+LLM responses stay debuggable in PostHog. It is scrubbed of
+credential-shaped fragments (scrub_secret_values) before capture and is
+not a raw request body — prompts are never sent.
 """
 
 from __future__ import annotations
@@ -60,10 +66,22 @@ _warned = False
 _attempted = False
 
 
+# Exact property names exempt from key-name redaction. "token" is a
+# substring of _SECRET_KEY_PATTERN (to catch *_token secrets), so without
+# this exemption the legitimate ai_request token-usage counters would be
+# redacted before capture.
+_REDACT_EXEMPT_KEYS = frozenset(
+    {"prompt_tokens", "completion_tokens", "total_tokens"}
+)
+
+
 def _scrub_secrets(properties: dict[str, Any]) -> dict[str, Any]:
     scrubbed: dict[str, Any] = {}
     for key, value in properties.items():
-        scrubbed[key] = _REDACTED if _SECRET_KEY_PATTERN.search(key) else value
+        if key in _REDACT_EXEMPT_KEYS:
+            scrubbed[key] = value
+        else:
+            scrubbed[key] = _REDACTED if _SECRET_KEY_PATTERN.search(key) else value
     return scrubbed
 
 
