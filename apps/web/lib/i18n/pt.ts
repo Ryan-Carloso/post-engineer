@@ -55,7 +55,7 @@ export const ptDictionary = {
     statusCompleted: 'Concluído',
     unknownTopic: 'Sem tema',
     personaFallback: 'Persona removida',
-    newSchedule: 'Agendar novo',
+    newPost: 'Novo post',
     refresh: 'Atualizar',
     generationsTitle: 'Gerações de vídeo',
     generationsEmpty: 'Nenhuma geração de vídeo ainda.',

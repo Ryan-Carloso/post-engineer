@@ -56,7 +56,7 @@ export const enDictionary: Dictionary = {
     statusCompleted: 'Completed',
     unknownTopic: 'No topic',
     personaFallback: 'Removed persona',
-    newSchedule: 'New schedule',
+    newPost: 'New Post',
     refresh: 'Refresh',
     generationsTitle: 'Video generations',
     generationsEmpty: 'No video generations yet.',
