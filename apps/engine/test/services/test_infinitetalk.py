@@ -314,5 +314,27 @@ class TestGenerateIntroTracking(unittest.TestCase):
         self.assertIn("500", props["error"])
 
 
+    def test_generate_intro_tracks_failure_with_job_id(self):
+        """
+        A job that fails after submit still reports the Modal job_id, so
+        post-submit failures stay correlatable in PostHog.
+        """
+        submit = requests.Response()
+        submit.status_code = 200
+        submit._content = b'{"job_id":"job-42"}'
+        status = requests.Response()
+        status.status_code = 200
+        status._content = b'{"status":"failed","error":"cuda oom"}'
+
+        with patch.object(infinitetalk, "track_ai_request") as track:
+            with self.assertRaises(infinitetalk.InfiniteTalkError):
+                self._run_generate_intro([submit, status])
+
+        track.assert_called_once()
+        props = track.call_args[0][0]
+        self.assertFalse(props["success"])
+        self.assertEqual(props["job_id"], "job-42")
+
+
 if __name__ == "__main__":
     unittest.main()

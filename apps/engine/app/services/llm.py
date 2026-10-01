@@ -11,11 +11,12 @@ from openai import AzureOpenAI, OpenAI
 from openai.types.chat import ChatCompletion
 
 from app.config import config
-from app.services.analytics import track_ai_request
+from app.services.analytics import scrub_secret_values, track_ai_request
 from app.utils import secret_redaction
 
 _max_retries = 5
 _DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+_DEFAULT_POLLINATIONS_MODEL = "openai-fast"
 _DEPRECATED_GEMINI_MODELS = {"gemini-pro", "gemini-1.0-pro"}
 MIN_SCRIPT_PARAGRAPH_NUMBER = 1
 MAX_SCRIPT_PARAGRAPH_NUMBER = 10
@@ -192,7 +193,9 @@ LLM_CLIENT_MAX_RETRIES = 1
 # Default model per provider, mirroring the provider branches in
 # _generate_response_inner below. _resolve_model_name prefers the explicit
 # config value; this dict only fills the gap when the branch applies a
-# default. Keep both in sync — the test suite pins these values.
+# default. Keep both in sync when adding or changing provider branches —
+# the tests below pin these values, but new branches must add their
+# entry here too.
 _PROVIDER_DEFAULT_MODELS = {
     "g4f": "gpt-3.5-turbo-16k-0613",
     "omniroute": "auto",
@@ -204,6 +207,8 @@ _PROVIDER_DEFAULT_MODELS = {
     "volcengine": "doubao-seed-2-1-turbo-260628",
     "zai": "glm-5.3-flash",
     "openrouter": "openrouter/auto",
+    "gemini": _DEFAULT_GEMINI_MODEL,
+    "pollinations": _DEFAULT_POLLINATIONS_MODEL,
 }
 
 # Truncate AI responses in analytics: enough to spot-check what the model
@@ -215,12 +220,17 @@ def _resolve_model_name(llm_provider: str) -> str:
     """Best-effort model name for analytics.
 
     Returns the configured <provider>_model_name, or the provider branch
-    default when unconfigured. Empty when the provider has neither (its
-    validation would fail before any request anyway).
+    default when unconfigured. Deprecated Gemini names are mapped to the
+    current default, mirroring the request branch. Empty when the provider
+    has neither a configured name nor a branch default — such providers
+    reject the request before anything is sent.
     """
     configured = config.app.get(f"{llm_provider}_model_name", "")
     if configured:
-        return str(configured)
+        name = str(configured)
+        if llm_provider == "gemini" and name in _DEPRECATED_GEMINI_MODELS:
+            return _DEFAULT_GEMINI_MODEL
+        return name
     return _PROVIDER_DEFAULT_MODELS.get(llm_provider, "")
 
 
@@ -237,9 +247,11 @@ def _track_llm_request(
 ) -> None:
     """Emit one ai_request event for an LLM call.
 
-    The error must already be sanitized by the caller. Telemetry never
-    raises (see track_ai_request). cost_usd is only present when the
-    provider reports it (OpenRouter); token counts default to 0.
+    Free-text fields are scrubbed for credential-shaped fragments before
+    sending (response_preview carries truncated model output, which can
+    echo secrets). Telemetry never raises (see track_ai_request).
+    cost_usd is only present when the provider reports it (OpenRouter);
+    token counts default to 0.
     """
     usage = usage or {}
     track_ai_request(
@@ -251,9 +263,11 @@ def _track_llm_request(
             "fallback_used": fallback_used,
             "duration_ms": duration_ms,
             "success": success,
-            "error": error or "",
+            "error": scrub_secret_values(error or ""),
             "response_chars": len(response_text),
-            "response_preview": response_text[:_RESPONSE_PREVIEW_CHARS],
+            "response_preview": scrub_secret_values(
+                response_text[:_RESPONSE_PREVIEW_CHARS]
+            ),
             "prompt_tokens": usage.get("prompt_tokens", 0),
             "completion_tokens": usage.get("completion_tokens", 0),
             "total_tokens": usage.get("total_tokens", 0),
@@ -524,7 +538,9 @@ def _generate_response_inner(
                     base_url = config.app.get("pollinations_base_url", "")
                     if not base_url:
                         base_url = "https://text.pollinations.ai/openai"
-                    model_name = config.app.get("pollinations_model_name", "openai-fast")
+                    model_name = config.app.get(
+                        "pollinations_model_name", _DEFAULT_POLLINATIONS_MODEL
+                    )
                    
                     # Prepare the payload
                     payload = {

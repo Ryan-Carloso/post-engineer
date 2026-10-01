@@ -137,20 +137,30 @@ def generate_intro(
     """Generate and download the persona intro using a fixed quality preset.
 
     Tracked as one ai_request event (backend=modal): the Modal job id,
-    duration, and sanitized error when it fails.
+    duration, and sanitized error when it fails. The job id is captured
+    even when the job fails after submit, so post-submit failures stay
+    correlatable in PostHog.
     """
     start = time.monotonic()
-    job_id = ""
+    # Populated by _generate_intro_impl once the job is submitted, so a
+    # failure during polling/download still reports the job_id.
+    job_ids: list[str] = []
     try:
         output_path, job_id = _generate_intro_impl(
-            image_path, audio_path, quality, output_path, request, duration_seconds
+            image_path,
+            audio_path,
+            quality,
+            output_path,
+            request,
+            duration_seconds,
+            job_ids,
         )
     except Exception as e:
         track_ai_request(
             {
                 "backend": "modal",
                 "operation": "generate_intro",
-                "job_id": job_id,
+                "job_id": job_ids[0] if job_ids else "",
                 "duration_ms": int((time.monotonic() - start) * 1000),
                 "success": False,
                 "error": scrub_secret_values(str(e))[:500],
@@ -177,8 +187,13 @@ def _generate_intro_impl(
     output_path: str,
     request: Request = requests.request,
     duration_seconds: float | None = None,
+    job_id_holder: list[str] | None = None,
 ) -> tuple[str, str]:
-    """Submit/poll/download the intro video; returns (output_path, job_id)."""
+    """Submit/poll/download the intro video; returns (output_path, job_id).
+
+    Appends the submitted job_id to job_id_holder as soon as the submit
+    succeeds, so callers can report it even when polling/download fails.
+    """
     if quality not in (LipSyncQuality.ok, LipSyncQuality.very_good):
         raise InfiniteTalkError(f"unsupported InfiniteTalk quality: {quality}")
     submit_url = _url("submit_url")
@@ -219,6 +234,8 @@ def _generate_intro_impl(
         job_id = submitted.get("job_id")
         if not isinstance(job_id, str) or not job_id:
             raise InfiniteTalkError("InfiniteTalk submit response has no job_id")
+        if job_id_holder is not None:
+            job_id_holder.append(job_id)
 
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:

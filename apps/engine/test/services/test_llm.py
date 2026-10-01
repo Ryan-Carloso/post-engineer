@@ -1340,9 +1340,40 @@ class TestAIRequestTracking(unittest.TestCase):
         config.app["omniroute_model_name"] = ""
         config.app["openrouter_model_name"] = ""
         config.app["zai_model_name"] = ""
+        config.app["gemini_model_name"] = ""
+        config.app["pollinations_model_name"] = ""
         self.assertEqual(llm._resolve_model_name("omniroute"), "auto")
         self.assertEqual(llm._resolve_model_name("openrouter"), "openrouter/auto")
         self.assertEqual(llm._resolve_model_name("zai"), "glm-5.3-flash")
+        self.assertEqual(llm._resolve_model_name("gemini"), "gemini-2.5-flash")
+        self.assertEqual(llm._resolve_model_name("pollinations"), "openai-fast")
+
+    def test_resolve_model_name_maps_deprecated_gemini(self):
+        # The gemini branch rewrites retired model names to the current
+        # default; analytics must report the model actually used.
+        config.app["gemini_model_name"] = "gemini-pro"
+        self.assertEqual(llm._resolve_model_name("gemini"), "gemini-2.5-flash")
+
+    def test_track_llm_request_scrubs_credential_fragments(self):
+        # response_preview ships truncated model output; credential-shaped
+        # fragments echoed in it must be redacted before reaching PostHog.
+        config.app["llm_provider"] = "omniroute"
+        config.app["omniroute_model_name"] = ""
+        with patch.object(llm, "track_ai_request") as track:
+            llm._track_llm_request(
+                provider="omniroute",
+                primary_provider="omniroute",
+                fallback_used=False,
+                duration_ms=1,
+                success=False,
+                error="call failed: token=abc123",
+                response_text="script body api_key=sk-secret-123 end",
+            )
+        props = track.call_args[0][0]
+        self.assertNotIn("sk-secret-123", props["response_preview"])
+        self.assertIn("api_key=[redacted]", props["response_preview"])
+        self.assertNotIn("abc123", props["error"])
+        self.assertIn("token=[redacted]", props["error"])
 
     def test_response_preview_is_truncated(self):
         """
