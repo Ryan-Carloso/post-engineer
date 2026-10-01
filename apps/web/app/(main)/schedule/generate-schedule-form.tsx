@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import {
   useBlueskyAccountsQuery,
   useInstagramAccountsQuery,
@@ -588,12 +589,12 @@ export default function GenerateScheduleForm() {
           ))}
         </ul>
         <div className="mt-4 flex flex-wrap gap-3">
-          <a
+          <Link
             href="/posts"
             className="rounded-xl bg-[#101728] px-5 py-2.5 text-sm font-semibold text-white"
           >
             {t('fillSchedule.genViewPosts')}
-          </a>
+          </Link>
           <button
             type="button"
             onClick={startNewBatch}

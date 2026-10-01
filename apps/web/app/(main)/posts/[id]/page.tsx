@@ -123,7 +123,6 @@ export default function PostDetailPage() {
   const slotDetail = slotQuery.data ?? null;
   const generation = generationQuery.data ?? null;
   const isLoading = slotQuery.isLoading || generationQuery.isLoading;
-  const isError = slotQuery.isError || generationQuery.isError;
 
   const accounts: AccountOption[] = useMemo(() => {
     if (!slotDetail) return [];

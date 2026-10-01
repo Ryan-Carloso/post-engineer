@@ -278,11 +278,12 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(spends[0].args.p_amount).toBe(4);
       expect(spends[0].args.p_user_id).toBe(USER_ID);
 
-      // Schedule row: kind=batch, deterministic id, scheduled_at stays NULL
-      // during dispatch (the tick must not race us).
+      // Schedule row: deterministic id, scheduled_at stays NULL during
+      // dispatch (the tick must not race us). `kind` was dropped from the
+      // schema (3bbbb65) — the insert must not resurrect the removed column.
       const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
       expect(scheduleRows).toHaveLength(1);
-      expect(scheduleRows[0].kind).toBe('batch');
+      expect(scheduleRows[0].kind).toBeUndefined();
       expect(scheduleRows[0].scheduled_at).toBeNull();
       expect(scheduleRows[0].posts_per_day).toBe(2);
       expect(scheduleRows[0].youtube_account_ids).toEqual(['acct-1']);
