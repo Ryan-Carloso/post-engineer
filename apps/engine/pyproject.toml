@@ -95,6 +95,9 @@ disable_error_code = [
 ]
 # Third-party dependencies without type stubs. Enumerated explicitly so
 # first-party import-not-found errors remain fatal (catches removed deps).
+# Note: PIL, cv2, and toml currently ship py.typed (or get stubs transitively),
+# but are listed defensively — if a future release drops typing, the gate stays
+# green instead of going red on an unrelated dependency bump.
 [[tool.mypy.overrides]]
 module = [
     "twelvelabs.*",
@@ -109,6 +112,9 @@ module = [
     "edge_tts.*",
     "litellm.*",
     "loguru.*",
+    "PIL.*",
+    "cv2.*",
+    "toml.*",
 ]
 ignore_missing_imports = true
 

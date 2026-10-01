@@ -41,6 +41,12 @@ class MypyConfigPinTests(unittest.TestCase):
         # that CI type-checks (uv run mypy app cli.py main.py).
         config = _load_mypy_config()
         overrides = config.get("overrides", [])
+        # The overrides section must exist and be non-empty — a deleted
+        # section would pass vacuously while CI goes red on stub-less deps.
+        self.assertTrue(
+            overrides,
+            "mypy overrides section must exist with stub-less third-party modules.",
+        )
         first_party = ("app", "cli", "main")
         for override in overrides:
             modules = override.get("module", [])
@@ -48,8 +54,10 @@ class MypyConfigPinTests(unittest.TestCase):
             if isinstance(modules, str):
                 modules = [modules]
             for mod in modules:
+                # Strip fnmatch trailing "*" — "app*" must not evade the check.
+                base = mod.rstrip("*").rstrip(".")
                 for pkg in first_party:
                     self.assertFalse(
-                        mod == pkg or mod.startswith(pkg + "."),
+                        base == pkg or base.startswith(pkg + "."),
                         f"Override must not silence first-party modules: {mod}",
                     )

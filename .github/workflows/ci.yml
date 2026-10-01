@@ -196,11 +196,11 @@ jobs:
         with:
           version: latest
 
-      - name: Sync dependencies
-        run: uv sync --frozen
-
       - name: Lockfile freshness (fail if uv.lock is stale vs pyproject.toml)
         run: uv lock --check
+
+      - name: Sync dependencies
+        run: uv sync --frozen
 
       - name: Lint
         run: uv run ruff check app cli.py scripts test
