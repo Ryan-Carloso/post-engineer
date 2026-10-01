@@ -80,6 +80,8 @@ export const ptDictionary = {
     coverPending: 'O vídeo é gerado automaticamente',
     coverGenerating: 'Gerando vídeo…',
     coverNoVideo: 'Sem vídeo',
+    back: 'Voltar para posts',
+    notFound: 'Post não encontrado — pode ter sido apagado.',
   },
 
   // Home / dashboard

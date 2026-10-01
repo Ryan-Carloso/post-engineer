@@ -17,8 +17,6 @@ vi.mock('@/lib/api', () => ({
   useInstagramAccountsQuery: vi.fn(),
   useLinkedinAccountsQuery: vi.fn(),
   useVideoGenerationsQuery: vi.fn(),
-  useUpdateSlotMutation: vi.fn(),
-  useDeleteSlotMutation: vi.fn(),
 }));
 
 vi.mock('@/lib/ui', () => ({
@@ -43,8 +41,6 @@ import {
   useInstagramAccountsQuery,
   useLinkedinAccountsQuery,
   useVideoGenerationsQuery,
-  useUpdateSlotMutation,
-  useDeleteSlotMutation,
 } from '@/lib/api';
 
 const SCHEDULE = {
@@ -142,20 +138,6 @@ function mockQueries(overrides: {
 beforeEach(() => {
   vi.clearAllMocks();
   mockQueries();
-  vi.mocked(useUpdateSlotMutation).mockReturnValue({
-    mutate: vi.fn(),
-    mutateAsync: vi.fn().mockResolvedValue(undefined),
-    isPending: false,
-    isError: false,
-    error: null,
-  } as never);
-  vi.mocked(useDeleteSlotMutation).mockReturnValue({
-    mutate: vi.fn(),
-    mutateAsync: vi.fn().mockResolvedValue(undefined),
-    isPending: false,
-    isError: false,
-    error: null,
-  } as never);
 });
 
 describe('PostsPage', () => {
@@ -493,163 +475,36 @@ describe('PostsPage generation history', () => {
 });
 
 //---------------
-// Slot detail modal — click a card to open it: watch the video (when the
-// engine already produced one), edit the topic of a slot that has not
-// started generating, delete a pending/failed slot. Published posts can
-// neither be edited nor deleted.
+// Detail navigation — cards are links to the full-page detail view
+// (/posts/[id]); the route param carries the id only.
 //---------------
 
-describe('PostsPage slot detail modal', () => {
-  async function openHistoryCard(name: RegExp): Promise<void> {
-    const user = userEvent.setup();
+describe('PostsPage card links', () => {
+  it('links upcoming cards to their detail page', () => {
     render(<PostsPage />);
-    await user.click(screen.getByRole('button', { name: /posts\.tabHistory/ }));
-    await user.click(screen.getByRole('button', { name }));
-  }
 
-  it('opens the detail modal from a card and shows the video player for a generated slot', async () => {
-    await openHistoryCard(/Past topic/);
-
-    const dialog = screen.getByRole('dialog');
-    expect(dialog).toBeInTheDocument();
-    const video = within(dialog).queryByRole('video') ?? dialog.querySelector('video');
-    expect(video).not.toBeNull();
-    expect(video?.getAttribute('src')).toBe('/api/persona/video-download/task-9/final-1.mp4');
+    expect(screen.getByRole('link', { name: /Upcoming topic/ })).toHaveAttribute('href', '/posts/u1');
   });
 
-  it('shows the video as the card thumbnail in the history grid', async () => {
-    const user = userEvent.setup();
-    render(<PostsPage />);
-    await user.click(screen.getByRole('button', { name: /posts\.tabHistory/ }));
-
-    // The card thumbnail IS the video: metadata-only preload, muted, no
-    // native controls (playback happens in the detail modal). The src
-    // carries a #t=0.1 media fragment so the browser seeks to 0.1s and
-    // paints that frame as the thumbnail — preload="metadata" alone shows
-    // an empty box in Chrome.
-    const cardVideo = document.querySelector('button video');
-    expect(cardVideo).not.toBeNull();
-    expect(cardVideo?.getAttribute('src')).toBe('/api/persona/video-download/task-9/final-1.mp4#t=0.1');
-    expect(cardVideo?.getAttribute('controls')).toBeNull();
-    expect(cardVideo?.getAttribute('preload')).toBe('metadata');
-  });
-
-  it('does not render a video cover when the slot has no task id', async () => {
-    mockQueries({
-      recent: [{ ...PUBLISHED_SLOT, taskId: null }],
-    });
-    const user = userEvent.setup();
-    render(<PostsPage />);
-    await user.click(screen.getByRole('button', { name: /posts\.tabHistory/ }));
-
-    expect(document.querySelector('button video')).toBeNull();
-  });
-
-  it('closes the modal on the close button', async () => {
-    await openHistoryCard(/Past topic/);
-    const user = userEvent.setup();
-
-    await user.click(screen.getByRole('button', { name: 'posts.close' }));
-
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-  });
-
-  it('lets the user edit the topic of an awaiting slot', async () => {
-    const user = userEvent.setup();
-    render(<PostsPage />);
-    await user.click(screen.getByRole('button', { name: /Upcoming topic/ }));
-
-    await user.click(screen.getByRole('button', { name: 'posts.edit' }));
-    const textarea = screen.getByLabelText('posts.topicLabel');
-    await user.clear(textarea);
-    await user.type(textarea, 'New topic');
-    await user.click(screen.getByRole('button', { name: 'posts.save' }));
-
-    expect(useUpdateSlotMutation).toHaveBeenCalled();
-    const mutate = vi.mocked(useUpdateSlotMutation).mock.results[0].value.mutate as ReturnType<typeof vi.fn>;
-    expect(mutate).toHaveBeenCalledWith({ slotId: 'u1', topic: 'New topic' }, expect.anything());
-  });
-
-  it('surfaces the mutation error in the modal instead of closing it', async () => {
-    vi.mocked(useUpdateSlotMutation).mockReturnValue({
-      mutate: vi.fn(),
-      mutateAsync: vi.fn().mockRejectedValue(new Error('Only a slot that has not started generating can be edited.')),
-      isPending: false,
-      isError: true,
-      error: new Error('Only a slot that has not started generating can be edited.'),
-    } as never);
-    const user = userEvent.setup();
-    render(<PostsPage />);
-    await user.click(screen.getByRole('button', { name: /Upcoming topic/ }));
-
-    await user.click(screen.getByRole('button', { name: 'posts.edit' }));
-    await user.click(screen.getByRole('button', { name: 'posts.save' }));
-
-    expect(await screen.findByText('Only a slot that has not started generating can be edited.')).toBeInTheDocument();
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-  });
-
-  it('deletes a failed slot after explicit confirmation', async () => {
-    await openHistoryCard(/Failed topic/);
-    const user = userEvent.setup();
-
-    // Two-step delete: first click arms the confirmation.
-    await user.click(screen.getByRole('button', { name: 'posts.delete' }));
-    await user.click(screen.getByRole('button', { name: 'posts.deleteConfirm' }));
-
-    const mutate = vi.mocked(useDeleteSlotMutation).mock.results[0].value.mutate as ReturnType<typeof vi.fn>;
-    expect(mutate).toHaveBeenCalledWith('r2', expect.anything());
-  });
-
-  it('offers no edit or delete actions for a published post', async () => {
-    await openHistoryCard(/Past topic/);
-
-    expect(screen.queryByRole('button', { name: 'posts.edit' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'posts.delete' })).not.toBeInTheDocument();
-  });
-
-  it('surfaces the delete error when the API rejects the deletion', async () => {
-    vi.mocked(useDeleteSlotMutation).mockReturnValue({
-      mutate: vi.fn(),
-      mutateAsync: vi.fn().mockRejectedValue(new Error('A published post cannot be deleted.')),
-      isPending: false,
-      isError: true,
-      error: new Error('A published post cannot be deleted.'),
-    } as never);
-    await openHistoryCard(/Failed topic/);
-    const user = userEvent.setup();
-
-    await user.click(screen.getByRole('button', { name: 'posts.delete' }));
-    await user.click(screen.getByRole('button', { name: 'posts.deleteConfirm' }));
-
-    expect(await screen.findByText('A published post cannot be deleted.')).toBeInTheDocument();
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-  });
-
-  it('opens the detail modal with a video player for a completed generation', async () => {
+  it('links history cards and generation cards to their detail pages', async () => {
     mockQueries({ generations: [COMPLETED_GENERATION] });
     const user = userEvent.setup();
     render(<PostsPage />);
     await user.click(screen.getByRole('button', { name: /posts\.tabHistory/ }));
-    await user.click(screen.getByRole('button', { name: /Launch recap/ }));
 
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-    const video = screen.getByRole('dialog').querySelector('video');
-    expect(video).not.toBeNull();
-    expect(video?.getAttribute('src')).toBe('/api/persona/video-download/task-3/final-1.mp4');
-    // Generations are history-only: no edit/delete actions.
-    expect(screen.queryByRole('button', { name: 'posts.edit' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'posts.delete' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Past topic/ })).toHaveAttribute('href', '/posts/r1');
+    expect(screen.getByRole('link', { name: /Failed topic/ })).toHaveAttribute('href', '/posts/r2');
+    expect(screen.getByRole('link', { name: /Launch recap/ })).toHaveAttribute('href', '/posts/g3');
   });
 
-  it('does not render a video player for a failed generation', async () => {
-    mockQueries({ generations: [FAILED_GENERATION] });
+  it('keeps showing the video thumbnail with the #t=0.1 frame in the card', async () => {
     const user = userEvent.setup();
     render(<PostsPage />);
     await user.click(screen.getByRole('button', { name: /posts\.tabHistory/ }));
-    await user.click(screen.getByRole('button', { name: /Myth busting/ }));
 
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByRole('dialog').querySelector('video')).toBeNull();
+    const cardVideo = document.querySelector('button video, a video');
+    expect(cardVideo).not.toBeNull();
+    expect(cardVideo?.getAttribute('src')).toBe('/api/persona/video-download/task-9/final-1.mp4#t=0.1');
+    expect(cardVideo?.getAttribute('controls')).toBeNull();
   });
 });

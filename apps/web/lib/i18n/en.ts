@@ -81,6 +81,8 @@ export const enDictionary: Dictionary = {
     coverPending: 'The video is generated automatically',
     coverGenerating: 'Generating video…',
     coverNoVideo: 'No video',
+    back: 'Back to posts',
+    notFound: 'Post not found — it may have been deleted.',
   },
 
   fillSchedule: {
