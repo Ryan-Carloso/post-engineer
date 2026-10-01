@@ -40,6 +40,10 @@ export const RATE_LIMITS = {
   billingCheckout: { name: 'billing-checkout', limit: 10, windowMs: 60_000 },
   // Video generation job submission: cost protection
   videoJob: { name: 'video-job', limit: 20, windowMs: 60_000 },
+  // Unified generate+schedule: one call can mint up to 10 videos, so the
+  // limit is lower than the single video-job profile. Keyed by user id
+  // (falling back to API-key id, then IP inside applyRateLimit).
+  generateAndSchedule: { name: 'generate-and-schedule', limit: 10, windowMs: 60_000 },
   // OAuth connect-url issuance (starts provider OAuth flows)
   connectUrl: { name: 'connect-url', limit: 30, windowMs: 60_000 },
   // OAuth /start routes (provider authorization redirects)
