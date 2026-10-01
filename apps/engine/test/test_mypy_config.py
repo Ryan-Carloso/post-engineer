@@ -30,17 +30,47 @@ def _load_ci_mypy_command() -> list:
 
     Returns the whitespace-separated tokens after "uv run mypy".
     """
-    ci_yml = (
-        Path(__file__).parent.parent.parent.parent
-        / ".github"
-        / "workflows"
-        / "ci.yml"
-    )
+    ci_yml = _ci_yml_path()
     for line in ci_yml.read_text().splitlines():
         stripped = line.strip()
         if stripped.startswith("run: uv run mypy "):
             return stripped[len("run: uv run mypy "):].split()
     raise AssertionError("Could not find 'uv run mypy' step in ci.yml")
+
+
+def _ci_yml_path() -> Path:
+    return (
+        Path(__file__).parent.parent.parent.parent
+        / ".github"
+        / "workflows"
+        / "ci.yml"
+    )
+
+
+def _load_ci_smoke_test_imports() -> set:
+    """Extract the module names imported by the CI smoke test.
+
+    Parses the `run: uv run python -c "import ..."` line and returns the
+    top-level module names (e.g. {"cli", "main", "app"}).
+    """
+    ci_yml = _ci_yml_path()
+    for line in ci_yml.read_text().splitlines():
+        stripped = line.strip()
+        if 'run: uv run python -c "import ' in stripped:
+            # Extract between the quotes: import cli, main; from app import asgi; ...
+            start = stripped.index('"') + 1
+            end = stripped.rindex('"')
+            code = stripped[start:end]
+            modules = set()
+            for stmt in code.split(";"):
+                stmt = stmt.strip()
+                if stmt.startswith("import "):
+                    for name in stmt[len("import "):].split(","):
+                        modules.add(name.strip().split(".")[0])
+                elif stmt.startswith("from "):
+                    modules.add(stmt[len("from "):].split()[0].split(".")[0])
+            return modules
+    raise AssertionError("Could not find smoke test 'python -c' step in ci.yml")
 
 
 def _load_ci_mypy_targets() -> tuple:
@@ -86,6 +116,18 @@ class MypyConfigPinTests(unittest.TestCase):
             args,
             expected,
             f"CI mypy step must be exactly the target list (no extra flags): {args}",
+        )
+
+    def test_smoke_test_covers_mypy_targets(self):
+        # The smoke test is the only step that *executes* imports — it must
+        # cover the same first-party targets as mypy, or a new target with
+        # a stub-overridden dep could go untested at runtime.
+        targets = set(_load_ci_mypy_targets())
+        smoke_imports = _load_ci_smoke_test_imports()
+        self.assertEqual(
+            smoke_imports,
+            targets,
+            f"Smoke test imports {smoke_imports} must match mypy targets {targets}",
         )
 
     def test_no_app_override(self):
