@@ -1440,6 +1440,25 @@ class TestExtractUsage(unittest.TestCase):
     def test_missing_usage_returns_empty(self):
         self.assertEqual(llm._extract_usage(object()), {})
 
+    def test_bool_token_values_are_ignored(self):
+        """isinstance(True, int) is True — a malformed `total_tokens: true`
+        payload must not ship as 1."""
+
+        class FakeUsage:
+            prompt_tokens = True
+            completion_tokens = False
+            total_tokens = True
+            cost = True
+
+        class FakeResponse:
+            usage = FakeUsage()
+
+        usage = llm._extract_usage(FakeResponse())
+        self.assertNotIn("prompt_tokens", usage)
+        self.assertNotIn("completion_tokens", usage)
+        self.assertNotIn("total_tokens", usage)
+        self.assertNotIn("cost_usd", usage)
+
     def test_non_int_token_values_are_ignored(self):
         """Malformed usage values never reach the event as wrong types."""
 

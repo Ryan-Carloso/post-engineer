@@ -126,10 +126,12 @@ def _extract_usage(response: object) -> dict[str, Any]:
         return usage
     for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
         value = _get_response_field(raw, key)
-        if isinstance(value, int):
+        # bool is a subclass of int — exclude it so a malformed
+        # `total_tokens: true` payload can't ship as 1.
+        if isinstance(value, int) and not isinstance(value, bool):
             usage[key] = value
     cost = _get_response_field(raw, "cost")
-    if isinstance(cost, (int, float)):
+    if isinstance(cost, (int, float)) and not isinstance(cost, bool):
         usage["cost_usd"] = float(cost)
     return usage
 
@@ -193,9 +195,9 @@ LLM_CLIENT_MAX_RETRIES = 1
 # Default model per provider, mirroring the provider branches in
 # _generate_response_inner below. _resolve_model_name prefers the explicit
 # config value; this dict only fills the gap when the branch applies a
-# default. Every entry here must match its branch default: the test below
-# pins each entry's value, so a one-sided drift fails the suite. When
-# adding or changing a provider branch, add/update its entry here too.
+# default. The test below pins each entry's value (dict-side drift fails
+# the suite); branch defaults are updated manually — when adding or
+# changing a provider branch, update its entry here too.
 _PROVIDER_DEFAULT_MODELS = {
     "g4f": "gpt-3.5-turbo-16k-0613",
     "omniroute": "auto",
