@@ -1365,6 +1365,68 @@ class TestAIRequestTracking(unittest.TestCase):
         config.app["gemini_model_name"] = "gemini-pro"
         self.assertEqual(llm._resolve_model_name("gemini"), "gemini-2.5-flash")
 
+    def test_fallback_path_tracks_openrouter_primary_failure(self):
+        """
+        When OpenRouter itself is the primary and fails, there is no
+        fallback — the event records provider=openrouter with
+        fallback_used=False and success=False.
+        """
+        config.app["llm_provider"] = "openrouter"
+        config.app["openrouter_model_name"] = ""
+
+        with patch.object(
+            llm, "_generate_response_inner", side_effect=Exception("openrouter 429")
+        ):
+            result, props = self._tracked(llm._generate_response_with_fallback, "hi")
+
+        self.assertTrue(result.startswith("Error:"))
+        self.assertEqual(props["provider"], "openrouter")
+        self.assertEqual(props["primary_provider"], "openrouter")
+        self.assertFalse(props["fallback_used"])
+        self.assertFalse(props["success"])
+        self.assertIn("openrouter 429", props["error"])
+
+    def test_fallback_path_tracks_missing_openrouter_key(self):
+        """
+        When the primary fails and no OpenRouter key is configured, the
+        event records the primary provider with fallback_used=False and
+        the primary's error.
+        """
+        config.app["llm_provider"] = "omniroute"
+        config.app["omniroute_model_name"] = ""
+        config.app["openrouter_api_key"] = ""
+
+        with patch.object(
+            llm, "_generate_response_inner", side_effect=Exception("primary down")
+        ):
+            result, props = self._tracked(llm._generate_response_with_fallback, "hi")
+
+        self.assertTrue(result.startswith("Error:"))
+        self.assertEqual(props["provider"], "omniroute")
+        self.assertEqual(props["primary_provider"], "omniroute")
+        self.assertFalse(props["fallback_used"])
+        self.assertFalse(props["success"])
+        self.assertIn("primary down", props["error"])
+
+    def test_track_llm_request_caps_error_length(self):
+        """
+        The error property is capped (symmetric with the Modal path): SDK
+        exceptions can embed multi-KB context that must not ship whole.
+        """
+        config.app["llm_provider"] = "omniroute"
+        config.app["omniroute_model_name"] = ""
+        with patch.object(llm, "track_ai_request") as track:
+            llm._track_llm_request(
+                provider="omniroute",
+                primary_provider="omniroute",
+                fallback_used=False,
+                duration_ms=1,
+                success=False,
+                error="x" * 2000,
+            )
+        props = track.call_args[0][0]
+        self.assertEqual(len(props["error"]), 500)
+
     def test_track_llm_request_scrubs_credential_fragments(self):
         # response_preview ships truncated model output; credential-shaped
         # fragments echoed in it must be redacted before reaching PostHog.

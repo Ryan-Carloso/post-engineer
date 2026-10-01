@@ -251,9 +251,10 @@ def _track_llm_request(
 
     Free-text fields are scrubbed for credential-shaped fragments before
     sending (response_preview carries truncated model output, which can
-    echo secrets). Telemetry never raises (see track_ai_request).
-    cost_usd is None when the provider doesn't report it (OpenRouter
-    reports it); token counts default to 0.
+    echo secrets), and error is capped at 500 chars like the Modal path —
+    SDK exceptions can embed multi-KB context. Telemetry never raises
+    (see track_ai_request). cost_usd is None when the provider doesn't
+    report it (OpenRouter reports it); token counts default to 0.
     """
     usage = usage or {}
     track_ai_request(
@@ -265,7 +266,7 @@ def _track_llm_request(
             "fallback_used": fallback_used,
             "duration_ms": duration_ms,
             "success": success,
-            "error": scrub_secret_values(error or ""),
+            "error": scrub_secret_values(error or "")[:500],
             "response_chars": len(response_text),
             "response_preview": scrub_secret_values(
                 response_text[:_RESPONSE_PREVIEW_CHARS]
