@@ -448,4 +448,65 @@ describe('api', () => {
     expect(result.current.data?.recent[0]?.progress).toBe(80);
     expect(result.current.data?.recent[0]?.retryable).toBe(true);
   });
+
+  //---------------
+  // Per-slot operations (Posts page: edit topic, delete scheduled slot).
+  //---------------
+
+  it('updateSlotTopic PATCHes /api/schedule/slots/:id with the topic', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ success: true, topic: 'Novo tema' }));
+    const { updateSlotTopic } = await import('@/lib/api');
+    const topic = await updateSlotTopic('slot-1', 'Novo tema');
+    expect(topic).toBe('Novo tema');
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/schedule/slots/slot-1',
+      expect.objectContaining({ method: 'PATCH' }),
+    );
+  });
+
+  it('updateSlotTopic throws on failure', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({ success: false, error: 'Only a slot that has not started generating can be edited.' }, false, 409),
+    );
+    const { updateSlotTopic } = await import('@/lib/api');
+    await expect(updateSlotTopic('slot-1', 'x')).rejects.toThrow('Only a slot that has not started generating can be edited.');
+  });
+
+  it('deleteSlot calls DELETE /api/schedule/slots/:id and throws on failure', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ success: true }));
+    const { deleteSlot } = await import('@/lib/api');
+    await expect(deleteSlot('slot-1')).resolves.toBeUndefined();
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/schedule/slots/slot-1',
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({ success: false, error: 'A published post cannot be deleted.' }, false, 409),
+    );
+    await expect(deleteSlot('slot-2')).rejects.toThrow('A published post cannot be deleted.');
+  });
+
+  it('slot mutations invalidate the schedule status cache on success', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ success: true }));
+    const { useUpdateSlotMutation, useDeleteSlotMutation } = await import('@/lib/api');
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }): ReactNode => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const invalidateSpy = vi.spyOn(client, 'invalidateQueries');
+
+    const { result: updateResult } = renderHook(() => useUpdateSlotMutation(), { wrapper });
+    await act(async () => {
+      await updateResult.current.mutateAsync({ slotId: 'slot-1', topic: 'Novo tema' });
+    });
+    const { result: deleteResult } = renderHook(() => useDeleteSlotMutation(), { wrapper });
+    await act(async () => {
+      await deleteResult.current.mutateAsync('slot-1');
+    });
+
+    const invalidatedKeys = invalidateSpy.mock.calls.map((c) => (c[0] as { queryKey: unknown[] })?.queryKey);
+    expect(invalidatedKeys).toContainEqual(['fill-schedule-status']);
+    invalidateSpy.mockRestore();
+  });
 });

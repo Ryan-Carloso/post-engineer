@@ -946,6 +946,52 @@ export function useDeleteScheduleMutation() {
   });
 }
 
+//---------------
+// Per-slot operations (Posts page). Only slots not yet dispatched to the
+// engine can be edited/deleted — the API returns 409 otherwise and the
+// error message is surfaced to the user, never swallowed.
+//---------------
+
+export async function updateSlotTopic(slotId: string, topic: string): Promise<string> {
+  const response = await fetch(`/api/schedule/slots/${encodeURIComponent(slotId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ topic }),
+  });
+  const data: { success: boolean; topic?: string; error?: string } = await response.json();
+  if (!response.ok || !data.success) throw new Error(data.error ?? 'Failed to update slot');
+  return data.topic ?? topic;
+}
+
+export async function deleteSlot(slotId: string): Promise<void> {
+  const response = await fetch(`/api/schedule/slots/${encodeURIComponent(slotId)}`, {
+    method: 'DELETE',
+  });
+  const data: { success: boolean; error?: string } = await response.json();
+  if (!response.ok || !data.success) throw new Error(data.error ?? 'Failed to delete slot');
+}
+
+export function useUpdateSlotMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ slotId, topic }: { slotId: string; topic: string }) =>
+      updateSlotTopic(slotId, topic),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['fill-schedule-status'] });
+    },
+  });
+}
+
+export function useDeleteSlotMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteSlot,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['fill-schedule-status'] });
+    },
+  });
+}
+
 export {
   fetchYouTubeAccounts,
   fetchInstagramAccounts,

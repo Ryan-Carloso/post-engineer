@@ -10,6 +10,8 @@ import {
   useInstagramAccountsQuery,
   useLinkedinAccountsQuery,
   useVideoGenerationsQuery,
+  useUpdateSlotMutation,
+  useDeleteSlotMutation,
   type ScheduledSlot,
   type ScheduleConfig,
   type VideoGeneration,
@@ -98,39 +100,130 @@ const GENERATION_ERROR_KEY: Record<string, TranslationKey> = {
 const GenerationCard = ({
   generation,
   locale,
+  onOpen,
 }: {
   generation: VideoGeneration;
   locale: 'pt' | 'en';
+  onOpen: () => void;
 }) => {
   const { t } = useI18n();
+  const videoUrl = videoUrlFor(generation.engineTaskId);
+  const hasCover = generation.status === 'completed' && videoUrl !== null;
   return (
-    <article className="rounded-xl border border-[#d7e2ea] bg-white p-4 shadow-[0_5px_18px_rgba(13,43,69,0.045)]">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-[#0d2b45]">
-          {formatDateTime(generation.createdAt, locale)}
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex h-full flex-col overflow-hidden rounded-xl border border-[#d7e2ea] bg-white text-left shadow-[0_5px_18px_rgba(13,43,69,0.045)] transition-colors hover:border-[#b9cbd9]"
+    >
+      <VideoCover src={hasCover ? videoUrl : null} placeholderLabel={t(generation.status === 'failed' ? 'posts.coverNoVideo' : 'posts.coverGenerating')} />
+      <div className="flex flex-1 flex-col p-4">
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="text-sm font-semibold text-[#0d2b45]">{formatDate(generation.createdAt, locale)}</p>
+          <p className="text-sm text-[#60758a]">{formatTime(generation.createdAt, locale)}</p>
+        </div>
+        <p className="mt-2 line-clamp-3 text-sm leading-snug text-[#0d2b45]">
+          <span className="font-semibold">{generation.personaName ?? t('posts.personaFallback')}</span>
+          {' — '}
+          <span className="text-[#60758a]">{generation.videoSubject ?? t('posts.unknownTopic')}</span>
         </p>
-        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_STYLE[generation.status] ?? STATUS_STYLE.pending}`}>
-          {t(GENERATION_STATUS_KEY[generation.status] ?? 'posts.statusPending')}
-        </span>
+        {generation.status === 'failed' && (
+          <p className="mt-2 line-clamp-2 text-xs text-[#c2301e]">
+            {t(GENERATION_ERROR_KEY[generation.errorCode ?? 'unknown'] ?? 'posts.errorUnknown')}
+          </p>
+        )}
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-3">
+          <span className="min-w-0 truncate text-xs text-[#60758a]">{generation.videoSubject ?? t('posts.unknownTopic')}</span>
+          <div className="flex shrink-0 items-center gap-2">
+            {generation.tokensRefunded && (
+              <span className="rounded-full bg-[#cff5df] px-2.5 py-1 text-xs font-semibold text-[#167246]">
+                {t('posts.refundedBadge')}
+              </span>
+            )}
+            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_STYLE[generation.status] ?? STATUS_STYLE.pending}`}>
+              {t(GENERATION_STATUS_KEY[generation.status] ?? 'posts.statusPending')}
+            </span>
+          </div>
+        </div>
       </div>
-      <p className="mt-2 text-sm text-[#0d2b45]">
-        <span className="font-semibold">{generation.personaName ?? t('posts.personaFallback')}</span>
-        {' — '}
-        <span className="text-[#60758a]">{generation.videoSubject ?? t('posts.unknownTopic')}</span>
-      </p>
-      {generation.status === 'failed' && (
-        <p className="mt-2 text-xs text-[#c2301e]">
-          {t(GENERATION_ERROR_KEY[generation.errorCode ?? 'unknown'] ?? 'posts.errorUnknown')}
-        </p>
-      )}
-      {generation.tokensRefunded && (
-        <p className="mt-2">
-          <span className="rounded-full bg-[#cff5df] px-2.5 py-1 text-xs font-semibold text-[#167246]">
-            {t('posts.refundedBadge')}
-          </span>
-        </p>
-      )}
-    </article>
+    </button>
+  );
+};
+
+//---------------
+// GenerationDetailModal — watch a manual video generation. Completed
+// generations stream through the engine download proxy via the stored
+// engine task id; failed ones show only the friendly, translated error.
+// History-only: no edit/delete actions exist for generations.
+//---------------
+const GenerationDetailModal = ({
+  generation,
+  locale,
+  onClose,
+}: {
+  generation: VideoGeneration;
+  locale: 'pt' | 'en';
+  onClose: () => void;
+}) => {
+  const { t } = useI18n();
+  const videoUrl = videoUrlFor(generation.engineTaskId);
+  const canWatch = generation.status === 'completed' && videoUrl !== null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0d2b45]/50 p-4" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-label={t('posts.detailsTitle')}
+        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-[#0d2b45]">
+              {formatDateTime(generation.createdAt, locale)}
+            </p>
+            <p className="mt-1 text-base font-bold text-[#0d2b45]">
+              {generation.personaName ?? t('posts.personaFallback')}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_STYLE[generation.status] ?? STATUS_STYLE.pending}`}>
+              {t(GENERATION_STATUS_KEY[generation.status] ?? 'posts.statusPending')}
+            </span>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={t('posts.close')}
+              className="rounded-lg px-2 py-1 text-sm font-semibold text-[#60758a] hover:bg-[#f1f6fa]"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        <p className="mt-2 text-sm text-[#60758a]">{generation.videoSubject ?? t('posts.unknownTopic')}</p>
+
+        {canWatch && videoUrl && (
+          <video
+            src={videoUrl}
+            controls
+            preload="metadata"
+            className="mt-4 w-full rounded-xl bg-black"
+          />
+        )}
+
+        {generation.status === 'failed' && (
+          <p className="mt-4 text-xs text-[#c2301e]">
+            {t(GENERATION_ERROR_KEY[generation.errorCode ?? 'unknown'] ?? 'posts.errorUnknown')}
+          </p>
+        )}
+        {generation.tokensRefunded && (
+          <p className="mt-4">
+            <span className="rounded-full bg-[#cff5df] px-2.5 py-1 text-xs font-semibold text-[#167246]">
+              {t('posts.refundedBadge')}
+            </span>
+          </p>
+        )}
+      </div>
+    </div>
   );
 };
 
@@ -141,6 +234,18 @@ export const POSTS_LIMIT = 200;
 function formatDateTime(value: string, locale: 'pt' | 'en'): string {
   return new Date(value).toLocaleString(locale === 'pt' ? 'pt-BR' : 'en-US', {
     dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+}
+
+function formatDate(value: string, locale: 'pt' | 'en'): string {
+  return new Date(value).toLocaleDateString(locale === 'pt' ? 'pt-BR' : 'en-US', {
+    dateStyle: 'medium',
+  });
+}
+
+function formatTime(value: string, locale: 'pt' | 'en'): string {
+  return new Date(value).toLocaleTimeString(locale === 'pt' ? 'pt-BR' : 'en-US', {
     timeStyle: 'short',
   });
 }
@@ -167,43 +272,275 @@ const PostCard = ({
   personaName,
   accounts,
   locale,
+  onOpen,
 }: {
   slot: ScheduledSlot;
   personaName: string;
   accounts: AccountOption[];
   locale: 'pt' | 'en';
+  onOpen: () => void;
 }) => {
   const { t } = useI18n();
   const isHistory = slot.status === 'published' || slot.status === 'failed';
+  const shownAt = isHistory && slot.publishedAt ? slot.publishedAt : slot.slotAt;
+  const videoUrl = videoUrlFor(slot.taskId);
+  const hasCover = SLOT_VIDEO_STATUSES.has(slot.status) && videoUrl !== null;
+  const placeholderKey =
+    slot.status === 'generating' ? 'posts.coverGenerating' : slot.status === 'failed' ? 'posts.coverNoVideo' : 'posts.coverPending';
   return (
-    <article className="rounded-xl border border-[#d7e2ea] bg-white p-4 shadow-[0_5px_18px_rgba(13,43,69,0.045)]">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-[#0d2b45]">
-          {formatDateTime(isHistory && slot.publishedAt ? slot.publishedAt : slot.slotAt, locale)}
-        </p>
-        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_STYLE[slot.status] ?? STATUS_STYLE.pending}`}>
-          {t(STATUS_KEY[slot.status] ?? 'posts.statusPending')}
-        </span>
-      </div>
-      <p className="mt-2 text-sm text-[#0d2b45]">
-        <span className="font-semibold">{personaName}</span>
-        {' — '}
-        <span className="text-[#60758a]">{slot.topic ?? t('posts.unknownTopic')}</span>
-      </p>
-      {accounts.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {accounts.map((account) => (
-            <span key={`${account.provider}:${account.id}`} className="inline-flex items-center gap-1.5 rounded-lg bg-[#f1f6fa] px-2.5 py-1.5 text-xs font-medium text-[#0d2b45]">
-              <ProviderDot provider={account.provider} />
-              {account.label}
-            </span>
-          ))}
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex h-full flex-col overflow-hidden rounded-xl border border-[#d7e2ea] bg-white text-left shadow-[0_5px_18px_rgba(13,43,69,0.045)] transition-colors hover:border-[#b9cbd9]"
+    >
+      <VideoCover src={hasCover ? videoUrl : null} placeholderLabel={t(placeholderKey)} />
+      <div className="flex flex-1 flex-col p-4">
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="text-sm font-semibold text-[#0d2b45]">{formatDate(shownAt, locale)}</p>
+          <p className="text-sm text-[#60758a]">{formatTime(shownAt, locale)}</p>
         </div>
-      )}
+        <p className="mt-2 line-clamp-3 text-sm leading-snug text-[#0d2b45]">
+          <span className="font-semibold">{personaName}</span>
+          {' — '}
+          <span className="text-[#60758a]">{slot.topic ?? t('posts.unknownTopic')}</span>
+        </p>
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-3">
+          <div className="flex min-w-0 flex-wrap gap-1.5">
+            {accounts.slice(0, 3).map((account) => (
+              <span key={`${account.provider}:${account.id}`} className="inline-flex items-center gap-1 rounded-lg bg-[#f1f6fa] px-2 py-1 text-xs font-medium text-[#0d2b45]">
+                <ProviderDot provider={account.provider} />
+                <span className="max-w-28 truncate">{account.label}</span>
+              </span>
+            ))}
+          </div>
+          <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_STYLE[slot.status] ?? STATUS_STYLE.pending}`}>
+            {t(STATUS_KEY[slot.status] ?? 'posts.statusPending')}
+          </span>
+        </div>
+      </div>
       {slot.status === 'failed' && slot.error && (
-        <p className="mt-2 text-xs text-[#c2301e]">{slot.error}</p>
+        <p className="sr-only">{slot.error}</p>
       )}
-    </article>
+    </button>
+  );
+};
+
+//---------------
+// VideoCover — the card's cover IS the video: metadata-only preload so a
+// grid of covers costs one small ranged request per card, muted and
+// control-less (playback happens in the detail modal). No video yet → a
+// quiet placeholder that says why.
+//---------------
+const VideoCover = ({ src, placeholderLabel }: { src: string | null; placeholderLabel: string }) => (
+  <div className="relative aspect-video w-full overflow-hidden bg-[#e8edf1]">
+    {src ? (
+      <video src={src} preload="metadata" muted playsInline className="h-full w-full object-cover" />
+    ) : (
+      <div className="flex h-full w-full items-center justify-center px-4 text-center text-xs font-medium text-[#8aa2b5]">
+        {placeholderLabel}
+      </div>
+    )}
+  </div>
+);
+
+//---------------
+// videoUrlFor — the engine download proxy serves the final render for a
+// task; only slots whose video was actually produced have one.
+//---------------
+function videoUrlFor(taskId: string | null | undefined): string | null {
+  return taskId ? `/api/persona/video-download/${encodeURIComponent(taskId)}/final-1.mp4` : null;
+}
+
+const SLOT_VIDEO_STATUSES = new Set<ScheduledSlot['status']>(['ready', 'publishing', 'published']);
+
+//---------------
+// SlotDetailModal — the card's details: video player (when the engine
+// produced one), topic, target accounts, and the per-status actions.
+// Awaiting slots can have their topic edited (the engine generates the
+// video from the stored topic) and be deleted; failed slots can be
+// deleted; published posts are watch-only. Mutation errors keep the modal
+// open and are shown inline — a committed mutation is never reported as a
+// total failure.
+//---------------
+const SlotDetailModal = ({
+  slot,
+  personaName,
+  accounts,
+  locale,
+  onClose,
+}: {
+  slot: ScheduledSlot;
+  personaName: string;
+  accounts: AccountOption[];
+  locale: 'pt' | 'en';
+  onClose: () => void;
+}) => {
+  const { t } = useI18n();
+  const updateTopic = useUpdateSlotMutation();
+  const deleteSlot = useDeleteSlotMutation();
+  const [editing, setEditing] = useState(false);
+  const [topicDraft, setTopicDraft] = useState(slot.topic ?? '');
+  // Two-step delete: the first click arms the confirmation button.
+  const [armed, setArmed] = useState(false);
+  const videoUrl = videoUrlFor(slot.taskId);
+  const canWatch = SLOT_VIDEO_STATUSES.has(slot.status) && videoUrl !== null;
+  const canEdit = slot.status === 'awaiting';
+  const canDelete = slot.status === 'awaiting' || slot.status === 'failed';
+  const mutationError =
+    (updateTopic.isError ? updateTopic.error?.message : null) ??
+    (deleteSlot.isError ? deleteSlot.error?.message : null);
+
+  const handleSave = (): void => {
+    updateTopic.mutate(
+      { slotId: slot.id, topic: topicDraft },
+      { onSuccess: () => setEditing(false) },
+    );
+  };
+
+  const handleDelete = (): void => {
+    if (!armed) {
+      setArmed(true);
+      return;
+    }
+    deleteSlot.mutate(slot.id, { onSuccess: onClose });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0d2b45]/50 p-4" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-label={t('posts.detailsTitle')}
+        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-[#0d2b45]">
+              {formatDateTime(slot.status === 'published' && slot.publishedAt ? slot.publishedAt : slot.slotAt, locale)}
+            </p>
+            <p className="mt-1 text-base font-bold text-[#0d2b45]">{personaName}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_STYLE[slot.status] ?? STATUS_STYLE.pending}`}>
+              {t(STATUS_KEY[slot.status] ?? 'posts.statusPending')}
+            </span>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={t('posts.close')}
+              className="rounded-lg px-2 py-1 text-sm font-semibold text-[#60758a] hover:bg-[#f1f6fa]"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {canWatch && videoUrl && (
+          <video
+            src={videoUrl}
+            controls
+            preload="metadata"
+            className="mt-4 w-full rounded-xl bg-black"
+          />
+        )}
+        {!canWatch && slot.taskId && slot.status === 'generating' && (
+          <p className="mt-4 rounded-xl bg-[#f1f6fa] p-3 text-sm text-[#60758a]">{t('posts.videoGenerating')}</p>
+        )}
+        {!canWatch && slot.status === 'awaiting' && (
+          <p className="mt-4 rounded-xl bg-[#f1f6fa] p-3 text-sm text-[#60758a]">{t('posts.videoPending')}</p>
+        )}
+
+        <div className="mt-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[#60758a]">{t('posts.topicLabel')}</p>
+          {editing ? (
+            <div className="mt-2">
+              <label className="sr-only" htmlFor="slot-topic">{t('posts.topicLabel')}</label>
+              <textarea
+                id="slot-topic"
+                value={topicDraft}
+                onChange={(event) => setTopicDraft(event.target.value)}
+                rows={3}
+                className="w-full rounded-xl border border-[#d7e2ea] px-3 py-2 text-sm text-[#0d2b45] focus:border-[#0d2b45] focus:outline-none"
+              />
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={updateTopic.isPending || topicDraft.trim() === ''}
+                  className="rounded-xl bg-[#0d2b45] px-4 py-2 text-sm font-semibold text-white hover:bg-[#123a5e] disabled:opacity-50"
+                >
+                  {t('posts.save')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditing(false);
+                    setTopicDraft(slot.topic ?? '');
+                  }}
+                  disabled={updateTopic.isPending}
+                  className="rounded-xl border border-[#d7e2ea] px-4 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb]"
+                >
+                  {t('posts.cancel')}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-1 text-sm text-[#0d2b45]">{slot.topic ?? t('posts.unknownTopic')}</p>
+          )}
+        </div>
+
+        {accounts.length > 0 && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {accounts.map((account) => (
+              <span key={`${account.provider}:${account.id}`} className="inline-flex items-center gap-1.5 rounded-lg bg-[#f1f6fa] px-2.5 py-1.5 text-xs font-medium text-[#0d2b45]">
+                <ProviderDot provider={account.provider} />
+                {account.label}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {slot.status === 'failed' && slot.error && (
+          <p className="mt-4 text-xs text-[#c2301e]">{slot.error}</p>
+        )}
+
+        {mutationError && (
+          <p className="mt-4 rounded-xl bg-[#ffe1de] p-3 text-sm text-[#c2301e]" role="alert">
+            {mutationError}
+          </p>
+        )}
+
+        {(canEdit || canDelete) && (
+          <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-[#edf2f5] pt-4">
+            {canEdit && !editing && (
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                disabled={deleteSlot.isPending}
+                className="rounded-xl border border-[#d7e2ea] px-4 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb]"
+              >
+                {t('posts.edit')}
+              </button>
+            )}
+            {canDelete && (
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={deleteSlot.isPending || updateTopic.isPending}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${
+                  armed ? 'bg-[#a1250f] hover:bg-[#8c1f0d]' : 'bg-[#c2301e] hover:bg-[#a1250f]'
+                }`}
+              >
+                {armed ? t('posts.deleteConfirm') : t('posts.delete')}
+              </button>
+            )}
+            {canDelete && armed && (
+              <span className="text-xs text-[#60758a]">{t('posts.deleteTokenNote')}</span>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
   );
 };
 
@@ -218,6 +555,11 @@ export default function PostsPage() {
   const [tab, setTab] = useState<Tab>('upcoming');
   const [providerFilter, setProviderFilter] = useState<ProviderFilter>('all');
   const [accountFilter, setAccountFilter] = useState<string>('all');
+  // Open detail modal: the slot is identified by id and re-resolved from
+  // the query data on every render, so a refetch updates the open modal
+  // instead of showing a stale copy.
+  const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
+  const [selectedGenerationId, setSelectedGenerationId] = useState<string | null>(null);
 
   const statusQuery = useScheduleStatusQuery(POSTS_LIMIT);
   const schedulesQuery = useSchedulesQuery();
@@ -318,8 +660,15 @@ export default function PostsPage() {
   const activeSlots = tab === 'upcoming' ? joinedUpcoming : joinedRecent;
   const isCapped = activeSlots.length >= POSTS_LIMIT;
 
+  const selectedSlot = selectedSlotId === null
+    ? null
+    : [...joinedUpcoming, ...joinedRecent].find((slot) => slot.id === selectedSlotId) ?? null;
+  const selectedGeneration = selectedGenerationId === null
+    ? null
+    : generations.find((generation) => generation.id === selectedGenerationId) ?? null;
+
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="mx-auto max-w-6xl">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-[-0.02em] text-[#0d2b45]">{t('posts.title')}</h1>
@@ -426,9 +775,14 @@ export default function PostsPage() {
                 {generations.length === 0 ? (
                   <p className="mt-3 text-sm text-[#60758a]">{t('posts.generationsEmpty')}</p>
                 ) : (
-                  <div className="mt-3 flex flex-col gap-3">
+                  <div className="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                     {generations.map((generation) => (
-                      <GenerationCard key={generation.id} generation={generation} locale={locale} />
+                      <GenerationCard
+                        key={generation.id}
+                        generation={generation}
+                        locale={locale}
+                        onOpen={() => setSelectedGenerationId(generation.id)}
+                      />
                     ))}
                   </div>
                 )}
@@ -441,7 +795,7 @@ export default function PostsPage() {
                   : t(tab === 'upcoming' ? 'posts.noUpcoming' : 'posts.noHistory')}
               </div>
             ) : (
-              <div className="flex flex-col gap-3">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {filteredSlots.map((slot) => (
                   <PostCard
                     key={slot.id}
@@ -449,6 +803,7 @@ export default function PostsPage() {
                     personaName={personaNameById.get(scheduleById.get(slot.scheduleId)?.personaId ?? '') ?? t('posts.personaFallback')}
                     accounts={resolveSlotAccounts(scheduleById.get(slot.scheduleId), accountOptions)}
                     locale={locale}
+                    onOpen={() => setSelectedSlotId(slot.id)}
                   />
                 ))}
               </div>
@@ -456,6 +811,24 @@ export default function PostsPage() {
           </>
         )}
       </div>
+
+      {selectedSlot && (
+        <SlotDetailModal
+          slot={selectedSlot}
+          personaName={personaNameById.get(scheduleById.get(selectedSlot.scheduleId)?.personaId ?? '') ?? t('posts.personaFallback')}
+          accounts={resolveSlotAccounts(scheduleById.get(selectedSlot.scheduleId), accountOptions)}
+          locale={locale}
+          onClose={() => setSelectedSlotId(null)}
+        />
+      )}
+
+      {selectedGeneration && (
+        <GenerationDetailModal
+          generation={selectedGeneration}
+          locale={locale}
+          onClose={() => setSelectedGenerationId(null)}
+        />
+      )}
     </div>
   );
 }
