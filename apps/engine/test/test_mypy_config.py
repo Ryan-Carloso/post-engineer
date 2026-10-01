@@ -37,16 +37,19 @@ class MypyConfigPinTests(unittest.TestCase):
 
     def test_no_app_override(self):
         # Parse the TOML structure (not regex) so string-form modules and
-        # quoting variants are all covered.
+        # quoting variants are all covered. Covers the full first-party set
+        # that CI type-checks (uv run mypy app cli.py main.py).
         config = _load_mypy_config()
         overrides = config.get("overrides", [])
+        first_party = ("app", "cli", "main")
         for override in overrides:
             modules = override.get("module", [])
             # Normalize: module can be a string or a list of strings.
             if isinstance(modules, str):
                 modules = [modules]
             for mod in modules:
-                self.assertFalse(
-                    mod == "app" or mod.startswith("app."),
-                    f"Override must not silence first-party modules: {mod}",
-                )
+                for pkg in first_party:
+                    self.assertFalse(
+                        mod == pkg or mod.startswith(pkg + "."),
+                        f"Override must not silence first-party modules: {mod}",
+                    )
