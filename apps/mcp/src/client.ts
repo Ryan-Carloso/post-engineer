@@ -1,10 +1,11 @@
-import { getErrorMessage, ImageTooLargeError } from './errors.js';
+import { getErrorMessage, ImageTooLargeError, ApiError } from './errors.js';
 import { MAX_LIBRARY_IMAGE_BYTES, MAX_LIBRARY_IMAGE_MB } from './limits.js';
 
 // Re-exported so existing import sites (`../client.js`) keep working.
 export { MAX_LIBRARY_IMAGE_BYTES, MAX_LIBRARY_IMAGE_MB };
 import { readFile, stat } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 export interface PostEngineerClientOptions {
   apiKey?: string;
@@ -40,34 +41,35 @@ export interface CreatePersonaInput {
   imagePrimaryIndex?: number;
 }
 
-export interface GenerateVideoJobInput {
-  // Omitted for faceless generation (the web API runs the job with
-  // face_mix_percent 0 and no photo); videoSubject plus a voice source
-  // (audioUrl or voiceId) are then required.
-  personaId?: string;
-  videoSubject?: string;
-  voiceId?: string;
-  scriptPrompt?: string;
-  audioUrl?: string;
-  /** Library image ID overriding the deterministic per-video selection. */
-  imageId?: string;
-  /** Optional callback URL the server POSTs to when the video terminates. */
-  webhookUrl?: string;
-}
-
-export interface GenerateVideoBatchInput {
-  /** One topic per video, 1-10. Videos generate sequentially in order. */
+export interface GeneratePersonaVideosInput {
+  // REQUIRED even for faceless generation: the web API has no
+  // standalone-generation flow, so a persona record always anchors the
+  // schedule (faceless drops the face via options.faceless).
+  personaId: string;
+  /** One topic per video, 1-10. */
   topics: string[];
-  // Omitted for faceless generation (the web API runs each video with
-  // face_mix_percent 0); voiceId is then required — batches accept no custom
-  // audio_url per video in V1.
-  personaId?: string;
-  /** Voice ID for faceless batch generation. */
-  voiceId?: string;
-  /** Library image ID overriding the deterministic per-video selection. */
-  imageId?: string;
-  /** Optional callback URL the server POSTs to when each video terminates. */
-  webhookUrl?: string;
+  providers: ('youtube' | 'instagram' | 'linkedin' | 'bluesky')[];
+  youtubeAccountIds?: string[];
+  instagramAccountIds?: string[];
+  linkedinAccountIds?: string[];
+  blueskyAccountIds?: string[];
+  /** ISO datetime when the first publish slot may start; naive values are wall-clock in timezone. */
+  startAt: string;
+  /** Daily publish times (HH:MM, 24h). */
+  times: string[];
+  /** IANA timezone for a naive startAt and the times. Defaults to UTC. */
+  timezone?: string;
+  options?: {
+    faceless?: boolean;
+    audioUrl?: string;
+    imageId?: string;
+    scriptPrompt?: string;
+    scriptPrompts?: string[];
+    voiceId?: string;
+    webhookUrl?: string;
+  };
+  /** Omitted: a UUID is generated per call, so a retry cannot double-generate. */
+  idempotencyKey?: string;
 }
 
 export interface UpdatePersonaInput {
@@ -268,7 +270,29 @@ export class PostEngineerClient {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Failed to ${action}: ${response.status} ${errorText.slice(0, MAX_ERROR_BODY_CHARS)}`);
+      // Structured API error bodies ({ success: false, error, code, field })
+      // carry the platform's stable machine code: keep it on the typed
+      // error so handlers can surface { code, message, field } instead of
+      // rewording the platform's own human message. The human message (or
+      // the raw body when it is not structured JSON) stays capped at
+      // MAX_ERROR_BODY_CHARS so nothing unbounded reaches agent output.
+      let code: string | null = null;
+      let field: string | null = null;
+      let detail = errorText.slice(0, MAX_ERROR_BODY_CHARS);
+      try {
+        const parsed: unknown = JSON.parse(errorText);
+        if (typeof parsed === 'object' && parsed !== null) {
+          const record = parsed as Record<string, unknown>;
+          if (typeof record.error === 'string' && record.error.length > 0) {
+            detail = record.error.slice(0, MAX_ERROR_BODY_CHARS);
+          }
+          if (typeof record.code === 'string') code = record.code;
+          if (typeof record.field === 'string') field = record.field;
+        }
+      } catch {
+        // Non-JSON body: detail stays the capped raw text.
+      }
+      throw new ApiError(`Failed to ${action}: ${response.status} ${detail}`, code, field);
     }
 
     // Some endpoints answer 204 No Content. An empty or non-JSON body on any
@@ -468,48 +492,39 @@ export class PostEngineerClient {
     );
   }
 
-  async generateVideoJob(input: GenerateVideoJobInput): Promise<unknown> {
+  async generatePersonaVideos(input: GeneratePersonaVideosInput): Promise<unknown> {
+    // Map the per-provider account arrays into the publishing.accounts
+    // record. Only set entries the caller provided: the server enforces
+    // which providers need accounts and rejects unknown ones.
+    const accounts: Record<string, string[]> = {};
+    if (input.youtubeAccountIds !== undefined) accounts.youtube = input.youtubeAccountIds;
+    if (input.instagramAccountIds !== undefined) accounts.instagram = input.instagramAccountIds;
+    if (input.linkedinAccountIds !== undefined) accounts.linkedin = input.linkedinAccountIds;
+    if (input.blueskyAccountIds !== undefined) accounts.bluesky = input.blueskyAccountIds;
     return this.request(
-      '/api/persona/video-job',
+      '/api/videos/generate-and-schedule',
       {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify({
-          // Explicit null (not a dropped key): the web route treats both as
-          // the faceless flow, and null survives serialization explicitly.
-          personaId: input.personaId ?? null,
-          video_subject: input.videoSubject,
-          voice_id: input.voiceId,
-          video_script_prompt: input.scriptPrompt,
-          audio_url: input.audioUrl,
-          image_id: input.imageId,
-          // Snake_case at the wire level: the web route's forward allowlist
-          // carries webhook_url (a first-class TaskVideoRequest field) to the
-          // engine's terminal dispatch. Undefined keys drop out of the JSON.
-          webhook_url: input.webhookUrl,
-        }),
-      },
-      'generate video job'
-    );
-  }
-
-  async generateVideoBatch(input: GenerateVideoBatchInput): Promise<unknown> {
-    return this.request(
-      '/api/persona/video-batch',
-      {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify({
-          // Explicit null (not a dropped key): the web route treats both as
-          // the faceless flow, and null survives serialization explicitly.
-          personaId: input.personaId ?? null,
+          personaId: input.personaId,
           topics: input.topics,
-          voice_id: input.voiceId,
-          image_id: input.imageId,
-          webhookUrl: input.webhookUrl,
+          publishing: {
+            providers: input.providers,
+            accounts,
+            schedule: {
+              startAt: input.startAt,
+              times: input.times,
+              timezone: input.timezone ?? 'UTC',
+            },
+          },
+          options: input.options ?? undefined,
+          // A retry without a stable key would generate a second schedule:
+          // generate a fresh UUID per call when the caller did not supply one.
+          idempotencyKey: input.idempotencyKey ?? randomUUID(),
         }),
       },
-      'generate video batch'
+      'generate and schedule videos'
     );
   }
 

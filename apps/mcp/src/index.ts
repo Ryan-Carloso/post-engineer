@@ -16,10 +16,9 @@ import {
   GetTokenBalanceShape,
   ListPostsShape,
   CancelScheduleShape,
-  GenerateVideoShape,
+  GeneratePersonaVideosShape,
   GetVideoStatusShape,
   GetVideoTaskProgressShape,
-  GenerateVideoBatchShape,
   ListPersonaImagesShape,
   AddPersonaImageShape,
   UpdatePersonaImageShape,
@@ -35,10 +34,9 @@ import {
   handleListPosts,
   handleCancelSchedule,
   handleGetTokenBalance,
-  handleGenerateVideo,
+  handleGeneratePersonaVideos,
   handleGetVideoStatus,
   handleGetVideoTaskProgress,
-  handleGenerateVideoBatch,
   handleListPersonaImages,
   handleAddPersonaImage,
   handleUpdatePersonaImage,
@@ -180,11 +178,11 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
   );
 
   server.tool(
-    'generate_video_from_persona',
-    'Trigger video generation using an existing persona. Optional scriptPrompt overrides the video script; optional audioUrl (public http(s) URL) supplies custom audio for this video, overriding the persona voice; optional imageId picks a specific image from the persona image library (see list_persona_images), overriding the deterministic per-video selection; optional webhookUrl is POSTed by the server once when the video reaches a terminal state. For faceless generation, omit personaId and provide videoSubject plus a voice source (audioUrl or voiceId).',
-    GenerateVideoShape,
-    withTracking('generate_video_from_persona', async (args) => {
-      return handleGenerateVideo(apiClient, args);
+    'generate_persona_videos',
+    'Generate and schedule 1-10 persona videos in ONE operation. Product rule: generation is always tied to publishing — one call generates each video AND schedules its automatic publish; there is no separate schedule step and no orphan generation. personaId is REQUIRED even for faceless videos (set options.faceless: true to drop the face; the persona voice, niche, and script prompt still apply). topics is one topic per video; the server assigns publish slots (topic i lands on day startAt\'s date + floor(i/times.length) at the i-th sorted time in times). Pass providers plus per-provider account IDs (see list_social_accounts), startAt (ISO datetime, wall-clock in timezone when naive), times (HH:MM, 24h), and timezone. Every slot must be 24h-30d ahead. idempotencyKey is generated automatically; reuse it to retry without generating twice (replayed: true). Poll each slot\'s taskId with get_video_task_progress.',
+    GeneratePersonaVideosShape,
+    withTracking('generate_persona_videos', async (args) => {
+      return handleGeneratePersonaVideos(apiClient, args);
     })
   );
 
@@ -199,7 +197,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
 
   server.tool(
     'get_video_task_progress',
-    'Poll one video task for its machine-readable progress: returns {task_id, state, progress, stage, error}. error is the engine failure reason when state is -1 (failed), null otherwise. Use per-video (1/6, 2/6, ...) after generate_persona_video_batch; prefer this over get_video_status when only progress matters.',
+    'Poll one video task for its machine-readable progress: returns {task_id, state, progress, stage, error}. error is the engine failure reason when state is -1 (failed), null otherwise. Use per-video (1/6, 2/6, ...) after generate_persona_videos; prefer this over get_video_status when only progress matters.',
     GetVideoTaskProgressShape,
     withTracking('get_video_task_progress', async (args) => {
       return handleGetVideoTaskProgress(apiClient, args);
@@ -207,17 +205,8 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
   );
 
   server.tool(
-    'generate_persona_video_batch',
-    'Generate 1-10 persona videos in one batch (sequential, in order). topics is one topic per video. Optional voiceId is required for faceless generation (personaId omitted). Optional webhookUrl is POSTed by the server once when each video terminates. Returns {task_ids}; poll each with get_video_task_progress.',
-    GenerateVideoBatchShape,
-    withTracking('generate_persona_video_batch', async (args) => {
-      return handleGenerateVideoBatch(apiClient, args);
-    })
-  );
-
-  server.tool(
     'list_persona_images',
-    `List the image library of a persona (up to ${MAX_LIBRARY_IMAGES} tagged images). Each entry has id, tag, description, and is_primary. Use the ids with generate_video_from_persona imageId to force a specific image for one video.`,
+    `List the image library of a persona (up to ${MAX_LIBRARY_IMAGES} tagged images). Each entry has id, tag, description, and is_primary. Use the ids with generate_persona_videos options.imageId to force a specific image for every video in one call.`,
     ListPersonaImagesShape,
     withTracking('list_persona_images', async (args) => {
       return handleListPersonaImages(apiClient, args);

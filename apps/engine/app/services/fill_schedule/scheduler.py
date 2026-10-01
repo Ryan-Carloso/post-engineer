@@ -1,8 +1,9 @@
 """Batch scheduling pipeline orchestrator.
 
 Tick (every TICK_SECONDS): batch generation → reconciliation → publishing.
-Only manual batch schedules (created by POST /api/schedule/batch) are
-processed — there is no automatic recurring scheduling.
+Only unified generate+schedule operations (created by POST
+/api/videos/generate-and-schedule) are processed — there is no automatic
+recurring scheduling.
 """
 
 from __future__ import annotations

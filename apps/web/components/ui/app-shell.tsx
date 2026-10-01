@@ -6,7 +6,6 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useSessionQuery } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
 import { LOCALES } from '@/lib/i18n';
-import { useDebugStore } from '@/lib/debug-store';
 import { TokenBalance } from '@/app/(main)/token-balance';
 import { InsufficientTokensDialog } from '@/components/ui/insufficient-tokens-dialog';
 import {
@@ -16,7 +15,6 @@ import {
   HistoryIcon,
   HomeIcon,
   SparklesIcon,
-  BugIcon,
   KeyIcon,
 } from '@/lib/ui';
 
@@ -58,8 +56,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 const MainSidebar = () => {
   const pathname = usePathname();
   const { t, locale, setLocale } = useI18n();
-  const registerClick = useDebugStore((s) => s.registerClick);
-  const debugMode = useDebugStore((s) => s.debugMode);
 
   const navItems: Array<NavItem> = [
     { href: '/', labelKey: 'nav.home', hintKey: 'nav.homeHint', icon: HomeIcon },
@@ -72,10 +68,8 @@ const MainSidebar = () => {
 
   return (
     <aside className="sticky top-0 hidden h-screen w-[clamp(300px,30vw,400px)] shrink-0 flex-col border-r border-[#edf0f4] bg-white shadow-[8px_0_28px_rgba(20,32,51,0.03)] md:flex">
-      <button
-        type="button"
+      <div
         data-testid="nav-brand"
-        onClick={registerClick}
         aria-label={t('nav.brand')}
         className="group flex items-center gap-3 px-5 pt-8 pb-6 text-left transition-colors hover:bg-[#fff8f7] lg:gap-4 lg:px-10 lg:pt-10 lg:pb-8"
       >
@@ -86,7 +80,7 @@ const MainSidebar = () => {
           <p className="text-[19px] leading-tight font-bold tracking-[-0.03em] text-[#101728]">{t('nav.brand')}</p>
           <p className="text-[15px] leading-snug text-[#718096] lg:text-[16px]">{t('nav.brandSubtitle')}</p>
         </div>
-      </button>
+      </div>
 
       <nav className="flex-1 space-y-1.5 px-3.5 py-6 lg:space-y-2 lg:px-7 lg:py-8">
         {navItems.map((item) => {
@@ -95,7 +89,6 @@ const MainSidebar = () => {
             <SidebarTab key={item.href} item={item} isActive={isActive} />
           );
         })}
-        {debugMode ? <DebugModeIndicator /> : null}
       </nav>
 
       <div className="space-y-3 border-t border-[#edf0f4] bg-white p-4 lg:p-6">
@@ -131,25 +124,6 @@ const SidebarTab = ({ item, isActive }: { item: NavItem; isActive: boolean }) =>
     </Link>
   );
 };
-
-//---------------
-// DebugModeIndicator — visual indicator (non-clickable) that debug mode
-// is unlocked: BugIcon + "DEBUG MODE" in the sidebar tab style.
-//---------------
-const DebugModeIndicator = () => (
-  <div
-    role="status"
-    aria-label="DEBUG MODE active"
-    className="flex items-center gap-3 rounded-[20px] bg-amber-50 px-4 py-3 lg:gap-5 lg:rounded-[24px] lg:px-8 lg:py-5"
-  >
-    <span className="shrink-0 text-amber-600 [&>svg]:size-6 lg:[&>svg]:size-8">
-      <BugIcon />
-    </span>
-    <span className="hidden min-w-0 text-[16px] leading-snug font-semibold tracking-[0.08em] text-amber-700 md:block lg:text-[18px]">
-      DEBUG MODE
-    </span>
-  </div>
-);
 
 //---------------
 // MobileHeader — compact brand for small screens.

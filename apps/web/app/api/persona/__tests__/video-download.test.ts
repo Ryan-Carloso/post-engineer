@@ -4,6 +4,15 @@ vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn(),
 }));
 
+vi.mock('@/lib/supabase/service', () => ({
+  createSupabaseServiceClient: vi.fn(),
+}));
+
+vi.mock('@/lib/api-keys', () => ({
+  resolveApiKey: vi.fn(),
+  validateApiKeyFormat: (key: string) => key.startsWith('post-engineer_'),
+}));
+
 //---------------
 // Testes de GET /api/persona/video-download/:taskId/*path — proxy binário
 // autenticado. Auth = sessão Supabase.
@@ -11,6 +20,8 @@ vi.mock('@/lib/supabase/server', () => ({
 
 import { GET } from '../video-download/[taskId]/[...path]/route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseServiceClient } from '@/lib/supabase/service';
+import { resolveApiKey } from '@/lib/api-keys';
 
 const ACCESS_TOKEN = 'sb-download-token';
 const API_SECRET = 'engine-shared-secret';
@@ -132,6 +143,52 @@ describe('GET /api/persona/video-download/:taskId/*path', () => {
     const response = await GET(new Request('http://localhost/download') as never, params('task-1', ['final.mp4']));
 
     expect(response.status).toBe(500);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('aceita API key via x-api-key (sem sessão web)', async () => {
+    // Regression: the route called requireSupabaseSession() without the
+    // request, so the API-key path never ran and API callers got 401.
+    mockSession({ noSession: true });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue({} as never);
+    vi.mocked(resolveApiKey).mockResolvedValue({
+      userId: USER_ID,
+      keyId: 'key-1',
+      personaIds: null,
+    });
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response('video bytes', {
+      status: 200,
+      headers: { 'Content-Type': 'video/mp4' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await GET(
+      new Request('http://localhost/download', {
+        headers: { 'x-api-key': 'post-engineer_testkey123' },
+      }) as never,
+      params('task-1', ['final.mp4']),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('video bytes');
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
+  it('retorna 401 com API key inválida', async () => {
+    mockSession({ noSession: true });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue({} as never);
+    vi.mocked(resolveApiKey).mockResolvedValue(null);
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await GET(
+      new Request('http://localhost/download', {
+        headers: { 'x-api-key': 'post-engineer_invalidkey' },
+      }) as never,
+      params('task-1', ['final.mp4']),
+    );
+
+    expect(response.status).toBe(401);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

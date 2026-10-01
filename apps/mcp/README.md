@@ -93,28 +93,26 @@ The `Authorization: Bearer` API key header is sent to the configured base URL, s
 - `create_persona`: create an AI persona (avatar, voice, language, niche).
 - `update_persona`: update an existing persona (only the provided fields change).
 - `get_token_balance`: get the prepaid token wallet balance. Check before generating videos, which cost tokens.
-- `generate_video_from_persona`: generate a video with a persona. Optional `scriptPrompt` overrides the video script; optional `audioUrl` (public http(s) URL) supplies custom audio for this video, overriding the persona voice; optional `imageId` picks a specific image from the persona image library (see `list_persona_images`); optional `webhookUrl` is POSTed by the server once when the video reaches a terminal state.
-- `generate_persona_video_batch`: generate 1-10 persona videos in one batch (sequential, in order; one topic per video). Optional `webhookUrl` is POSTed by the server once when each video terminates. Returns `{task_ids}`; poll each with `get_video_task_progress`.
+- `generate_persona_videos`: generate and schedule 1-10 persona videos in ONE operation — generation is always tied to publishing (one call = generate + schedule + auto-publish; no orphan videos, no separate schedule step). `personaId` is required even for faceless videos (set `options.faceless: true` to drop the face). `topics` is one topic per video; the server assigns publish slots across `startAt` + `times` (daily `HH:MM` publish times in `timezone`). Pass `providers` plus per-provider account IDs (see the account ID table below). Every slot must be 24h–30d ahead. `idempotencyKey` is generated automatically; reuse it to retry without generating twice (`replayed: true`). Poll each slot's `taskId` with `get_video_task_progress`.
 - `get_video_status`: check generation status and get the final video URL.
-- `get_video_task_progress`: poll one video task for machine-readable progress: returns `{task_id, state, progress, stage, error}`. `error` is the engine failure reason when `state` is `-1` (failed), `null` otherwise. Use per-video (1/6, 2/6, ...) after `generate_persona_video_batch`; prefer this over `get_video_status` when only progress matters.
-- `list_persona_images`: list a persona's image library (id, tag, description, is_primary). Use the ids with `generate_video_from_persona` `imageId` to force a specific image for one video.
+- `get_video_task_progress`: poll one video task for machine-readable progress: returns `{task_id, state, progress, stage, error}`. `error` is the engine failure reason when `state` is `-1` (failed), `null` otherwise. Use per-video (1/6, 2/6, ...) after `generate_persona_videos`; prefer this over `get_video_status` when only progress matters.
+- `list_persona_images`: list a persona's image library (id, tag, description, is_primary). Use the ids with `generate_persona_videos` `options.imageId` to force a specific image for every video in one call.
 - `add_persona_image`: add an image to a persona image library from a local file path (JPG/JPEG, PNG, or WebP, max 9MB). Optional tag and description drive the deterministic per-video image selection.
 - `update_persona_image`: update a persona library image tag, description, or primary flag.
 - `remove_persona_image`: remove an image from a persona image library.
 - `list_social_accounts`: list connected social accounts with the account IDs needed for scheduling.
 - `connect_account`: connect a social account. For youtube/instagram/linkedin: returns an authorization URL — the user must open it in a browser and authorize, then the account connects automatically (verify with `list_social_accounts`). For bluesky: connects directly with handle + app password.
-- `schedule_video`: schedule automated posting (must be at least 24h in advance; each provider needs an account ID from `list_social_accounts`).
 - `list_schedules`: list automation schedules.
 - `list_posts`: list upcoming (scheduled) and past (published/failed) posts across all connected accounts.
 - `cancel_schedule`: cancel a schedule by its ID.
 
-### Social account IDs for `schedule_video`
+### Social account IDs for `generate_persona_videos`
 
 Each provider's `*AccountIds` field expects the provider's account identifier
 from `list_social_accounts` — **not** the `recordId` (that is the internal
 database row id and is rejected):
 
-| Provider | `schedule_video` field | Use this `list_social_accounts` field |
+| Provider | `generate_persona_videos` field | Use this `list_social_accounts` field |
 |---|---|---|
 | YouTube | `youtubeAccountIds` | `channelId` |
 | Instagram | `instagramAccountIds` | `igUserId` |

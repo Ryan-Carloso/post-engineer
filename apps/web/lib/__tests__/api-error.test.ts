@@ -157,7 +157,7 @@ describe('apiErrorResponse', () => {
 
   it('merges extra fields into the response body and the logged metadata', async () => {
     const res = apiErrorResponse(400, 'Insufficient tokens.', {
-      route: 'POST /api/schedule/batch',
+      route: 'POST /api/videos/generate-and-schedule',
       extra: { code: 'INSUFFICIENT', have: 10, need: 50 },
     });
 

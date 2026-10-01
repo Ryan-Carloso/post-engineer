@@ -438,13 +438,14 @@ describe('GET /api/persona/video-status/:taskId', () => {
     });
 
     it('never refunds engine-billed batch tasks: the engine owns that ledger', async () => {
-      // Billing ownership model: videos created through the batch endpoint
-      // (POST /api/persona/video-batch) are charged upfront by the ENGINE
+      // Billing ownership model (legacy): videos created through the removed
+      // batch endpoint (POST /api/persona/video-batch, deleted with the
+      // unified generate+schedule refactor) were charged upfront by the ENGINE
       // under `persona-batch:<id>:video:<n>` generation ids. The engine
       // never attaches engine_task_id to those charge rows, so this
       // proxy's token_transactions lookup finds nothing — and it must
       // stay that way: a web-side refund here would double-refund the
-      // engine's own failure refund (see _run_persona_batch_sequential).
+      // engine's own failure refund for those legacy batch tasks.
       mockTaskBody({
         status: 200,
         data: { task_id: 'task-1', state: -1, error: 'boom' },

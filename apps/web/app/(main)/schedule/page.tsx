@@ -1,29 +1,29 @@
 'use client';
 
 import { Suspense } from 'react';
-import BatchForm from './batch-form';
+import GenerateScheduleForm from './generate-schedule-form';
 
 //---------------
-// SchedulePage — manual video batches only (for now).
+// SchedulePage — the single generate+schedule experience.
 //
-// The recurring/one-off schedule form was removed: the engine no longer
-// does automatic scheduling. This page is just the batch flow — the user
-// requests N videos, pays upfront, and the engine generates + publishes
-// each one at its scheduled time.
+// Video generation and scheduling are one operation now
+// (POST /api/videos/generate-and-schedule): this page renders the unified
+// form. The Suspense boundary is required because the form reads the
+// ?personaId= search param (next/navigation's useSearchParams).
 //---------------
 
 export default function SchedulePage() {
   return (
     <Suspense fallback={<ScheduleSkeleton />}>
       <div className="mx-auto w-full max-w-3xl space-y-6">
-        <BatchForm />
+        <GenerateScheduleForm />
       </div>
     </Suspense>
   );
 }
 
 //---------------
-// ScheduleSkeleton — placeholder enquanto o formulário carrega.
+// ScheduleSkeleton — placeholder while the form loads.
 //---------------
 const ScheduleSkeleton = () => (
   <div className="mx-auto w-full max-w-3xl space-y-5" aria-hidden="true">

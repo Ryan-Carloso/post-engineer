@@ -81,7 +81,7 @@ class BatchScheduleTests(unittest.TestCase):
     """Manual video batches (kind='batch'): finite, user-requested, prepaid.
 
     plan() must skip batch schedules (their slots are pre-materialized by
-    POST /api/schedule/batch); generate() must always process their pending
+    POST /api/videos/generate-and-schedule); generate() must always process their pending
     slots using the stored topic — no LLM topic, no token spend.
     """
 

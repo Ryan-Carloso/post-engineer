@@ -38,8 +38,8 @@ def new_task_id(slot: dict[str, Any]) -> str:
 
 def is_oneoff_slot(slot: dict[str, Any]) -> bool:
     """One-off discriminator (no schema change): the joined schedule carries
-    ``scheduled_at``. Batch schedules (from POST /api/schedule/batch) leave
-    it NULL."""
+    ``scheduled_at``. Unified generate+schedule operations (from POST
+    /api/videos/generate-and-schedule) leave it NULL."""
     schedule = slot.get("schedules")
     return isinstance(schedule, dict) and schedule.get("scheduled_at") is not None
 
