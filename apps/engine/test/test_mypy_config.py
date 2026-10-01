@@ -109,22 +109,22 @@ class MypyConfigPinTests(unittest.TestCase):
 
     def test_ci_mypy_command_does_not_silence_imports(self):
         # The contract is enforced by the CI invocation itself — assert the
-        # command is EXACTLY the target list. Any added flag (e.g.
+        # command contains NO flags at all. Any added flag (e.g.
         # --ignore-missing-imports, --config-file ci-lenient.toml) then fails
         # the pin consciously instead of being enumerated case-by-case.
-        # Compare non-flag tokens directly (no .py-suffix reconstruction —
-        # a future directory target like "scripts" must not confuse this).
         args = _load_ci_mypy_command()
-        non_flag_args = [a for a in args if not a.startswith("-")]
-        targets = _load_ci_mypy_targets()
-        # Map targets back to CI tokens: module "cli" -> file "cli.py".
-        expected = [
-            f"{t}.py" if t in ("cli", "main") else t for t in targets
-        ]
+        self.assertFalse(
+            any(a.startswith("-") for a in args),
+            f"CI mypy step must not add flags (would silently weaken the gate): {args}",
+        )
+        # And the targets must match the derived first-party set (compare as
+        # module names: "cli.py" -> "cli", so a future file target like
+        # "scripts.py" round-trips without hardcoding).
+        arg_modules = tuple(a[:-3] if a.endswith(".py") else a for a in args)
         self.assertEqual(
-            non_flag_args,
-            expected,
-            f"CI mypy step must be exactly the target list (no extra flags): {args}",
+            arg_modules,
+            _load_ci_mypy_targets(),
+            f"CI mypy targets must match first-party set: {args}",
         )
 
     def test_smoke_test_covers_mypy_targets(self):
