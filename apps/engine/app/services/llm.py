@@ -168,7 +168,7 @@ LLM_CLIENT_MAX_RETRIES = 1
 def _generate_response(prompt: str) -> str:
     # Compatibility wrapper: converts failures into the "Error: ..." string
     # expected by legacy callers (WebUI, tests, and internal services).
-    llm_provider = str(config.app.get("llm_provider", "openai"))
+    llm_provider = str(config.app.get("llm_provider", "omniroute"))
     try:
         return _generate_response_inner(prompt, llm_provider)
     except Exception as e:
@@ -350,10 +350,9 @@ def _generate_response_inner(prompt: str, llm_provider: str) -> str:
                 if not model_name:
                     model_name = "doubao-seed-2-1-turbo-260628"
             elif llm_provider == "zai":
-                # Z.ai (Zhipu GLM) exposes an OpenAI-compatible endpoint and is
-                # used as the fallback provider when the primary fails. The
-                # default model glm-5.3-flash costs flash-tier pricing, which
-                # keeps the fallback cheap even during error bursts.
+                # Z.ai (Zhipu GLM) exposes an OpenAI-compatible endpoint.
+                # (OpenRouter is the automatic fallback; zai remains
+                # selectable as a primary provider.)
                 api_key = config.app.get("zai_api_key")
                 model_name = config.app.get("zai_model_name")
                 base_url = config.app.get("zai_base_url")
@@ -361,6 +360,19 @@ def _generate_response_inner(prompt: str, llm_provider: str) -> str:
                     base_url = "https://api.z.ai/api/paas/v4"
                 if not model_name:
                     model_name = "glm-5.3-flash"
+            elif llm_provider == "openrouter":
+                # OpenRouter (https://openrouter.ai) — unified gateway over
+                # 300+ models behind one OpenAI-compatible endpoint. Used as
+                # the automatic fallback when the primary provider fails.
+                # Attribution headers (HTTP-Referer / X-Title) are optional
+                # and only identify the app in the OpenRouter dashboard.
+                api_key = config.app.get("openrouter_api_key")
+                model_name = config.app.get("openrouter_model_name")
+                base_url = config.app.get("openrouter_base_url", "")
+                if not base_url:
+                    base_url = "https://openrouter.ai/api/v1"
+                if not model_name:
+                    model_name = "openai/gpt-4o-mini"
             elif llm_provider == "modelscope":
                 api_key = config.app.get("modelscope_api_key")
                 model_name = config.app.get("modelscope_model_name")
@@ -646,6 +658,38 @@ def _generate_response_inner(prompt: str, llm_provider: str) -> str:
                 else:
                     raise Exception(f"[{llm_provider}] returned an empty response")
 
+            elif llm_provider == "openrouter":
+                # OpenRouter attribution headers are optional and only
+                # identify the app in the OpenRouter dashboard; without
+                # them the call is a plain OpenAI-compatible request.
+                attribution_headers: dict[str, str] = {}
+                site_url = config.app.get("openrouter_site_url", "")
+                if site_url:
+                    attribution_headers["HTTP-Referer"] = str(site_url)
+                app_name = config.app.get("openrouter_app_name", "")
+                if app_name:
+                    attribution_headers["X-Title"] = str(app_name)
+                client = OpenAI(
+                    api_key=api_key,
+                    base_url=base_url,
+                    timeout=LLM_CLIENT_TIMEOUT_SECONDS,
+                    max_retries=LLM_CLIENT_MAX_RETRIES,
+                    default_headers=attribution_headers or None,
+                )
+                response = client.chat.completions.create(
+                    model=model_name, messages=[{"role": "user", "content": prompt}]
+                )
+                if response:
+                    if isinstance(response, ChatCompletion):
+                        return _extract_chat_completion_text(response, llm_provider)
+                    else:
+                        raise Exception(
+                            f'[{llm_provider}] returned an invalid response: "{response}", please check your network '
+                            f"connection and try again."
+                        )
+                else:
+                    raise Exception(f"[{llm_provider}] returned an empty response")
+
             else:
                 client = OpenAI(
                     api_key=api_key,
@@ -676,36 +720,37 @@ def _generate_response_inner(prompt: str, llm_provider: str) -> str:
 
 
 def _generate_response_with_fallback(prompt: str) -> str:
-    # The Z.ai fallback covers ANY primary-provider failure (invalid-key
-    # 401/403, missing model, gateway down, rate limit, timeout...). The only
-    # exception is Z.ai already being the primary provider — repeating the
-    # same call wouldn't fix the error and would just double cost and latency.
+    # The OpenRouter fallback covers ANY primary-provider failure
+    # (invalid-key 401/403, insufficient balance, missing model, gateway
+    # down, rate limit, timeout...). The only exception is OpenRouter
+    # already being the primary provider — repeating the same call
+    # wouldn't fix the error and would just double cost and latency.
     #
     # The provider is passed as an explicit argument on every call: mutating
     # config.app["llm_provider"] here would race between concurrent requests
-    # (a parallel request would read "zai" as primary and lose its own
+    # (a parallel request would read "openrouter" as primary and lose its own
     # fallback).
-    primary_provider = str(config.app.get("llm_provider", "openai"))
+    primary_provider = str(config.app.get("llm_provider", "omniroute"))
     try:
         return _generate_response_inner(prompt, primary_provider)
     except Exception as primary_error:
         primary_message = _sanitize_error_message(primary_error)
 
-        if primary_provider == "zai":
+        if primary_provider == "openrouter":
             return f"Error: {primary_message}"
 
-        zai_key = config.app.get("zai_api_key", "")
-        if not zai_key:
+        openrouter_key = config.app.get("openrouter_api_key", "")
+        if not openrouter_key:
             return f"Error: {primary_message}"
 
         logger.warning(
             f"primary llm provider '{primary_provider}' failed, "
-            f"falling back to zai: {primary_message}"
+            f"falling back to openrouter: {primary_message}"
         )
         try:
-            return _generate_response_inner(prompt, "zai")
-        except Exception as zai_error:
-            return f"Error: {_sanitize_error_message(zai_error)}"
+            return _generate_response_inner(prompt, "openrouter")
+        except Exception as openrouter_error:
+            return f"Error: {_sanitize_error_message(openrouter_error)}"
 
 
 def _limit_script_text(text: str | None, max_length: int, field_name: str) -> str:

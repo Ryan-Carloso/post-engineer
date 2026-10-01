@@ -123,7 +123,8 @@ twelvelabs_rerank_terms = false
 #   modelscope  (魔搭社区)
 #   litellm     (100+ providers via LiteLLM gateway)
 #   omniroute   (local OpenAI-compatible AI gateway, https://github.com/diegosouzapw/OmniRoute)
-llm_provider = "openai"
+#   openrouter  (unified gateway, https://openrouter.ai — automatic fallback)
+llm_provider = "omniroute"
 
 ########## Pollinations AI Settings
 # Visit https://pollinations.ai/ to learn more
@@ -284,12 +285,22 @@ mimo_tts_style_prompt = "请用自然、清晰、适合短视频旁白的语气�
 
 ########## Z.ai (Zhipu GLM) API Key
 # Visit https://z.ai/manage-apikey/apikey-list to get your API key.
-# OpenAI-compatible endpoint (https://docs.z.ai). Used as the fallback
-# provider when the primary LLM provider fails; glm-5.3-flash is the
-# low-cost flash tier.
+# OpenAI-compatible endpoint (https://docs.z.ai).
 zai_api_key = ""
 zai_base_url = "https://api.z.ai/api/paas/v4"
 zai_model_name = "glm-5.3-flash"
+
+
+########## OpenRouter API Key
+# Visit https://openrouter.ai/keys to get your API key.
+# Unified gateway over 300+ models (https://openrouter.ai). Used as the
+# automatic fallback when the primary LLM provider fails.
+openrouter_api_key = ""
+openrouter_base_url = "https://openrouter.ai/api/v1"
+openrouter_model_name = "openai/gpt-4o-mini"
+# Optional attribution headers shown in the OpenRouter dashboard.
+openrouter_site_url = ""
+openrouter_app_name = "Post Engineer"
 
 
 ########## ModelScope API Key

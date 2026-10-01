@@ -925,10 +925,9 @@ class TestLiteLLMProvider(unittest.TestCase):
 
     def test_zai_provider_uses_openai_compatible_client(self):
         """
-        Z.ai (Zhipu GLM) is the fallback provider and exposes an
-        OpenAI-compatible endpoint. Without base_url/model configured, it
-        must use the defaults (api.z.ai + glm-5.3-flash) and the config.toml
-        key.
+        Z.ai (Zhipu GLM) exposes an OpenAI-compatible endpoint. Without
+        base_url/model configured, it must use the defaults (api.z.ai +
+        glm-5.3-flash) and the config.toml key.
         """
         config.app["llm_provider"] = "zai"
         config.app["zai_api_key"] = "zai-key"
@@ -968,26 +967,118 @@ class TestLiteLLMProvider(unittest.TestCase):
         )
         self.assertEqual(result, "hello zai")
 
-    def test_fallback_to_zai_triggers_on_any_error(self):
+    def _run_openrouter(self):
+        """Run one openrouter generation against a fake OpenAI client."""
+
+        class FakeCompletions:
+            def create(self, **kwargs):
+                self.kwargs = kwargs
+                message = types.SimpleNamespace(content="hello\nopenrouter")
+                choice = types.SimpleNamespace(message=message)
+                return types.SimpleNamespace(choices=[choice])
+
+        fake_completions = FakeCompletions()
+        fake_client = types.SimpleNamespace(
+            chat=types.SimpleNamespace(completions=fake_completions)
+        )
+        with (
+            patch.object(llm, "OpenAI", return_value=fake_client) as openai_client,
+            patch.object(llm, "ChatCompletion", types.SimpleNamespace),
+        ):
+            result = llm._generate_response("Say hello")
+        return result, openai_client, fake_completions
+
+    def test_openrouter_provider_uses_defaults(self):
         """
-        The Z.ai fallback must cover any primary-provider failure —
+        OpenRouter without explicit base_url/model must use the public
+        endpoint default, the default model, and the config.toml key.
+        """
+        config.app["llm_provider"] = "openrouter"
+        config.app["openrouter_api_key"] = "or-key"
+        config.app["openrouter_base_url"] = ""
+        config.app["openrouter_model_name"] = ""
+        config.app["openrouter_site_url"] = ""
+        config.app["openrouter_app_name"] = ""
+
+        result, openai_client, fake_completions = self._run_openrouter()
+
+        openai_client.assert_called_once_with(
+            api_key="or-key",
+            base_url="https://openrouter.ai/api/v1",
+            timeout=llm.LLM_CLIENT_TIMEOUT_SECONDS,
+            max_retries=llm.LLM_CLIENT_MAX_RETRIES,
+            default_headers=None,
+        )
+        self.assertEqual(
+            fake_completions.kwargs,
+            {
+                "model": "openai/gpt-4o-mini",
+                "messages": [{"role": "user", "content": "Say hello"}],
+            },
+        )
+        self.assertEqual(result, "hello openrouter")
+
+    def test_openrouter_provider_sends_attribution_headers(self):
+        """
+        OpenRouter attribution headers (HTTP-Referer / X-Title) are only
+        sent when configured — they identify the app in the dashboard.
+        """
+        config.app["llm_provider"] = "openrouter"
+        config.app["openrouter_api_key"] = "or-key"
+        config.app["openrouter_base_url"] = ""
+        config.app["openrouter_model_name"] = "openai/gpt-4o"
+        config.app["openrouter_site_url"] = "https://post-engineer.com"
+        config.app["openrouter_app_name"] = "Post Engineer"
+
+        _, openai_client, _ = self._run_openrouter()
+
+        openai_client.assert_called_once_with(
+            api_key="or-key",
+            base_url="https://openrouter.ai/api/v1",
+            timeout=llm.LLM_CLIENT_TIMEOUT_SECONDS,
+            max_retries=llm.LLM_CLIENT_MAX_RETRIES,
+            default_headers={
+                "HTTP-Referer": "https://post-engineer.com",
+                "X-Title": "Post Engineer",
+            },
+        )
+
+    def test_default_provider_is_omniroute(self):
+        """
+        Without an explicit llm_provider, the engine defaults to the local
+        OmniRoute gateway (the primary), not OpenAI.
+        """
+        config.app.pop("llm_provider", None)
+        config.app["openrouter_api_key"] = "or-key"
+
+        with patch.object(
+            llm, "_generate_response_inner", return_value="ok"
+        ) as generate:
+            result = llm._generate_response_with_fallback("test")
+
+        generate.assert_called_once_with("test", "omniroute")
+        self.assertEqual(result, "ok")
+
+    def test_fallback_to_openrouter_triggers_on_any_error(self):
+        """
+        The OpenRouter fallback must cover any primary-provider failure —
         including non-retryable errors like a 401 from an invalid key. The
         provider is passed as an explicit argument on every call.
         """
         config.app["llm_provider"] = "omniroute"
-        config.app["zai_api_key"] = "zai-key"
+        config.app["openrouter_api_key"] = "or-key"
 
         with patch.object(
             llm,
             "_generate_response_inner",
-            side_effect=[Exception("401 invalid api key"), "script from zai"],
+            side_effect=[Exception("401 invalid api key"), "script from openrouter"],
         ) as generate:
             result = llm._generate_response_with_fallback("test")
 
-        self.assertEqual(result, "script from zai")
+        self.assertEqual(result, "script from openrouter")
         self.assertEqual(generate.call_count, 2)
         generate.assert_any_call("test", "omniroute")
-        generate.assert_any_call("test", "zai")
+        generate.assert_any_call("test", "openrouter")
         self.assertEqual(config.app["llm_provider"], "omniroute")
 
     def test_fallback_does_not_mutate_global_provider_config(self):
@@ -995,10 +1086,10 @@ class TestLiteLLMProvider(unittest.TestCase):
         Race-condition regression: concurrent requests share config.app.
         The fallback must pass the provider as an argument instead of
         mutating global state — mutating would make a parallel request read
-        "zai" as the primary provider and lose its own fallback.
+        "openrouter" as the primary provider and lose its own fallback.
         """
         config.app["llm_provider"] = "omniroute"
-        config.app["zai_api_key"] = "zai-key"
+        config.app["openrouter_api_key"] = "or-key"
 
         with patch.object(
             llm,
@@ -1010,7 +1101,7 @@ class TestLiteLLMProvider(unittest.TestCase):
         self.assertEqual(result, "recovered")
         self.assertEqual(
             generate.call_args_list,
-            [call("test", "omniroute"), call("test", "zai")],
+            [call("test", "omniroute"), call("test", "openrouter")],
         )
         self.assertEqual(config.app["llm_provider"], "omniroute")
 
@@ -1021,7 +1112,7 @@ class TestLiteLLMProvider(unittest.TestCase):
         be replaced by another generation.
         """
         config.app["llm_provider"] = "omniroute"
-        config.app["zai_api_key"] = "zai-key"
+        config.app["openrouter_api_key"] = "or-key"
 
         with patch.object(
             llm,
@@ -1034,14 +1125,14 @@ class TestLiteLLMProvider(unittest.TestCase):
         self.assertEqual(generate.call_count, 1)
         self.assertEqual(config.app["llm_provider"], "omniroute")
 
-    def test_fallback_skipped_when_primary_provider_is_zai(self):
+    def test_fallback_skipped_when_primary_provider_is_openrouter(self):
         """
-        If Z.ai is already the primary provider, repeating the same call
+        If OpenRouter is already the primary provider, repeating the same call
         on the fallback wouldn't fix the error — it would only double cost
         and latency.
         """
-        config.app["llm_provider"] = "zai"
-        config.app["zai_api_key"] = "zai-key"
+        config.app["llm_provider"] = "openrouter"
+        config.app["openrouter_api_key"] = "or-key"
 
         with patch.object(
             llm,
@@ -1052,12 +1143,12 @@ class TestLiteLLMProvider(unittest.TestCase):
 
         self.assertEqual(result, "Error: connection refused")
         self.assertEqual(generate.call_count, 1)
-        generate.assert_called_once_with("test", "zai")
-        self.assertEqual(config.app["llm_provider"], "zai")
+        generate.assert_called_once_with("test", "openrouter")
+        self.assertEqual(config.app["llm_provider"], "openrouter")
 
-    def test_fallback_skipped_without_zai_api_key(self):
+    def test_fallback_skipped_without_openrouter_api_key(self):
         config.app["llm_provider"] = "omniroute"
-        config.app["zai_api_key"] = ""
+        config.app["openrouter_api_key"] = ""
 
         with patch.object(
             llm,
@@ -1071,22 +1162,22 @@ class TestLiteLLMProvider(unittest.TestCase):
         generate.assert_called_once_with("test", "omniroute")
         self.assertEqual(config.app["llm_provider"], "omniroute")
 
-    def test_fallback_returns_zai_error_when_both_fail(self):
+    def test_fallback_returns_openrouter_error_when_both_fail(self):
         """
-        If Z.ai (the fallback) fails too, its error is returned — no
+        If OpenRouter (the fallback) fails too, its error is returned — no
         loop, and no masking that the whole call failed.
         """
         config.app["llm_provider"] = "omniroute"
-        config.app["zai_api_key"] = "zai-key"
+        config.app["openrouter_api_key"] = "or-key"
 
         with patch.object(
             llm,
             "_generate_response_inner",
-            side_effect=[Exception("primary down"), Exception("zai down")],
+            side_effect=[Exception("primary down"), Exception("openrouter down")],
         ) as generate:
             result = llm._generate_response_with_fallback("test")
 
-        self.assertEqual(result, "Error: zai down")
+        self.assertEqual(result, "Error: openrouter down")
         self.assertEqual(generate.call_count, 2)
         self.assertEqual(config.app["llm_provider"], "omniroute")
 
