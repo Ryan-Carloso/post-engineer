@@ -141,7 +141,7 @@ class TestScriptPromptOptions(unittest.TestCase):
 
         def fake_generate_response(prompt, llm_provider):
             captured["prompt"] = prompt
-            return "第一段。\n\n第二段。"
+            return "第一段。\n\n第二段。", {}
 
         with patch.object(llm, "_generate_response_inner", side_effect=fake_generate_response):
             result = llm.generate_script(
@@ -167,7 +167,7 @@ class TestScriptPromptOptions(unittest.TestCase):
 
         def fake_generate_response(prompt, llm_provider):
             captured["prompt"] = prompt
-            return '["opening city", "middle office", "final sunset"]'
+            return '["opening city", "middle office", "final sunset"]', {}
 
         with patch.object(llm, "_generate_response_inner", side_effect=fake_generate_response):
             result = llm.generate_terms(
@@ -1053,7 +1053,7 @@ class TestLiteLLMProvider(unittest.TestCase):
         config.app["openrouter_api_key"] = "or-key"
 
         with patch.object(
-            llm, "_generate_response_inner", return_value="ok"
+            llm, "_generate_response_inner", return_value=("ok", {})
         ) as generate:
             result = llm._generate_response_with_fallback("test")
 
@@ -1069,7 +1069,7 @@ class TestLiteLLMProvider(unittest.TestCase):
         config.app.pop("llm_provider", None)
 
         with patch.object(
-            llm, "_generate_response_inner", return_value="ok"
+            llm, "_generate_response_inner", return_value=("ok", {})
         ) as generate:
             result = llm._generate_response("test")
 
@@ -1088,7 +1088,7 @@ class TestLiteLLMProvider(unittest.TestCase):
         with patch.object(
             llm,
             "_generate_response_inner",
-            side_effect=[Exception("401 invalid api key"), "script from openrouter"],
+            side_effect=[Exception("401 invalid api key"), ("script from openrouter", {})],
         ) as generate:
             result = llm._generate_response_with_fallback("test")
 
@@ -1111,7 +1111,7 @@ class TestLiteLLMProvider(unittest.TestCase):
         with patch.object(
             llm,
             "_generate_response_inner",
-            side_effect=[Exception("boom"), "recovered"],
+            side_effect=[Exception("boom"), ("recovered", {})],
         ) as generate:
             result = llm._generate_response_with_fallback("test")
 
@@ -1134,7 +1134,7 @@ class TestLiteLLMProvider(unittest.TestCase):
         with patch.object(
             llm,
             "_generate_response_inner",
-            return_value="Error: this is a legit model answer",
+            return_value=("Error: this is a legit model answer", {}),
         ) as generate:
             result = llm._generate_response_with_fallback("test")
 
@@ -1223,7 +1223,7 @@ class TestAIRequestTracking(unittest.TestCase):
         config.app["openrouter_api_key"] = "or-key"
 
         with patch.object(
-            llm, "_generate_response_inner", return_value="hello script"
+            llm, "_generate_response_inner", return_value=("hello script", {})
         ):
             result, props = self._tracked(llm._generate_response_with_fallback, "hi")
 
@@ -1238,6 +1238,11 @@ class TestAIRequestTracking(unittest.TestCase):
         self.assertGreaterEqual(props["duration_ms"], 0)
         self.assertEqual(props["response_chars"], len("hello script"))
         self.assertEqual(props["response_preview"], "hello script")
+        # No usage reported: tokens default to 0, cost stays unknown.
+        self.assertEqual(props["prompt_tokens"], 0)
+        self.assertEqual(props["completion_tokens"], 0)
+        self.assertEqual(props["total_tokens"], 0)
+        self.assertIsNone(props["cost_usd"])
 
     def test_fallback_path_tracks_fallback_usage(self):
         """
@@ -1252,7 +1257,18 @@ class TestAIRequestTracking(unittest.TestCase):
         with patch.object(
             llm,
             "_generate_response_inner",
-            side_effect=[Exception("primary down"), "recovered script"],
+            side_effect=[
+                Exception("primary down"),
+                (
+                    "recovered script",
+                    {
+                        "prompt_tokens": 18,
+                        "completion_tokens": 114,
+                        "total_tokens": 132,
+                        "cost_usd": 0.0000597,
+                    },
+                ),
+            ],
         ):
             result, props = self._tracked(llm._generate_response_with_fallback, "hi")
 
@@ -1263,6 +1279,10 @@ class TestAIRequestTracking(unittest.TestCase):
         self.assertEqual(props["primary_provider"], "omniroute")
         self.assertTrue(props["success"])
         self.assertEqual(props["error"], "")
+        self.assertEqual(props["prompt_tokens"], 18)
+        self.assertEqual(props["completion_tokens"], 114)
+        self.assertEqual(props["total_tokens"], 132)
+        self.assertAlmostEqual(props["cost_usd"], 0.0000597)
 
     def test_fallback_path_tracks_terminal_failure(self):
         """
@@ -1295,7 +1315,7 @@ class TestAIRequestTracking(unittest.TestCase):
         config.app["llm_provider"] = "zai"
         config.app["zai_model_name"] = "glm-5.3-flash"
 
-        with patch.object(llm, "_generate_response_inner", return_value="legacy ok"):
+        with patch.object(llm, "_generate_response_inner", return_value=("legacy ok", {})):
             result, props = self._tracked(llm._generate_response, "hi")
         self.assertEqual(result, "legacy ok")
         self.assertEqual(props["backend"], "llm")
@@ -1334,11 +1354,67 @@ class TestAIRequestTracking(unittest.TestCase):
         config.app["openrouter_api_key"] = "or-key"
         long_text = "x" * 2000
 
-        with patch.object(llm, "_generate_response_inner", return_value=long_text):
+        with patch.object(llm, "_generate_response_inner", return_value=(long_text, {})):
             _, props = self._tracked(llm._generate_response_with_fallback, "hi")
 
         self.assertEqual(props["response_chars"], 2000)
         self.assertEqual(len(props["response_preview"]), 500)
+
+
+class TestExtractUsage(unittest.TestCase):
+    def test_openrouter_style_usage_with_cost(self):
+        """OpenRouter reports cost directly on usage — it becomes cost_usd."""
+
+        class FakeUsage:
+            prompt_tokens = 18
+            completion_tokens = 114
+            total_tokens = 132
+            cost = 0.0000597
+
+        class FakeResponse:
+            usage = FakeUsage()
+
+        usage = llm._extract_usage(FakeResponse())
+        self.assertEqual(usage["prompt_tokens"], 18)
+        self.assertEqual(usage["completion_tokens"], 114)
+        self.assertEqual(usage["total_tokens"], 132)
+        self.assertAlmostEqual(usage["cost_usd"], 0.0000597)
+
+    def test_plain_openai_style_usage_has_no_cost(self):
+        """Providers without cost still report token counts."""
+
+        class FakeUsage:
+            prompt_tokens = 5
+            completion_tokens = 7
+            total_tokens = 12
+
+        class FakeResponse:
+            usage = FakeUsage()
+
+        usage = llm._extract_usage(FakeResponse())
+        self.assertEqual(usage["total_tokens"], 12)
+        self.assertNotIn("cost_usd", usage)
+
+    def test_missing_usage_returns_empty(self):
+        self.assertEqual(llm._extract_usage(object()), {})
+
+    def test_non_int_token_values_are_ignored(self):
+        """Malformed usage values never reach the event as wrong types."""
+
+        class FakeUsage:
+            prompt_tokens = "18"
+            completion_tokens = None
+            total_tokens = 132
+            cost = "free"
+
+        class FakeResponse:
+            usage = FakeUsage()
+
+        usage = llm._extract_usage(FakeResponse())
+        self.assertNotIn("prompt_tokens", usage)
+        self.assertNotIn("completion_tokens", usage)
+        self.assertEqual(usage["total_tokens"], 132)
+        self.assertNotIn("cost_usd", usage)
 
 
 class TestRuntimeEnvironmentDetection(unittest.TestCase):
@@ -1483,7 +1559,7 @@ class TestSocialMetadata(unittest.TestCase):
             '{"title":"上海一日游","caption":"收藏这条路线，下次直接出发！",'
             '"hashtags":["#上海","#旅行","#shorts"]}'
         )
-        with patch.object(llm, "_generate_response_inner", return_value=payload):
+        with patch.object(llm, "_generate_response_inner", return_value=(payload, {})):
             result = llm.generate_social_metadata(
                 video_subject="上海一日游",
                 video_script="今天带你快速看完上海经典路线。",
@@ -1632,7 +1708,7 @@ class TestCloudflareResultLogging(unittest.TestCase):
             patch.object(llm.requests, "post", return_value=fake_response),
             patch.object(llm, "logger") as mock_logger,
         ):
-            text = llm._generate_response_inner("Say hello", "cloudflare")
+            text, _ = llm._generate_response_inner("Say hello", "cloudflare")
 
         self.assertEqual(text, "hello")
         logged = " ".join(
