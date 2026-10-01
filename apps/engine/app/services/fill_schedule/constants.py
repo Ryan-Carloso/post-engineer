@@ -11,5 +11,6 @@ SLOT_PUBLISHING = "publishing"
 SLOT_PUBLISHED = "published"
 SLOT_FAILED = "failed"
 
-# Manual video batches (POST /api/schedule/batch): finite, user-requested,
-# prepaid at request time. Their slots carry the topic chosen by the user.
+# Unified generate+schedule batches (POST /api/videos/generate-and-schedule):
+# finite, user-requested, prepaid at request time. Their slots carry the
+# topic chosen by the user.
