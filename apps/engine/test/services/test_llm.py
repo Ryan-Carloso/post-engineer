@@ -991,7 +991,8 @@ class TestLiteLLMProvider(unittest.TestCase):
     def test_openrouter_provider_uses_defaults(self):
         """
         OpenRouter without explicit base_url/model must use the public
-        endpoint default, the default model, and the config.toml key.
+        endpoint default, the Auto Router model default, and the
+        config.toml key.
         """
         config.app["llm_provider"] = "openrouter"
         config.app["openrouter_api_key"] = "or-key"
@@ -1012,7 +1013,7 @@ class TestLiteLLMProvider(unittest.TestCase):
         self.assertEqual(
             fake_completions.kwargs,
             {
-                "model": "openai/gpt-4o-mini",
+                "model": "openrouter/auto",
                 "messages": [{"role": "user", "content": "Say hello"}],
             },
         )

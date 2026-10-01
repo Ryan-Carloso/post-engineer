@@ -294,10 +294,12 @@ zai_model_name = "glm-5.3-flash"
 ########## OpenRouter API Key
 # Visit https://openrouter.ai/keys to get your API key.
 # Unified gateway over 300+ models (https://openrouter.ai). Used as the
-# automatic fallback when the primary LLM provider fails.
+# automatic fallback when the primary LLM provider fails. The default model
+# is the Auto Router (openrouter/auto): OpenRouter picks the model
+# server-side per request.
 openrouter_api_key = ""
 openrouter_base_url = "https://openrouter.ai/api/v1"
-openrouter_model_name = "openai/gpt-4o-mini"
+openrouter_model_name = "openrouter/auto"
 # Optional attribution headers shown in the OpenRouter dashboard.
 openrouter_site_url = ""
 openrouter_app_name = "Post Engineer"

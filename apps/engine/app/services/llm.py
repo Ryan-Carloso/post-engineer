@@ -366,13 +366,16 @@ def _generate_response_inner(prompt: str, llm_provider: str) -> str:
                 # the automatic fallback when the primary provider fails.
                 # Attribution headers (HTTP-Referer / X-Title) are optional
                 # and only identify the app in the OpenRouter dashboard.
+                # The default model is the Auto Router: OpenRouter picks the
+                # model server-side per request, so no code change is needed
+                # when models are deprecated.
                 api_key = config.app.get("openrouter_api_key")
                 model_name = config.app.get("openrouter_model_name")
                 base_url = config.app.get("openrouter_base_url", "")
                 if not base_url:
                     base_url = "https://openrouter.ai/api/v1"
                 if not model_name:
-                    model_name = "openai/gpt-4o-mini"
+                    model_name = "openrouter/auto"
             elif llm_provider == "modelscope":
                 api_key = config.app.get("modelscope_api_key")
                 model_name = config.app.get("modelscope_model_name")
