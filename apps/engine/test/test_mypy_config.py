@@ -52,6 +52,10 @@ def _load_ci_smoke_test_imports() -> set:
 
     Parses the `run: uv run python -c "import ..."` line and returns the
     top-level module names (e.g. {"cli", "main", "app"}).
+
+    Constraint: the CI payload must not contain escaped double quotes —
+    the parser splits on the first/last quote character. Keep the
+    one-liner simple (no print() with quotes) or update this parser.
     """
     ci_yml = _ci_yml_path()
     for line in ci_yml.read_text().splitlines():
@@ -108,12 +112,17 @@ class MypyConfigPinTests(unittest.TestCase):
         # command is EXACTLY the target list. Any added flag (e.g.
         # --ignore-missing-imports, --config-file ci-lenient.toml) then fails
         # the pin consciously instead of being enumerated case-by-case.
+        # Compare non-flag tokens directly (no .py-suffix reconstruction —
+        # a future directory target like "scripts" must not confuse this).
         args = _load_ci_mypy_command()
+        non_flag_args = [a for a in args if not a.startswith("-")]
         targets = _load_ci_mypy_targets()
-        # Reconstruct the expected command from targets: "cli" -> "cli.py".
-        expected = [f"{t}.py" if t != "app" else t for t in targets]
+        # Map targets back to CI tokens: module "cli" -> file "cli.py".
+        expected = [
+            f"{t}.py" if t in ("cli", "main") else t for t in targets
+        ]
         self.assertEqual(
-            args,
+            non_flag_args,
             expected,
             f"CI mypy step must be exactly the target list (no extra flags): {args}",
         )
