@@ -1346,3 +1346,24 @@ Follow these so the same issues don't come back:
   global opt-out: any future caller reusing an exempt name for a secret
   value bypasses redaction. Only honor the exemption for non-bool ints —
   a secret is never an int.
+## Build learnings (2026-10-01)
+- **A dynamic `import()` does NOT keep a Node-only package out of the client
+  bundle.** Webpack statically analyzes `import('posthog-node')`, resolves it
+  at build time, and bundles the SDK into the client chunk. posthog-node
+  ships no browser export condition (only node/edge/workerd), so the client
+  build died on `node:fs` / `node:os` / `node:path` (UnhandledSchemeError)
+  via the chain `billing/page.tsx → token-balance.ts → logger.ts →
+  posthog-server.ts`. Mark the import `/* webpackIgnore: true */` so webpack
+  emits it untouched: Node resolves it natively at runtime on the server,
+  and the browser never reaches it (the `typeof window` guard returns null
+  first). Pinned by `posthog-server.node.test.ts` ("marks the posthog-node
+  dynamic import with webpackIgnore: true"). Same bug class as the earlier
+  `node:crypto`-in-the-browser-bundle incident — a client-reachable module
+  must never give webpack a statically resolvable path to a Node-only
+  package.
+- **CI never runs `next build` for web — only Vercel does.** Webpack
+  client-bundle breakage slips through a green CI; treat the Vercel preview
+  build as the web build gate, and reproduce locally with
+  `npx nx build web --skip-nx-cache` (local env needs the build-time
+  `NEXT_PUBLIC_*` vars; a dummy `.env` suffices for verification — never
+  commit it).
