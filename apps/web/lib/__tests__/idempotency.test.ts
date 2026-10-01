@@ -36,7 +36,8 @@ describe('resolveIdempotency', () => {
     expect(resolved.clientSupplied).toBe(true);
     expect(resolved.key).toBe('key-1');
     expect(resolved.scheduleId).toBe(deterministicUuid(IDEMPOTENCY_NAMESPACE, 'user-1:key-1'));
-    expect(resolved.generationId).toBe(`unified:${resolved.scheduleId}`);
+    // batch: prefix = the engine reconciler's prepaid-batch convention.
+    expect(resolved.generationId).toBe(`batch:${resolved.scheduleId}`);
   });
 
   it('falls back to the Idempotency-Key header', () => {

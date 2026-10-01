@@ -65,6 +65,11 @@ export function resolveIdempotency(
     key,
     clientSupplied: raw !== null,
     scheduleId,
-    generationId: `unified:${scheduleId}`,
+    // `batch:` is the engine-side convention for prepaid batches: the
+    // fill_schedule reconciler refunds failed slots under
+    // `batch:{scheduleId}` and per-slot keys `{generationId}:slot:{slotId}`.
+    // Using the same id here means the engine's refund path works for our
+    // web-dispatched slots with zero engine changes.
+    generationId: `batch:${scheduleId}`,
   };
 }

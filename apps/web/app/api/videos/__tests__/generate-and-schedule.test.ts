@@ -563,7 +563,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(refunds).toHaveLength(1);
       const args = refunds[0].args;
       expect(args.p_amount).toBe(2);
-      expect(args.p_refund_key).toMatch(/^unified:.*:slot:slot-0$/);
+      expect(args.p_refund_key).toMatch(/^batch:.*:slot:slot-0$/);
       expect(String(args.p_batch_generation_id)).toBe(String(args.p_refund_key).split(':slot:')[0]);
 
       const failedUpdates = updates.filter((u) => u.table === 'scheduled_posts' && u.fields.status === 'failed');
