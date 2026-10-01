@@ -27,6 +27,9 @@ const ENGINE_LOOKUP_TIMEOUT_MS = 8000;
 // request open for minutes. counts.generatedVideos still reports the full
 // total; videos carries download links for the first N.
 const PREVIEW_VIDEO_CAP = 20;
+// Aggregate budget for the engine lookups: a slow-but-alive engine would
+// otherwise burn the full per-call timeout on every video (20 x 8s).
+const PREVIEW_LOOKUP_BUDGET_MS = 15_000;
 
 interface GenerationRow {
   id: string;
@@ -134,7 +137,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       .select('id, engine_task_id, video_subject, status')
       .eq('persona_id', personaId)
       .eq('user_id', auth.userId),
-    supabase.from('persona_images').select('id').eq('persona_id', personaId),
+    supabase.from('persona_images').select('id').eq('persona_id', personaId).eq('user_id', auth.userId),
   ]);
   if (schedulesRes.error || generationsRes.error || imagesRes.error) {
     logger.error('[api/persona/delete-preview] count lookup failed', {
@@ -177,6 +180,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   // at PREVIEW_VIDEO_CAP so a huge library cannot hold the request open
   // for minutes on serverless.
   const baseUrl = process.env.MONEYPRINT_API_URL;
+  const lookupStart = Date.now();
   const videos: Array<{
     taskId: string | null;
     topic: string | null;
@@ -185,7 +189,12 @@ export async function GET(request: Request): Promise<NextResponse> {
   }> = [];
   for (const gen of generations.slice(0, PREVIEW_VIDEO_CAP)) {
     let downloadUrl: string | null = null;
-    if (gen.status === 'completed' && gen.engine_task_id && baseUrl) {
+    if (
+      gen.status === 'completed' &&
+      gen.engine_task_id &&
+      baseUrl &&
+      Date.now() - lookupStart < PREVIEW_LOOKUP_BUDGET_MS
+    ) {
       downloadUrl = await resolveDownloadUrl(gen.engine_task_id, auth.userId, baseUrl);
     }
     videos.push({
@@ -209,5 +218,6 @@ export async function GET(request: Request): Promise<NextResponse> {
       personaImages: imagesRes.data?.length ?? 0,
     },
     videos,
+    videosTruncated: generations.length > videos.length,
   });
 }

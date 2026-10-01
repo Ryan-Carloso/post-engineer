@@ -213,6 +213,7 @@ export interface DeletePreview {
     personaImages: number;
   };
   videos?: DeletePreviewVideo[];
+  videosTruncated?: boolean;
   error?: string;
 }
 

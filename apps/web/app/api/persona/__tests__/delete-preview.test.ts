@@ -69,9 +69,9 @@ const BASE_TABLES: TableData = {
     },
   ],
   persona_images: [
-    { id: 'img-1', persona_id: PERSONA_ID },
-    { id: 'img-2', persona_id: PERSONA_ID },
-    { id: 'img-3', persona_id: PERSONA_ID },
+    { id: 'img-1', persona_id: PERSONA_ID, user_id: USER_ID },
+    { id: 'img-2', persona_id: PERSONA_ID, user_id: USER_ID },
+    { id: 'img-3', persona_id: PERSONA_ID, user_id: USER_ID },
   ],
 };
 
@@ -306,10 +306,64 @@ describe('GET /api/persona/delete-preview', () => {
     const body = (await res.json()) as {
       counts: { generatedVideos: number };
       videos: unknown[];
+      videosTruncated: boolean;
     };
     expect(res.status).toBe(200);
     expect(body.counts.generatedVideos).toBe(25);
     expect(body.videos).toHaveLength(20);
+    expect(body.videosTruncated).toBe(true);
     expect(engineCalls).toBe(20);
+  });
+
+  it('reports videosTruncated:false when nothing is cut', async () => {
+    getClient();
+    const res = await GET(
+      new Request(`http://localhost/api/persona/delete-preview?personaId=${PERSONA_ID}`),
+    );
+    const body = (await res.json()) as { videosTruncated: boolean };
+    expect(body.videosTruncated).toBe(false);
+  });
+
+  it('stops engine lookups once the aggregate time budget is spent', async () => {
+    const generations = Array.from({ length: 5 }, (_, i) => ({
+      id: `gen-${i}`,
+      persona_id: PERSONA_ID,
+      user_id: USER_ID,
+      engine_task_id: `task-${i}`,
+      video_subject: `Topic ${i}`,
+      status: 'completed',
+    }));
+    getClient({ ...BASE_TABLES, video_generations: generations });
+    let now = 1_000_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    let engineCalls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        engineCalls += 1;
+        now += 10_000; // each lookup burns 10s; the budget is 15s
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ state: 1, result: { video: '/api/v1/download/x/final.mp4' } }),
+        };
+      }),
+    );
+    const res = await GET(
+      new Request(`http://localhost/api/persona/delete-preview?personaId=${PERSONA_ID}`),
+    );
+    const body = (await res.json()) as {
+      videos: Array<{ downloadUrl: string | null }>;
+    };
+    expect(res.status).toBe(200);
+    // Lookups 0 and 1 run (t=0s, t=10s < 15s); 2..4 are skipped past budget.
+    expect(engineCalls).toBe(2);
+    expect(body.videos).toHaveLength(5);
+    expect(body.videos[0]?.downloadUrl).toContain('/api/persona/video-download/');
+    expect(body.videos[1]?.downloadUrl).toContain('/api/persona/video-download/');
+    expect(body.videos[2]?.downloadUrl).toBeNull();
+    expect(body.videos[3]?.downloadUrl).toBeNull();
+    expect(body.videos[4]?.downloadUrl).toBeNull();
+    vi.mocked(Date.now).mockRestore();
   });
 });

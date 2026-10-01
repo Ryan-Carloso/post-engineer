@@ -170,4 +170,30 @@ describe('DeletePersonaModal', () => {
     expect(screen.getByText('personas.deleteDialogNameMismatch')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'personas.deleteConfirm' })).toBeDisabled();
   });
+
+  it('uses singular labels for a count of 1', async () => {
+    vi.mocked(fetchDeletePreview).mockResolvedValue({
+      ...PREVIEW,
+      counts: { schedules: 1, upcomingSlots: 1, generatedVideos: 1, personaImages: 1 },
+    });
+    renderModal();
+    await screen.findByText('personas.deleteDialogNoRefund');
+    expect(screen.getByText('personas.deleteDialogSchedule')).toBeInTheDocument();
+    expect(screen.getByText('personas.deleteDialogSlot')).toBeInTheDocument();
+    expect(screen.getByText('personas.deleteDialogVideo')).toBeInTheDocument();
+    expect(screen.getByText('personas.deleteDialogImage')).toBeInTheDocument();
+    expect(screen.queryByText('personas.deleteDialogSchedules')).not.toBeInTheDocument();
+  });
+
+  it('notes when the video list was truncated', async () => {
+    vi.mocked(fetchDeletePreview).mockResolvedValue({
+      ...PREVIEW,
+      counts: { schedules: 0, upcomingSlots: 0, generatedVideos: 25, personaImages: 0 },
+      videosTruncated: true,
+    });
+    // The t mock returns the key; assert the key renders with interpolation params.
+    const { container } = renderModal();
+    await screen.findByText('personas.deleteDialogVideosTruncated');
+    expect(container.textContent).toContain('personas.deleteDialogVideosTruncated');
+  });
 });

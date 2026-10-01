@@ -119,19 +119,19 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
             <ul className="mt-3 space-y-1.5 text-sm text-neutral-800">
               <li>
                 <strong className="font-semibold">{counts.schedules}</strong>{' '}
-                {t('personas.deleteDialogSchedules', { count: counts.schedules })}
+                {t(counts.schedules === 1 ? 'personas.deleteDialogSchedule' : 'personas.deleteDialogSchedules')}
               </li>
               <li>
                 <strong className="font-semibold">{counts.upcomingSlots}</strong>{' '}
-                {t('personas.deleteDialogSlots', { count: counts.upcomingSlots })}
+                {t(counts.upcomingSlots === 1 ? 'personas.deleteDialogSlot' : 'personas.deleteDialogSlots')}
               </li>
               <li>
                 <strong className="font-semibold">{counts.generatedVideos}</strong>{' '}
-                {t('personas.deleteDialogVideos', { count: counts.generatedVideos })}
+                {t(counts.generatedVideos === 1 ? 'personas.deleteDialogVideo' : 'personas.deleteDialogVideos')}
               </li>
               <li>
                 <strong className="font-semibold">{counts.personaImages}</strong>{' '}
-                {t('personas.deleteDialogImages', { count: counts.personaImages })}
+                {t(counts.personaImages === 1 ? 'personas.deleteDialogImage' : 'personas.deleteDialogImages')}
               </li>
             </ul>
 
@@ -144,6 +144,14 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
                 <p className="text-sm font-medium text-neutral-700">
                   {t('personas.deleteDialogDownloadHint')}
                 </p>
+                {preview?.videosTruncated === true && (
+                  <p className="mt-1 text-xs text-neutral-500">
+                    {t('personas.deleteDialogVideosTruncated', {
+                      shown: videos.length,
+                      total: counts?.generatedVideos ?? videos.length,
+                    })}
+                  </p>
+                )}
                 <ul className="mt-2 space-y-1.5">
                   {videos.map((video, index) => (
                     <li
