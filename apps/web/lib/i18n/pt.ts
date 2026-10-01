@@ -327,7 +327,7 @@ export const ptDictionary = {
     docsStepsTitle: 'Como conectar',
     docsStep1: 'Gere uma API Key acima e copie o valor completo.',
     docsStep2: 'Adicione o servidor MCP ao seu agente usando o comando de instalação abaixo.',
-    docsStep3: 'Pronto! O agente terá acesso às tools: create_persona, list_personas, generate_video_from_persona, get_video_status e generate_persona_video_batch.',
+    docsStep3: 'Pronto! O agente terá acesso às tools: create_persona, list_personas, generate_persona_videos, get_video_status e get_video_task_progress.',
     docsCopyPrompt: 'Copiar prompt de instalação',
     docsCopied: 'Copiado!',
     docsSecurityNote:
@@ -365,8 +365,7 @@ export const ptDictionary = {
     toolDescCreatePersona: 'Crie uma nova persona',
     toolDescUpdatePersona: 'Atualize uma persona existente',
     toolDescGetTokenBalance: 'Consulte o saldo de tokens',
-    toolDescGenerateVideo: 'Gere um vídeo de uma persona (roteiro/áudio opcional)',
-    toolDescGenerateVideoBatch: 'Gere de 1 a 10 vídeos em lote',
+    toolDescGeneratePersonaVideos: 'Gerar e agendar de 1 a 10 vídeos de persona em uma operação',
     toolDescGetVideoStatus: 'Confira o status do vídeo',
     toolDescGetVideoTaskProgress: 'Acompanhe o progresso por vídeo (%, etapa)',
     toolDescListPersonaImages: 'Liste a biblioteca de imagens da persona',

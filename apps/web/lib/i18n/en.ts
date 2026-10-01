@@ -328,7 +328,7 @@ export const enDictionary: Dictionary = {
     docsStepsTitle: 'How to connect',
     docsStep1: 'Generate an API Key above and copy the full value.',
     docsStep2: 'Add the MCP server to your agent using the install prompt below.',
-    docsStep3: 'Done! The agent gets access to these tools: create_persona, list_personas, generate_video_from_persona, get_video_status, and generate_persona_video_batch.',
+    docsStep3: 'Done! The agent gets access to these tools: create_persona, list_personas, generate_persona_videos, get_video_status, and get_video_task_progress.',
     docsCopyPrompt: 'Copy install prompt',
     docsCopied: 'Copied!',
     docsSecurityNote:
@@ -366,8 +366,7 @@ export const enDictionary: Dictionary = {
     toolDescCreatePersona: 'Create a new persona',
     toolDescUpdatePersona: 'Update an existing persona',
     toolDescGetTokenBalance: 'Check token balance',
-    toolDescGenerateVideo: 'Generate a video from a persona (optional custom script/audio)',
-    toolDescGenerateVideoBatch: 'Generate 1-10 videos in one batch',
+    toolDescGeneratePersonaVideos: 'Generate and schedule 1-10 persona videos in one operation',
     toolDescGetVideoStatus: 'Check video status',
     toolDescGetVideoTaskProgress: 'Poll per-video progress (%, stage)',
     toolDescListPersonaImages: "List a persona's image library",

@@ -598,6 +598,14 @@ export async function POST(request: Request): Promise<NextResponse> {
   // explicit .eq('user_id', userId) predicate.
   const supabase: SupabaseClient = createSupabaseServiceClient();
 
+  trackApiEvent('video_creation_started', {
+    userId,
+    personaId,
+    numberOfVideos: topics.length,
+    providers,
+    faceless: validatedOptions.faceless,
+  });
+
   // 4. Persona scope (API keys) + ownership.
   if (!isPersonaAllowed(auth.personaIds, personaId)) {
     return validationFailed(ERROR_CODES.PERSONA_SCOPE_DENIED, formatErrorMessage(ERROR_CODES.PERSONA_SCOPE_DENIED), 'personaId', 403);

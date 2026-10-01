@@ -11,6 +11,27 @@ export function getErrorMessage(error: unknown): string {
 }
 
 /**
+ * Thrown by the client's request() for non-2xx API responses whose body is
+ * the platform's structured error contract ({ success: false, error,
+ * code, field?, errorId? }). Carries the stable machine code (and the
+ * offending field, when named) so handlers can surface { code, message,
+ * field } instead of rewording the platform's own human message.
+ */
+export class ApiError extends Error {
+  /** Stable machine code from the API error body (e.g. TOPICS_REQUIRED). */
+  readonly code: string | null;
+  /** Dot-path of the offending input field, when the API names one. */
+  readonly field: string | null;
+
+  constructor(message: string, code: string | null, field: string | null) {
+    super(message);
+    this.name = 'ApiError';
+    this.code = code;
+    this.field = field;
+  }
+}
+
+/**
  * Thrown when a library image exceeds the size limit. Carries the path and
  * the observed size so the catch block in imageFormFile can discriminate by
  * type (`instanceof`) instead of sniffing the error message text — message

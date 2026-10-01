@@ -71,7 +71,7 @@ describe('McpDocsSection', () => {
     expect(screen.queryByTestId('mcp-docs-help-cta')).toBeNull();
   });
 
-  it('renders the tools grid with all twenty tools', () => {
+  it('renders the tools grid with all nineteen tools', () => {
     render(<McpDocsSection />);
 
     const grid = screen.getByTestId('mcp-tools-grid');
@@ -83,8 +83,7 @@ describe('McpDocsSection', () => {
       'create_persona',
       'update_persona',
       'get_token_balance',
-      'generate_video_from_persona',
-      'generate_persona_video_batch',
+      'generate_persona_videos',
       'get_video_status',
       'get_video_task_progress',
       'list_persona_images',
@@ -110,7 +109,7 @@ describe('McpDocsSection', () => {
     const prompt = vi.mocked(window.navigator.clipboard.writeText).mock.calls[0][0] as string;
     expect(prompt).toContain('post-engineer');
     expect(prompt).toContain('POST_ENGINEER_API_KEY');
-    expect(prompt).toContain('generate_persona_video_batch');
+    expect(prompt).toContain('generate_persona_videos');
     expect(prompt).toContain('"command": ["npx", "-y", "post-engineer-mcp"]');
     expect(prompt).toContain('list_personas');
     expect(prompt).toContain('list_voices');
@@ -120,7 +119,7 @@ describe('McpDocsSection', () => {
     expect(prompt).toContain('cancel_schedule');
     // Batch generation, per-video progress, image library, and account
     // connect must be visible to the agent in the copied prompt.
-    expect(prompt).toContain('generate_persona_video_batch');
+    expect(prompt).toContain('generate_persona_videos');
     expect(prompt).toContain('get_video_task_progress');
     expect(prompt).toContain('list_persona_images');
     expect(prompt).toContain('add_persona_image');
@@ -139,10 +138,10 @@ describe('McpDocsSection', () => {
     expect(prompt).toContain(
       'list_posts: list my upcoming (scheduled) and past posts across all connected accounts (optional limit, default 20, max 500).',
     );
-    // generate_video_from_persona documents the per-video overrides.
-    expect(prompt).toContain('generate_video_from_persona');
+    // generate_persona_videos documents the per-video overrides.
+    expect(prompt).toContain('generate_persona_videos');
     expect(prompt).toContain('audioUrl');
-    expect(prompt).toContain('overrides the persona voice');
+    expect(prompt).toContain('overriding the persona voice');
     expect(prompt).toContain('How to work with me');
     expect(prompt).toContain('Never invent a personaId');
     expect(prompt).not.toContain('Clone');
