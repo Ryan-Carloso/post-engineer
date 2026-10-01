@@ -15,13 +15,13 @@ const mockPostHogCtor = vi.fn();
 vi.mock('posthog-node', () => ({
   PostHog: class {
     capture = mockCapture;
-    constructor() {
-      mockPostHogCtor();
+    constructor(...args: unknown[]) {
+      mockPostHogCtor(...args);
     }
   },
 }));
 
-import { trackEvent, resetAnalyticsForTesting } from '../analytics.js';
+import { trackEvent, resetAnalyticsForTesting, DEFAULT_POSTHOG_HOST } from '../analytics.js';
 
 describe('trackEvent', () => {
   beforeEach(() => {
@@ -87,5 +87,27 @@ describe('trackEvent', () => {
     });
     expect(() => trackEvent('mcp_tool_called', { toolName: 'x' })).not.toThrow();
     expect(mockCapture).not.toHaveBeenCalled();
+  });
+
+  it('falls back to DEFAULT_POSTHOG_HOST when POSTHOG_HOST is not set', async () => {
+    vi.stubEnv('POSTHOG_API_KEY', 'phc_test_key');
+    delete process.env['POSTHOG_HOST'];
+    trackEvent('mcp_tool_called', { toolName: 'x' });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(mockPostHogCtor).toHaveBeenCalledWith(
+      'phc_test_key',
+      expect.objectContaining({ host: DEFAULT_POSTHOG_HOST }),
+    );
+  });
+
+  it('prefers POSTHOG_HOST over the default', async () => {
+    vi.stubEnv('POSTHOG_API_KEY', 'phc_test_key');
+    vi.stubEnv('POSTHOG_HOST', 'https://eu.i.posthog.com');
+    trackEvent('mcp_tool_called', { toolName: 'x' });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(mockPostHogCtor).toHaveBeenCalledWith(
+      'phc_test_key',
+      expect.objectContaining({ host: 'https://eu.i.posthog.com' }),
+    );
   });
 });

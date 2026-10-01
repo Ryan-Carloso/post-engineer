@@ -84,3 +84,29 @@ def test_scrub_secret_values_redacts_key_value_pairs():
 def test_scrub_secret_values_leaves_clean_text():
     text = "Connection failed: timeout after 30s"
     assert analytics.scrub_secret_values(text) == text
+
+
+def test_default_posthog_host_const_is_https_url():
+    # Self-host seam: the constant is the single fallback every engine
+    # telemetry path uses when POSTHOG_HOST is not set.
+    assert analytics.DEFAULT_POSTHOG_HOST.startswith("https://")
+
+
+def test_get_client_uses_default_host_when_env_unset():
+    with mock.patch.dict(os.environ, {"POSTHOG_API_KEY": "phc_test_key"}, clear=True):
+        with mock.patch("posthog.Posthog") as mock_cls:
+            analytics.track_event("video_generated", {"slotId": "s1"})
+            _, kwargs = mock_cls.call_args
+            assert kwargs["host"] == analytics.DEFAULT_POSTHOG_HOST
+
+
+def test_get_client_prefers_posthog_host_env():
+    with mock.patch.dict(
+        os.environ,
+        {"POSTHOG_API_KEY": "phc_test_key", "POSTHOG_HOST": "https://eu.i.posthog.com"},
+        clear=True,
+    ):
+        with mock.patch("posthog.Posthog") as mock_cls:
+            analytics.track_event("video_generated", {"slotId": "s1"})
+            _, kwargs = mock_cls.call_args
+            assert kwargs["host"] == "https://eu.i.posthog.com"
