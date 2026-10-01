@@ -1328,3 +1328,21 @@ Follow these so the same issues don't come back:
   default would have gone unnoticed. When the same default literal exists in
   N code paths, pin all N (`test_wrapper_default_provider_is_omniroute`
   mirrors `test_default_provider_is_omniroute`).
+
+## Engine review learnings, PR #38 (2026-10-01)
+- **Free-text secret scrubbers must handle quoted/JSON shapes, not just
+  bare `key=value`.** `_SECRET_VALUE_PATTERN` missed `"api_key": "sk-..."`
+  (JSON) and `'api_key': 'sk-...'` (Python repr) — exactly the shapes model
+  output and SDK/HTTP errors echo when they embed config blobs. The
+  existing test pinned only the bare shape (false confidence). Rule: probe
+  a free-text redaction pattern against every serialization shape the
+  field can carry (bare, JSON, dict repr), and test each shape.
+- **Scrub the full free-text field before truncating it.** Truncate-then-
+  scrub on `response_preview` left a leak: a 500-char cut landing mid-key
+  produces a secret fragment the key-anchored pattern can no longer see.
+  Scrub-then-truncate removes the boundary case entirely.
+- **Global redaction exemptions must be value-type-gated.** An exact-name
+  exemption list (`_REDACT_EXEMPT_KEYS`) applied to every event is a silent
+  global opt-out: any future caller reusing an exempt name for a secret
+  value bypasses redaction. Only honor the exemption for non-bool ints —
+  a secret is never an int.

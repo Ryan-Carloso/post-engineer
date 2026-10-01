@@ -141,7 +141,7 @@ class TestScriptPromptOptions(unittest.TestCase):
 
         def fake_generate_response(prompt, llm_provider):
             captured["prompt"] = prompt
-            return "第一段。\n\n第二段。"
+            return "第一段。\n\n第二段。", {}
 
         with patch.object(llm, "_generate_response_inner", side_effect=fake_generate_response):
             result = llm.generate_script(
@@ -167,7 +167,7 @@ class TestScriptPromptOptions(unittest.TestCase):
 
         def fake_generate_response(prompt, llm_provider):
             captured["prompt"] = prompt
-            return '["opening city", "middle office", "final sunset"]'
+            return '["opening city", "middle office", "final sunset"]', {}
 
         with patch.object(llm, "_generate_response_inner", side_effect=fake_generate_response):
             result = llm.generate_terms(
@@ -1053,7 +1053,7 @@ class TestLiteLLMProvider(unittest.TestCase):
         config.app["openrouter_api_key"] = "or-key"
 
         with patch.object(
-            llm, "_generate_response_inner", return_value="ok"
+            llm, "_generate_response_inner", return_value=("ok", {})
         ) as generate:
             result = llm._generate_response_with_fallback("test")
 
@@ -1069,7 +1069,7 @@ class TestLiteLLMProvider(unittest.TestCase):
         config.app.pop("llm_provider", None)
 
         with patch.object(
-            llm, "_generate_response_inner", return_value="ok"
+            llm, "_generate_response_inner", return_value=("ok", {})
         ) as generate:
             result = llm._generate_response("test")
 
@@ -1088,7 +1088,7 @@ class TestLiteLLMProvider(unittest.TestCase):
         with patch.object(
             llm,
             "_generate_response_inner",
-            side_effect=[Exception("401 invalid api key"), "script from openrouter"],
+            side_effect=[Exception("401 invalid api key"), ("script from openrouter", {})],
         ) as generate:
             result = llm._generate_response_with_fallback("test")
 
@@ -1111,7 +1111,7 @@ class TestLiteLLMProvider(unittest.TestCase):
         with patch.object(
             llm,
             "_generate_response_inner",
-            side_effect=[Exception("boom"), "recovered"],
+            side_effect=[Exception("boom"), ("recovered", {})],
         ) as generate:
             result = llm._generate_response_with_fallback("test")
 
@@ -1134,7 +1134,7 @@ class TestLiteLLMProvider(unittest.TestCase):
         with patch.object(
             llm,
             "_generate_response_inner",
-            return_value="Error: this is a legit model answer",
+            return_value=("Error: this is a legit model answer", {}),
         ) as generate:
             result = llm._generate_response_with_fallback("test")
 
@@ -1197,6 +1197,367 @@ class TestLiteLLMProvider(unittest.TestCase):
         self.assertEqual(result, "Error: openrouter down")
         self.assertEqual(generate.call_count, 2)
         self.assertEqual(config.app["llm_provider"], "omniroute")
+
+
+class TestAIRequestTracking(unittest.TestCase):
+    def setUp(self):
+        self.original_app_config = dict(config.app)
+
+    def tearDown(self):
+        config.app.clear()
+        config.app.update(self.original_app_config)
+
+    def _tracked(self, fn, *args):
+        with patch.object(llm, "track_ai_request") as track:
+            result = fn(*args)
+        self.assertEqual(track.call_count, 1)
+        return result, track.call_args[0][0]
+
+    def test_fallback_path_tracks_primary_success(self):
+        """
+        A successful primary call emits one ai_request: backend=llm, the
+        provider/model that served it, fallback_used=False.
+        """
+        config.app["llm_provider"] = "omniroute"
+        config.app["omniroute_model_name"] = ""
+        config.app["openrouter_api_key"] = "or-key"
+
+        with patch.object(
+            llm, "_generate_response_inner", return_value=("hello script", {})
+        ):
+            result, props = self._tracked(llm._generate_response_with_fallback, "hi")
+
+        self.assertEqual(result, "hello script")
+        self.assertEqual(props["backend"], "llm")
+        self.assertEqual(props["provider"], "omniroute")
+        self.assertEqual(props["model"], "auto")
+        self.assertEqual(props["primary_provider"], "omniroute")
+        self.assertFalse(props["fallback_used"])
+        self.assertTrue(props["success"])
+        self.assertEqual(props["error"], "")
+        self.assertGreaterEqual(props["duration_ms"], 0)
+        self.assertEqual(props["response_chars"], len("hello script"))
+        self.assertEqual(props["response_preview"], "hello script")
+        # No usage reported: tokens default to 0, cost stays unknown.
+        self.assertEqual(props["prompt_tokens"], 0)
+        self.assertEqual(props["completion_tokens"], 0)
+        self.assertEqual(props["total_tokens"], 0)
+        self.assertIsNone(props["cost_usd"])
+
+    def test_fallback_path_tracks_fallback_usage(self):
+        """
+        When the primary fails and OpenRouter serves the request, the event
+        records provider=openrouter with fallback_used=True and the primary.
+        """
+        config.app["llm_provider"] = "omniroute"
+        config.app["omniroute_model_name"] = ""
+        config.app["openrouter_api_key"] = "or-key"
+        config.app["openrouter_model_name"] = ""
+
+        with patch.object(
+            llm,
+            "_generate_response_inner",
+            side_effect=[
+                Exception("primary down"),
+                (
+                    "recovered script",
+                    {
+                        "prompt_tokens": 18,
+                        "completion_tokens": 114,
+                        "total_tokens": 132,
+                        "cost_usd": 0.0000597,
+                    },
+                ),
+            ],
+        ):
+            result, props = self._tracked(llm._generate_response_with_fallback, "hi")
+
+        self.assertEqual(result, "recovered script")
+        self.assertEqual(props["provider"], "openrouter")
+        self.assertEqual(props["model"], "openrouter/auto")
+        self.assertTrue(props["fallback_used"])
+        self.assertEqual(props["primary_provider"], "omniroute")
+        self.assertTrue(props["success"])
+        self.assertEqual(props["error"], "")
+        self.assertEqual(props["prompt_tokens"], 18)
+        self.assertEqual(props["completion_tokens"], 114)
+        self.assertEqual(props["total_tokens"], 132)
+        self.assertAlmostEqual(props["cost_usd"], 0.0000597)
+
+    def test_fallback_path_tracks_terminal_failure(self):
+        """
+        When both primary and fallback fail, the event carries success=False
+        and the sanitized error of the last attempt.
+        """
+        config.app["llm_provider"] = "omniroute"
+        config.app["omniroute_model_name"] = ""
+        config.app["openrouter_api_key"] = "or-key"
+        config.app["openrouter_model_name"] = ""
+
+        with patch.object(
+            llm,
+            "_generate_response_inner",
+            side_effect=[Exception("primary down"), Exception("openrouter 429")],
+        ):
+            result, props = self._tracked(llm._generate_response_with_fallback, "hi")
+
+        self.assertTrue(result.startswith("Error:"))
+        self.assertFalse(props["success"])
+        self.assertIn("openrouter 429", props["error"])
+        self.assertEqual(props["provider"], "openrouter")
+        self.assertTrue(props["fallback_used"])
+
+    def test_legacy_wrapper_tracks_success_and_failure(self):
+        """
+        The legacy _generate_response entrypoint also emits ai_request so
+        every LLM call is tracked, not just the fallback path.
+        """
+        config.app["llm_provider"] = "zai"
+        config.app["zai_model_name"] = "glm-5.3-flash"
+
+        with patch.object(llm, "_generate_response_inner", return_value=("legacy ok", {})):
+            result, props = self._tracked(llm._generate_response, "hi")
+        self.assertEqual(result, "legacy ok")
+        self.assertEqual(props["backend"], "llm")
+        self.assertEqual(props["provider"], "zai")
+        self.assertEqual(props["model"], "glm-5.3-flash")
+        self.assertFalse(props["fallback_used"])
+        self.assertTrue(props["success"])
+
+        with patch.object(
+            llm, "_generate_response_inner", side_effect=Exception("boom")
+        ):
+            result, props = self._tracked(llm._generate_response, "hi")
+        self.assertTrue(result.startswith("Error:"))
+        self.assertFalse(props["success"])
+        self.assertIn("boom", props["error"])
+
+    def test_resolve_model_name_prefers_config_over_default(self):
+        config.app["openrouter_model_name"] = "openai/gpt-4o"
+        self.assertEqual(llm._resolve_model_name("openrouter"), "openai/gpt-4o")
+
+    def test_resolve_model_name_uses_provider_default(self):
+        # Pins every _PROVIDER_DEFAULT_MODELS entry, so a one-sided drift
+        # between a provider branch default and this dict fails the suite.
+        for provider in llm._PROVIDER_DEFAULT_MODELS:
+            config.app[f"{provider}_model_name"] = ""
+        expected = {
+            "g4f": "gpt-3.5-turbo-16k-0613",
+            "omniroute": "auto",
+            "aihubmix": "gpt-5.4-mini",
+            "aimlapi": "openai/gpt-4o-mini",
+            "groq": "llama-3.3-70b-versatile",
+            "evolink": "gpt-5.5",
+            "mimo": "mimo-v2.5-pro",
+            "volcengine": "doubao-seed-2-1-turbo-260628",
+            "zai": "glm-5.3-flash",
+            "openrouter": "openrouter/auto",
+            "gemini": "gemini-2.5-flash",
+            "pollinations": "openai-fast",
+        }
+        self.assertEqual(dict(llm._PROVIDER_DEFAULT_MODELS), expected)
+        for provider, model in expected.items():
+            self.assertEqual(llm._resolve_model_name(provider), model)
+
+    def test_resolve_model_name_maps_deprecated_gemini(self):
+        # The gemini branch rewrites retired model names to the current
+        # default; analytics must report the model actually used.
+        config.app["gemini_model_name"] = "gemini-pro"
+        self.assertEqual(llm._resolve_model_name("gemini"), "gemini-2.5-flash")
+
+    def test_fallback_path_tracks_openrouter_primary_failure(self):
+        """
+        When OpenRouter itself is the primary and fails, there is no
+        fallback — the event records provider=openrouter with
+        fallback_used=False and success=False.
+        """
+        config.app["llm_provider"] = "openrouter"
+        config.app["openrouter_model_name"] = ""
+
+        with patch.object(
+            llm, "_generate_response_inner", side_effect=Exception("openrouter 429")
+        ):
+            result, props = self._tracked(llm._generate_response_with_fallback, "hi")
+
+        self.assertTrue(result.startswith("Error:"))
+        self.assertEqual(props["provider"], "openrouter")
+        self.assertEqual(props["primary_provider"], "openrouter")
+        self.assertFalse(props["fallback_used"])
+        self.assertFalse(props["success"])
+        self.assertIn("openrouter 429", props["error"])
+
+    def test_fallback_path_tracks_missing_openrouter_key(self):
+        """
+        When the primary fails and no OpenRouter key is configured, the
+        event records the primary provider with fallback_used=False and
+        the primary's error.
+        """
+        config.app["llm_provider"] = "omniroute"
+        config.app["omniroute_model_name"] = ""
+        config.app["openrouter_api_key"] = ""
+
+        with patch.object(
+            llm, "_generate_response_inner", side_effect=Exception("primary down")
+        ):
+            result, props = self._tracked(llm._generate_response_with_fallback, "hi")
+
+        self.assertTrue(result.startswith("Error:"))
+        self.assertEqual(props["provider"], "omniroute")
+        self.assertEqual(props["primary_provider"], "omniroute")
+        self.assertFalse(props["fallback_used"])
+        self.assertFalse(props["success"])
+        self.assertIn("primary down", props["error"])
+
+    def test_track_llm_request_caps_error_length(self):
+        """
+        The error property is capped (symmetric with the Modal path): SDK
+        exceptions can embed multi-KB context that must not ship whole.
+        """
+        config.app["llm_provider"] = "omniroute"
+        config.app["omniroute_model_name"] = ""
+        with patch.object(llm, "track_ai_request") as track:
+            llm._track_llm_request(
+                provider="omniroute",
+                primary_provider="omniroute",
+                fallback_used=False,
+                duration_ms=1,
+                success=False,
+                error="x" * 2000,
+            )
+        props = track.call_args[0][0]
+        self.assertEqual(len(props["error"]), 500)
+
+    def test_track_llm_request_scrubs_credential_fragments(self):
+        # response_preview ships truncated model output; credential-shaped
+        # fragments echoed in it must be redacted before reaching PostHog.
+        config.app["llm_provider"] = "omniroute"
+        config.app["omniroute_model_name"] = ""
+        with patch.object(llm, "track_ai_request") as track:
+            llm._track_llm_request(
+                provider="omniroute",
+                primary_provider="omniroute",
+                fallback_used=False,
+                duration_ms=1,
+                success=False,
+                error="call failed: token=abc123",
+                response_text="script body api_key=sk-secret-123 end",
+            )
+        props = track.call_args[0][0]
+        self.assertNotIn("sk-secret-123", props["response_preview"])
+        self.assertIn("api_key=[redacted]", props["response_preview"])
+        self.assertNotIn("abc123", props["error"])
+        self.assertIn("token=[redacted]", props["error"])
+
+    def test_track_llm_request_scrubs_quoted_credential_fragments(self):
+        # JSON/dict-shaped credentials echoed in model output or SDK errors
+        # must be redacted before reaching PostHog — the bare-shape test
+        # above does not cover these.
+        config.app["llm_provider"] = "omniroute"
+        config.app["omniroute_model_name"] = ""
+        with patch.object(llm, "track_ai_request") as track:
+            llm._track_llm_request(
+                provider="omniroute",
+                primary_provider="omniroute",
+                fallback_used=False,
+                duration_ms=1,
+                success=False,
+                error="request failed: {\"api_key\": \"sk-err-123\"}",
+                response_text="config dump {\"token\": \"sk-resp-456\"} end",
+            )
+        props = track.call_args[0][0]
+        self.assertNotIn("sk-err-123", props["error"])
+        self.assertNotIn("sk-resp-456", props["response_preview"])
+
+    def test_response_preview_is_truncated(self):
+        """
+        Long responses are truncated in the event preview while
+        response_chars keeps the full length.
+        """
+        config.app["llm_provider"] = "omniroute"
+        config.app["omniroute_model_name"] = ""
+        config.app["openrouter_api_key"] = "or-key"
+        long_text = "x" * 2000
+
+        with patch.object(llm, "_generate_response_inner", return_value=(long_text, {})):
+            _, props = self._tracked(llm._generate_response_with_fallback, "hi")
+
+        self.assertEqual(props["response_chars"], 2000)
+        self.assertEqual(len(props["response_preview"]), 500)
+
+
+class TestExtractUsage(unittest.TestCase):
+    def test_openrouter_style_usage_with_cost(self):
+        """OpenRouter reports cost directly on usage — it becomes cost_usd."""
+
+        class FakeUsage:
+            prompt_tokens = 18
+            completion_tokens = 114
+            total_tokens = 132
+            cost = 0.0000597
+
+        class FakeResponse:
+            usage = FakeUsage()
+
+        usage = llm._extract_usage(FakeResponse())
+        self.assertEqual(usage["prompt_tokens"], 18)
+        self.assertEqual(usage["completion_tokens"], 114)
+        self.assertEqual(usage["total_tokens"], 132)
+        self.assertAlmostEqual(usage["cost_usd"], 0.0000597)
+
+    def test_plain_openai_style_usage_has_no_cost(self):
+        """Providers without cost still report token counts."""
+
+        class FakeUsage:
+            prompt_tokens = 5
+            completion_tokens = 7
+            total_tokens = 12
+
+        class FakeResponse:
+            usage = FakeUsage()
+
+        usage = llm._extract_usage(FakeResponse())
+        self.assertEqual(usage["total_tokens"], 12)
+        self.assertNotIn("cost_usd", usage)
+
+    def test_missing_usage_returns_empty(self):
+        self.assertEqual(llm._extract_usage(object()), {})
+
+    def test_bool_token_values_are_ignored(self):
+        """isinstance(True, int) is True — a malformed `total_tokens: true`
+        payload must not ship as 1."""
+
+        class FakeUsage:
+            prompt_tokens = True
+            completion_tokens = False
+            total_tokens = True
+            cost = True
+
+        class FakeResponse:
+            usage = FakeUsage()
+
+        usage = llm._extract_usage(FakeResponse())
+        self.assertNotIn("prompt_tokens", usage)
+        self.assertNotIn("completion_tokens", usage)
+        self.assertNotIn("total_tokens", usage)
+        self.assertNotIn("cost_usd", usage)
+
+    def test_non_int_token_values_are_ignored(self):
+        """Malformed usage values never reach the event as wrong types."""
+
+        class FakeUsage:
+            prompt_tokens = "18"
+            completion_tokens = None
+            total_tokens = 132
+            cost = "free"
+
+        class FakeResponse:
+            usage = FakeUsage()
+
+        usage = llm._extract_usage(FakeResponse())
+        self.assertNotIn("prompt_tokens", usage)
+        self.assertNotIn("completion_tokens", usage)
+        self.assertEqual(usage["total_tokens"], 132)
+        self.assertNotIn("cost_usd", usage)
 
 
 class TestRuntimeEnvironmentDetection(unittest.TestCase):
@@ -1341,7 +1702,7 @@ class TestSocialMetadata(unittest.TestCase):
             '{"title":"上海一日游","caption":"收藏这条路线，下次直接出发！",'
             '"hashtags":["#上海","#旅行","#shorts"]}'
         )
-        with patch.object(llm, "_generate_response_inner", return_value=payload):
+        with patch.object(llm, "_generate_response_inner", return_value=(payload, {})):
             result = llm.generate_social_metadata(
                 video_subject="上海一日游",
                 video_script="今天带你快速看完上海经典路线。",
@@ -1490,7 +1851,7 @@ class TestCloudflareResultLogging(unittest.TestCase):
             patch.object(llm.requests, "post", return_value=fake_response),
             patch.object(llm, "logger") as mock_logger,
         ):
-            text = llm._generate_response_inner("Say hello", "cloudflare")
+            text, _ = llm._generate_response_inner("Say hello", "cloudflare")
 
         self.assertEqual(text, "hello")
         logged = " ".join(

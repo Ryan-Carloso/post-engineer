@@ -10,6 +10,12 @@ Safety rules:
 - Secret-bearing property keys are redacted before capture.
 - Never log PII, credentials, or raw request bodies in properties.
 - Configuration comes from environment variables only — never hardcode.
+
+Deliberate exception (user-requested, 2026-10-01): the ai_request event
+carries response_preview, up to 500 chars of truncated model output, so
+LLM responses stay debuggable in PostHog. It is scrubbed of
+credential-shaped fragments (scrub_secret_values) before capture and is
+not a raw request body — prompts are never sent.
 """
 
 from __future__ import annotations
@@ -29,9 +35,12 @@ _SECRET_KEY_PATTERN = re.compile(
 )
 
 # Values matching this pattern have the secret portion redacted.
-# Catches `key=secret`, `key: secret`, `Bearer secret` in free text.
+# Catches `key=secret`, `key: secret`, `"key": "secret"` (JSON),
+# `'key': 'secret'` (Python repr), and `Bearer <token>` in free text.
+# The optional quotes matter: model output and SDK/HTTP errors often echo
+# config blobs in JSON/dict shape, which the bare pattern missed.
 _SECRET_VALUE_PATTERN = re.compile(
-    r"(password|passwd|secret|token|api[-_]?key|credential|private[-_]?key|session)\s*[:=]\s*([^\s,;\"']+)"
+    r"(password|passwd|secret|token|api[-_]?key|credential|private[-_]?key|session)[\"']?\s*[:=]\s*[\"']?([^\s,;\"']+)"
     r"|(bearer)\s+([^\s,;\"']+)",
     re.IGNORECASE,
 )
@@ -60,10 +69,30 @@ _warned = False
 _attempted = False
 
 
+# Exact property names exempt from key-name redaction. "token" is a
+# substring of _SECRET_KEY_PATTERN (to catch *_token secrets), so without
+# this exemption the legitimate ai_request token-usage counters would be
+# redacted before capture.
+_REDACT_EXEMPT_KEYS = frozenset(
+    {"prompt_tokens", "completion_tokens", "total_tokens"}
+)
+
+
 def _scrub_secrets(properties: dict[str, Any]) -> dict[str, Any]:
     scrubbed: dict[str, Any] = {}
     for key, value in properties.items():
-        scrubbed[key] = _REDACTED if _SECRET_KEY_PATTERN.search(key) else value
+        # Exempt names are legitimate telemetry counters — but only when the
+        # value is actually a number. A secret is never an int, so a
+        # non-numeric value under an exempt name is still redacted. This
+        # keeps the exemption from becoming a global opt-out for every event.
+        if (
+            key in _REDACT_EXEMPT_KEYS
+            and isinstance(value, int)
+            and not isinstance(value, bool)
+        ):
+            scrubbed[key] = value
+        else:
+            scrubbed[key] = _REDACTED if _SECRET_KEY_PATTERN.search(key) else value
     return scrubbed
 
 
@@ -113,6 +142,21 @@ def track_event(event_name: str, properties: dict[str, Any] | None = None) -> No
         )
     except Exception:  # noqa: BLE001 - telemetry must never break
         pass
+
+
+def track_ai_request(properties: dict[str, Any]) -> None:
+    """Track one AI backend call (LLM or Modal).
+
+    Event name: ai_request. The caller builds the properties dict with a
+    uniform schema: backend ("llm" | "modal"), duration_ms, success, plus
+    backend-specific context (provider/model/primary_provider/fallback_used
+    for llm; operation/job_id for modal) and, on failure, a pre-sanitized
+    error. track_event redacts whole properties whose KEY names a secret
+    as a backstop and never raises — free-text fields (error,
+    response_preview) must be scrubbed by the caller first, which the
+    llm/modal paths do via scrub_secret_values.
+    """
+    track_event("ai_request", properties)
 
 
 def reset_for_testing() -> None:

@@ -1,18 +1,22 @@
 import json
 import logging
 import re
+import time
+
 import requests
-from typing import List
+from typing import Any, List
 
 from loguru import logger
 from openai import AzureOpenAI, OpenAI
 from openai.types.chat import ChatCompletion
 
 from app.config import config
+from app.services.analytics import scrub_secret_values, track_ai_request
 from app.utils import secret_redaction
 
 _max_retries = 5
 _DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+_DEFAULT_POLLINATIONS_MODEL = "openai-fast"
 _DEPRECATED_GEMINI_MODELS = {"gemini-pro", "gemini-1.0-pro"}
 MIN_SCRIPT_PARAGRAPH_NUMBER = 1
 MAX_SCRIPT_PARAGRAPH_NUMBER = 10
@@ -109,6 +113,29 @@ def _extract_chat_completion_text(response, llm_provider: str) -> str:
     return _normalize_text_response(content, llm_provider)
 
 
+def _extract_usage(response: object) -> dict[str, Any]:
+    """Pull token/cost usage off an OpenAI-compatible response, if present.
+
+    All OpenAI-compatible providers report prompt/completion/total tokens.
+    OpenRouter additionally reports the request cost directly as
+    usage.cost. Absent fields stay absent — the tracker defaults them.
+    """
+    usage: dict[str, Any] = {}
+    raw = getattr(response, "usage", None)
+    if raw is None:
+        return usage
+    for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+        value = _get_response_field(raw, key)
+        # bool is a subclass of int — exclude it so a malformed
+        # `total_tokens: true` payload can't ship as 1.
+        if isinstance(value, int) and not isinstance(value, bool):
+            usage[key] = value
+    cost = _get_response_field(raw, "cost")
+    if isinstance(cost, (int, float)) and not isinstance(cost, bool):
+        usage["cost_usd"] = float(cost)
+    return usage
+
+
 def _get_response_field(value, key: str):
     """Read a field from either a dict or an SDK response object."""
     if isinstance(value, dict):
@@ -165,17 +192,137 @@ LLM_CLIENT_TIMEOUT_SECONDS = 60.0
 LLM_CLIENT_MAX_RETRIES = 1
 
 
+# Default model per provider, mirroring the provider branches in
+# _generate_response_inner below. _resolve_model_name prefers the explicit
+# config value; this dict only fills the gap when the branch applies a
+# default. The test below pins each entry's value (dict-side drift fails
+# the suite); branch defaults are updated manually — when adding or
+# changing a provider branch, update its entry here too.
+_PROVIDER_DEFAULT_MODELS = {
+    "g4f": "gpt-3.5-turbo-16k-0613",
+    "omniroute": "auto",
+    "aihubmix": "gpt-5.4-mini",
+    "aimlapi": "openai/gpt-4o-mini",
+    "groq": "llama-3.3-70b-versatile",
+    "evolink": "gpt-5.5",
+    "mimo": "mimo-v2.5-pro",
+    "volcengine": "doubao-seed-2-1-turbo-260628",
+    "zai": "glm-5.3-flash",
+    "openrouter": "openrouter/auto",
+    "gemini": _DEFAULT_GEMINI_MODEL,
+    "pollinations": _DEFAULT_POLLINATIONS_MODEL,
+}
+
+# Truncate AI responses in analytics: enough to spot-check what the model
+# returned, small enough to keep events lean.
+_RESPONSE_PREVIEW_CHARS = 500
+
+
+def _resolve_model_name(llm_provider: str) -> str:
+    """Best-effort model name for analytics.
+
+    Returns the configured <provider>_model_name, or the provider branch
+    default when unconfigured. Deprecated Gemini names are mapped to the
+    current default, mirroring the request branch. Empty when the provider
+    has neither a configured name nor a branch default — such providers
+    reject the request before anything is sent.
+    """
+    configured = config.app.get(f"{llm_provider}_model_name", "")
+    if configured:
+        name = str(configured)
+        if llm_provider == "gemini" and name in _DEPRECATED_GEMINI_MODELS:
+            return _DEFAULT_GEMINI_MODEL
+        return name
+    return _PROVIDER_DEFAULT_MODELS.get(llm_provider, "")
+
+
+def _track_llm_request(
+    *,
+    provider: str,
+    primary_provider: str,
+    fallback_used: bool,
+    duration_ms: int,
+    success: bool,
+    error: str | None = None,
+    response_text: str = "",
+    usage: dict[str, Any] | None = None,
+) -> None:
+    """Emit one ai_request event for an LLM call.
+
+    Free-text fields are scrubbed for credential-shaped fragments before
+    sending (response_preview carries truncated model output, which can
+    echo secrets), and error is capped at 500 chars like the Modal path —
+    SDK exceptions can embed multi-KB context. Telemetry never raises
+    (see track_ai_request). cost_usd is None when the provider doesn't
+    report it (OpenRouter reports it); token counts default to 0.
+    """
+    usage = usage or {}
+    track_ai_request(
+        {
+            "backend": "llm",
+            "provider": provider,
+            "model": _resolve_model_name(provider),
+            "primary_provider": primary_provider,
+            "fallback_used": fallback_used,
+            "duration_ms": duration_ms,
+            "success": success,
+            "error": scrub_secret_values(error or "")[:500],
+            "response_chars": len(response_text),
+            # Scrub the full text BEFORE truncating: a cut landing mid-key
+            # would otherwise leave a secret fragment the pattern can't see.
+            "response_preview": scrub_secret_values(response_text)[
+                :_RESPONSE_PREVIEW_CHARS
+            ],
+            "prompt_tokens": usage.get("prompt_tokens", 0),
+            "completion_tokens": usage.get("completion_tokens", 0),
+            "total_tokens": usage.get("total_tokens", 0),
+            # Present only when the provider reports it (OpenRouter).
+            "cost_usd": usage.get("cost_usd"),
+        }
+    )
+
+
 def _generate_response(prompt: str) -> str:
     # Compatibility wrapper: converts failures into the "Error: ..." string
     # expected by legacy callers (WebUI, tests, and internal services).
+    # Every call is tracked as an ai_request event (backend=llm).
     llm_provider = str(config.app.get("llm_provider", "omniroute"))
+    start = time.monotonic()
+    usage: dict[str, Any] = {}
     try:
-        return _generate_response_inner(prompt, llm_provider)
+        result, usage = _generate_response_inner(prompt, llm_provider)
     except Exception as e:
-        return f"Error: {_sanitize_error_message(e)}"
+        error = _sanitize_error_message(e)
+        _track_llm_request(
+            provider=llm_provider,
+            primary_provider=llm_provider,
+            fallback_used=False,
+            duration_ms=int((time.monotonic() - start) * 1000),
+            success=False,
+            error=error,
+            usage=usage,
+        )
+        return f"Error: {error}"
+    _track_llm_request(
+        provider=llm_provider,
+        primary_provider=llm_provider,
+        fallback_used=False,
+        duration_ms=int((time.monotonic() - start) * 1000),
+        success=True,
+        response_text=result,
+        usage=usage,
+    )
+    return result
 
 
-def _generate_response_inner(prompt: str, llm_provider: str) -> str:
+def _generate_response_inner(
+    prompt: str, llm_provider: str
+) -> tuple[str, dict[str, Any]]:
+    """Core LLM call — no telemetry here; callers own the ai_request event.
+
+    Returns (text, usage) where usage may carry prompt/completion/total
+    tokens and, when the provider reports it (OpenRouter), cost_usd.
+    Usage is {} when unavailable."""
     try:
         content = ""
         logger.info(f"llm provider: {llm_provider}")
@@ -396,7 +543,9 @@ def _generate_response_inner(prompt: str, llm_provider: str) -> str:
                     base_url = config.app.get("pollinations_base_url", "")
                     if not base_url:
                         base_url = "https://text.pollinations.ai/openai"
-                    model_name = config.app.get("pollinations_model_name", "openai-fast")
+                    model_name = config.app.get(
+                        "pollinations_model_name", _DEFAULT_POLLINATIONS_MODEL
+                    )
                    
                     # Prepare the payload
                     payload = {
@@ -424,7 +573,7 @@ def _generate_response_inner(prompt: str, llm_provider: str) -> str:
                     
                     if result and "choices" in result and len(result["choices"]) > 0:
                         content = result["choices"][0]["message"]["content"]
-                        return _normalize_text_response(content, llm_provider)
+                        return _normalize_text_response(content, llm_provider), {}
                     else:
                         raise Exception(f"[{llm_provider}] returned an invalid response format")
                         
@@ -466,7 +615,7 @@ def _generate_response_inner(prompt: str, llm_provider: str) -> str:
                                 f'[{llm_provider}] returned an error response: "{response}"'
                             )
 
-                        return _extract_qwen_generation_text(response)
+                        return _extract_qwen_generation_text(response), {}
                     else:
                         raise Exception(
                             f'[{llm_provider}] returned an invalid response: "{response}"'
@@ -526,7 +675,7 @@ def _generate_response_inner(prompt: str, llm_provider: str) -> str:
                         f"[{llm_provider}] returned invalid response content"
                     )
 
-                return _normalize_text_response(generated_text, llm_provider)
+                return _normalize_text_response(generated_text, llm_provider), {}
 
             if llm_provider == "cloudflare":
                 response = requests.post(
@@ -548,7 +697,7 @@ def _generate_response_inner(prompt: str, llm_provider: str) -> str:
                 logger.info(secret_redaction.redact_value(
                     {"provider": "cloudflare", "result_chars": len(str(result))}
                 ))
-                return _normalize_text_response(result["result"]["response"], llm_provider)
+                return _normalize_text_response(result["result"]["response"], llm_provider), {}
 
             if llm_provider == "ernie":
                 response = requests.post(
@@ -580,7 +729,7 @@ def _generate_response_inner(prompt: str, llm_provider: str) -> str:
                 response = requests.request(
                     "POST", base_url, headers=headers, data=payload, params=chat_params
                 ).json()
-                return _normalize_text_response(response.get("result"), llm_provider)
+                return _normalize_text_response(response.get("result"), llm_provider), {}
 
             if llm_provider == "litellm":
                 import litellm
@@ -601,7 +750,10 @@ def _generate_response_inner(prompt: str, llm_provider: str) -> str:
                 if not getattr(response, "choices", None):
                     raise ValueError(f"[{llm_provider}] returned empty response")
 
-                return _extract_chat_completion_text(response, llm_provider)
+                return (
+                    _extract_chat_completion_text(response, llm_provider),
+                    _extract_usage(response),
+                )
 
             if llm_provider == "azure":
                 # The Azure OpenAI SDK builds its request address from
@@ -621,7 +773,10 @@ def _generate_response_inner(prompt: str, llm_provider: str) -> str:
                 )
                 if response:
                     if isinstance(response, ChatCompletion):
-                        return _extract_chat_completion_text(response, llm_provider)
+                        return (
+                            _extract_chat_completion_text(response, llm_provider),
+                            _extract_usage(response),
+                        )
                     else:
                         raise Exception(
                             f'[{llm_provider}] returned an invalid response: "{response}", please check your network '
@@ -657,7 +812,7 @@ def _generate_response_inner(prompt: str, llm_provider: str) -> str:
                     if not content.strip():
                         raise ValueError("Empty content in stream response")
                     
-                    return _normalize_text_response(content, llm_provider)
+                    return _normalize_text_response(content, llm_provider), {}
                 else:
                     raise Exception(f"[{llm_provider}] returned an empty response")
 
@@ -684,7 +839,10 @@ def _generate_response_inner(prompt: str, llm_provider: str) -> str:
                 )
                 if response:
                     if isinstance(response, ChatCompletion):
-                        return _extract_chat_completion_text(response, llm_provider)
+                        return (
+                            _extract_chat_completion_text(response, llm_provider),
+                            _extract_usage(response),
+                        )
                     else:
                         raise Exception(
                             f'[{llm_provider}] returned an invalid response: "{response}", please check your network '
@@ -706,7 +864,10 @@ def _generate_response_inner(prompt: str, llm_provider: str) -> str:
             )
             if response:
                 if isinstance(response, ChatCompletion):
-                    return _extract_chat_completion_text(response, llm_provider)
+                    return (
+                        _extract_chat_completion_text(response, llm_provider),
+                        _extract_usage(response),
+                    )
                 else:
                     raise Exception(
                         f'[{llm_provider}] returned an invalid response: "{response}", please check your network '
@@ -717,7 +878,7 @@ def _generate_response_inner(prompt: str, llm_provider: str) -> str:
                     f"[{llm_provider}] returned an empty response, please check your network connection and try again."
                 )
 
-        return _normalize_text_response(content, llm_provider)
+        return _normalize_text_response(content, llm_provider), {}
     except Exception as e:
         raise LLMResponseError(_sanitize_error_message(e)) from e
 
@@ -733,27 +894,52 @@ def _generate_response_with_fallback(prompt: str) -> str:
     # config.app["llm_provider"] here would race between concurrent requests
     # (a parallel request would read "openrouter" as primary and lose its own
     # fallback).
+    #
+    # Every call is tracked as one ai_request event (backend=llm) with the
+    # provider that actually served it, whether the fallback ran, and the
+    # sanitized error when it failed.
     primary_provider = str(config.app.get("llm_provider", "omniroute"))
+    start = time.monotonic()
+    used_provider = primary_provider
+    fallback_used = False
+    error: str | None = None
+    result = ""
+    usage: dict[str, Any] = {}
     try:
-        return _generate_response_inner(prompt, primary_provider)
-    except Exception as primary_error:
-        primary_message = _sanitize_error_message(primary_error)
-
-        if primary_provider == "openrouter":
-            return f"Error: {primary_message}"
-
-        openrouter_key = config.app.get("openrouter_api_key", "")
-        if not openrouter_key:
-            return f"Error: {primary_message}"
-
-        logger.warning(
-            f"primary llm provider '{primary_provider}' failed, "
-            f"falling back to openrouter: {primary_message}"
-        )
         try:
-            return _generate_response_inner(prompt, "openrouter")
-        except Exception as openrouter_error:
-            return f"Error: {_sanitize_error_message(openrouter_error)}"
+            result, usage = _generate_response_inner(prompt, primary_provider)
+        except Exception as primary_error:
+            primary_message = _sanitize_error_message(primary_error)
+
+            if primary_provider == "openrouter":
+                raise
+
+            openrouter_key = config.app.get("openrouter_api_key", "")
+            if not openrouter_key:
+                raise
+
+            logger.warning(
+                f"primary llm provider '{primary_provider}' failed, "
+                f"falling back to openrouter: {primary_message}"
+            )
+            used_provider = "openrouter"
+            fallback_used = True
+            result, usage = _generate_response_inner(prompt, "openrouter")
+    except Exception as e:
+        error = _sanitize_error_message(e)
+    _track_llm_request(
+        provider=used_provider,
+        primary_provider=primary_provider,
+        fallback_used=fallback_used,
+        duration_ms=int((time.monotonic() - start) * 1000),
+        success=error is None,
+        error=error,
+        response_text=result,
+        usage=usage,
+    )
+    if error is not None:
+        return f"Error: {error}"
+    return result
 
 
 def _limit_script_text(text: str | None, max_length: int, field_name: str) -> str:
