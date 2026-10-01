@@ -91,7 +91,9 @@ describe('trackEvent', () => {
 
   it('falls back to DEFAULT_POSTHOG_HOST when POSTHOG_HOST is not set', async () => {
     vi.stubEnv('POSTHOG_API_KEY', 'phc_test_key');
-    delete process.env['POSTHOG_HOST'];
+    // undefined deletes the var and vi.unstubAllEnvs() restores the original
+    // afterwards — a manual `delete` would leak into other test files.
+    vi.stubEnv('POSTHOG_HOST', undefined);
     trackEvent('mcp_tool_called', { toolName: 'x' });
     await new Promise((resolve) => setImmediate(resolve));
     expect(mockPostHogCtor).toHaveBeenCalledWith(

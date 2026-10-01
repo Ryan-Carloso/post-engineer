@@ -37,8 +37,11 @@ import { DEFAULT_POSTHOG_HOST } from '@/lib/posthog-config';
 import { __resetPostHogServerForTests } from '@/lib/posthog-server';
 
 describe('DEFAULT_POSTHOG_HOST', () => {
-  it('is the PostHog EU ingest default (our project region)', () => {
-    expect(DEFAULT_POSTHOG_HOST).toBe('https://eu.i.posthog.com');
+  // Shape-only pin (mirrors the engine test): self-hosters change this
+  // constant, so an exact-value assertion would fail `pnpm test` for them.
+  // The fallback/override wiring is pinned by the tests below.
+  it('is a valid https ingest URL', () => {
+    expect(DEFAULT_POSTHOG_HOST).toMatch(/^https:\/\//);
   });
 });
 
