@@ -1368,6 +1368,34 @@ Follow these so the same issues don't come back:
   `NEXT_PUBLIC_*` vars; a dummy `.env` suffices for verification — never
   commit it).
 
+## Web/API review learnings, PR #41 (2026-10-01)
+- **OAuth callers take the service-client branch too.** `requireSupabaseSession`
+  returns `isOAuth: true` for MCP/OAuth callers, who have no cookie session —
+  `request-auth.ts` says to treat them like API keys. Every new route must
+  branch `auth.isApiKey === true || auth.isOAuth === true`, not just
+  `isApiKey`; otherwise RLS returns zero rows and the route 404s on data the
+  caller owns. Pinned by OAuth tests on delete-preview and the DELETE cascade.
+- **Every promise chain in a component gets a `.catch`.** A `.then` without
+  one leaves the dialog in `loading`/`deleting` forever on network failure —
+  all inputs disabled, no retry, the only escape a reload. Rejections surface
+  as the component's error state, never a wedged UI.
+- **Client fetch helpers never throw on HTTP errors.** Check `response.ok`
+  and guard `response.json()` (Vercel 502 HTML bodies throw on parse);
+  return `{ success: false, error }` so the caller's existing
+  `result.success` branch handles it.
+- **Bound downstream fan-out on read paths; `after()` post-commit cleanup.**
+  A per-video engine lookup loop gets a cap (counts still report the full
+  total). Post-commit cleanup (engine task dirs) runs in `after()` from
+  `next/server` — a slow downstream must not turn a committed mutation into
+  a client-side timeout that reports failure for a delete that happened.
+  In tests, mock `after` to run the callback inline (the real one needs a
+  request scope).
+- **Expensive authenticated GETs get a rate-limit profile too.** The house
+  rule was upload/POST surfaces; a GET that fans out to the engine (up to
+  N lookups) gets its own `RATE_LIMITS` profile keyed by user id, applied
+  right after auth. Payload tests mock the limiter no-op; one dedicated
+  test owns the 429 path.
+
 ## Engine review learnings (2026-10-02, PR #43)
 - **A test comment claiming a behavior must pin it with an assertion.** The
   reconcile test's comment said "the refund is skipped" but asserted only
