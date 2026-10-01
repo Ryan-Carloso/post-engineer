@@ -74,17 +74,19 @@ class MypyConfigPinTests(unittest.TestCase):
         self.assertNotIn("import-untyped", disabled)
 
     def test_ci_mypy_command_does_not_silence_imports(self):
-        # The contract is enforced by the CI invocation itself — a future
-        # edit adding --ignore-missing-imports (or similar) to the mypy
-        # command would defeat the gate while every config pin stays green.
+        # The contract is enforced by the CI invocation itself — assert the
+        # command is EXACTLY the target list. Any added flag (e.g.
+        # --ignore-missing-imports, --config-file ci-lenient.toml) then fails
+        # the pin consciously instead of being enumerated case-by-case.
         args = _load_ci_mypy_command()
-        for a in args:
-            self.assertFalse(
-                a == "--ignore-missing-imports"
-                or a.startswith("--disable-error-code")
-                or a.startswith("--follow-imports"),
-                f"CI mypy step must not silence import errors: {a}",
-            )
+        targets = _load_ci_mypy_targets()
+        # Reconstruct the expected command from targets: "cli" -> "cli.py".
+        expected = [f"{t}.py" if t != "app" else t for t in targets]
+        self.assertEqual(
+            args,
+            expected,
+            f"CI mypy step must be exactly the target list (no extra flags): {args}",
+        )
 
     def test_no_app_override(self):
         # Parse the TOML structure (not regex) so string-form modules and

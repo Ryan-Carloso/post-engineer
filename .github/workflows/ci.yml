@@ -212,7 +212,7 @@ jobs:
         run: uv run mypy app cli.py main.py
 
       - name: Import smoke test (catches ModuleNotFoundError from removed deps)
-        run: uv run python -c "import cli; from app import asgi; print('imports OK')"
+        run: uv run python -c "import cli, main; from app import asgi; print('imports OK')"
 
       - name: Tests
         run: uv run coverage run -m pytest -q && uv run coverage xml -o coverage.xml
