@@ -159,17 +159,28 @@ beforeEach(() => {
 });
 
 describe('PostsPage', () => {
-  it('shows upcoming posts by default with persona, topic, status and account chips', () => {
+  it('shows upcoming posts by default with persona, topic, status and account avatars', () => {
     render(<PostsPage />);
 
     expect(screen.getByText('Upcoming topic')).toBeInTheDocument();
     expect(screen.getByText('Viva Leve')).toBeInTheDocument();
     expect(screen.getByText('posts.statusPending')).toBeInTheDocument();
-    // Account labels appear in the card chip and in the account filter options
-    expect(screen.getAllByText('Europa Na Estrada').length).toBeGreaterThanOrEqual(2);
-    expect(screen.getAllByText('@vivalave').length).toBeGreaterThanOrEqual(2);
+    // Account names appear only in the account filter now — the card
+    // footer shows compact initial avatars instead of full-name chips.
+    expect(screen.getAllByText('Europa Na Estrada').length).toBe(1);
+    expect(screen.getAllByText('@vivalave').length).toBe(1);
     // History items are hidden on the upcoming tab
     expect(screen.queryByText('Past topic')).not.toBeInTheDocument();
+  });
+
+  it('renders the network icon at the card top and initial avatars in the footer', () => {
+    render(<PostsPage />);
+
+    // Network icon (role img) labelled by the provider name.
+    expect(screen.getAllByRole('img', { name: 'youtube' }).length).toBeGreaterThanOrEqual(1);
+    // Avatar fallbacks use the accounts' initials.
+    expect(screen.getByText('EN')).toBeInTheDocument();
+    expect(screen.getByText('V')).toBeInTheDocument();
   });
 
   it('switches to the history tab showing published and failed posts', async () => {

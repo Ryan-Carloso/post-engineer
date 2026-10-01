@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useMemo, useState } from 'react';
+import { Play } from 'lucide-react';
 import {
   useScheduleStatusQuery,
   useSchedulesQuery,
@@ -16,6 +17,11 @@ import {
   type ScheduleConfig,
   type VideoGeneration,
 } from '@/lib/api';
+import { Card, CardFooter } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { AspectRatio } from '@/components/ui/aspect-ratio';
+import { ProviderIcon } from '@/components/provider-icon';
 import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
 import { SpinnerIcon } from '@/lib/ui';
@@ -108,43 +114,47 @@ const GenerationCard = ({
 }) => {
   const { t } = useI18n();
   const videoUrl = videoUrlFor(generation.engineTaskId);
-  const hasCover = generation.status === 'completed' && videoUrl !== null;
+  const hasThumb = generation.status === 'completed' && videoUrl !== null;
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="flex h-full flex-col overflow-hidden rounded-xl border border-[#d7e2ea] bg-white text-left shadow-[0_5px_18px_rgba(13,43,69,0.045)] transition-colors hover:border-[#b9cbd9]"
-    >
-      <VideoCover src={hasCover ? videoUrl : null} placeholderLabel={t(generation.status === 'failed' ? 'posts.coverNoVideo' : 'posts.coverGenerating')} />
-      <div className="flex flex-1 flex-col p-4">
-        <div className="flex items-baseline justify-between gap-2">
-          <p className="text-sm font-semibold text-[#0d2b45]">{formatDate(generation.createdAt, locale)}</p>
-          <p className="text-sm text-[#60758a]">{formatTime(generation.createdAt, locale)}</p>
-        </div>
-        <p className="mt-2 line-clamp-3 text-sm leading-snug text-[#0d2b45]">
-          <span className="font-semibold">{generation.personaName ?? t('posts.personaFallback')}</span>
-          {' — '}
-          <span className="text-[#60758a]">{generation.videoSubject ?? t('posts.unknownTopic')}</span>
-        </p>
-        {generation.status === 'failed' && (
-          <p className="mt-2 line-clamp-2 text-xs text-[#c2301e]">
-            {t(GENERATION_ERROR_KEY[generation.errorCode ?? 'unknown'] ?? 'posts.errorUnknown')}
+    <button type="button" onClick={onOpen} className="h-full text-left">
+      <Card className={`flex h-full flex-col gap-0 rounded-xl p-4 transition-colors ${CARD_BORDER}`}>
+        <div className="flex items-center justify-between gap-2">
+          <span role="img" aria-label="video" className="inline-flex text-[#60758a]">
+            <Play className="h-5 w-5" />
+          </span>
+          <p className="text-xs text-muted-foreground">
+            {formatDate(generation.createdAt, locale)} · {formatTime(generation.createdAt, locale)}
           </p>
-        )}
-        <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-3">
+        </div>
+        <div className="mt-3 flex gap-3">
+          <div className="flex-1">
+            <p className="line-clamp-3 text-sm leading-snug text-[#0d2b45]">
+              <span className="font-semibold">{generation.personaName ?? t('posts.personaFallback')}</span>
+              {' — '}
+              <span className="text-[#60758a]">{generation.videoSubject ?? t('posts.unknownTopic')}</span>
+            </p>
+            {generation.status === 'failed' && (
+              <p className="mt-2 line-clamp-2 text-xs text-[#c2301e]">
+                {t(GENERATION_ERROR_KEY[generation.errorCode ?? 'unknown'] ?? 'posts.errorUnknown')}
+              </p>
+            )}
+          </div>
+          <PostThumb src={hasThumb ? videoUrl : null} />
+        </div>
+        <CardFooter className="mt-auto items-center justify-between p-0 pt-4">
           <span className="min-w-0 truncate text-xs text-[#60758a]">{generation.videoSubject ?? t('posts.unknownTopic')}</span>
           <div className="flex shrink-0 items-center gap-2">
             {generation.tokensRefunded && (
-              <span className="rounded-full bg-[#cff5df] px-2.5 py-1 text-xs font-semibold text-[#167246]">
+              <Badge variant="outline" className="border-transparent bg-[#cff5df] text-[#167246]">
                 {t('posts.refundedBadge')}
-              </span>
+              </Badge>
             )}
-            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_STYLE[generation.status] ?? STATUS_STYLE.pending}`}>
+            <Badge variant="outline" className={`border-transparent ${STATUS_STYLE[generation.status] ?? STATUS_STYLE.pending}`}>
               {t(GENERATION_STATUS_KEY[generation.status] ?? 'posts.statusPending')}
-            </span>
+            </Badge>
           </div>
-        </div>
-      </div>
+        </CardFooter>
+      </Card>
     </button>
   );
 };
@@ -284,40 +294,32 @@ const PostCard = ({
   const isHistory = slot.status === 'published' || slot.status === 'failed';
   const shownAt = isHistory && slot.publishedAt ? slot.publishedAt : slot.slotAt;
   const videoUrl = videoUrlFor(slot.taskId);
-  const hasCover = SLOT_VIDEO_STATUSES.has(slot.status) && videoUrl !== null;
-  const placeholderKey =
-    slot.status === 'generating' ? 'posts.coverGenerating' : slot.status === 'failed' ? 'posts.coverNoVideo' : 'posts.coverPending';
+  const hasThumb = SLOT_VIDEO_STATUSES.has(slot.status) && videoUrl !== null;
+  const provider = accounts[0]?.provider;
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="flex h-full flex-col overflow-hidden rounded-xl border border-[#d7e2ea] bg-white text-left shadow-[0_5px_18px_rgba(13,43,69,0.045)] transition-colors hover:border-[#b9cbd9]"
-    >
-      <VideoCover src={hasCover ? videoUrl : null} placeholderLabel={t(placeholderKey)} />
-      <div className="flex flex-1 flex-col p-4">
-        <div className="flex items-baseline justify-between gap-2">
-          <p className="text-sm font-semibold text-[#0d2b45]">{formatDate(shownAt, locale)}</p>
-          <p className="text-sm text-[#60758a]">{formatTime(shownAt, locale)}</p>
+    <button type="button" onClick={onOpen} className="h-full text-left">
+      <Card className={`flex h-full flex-col gap-0 rounded-xl p-4 transition-colors ${CARD_BORDER}`}>
+        <div className="flex items-center justify-between gap-2">
+          {provider ? <ProviderIcon provider={provider} /> : <span />}
+          <p className="text-xs text-muted-foreground">
+            {formatDate(shownAt, locale)} · {formatTime(shownAt, locale)}
+          </p>
         </div>
-        <p className="mt-2 line-clamp-3 text-sm leading-snug text-[#0d2b45]">
-          <span className="font-semibold">{personaName}</span>
-          {' — '}
-          <span className="text-[#60758a]">{slot.topic ?? t('posts.unknownTopic')}</span>
-        </p>
-        <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-3">
-          <div className="flex min-w-0 flex-wrap gap-1.5">
-            {accounts.slice(0, 3).map((account) => (
-              <span key={`${account.provider}:${account.id}`} className="inline-flex items-center gap-1 rounded-lg bg-[#f1f6fa] px-2 py-1 text-xs font-medium text-[#0d2b45]">
-                <ProviderDot provider={account.provider} />
-                <span className="max-w-28 truncate">{account.label}</span>
-              </span>
-            ))}
-          </div>
-          <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_STYLE[slot.status] ?? STATUS_STYLE.pending}`}>
+        <div className="mt-3 flex gap-3">
+          <p className="line-clamp-3 flex-1 text-sm leading-snug text-[#0d2b45]">
+            <span className="font-semibold">{personaName}</span>
+            {' — '}
+            <span className="text-[#60758a]">{slot.topic ?? t('posts.unknownTopic')}</span>
+          </p>
+          <PostThumb src={hasThumb ? videoUrl : null} />
+        </div>
+        <CardFooter className="mt-auto items-center justify-between p-0 pt-4">
+          <AccountAvatarGroup accounts={accounts} />
+          <Badge variant="outline" className={`border-transparent ${STATUS_STYLE[slot.status] ?? STATUS_STYLE.pending}`}>
             {t(STATUS_KEY[slot.status] ?? 'posts.statusPending')}
-          </span>
-        </div>
-      </div>
+          </Badge>
+        </CardFooter>
+      </Card>
       {slot.status === 'failed' && slot.error && (
         <p className="sr-only">{slot.error}</p>
       )}
@@ -326,22 +328,49 @@ const PostCard = ({
 };
 
 //---------------
-// VideoCover — the card's cover IS the video: metadata-only preload so a
-// grid of covers costs one small ranged request per card, muted and
-// control-less (playback happens in the detail modal). No video yet → a
-// quiet placeholder that says why.
+// accountInitials — compact circular avatars use the account label's
+// initials (first letters of up to two tokens, unicode-aware so non-Latin
+// accounts get real initials too).
 //---------------
-const VideoCover = ({ src, placeholderLabel }: { src: string | null; placeholderLabel: string }) => (
-  <div className="relative aspect-video w-full overflow-hidden bg-[#e8edf1]">
-    {src ? (
-      <video src={src} preload="metadata" muted playsInline className="h-full w-full object-cover" />
-    ) : (
-      <div className="flex h-full w-full items-center justify-center px-4 text-center text-xs font-medium text-[#8aa2b5]">
-        {placeholderLabel}
-      </div>
+function accountInitials(label: string): string {
+  const tokens = label.replace(/^@/, '').match(/[\p{L}\p{N}]+/gu) ?? [];
+  return tokens.slice(0, 2).map((token) => token[0]?.toUpperCase() ?? '').join('');
+}
+
+const AccountAvatarGroup = ({ accounts }: { accounts: AccountOption[] }) => (
+  <div className="flex -space-x-1.5">
+    {accounts.slice(0, 4).map((account) => (
+      <Avatar key={`${account.provider}:${account.id}`} className="h-6 w-6 ring-2 ring-white">
+        <AvatarFallback className="bg-[#f1f6fa] text-[9px] font-semibold text-[#0d2b45]">
+          {accountInitials(account.label)}
+        </AvatarFallback>
+      </Avatar>
+    ))}
+  </div>
+);
+
+//---------------
+// PostThumb — the 72×72 thumbnail on the card body's right: the video
+// itself (metadata-only preload, muted, control-less — playback happens
+// in the detail modal) under a small play glyph. No video yet → a quiet
+// muted square.
+//---------------
+const PostThumb = ({ src }: { src: string | null }) => (
+  <div className="relative w-[72px] shrink-0">
+    <AspectRatio ratio={1} className="w-[72px] rounded-[9px] bg-[#e8edf1]">
+      {src ? (
+        <video src={src} preload="metadata" muted playsInline className="size-full object-cover" />
+      ) : null}
+    </AspectRatio>
+    {src && (
+      <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <Play className="h-4 w-4 fill-white text-white drop-shadow" />
+      </span>
     )}
   </div>
 );
+
+const CARD_BORDER = 'border-[#e3ebf1] shadow-[0_1px_2px_rgba(13,43,69,0.05)] hover:border-[#c8d6e0]';
 
 //---------------
 // videoUrlFor — the engine download proxy serves the final render for a
@@ -451,7 +480,7 @@ const SlotDetailModal = ({
         )}
 
         <div className="mt-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-[#60758a]">{t('posts.topicLabel')}</p>
+          <p className="text-xs font-semibold tracking-wide text-[#60758a] uppercase">{t('posts.topicLabel')}</p>
           {editing ? (
             <div className="mt-2">
               <label className="sr-only" htmlFor="slot-topic">{t('posts.topicLabel')}</label>
