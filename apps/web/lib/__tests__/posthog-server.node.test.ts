@@ -42,10 +42,28 @@ describe('getPostHogServer (node runtime)', () => {
 
   it('is built on posthog-node, never posthog-js', () => {
     const source = readFileSync(path.resolve(process.cwd(), 'lib/posthog-server.ts'), 'utf8');
-    // posthog-node is lazy-loaded via dynamic import to keep it out of the
-    // client bundle; either a static import or dynamic import counts.
-    expect(source).toMatch(/from ['"]posthog-node['"]|import\(['"]posthog-node['"]\)/);
+    // posthog-node is lazy-loaded via a webpackIgnore-marked dynamic import
+    // (see the test below); posthog-js must never appear — the server SDK
+    // is the only client used here.
     expect(source).not.toContain("from 'posthog-js'");
     expect(source).not.toContain('from "posthog-js"');
+    expect(source).not.toMatch(/^\s*import .* from ['"]posthog-node['"]/m);
+  });
+
+  it('marks the posthog-node dynamic import with webpackIgnore: true', () => {
+    // Regression: a plain dynamic import() is still statically analyzed by
+    // webpack, which resolves 'posthog-node' at build time and bundles the
+    // Node-only SDK (no browser export condition) into the client chunk —
+    // the build then fails on node:fs / node:os / node:path
+    // (UnhandledSchemeError). webpackIgnore: true keeps the import() native
+    // so Node resolves it at runtime on the server; the browser never
+    // reaches it (typeof window guard in getPostHogServer/flushPostHog).
+    const source = readFileSync(path.resolve(process.cwd(), 'lib/posthog-server.ts'), 'utf8');
+    const dynamicImports = [...source.matchAll(/import\(([\s\S]*?)\)/g)];
+    const posthogImports = dynamicImports.filter((m) => m[1].includes('posthog-node'));
+    expect(posthogImports.length).toBeGreaterThan(0);
+    for (const m of posthogImports) {
+      expect(m[1]).toMatch(/webpackIgnore:\s*true/);
+    }
   });
 });

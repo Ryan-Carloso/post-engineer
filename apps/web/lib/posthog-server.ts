@@ -1,10 +1,20 @@
 //---------------
 // Server-side PostHog client singleton.
 //
-// posthog-node is lazy-loaded (dynamic import) so the Node-only SDK never
-// ends up in the client bundle. This module is imported by lib/logger.ts,
-// which is reachable from client components — a static `import` of
-// posthog-node would ship Node builtins (async_hooks, zlib) to browsers.
+// posthog-node is loaded via a dynamic import marked `webpackIgnore: true`
+// so the Node-only SDK never ends up in the client bundle. A plain dynamic
+// import() is NOT enough: webpack statically analyzes it, resolves
+// 'posthog-node' at build time, and bundles the SDK into the client chunk.
+// posthog-node ships no browser build (its exports map only has
+// node/edge/workerd conditions), so the client build then dies on
+// node:fs / node:os / node:path (UnhandledSchemeError). With webpackIgnore,
+// webpack emits the import() untouched: Node resolves it natively at
+// runtime on the server, and the browser never reaches it — every public
+// function below returns early on `typeof window !== 'undefined'`.
+//
+// This module is imported by lib/logger.ts, which is reachable from client
+// components — a static `import` of posthog-node would ship Node builtins
+// (async_hooks, zlib) to browsers.
 //
 // Reads configuration from environment variables:
 // - POSTHOG_API_KEY (server-side, preferred) or NEXT_PUBLIC_POSTHOG_KEY (fallback)
@@ -23,8 +33,9 @@ import { DEFAULT_POSTHOG_HOST } from './posthog-config';
 const SERVER_DISTINCT_ID = 'post-engineer-server';
 
 //---------------
-// Lazy loader for the posthog-node SDK. The dynamic import keeps the
-// server-only dependency out of the client bundle. Failures degrade to
+// Lazy loader for the posthog-node SDK. The dynamic import is marked
+// `webpackIgnore: true` so webpack does not try to bundle the Node-only
+// SDK into client chunks (see the header comment). Failures degrade to
 // telemetry-disabled (null client).
 //---------------
 
@@ -70,8 +81,12 @@ function loadSdk(): Promise<PostHogNodeClient | null> {
       const config = getConfig();
       if (!config) return null;
       try {
-        // Dynamic import: keeps posthog-node out of the client bundle.
-        const { PostHog } = await import('posthog-node');
+        // webpackIgnore: true is load-bearing — without it, webpack
+        // statically resolves this import at build time and bundles
+        // posthog-node (Node-only, no browser export condition) into the
+        // client chunk, failing the build on node:fs / node:os / node:path.
+        // With it, Node resolves the SDK natively at runtime on the server.
+        const { PostHog } = await import(/* webpackIgnore: true */ 'posthog-node');
         return new PostHog(config.key, {
           host: config.host,
           // Serverless (Vercel): best-effort immediate flush. flushAt: 1

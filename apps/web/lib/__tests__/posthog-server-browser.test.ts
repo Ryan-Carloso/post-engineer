@@ -5,9 +5,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 //---------------
 // Browser guard: getPostHogServer() must return null when `window` exists,
-// even with a key configured. This is the documented mechanism keeping
-// posthog-node out of client bundles (lib/logger.ts is imported by client
-// components via lib/api.ts).
+// even with a key configured. The import() of posthog-node in
+// lib/posthog-server.ts carries `webpackIgnore: true` so webpack never
+// bundles the Node-only SDK into client chunks (lib/logger.ts is imported
+// by client components via lib/api.ts); this runtime guard is the second
+// layer — it ensures the native import() is never even reached in the
+// browser.
 //---------------
 
 describe('getPostHogServer browser guard', () => {
