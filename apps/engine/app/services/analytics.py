@@ -35,9 +35,12 @@ _SECRET_KEY_PATTERN = re.compile(
 )
 
 # Values matching this pattern have the secret portion redacted.
-# Catches `key=secret`, `key: secret`, `Bearer secret` in free text.
+# Catches `key=secret`, `key: secret`, `"key": "secret"` (JSON),
+# `'key': 'secret'` (Python repr), and `Bearer <token>` in free text.
+# The optional quotes matter: model output and SDK/HTTP errors often echo
+# config blobs in JSON/dict shape, which the bare pattern missed.
 _SECRET_VALUE_PATTERN = re.compile(
-    r"(password|passwd|secret|token|api[-_]?key|credential|private[-_]?key|session)\s*[:=]\s*([^\s,;\"']+)"
+    r"(password|passwd|secret|token|api[-_]?key|credential|private[-_]?key|session)[\"']?\s*[:=]\s*[\"']?([^\s,;\"']+)"
     r"|(bearer)\s+([^\s,;\"']+)",
     re.IGNORECASE,
 )
@@ -78,7 +81,15 @@ _REDACT_EXEMPT_KEYS = frozenset(
 def _scrub_secrets(properties: dict[str, Any]) -> dict[str, Any]:
     scrubbed: dict[str, Any] = {}
     for key, value in properties.items():
-        if key in _REDACT_EXEMPT_KEYS:
+        # Exempt names are legitimate telemetry counters — but only when the
+        # value is actually a number. A secret is never an int, so a
+        # non-numeric value under an exempt name is still redacted. This
+        # keeps the exemption from becoming a global opt-out for every event.
+        if (
+            key in _REDACT_EXEMPT_KEYS
+            and isinstance(value, int)
+            and not isinstance(value, bool)
+        ):
             scrubbed[key] = value
         else:
             scrubbed[key] = _REDACTED if _SECRET_KEY_PATTERN.search(key) else value

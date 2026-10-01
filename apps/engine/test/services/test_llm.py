@@ -1448,6 +1448,26 @@ class TestAIRequestTracking(unittest.TestCase):
         self.assertNotIn("abc123", props["error"])
         self.assertIn("token=[redacted]", props["error"])
 
+    def test_track_llm_request_scrubs_quoted_credential_fragments(self):
+        # JSON/dict-shaped credentials echoed in model output or SDK errors
+        # must be redacted before reaching PostHog — the bare-shape test
+        # above does not cover these.
+        config.app["llm_provider"] = "omniroute"
+        config.app["omniroute_model_name"] = ""
+        with patch.object(llm, "track_ai_request") as track:
+            llm._track_llm_request(
+                provider="omniroute",
+                primary_provider="omniroute",
+                fallback_used=False,
+                duration_ms=1,
+                success=False,
+                error="request failed: {\"api_key\": \"sk-err-123\"}",
+                response_text="config dump {\"token\": \"sk-resp-456\"} end",
+            )
+        props = track.call_args[0][0]
+        self.assertNotIn("sk-err-123", props["error"])
+        self.assertNotIn("sk-resp-456", props["response_preview"])
+
     def test_response_preview_is_truncated(self):
         """
         Long responses are truncated in the event preview while

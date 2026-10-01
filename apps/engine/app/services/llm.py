@@ -268,9 +268,11 @@ def _track_llm_request(
             "success": success,
             "error": scrub_secret_values(error or "")[:500],
             "response_chars": len(response_text),
-            "response_preview": scrub_secret_values(
-                response_text[:_RESPONSE_PREVIEW_CHARS]
-            ),
+            # Scrub the full text BEFORE truncating: a cut landing mid-key
+            # would otherwise leave a secret fragment the pattern can't see.
+            "response_preview": scrub_secret_values(response_text)[
+                :_RESPONSE_PREVIEW_CHARS
+            ],
             "prompt_tokens": usage.get("prompt_tokens", 0),
             "completion_tokens": usage.get("completion_tokens", 0),
             "total_tokens": usage.get("total_tokens", 0),
