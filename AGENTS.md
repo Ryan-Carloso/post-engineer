@@ -1003,6 +1003,18 @@ Follow these so the same issues don't come back:
 
 ## CI lessons
 
+- **Rebase can silently drop a dependency from package.json while the lockfile
+  keeps it (2026-10-01, PR #34):** after rebasing onto main, conflict
+  resolution on `apps/mcp/package.json` kept the old branch's
+  `dependencies` block (without `posthog-node`) while `pnpm-lock.yaml`
+  still referenced it — CI's `pnpm install --frozen-lockfile` failed with
+  `ERR_PNPM_OUTDATED_LOCKFILE` ("specifiers in the lockfile don't match").
+  Same class of bug previously bit `apps/web/package.json` (@sentry/nextjs
+  resurrected). Rule: after ANY rebase that touches a package.json, run
+  `pnpm install --frozen-lockfile` locally before pushing; and when taking
+  `--theirs`/`--ours` on a package.json, diff the dependencies blocks
+  explicitly instead of trusting the merge.
+
 - Never pass CLI flags through `pnpm <script> -- <flags>` in workflows:
   pnpm (v10) forwards a literal `--` to the script, so
   `pnpm test -- --coverage` runs `vitest run -- --coverage`, and vitest then
