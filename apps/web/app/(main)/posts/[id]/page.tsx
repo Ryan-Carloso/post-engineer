@@ -160,7 +160,7 @@ export default function PostDetailPage() {
           statusStyle={STATUS_STYLE[generation.status] ?? STATUS_STYLE.pending}
         />
         <section aria-label={t('posts.detailsTitle')} className="mt-6">
-          <p className="text-sm text-[#60758a]">
+          <p className="text-sm text-muted-foreground">
             {formatDateTime(generation.createdAt, locale)} · {generation.videoSubject ?? t('posts.unknownTopic')}
           </p>
           <DetailPlayer
@@ -168,7 +168,7 @@ export default function PostDetailPage() {
             placeholder={t('posts.coverNoVideo')}
           />
           {generation.status === 'failed' && (
-            <p className="mt-4 text-sm text-[#c2301e]">
+            <p className="mt-4 text-sm text-destructive">
               {t(GENERATION_ERROR_KEY[generation.errorCode ?? 'unknown'] ?? 'posts.errorUnknown')}
             </p>
           )}
@@ -218,9 +218,9 @@ const DetailHeader = ({
         <Link
           href="/posts"
           aria-label={t('posts.back')}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#d7e2ea] bg-white text-[#0d2b45] hover:bg-[#f4f8fb]"
+          className="inline-flex size-9 items-center justify-center rounded-full border border-input bg-white text-[#0d2b45] hover:bg-[#f4f8fb]"
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="size-4" />
         </Link>
         <h1 className="text-xl font-bold tracking-[-0.02em] text-[#0d2b45]">{title}</h1>
       </div>
@@ -356,14 +356,14 @@ const SlotDetail = ({
 
   return (
     <section aria-label={t('posts.detailsTitle')} className="mt-6">
-      <p className="text-sm text-[#60758a]">
+      <p className="text-sm text-muted-foreground">
         {formatDateTime(slot.status === 'published' && slot.publishedAt ? slot.publishedAt : slot.slotAt, locale)}
       </p>
 
       {canWatch && videoUrl ? (
         <DetailPlayer src={videoUrl} placeholder="" />
       ) : slot.status === 'generating' ? (
-        <div className="mt-4 rounded-2xl bg-[#f1f6fa] p-6">
+        <div className="mt-4 rounded-2xl bg-secondary p-6">
           <div className="flex items-center justify-between text-sm font-semibold text-[#0d2b45]">
             <span>{t('posts.videoGenerating')}</span>
             <span>{slot.progress}%</span>
@@ -377,7 +377,7 @@ const SlotDetail = ({
           >
             <div className="h-full rounded-full bg-[#0d2b45] transition-all" style={{ width: `${slot.progress}%` }} />
           </div>
-          {slot.stage && <p className="mt-2 text-xs text-[#60758a]">{slot.stage}</p>}
+          {slot.stage && <p className="mt-2 text-xs text-muted-foreground">{slot.stage}</p>}
         </div>
       ) : (
         <DetailPlayer
@@ -387,7 +387,7 @@ const SlotDetail = ({
       )}
 
       <div className="mt-6">
-        <p className="text-xs font-semibold uppercase tracking-wide text-[#60758a]">{t('posts.topicLabel')}</p>
+        <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{t('posts.topicLabel')}</p>
         {editing ? (
           <div className="mt-2">
             <label className="sr-only" htmlFor="slot-topic">{t('posts.topicLabel')}</label>
@@ -396,7 +396,7 @@ const SlotDetail = ({
               value={topicDraft}
               onChange={(event) => setTopicDraft(event.target.value)}
               rows={3}
-              className="w-full rounded-xl border border-[#d7e2ea] px-3 py-2 text-sm text-[#0d2b45] focus:border-[#0d2b45] focus:outline-none"
+              className="w-full rounded-xl border border-input px-3 py-2 text-sm text-[#0d2b45] focus:border-[#0d2b45] focus:outline-none"
             />
             <div className="mt-2 flex gap-2">
               <button
@@ -414,7 +414,7 @@ const SlotDetail = ({
                   setTopicDraft(slot.topic ?? '');
                 }}
                 disabled={updateTopic.isPending}
-                className="rounded-xl border border-[#d7e2ea] px-4 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb]"
+                className="rounded-xl border border-input px-4 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb]"
               >
                 {t('posts.cancel')}
               </button>
@@ -430,8 +430,8 @@ const SlotDetail = ({
           {provider && <ProviderIcon provider={provider} />}
           <div className="flex -space-x-1.5">
             {accounts.map((account) => (
-              <Avatar key={`${account.provider}:${account.id}`} className="h-7 w-7 ring-2 ring-white">
-                <AvatarFallback className="bg-[#f1f6fa] text-[10px] font-semibold text-[#0d2b45]">
+              <Avatar key={`${account.provider}:${account.id}`} className="size-7 ring-2 ring-white">
+                <AvatarFallback className="bg-secondary text-[10px] font-semibold text-[#0d2b45]">
                   {accountInitials(account.label)}
                 </AvatarFallback>
               </Avatar>
@@ -441,11 +441,11 @@ const SlotDetail = ({
       )}
 
       {slot.status === 'failed' && slot.error && (
-        <p className="mt-6 text-sm text-[#c2301e]">{slot.error}</p>
+        <p className="mt-6 text-sm text-destructive">{slot.error}</p>
       )}
 
       {mutationError && (
-        <p className="mt-6 rounded-xl bg-[#ffe1de] p-3 text-sm text-[#c2301e]" role="alert">
+        <p className="mt-6 rounded-xl bg-[#ffe1de] p-3 text-sm text-destructive" role="alert">
           {mutationError}
         </p>
       )}
@@ -457,7 +457,7 @@ const SlotDetail = ({
               type="button"
               onClick={() => setEditing(true)}
               disabled={deleteSlot.isPending}
-              className="rounded-xl border border-[#d7e2ea] px-4 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb]"
+              className="rounded-xl border border-input px-4 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb]"
             >
               {t('posts.edit')}
             </button>
@@ -468,14 +468,14 @@ const SlotDetail = ({
               onClick={handleDelete}
               disabled={deleteSlot.isPending || updateTopic.isPending}
               className={`rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${
-                armed ? 'bg-[#a1250f] hover:bg-[#8c1f0d]' : 'bg-[#c2301e] hover:bg-[#a1250f]'
+                armed ? 'bg-[#a1250f] hover:bg-[#8c1f0d]' : 'bg-destructive hover:bg-[#a1250f]'
               }`}
             >
               {armed ? t('posts.deleteConfirm') : t('posts.delete')}
             </button>
           )}
           {canDelete && armed && (
-            <span className="text-xs text-[#60758a]">{t('posts.deleteTokenNote')}</span>
+            <span className="text-xs text-muted-foreground">{t('posts.deleteTokenNote')}</span>
           )}
         </div>
       )}
@@ -506,7 +506,7 @@ const DetailNotFound = ({ message }: { message?: string }) => {
 const DetailSkeleton = () => (
   <div className="mx-auto max-w-3xl animate-pulse" data-testid="detail-skeleton">
     <div className="flex items-center gap-3">
-      <div className="h-9 w-9 rounded-full bg-[#e8edf1]" />
+      <div className="size-9 rounded-full bg-[#e8edf1]" />
       <div className="h-6 w-48 rounded-lg bg-[#e8edf1]" />
     </div>
     <div className="mt-6 aspect-video w-full rounded-2xl bg-[#e8edf1]" />
