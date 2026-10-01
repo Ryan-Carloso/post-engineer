@@ -115,6 +115,19 @@ def track_event(event_name: str, properties: dict[str, Any] | None = None) -> No
         pass
 
 
+def track_ai_request(properties: dict[str, Any]) -> None:
+    """Track one AI backend call (LLM or Modal).
+
+    Event name: ai_request. The caller builds the properties dict with a
+    uniform schema: backend ("llm" | "modal"), duration_ms, success, plus
+    backend-specific context (provider/model/primary_provider/fallback_used
+    for llm; operation/job_id for modal) and, on failure, a pre-sanitized
+    error. Never pass credentials or raw secrets — track_event applies the
+    secret scrubber as a backstop and never raises.
+    """
+    track_event("ai_request", properties)
+
+
 def reset_for_testing() -> None:
     """Reset cached client between tests. Not used in production."""
     global _client, _warned, _attempted

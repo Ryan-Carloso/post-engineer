@@ -1,6 +1,8 @@
 import json
 import logging
 import re
+import time
+
 import requests
 from typing import List
 
@@ -9,6 +11,7 @@ from openai import AzureOpenAI, OpenAI
 from openai.types.chat import ChatCompletion
 
 from app.config import config
+from app.services.analytics import track_ai_request
 from app.utils import secret_redaction
 
 _max_retries = 5
@@ -165,14 +168,100 @@ LLM_CLIENT_TIMEOUT_SECONDS = 60.0
 LLM_CLIENT_MAX_RETRIES = 1
 
 
+# Default model per provider, mirroring the provider branches in
+# _generate_response_inner below. _resolve_model_name prefers the explicit
+# config value; this dict only fills the gap when the branch applies a
+# default. Keep both in sync — the test suite pins these values.
+_PROVIDER_DEFAULT_MODELS = {
+    "g4f": "gpt-3.5-turbo-16k-0613",
+    "omniroute": "auto",
+    "aihubmix": "gpt-5.4-mini",
+    "aimlapi": "openai/gpt-4o-mini",
+    "groq": "llama-3.3-70b-versatile",
+    "evolink": "gpt-5.5",
+    "mimo": "mimo-v2.5-pro",
+    "volcengine": "doubao-seed-2-1-turbo-260628",
+    "zai": "glm-5.3-flash",
+    "openrouter": "openrouter/auto",
+}
+
+# Truncate AI responses in analytics: enough to spot-check what the model
+# returned, small enough to keep events lean.
+_RESPONSE_PREVIEW_CHARS = 500
+
+
+def _resolve_model_name(llm_provider: str) -> str:
+    """Best-effort model name for analytics.
+
+    Returns the configured <provider>_model_name, or the provider branch
+    default when unconfigured. Empty when the provider has neither (its
+    validation would fail before any request anyway).
+    """
+    configured = config.app.get(f"{llm_provider}_model_name", "")
+    if configured:
+        return str(configured)
+    return _PROVIDER_DEFAULT_MODELS.get(llm_provider, "")
+
+
+def _track_llm_request(
+    *,
+    provider: str,
+    primary_provider: str,
+    fallback_used: bool,
+    duration_ms: int,
+    success: bool,
+    error: str | None = None,
+    response_text: str = "",
+) -> None:
+    """Emit one ai_request event for an LLM call.
+
+    The error must already be sanitized by the caller. Telemetry never
+    raises (see track_ai_request).
+    """
+    track_ai_request(
+        {
+            "backend": "llm",
+            "provider": provider,
+            "model": _resolve_model_name(provider),
+            "primary_provider": primary_provider,
+            "fallback_used": fallback_used,
+            "duration_ms": duration_ms,
+            "success": success,
+            "error": error or "",
+            "response_chars": len(response_text),
+            "response_preview": response_text[:_RESPONSE_PREVIEW_CHARS],
+        }
+    )
+
+
 def _generate_response(prompt: str) -> str:
     # Compatibility wrapper: converts failures into the "Error: ..." string
     # expected by legacy callers (WebUI, tests, and internal services).
+    # Every call is tracked as an ai_request event (backend=llm).
     llm_provider = str(config.app.get("llm_provider", "omniroute"))
+    start = time.monotonic()
     try:
-        return _generate_response_inner(prompt, llm_provider)
+        result = _generate_response_inner(prompt, llm_provider)
     except Exception as e:
-        return f"Error: {_sanitize_error_message(e)}"
+        error = _sanitize_error_message(e)
+        _track_llm_request(
+            provider=llm_provider,
+            primary_provider=llm_provider,
+            fallback_used=False,
+            duration_ms=int((time.monotonic() - start) * 1000),
+            success=False,
+            error=error,
+        )
+        return f"Error: {error}"
+    _track_llm_request(
+        provider=llm_provider,
+        primary_provider=llm_provider,
+        fallback_used=False,
+        duration_ms=int((time.monotonic() - start) * 1000),
+        success=True,
+        response_text=result,
+    )
+    return result
 
 
 def _generate_response_inner(prompt: str, llm_provider: str) -> str:
@@ -733,27 +822,50 @@ def _generate_response_with_fallback(prompt: str) -> str:
     # config.app["llm_provider"] here would race between concurrent requests
     # (a parallel request would read "openrouter" as primary and lose its own
     # fallback).
+    #
+    # Every call is tracked as one ai_request event (backend=llm) with the
+    # provider that actually served it, whether the fallback ran, and the
+    # sanitized error when it failed.
     primary_provider = str(config.app.get("llm_provider", "omniroute"))
+    start = time.monotonic()
+    used_provider = primary_provider
+    fallback_used = False
+    error: str | None = None
+    result = ""
     try:
-        return _generate_response_inner(prompt, primary_provider)
-    except Exception as primary_error:
-        primary_message = _sanitize_error_message(primary_error)
-
-        if primary_provider == "openrouter":
-            return f"Error: {primary_message}"
-
-        openrouter_key = config.app.get("openrouter_api_key", "")
-        if not openrouter_key:
-            return f"Error: {primary_message}"
-
-        logger.warning(
-            f"primary llm provider '{primary_provider}' failed, "
-            f"falling back to openrouter: {primary_message}"
-        )
         try:
-            return _generate_response_inner(prompt, "openrouter")
-        except Exception as openrouter_error:
-            return f"Error: {_sanitize_error_message(openrouter_error)}"
+            result = _generate_response_inner(prompt, primary_provider)
+        except Exception as primary_error:
+            primary_message = _sanitize_error_message(primary_error)
+
+            if primary_provider == "openrouter":
+                raise
+
+            openrouter_key = config.app.get("openrouter_api_key", "")
+            if not openrouter_key:
+                raise
+
+            logger.warning(
+                f"primary llm provider '{primary_provider}' failed, "
+                f"falling back to openrouter: {primary_message}"
+            )
+            used_provider = "openrouter"
+            fallback_used = True
+            result = _generate_response_inner(prompt, "openrouter")
+    except Exception as e:
+        error = _sanitize_error_message(e)
+    _track_llm_request(
+        provider=used_provider,
+        primary_provider=primary_provider,
+        fallback_used=fallback_used,
+        duration_ms=int((time.monotonic() - start) * 1000),
+        success=error is None,
+        error=error,
+        response_text=result,
+    )
+    if error is not None:
+        return f"Error: {error}"
+    return result
 
 
 def _limit_script_text(text: str | None, max_length: int, field_name: str) -> str:

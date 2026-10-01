@@ -213,5 +213,106 @@ class TestInfiniteTalkClient(unittest.TestCase):
                         )
 
 
+class TestGenerateIntroTracking(unittest.TestCase):
+    def _run_generate_intro(self, responses):
+        """Run generate_intro with canned HTTP responses; returns the paths."""
+        calls: list[dict[str, object]] = []
+
+        def request(*args: object, **kwargs: object) -> requests.Response:
+            calls.append(kwargs)
+            return responses.pop(0)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            image_path = Path(temp_dir) / "image.png"
+            audio_path = Path(temp_dir) / "audio.mp3"
+            output_path = Path(temp_dir) / "intro.mp4"
+            image_path.write_bytes(b"image")
+            audio_path.write_bytes(b"audio")
+            with patch.object(infinitetalk, "trim_audio") as trim:
+                def fake_trim(
+                    source: str,
+                    target: str,
+                    duration_seconds: float,
+                    padding_seconds: float,
+                ) -> None:
+                    Path(target).write_bytes(b"audio")
+
+                trim.side_effect = fake_trim
+                with patch.object(
+                    infinitetalk, "audio_duration_seconds", return_value=5.0
+                ):
+                    with patch.object(
+                        infinitetalk.config,
+                        "infinitetalk",
+                        {
+                            "submit_url": "https://modal.test/submit",
+                            "status_url": "https://modal.test/status",
+                            "download_url": "https://modal.test/download",
+                            "poll_interval_seconds": 0,
+                            "timeout_seconds": 1,
+                            "intro_duration_seconds": 5,
+                            "http_secret": "test-secret",
+                        },
+                    ):
+                        result = infinitetalk.generate_intro(
+                            str(image_path),
+                            str(audio_path),
+                            LipSyncQuality.very_good,
+                            str(output_path),
+                            request=request,
+                        )
+            self.assertTrue(Path(result).exists())
+            return result
+
+    def _submit_status_download(self):
+        submit = requests.Response()
+        submit.status_code = 200
+        submit._content = b'{"job_id":"job-1"}'
+        status = requests.Response()
+        status.status_code = 200
+        status._content = b'{"status":"done"}'
+        download = requests.Response()
+        download.status_code = 200
+        download._content = b"valid-mp4"
+        return [submit, status, download]
+
+    def test_generate_intro_tracks_success(self):
+        """
+        A completed Modal job emits one ai_request: backend=modal,
+        operation=generate_intro, the job_id, success=True.
+        """
+        with patch.object(infinitetalk, "track_ai_request") as track:
+            self._run_generate_intro(self._submit_status_download())
+
+        track.assert_called_once()
+        props = track.call_args[0][0]
+        self.assertEqual(props["backend"], "modal")
+        self.assertEqual(props["operation"], "generate_intro")
+        self.assertEqual(props["job_id"], "job-1")
+        self.assertTrue(props["success"])
+        self.assertEqual(props["error"], "")
+        self.assertGreaterEqual(props["duration_ms"], 0)
+
+    def test_generate_intro_tracks_failure(self):
+        """
+        A failed Modal submit emits ai_request with success=False and the
+        error, and the original exception still propagates.
+        """
+        submit = requests.Response()
+        submit.status_code = 500
+        submit._content = b"boom"
+
+        with patch.object(infinitetalk, "track_ai_request") as track:
+            with self.assertRaises(infinitetalk.InfiniteTalkError):
+                self._run_generate_intro([submit])
+
+        track.assert_called_once()
+        props = track.call_args[0][0]
+        self.assertEqual(props["backend"], "modal")
+        self.assertEqual(props["operation"], "generate_intro")
+        self.assertFalse(props["success"])
+        self.assertIn("500", props["error"])
+
+
 if __name__ == "__main__":
     unittest.main()

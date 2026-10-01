@@ -14,6 +14,7 @@ import requests
 
 from app.config import config
 from app.models.schema import LipSyncQuality
+from app.services.analytics import scrub_secret_values, track_ai_request
 
 
 class InfiniteTalkError(RuntimeError):
@@ -133,7 +134,51 @@ def generate_intro(
     request: Request = requests.request,
     duration_seconds: float | None = None,
 ) -> str:
-    """Generate and download the persona intro using a fixed quality preset."""
+    """Generate and download the persona intro using a fixed quality preset.
+
+    Tracked as one ai_request event (backend=modal): the Modal job id,
+    duration, and sanitized error when it fails.
+    """
+    start = time.monotonic()
+    job_id = ""
+    try:
+        output_path, job_id = _generate_intro_impl(
+            image_path, audio_path, quality, output_path, request, duration_seconds
+        )
+    except Exception as e:
+        track_ai_request(
+            {
+                "backend": "modal",
+                "operation": "generate_intro",
+                "job_id": job_id,
+                "duration_ms": int((time.monotonic() - start) * 1000),
+                "success": False,
+                "error": scrub_secret_values(str(e))[:500],
+            }
+        )
+        raise
+    track_ai_request(
+        {
+            "backend": "modal",
+            "operation": "generate_intro",
+            "job_id": job_id,
+            "duration_ms": int((time.monotonic() - start) * 1000),
+            "success": True,
+            "error": "",
+        }
+    )
+    return output_path
+
+
+def _generate_intro_impl(
+    image_path: str,
+    audio_path: str,
+    quality: LipSyncQuality,
+    output_path: str,
+    request: Request = requests.request,
+    duration_seconds: float | None = None,
+) -> tuple[str, str]:
+    """Submit/poll/download the intro video; returns (output_path, job_id)."""
     if quality not in (LipSyncQuality.ok, LipSyncQuality.very_good):
         raise InfiniteTalkError(f"unsupported InfiniteTalk quality: {quality}")
     submit_url = _url("submit_url")
@@ -199,4 +244,4 @@ def generate_intro(
     if not response.content:
         raise InfiniteTalkError("InfiniteTalk returned an empty video")
     Path(output_path).write_bytes(response.content)
-    return output_path
+    return output_path, job_id

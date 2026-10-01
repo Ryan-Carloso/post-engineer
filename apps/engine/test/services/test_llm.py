@@ -1199,6 +1199,148 @@ class TestLiteLLMProvider(unittest.TestCase):
         self.assertEqual(config.app["llm_provider"], "omniroute")
 
 
+class TestAIRequestTracking(unittest.TestCase):
+    def setUp(self):
+        self.original_app_config = dict(config.app)
+
+    def tearDown(self):
+        config.app.clear()
+        config.app.update(self.original_app_config)
+
+    def _tracked(self, fn, *args):
+        with patch.object(llm, "track_ai_request") as track:
+            result = fn(*args)
+        self.assertEqual(track.call_count, 1)
+        return result, track.call_args[0][0]
+
+    def test_fallback_path_tracks_primary_success(self):
+        """
+        A successful primary call emits one ai_request: backend=llm, the
+        provider/model that served it, fallback_used=False.
+        """
+        config.app["llm_provider"] = "omniroute"
+        config.app["omniroute_model_name"] = ""
+        config.app["openrouter_api_key"] = "or-key"
+
+        with patch.object(
+            llm, "_generate_response_inner", return_value="hello script"
+        ):
+            result, props = self._tracked(llm._generate_response_with_fallback, "hi")
+
+        self.assertEqual(result, "hello script")
+        self.assertEqual(props["backend"], "llm")
+        self.assertEqual(props["provider"], "omniroute")
+        self.assertEqual(props["model"], "auto")
+        self.assertEqual(props["primary_provider"], "omniroute")
+        self.assertFalse(props["fallback_used"])
+        self.assertTrue(props["success"])
+        self.assertEqual(props["error"], "")
+        self.assertGreaterEqual(props["duration_ms"], 0)
+        self.assertEqual(props["response_chars"], len("hello script"))
+        self.assertEqual(props["response_preview"], "hello script")
+
+    def test_fallback_path_tracks_fallback_usage(self):
+        """
+        When the primary fails and OpenRouter serves the request, the event
+        records provider=openrouter with fallback_used=True and the primary.
+        """
+        config.app["llm_provider"] = "omniroute"
+        config.app["omniroute_model_name"] = ""
+        config.app["openrouter_api_key"] = "or-key"
+        config.app["openrouter_model_name"] = ""
+
+        with patch.object(
+            llm,
+            "_generate_response_inner",
+            side_effect=[Exception("primary down"), "recovered script"],
+        ):
+            result, props = self._tracked(llm._generate_response_with_fallback, "hi")
+
+        self.assertEqual(result, "recovered script")
+        self.assertEqual(props["provider"], "openrouter")
+        self.assertEqual(props["model"], "openrouter/auto")
+        self.assertTrue(props["fallback_used"])
+        self.assertEqual(props["primary_provider"], "omniroute")
+        self.assertTrue(props["success"])
+        self.assertEqual(props["error"], "")
+
+    def test_fallback_path_tracks_terminal_failure(self):
+        """
+        When both primary and fallback fail, the event carries success=False
+        and the sanitized error of the last attempt.
+        """
+        config.app["llm_provider"] = "omniroute"
+        config.app["omniroute_model_name"] = ""
+        config.app["openrouter_api_key"] = "or-key"
+        config.app["openrouter_model_name"] = ""
+
+        with patch.object(
+            llm,
+            "_generate_response_inner",
+            side_effect=[Exception("primary down"), Exception("openrouter 429")],
+        ):
+            result, props = self._tracked(llm._generate_response_with_fallback, "hi")
+
+        self.assertTrue(result.startswith("Error:"))
+        self.assertFalse(props["success"])
+        self.assertIn("openrouter 429", props["error"])
+        self.assertEqual(props["provider"], "openrouter")
+        self.assertTrue(props["fallback_used"])
+
+    def test_legacy_wrapper_tracks_success_and_failure(self):
+        """
+        The legacy _generate_response entrypoint also emits ai_request so
+        every LLM call is tracked, not just the fallback path.
+        """
+        config.app["llm_provider"] = "zai"
+        config.app["zai_model_name"] = "glm-5.3-flash"
+
+        with patch.object(llm, "_generate_response_inner", return_value="legacy ok"):
+            result, props = self._tracked(llm._generate_response, "hi")
+        self.assertEqual(result, "legacy ok")
+        self.assertEqual(props["backend"], "llm")
+        self.assertEqual(props["provider"], "zai")
+        self.assertEqual(props["model"], "glm-5.3-flash")
+        self.assertFalse(props["fallback_used"])
+        self.assertTrue(props["success"])
+
+        with patch.object(
+            llm, "_generate_response_inner", side_effect=Exception("boom")
+        ):
+            result, props = self._tracked(llm._generate_response, "hi")
+        self.assertTrue(result.startswith("Error:"))
+        self.assertFalse(props["success"])
+        self.assertIn("boom", props["error"])
+
+    def test_resolve_model_name_prefers_config_over_default(self):
+        config.app["openrouter_model_name"] = "openai/gpt-4o"
+        self.assertEqual(llm._resolve_model_name("openrouter"), "openai/gpt-4o")
+
+    def test_resolve_model_name_uses_provider_default(self):
+        config.app["omniroute_model_name"] = ""
+        config.app["openrouter_model_name"] = ""
+        config.app["zai_model_name"] = ""
+        self.assertEqual(llm._resolve_model_name("omniroute"), "auto")
+        self.assertEqual(llm._resolve_model_name("openrouter"), "openrouter/auto")
+        self.assertEqual(llm._resolve_model_name("zai"), "glm-5.3-flash")
+
+    def test_response_preview_is_truncated(self):
+        """
+        Long responses are truncated in the event preview while
+        response_chars keeps the full length.
+        """
+        config.app["llm_provider"] = "omniroute"
+        config.app["omniroute_model_name"] = ""
+        config.app["openrouter_api_key"] = "or-key"
+        long_text = "x" * 2000
+
+        with patch.object(llm, "_generate_response_inner", return_value=long_text):
+            _, props = self._tracked(llm._generate_response_with_fallback, "hi")
+
+        self.assertEqual(props["response_chars"], 2000)
+        self.assertEqual(len(props["response_preview"]), 500)
+
+
 class TestRuntimeEnvironmentDetection(unittest.TestCase):
     def test_container_detection_ignores_plain_linux_cgroup_file(self):
         """
