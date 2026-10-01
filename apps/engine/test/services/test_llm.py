@@ -1059,6 +1059,22 @@ class TestLiteLLMProvider(unittest.TestCase):
         generate.assert_called_once_with("test", "omniroute")
         self.assertEqual(result, "ok")
 
+    def test_wrapper_default_provider_is_omniroute(self):
+        """
+        The legacy _generate_response wrapper carries its own default for
+        llm_provider; pin it too so a future revert of just one of the two
+        defaults (wrapper vs fallback) is caught.
+        """
+        config.app.pop("llm_provider", None)
+
+        with patch.object(
+            llm, "_generate_response_inner", return_value="ok"
+        ) as generate:
+            result = llm._generate_response("test")
+
+        generate.assert_called_once_with("test", "omniroute")
+        self.assertEqual(result, "ok")
+
     def test_fallback_to_openrouter_triggers_on_any_error(self):
         """
         The OpenRouter fallback must cover any primary-provider failure —
