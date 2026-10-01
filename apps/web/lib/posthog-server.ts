@@ -8,14 +8,15 @@
 //
 // Reads configuration from environment variables:
 // - POSTHOG_API_KEY (server-side, preferred) or NEXT_PUBLIC_POSTHOG_KEY (fallback)
-// - NEXT_PUBLIC_POSTHOG_HOST (defaults to https://us.i.posthog.com)
+// - NEXT_PUBLIC_POSTHOG_HOST (defaults to DEFAULT_POSTHOG_HOST —
+//   change the constant in lib/posthog-config.ts to self-host)
 //
 // Returns null when not configured or running in the browser — telemetry
 // must never break the app, so a missing key warns once and disables
 // reporting instead of throwing.
 //---------------
 
-const DEFAULT_HOST = 'https://us.i.posthog.com';
+import { DEFAULT_POSTHOG_HOST } from './posthog-config';
 
 // Server-side events have no user session: attribute them to the API
 // server itself. Per-user attribution happens client-side.
@@ -59,7 +60,7 @@ function getConfig(): { key: string; host: string } | null {
     warnOnce('[posthog] POSTHOG_API_KEY / NEXT_PUBLIC_POSTHOG_KEY not set — PostHog telemetry disabled');
     return null;
   }
-  const host = process.env.NEXT_PUBLIC_POSTHOG_HOST ?? DEFAULT_HOST;
+  const host = process.env.NEXT_PUBLIC_POSTHOG_HOST ?? DEFAULT_POSTHOG_HOST;
   return { key, host };
 }
 

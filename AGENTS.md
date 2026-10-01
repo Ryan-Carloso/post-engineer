@@ -1267,3 +1267,14 @@ Follow these so the same issues don't come back:
   and cited lines 136-147 in a 27-line file. When a finding mixes
   languages or cites impossible lines, rebut it; don't mine it for a
   grain of truth.
+
+## PR #35 review learnings (2026-10-01, OpenCode — 0 fixed, 2 declined)
+- **Respect the reviewer's own non-blocking verdict.** Both MINORs came with
+  explicit "not requesting a change in this PR" / "cosmetic only" qualifiers:
+  (1) empty-string `POSTHOG_HOST` bypassing the default is pre-existing
+  behavior on lines the PR merely rewrote — fixing it would change runtime
+  semantics beyond the PR's refactor scope; (2) the doubled
+  `@vitest-environment` pragma text in the new test file is comment-only.
+  A cosmetic commit restarts the full ~10min CI and risks orphan commits if
+  the user merges mid-babysit. When the reviewer declines its own finding,
+  record the decision and move on — don't churn for the reviewer's sake.

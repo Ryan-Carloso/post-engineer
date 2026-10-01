@@ -6,7 +6,8 @@ import { flushPostHog, getPostHogServer } from "./lib/posthog-server";
 // fine without PostHog configured (the logger warns once and skips).
 // Configuration comes from environment variables, never hardcoded:
 // POSTHOG_API_KEY (server) or NEXT_PUBLIC_POSTHOG_KEY, plus
-// NEXT_PUBLIC_POSTHOG_HOST (defaults to https://us.i.posthog.com).
+// NEXT_PUBLIC_POSTHOG_HOST (defaults to DEFAULT_POSTHOG_HOST in
+// lib/posthog-config.ts — change the constant there to self-host).
 //---------------
 
 export async function register() {

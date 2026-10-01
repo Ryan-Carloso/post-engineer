@@ -21,7 +21,8 @@ Public MCP (Model Context Protocol) server for [Post Engineer](https://post-engi
 ### Telemetry (optional)
 
 Set `POSTHOG_API_KEY` (and optionally `POSTHOG_HOST`, defaults to
-`https://us.i.posthog.com`) to send `mcp_tool_called` analytics events to
+`DEFAULT_POSTHOG_HOST` in `src/analytics.ts` — change the constant to
+self-host) to send `mcp_tool_called` analytics events to
 PostHog. Without it, the server runs normally with telemetry disabled.
 The key is read from the environment only — never hardcoded.
 

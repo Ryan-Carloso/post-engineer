@@ -32,6 +32,13 @@ function scrubSecrets(properties: Record<string, unknown>): Record<string, unkno
   return scrubbed;
 }
 
+//---------------
+// Default PostHog ingest host. Change this constant if you self-host
+// PostHog — every telemetry path in the MCP server reads it as the
+// fallback when POSTHOG_HOST is not set.
+//---------------
+export const DEFAULT_POSTHOG_HOST = 'https://eu.i.posthog.com';
+
 interface PostHogClient {
   capture(args: {
     distinctId: string;
@@ -64,7 +71,7 @@ async function getClient(): Promise<PostHogClient | null> {
       // module load. The MCP server declares node >=20.10; posthog-node 5.x
       // wants >=20.20 — on older Node this catch degrades to disabled.
       const { PostHog } = await import('posthog-node');
-      const host = process.env['POSTHOG_HOST'] ?? 'https://us.i.posthog.com';
+      const host = process.env['POSTHOG_HOST'] ?? DEFAULT_POSTHOG_HOST;
       client = new PostHog(apiKey, { host }) as unknown as PostHogClient;
       return client;
     } catch (error) {

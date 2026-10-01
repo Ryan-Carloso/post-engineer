@@ -48,7 +48,10 @@ def scrub_secret_values(text: str) -> str:
         return f"{key}{sep}[redacted]"
     return _SECRET_VALUE_PATTERN.sub(_replace, text)
 
-_DEFAULT_HOST = "https://us.i.posthog.com"
+# Default PostHog ingest host. Change this constant if you self-host
+# PostHog — every telemetry path in the engine reads it as the fallback
+# when POSTHOG_HOST is not set.
+DEFAULT_POSTHOG_HOST = "https://eu.i.posthog.com"
 
 _client: Any = None
 _warned = False
@@ -80,7 +83,7 @@ def _get_client() -> Any:
     try:
         from posthog import Posthog
 
-        host = os.environ.get("POSTHOG_HOST", _DEFAULT_HOST)
+        host = os.environ.get("POSTHOG_HOST", DEFAULT_POSTHOG_HOST)
         _client = Posthog(api_key, host=host)
         return _client
     except Exception as exc:  # noqa: BLE001 - telemetry must never break
