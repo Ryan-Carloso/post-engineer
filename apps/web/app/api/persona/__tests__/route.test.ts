@@ -268,7 +268,7 @@ describe('POST /api/persona', () => {
     expect(body.success).toBe(true);
     expect(trackApiEvent).toHaveBeenCalledWith(
       'persona_created',
-      expect.objectContaining({ personaId: 'persona-uuid-1', imageCount: 0 }),
+      expect.objectContaining({ personaId: 'persona-uuid-1' }),
     );
   });
 

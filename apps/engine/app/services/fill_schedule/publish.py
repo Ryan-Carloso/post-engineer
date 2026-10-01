@@ -10,6 +10,7 @@ from loguru import logger
 
 from app.services import notify as notify_module
 from app.services import upload_publisher
+from app.services.analytics import scrub_secret_values, track_event
 from app.services.fill_schedule.constants import (
     SLOT_FAILED,
     SLOT_PUBLISHED,
@@ -61,6 +62,7 @@ class BatchPublisher:
             if not self.store.claim_ready_slot(str(slot["id"])):
                 # another tick/process already claimed (or published) this slot
                 continue
+            track_event("video_publish_started", {"slotId": str(slot["id"])})
             task = self.task_state.get_task(str(slot["task_id"]))
             videos = (task or {}).get("videos") or []
             if not videos:
@@ -86,6 +88,13 @@ class BatchPublisher:
                     slot["id"], status=SLOT_PUBLISHED, published_at=now.isoformat()
                 )
                 published += 1
+                track_event(
+                    "video_published",
+                    {
+                        "slotId": str(slot["id"]),
+                        "providers": [str(p) for p in schedule.get("providers", [])],
+                    },
+                )
                 notify_safe(
                     self.notify,
                     notify_module.slot_published_msg(
@@ -106,6 +115,14 @@ class BatchPublisher:
                 # back to 'ready' (not 'failed'): may be transient; the atomic
                 # claim guarantees only one worker publishes at a time.
                 self.store.update_slot(slot["id"], status=SLOT_READY)
+                track_event(
+                    "video_publish_failed",
+                    {
+                        "slotId": str(slot["id"]),
+                        "reason": scrub_secret_values(str(exc)[:200]),
+                        "retryable": True,
+                    },
+                )
                 notify_safe(
                     self.notify,
                     notify_module.slot_failed_msg(

@@ -323,12 +323,18 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     body = (await request.json()) as ScheduleRequestBody;
   } catch {
+    trackApiEvent('schedule_request_failed', { reason: 'invalid_json' });
     return errorResponse(400, 'Invalid JSON payload.', 'POST /api/schedule');
   }
 
   const personaId = typeof body.personaId === 'string' ? body.personaId : null;
-  if (!personaId) return errorResponse(400, 'personaId is required.', 'POST /api/schedule');
+  if (!personaId) {
+    trackApiEvent('schedule_request_failed', { reason: 'missing_personaId' });
+    return errorResponse(400, 'personaId is required.', 'POST /api/schedule');
+  }
+  trackApiEvent('schedule_requested', { personaId });
   if (!isPersonaAllowed(auth.personaIds, personaId)) {
+    trackApiEvent('schedule_request_failed', { personaId, reason: 'persona_not_allowed' });
     return errorResponse(403, 'This API key does not have access to this persona.', 'POST /api/schedule');
   }
 

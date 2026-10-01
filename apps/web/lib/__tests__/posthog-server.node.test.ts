@@ -42,7 +42,10 @@ describe('getPostHogServer (node runtime)', () => {
 
   it('is built on posthog-node, never posthog-js', () => {
     const source = readFileSync(path.resolve(process.cwd(), 'lib/posthog-server.ts'), 'utf8');
-    expect(source).toContain("from 'posthog-node'");
+    // posthog-node is lazy-loaded via dynamic import to keep it out of the
+    // client bundle; either a static import or dynamic import counts.
+    expect(source).toMatch(/from ['"]posthog-node['"]|import\(['"]posthog-node['"]\)/);
     expect(source).not.toContain("from 'posthog-js'");
+    expect(source).not.toContain('from "posthog-js"');
   });
 });

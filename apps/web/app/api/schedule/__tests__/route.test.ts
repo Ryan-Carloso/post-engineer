@@ -987,7 +987,9 @@ describe('POST /api/schedule topics → slots → charging', () => {
     oneOffSupabase({ persona: { data: null } });
     const res = await POST(jsonRequest(validOneOffBody, 'POST'));
     expect(res.status).toBe(404);
-    expect(trackApiEvent).not.toHaveBeenCalled();
+    // schedule_requested fires (the request was made), but schedule_created must not.
+    expect(trackApiEvent).toHaveBeenCalledWith('schedule_requested', expect.anything());
+    expect(trackApiEvent).not.toHaveBeenCalledWith('schedule_created', expect.anything());
   });
 
   it('rejects a missing topics with 400 without creating anything or spending tokens', async () => {

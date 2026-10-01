@@ -1,9 +1,8 @@
-"""Tests for the loguru -> Bugsink (Sentry-compatible) bridge in app.asgi.
+"""Tests for the loguru -> PostHog bridge in app.asgi.
 
-The sentry SDK's stdlib logging integration never sees loguru records, so
-app.asgi installs a loguru sink that forwards ERROR+ records to Bugsink.
-These tests exercise that sink directly; under pytest the real sentry init
-(and therefore the sink installation) is always skipped.
+app.asgi installs a loguru sink that forwards ERROR+ records to PostHog
+as $exception events. These tests exercise that sink directly; under pytest
+the real PostHog init (and therefore the sink installation) is always skipped.
 """
 
 import unittest
@@ -19,25 +18,25 @@ def _message(**record_overrides):
     return SimpleNamespace(record=record)
 
 
-class BugsinkSinkTests(unittest.TestCase):
+class PostHogSinkTests(unittest.TestCase):
     def test_plain_error_record_forwards_message(self):
-        with (
-            patch("sentry_sdk.capture_message") as capture_message,
-            patch("sentry_sdk.capture_exception") as capture_exception,
-        ):
-            asgi._loguru_bugsink_sink(_message())
-        capture_message.assert_called_once_with("boom", level="error")
-        capture_exception.assert_not_called()
+        with patch("app.asgi.track_event") as track_event:
+            asgi._loguru_posthog_sink(_message())
+        track_event.assert_called_once()
+        event_name, properties = track_event.call_args[0]
+        assert event_name == "$exception"
+        assert properties["$exception_message"] == "boom"
+        assert "$exception_type" not in properties
 
-    def test_record_with_exception_forwards_the_exception(self):
+    def test_record_with_exception_forwards_exception_details(self):
         error = ValueError("kaput")
-        with (
-            patch("sentry_sdk.capture_message") as capture_message,
-            patch("sentry_sdk.capture_exception") as capture_exception,
-        ):
-            asgi._loguru_bugsink_sink(_message(exception=(ValueError, error, None)))
-        capture_exception.assert_called_once_with(error)
-        capture_message.assert_not_called()
+        with patch("app.asgi.track_event") as track_event:
+            asgi._loguru_posthog_sink(_message(exception=(ValueError, error, None)))
+        track_event.assert_called_once()
+        event_name, properties = track_event.call_args[0]
+        assert event_name == "$exception"
+        assert properties["$exception_type"] == "ValueError"
+        assert properties["$exception_message"] == "kaput"
 
     def test_sink_never_raises(self):
         class BadMessage:
@@ -45,8 +44,8 @@ class BugsinkSinkTests(unittest.TestCase):
             def record(self):  # noqa: D102 - test double
                 raise RuntimeError("nope")
 
-        # A throwing sentry client and a broken record must both be swallowed:
+        # A throwing PostHog client and a broken record must both be swallowed:
         # telemetry must never break the app.
-        with patch("sentry_sdk.capture_message", side_effect=RuntimeError("sentry down")):
-            asgi._loguru_bugsink_sink(BadMessage())
-            asgi._loguru_bugsink_sink(_message())
+        with patch("app.asgi.track_event", side_effect=RuntimeError("posthog down")):
+            asgi._loguru_posthog_sink(BadMessage())
+            asgi._loguru_posthog_sink(_message())

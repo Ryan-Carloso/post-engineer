@@ -8,7 +8,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "moneyprinterturbo"
-version = "1.7.0"
+version = "1.7.2"
 description = "Generate short videos from prompts, local assets, subtitles, and TTS."
 readme = "README-en.md"
 requires-python = ">=3.11,<3.13"
@@ -37,7 +37,7 @@ dependencies = [
     "litellm==1.86.2",
     "modal>=1.5.5",
     "opencv-python-headless==4.12.0.88",
-    "sentry-sdk[fastapi]>=2.0.0",
+    "posthog>=3.0.0",
     "python-dotenv>=1.0.0",
 ]
 

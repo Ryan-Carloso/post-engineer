@@ -1,25 +1,18 @@
-import { PostHog } from 'posthog-node';
-
 //---------------
 // Server-side PostHog client singleton.
 //
-// posthog-node is the server SDK: the browser posthog-js SDK must never
-// run in Node API routes (it depends on browser APIs and on
-// session-persistence semantics that don't apply server-side).
-//
-// Note: this module is imported by lib/logger.ts, which is also imported
-// by client components (e.g. lib/api.ts). There is deliberately NO
-// `import 'server-only'` here — instead getPostHogServer() returns null
-// when running in the browser (typeof window !== 'undefined'), making
-// client-side telemetry a safe no-op. The browser PostHog instance
-// (instrumentation-client.ts) handles client-side capture separately.
+// posthog-node is lazy-loaded (dynamic import) so the Node-only SDK never
+// ends up in the client bundle. This module is imported by lib/logger.ts,
+// which is reachable from client components — a static `import` of
+// posthog-node would ship Node builtins (async_hooks, zlib) to browsers.
 //
 // Reads configuration from environment variables:
 // - POSTHOG_API_KEY (server-side, preferred) or NEXT_PUBLIC_POSTHOG_KEY (fallback)
 // - NEXT_PUBLIC_POSTHOG_HOST (defaults to https://us.i.posthog.com)
 //
-// Returns null when not configured — telemetry must never break the app,
-// so a missing key warns once and disables reporting instead of throwing.
+// Returns null when not configured or running in the browser — telemetry
+// must never break the app, so a missing key warns once and disables
+// reporting instead of throwing.
 //---------------
 
 const DEFAULT_HOST = 'https://us.i.posthog.com';
@@ -29,19 +22,27 @@ const DEFAULT_HOST = 'https://us.i.posthog.com';
 const SERVER_DISTINCT_ID = 'post-engineer-server';
 
 //---------------
-// The surface logger.ts and analytics.ts use. Two-argument capture keeps
-// the call shape they were written against; the wrapper translates it to
-// posthog-node's { distinctId, event, properties } form.
+// Lazy loader for the posthog-node SDK. The dynamic import keeps the
+// server-only dependency out of the client bundle. Failures degrade to
+// telemetry-disabled (null client).
 //---------------
 
-export interface ServerPostHogClient {
-  capture(event: string, properties?: Record<string, unknown>): void;
-  captureException(error: unknown, properties?: Record<string, unknown>): void;
+interface PostHogNodeClient {
+  capture(args: {
+    distinctId: string;
+    event: string;
+    properties?: Record<string, unknown>;
+  }): void;
+  captureException(
+    error: unknown,
+    distinctId: string,
+    properties?: Record<string, unknown>,
+  ): void;
+  shutdownAsync(): Promise<void>;
 }
 
-let cached: ServerPostHogClient | null = null;
+let sdkPromise: Promise<PostHogNodeClient | null> | null = null;
 let warned = false;
-let attempted = false;
 
 function warnOnce(message: string): void {
   if (!warned) {
@@ -50,47 +51,131 @@ function warnOnce(message: string): void {
   }
 }
 
-function toClient(client: PostHog): ServerPostHogClient {
+function getConfig(): { key: string; host: string } | null {
+  // Client bundle safety: never initialize the server SDK in the browser.
+  if (typeof window !== 'undefined') return null;
+  const key = process.env.POSTHOG_API_KEY ?? process.env.NEXT_PUBLIC_POSTHOG_KEY;
+  if (!key) {
+    warnOnce('[posthog] POSTHOG_API_KEY / NEXT_PUBLIC_POSTHOG_KEY not set — PostHog telemetry disabled');
+    return null;
+  }
+  const host = process.env.NEXT_PUBLIC_POSTHOG_HOST ?? DEFAULT_HOST;
+  return { key, host };
+}
+
+function loadSdk(): Promise<PostHogNodeClient | null> {
+  if (!sdkPromise) {
+    sdkPromise = (async (): Promise<PostHogNodeClient | null> => {
+      const config = getConfig();
+      if (!config) return null;
+      try {
+        // Dynamic import: keeps posthog-node out of the client bundle.
+        const { PostHog } = await import('posthog-node');
+        return new PostHog(config.key, {
+          host: config.host,
+          // Serverless (Vercel): best-effort immediate flush. flushAt: 1
+          // starts an async flush on every capture, but the function can
+          // freeze after the response before the network write lands.
+          flushAt: 1,
+        }) as unknown as PostHogNodeClient;
+      } catch {
+        warnOnce('[posthog] Failed to initialize PostHog client — telemetry disabled');
+        return null;
+      }
+    })();
+  }
+  return sdkPromise;
+}
+
+//---------------
+// The surface logger.ts and analytics.ts use. Capture methods are
+// fire-and-forget: they trigger the lazy SDK load and send when ready.
+// For request-scoped errors where the process may freeze (Vercel),
+// use flushPostHog() to await delivery.
+//---------------
+
+export interface ServerPostHogClient {
+  capture(event: string, properties?: Record<string, unknown>): void;
+  captureException(error: unknown, properties?: Record<string, unknown>): void;
+}
+
+function toClient(sdk: PostHogNodeClient): ServerPostHogClient {
   return {
     capture: (event, properties) => {
-      client.capture({ distinctId: SERVER_DISTINCT_ID, event, properties });
+      sdk.capture({ distinctId: SERVER_DISTINCT_ID, event, properties });
     },
     captureException: (error, properties) => {
-      client.captureException(error, SERVER_DISTINCT_ID, properties);
+      sdk.captureException(error, SERVER_DISTINCT_ID, properties);
     },
   };
 }
+
+let cachedClient: ServerPostHogClient | null = null;
+let clientReady = false;
+let queuingClient: ServerPostHogClient | null = null;
 
 export function getPostHogServer(): ServerPostHogClient | null {
   // Client bundle safety: this module is reachable from client components
   // via lib/logger.ts. Never initialize the server SDK in the browser.
   if (typeof window !== 'undefined') return null;
-  if (attempted) return cached;
-  attempted = true;
+  if (clientReady) return cachedClient;
 
-  // Server key preferred; the public key works as a fallback for capture-only use.
-  const key = process.env.POSTHOG_API_KEY ?? process.env.NEXT_PUBLIC_POSTHOG_KEY;
-  if (!key) {
-    warnOnce('[posthog] POSTHOG_API_KEY / NEXT_PUBLIC_POSTHOG_KEY not set — PostHog telemetry disabled');
-    cached = null;
-    return cached;
-  }
+  // If no API key is configured, return null immediately (don't queue).
+  // getConfig() warns once via warnOnce.
+  if (!getConfig()) return null;
 
-  const host = process.env.NEXT_PUBLIC_POSTHOG_HOST ?? DEFAULT_HOST;
+  // Return the same queuing client on repeated calls (singleton).
+  if (queuingClient) return queuingClient;
 
+  // Kick off the async load; return a queuing client immediately.
+  // Events captured before the SDK loads are sent once it's ready.
+  const pending: Array<() => void> = [];
+  queuingClient = {
+    capture: (event, properties) => {
+      pending.push(() => cachedClient?.capture(event, properties));
+    },
+    captureException: (error, properties) => {
+      pending.push(() => cachedClient?.captureException(error, properties));
+    },
+  };
+
+  loadSdk().then((sdk) => {
+    if (sdk) {
+      cachedClient = toClient(sdk);
+    }
+    clientReady = true;
+    // Flush queued events.
+    for (const send of pending) {
+      try {
+        send();
+      } catch {
+        // Telemetry must never break the app.
+      }
+    }
+    pending.length = 0;
+  });
+
+  return queuingClient;
+}
+
+//---------------
+// Awaitable flush for request-scoped error handling (e.g. Next.js
+// onRequestError). Ensures captured events are delivered before the
+// serverless function freezes.
+//---------------
+
+export async function flushPostHog(): Promise<void> {
+  if (typeof window !== 'undefined') return;
   try {
-    // Serverless (Vercel): best-effort immediate flush. flushAt: 1 starts an
-    // async flush on every capture, but the function can freeze after the
-    // response before the network write lands — rare 5xx $exception events
-    // may still be dropped. Best posthog-node offers without wiring
-    // await shutdown() into the request lifecycle.
-    cached = toClient(new PostHog(key, { host, flushAt: 1 }));
+    const sdk = await loadSdk();
+    // Access the underlying SDK for shutdown. We don't retain a direct
+    // reference in the public client interface, so re-resolve here.
+    if (sdk) {
+      await sdk.shutdownAsync();
+    }
   } catch {
-    warnOnce('[posthog] Failed to initialize PostHog client — telemetry disabled');
-    cached = null;
+    // Telemetry must never break the request path.
   }
-
-  return cached;
 }
 
 //---------------
@@ -98,7 +183,9 @@ export function getPostHogServer(): ServerPostHogClient | null {
 //---------------
 
 export function __resetPostHogServerForTests(): void {
-  cached = null;
+  cachedClient = null;
+  clientReady = false;
+  queuingClient = null;
+  sdkPromise = null;
   warned = false;
-  attempted = false;
 }
