@@ -8,7 +8,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "moneyprinterturbo"
-version = "1.7.2"
+version = "1.8.0"
 description = "Generate short videos from prompts, local assets, subtitles, and TTS."
 readme = "README-en.md"
 requires-python = ">=3.11,<3.13"
@@ -70,10 +70,53 @@ dev = [
     "coverage>=7.6.0",
     "httpx>=0.28.1",
     "mutmut>=3.3.1",
+    "mypy>=1.10.0",
     "pre-commit>=4.0.0",
     "pytest>=9.1.1",
     "ruff>=0.11.0",
 ]
+
+[tool.mypy]
+# Incremental adoption: import-not-found is fatal (catches removed deps),
+# other codes are selectively disabled. Third-party deps without stubs
+# are enumerated in the overrides below — do NOT set ignore_missing_imports
+# globally, it would silence first-party import errors too.
+disable_error_code = [
+    "arg-type",
+    "attr-defined",
+    "assignment",
+    "call-arg",
+    "index",
+    "list-item",
+    "misc",
+    "return-value",
+    "union-attr",
+    "var-annotated",
+]
+# Third-party dependencies without type stubs. Enumerated explicitly so
+# first-party import-not-found errors remain fatal (catches removed deps).
+# Note: PIL, cv2, and toml currently ship py.typed (or get stubs transitively),
+# but are listed defensively — if a future release drops typing, the gate stays
+# green instead of going red on an unrelated dependency bump.
+[[tool.mypy.overrides]]
+module = [
+    "twelvelabs.*",
+    "g4f.*",
+    "moviepy.*",
+    "pydub.*",
+    "faster_whisper.*",
+    "imageio_ffmpeg.*",
+    "requests.*",
+    "azure.*",
+    "dashscope.*",
+    "edge_tts.*",
+    "litellm.*",
+    "loguru.*",
+    "PIL.*",
+    "cv2.*",
+    "toml.*",
+]
+ignore_missing_imports = true
 
 [tool.ruff]
 target-version = "py311"

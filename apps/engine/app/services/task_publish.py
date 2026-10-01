@@ -107,9 +107,9 @@ def publish_task_videos(
     """
     existing = sm.state.get_task(task_id) or {}
     if existing.get("publish_results") is not None:
-        results: list[dict[str, object]] = existing["publish_results"]
+        prior_results = existing["publish_results"]
         logger.info(f"task {task_id} already published, skipping publish step")
-        return results
+        return prior_results
 
     metadata = to_client_metadata(params.publish)
     if metadata is None:
