@@ -25,11 +25,10 @@ def _load_mypy_config() -> dict:
         return tomllib.load(f)["tool"]["mypy"]
 
 
-def _load_ci_mypy_targets() -> tuple:
-    """Extract the mypy target list from the CI workflow.
+def _load_ci_mypy_command() -> list:
+    """Extract the raw mypy command args from the CI workflow.
 
-    The first-party set must match what CI actually type-checks, so the
-    test reads .github/workflows/ci.yml instead of hardcoding it.
+    Returns the whitespace-separated tokens after "uv run mypy".
     """
     ci_yml = (
         Path(__file__).parent.parent.parent.parent
@@ -40,10 +39,22 @@ def _load_ci_mypy_targets() -> tuple:
     for line in ci_yml.read_text().splitlines():
         stripped = line.strip()
         if stripped.startswith("run: uv run mypy "):
-            args = stripped[len("run: uv run mypy "):].split()
-            # Map file targets to module names: "cli.py" -> "cli".
-            return tuple(a[:-3] if a.endswith(".py") else a for a in args)
+            return stripped[len("run: uv run mypy "):].split()
     raise AssertionError("Could not find 'uv run mypy' step in ci.yml")
+
+
+def _load_ci_mypy_targets() -> tuple:
+    """Extract the mypy target list from the CI workflow.
+
+    The first-party set must match what CI actually type-checks, so the
+    test reads .github/workflows/ci.yml instead of hardcoding it.
+    """
+    args = _load_ci_mypy_command()
+    # Map file targets to module names: "cli.py" -> "cli".
+    # Skip flags (e.g. --strict) — only bare targets count.
+    return tuple(
+        a[:-3] if a.endswith(".py") else a for a in args if not a.startswith("-")
+    )
 
 
 class MypyConfigPinTests(unittest.TestCase):
@@ -61,6 +72,19 @@ class MypyConfigPinTests(unittest.TestCase):
         disabled = config.get("disable_error_code", [])
         self.assertNotIn("import-not-found", disabled)
         self.assertNotIn("import-untyped", disabled)
+
+    def test_ci_mypy_command_does_not_silence_imports(self):
+        # The contract is enforced by the CI invocation itself — a future
+        # edit adding --ignore-missing-imports (or similar) to the mypy
+        # command would defeat the gate while every config pin stays green.
+        args = _load_ci_mypy_command()
+        for a in args:
+            self.assertFalse(
+                a == "--ignore-missing-imports"
+                or a.startswith("--disable-error-code")
+                or a.startswith("--follow-imports"),
+                f"CI mypy step must not silence import errors: {a}",
+            )
 
     def test_no_app_override(self):
         # Parse the TOML structure (not regex) so string-form modules and
