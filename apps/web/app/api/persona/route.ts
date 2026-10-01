@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
@@ -538,8 +538,9 @@ export async function DELETE(request: Request): Promise<NextResponse> {
   if (authError || !auth) return authError;
   const user = { id: auth.userId };
   // Service-role bypasses RLS: every query below is re-scoped by user_id,
-  // and the persona row itself is the ownership proof.
-  const supabase = auth.isApiKey === true
+  // and the persona row itself is the ownership proof. OAuth callers have
+  // no cookie session, so they get the service client like API keys.
+  const supabase = auth.isApiKey === true || auth.isOAuth === true
     ? createSupabaseServiceClient()
     : await createSupabaseServerClient();
 
@@ -706,31 +707,41 @@ export async function DELETE(request: Request): Promise<NextResponse> {
   }
 
   // Engine task directories would orphan on the engine host now that their
-  // generation rows are gone. Best-effort: a down engine must never fail
-  // the persona delete.
+  // generation rows are gone. This runs after() the response is sent: the
+  // DB delete is already committed, and a slow or down engine must not
+  // turn a successful delete into a client-side timeout (the UI would
+  // report failure for a delete that happened). Sequential on purpose —
+  // one small DELETE in flight at a time — with a per-call timeout; every
+  // failure is logged loudly, never swallowed.
   const engineBaseUrl = process.env.MONEYPRINT_API_URL;
   if (engineBaseUrl && engineTaskIds.length > 0) {
-    for (const taskId of engineTaskIds) {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
-      try {
-        const res = await fetch(
-          `${engineBaseUrl.replace(/\/+$/, '')}/api/v1/tasks/${encodeURIComponent(taskId)}`,
-          {
-            method: 'DELETE',
-            headers: engineAuthHeaders(user.id),
-            signal: controller.signal,
-          },
-        );
-        if (!res.ok) {
-          logger.warn('[api/persona] engine task cleanup failed', { taskId, status: res.status });
+    const taskIds = [...engineTaskIds];
+    const userId = user.id;
+    after(() => {
+      void (async () => {
+        for (const taskId of taskIds) {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 8000);
+          try {
+            const res = await fetch(
+              `${engineBaseUrl.replace(/\/+$/, '')}/api/v1/tasks/${encodeURIComponent(taskId)}`,
+              {
+                method: 'DELETE',
+                headers: engineAuthHeaders(userId),
+                signal: controller.signal,
+              },
+            );
+            if (!res.ok) {
+              logger.warn('[api/persona] engine task cleanup failed', { taskId, status: res.status });
+            }
+          } catch (error) {
+            logger.warn('[api/persona] engine task cleanup failed', { taskId, error });
+          } finally {
+            clearTimeout(timeout);
+          }
         }
-      } catch (error) {
-        logger.warn('[api/persona] engine task cleanup failed', { taskId, error });
-      } finally {
-        clearTimeout(timeout);
-      }
-    }
+      })();
+    });
   }
 
   trackApiEvent('persona_deleted', {

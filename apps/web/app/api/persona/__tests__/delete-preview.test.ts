@@ -21,10 +21,18 @@ vi.mock('@/lib/request-auth', () => ({
 vi.mock('@/lib/analytics', () => ({
   trackApiEvent: vi.fn(),
 }));
+vi.mock('@/lib/rate-limit', async (importOriginal) => {
+  // Rate limiting is bypassed for payload-behavior tests; one dedicated
+  // test below covers the 429 path.
+  const actual = await importOriginal<typeof import('@/lib/rate-limit')>();
+  return { ...actual, applyRateLimit: vi.fn().mockResolvedValue(null) };
+});
 
 import { GET } from '../delete-preview/route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
+import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 const USER_ID = 'user-uuid-1';
 const PERSONA_ID = 'persona-uuid-1';
@@ -240,5 +248,68 @@ describe('GET /api/persona/delete-preview', () => {
     const body = (await res.json()) as { code: string };
     expect(res.status).toBe(500);
     expect(body.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('uses the service client for OAuth callers (no cookie session)', async () => {
+    const client = getClient();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: USER_ID, personaIds: null, accessToken: 'oauth-token', isOAuth: true },
+      error: null,
+    } as never);
+    const res = await GET(
+      new Request(`http://localhost/api/persona/delete-preview?personaId=${PERSONA_ID}`),
+    );
+    expect(res.status).toBe(200);
+    expect(createSupabaseServiceClient).toHaveBeenCalled();
+    expect(createSupabaseServerClient).not.toHaveBeenCalled();
+  });
+
+  it('returns 429 when the rate limiter rejects the request', async () => {
+    getClient();
+    const limited = new Response(JSON.stringify({ success: false, errorType: 'RATE_LIMITED' }), {
+      status: 429,
+    });
+    vi.mocked(applyRateLimit).mockResolvedValueOnce(limited as never);
+    const res = await GET(
+      new Request(`http://localhost/api/persona/delete-preview?personaId=${PERSONA_ID}`),
+    );
+    expect(res.status).toBe(429);
+    expect(applyRateLimit).toHaveBeenCalledWith(expect.any(Request), RATE_LIMITS.deletePreview, USER_ID);
+  });
+
+  it('caps engine lookups at 20 videos but reports the full count', async () => {
+    const generations = Array.from({ length: 25 }, (_, i) => ({
+      id: `gen-${i}`,
+      persona_id: PERSONA_ID,
+      user_id: USER_ID,
+      engine_task_id: `task-${i}`,
+      video_subject: `Topic ${i}`,
+      status: 'completed',
+    }));
+    getClient({ ...BASE_TABLES, video_generations: generations });
+    let engineCalls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        engineCalls += 1;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ state: 1, result: { video: '/api/v1/download/x/final.mp4' } }),
+        };
+      }),
+    );
+    const res = await GET(
+      new Request(`http://localhost/api/persona/delete-preview?personaId=${PERSONA_ID}`),
+    );
+    const body = (await res.json()) as {
+      counts: { generatedVideos: number };
+      videos: unknown[];
+    };
+    expect(res.status).toBe(200);
+    expect(body.counts.generatedVideos).toBe(25);
+    expect(body.videos).toHaveLength(20);
+    expect(engineCalls).toBe(20);
   });
 });

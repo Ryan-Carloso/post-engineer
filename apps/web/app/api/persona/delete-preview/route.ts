@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
 import { isPersonaAllowed } from '@/lib/api-keys';
+import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { apiErrorResponse } from '@/lib/api-error';
 import { ERROR_CODES } from '@/lib/error-codes';
 import { logger } from '@/lib/logger';
@@ -21,6 +22,11 @@ const ROUTE = 'GET /api/persona/delete-preview';
 const UPCOMING_SLOT_STATUSES = ['pending', 'generating', 'ready', 'publishing'];
 const SAFE_TASK_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const ENGINE_LOOKUP_TIMEOUT_MS = 8000;
+// Cap on per-video engine lookups: each is a network call with its own
+// timeout, and a persona with hundreds of videos would otherwise hold the
+// request open for minutes. counts.generatedVideos still reports the full
+// total; videos carries download links for the first N.
+const PREVIEW_VIDEO_CAP = 20;
 
 interface GenerationRow {
   id: string;
@@ -71,10 +77,15 @@ async function resolveDownloadUrl(
 export async function GET(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
+  const limited = await applyRateLimit(request, RATE_LIMITS.deletePreview, auth.userId);
+  if (limited) return limited;
   // Service-role bypasses RLS: every query below is re-scoped by user_id,
-  // and the persona row itself is the ownership proof.
+  // and the persona row itself is the ownership proof. OAuth callers have
+  // no cookie session, so they get the service client like API keys.
   const supabase =
-    auth.isApiKey === true ? createSupabaseServiceClient() : await createSupabaseServerClient();
+    auth.isApiKey === true || auth.isOAuth === true
+      ? createSupabaseServiceClient()
+      : await createSupabaseServerClient();
 
   const personaId = new URL(request.url).searchParams.get('personaId');
   if (!personaId) {
@@ -162,7 +173,9 @@ export async function GET(request: Request): Promise<NextResponse> {
     .filter((row): row is GenerationRow => row !== null);
 
   // Sequential on purpose: one small JSON body in flight at a time, and a
-  // slow engine cannot fan out into dozens of concurrent lookups.
+  // slow engine cannot fan out into dozens of concurrent lookups. Capped
+  // at PREVIEW_VIDEO_CAP so a huge library cannot hold the request open
+  // for minutes on serverless.
   const baseUrl = process.env.MONEYPRINT_API_URL;
   const videos: Array<{
     taskId: string | null;
@@ -170,7 +183,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     status: string;
     downloadUrl: string | null;
   }> = [];
-  for (const gen of generations) {
+  for (const gen of generations.slice(0, PREVIEW_VIDEO_CAP)) {
     let downloadUrl: string | null = null;
     if (gen.status === 'completed' && gen.engine_task_id && baseUrl) {
       downloadUrl = await resolveDownloadUrl(gen.engine_task_id, auth.userId, baseUrl);

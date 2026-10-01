@@ -22,6 +22,17 @@ vi.mock('@/lib/request-auth', () => ({
 vi.mock('@/lib/analytics', () => ({
   trackApiEvent: vi.fn(),
 }));
+vi.mock('next/server', async (importOriginal) => {
+  // after() needs a request scope; in tests the callback runs inline so
+  // the post-response engine cleanup is still exercised.
+  const actual = await importOriginal<typeof import('next/server')>();
+  return {
+    ...actual,
+    after: (callback: () => unknown) => {
+      void Promise.resolve().then(() => callback());
+    },
+  };
+});
 
 import { DELETE } from '../route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -176,6 +187,10 @@ afterEach(() => {
 const del = (personaId: string) =>
   DELETE(new Request(`http://localhost/api/persona?personaId=${personaId}`, { method: 'DELETE' }));
 
+// after() callbacks run on the microtask queue in tests; flush them before
+// asserting on post-response side effects like the engine cleanup.
+const flushAfterCallbacks = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 describe('DELETE /api/persona cascade', () => {
   it('deletes slots, schedules, generations and the persona — in that order', async () => {
     const { deletes } = setup();
@@ -236,10 +251,25 @@ describe('DELETE /api/persona cascade', () => {
   it('best-effort deletes engine task dirs for the persona\u2019s tasks', async () => {
     setup();
     await del(PERSONA_ID);
+    await flushAfterCallbacks();
     expect(engineDeletes).toContain('https://engine.internal:8080/api/v1/tasks/task-aaa');
     expect(engineDeletes).not.toContain(
       expect.stringContaining('task-zzz'),
     );
+  });
+
+  it('uses the service client for OAuth callers (no cookie session)', async () => {
+    const { client } = setup();
+    const { createSupabaseServiceClient } = await import('@/lib/supabase/service');
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: USER_ID, personaIds: null, accessToken: 'oauth-token', isOAuth: true },
+      error: null,
+    } as never);
+    const res = await del(PERSONA_ID);
+    expect(res.status).toBe(200);
+    expect(createSupabaseServiceClient).toHaveBeenCalled();
+    expect(createSupabaseServerClient).not.toHaveBeenCalled();
   });
 
   it('returns 404 PERSONA_NOT_FOUND for another user\u2019s persona and deletes nothing', async () => {

@@ -246,6 +246,36 @@ describe('lib/api — persona', () => {
       );
       expect(result).toEqual(preview);
     });
+
+    it('returns success:false on a non-ok response instead of throwing', async () => {
+      fetchMock.mockResolvedValue(new Response('<html>502</html>', { status: 502 }));
+
+      const result = await fetchDeletePreview('p-1');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('502');
+    });
+
+    it('returns success:false on a non-JSON body instead of throwing', async () => {
+      fetchMock.mockResolvedValue(
+        new Response('not json', { status: 200, headers: { 'Content-Type': 'text/plain' } }),
+      );
+
+      const result = await fetchDeletePreview('p-1');
+
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('deletePersona robustness', () => {
+    it('returns success:false on a non-ok response instead of throwing', async () => {
+      fetchMock.mockResolvedValue(new Response('timeout', { status: 504 }));
+
+      const result = await deletePersona('p-1');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('504');
+    });
   });
 
   describe('updatePersona', () => {

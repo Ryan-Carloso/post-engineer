@@ -136,4 +136,38 @@ describe('DeletePersonaModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'personas.tryAgain' }));
     await waitFor(() => expect(fetchDeletePreview).toHaveBeenCalledTimes(2));
   });
+
+  it('shows the load error (not a stuck spinner) when the preview rejects', async () => {
+    vi.mocked(fetchDeletePreview).mockRejectedValue(new Error('network down'));
+    renderModal();
+    expect(await screen.findByText('personas.deleteDialogLoadError')).toBeInTheDocument();
+    // Retry is offered — the dialog is not wedged in 'loading'.
+    expect(screen.getByRole('button', { name: 'personas.tryAgain' })).toBeEnabled();
+  });
+
+  it('shows the delete error (dialog stays usable) when the delete rejects', async () => {
+    vi.mocked(deletePersona).mockRejectedValue(new Error('timeout'));
+    const onClose = vi.fn();
+    renderModal({ onClose });
+    await screen.findByText('personas.deleteDialogNoRefund');
+    fireEvent.change(screen.getByLabelText('personas.deleteDialogTypeName'), {
+      target: { value: 'Ryan' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'personas.deleteConfirm' }));
+
+    expect(await screen.findByText('personas.deleteDialogDeleteError')).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    // Cancel is re-enabled — the user is not trapped in 'deleting'.
+    expect(screen.getByRole('button', { name: 'personas.cancel' })).toBeEnabled();
+  });
+
+  it('hints when the typed name does not match', async () => {
+    renderModal();
+    await screen.findByText('personas.deleteDialogNoRefund');
+    fireEvent.change(screen.getByLabelText('personas.deleteDialogTypeName'), {
+      target: { value: 'Rya' },
+    });
+    expect(screen.getByText('personas.deleteDialogNameMismatch')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'personas.deleteConfirm' })).toBeDisabled();
+  });
 });

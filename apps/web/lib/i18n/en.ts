@@ -503,7 +503,6 @@ export const enDictionary: Dictionary = {
     voiceOwn: 'Your voice',
     delete: 'Delete persona',
     edit: 'Edit persona',
-    deleteQuestion: 'Delete this persona?',
     deleteConfirm: 'Delete',
     cancel: 'Cancel',
     deleteDialogTitle: 'Delete persona',

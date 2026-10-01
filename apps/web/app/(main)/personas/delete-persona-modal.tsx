@@ -39,15 +39,21 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
     setPreview(null);
     setTypedName('');
     let cancelled = false;
-    void fetchDeletePreview(persona.id).then((result) => {
-      if (cancelled) return;
-      if (result.success) {
-        setPreview(result);
-        setPhase('ready');
-      } else {
-        setPhase('loadError');
-      }
-    });
+    // Rejections (network failure, non-JSON body) surface as loadError —
+    // the dialog must never wedge in 'loading' with no retry.
+    void fetchDeletePreview(persona.id)
+      .then((result) => {
+        if (cancelled) return;
+        if (result.success) {
+          setPreview(result);
+          setPhase('ready');
+        } else {
+          setPhase('loadError');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPhase('loadError');
+      });
     return () => {
       cancelled = true;
     };
@@ -62,14 +68,18 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
   const handleDelete = (): void => {
     if (!nameMatches || phase === 'deleting') return;
     setPhase('deleting');
-    void deletePersona(persona.id).then((result) => {
-      if (result.success) {
-        onDeleted();
-        onClose();
-      } else {
-        setPhase('deleteError');
-      }
-    });
+    // A rejection after 'deleting' would disable Delete, Cancel and the
+    // input at once — surface it as deleteError so the user can retry.
+    void deletePersona(persona.id)
+      .then((result) => {
+        if (result.success) {
+          onDeleted();
+          onClose();
+        } else {
+          setPhase('deleteError');
+        }
+      })
+      .catch(() => setPhase('deleteError'));
   };
 
   return (
@@ -180,8 +190,14 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
               placeholder={persona.name}
               autoComplete="off"
               disabled={phase === 'deleting'}
+              aria-describedby={typedName !== '' && !nameMatches ? 'delete-persona-name-hint' : undefined}
               className="mt-1.5 w-full rounded-lg border border-neutral-300 px-3 py-2.5 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-red-500 focus:outline-none"
             />
+            {typedName !== '' && !nameMatches && (
+              <p id="delete-persona-name-hint" className="mt-1.5 text-xs text-neutral-500">
+                {t('personas.deleteDialogNameMismatch')}
+              </p>
+            )}
           </>
         )}
 

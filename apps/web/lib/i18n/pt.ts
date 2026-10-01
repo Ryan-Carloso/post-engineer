@@ -500,7 +500,6 @@ export const ptDictionary = {
     voiceOwn: 'Sua voz',
     delete: 'Deletar persona',
     edit: 'Editar persona',
-    deleteQuestion: 'Deletar esta persona?',
     deleteConfirm: 'Deletar',
     cancel: 'Cancelar',
     deleteDialogTitle: 'Deletar persona',

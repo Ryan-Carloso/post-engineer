@@ -188,6 +188,12 @@ export function usePersonasQuery() {
 export interface DeletePersonaResult {
   success: boolean;
   error?: string;
+  deleted?: {
+    schedules: number;
+    slots: number;
+    videos: number;
+    images: number;
+  };
 }
 
 export interface DeletePreviewVideo {
@@ -214,7 +220,14 @@ export async function fetchDeletePreview(personaId: string): Promise<DeletePrevi
   const response = await fetch(
     `/api/persona/delete-preview?personaId=${encodeURIComponent(personaId)}`,
   );
-  return response.json();
+  if (!response.ok) {
+    return { success: false, error: `Preview request failed (${response.status}).` };
+  }
+  try {
+    return (await response.json()) as DeletePreview;
+  } catch {
+    return { success: false, error: 'Preview returned an unreadable response.' };
+  }
 }
 
 export async function deletePersona(personaId: string): Promise<DeletePersonaResult> {
@@ -222,7 +235,14 @@ export async function deletePersona(personaId: string): Promise<DeletePersonaRes
     `/api/persona?personaId=${encodeURIComponent(personaId)}`,
     { method: 'DELETE' },
   );
-  return response.json();
+  if (!response.ok) {
+    return { success: false, error: `Delete request failed (${response.status}).` };
+  }
+  try {
+    return (await response.json()) as DeletePersonaResult;
+  } catch {
+    return { success: false, error: 'Delete returned an unreadable response.' };
+  }
 }
 
 export interface UpdatePersonaResult {

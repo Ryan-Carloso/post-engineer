@@ -16,7 +16,6 @@ vi.mock('next/image', () => ({
 
 vi.mock('@/lib/api', () => ({
   usePersonaListQuery: vi.fn(),
-  useDeletePersonaMutation: vi.fn(),
   fetchDeletePreview: vi.fn(),
   deletePersona: vi.fn(),
 }));
