@@ -1308,3 +1308,23 @@ Follow these so the same issues don't come back:
   the push, so the unpushed work (cross-app sync test) stayed local instead
   of becoming orphan commits. Never skip the check, no matter how "safe"
   the push looks.
+
+## PR #37 review learnings (2026-10-01, OpenCode on 8d6e498 — 2 fixed)
+
+- **The sed-on-conflict version mistake recurred — grep for duplicate keys,
+  not just markers.** The 2026-10-01 rebase lesson (~/AGENTS.md) says sed on
+  conflicted version files leaves markers and duplicates TOML keys; on PR
+  #37's rebase the same shortcut left DUPLICATE `"version"` keys in both
+  package.json manifests (JSON.parse keeps the last, so version-check stayed
+  green while the files were malformed). After any version-file conflict
+  resolution, run `grep -c '"version"'` on each package.json in addition to
+  the marker grep and `bump-version.sh check`. Note: the duplication came
+  from manual conflict resolution, not from `bump-version.sh` — its
+  `re.subn(..., count=1)` is idempotent-safe.
+- **Pin a default literal in every code path that carries it.** This PR
+  changed the default provider in two places — the legacy `_generate_response`
+  wrapper and `_generate_response_with_fallback` — but only the fallback had
+  a test asserting `"omniroute"`. A future revert of just the wrapper's
+  default would have gone unnoticed. When the same default literal exists in
+  N code paths, pin all N (`test_wrapper_default_provider_is_omniroute`
+  mirrors `test_default_provider_is_omniroute`).
