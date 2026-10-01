@@ -1396,6 +1396,23 @@ Follow these so the same issues don't come back:
   right after auth. Payload tests mock the limiter no-op; one dedicated
   test owns the 429 path.
 
+## Web/API review learnings, PR #41 round 2 (2026-10-01)
+- **User-scope every child query, not just the siblings.** The delete-preview
+  persona_images count was persona-scoped while schedules/generations were
+  user-scoped — the "every query is re-scoped by user_id" comment overclaimed.
+  When a comment asserts a guarantee, grep every query under it.
+- **Aggregate budgets on bounded loops.** A per-call timeout does not bound
+  a loop: 20 x 8s = 160s against a slow-but-alive downstream. Gate the loop
+  on `Date.now() - start < BUDGET_MS`; items past budget degrade to null,
+  counts stay complete. Pinned with a mocked-clock test.
+- **Truncation is part of the contract.** A capped list needs a `truncated`
+  flag in the response, the client type, and the UI — a silent cap hides
+  unrecoverable data loss behind a destructive confirm.
+- **Singular/plural keys for count labels.** Follow the
+  `accountConnected`/`accountsConnected` convention; never render "1
+  schedules". If the count already renders in `<strong>`, the label key
+  carries no `{count}` of its own.
+
 ## Engine review learnings (2026-10-02, PR #43)
 - **A test comment claiming a behavior must pin it with an assertion.** The
   reconcile test's comment said "the refund is skipped" but asserted only
