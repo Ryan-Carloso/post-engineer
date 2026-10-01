@@ -90,6 +90,10 @@ async function headWithTimeout(url: string): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), CUSTOM_AUDIO_HEAD_TIMEOUT_MS);
   try {
+    // codeql[js/request-forgery]: false positive — every URL reaching this
+    // fetch passed checkUrlIsPublic (DNS resolution + private/loopback/
+    // link-local IP rejection) on this hop, and redirects are followed
+    // manually with the same check per hop (see checkCustomAudioUrl).
     return await fetch(url, { method: 'HEAD', redirect: 'manual', signal: controller.signal });
   } finally {
     clearTimeout(timeout);

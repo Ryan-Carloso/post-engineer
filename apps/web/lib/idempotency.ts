@@ -22,6 +22,10 @@ export const IDEMPOTENCY_NAMESPACE = 'unified-generate-schedule/v1';
  * from a namespace + name. Same input always yields the same id.
  */
 export function deterministicUuid(namespace: string, name: string): string {
+  // codeql[js/insufficient-password-hash]: false positive — this hashes a
+  // (namespace, userId:idempotencyKey) tuple to derive a deterministic UUID
+  // for idempotent schedule identity, not a password or credential. SHA-256
+  // is the correct primitive here; no password storage is involved.
   const hash = createHash('sha256').update(`${namespace}:${name}`).digest();
   // Set the version (5) and RFC 4122 variant bits on the first 16 bytes.
   hash[6] = (hash[6] & 0x0f) | 0x50;
