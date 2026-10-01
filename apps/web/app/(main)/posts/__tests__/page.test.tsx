@@ -517,16 +517,19 @@ describe('PostsPage slot detail modal', () => {
     expect(video?.getAttribute('src')).toBe('/api/persona/video-download/task-9/final-1.mp4');
   });
 
-  it('shows the video as the card cover in the history grid', async () => {
+  it('shows the video as the card thumbnail in the history grid', async () => {
     const user = userEvent.setup();
     render(<PostsPage />);
     await user.click(screen.getByRole('button', { name: /posts\.tabHistory/ }));
 
-    // The card cover IS the video: metadata-only preload, muted, no native
-    // controls (playback happens in the detail modal).
+    // The card thumbnail IS the video: metadata-only preload, muted, no
+    // native controls (playback happens in the detail modal). The src
+    // carries a #t=0.1 media fragment so the browser seeks to 0.1s and
+    // paints that frame as the thumbnail — preload="metadata" alone shows
+    // an empty box in Chrome.
     const cardVideo = document.querySelector('button video');
     expect(cardVideo).not.toBeNull();
-    expect(cardVideo?.getAttribute('src')).toBe('/api/persona/video-download/task-9/final-1.mp4');
+    expect(cardVideo?.getAttribute('src')).toBe('/api/persona/video-download/task-9/final-1.mp4#t=0.1');
     expect(cardVideo?.getAttribute('controls')).toBeNull();
     expect(cardVideo?.getAttribute('preload')).toBe('metadata');
   });

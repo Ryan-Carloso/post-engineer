@@ -30,13 +30,13 @@ export default function GlobalError({
       <body className="flex min-h-dvh items-center justify-center p-8">
         <div className="flex flex-col items-center gap-4 text-center">
           <h1 className="text-lg font-semibold">Algo deu errado</h1>
-          <p className="text-muted-foreground text-sm">
+          <p className="text-sm text-muted-foreground">
             O erro foi registrado.
           </p>
           <button
             type="button"
             onClick={reset}
-            className="bg-primary text-primary-foreground rounded-lg px-4 py-2 text-sm font-medium hover:opacity-90"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
           >
             Tentar novamente
           </button>

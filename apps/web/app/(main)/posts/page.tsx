@@ -119,8 +119,8 @@ const GenerationCard = ({
     <button type="button" onClick={onOpen} className="h-full text-left">
       <Card className={`flex h-full flex-col gap-0 rounded-xl p-4 transition-colors ${CARD_BORDER}`}>
         <div className="flex items-center justify-between gap-2">
-          <span role="img" aria-label="video" className="inline-flex text-[#60758a]">
-            <Play className="h-5 w-5" />
+          <span role="img" aria-label="video" className="inline-flex text-muted-foreground">
+            <Play className="size-5" />
           </span>
           <p className="text-xs text-muted-foreground">
             {formatDate(generation.createdAt, locale)} · {formatTime(generation.createdAt, locale)}
@@ -131,10 +131,10 @@ const GenerationCard = ({
             <p className="line-clamp-3 text-sm leading-snug text-[#0d2b45]">
               <span className="font-semibold">{generation.personaName ?? t('posts.personaFallback')}</span>
               {' — '}
-              <span className="text-[#60758a]">{generation.videoSubject ?? t('posts.unknownTopic')}</span>
+              <span className="text-muted-foreground">{generation.videoSubject ?? t('posts.unknownTopic')}</span>
             </p>
             {generation.status === 'failed' && (
-              <p className="mt-2 line-clamp-2 text-xs text-[#c2301e]">
+              <p className="mt-2 line-clamp-2 text-xs text-destructive">
                 {t(GENERATION_ERROR_KEY[generation.errorCode ?? 'unknown'] ?? 'posts.errorUnknown')}
               </p>
             )}
@@ -142,7 +142,7 @@ const GenerationCard = ({
           <PostThumb src={hasThumb ? videoUrl : null} />
         </div>
         <CardFooter className="mt-auto items-center justify-between p-0 pt-4">
-          <span className="min-w-0 truncate text-xs text-[#60758a]">{generation.videoSubject ?? t('posts.unknownTopic')}</span>
+          <span className="min-w-0 truncate text-xs text-muted-foreground">{generation.videoSubject ?? t('posts.unknownTopic')}</span>
           <div className="flex shrink-0 items-center gap-2">
             {generation.tokensRefunded && (
               <Badge variant="outline" className="border-transparent bg-[#cff5df] text-[#167246]">
@@ -202,14 +202,14 @@ const GenerationDetailModal = ({
               type="button"
               onClick={onClose}
               aria-label={t('posts.close')}
-              className="rounded-lg px-2 py-1 text-sm font-semibold text-[#60758a] hover:bg-[#f1f6fa]"
+              className="rounded-lg px-2 py-1 text-sm font-semibold text-muted-foreground hover:bg-secondary"
             >
               ✕
             </button>
           </div>
         </div>
 
-        <p className="mt-2 text-sm text-[#60758a]">{generation.videoSubject ?? t('posts.unknownTopic')}</p>
+        <p className="mt-2 text-sm text-muted-foreground">{generation.videoSubject ?? t('posts.unknownTopic')}</p>
 
         {canWatch && videoUrl && (
           <video
@@ -221,7 +221,7 @@ const GenerationDetailModal = ({
         )}
 
         {generation.status === 'failed' && (
-          <p className="mt-4 text-xs text-[#c2301e]">
+          <p className="mt-4 text-xs text-destructive">
             {t(GENERATION_ERROR_KEY[generation.errorCode ?? 'unknown'] ?? 'posts.errorUnknown')}
           </p>
         )}
@@ -309,7 +309,7 @@ const PostCard = ({
           <p className="line-clamp-3 flex-1 text-sm leading-snug text-[#0d2b45]">
             <span className="font-semibold">{personaName}</span>
             {' — '}
-            <span className="text-[#60758a]">{slot.topic ?? t('posts.unknownTopic')}</span>
+            <span className="text-muted-foreground">{slot.topic ?? t('posts.unknownTopic')}</span>
           </p>
           <PostThumb src={hasThumb ? videoUrl : null} />
         </div>
@@ -340,8 +340,8 @@ function accountInitials(label: string): string {
 const AccountAvatarGroup = ({ accounts }: { accounts: AccountOption[] }) => (
   <div className="flex -space-x-1.5">
     {accounts.slice(0, 4).map((account) => (
-      <Avatar key={`${account.provider}:${account.id}`} className="h-6 w-6 ring-2 ring-white">
-        <AvatarFallback className="bg-[#f1f6fa] text-[9px] font-semibold text-[#0d2b45]">
+      <Avatar key={`${account.provider}:${account.id}`} className="size-6 ring-2 ring-white">
+        <AvatarFallback className="bg-secondary text-[9px] font-semibold text-[#0d2b45]">
           {accountInitials(account.label)}
         </AvatarFallback>
       </Avatar>
@@ -352,23 +352,28 @@ const AccountAvatarGroup = ({ accounts }: { accounts: AccountOption[] }) => (
 //---------------
 // PostThumb — the 72×72 thumbnail on the card body's right: the video
 // itself (metadata-only preload, muted, control-less — playback happens
-// in the detail modal) under a small play glyph. No video yet → a quiet
-// muted square.
+// in the detail modal) under a small play glyph. The src carries a
+// #t=0.1 media fragment so the browser seeks and paints that frame as
+// the thumbnail — preload="metadata" alone renders an empty box in
+// Chrome even when the video exists.
 //---------------
-const PostThumb = ({ src }: { src: string | null }) => (
-  <div className="relative w-[72px] shrink-0">
-    <AspectRatio ratio={1} className="w-[72px] rounded-[9px] bg-[#e8edf1]">
-      {src ? (
-        <video src={src} preload="metadata" muted playsInline className="size-full object-cover" />
-      ) : null}
-    </AspectRatio>
-    {src && (
-      <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        <Play className="h-4 w-4 fill-white text-white drop-shadow" />
-      </span>
-    )}
-  </div>
-);
+const PostThumb = ({ src }: { src: string | null }) => {
+  const thumbSrc = src ? `${src}#t=0.1` : null;
+  return (
+    <div className="relative w-18 shrink-0">
+      <AspectRatio ratio={1} className="w-18 rounded-[9px] bg-[#e8edf1]">
+        {thumbSrc ? (
+          <video src={thumbSrc} preload="metadata" muted playsInline className="size-full object-cover" />
+        ) : null}
+      </AspectRatio>
+      {thumbSrc && (
+        <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <Play className="size-4 fill-white text-white drop-shadow" />
+        </span>
+      )}
+    </div>
+  );
+};
 
 const CARD_BORDER = 'border-[#e3ebf1] shadow-[0_1px_2px_rgba(13,43,69,0.05)] hover:border-[#c8d6e0]';
 
@@ -457,7 +462,7 @@ const SlotDetailModal = ({
               type="button"
               onClick={onClose}
               aria-label={t('posts.close')}
-              className="rounded-lg px-2 py-1 text-sm font-semibold text-[#60758a] hover:bg-[#f1f6fa]"
+              className="rounded-lg px-2 py-1 text-sm font-semibold text-muted-foreground hover:bg-secondary"
             >
               ✕
             </button>
@@ -473,14 +478,14 @@ const SlotDetailModal = ({
           />
         )}
         {!canWatch && slot.taskId && slot.status === 'generating' && (
-          <p className="mt-4 rounded-xl bg-[#f1f6fa] p-3 text-sm text-[#60758a]">{t('posts.videoGenerating')}</p>
+          <p className="mt-4 rounded-xl bg-secondary p-3 text-sm text-muted-foreground">{t('posts.videoGenerating')}</p>
         )}
         {!canWatch && slot.status === 'awaiting' && (
-          <p className="mt-4 rounded-xl bg-[#f1f6fa] p-3 text-sm text-[#60758a]">{t('posts.videoPending')}</p>
+          <p className="mt-4 rounded-xl bg-secondary p-3 text-sm text-muted-foreground">{t('posts.videoPending')}</p>
         )}
 
         <div className="mt-4">
-          <p className="text-xs font-semibold tracking-wide text-[#60758a] uppercase">{t('posts.topicLabel')}</p>
+          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{t('posts.topicLabel')}</p>
           {editing ? (
             <div className="mt-2">
               <label className="sr-only" htmlFor="slot-topic">{t('posts.topicLabel')}</label>
@@ -489,7 +494,7 @@ const SlotDetailModal = ({
                 value={topicDraft}
                 onChange={(event) => setTopicDraft(event.target.value)}
                 rows={3}
-                className="w-full rounded-xl border border-[#d7e2ea] px-3 py-2 text-sm text-[#0d2b45] focus:border-[#0d2b45] focus:outline-none"
+                className="w-full rounded-xl border border-input px-3 py-2 text-sm text-[#0d2b45] focus:border-[#0d2b45] focus:outline-none"
               />
               <div className="mt-2 flex gap-2">
                 <button
@@ -507,7 +512,7 @@ const SlotDetailModal = ({
                     setTopicDraft(slot.topic ?? '');
                   }}
                   disabled={updateTopic.isPending}
-                  className="rounded-xl border border-[#d7e2ea] px-4 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb]"
+                  className="rounded-xl border border-input px-4 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb]"
                 >
                   {t('posts.cancel')}
                 </button>
@@ -521,7 +526,7 @@ const SlotDetailModal = ({
         {accounts.length > 0 && (
           <div className="mt-4 flex flex-wrap gap-2">
             {accounts.map((account) => (
-              <span key={`${account.provider}:${account.id}`} className="inline-flex items-center gap-1.5 rounded-lg bg-[#f1f6fa] px-2.5 py-1.5 text-xs font-medium text-[#0d2b45]">
+              <span key={`${account.provider}:${account.id}`} className="inline-flex items-center gap-1.5 rounded-lg bg-secondary px-2.5 py-1.5 text-xs font-medium text-[#0d2b45]">
                 <ProviderDot provider={account.provider} />
                 {account.label}
               </span>
@@ -530,11 +535,11 @@ const SlotDetailModal = ({
         )}
 
         {slot.status === 'failed' && slot.error && (
-          <p className="mt-4 text-xs text-[#c2301e]">{slot.error}</p>
+          <p className="mt-4 text-xs text-destructive">{slot.error}</p>
         )}
 
         {mutationError && (
-          <p className="mt-4 rounded-xl bg-[#ffe1de] p-3 text-sm text-[#c2301e]" role="alert">
+          <p className="mt-4 rounded-xl bg-[#ffe1de] p-3 text-sm text-destructive" role="alert">
             {mutationError}
           </p>
         )}
@@ -546,7 +551,7 @@ const SlotDetailModal = ({
                 type="button"
                 onClick={() => setEditing(true)}
                 disabled={deleteSlot.isPending}
-                className="rounded-xl border border-[#d7e2ea] px-4 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb]"
+                className="rounded-xl border border-input px-4 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb]"
               >
                 {t('posts.edit')}
               </button>
@@ -557,14 +562,14 @@ const SlotDetailModal = ({
                 onClick={handleDelete}
                 disabled={deleteSlot.isPending || updateTopic.isPending}
                 className={`rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${
-                  armed ? 'bg-[#a1250f] hover:bg-[#8c1f0d]' : 'bg-[#c2301e] hover:bg-[#a1250f]'
+                  armed ? 'bg-[#a1250f] hover:bg-[#8c1f0d]' : 'bg-destructive hover:bg-[#a1250f]'
                 }`}
               >
                 {armed ? t('posts.deleteConfirm') : t('posts.delete')}
               </button>
             )}
             {canDelete && armed && (
-              <span className="text-xs text-[#60758a]">{t('posts.deleteTokenNote')}</span>
+              <span className="text-xs text-muted-foreground">{t('posts.deleteTokenNote')}</span>
             )}
           </div>
         )}
@@ -701,14 +706,14 @@ export default function PostsPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-[-0.02em] text-[#0d2b45]">{t('posts.title')}</h1>
-          <p className="mt-1 text-sm text-[#60758a]">{t('posts.subtitle')}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{t('posts.subtitle')}</p>
         </div>
         <div className="flex gap-2">
           <button
             type="button"
             onClick={handleRetry}
             disabled={statusQuery.isFetching}
-            className="rounded-xl border border-[#d7e2ea] bg-white px-4 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb] disabled:opacity-50"
+            className="rounded-xl border border-input bg-white px-4 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb] disabled:opacity-50"
           >
             {t('posts.refresh')}
           </button>
@@ -726,7 +731,7 @@ export default function PostsPage() {
             onClick={() => setTab(value)}
             aria-pressed={tab === value}
             className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
-              tab === value ? 'bg-white text-[#0d2b45] shadow-sm' : 'text-[#60758a] hover:text-[#0d2b45]'
+              tab === value ? 'bg-white text-[#0d2b45] shadow-sm' : 'text-muted-foreground hover:text-[#0d2b45]'
             }`}
           >
             {t(value === 'upcoming' ? 'posts.tabUpcoming' : 'posts.tabHistory')} ({value === 'upcoming' ? upcomingCount : historyCount})
@@ -735,11 +740,11 @@ export default function PostsPage() {
       </div>
 
       {isCapped && !isLoading && !isError && (
-        <p className="mt-3 text-xs text-[#60758a]">{t('posts.listCapped', { count: POSTS_LIMIT })}</p>
+        <p className="mt-3 text-xs text-muted-foreground">{t('posts.listCapped', { count: POSTS_LIMIT })}</p>
       )}
 
       <div className="mt-4 flex flex-wrap gap-3">
-        <label className="flex flex-col gap-1 text-xs font-semibold text-[#60758a]">
+        <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
           {t('posts.filterProvider')}
           <select
             value={providerFilter}
@@ -751,7 +756,7 @@ export default function PostsPage() {
               // switching back — reset it instead.
               setAccountFilter((current) => resolveAccountFilter(current, next, accountOptions));
             }}
-            className="rounded-xl border border-[#d7e2ea] bg-white px-3 py-2 text-sm font-medium text-[#0d2b45]"
+            className="rounded-xl border border-input bg-white px-3 py-2 text-sm font-medium text-[#0d2b45]"
           >
             <option value="all">{t('posts.allProviders')}</option>
             {PROVIDER_FILTERS.filter((provider) => provider !== 'all').map((provider) => (
@@ -761,12 +766,12 @@ export default function PostsPage() {
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-xs font-semibold text-[#60758a]">
+        <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
           {t('posts.filterAccount')}
           <select
             value={effectiveAccountFilter}
             onChange={(event) => setAccountFilter(event.target.value)}
-            className="rounded-xl border border-[#d7e2ea] bg-white px-3 py-2 text-sm font-medium text-[#0d2b45]"
+            className="rounded-xl border border-input bg-white px-3 py-2 text-sm font-medium text-[#0d2b45]"
           >
             <option value="all">{t('posts.allAccounts')}</option>
             {visibleAccounts.map((account) => (
@@ -780,11 +785,11 @@ export default function PostsPage() {
 
       <div className="mt-6">
         {isLoading ? (
-          <div className="flex items-center justify-center gap-2 py-16 text-sm text-[#60758a]">
+          <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
             <SpinnerIcon /> {t('posts.refresh')}…
           </div>
         ) : isError ? (
-          <div className="rounded-xl border border-[#d7e2ea] bg-white p-8 text-center">
+          <div className="rounded-xl border border-input bg-white p-8 text-center">
             <p className="text-sm font-semibold text-[#0d2b45]">{t('posts.loadError')}</p>
             <button
               type="button"
@@ -802,7 +807,7 @@ export default function PostsPage() {
                   {t('posts.generationsTitle')}
                 </h2>
                 {generations.length === 0 ? (
-                  <p className="mt-3 text-sm text-[#60758a]">{t('posts.generationsEmpty')}</p>
+                  <p className="mt-3 text-sm text-muted-foreground">{t('posts.generationsEmpty')}</p>
                 ) : (
                   <div className="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                     {generations.map((generation) => (
@@ -818,7 +823,7 @@ export default function PostsPage() {
               </section>
             )}
             {filteredSlots.length === 0 ? (
-              <div className="rounded-xl border border-[#d7e2ea] bg-white p-8 text-center text-sm text-[#60758a]">
+              <div className="rounded-xl border border-input bg-white p-8 text-center text-sm text-muted-foreground">
                 {hasActiveFilter
                   ? t('posts.noResultsForFilter')
                   : t(tab === 'upcoming' ? 'posts.noUpcoming' : 'posts.noHistory')}
