@@ -6,6 +6,7 @@
 # the protocol handshake, so it stays in sync too; uv.lock records the
 # engine project version and is patched the same way):
 #   VERSION
+#   package.json (repo root)
 #   apps/mcp/package.json
 #   apps/web/package.json
 #   apps/engine/pyproject.toml
@@ -22,14 +23,14 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-LOCATIONS=(VERSION apps/mcp/package.json apps/web/package.json apps/engine/pyproject.toml apps/engine/uv.lock)
+LOCATIONS=(VERSION package.json apps/mcp/package.json apps/web/package.json apps/engine/pyproject.toml apps/engine/uv.lock)
 
 version_of() {
   case "$1" in
     VERSION)
       tr -d '[:space:]' < VERSION
       ;;
-    apps/mcp/package.json | apps/web/package.json)
+    package.json | apps/mcp/package.json | apps/web/package.json)
       python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['version'])" "$1"
       ;;
     apps/engine/pyproject.toml)
@@ -56,7 +57,7 @@ set_version_in() {
     VERSION)
       printf '%s\n' "$new" > VERSION
       ;;
-    apps/mcp/package.json | apps/web/package.json)
+    apps/mcp/package.json | apps/web/package.json | package.json)
       python3 -c "
 import json, re, sys
 path, new = sys.argv[1], sys.argv[2]

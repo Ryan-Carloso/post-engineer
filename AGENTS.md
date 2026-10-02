@@ -14,8 +14,9 @@
   before merge.
 - **Every PR bumps the repo-root `VERSION` file** (minor for features,
   patch for fixes) via `scripts/bump-version.sh [patch|minor|major]` — it
-  updates `VERSION`, `apps/mcp/package.json`, `apps/web/package.json` and
-  `apps/engine/pyproject.toml` in one go. CI (`version-check` workflow)
+  updates `VERSION`, the repo-root `package.json`, `apps/mcp/package.json`,
+  `apps/web/package.json`, `apps/engine/pyproject.toml` and
+  `apps/engine/uv.lock` in one go. CI (`version-check` workflow)
   fails the PR if the locations diverge or if `VERSION` was not bumped —
   this is the enforcement, not agent memory. The MCP already advertises
   its package.json version in the protocol handshake, so it stays unified
