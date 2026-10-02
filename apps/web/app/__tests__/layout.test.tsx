@@ -74,3 +74,31 @@ describe('app/layout — RootLayout', () => {
     }
   });
 });
+
+describe('root layout metadata icons', () => {
+  it('declares every icon role in config (config icons do not merge with file-convention icons)', async () => {
+    // Next.js 15 skips file-convention icons entirely once any config
+    // `icons` object exists — omitting `apple:` here once silently dropped
+    // the apple-touch-icon link with zero CI signal.
+    const { metadata } = await import('../layout');
+    expect(metadata.icons).toEqual({ icon: '/icon-128.png', apple: '/apple-icon.png' });
+  });
+
+  it('every declared icon resolves to a real file under apps/web/public/', async () => {
+    const { metadata } = await import('../layout');
+    const { existsSync } = await import('node:fs');
+    const { join, dirname } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const publicDir = join(
+      dirname(fileURLToPath(import.meta.url)),
+      '..',
+      '..',
+      'public',
+    );
+    const icons = metadata.icons as { icon: string; apple: string };
+    for (const href of [icons.icon, icons.apple]) {
+      expect(href.startsWith('/'), `${href} must be a public/ path`).toBe(true);
+      expect(existsSync(join(publicDir, href.slice(1))), `${href} does not exist under public/`).toBe(true);
+    }
+  });
+});

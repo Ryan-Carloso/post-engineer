@@ -1911,3 +1911,8 @@ Follow these so the same issues don't come back:
 
 - **Config `icons` and file-convention icons do NOT merge in Next.js 15.** Once any `icons` object exists in metadata, `resolve-metadata.ts` skips the file-convention icons entirely (`if (!resolvedMetadata.icons)` — favicon.ico survives via a separate special case). Declaring only `icon:` silently dropped the `apple-touch-icon` link. Lesson: declare EVERY icon role in config when using it; verify framework merge semantics in `node_modules/next/dist` before assuming additive behavior.
 - **Give the tab-icon role its own small asset.** A 222 KB `logo.png` as the raw tab icon wastes bandwidth on a 16–32 px slot — export a 128 px variant for the `icon` role and keep the full logo for in-page display.
+
+## Web review learnings, PR #58 round 2 (2026-10-02, OpenCode on 203f253)
+
+- **No CRITICAL/MAJOR on the follow-up head.** Round-3 fixes verified in the tree.
+- **Pin config-declared metadata in tests.** `metadata.icons` is the exact line whose omission once silently dropped the apple-touch-icon — a future rebrand can drop a role again with zero CI signal. `metadata` is a plain static export, so `app/__tests__/layout.test.tsx` pins it directly plus an existence check that each href resolves under `public/` (both mutation-verified).
