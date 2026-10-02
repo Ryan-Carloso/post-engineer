@@ -1402,3 +1402,14 @@ Follow these so the same issues don't come back:
   from the removed flow) — verify zero usages before deleting, and keep
   keys that are still live (`home.waitingForSchedule` was reused by the
   next-slot display).
+
+## Web/API review learnings, PR #44 round 2 (2026-10-02)
+- **Runtime strings are part of the deleted path too.** Validator error
+  copy naming a removed field reaches API clients verbatim in 400 bodies —
+  reword it to the current concept, not just code comments. Tests that
+  regex-match the copy (not the literal) survive the reword untouched.
+- **A nullable field rendered unconditionally is a latent "null:00".**
+  When the dead branch that guarded a nullable field is removed, the
+  surviving consumer must define what NULL means (fallback UI here) and
+  a test must pin it — the deleted test was the only pin on the null
+  shape, so its replacement belongs in the same PR.
