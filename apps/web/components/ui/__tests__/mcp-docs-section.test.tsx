@@ -118,7 +118,7 @@ describe('McpDocsSection', () => {
     expect(prompt).toContain('post-engineer');
     expect(prompt).toContain('POST_ENGINEER_API_KEY');
     expect(prompt).toContain('generate_persona_videos');
-    expect(prompt).toContain('"command": ["npx", "-y", "post-engineer-mcp"]');
+    expect(prompt).toContain('"command": ["npx", "-y", "post-engineer-mcp@latest"]');
     expect(prompt).toContain('list_personas');
     expect(prompt).toContain('list_voices');
     expect(prompt).toContain('list_faces');
