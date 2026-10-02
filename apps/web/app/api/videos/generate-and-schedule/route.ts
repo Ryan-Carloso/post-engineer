@@ -37,7 +37,7 @@ import {
   SlotDistributionError,
   type DistributedSlot,
 } from '@/lib/schedule/slot-distribution';
-import { validateScheduleWindow } from '@/lib/schedule-window';
+import { validateScheduleWindow, SCHEDULE_MAX_AHEAD_DAYS, SCHEDULE_MIN_ADVANCE_HOURS } from '@/lib/schedule-window';
 import { computeVideoTokens, toFiniteNumber, type FaceQuality } from '@/lib/tokens';
 import {
   buildJobPayload,
@@ -327,7 +327,11 @@ function validateSlots(
     if (!windowCheck.ok) {
       return validationFailed(
         ERROR_CODES.SCHEDULE_OUT_OF_RANGE,
-        windowCheck.error || formatErrorMessage(ERROR_CODES.SCHEDULE_OUT_OF_RANGE),
+        windowCheck.error ||
+          formatErrorMessage(ERROR_CODES.SCHEDULE_OUT_OF_RANGE, {
+            minHours: SCHEDULE_MIN_ADVANCE_HOURS,
+            maxDays: SCHEDULE_MAX_AHEAD_DAYS,
+          }),
         'publishing.schedule',
       );
     }
