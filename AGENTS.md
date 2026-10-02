@@ -1435,6 +1435,24 @@ Follow these so the same issues don't come back:
   `delete process.env.X` permanently removes a genuinely-set var for later
   test files in the worker.
 
+## Web/API review learnings, PR #41 round 4 (2026-10-02)
+- **Bound the DB reads, not just the downstream fan-out.** `head: true,
+  count: 'exact'` for pure counts; `.limit()` + deterministic
+  `.order('created_at').order('id')` for the list. A capped API over an
+  unbounded query still pulls every row into serverless memory.
+- **One shared guard per input class.** `SAFE_TASK_ID` now lives in
+  `lib/video-urls.ts` next to the other engine-URL helpers; the download
+  proxy imports it instead of its local duplicate. Identical regexes drift.
+- **Retry must not wipe user input.** The modal's refetch effect resets
+  state per persona id (via ref), not per attempt — the links-incomplete
+  retry keeps the typed confirmation name.
+- **Harden the closest sibling too.** `updatePersona` had the same bare
+  `response.json()` the PR fixed elsewhere; a 5-line hardening now beats
+  the next review round flagging it.
+- **Test the budget-skip branch, not just the happy path.** The `after()`
+  cleanup budget got a mocked-clock test mirroring the preview's — the
+  skip-and-log path is production logic, not an edge.
+
 ## Engine review learnings (2026-10-02, PR #43)
 - **A test comment claiming a behavior must pin it with an assertion.** The
   reconcile test's comment said "the refund is skipped" but asserted only
