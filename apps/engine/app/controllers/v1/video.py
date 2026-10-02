@@ -37,7 +37,14 @@ from app.models.schema import (
 )
 from app.services import state as sm
 from app.services import task as tm
+from app.services.analytics import warm_client as _warm_posthog_client
 from app.utils import file_security, upload_limits, utils
+
+# Warm the PostHog client at controller startup: the on_accepted funnel
+# callback runs under the task-manager lock, and the first track_event in
+# a process pays the posthog import + client construction. Doing it here
+# keeps the lock hold short. No-op when POSTHOG_API_KEY is unset.
+_warm_posthog_client()
 
 # Upload size caps: the handlers stream uploads in chunks instead of
 # buffering the whole body in RAM.
@@ -218,8 +225,22 @@ def create_task(
             "params": body.model_dump(),
             "user_id": auth.user_id,
         }
-        sm.state.update_task(task_id, user_id=auth.user_id)
-        task_manager.add_task(tm.start, task_id=task_id, params=body, stop_at=stop_at)
+        sm.state.update_task(
+            task_id, user_id=auth.user_id, flow="direct", pipeline=stop_at
+        )
+        # Funnel entry: requested fires from on_accepted once the task is
+        # ACCEPTED into the queue — strictly before the worker thread
+        # starts on the immediate path, and never on a 429 queue-full
+        # rejection.
+        task_manager.add_task(
+            tm.start,
+            task_id=task_id,
+            params=body,
+            stop_at=stop_at,
+            on_accepted=lambda: tm.track_generation_requested(
+                task_id, user_id=auth.user_id, flow="direct", pipeline=stop_at
+            ),
+        )
         logger.success(f"Task created: task_id={task_id}")
         return utils.get_response(200, task)
     except TaskQueueFullError as e:

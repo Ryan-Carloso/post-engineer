@@ -1418,3 +1418,85 @@ Follow these so the same issues don't come back:
 - **Grep comments for deleted route names.** Removing an endpoint leaves
   "used by POST /api/schedule" in header comments — docs must describe
   what the code does, so the comment now names the real consumers.
+
+## Engine review learnings, PR #51 (2026-10-02)
+- **Scrub-then-truncate is a repo-wide rule, not a one-file fix.** PR #38
+  established "scrub the full free-text field before truncating"; PR #51
+  reintroduced `scrub_secret_values(str(x)[:200])` in two new call sites
+  (task.py `_fail_task`, generate.py batch dispatch failure). When a
+  reviewer flags a banned pattern, grep the whole repo for siblings — a
+  third pre-existing instance lives in publish.py (`video_publish_failed`
+  reason, out of this PR's scope, flagged for a follow-up PR).
+- **Funnel entry = accepted, not attempted.** `video_generation_requested`
+  fired before `task_manager.add_task`, so 429 queue-full rejections
+  entered the funnel with no terminal event. Requested now fires after a
+  successful enqueue; the rejection path is covered by a test asserting
+  requested is never emitted and the row is rolled back.
+- **Every lifecycle event carries the full segmentation context.**
+  Batch `video_generation_failed`/`video_generated` were missing
+  `user_id`/`pipeline`, silently dropping batch rows from PostHog
+  breakdowns. Guard optional ids (`if user_id is not None`) — pre-task
+  slot failures (deleted persona, empty topic) have no user yet — and
+  document at the call site that they sit outside the requested->failed
+  funnel by design.
+- **A reviewer's suggested test assertion can be wrong — verify it.**
+  OpenCode suggested asserting the redacted reason "contains [redacted]"
+  for a secret past position 200; on the fixed code the redaction lands
+  beyond the 200-char cut, so the assertion fails either way. Pin the
+  order white-box (scrub called with the full string) plus the behavioral
+  invariant (raw secret absent, length bounded).
+
+## Engine review learnings, PR #51 round 2 (2026-10-02)
+- **Comments must describe the mechanism that exists, not the one you
+  wish existed.** The milestone-dedup comment claimed "after a restart
+  the reconciler fails orphan tasks before any progress write" — no such
+  path exists. State the real invariants (empty dict per process, uuid4
+  direct ids never reused, uuid5 batch ids never re-dispatched, terminal
+  transitions pop the entry).
+- **Never overclaim ordering in comments/tests.** `add_task` starts the
+  worker synchronously when capacity is available, so
+  `video_generation_started` can be timestamped before
+  `video_generation_requested`; the test only proved mock call order.
+  Reword to the actual guarantee (PostHog orders funnel steps by
+  timestamp) instead of asserting an ordering the runtime doesn't give.
+- **Degraded contexts fail closed, not open.** `_complete_task` gated
+  batch reporting on `flow != "batch"`, but a failed state read degrades
+  to `flow="unknown"` — which passed the guard and double-counted batch
+  completions. Invert to `flow == "direct"` so only a confirmed direct
+  flow reports here; the reconciler owns batch reporting.
+- **Pin security orderings at every call site, not just the first.**
+  The white-box scrub-then-truncate pin existed only for `_fail_task`;
+  the batch dispatch site used a 43-char message where `[:200]` is a
+  no-op, so a truncate-first revert there passed CI. Every scrub site
+  gets a >200-char secret-bearing test asserting the scrubber received
+  the full string.
+
+## Engine review learnings, PR #51 round 3 (2026-10-02)
+- **Dedup terminal events by notice, not by state.** The publish stage
+  pre-writes FAILED before raising, so `_fail_task`'s "already failed"
+  branch skipped the funnel event entirely — publish failures had no
+  terminal event. A bounded emission set (`_should_emit_failed_event`,
+  mirroring `_should_send_failure_alert`) makes the FIRST notice always
+  emit while later notices stay deduped; the milestone cache now pops on
+  every notice, not just the first.
+- **Funnel entry ordering must be deterministic, not probable.** Firing
+  requested after `add_task` returns still races the synchronously
+  started worker thread. `TaskManager.add_task` takes an `on_accepted`
+  callback fired after acceptance but before thread start (never on
+  429) — pinned at the manager level with a fake that records
+  callback-vs-execute order.
+- **Degraded identity props use the "unknown" sentinel, never a
+  plausible-looking value.** `user_id="internal"` read as a real person
+  in PostHog breakdowns; it now degrades to "unknown" like flow.
+- **A deferred pre-existing instance stops being "out of scope" when
+  the reviewer re-flags it in the same event family.** publish.py's
+  truncate-then-scrub on `video_publish_failed` was left for a follow-up
+  in round 1; round 3 correctly called it a live leak in the same
+  family — fixed here with the same white-box pin.
+
+## PR #51 round-4 review learnings (2026-10-02, OpenCode on bb7dadc)
+
+- **Deterministic ids need emission dedup, not just comments.** Batch task ids are uuid5 per slot, so a crash between dispatch and `update_slot(generating)` re-dispatches the SAME id — the "never re-dispatched" comment was false and the re-dispatch double-fired `video_generation_requested`, inflating the funnel denominator. Fix: bounded check-and-record guard (`_should_emit_requested_event`, mirroring `_should_emit_failed_event`) + honest comment. Process-local guards bound within-process damage; cross-crash duplicates are rare and documented.
+- **New process-local guards break tests that reuse ids.** Two existing tests both used `"task-1"` — the second silently stopped emitting after the guard landed. Clear the guard deque in `setUp`, same as the failed-event guard pattern.
+- **Degraded identity props must ALL use the "unknown" sentinel.** `user_id`/`flow` were converted in round 3 but `pipeline` kept the plausible `"video"` default — a failed state read on a `stop_at="subtitle"` task would silently re-segment into the video funnel. Extend the sentinel test to assert every prop.
+- **Warm expensive lazy imports out from under locks.** The `on_accepted` funnel callback runs under the task-manager lock and the first `track_event` paid the `posthog` import + client construction there. `analytics.warm_client()` at controller startup moves the one-time cost out of the lock hold.

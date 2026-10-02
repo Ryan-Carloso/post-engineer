@@ -1,7 +1,9 @@
 """PostHog product-analytics for the engine.
 
 Tracks the video lifecycle funnel as PostHog events:
-- video_generation_started / video_generated / video_generation_failed
+- video_generation_requested (funnel entry, before the pipeline starts)
+- video_generation_started / video_generation_failed / video_generated
+- video_generation_progress (every 10% milestone)
 - video_publish_started / video_published / video_publish_failed
 
 Safety rules:
@@ -122,6 +124,17 @@ def _get_client() -> Any:
             _warned = True
             logger.warning("PostHog init failed — engine analytics disabled: %s", exc)
         return None
+
+
+def warm_client() -> None:
+    """Construct the PostHog client now (idempotent, never raises).
+
+    The first ``track_event`` in a process pays the ``posthog`` import plus
+    client construction. The ``on_accepted`` funnel callback runs under the
+    task-manager lock, so call this once at controller startup to keep the
+    lock hold short. With no API key it is a no-op (warn-once inside).
+    """
+    _get_client()
 
 
 def track_event(event_name: str, properties: dict[str, Any] | None = None) -> None:
