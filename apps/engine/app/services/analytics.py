@@ -131,8 +131,9 @@ def warm_client() -> None:
 
     The first ``track_event`` in a process pays the ``posthog`` import plus
     client construction. The ``on_accepted`` funnel callback runs under the
-    task-manager lock, so call this once at controller startup to keep the
-    lock hold short. With no API key it is a no-op (warn-once inside).
+    task-manager lock, so call this once at server startup (FastAPI startup
+    event) to keep the lock hold short. With no API key it is a no-op
+    (warn-once inside).
     """
     _get_client()
 
