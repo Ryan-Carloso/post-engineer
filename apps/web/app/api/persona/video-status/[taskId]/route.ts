@@ -5,7 +5,7 @@ import { refundTokens } from '@/lib/billing/token-check';
 import { recordGenerationUpdate } from '@/lib/generation/video-generation';
 import { categorizeGenerationError } from '@/lib/generation/generation-errors';
 import { apiErrorResponse } from '@/lib/api-error';
-import { rewriteVideoUrls } from '@/lib/video-urls';
+import { rewriteVideoUrls, SAFE_TASK_ID } from '@/lib/video-urls';
 
 //---------------
 // GET /api/persona/video-status/:taskId — engine status proxy.
@@ -13,8 +13,6 @@ import { rewriteVideoUrls } from '@/lib/video-urls';
 // Observing a terminal state also advances the video_generations history
 // row (completed, or failed with the engine error + refund flag).
 //---------------
-
-const SAFE_TASK_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 export async function GET(
   request: Request,
