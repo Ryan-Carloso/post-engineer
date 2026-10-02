@@ -15,8 +15,8 @@ import {
   fetchVoices,
   fetchPersonaList,
   deletePersona,
+  fetchDeletePreview,
   updatePersona,
-  useDeletePersonaMutation,
   useUpdatePersonaMutation,
   usePersonaImagesQuery,
 } from '@/lib/api';
@@ -234,6 +234,95 @@ describe('lib/api — persona', () => {
     });
   });
 
+  describe('fetchDeletePreview', () => {
+    it('GETs /api/persona/delete-preview with the encoded id', async () => {
+      const preview = { success: true, counts: { schedules: 1 } };
+      fetchMock.mockResolvedValue(jsonResponse(preview));
+
+      const result = await fetchDeletePreview('p/1 espaço');
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        `/api/persona/delete-preview?personaId=${encodeURIComponent('p/1 espaço')}`,
+      );
+      expect(result).toEqual(preview);
+    });
+
+    it('returns success:false on a non-ok response instead of throwing', async () => {
+      fetchMock.mockResolvedValue(new Response('<html>502</html>', { status: 502 }));
+
+      const result = await fetchDeletePreview('p-1');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('502');
+    });
+
+    it('surfaces the server structured error on a non-ok JSON response', async () => {
+      fetchMock.mockResolvedValue(
+        new Response(JSON.stringify({ success: false, error: 'Persona not found.', code: 'PERSONA_NOT_FOUND' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+      const result = await fetchDeletePreview('p-1');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Persona not found.');
+    });
+
+    it('returns success:false on a non-JSON body instead of throwing', async () => {
+      fetchMock.mockResolvedValue(
+        new Response('not json', { status: 200, headers: { 'Content-Type': 'text/plain' } }),
+      );
+
+      const result = await fetchDeletePreview('p-1');
+
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('deletePersona robustness', () => {
+    it('returns success:false on a non-ok response instead of throwing', async () => {
+      fetchMock.mockResolvedValue(new Response('timeout', { status: 504 }));
+
+      const result = await deletePersona('p-1');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('504');
+    });
+
+    it('returns success:false on a non-JSON body instead of throwing', async () => {
+      fetchMock.mockResolvedValue(
+        new Response('not json', { status: 200, headers: { 'Content-Type': 'text/plain' } }),
+      );
+
+      const result = await deletePersona('p-1');
+
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('updatePersona robustness', () => {
+    it('returns success:false on a non-ok response instead of throwing', async () => {
+      fetchMock.mockResolvedValue(new Response('<html>502</html>', { status: 502 }));
+
+      const result = await updatePersona('p-1', new FormData());
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('502');
+    });
+
+    it('returns success:false on a non-JSON body instead of throwing', async () => {
+      fetchMock.mockResolvedValue(
+        new Response('not json', { status: 200, headers: { 'Content-Type': 'text/plain' } }),
+      );
+
+      const result = await updatePersona('p-1', new FormData());
+
+      expect(result.success).toBe(false);
+    });
+  });
+
   describe('updatePersona', () => {
     it('sends a multipart PATCH to /api/persona with the encoded id', async () => {
       fetchMock.mockResolvedValue(jsonResponse({ success: true }));
@@ -283,35 +372,6 @@ describe('lib/api — persona', () => {
 
       await waitFor(() => {
         expect(queryClient.getQueryState(['persona-list'])?.isInvalidated).toBe(true);
-      });
-    });
-  });
-
-  describe('useDeletePersonaMutation', () => {
-    it('deletes the persona and invalidates the list to reload', async () => {
-      fetchMock.mockResolvedValue(jsonResponse({ success: true }));
-      const queryClient = new QueryClient();
-      queryClient.setQueryData(['persona-list'], [{ id: 'p-1', name: 'Ana' }]);
-
-      function Wrapper({ children }: { children: ReactNode }) {
-        return createElement(
-          QueryClientProvider,
-          { client: queryClient },
-          children,
-        );
-      }
-      Wrapper.displayName = 'DeletePersonaWrapper';
-
-      const { result } = renderHook(() => useDeletePersonaMutation(), {
-        wrapper: Wrapper,
-      });
-      await result.current.mutateAsync('p-1');
-
-      await waitFor(() => {
-        expect(queryClient.getQueryState(['persona-list'])?.isInvalidated).toBe(true);
-      });
-      expect(fetchMock).toHaveBeenCalledWith('/api/persona?personaId=p-1', {
-        method: 'DELETE',
       });
     });
   });

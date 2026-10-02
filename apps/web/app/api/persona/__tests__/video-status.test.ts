@@ -209,6 +209,9 @@ describe('GET /api/persona/video-status/:taskId', () => {
         data: { task_id: 'task-1', state: -1, error: 'custom audio file is invalid: boom' },
       });
       const serviceClient = mockServiceClient('gen-1');
+      // The refund RPC succeeded, so the flag is written and the next poll
+      // skips the terminal side effects.
+      vi.mocked(refundTokens).mockResolvedValue(true);
       const updateSpy = vi
         .spyOn(videoGeneration, 'recordGenerationUpdate')
         .mockResolvedValue(undefined);
@@ -225,6 +228,36 @@ describe('GET /api/persona/video-status/:taskId', () => {
             errorMessage: 'custom audio file is invalid: boom',
             tokensRefunded: true,
           }),
+        );
+      } finally {
+        updateSpy.mockRestore();
+      }
+    });
+
+    it('leaves tokens_refunded unset when the refund RPC fails so the next poll retries', async () => {
+      // Review round 5 (opencode): the route used to write
+      // tokensRefunded: true unconditionally. A failed refund then looked
+      // recorded and the "next poll must retry that refund" backstop above
+      // could never fire — the user's tokens were silently lost.
+      mockTaskBody({
+        status: 200,
+        message: 'success',
+        data: { task_id: 'task-1', state: -1, error: 'boom' },
+      });
+      mockServiceClient('gen-1');
+      vi.mocked(refundTokens).mockResolvedValue(false);
+      const updateSpy = vi
+        .spyOn(videoGeneration, 'recordGenerationUpdate')
+        .mockResolvedValue(undefined);
+      try {
+        const response = await poll();
+        expect(response.status).toBe(200);
+        expect(refundTokens).toHaveBeenCalled();
+        expect(updateSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ generationId: 'gen-1', status: 'failed' }),
+        );
+        expect(updateSpy).toHaveBeenCalledWith(
+          expect.not.objectContaining({ tokensRefunded: true }),
         );
       } finally {
         updateSpy.mockRestore();
@@ -372,6 +405,8 @@ describe('GET /api/persona/video-status/:taskId', () => {
         data: { task_id: 'task-1', state: -1, error: 'boom' },
       });
       const serviceClient = mockServiceClient('gen-1', { status: 'failed', tokens_refunded: false });
+      // The retry lands, so the flag is written this time.
+      vi.mocked(refundTokens).mockResolvedValue(true);
       const updateSpy = vi
         .spyOn(videoGeneration, 'recordGenerationUpdate')
         .mockResolvedValue(undefined);

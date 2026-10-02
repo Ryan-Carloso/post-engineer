@@ -2,12 +2,12 @@ import { NextResponse } from 'next/server';
 import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
 import { apiErrorResponse } from '@/lib/api-error';
 import { logger } from '@/lib/logger';
+import { SAFE_TASK_ID } from '@/lib/video-urls';
 
 type DownloadContext = {
   params: Promise<{ taskId: string; path: string[] }>;
 };
 
-const SAFE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const FORWARDED_RESPONSE_HEADERS = ['content-type', 'content-length', 'content-range', 'accept-ranges'] as const;
 
 //---------------
@@ -134,8 +134,8 @@ function findVideoSegments(value: unknown, prefix: string): string[] | null {
 }
 
 function isSafePath(taskId: string, path: string[]): boolean {
-  return SAFE_SEGMENT.test(taskId)
+  return SAFE_TASK_ID.test(taskId)
     && path.length > 0
-    && path.every((segment) => SAFE_SEGMENT.test(segment) && segment !== '.' && segment !== '..')
+    && path.every((segment) => SAFE_TASK_ID.test(segment) && segment !== '.' && segment !== '..')
     && /\.[A-Za-z0-9]{1,8}$/.test(path[path.length - 1] ?? '');
 }

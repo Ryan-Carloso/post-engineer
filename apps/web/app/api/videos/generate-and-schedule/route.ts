@@ -18,8 +18,7 @@
 //
 // The engine's 60s tick reconciles generating -> ready/failed and publishes
 // ready slots at slot_at; the tick never sees our slots while pending:
-// scheduled_at stays NULL during dispatch (it would otherwise trigger the
-// immediate one-off dispatch path and double-generate).
+// scheduled_at is a legacy column that always stays NULL now.
 //---------------
 
 import { NextResponse } from 'next/server';
@@ -745,11 +744,13 @@ export async function POST(request: Request): Promise<NextResponse> {
     generationId: idem.generationId,
   });
 
-  // 9. Insert the schedule. The id is deterministic (idempotency anchor).
-  // No `kind` field: the column was dropped from the schema (3bbbb65) and
-  // inserting it 42703s — the 500 every schedule creation hit. scheduled_at
-  // stays NULL during dispatch so the engine's immediate one-off path cannot
-  // race us and double-generate; the tick only reconciles our generating slots.
+// 9. Insert the schedule. The id is deterministic (idempotency anchor).
+  // No `kind` key: the schedules table has no kind column — it was dropped
+  // from the schema and PostgREST rejects the whole insert on an unknown
+  // key, which is the 500 every schedule creation hit.
+  // scheduled_at is a legacy column that always stays NULL during dispatch,
+  // so the engine's immediate one-off path cannot race us and
+  // double-generate; the tick only reconciles our generating slots.
   const sortedTimes = [...new Set(schedule.times.map((t) => t.trim()))].sort();
   const { error: scheduleError } = await supabase.from('schedules').insert({
     id: idem.scheduleId,

@@ -11,6 +11,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // formData parsing, validations, path assembly, and payload.
 //---------------
 
+vi.mock('next/server', async (importOriginal) => {
+  // after() needs a request scope; in tests the callback runs inline.
+  const actual = await importOriginal<typeof import('next/server')>();
+  return {
+    ...actual,
+    after: (callback: () => unknown) => {
+      void Promise.resolve().then(() => callback());
+    },
+  };
+});
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn(),
 }));
@@ -613,10 +623,18 @@ function mockSupabaseForDelete(deleteError: { code?: string; message: string } |
       select: vi.fn(() => ({
         eq: vi.fn(() => ({
           eq: vi.fn(() => ({
+            order: vi.fn(() => ({
+              limit: vi.fn(async () => ({ data: [], error: null, count: 0 })),
+            })),
             single: vi.fn(async () => ({
               data: { id: 'persona-uuid-1', photo_path: null, voice_audio_path: null },
               error: null,
             })),
+            // Thenable for list selects (schedules, generations): resolves
+            // to an empty list so the cascade degenerates cleanly.
+            then: (resolve: (v: unknown) => void) => {
+              resolve({ data: [], error: null });
+            },
           })),
         })),
       })),
@@ -1019,9 +1037,11 @@ describe('DELETE /api/persona', () => {
         if (table === 'persona_images') {
           return {
             select: vi.fn(() => ({
-              eq: vi.fn(async () => ({
-                data: [{ image_path: 'uid/img1.png' }, { image_path: 'uid/img2.png' }],
-                error: null,
+              eq: vi.fn(() => ({
+                eq: vi.fn(async () => ({
+                  data: [{ image_path: 'uid/img1.png' }, { image_path: 'uid/img2.png' }],
+                  error: null,
+                })),
               })),
             })),
           };
@@ -1030,10 +1050,16 @@ describe('DELETE /api/persona', () => {
           select: vi.fn(() => ({
             eq: vi.fn(() => ({
               eq: vi.fn(() => ({
+                order: vi.fn(() => ({
+                  limit: vi.fn(async () => ({ data: [], error: null, count: 0 })),
+                })),
                 single: vi.fn(async () => ({
                   data: { id: 'persona-uuid-1', photo_path: null, voice_audio_path: null },
                   error: null,
                 })),
+                then: (resolve: (v: unknown) => void) => {
+                  resolve({ data: [], error: null });
+                },
               })),
             })),
           })),
@@ -1072,7 +1098,9 @@ describe('DELETE /api/persona', () => {
         if (table === 'persona_images') {
           return {
             select: vi.fn(() => ({
-              eq: vi.fn(async () => ({ data: null, error: { message: 'db down' } })),
+              eq: vi.fn(() => ({
+                eq: vi.fn(async () => ({ data: null, error: { message: 'db down' } })),
+              })),
             })),
           };
         }
@@ -1080,10 +1108,16 @@ describe('DELETE /api/persona', () => {
           select: vi.fn(() => ({
             eq: vi.fn(() => ({
               eq: vi.fn(() => ({
+                order: vi.fn(() => ({
+                  limit: vi.fn(async () => ({ data: [], error: null, count: 0 })),
+                })),
                 single: vi.fn(async () => ({
                   data: { id: 'persona-uuid-1', photo_path: null, voice_audio_path: null },
                   error: null,
                 })),
+                then: (resolve: (v: unknown) => void) => {
+                  resolve({ data: [], error: null });
+                },
               })),
             })),
           })),

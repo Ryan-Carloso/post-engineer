@@ -287,7 +287,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(spends[0].args.p_amount).toBe(4);
       expect(spends[0].args.p_user_id).toBe(USER_ID);
 
-      // Schedule row: deterministic id, scheduled_at stays NULL during
+// Schedule row: deterministic id, scheduled_at stays NULL during
       // dispatch (the tick must not race us). `kind` was dropped from the
       // schema (3bbbb65) — the insert must not resurrect the removed column.
       const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;

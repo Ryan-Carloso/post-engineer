@@ -85,7 +85,7 @@ class StoreRequestsTests(unittest.TestCase):
             self.assertIn(field, select)
 
     def test_ready_due_slots_embeds_personas_for_notification(self):
-        # A mensagem Discord de publish precisa do nome da persona.
+        # The Discord publish message needs the persona name.
         self.store.ready_due_slots(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
         _, _, kwargs = self._last_call()
         self.assertIn("personas(", kwargs["params"]["select"])
@@ -228,7 +228,7 @@ class GenerationHorizonTests(unittest.TestCase):
                 app_config.app["fill_schedule_generation_horizon_hours"] = original
         kwargs = self._pair(store)[1]
         slot_at = kwargs["params"]["slot_at"]
-        # 12:00 + 1h de horizonte → limite 13:00 do mesmo dia
+        # 12:00 + 1h horizon -> 13:00 cutoff on the same day
         self.assertEqual(slot_at, "lte.2026-09-06T13:00:00+00:00")
 
     @staticmethod
@@ -241,11 +241,9 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class OneOffSlotsTests(unittest.TestCase):
-    """One-off schedule slots: dispatched immediately, ignoring the horizon.
-
-    Discriminator (no schema change): the joined schedule carries
-    scheduled_at (batch schedules leave it NULL).
+class SlotSelectTests(unittest.TestCase):
+    """SLOT_SELECT shape: the PostgREST select used for scheduled_posts
+    reads with the joined schedule (+persona) embed.
     """
 
     def setUp(self):
@@ -258,21 +256,5 @@ class OneOffSlotsTests(unittest.TestCase):
         call = self.requests.request.call_args
         return call.args[0], call.args[1], call.kwargs
 
-    def test_slot_select_includes_scheduled_at_and_bluesky_account_ids(self):
-        self.assertIn("scheduled_at", fs.ScheduleStore.SLOT_SELECT)
+    def test_slot_select_includes_bluesky_account_ids(self):
         self.assertIn("bluesky_account_ids", fs.ScheduleStore.SLOT_SELECT)
-
-    def test_pending_oneoff_slots_filters_null_topic_schedules_not_null(self):
-        self.store.pending_oneoff_slots()
-        _, _, kwargs = self._last_call()
-        params = kwargs["params"]
-        self.assertEqual(params["status"], f"eq.{fs.SLOT_PENDING}")
-        self.assertEqual(params["schedules.scheduled_at"], "not.is.null")
-        # No horizon filter: one-off slots dispatch at creation, however
-        # far out their slot_at is.
-        self.assertNotIn("slot_at", params)
-
-    def test_pending_oneoff_slots_returns_rows(self):
-        rows = [{"id": "slot-1", "topic": "T"}]
-        self.requests.request.return_value = _response(json_data=rows)
-        self.assertEqual(self.store.pending_oneoff_slots(), rows)

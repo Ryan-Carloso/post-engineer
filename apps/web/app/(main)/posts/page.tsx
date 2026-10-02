@@ -92,15 +92,6 @@ const GENERATION_STATUS_KEY: Record<string, TranslationKey> = {
   failed: 'posts.statusFailed',
 };
 
-const GENERATION_ERROR_KEY: Record<string, TranslationKey> = {
-  custom_audio_invalid: 'posts.errorCustomAudio',
-  engine_unavailable: 'posts.errorEngineUnavailable',
-  engine_rejected: 'posts.errorEngineRejected',
-  no_task_id: 'posts.errorNoTaskId',
-  invalid_task_response: 'posts.errorInvalidTaskResponse',
-  unknown: 'posts.errorUnknown',
-};
-
 const GenerationCard = ({
   generation,
   locale,

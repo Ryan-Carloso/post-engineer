@@ -1,4 +1,5 @@
 import { engineAuthHeaders } from '@/lib/request-auth';
+import { SAFE_TASK_ID } from './video-urls';
 
 //---------------
 // engine-tasks — pure-read engine task lookups (no side effects).
@@ -9,8 +10,6 @@ import { engineAuthHeaders } from '@/lib/request-auth';
 // endpoints (e.g. GET /api/schedule/status) can surface live progress
 // without changing any billing or history state.
 //---------------
-
-export const SAFE_TASK_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 //---------------
 // ENGINE_TASK_PROGRESS_TIMEOUT_MS — the status list is read live while

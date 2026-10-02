@@ -2,6 +2,7 @@
 
 import os
 import traceback
+from types import TracebackType
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
@@ -41,6 +42,70 @@ def should_init_error_tracking() -> bool:
 # tracking (the engine also runs in dev/tests without a complete .env).
 # Under pytest the init is always skipped (see should_init_error_tracking).
 #---------------
+# Loguru extras forwarded as PostHog properties on $exception events.
+# Whitelisted: only filterable, non-sensitive context (ids, status codes).
+# Anything else bound to a record stays out of telemetry.
+_EXCEPTION_CONTEXT_EXTRAS = ("task_id", "http_status_code")
+
+# Bound on serialized frames per $exception_list entry: deep tracebacks
+# (e.g. RecursionError) must not blow up the event payload.
+_MAX_STACKTRACE_FRAMES = 100
+
+# Bound on free-text fields ($exception_message, entry value, stacktrace
+# text): oversized values risk ingestion dropping the event — or silently
+# truncating properties — exactly when the payload is biggest. Scrub the
+# full text first, then cut (PR #38 rule: a cut landing mid-key would
+# otherwise strip the regex anchor and leak the value).
+_MAX_TEXT_CHARS = 5000
+
+
+def _scrub_and_truncate(text: str) -> str:
+    return scrub_secret_values(text)[:_MAX_TEXT_CHARS]
+
+
+def _stacktrace_frames(exc_tb: TracebackType | None) -> list[dict[str, object]]:
+    """Serialize a traceback into PostHog's {"type": "raw", "frames": [...]} shape.
+
+    Mirrors posthog-python's own exception capture (exception_utils.py):
+    ingestion models $exception_list[].stacktrace Sentry-style, and a plain
+    string risks failing its serde check — the exact failure this sink exists
+    to fix.
+
+    Frames are ordered oldest-first (Sentry convention: the innermost frame
+    is last), and the cap keeps the LAST N summaries — the error site —
+    never the outermost framework boilerplate.
+    """
+    try:
+        summaries = traceback.extract_tb(exc_tb)[-_MAX_STACKTRACE_FRAMES:]
+        return [
+            {
+                "filename": scrub_secret_values(summary.filename or ""),
+                "lineno": summary.lineno,
+                "function": scrub_secret_values(summary.name or ""),
+            }
+            for summary in summaries
+        ]
+    except Exception:
+        return []
+
+
+def _exception_list_entry(
+    exc_type: str, value: str, stacktrace: dict[str, object]
+) -> dict[str, object]:
+    # PostHog error tracking requires $exception_list on every $exception
+    # event; without it ingestion flags $cymbal_errors ("missing field
+    # $exception_list") and the event never groups in Error Tracking.
+    # handled: True matches posthog-python's own capture default — records
+    # reaching this sink were caught and logged while the app keeps
+    # serving, never process crashes.
+    return {
+        "type": exc_type,
+        "value": value,
+        "stacktrace": stacktrace,
+        "mechanism": {"type": "generic", "handled": True},
+    }
+
+
 def _loguru_posthog_sink(message) -> None:
     """Forward ERROR+ loguru records to PostHog as $exception events.
 
@@ -51,19 +116,61 @@ def _loguru_posthog_sink(message) -> None:
         record = message.record
         exception = record.get("exception")
         properties: dict[str, object] = {
-            "$exception_message": scrub_secret_values(str(record.get("message", ""))),
+            "$exception_message": _scrub_and_truncate(str(record.get("message", ""))),
         }
+        extra = record.get("extra") or {}
+        for key in _EXCEPTION_CONTEXT_EXTRAS:
+            if isinstance(extra, dict) and extra.get(key) is not None:
+                value = extra[key]
+                # Typed ints (e.g. http_status_code) are not free text:
+                # forward them raw so PostHog numeric filters/breakdowns
+                # work; everything else is scrubbed AND length-capped like
+                # every other free-text field. Bools are excluded
+                # explicitly — isinstance(True, int) is True, and a secret
+                # is never an int (analytics.py rule).
+                properties[key] = (
+                    value
+                    if isinstance(value, int) and not isinstance(value, bool)
+                    else _scrub_and_truncate(str(value))
+                )
         if exception is not None:
             # loguru stores the exception as a (type, value, traceback) tuple
             exc_value = exception[1]
-            properties["$exception_type"] = type(exc_value).__name__
-            properties["$exception_message"] = scrub_secret_values(str(exc_value))
+            exc_type_name = type(exc_value).__name__
+            exc_message = _scrub_and_truncate(str(exc_value))
             try:
-                properties["$exception_stacktrace"] = scrub_secret_values("".join(
-                    traceback.format_exception(type(exc_value), exc_value, exc_value.__traceback__)
-                )[:5000])
+                stacktrace_text = _scrub_and_truncate(
+                    "".join(
+                        traceback.format_exception(
+                            type(exc_value), exc_value, exc_value.__traceback__
+                        )
+                    )
+                )
             except Exception:
-                pass
+                stacktrace_text = ""
+            stacktrace: dict[str, object] = {
+                "type": "raw",
+                "frames": _stacktrace_frames(exception[2]),
+            }
+            properties["$exception_type"] = exc_type_name
+            properties["$exception_message"] = exc_message
+            properties["$exception_stacktrace"] = stacktrace_text
+        else:
+            # No live exception tuple (e.g. HttpException logs its own flat
+            # message): synthesize the entry so the event still ingests.
+            # The http_status_code extra marks our HttpException path — same
+            # not-None gate as the property forwarding above, so the
+            # classification can never drift from the forwarded signal.
+            exc_type_name = (
+                "HttpException"
+                if isinstance(extra, dict) and extra.get("http_status_code") is not None
+                else "Error"
+            )
+            exc_message = str(properties["$exception_message"])
+            stacktrace = {"type": "raw", "frames": []}
+        properties["$exception_list"] = [
+            _exception_list_entry(exc_type_name, exc_message, stacktrace)
+        ]
         track_event("$exception", properties)  # type: ignore[arg-type]
     except Exception:
         pass
