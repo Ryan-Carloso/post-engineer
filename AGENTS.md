@@ -1564,6 +1564,16 @@ Follow these so the same issues don't come back:
   exactly what will be deleted" is a contract; published-post history
   goes too, so count it and show it.
 
+## Web/API review learnings, PR #41 round 14 (2026-10-02)
+- **A parsed flag with no UI consumer is an overclaim.** parseErrorResponse
+  extracted code but the modal ignored it; PERSONA_NOT_FOUND must close +
+  refetch, not offer retry.
+- **"Everything the cascade deletes" includes failed rows.** The status
+  enum has more members than the happy path; enumerate them or count the
+  total.
+- **Behavioral branches need tests, not just logging branches.** The
+  config-throw path changes what the user sees (no retry note); pin it.
+
 ## Engine review learnings (2026-10-02, PR #43)
 - **A test comment claiming a behavior must pin it with an assertion.** The
   reconcile test's comment said "the refund is skipped" but asserted only
