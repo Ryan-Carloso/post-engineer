@@ -3,10 +3,11 @@
 // Product rule: minimum 3h in advance, maximum 30 days ahead.
 //
 // Callers pass the CONVERTED instant (a Date): timezone-aware parsing
-// happens before this validator runs — see parseZonedDateTime in
-// lib/timezone.ts, used by POST /api/videos/generate-and-schedule (via
-// lib/schedule/slot-distribution.ts) and the schedule form so a naive wall
-// clock in the caller's timezone is not measured as if it were UTC.
+// happens before this validator runs — the route passes slots already
+// converted to UTC instants by distributeSlots (which converts via
+// zonedTimeToUtc, lib/timezone.ts). The schedule form parses the naive
+// start date with parseZonedDateTime but does not run this validator;
+// the server enforces the window.
 //---------------
 
 export const SCHEDULE_MIN_ADVANCE_HOURS = 3;
@@ -30,7 +31,7 @@ export function validateScheduleWindow(
   const targetDate = typeof target === 'string' ? new Date(target) : target;
 
   if (!(targetDate instanceof Date) || Number.isNaN(targetDate.getTime())) {
-    return { ok: false, error: 'scheduledAt must be a valid ISO date.' };
+    return { ok: false, error: 'Publish time must be a valid ISO date.' };
   }
 
   const diffMs = targetDate.getTime() - now.getTime();
@@ -38,7 +39,7 @@ export function validateScheduleWindow(
   if (diffMs < SCHEDULE_MIN_ADVANCE_MS) {
     return {
       ok: false,
-      error: `scheduledAt must be at least ${SCHEDULE_MIN_ADVANCE_HOURS} hours in advance (earliest allowed is ${new Date(
+      error: `Publish time must be at least ${SCHEDULE_MIN_ADVANCE_HOURS} hours in advance (earliest allowed is ${new Date(
         now.getTime() + SCHEDULE_MIN_ADVANCE_MS,
       ).toISOString()}).`,
     };
@@ -47,7 +48,7 @@ export function validateScheduleWindow(
   if (diffMs > SCHEDULE_MAX_AHEAD_MS) {
     return {
       ok: false,
-      error: `scheduledAt cannot be more than ${SCHEDULE_MAX_AHEAD_DAYS} days in advance (latest allowed is ${new Date(
+      error: `Publish time cannot be more than ${SCHEDULE_MAX_AHEAD_DAYS} days in advance (latest allowed is ${new Date(
         now.getTime() + SCHEDULE_MAX_AHEAD_MS,
       ).toISOString()}).`,
     };

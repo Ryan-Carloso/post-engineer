@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
 import { apiErrorResponse } from '@/lib/api-error';
+import { SAFE_TASK_ID } from '@/lib/video-urls';
 
 //---------------
 // DELETE /api/persona/video-task/:taskId — cancela/remove task no motor.
 // Disponível para cleanup do produto.
 //---------------
-
-const SAFE_TASK_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 export async function DELETE(
   request: NextRequest,

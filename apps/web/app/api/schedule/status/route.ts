@@ -150,9 +150,8 @@ async function enrichSlot(
 
 //---------------
 // withSlotPresentation — attach the presentation fields to every slot.
-// Engine task lookups run concurrently (Promise.all): sequential one-off
-// generation means at most one generating slot per schedule, but a caller
-// may list many schedules.
+// Engine task lookups run concurrently (Promise.all) since a caller may
+// list many schedules at once.
 //---------------
 async function withSlotPresentation<T extends { status?: unknown; task_id?: unknown }>(
   slots: T[],

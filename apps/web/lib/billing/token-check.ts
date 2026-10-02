@@ -78,7 +78,15 @@ export async function refundTokens(
     return false;
   }
 
-  return isRecord(data) && data.refunded === true;
+  // Review round 5 (opencode): the soft-failure branch ("RPC answered,
+  // refund not applied") left zero trail. Log loudly — the caller leaves
+  // tokens_refunded unset so the next poll retries, and this log is the
+  // only trail for that outcome.
+  const refunded = isRecord(data) && data.refunded === true;
+  if (!refunded) {
+    logger.error('[token-check] refund not applied', null, { userId, generationId });
+  }
+  return refunded;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

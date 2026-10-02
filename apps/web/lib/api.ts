@@ -188,6 +188,70 @@ export function usePersonasQuery() {
 export interface DeletePersonaResult {
   success: boolean;
   error?: string;
+  // Present on non-ok responses when the server sent a structured code
+  // (e.g. PERSONA_NOT_FOUND). Lets the UI stop retrying permanent failures.
+  code?: string;
+}
+
+export interface DeletePreviewVideo {
+  taskId: string | null;
+  topic: string | null;
+  status: string;
+  downloadUrl: string | null;
+}
+
+export interface DeletePreview {
+  success: boolean;
+  persona?: { id: string; name: string };
+  counts?: {
+    schedules: number;
+    upcomingSlots: number;
+    publishedSlots: number;
+    failedSlots: number;
+    generatedVideos: number;
+    personaImages: number;
+  };
+  videos?: DeletePreviewVideo[];
+  videosTruncated?: boolean;
+  linksIncomplete?: boolean;
+  error?: string;
+  code?: string;
+}
+
+// Extract the server's structured error from a non-ok response, falling
+// back to a generic message when the body is missing or unreadable.
+// Returns the error text and, when present, the machine-readable code so
+// callers can distinguish permanent failures (PERSONA_NOT_FOUND) from
+// transient ones.
+async function parseErrorResponse(
+  response: Response,
+  fallback: string,
+): Promise<{ error: string; code?: string }> {
+  const body = await response.json().catch(() => null);
+  if (body !== null && typeof body === 'object') {
+    const error =
+      'error' in body && typeof body.error === 'string' ? body.error : null;
+    const code = 'code' in body && typeof body.code === 'string' ? body.code : undefined;
+    if (error !== null) return { error, code };
+  }
+  return { error: fallback };
+}
+
+export async function fetchDeletePreview(personaId: string): Promise<DeletePreview> {
+  const response = await fetch(
+    `/api/persona/delete-preview?personaId=${encodeURIComponent(personaId)}`,
+  );
+  if (!response.ok) {
+    // Surface the server's structured error (code/error) so the UI can
+    // distinguish e.g. PERSONA_NOT_FOUND from a transient 500.
+    const parsed = await parseErrorResponse(response, `Preview request failed (${response.status}).`);
+    return { success: false, error: parsed.error, code: parsed.code };
+  }
+  try {
+    return (await response.json()) as DeletePreview;
+  } catch {
+    return { success: false, error: 'Preview returned an unreadable response.' };
+  }
 }
 
 export async function deletePersona(personaId: string): Promise<DeletePersonaResult> {
@@ -195,7 +259,15 @@ export async function deletePersona(personaId: string): Promise<DeletePersonaRes
     `/api/persona?personaId=${encodeURIComponent(personaId)}`,
     { method: 'DELETE' },
   );
-  return response.json();
+  if (!response.ok) {
+    const parsed = await parseErrorResponse(response, `Delete request failed (${response.status}).`);
+    return { success: false, error: parsed.error, code: parsed.code };
+  }
+  try {
+    return (await response.json()) as DeletePersonaResult;
+  } catch {
+    return { success: false, error: 'Delete returned an unreadable response.' };
+  }
 }
 
 export interface UpdatePersonaResult {
@@ -216,7 +288,15 @@ export async function updatePersona(
     `/api/persona?personaId=${encodeURIComponent(personaId)}`,
     { method: 'PATCH', body: formData },
   );
-  return response.json();
+  if (!response.ok) {
+    const parsed = await parseErrorResponse(response, `Update request failed (${response.status}).`);
+    return { success: false, error: parsed.error };
+  }
+  try {
+    return (await response.json()) as UpdatePersonaResult;
+  } catch {
+    return { success: false, error: 'Update returned an unreadable response.' };
+  }
 }
 
 export function useUpdatePersonaMutation() {
@@ -224,16 +304,6 @@ export function useUpdatePersonaMutation() {
   return useMutation({
     mutationFn: (input: UpdatePersonaInput) =>
       updatePersona(input.personaId, input.formData),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['persona-list'] });
-    },
-  });
-}
-
-export function useDeletePersonaMutation() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: deletePersona,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['persona-list'] });
     },
@@ -621,9 +691,11 @@ export function useVoiceSampleLanguagesQuery() {
 
 
 //---------------
-// Fill Schedule — automatic schedule (days + time window + posts/day).
-// The engine reads the config and does the rest: LLM topic, video in the 06h
-// UTC batch and publishing at each slot's time.
+// Fill Schedule — video publishing timetables (days + time window + posts/day).
+// Schedules are created by POST /api/videos/generate-and-schedule (1-10
+// topics, each becoming a video + slot + task); the engine reads these
+// tables via the service role and does the rest: video generation per slot,
+// then publishing at each slot's time via /api/upload-content.
 //---------------
 
 export interface ScheduleConfig {
@@ -640,7 +712,6 @@ export interface ScheduleConfig {
   postsPerDay: number;
   timezone: string;
   active: boolean;
-  scheduledAt: string | null;
 }
 
 export interface ScheduledSlot {
@@ -682,7 +753,6 @@ interface ScheduleRow {
   posts_per_day: number;
   timezone: string;
   active: boolean;
-  scheduled_at: string | null;
 }
 
 interface SlotRow {
@@ -710,14 +780,12 @@ function mapSchedule(row: ScheduleRow): ScheduleConfig {
     instagramAccountIds: row.instagram_account_ids ?? [],
     linkedinAccountIds: row.linkedin_account_ids ?? [],
     blueskyAccountIds: row.bluesky_account_ids ?? [],
-    // One-off schedules: days/window are null in the database (scheduled_at instead).
     daysOfWeek: row.days_of_week ?? [],
     startHour: row.start_hour ?? null,
     endHour: row.end_hour ?? null,
     postsPerDay: row.posts_per_day,
     timezone: row.timezone,
     active: row.active,
-    scheduledAt: row.scheduled_at ?? null,
   };
 }
 

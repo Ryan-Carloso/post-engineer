@@ -123,8 +123,12 @@ def publish_task_videos(
             f"task {task_id} has no owner user_id in state; cannot publish"
         )
 
-    sm.state.update_task(
-        task_id, state=const.TASK_STATE_PROCESSING, status="publishing"
+    # Resilient write: losing the publishing marker is harmless, but the
+    # FAILED and publish_results writes below must not be silently lost
+    # (a lost publish_results defeats the already-published idempotency
+    # check above and re-publishes).
+    sm.persist_state_update(
+        sm.state, task_id, state=const.TASK_STATE_PROCESSING, status="publishing"
     )
 
     results: list[dict[str, object]] = []
@@ -157,11 +161,11 @@ def publish_task_videos(
                 # string (it reaches Discord); it is logged server-side only.
                 error = f"publish failed for {os.path.basename(video_path)}: {exc}"
                 logger.error(f"task {task_id}: {error} | upstream response: {exc.response_body}")
-                sm.state.update_task(
-                    task_id, state=const.TASK_STATE_FAILED, error=error
+                sm.persist_state_update(
+                    sm.state, task_id, state=const.TASK_STATE_FAILED, error=error
                 )
                 raise PublishFailedError(error) from exc
             results.append({"provider": provider, "video": video_path, **result})
 
-    sm.state.update_task(task_id, publish_results=results)
+    sm.persist_state_update(sm.state, task_id, publish_results=results)
     return results

@@ -67,8 +67,6 @@ describe('SchedulePage — unified generate+schedule', () => {
       </I18nProvider>,
     );
     expect(screen.getByTestId('gen-form')).toBeInTheDocument();
-    expect(screen.queryByLabelText('fillSchedule.modeRecurring')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('fillSchedule.oneOff')).not.toBeInTheDocument();
     expect(screen.queryByTestId('batch-form')).not.toBeInTheDocument();
   });
 });

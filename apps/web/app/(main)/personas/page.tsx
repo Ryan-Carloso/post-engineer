@@ -1,14 +1,14 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   usePersonaListQuery,
-  useDeletePersonaMutation,
   type PersonaRecord,
 } from '@/lib/api';
+import { DeletePersonaModal } from './delete-persona-modal';
 import { useI18n } from '@/lib/i18n/provider';
 import {
   SparklesIcon,
@@ -118,12 +118,14 @@ const PersonasPageError = () => {
 //---------------
 const PersonasList = ({ personas }: { personas: PersonaRecord[] }) => {
   const { t } = useI18n();
+  const queryClient = useQueryClient();
+  const [deletingPersona, setDeletingPersona] = useState<PersonaRecord | null>(null);
 
   return (
     <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {personas.map((persona) => (
-          <PersonaCard key={persona.id} persona={persona} />
+          <PersonaCard key={persona.id} persona={persona} onDeleteRequest={setDeletingPersona} />
         ))}
         <Link
           href="/persona"
@@ -145,28 +147,31 @@ const PersonasList = ({ personas }: { personas: PersonaRecord[] }) => {
           {t('nav.schedule')}
         </Link>
       </div>
+      <DeletePersonaModal
+        persona={deletingPersona}
+        onClose={() => setDeletingPersona(null)}
+        onDeleted={() => {
+          void queryClient.refetchQueries({ queryKey: ['persona-list'] });
+        }}
+      />
     </section>
   );
 };
 
 //---------------
 // PersonaCard — cartão da persona: inteiro clicável, leva aos detalhes.
-// Botão de deletar (com confirmação) no canto, sem navegar para a edição.
+// Botão de deletar no canto abre o modal de confirmação (com preview do
+// que será apagado), sem navegar para a edição.
 //---------------
-const PersonaCard = ({ persona }: { persona: PersonaRecord }) => {
+const PersonaCard = ({
+  persona,
+  onDeleteRequest,
+}: {
+  persona: PersonaRecord;
+  onDeleteRequest: (persona: PersonaRecord) => void;
+}) => {
   const { t } = useI18n();
   const imageUrl = persona.avatarUrl ?? persona.photoUrl;
-  const deleteMutation = useDeletePersonaMutation();
-  const queryClient = useQueryClient();
-
-  const handleDelete = (): void => {
-    if (!window.confirm(t('personas.deleteQuestion'))) return;
-    void deleteMutation.mutateAsync(persona.id).then((result) => {
-      if (result.success) {
-        void queryClient.refetchQueries({ queryKey: ['persona-list'] });
-      }
-    });
-  };
 
   return (
     <div className="group relative flex min-h-30 items-center gap-4 rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-neutral-300 hover:shadow-md">
@@ -216,8 +221,7 @@ const PersonaCard = ({ persona }: { persona: PersonaRecord }) => {
         type="button"
         aria-label={t('personas.delete')}
         title={t('personas.delete')}
-        disabled={deleteMutation.isPending}
-        onClick={handleDelete}
+        onClick={() => onDeleteRequest(persona)}
         className="absolute top-2.5 right-2.5 flex size-8 shrink-0 items-center justify-center rounded-lg text-neutral-300 transition-colors group-hover:text-neutral-400 hover:bg-red-50 hover:text-red-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 disabled:opacity-50 [&_svg]:size-4"
       >
         <TrashIcon />

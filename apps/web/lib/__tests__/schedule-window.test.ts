@@ -11,6 +11,24 @@ describe('schedule-window validator (3h min / 30d max)', () => {
     expect(SCHEDULE_MAX_AHEAD_DAYS).toBe(30);
   });
 
+  it('never names the removed scheduledAt field in error copy', () => {
+    // Regression pin (PR #52 consolidation): a merge conflict silently
+    // reverted the "Publish time" reword on two branches while the third
+    // kept it. scheduledAt no longer exists on the API surface, so it must
+    // not appear in 400 bodies.
+    const now = new Date('2026-09-18T09:00:00.000Z');
+
+    const cases = [
+      validateScheduleWindow('2026-09-18T11:00:00.000Z', now), // too soon
+      validateScheduleWindow('2026-10-19T09:00:00.000Z', now), // too far
+      validateScheduleWindow('not-a-date', now), // invalid
+    ];
+    for (const result of cases) {
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error).not.toMatch(/scheduledAt/i);
+    }
+  });
+
   it('rejects datetimes less than 3 hours in the future', () => {
     const now = new Date('2026-09-18T09:00:00.000Z');
 

@@ -5,6 +5,8 @@ import { refundTokens } from '@/lib/billing/token-check';
 import { recordGenerationUpdate } from '@/lib/generation/video-generation';
 import { categorizeGenerationError } from '@/lib/generation/generation-errors';
 import { apiErrorResponse } from '@/lib/api-error';
+import { rewriteVideoUrls, SAFE_TASK_ID } from '@/lib/video-urls';
+import { logger } from '@/lib/logger';
 
 //---------------
 // GET /api/persona/video-status/:taskId — engine status proxy.
@@ -12,8 +14,6 @@ import { apiErrorResponse } from '@/lib/api-error';
 // Observing a terminal state also advances the video_generations history
 // row (completed, or failed with the engine error + refund flag).
 //---------------
-
-const SAFE_TASK_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 export async function GET(
   request: Request,
@@ -79,7 +79,16 @@ export async function GET(
         return NextResponse.json(rewriteVideoUrls(body, taskId, baseUrl), { status: response.ok ? 200 : 502 });
       }
       if (isFailedVideoStatus(body)) {
-        await refundTokens(supabase, auth.userId, generationId);
+        // Review round 5 (opencode): the refunded flag is written ONLY when
+        // the refund truly landed. A failed refund leaves tokens_refunded
+        // unset so the terminalRecorded gate above keeps retrying on the
+        // next poll — never mark it refunded optimistically.
+        const refunded = await refundTokens(supabase, auth.userId, generationId);
+        if (!refunded) {
+          logger.error('[api/persona/video-status] refund failed; leaving tokens_refunded unset', null, {
+            generationId,
+          });
+        }
         const rawError = extractTaskError(body);
         await recordGenerationUpdate({
           supabase,
@@ -88,7 +97,7 @@ export async function GET(
           engineTaskId: taskId,
           errorCode: categorizeGenerationError(rawError),
           errorMessage: rawError,
-          tokensRefunded: true,
+          tokensRefunded: refunded ? true : undefined,
         });
       } else {
         await recordGenerationUpdate({
@@ -170,29 +179,4 @@ function extractTaskError(value: unknown): string | null {
   return typeof candidate === 'string' && candidate.length > 0 ? candidate : null;
 }
 
-function rewriteVideoUrls(body: unknown, taskId: string, baseUrl: string): unknown {
-  if (typeof body === 'string') {
-    let candidate = body;
-    let internalAbsolute = false;
-    try {
-      const absolute = new URL(body);
-      if (absolute.origin === new URL(baseUrl).origin) {
-        candidate = `${absolute.pathname}${absolute.search}`;
-        internalAbsolute = true;
-      }
-    } catch {
-      // Non-URL strings are ordinary status data.
-    }
-    const relative = candidate.match(/^\/api\/v1\/(download|stream)\/([^?]+)(\?.*)?$/);
-    if (relative) {
-      const path = relative[2].split('/');
-      if (path[0] === taskId) path.shift();
-      if (path.length === 0) return body;
-      return `/api/persona/video-download/${encodeURIComponent(taskId)}/${path.map(encodeURIComponent).join('/')}${relative[1] === 'stream' ? '?source=stream' : ''}`;
-    }
-    return internalAbsolute ? null : body;
-  }
-  if (Array.isArray(body)) return body.map((item) => rewriteVideoUrls(item, taskId, baseUrl));
-  if (typeof body !== 'object' || body === null) return body;
-  return Object.fromEntries(Object.entries(body).map(([key, value]) => [key, rewriteVideoUrls(value, taskId, baseUrl)]));
-}
+// (rewriteVideoUrls lives in lib/video-urls.ts — shared with delete-preview.)

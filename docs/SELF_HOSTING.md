@@ -47,8 +47,17 @@ openssl rand -hex 32     # MONEYPRINT_API_SECRET (identical in both .env files)
 openssl rand -base64 32  # TOKEN_ENCRYPTION_KEY
 ```
 
-Provision the database schema in your Supabase project (the schema is not
-versioned in this repository — see README §2).
+Provision the database schema in your Supabase project:
+
+1. `supabase/schema.sql` — tables, types and defaults (idempotent snapshot;
+   see its header for what it covers and what to finish in the dashboard:
+   RLS policies, FK constraints, RPC function bodies, the `personas`
+   storage bucket).
+2. `supabase/persona-images.sql` — persona image library constraints.
+3. `supabase/engine-task-state.sql` — engine task state (only needed when
+   running the engine with `MPT_STATE_BACKEND=supabase`).
+
+Paste each file into the Supabase Dashboard > SQL Editor and run, in order.
 
 ## 3. Run the engine with Docker Compose
 

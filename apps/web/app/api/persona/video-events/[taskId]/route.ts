@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
 import { apiErrorResponse } from '@/lib/api-error';
+import { SAFE_TASK_ID } from '@/lib/video-urls';
 
 //---------------
 // GET /api/persona/video-events/:taskId — SSE progress proxy.
@@ -12,8 +13,6 @@ import { apiErrorResponse } from '@/lib/api-error';
 // the video-status proxy: clients do one final GET there after receiving
 // a terminal snapshot.
 //---------------
-
-const SAFE_TASK_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 export async function GET(
   request: Request,
