@@ -1489,6 +1489,20 @@ Follow these so the same issues don't come back:
   happened" was false for batch-prepaid, never-generated slots. State the
   forfeiture honestly in both the code comment and the user-facing copy.
 
+## Web/API review learnings, PR #41 round 8 (2026-10-02)
+- **Transient vs gone is a product-critical distinction.** An engine 5xx/
+  abort during the pre-delete window is not "download unavailable" — the
+  video exists and deletion is irreversible. Return a failure class from
+  the lookup (or at least split 404 from the rest) and flag the UI for
+  retry. The round-3 budget rule generalizes: any lookup that can fail
+  without the asset being gone must say so.
+- **completedSteps must describe reality, not intent.** A push outside
+  its `if` guard claims a step that never ran — the exact lie the field
+  exists to prevent in partial-failure states.
+- **Removing a response field orphans its locals.** Dropping `deleted`
+  left `imagesDeleted` assigned-but-unused; the lint error is the
+  reminder — delete the source variable too.
+
 ## Engine review learnings (2026-10-02, PR #43)
 - **A test comment claiming a behavior must pin it with an assertion.** The
   reconcile test's comment said "the refund is skipped" but asserted only
