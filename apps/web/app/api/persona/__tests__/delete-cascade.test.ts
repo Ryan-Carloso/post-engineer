@@ -102,6 +102,8 @@ function makeClient(tables: Record<string, Row[]>, deleteErrorOn?: string) {
         predicates.push((row) => vals.includes(row[col]));
         return builder;
       }),
+      order: vi.fn(() => builder),
+      limit: vi.fn(() => builder),
       single: vi.fn(async () => {
         const rows = (tables[table] ?? []).filter((r) => predicates.every((p) => p(r)));
         if (rows.length === 0) {
