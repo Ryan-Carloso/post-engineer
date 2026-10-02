@@ -414,12 +414,21 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('rejects a slot less than 3 hours in the future', async () => {
-      const res = await post(
-        baseBody({ publishing: { providers: ['youtube'], accounts: { youtube: ['acct-1'] }, schedule: { startAt: futureISO(0.5), times: [lisbonTimePlus(1)], timezone: 'Europe/Lisbon' } } }),
-      );
-      const json = await res.json();
-      expect(res.status).toBe(400);
-      expect(json.code).toBe('SCHEDULE_OUT_OF_RANGE');
+      // Pin the clock to a mid-day instant: the wall-clock arithmetic below
+      // must stay deterministic no matter when the suite runs (midnight
+      // crossings and DST shifts would otherwise move the slot).
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-18T09:00:00.000Z'));
+      try {
+        const res = await post(
+          baseBody({ publishing: { providers: ['youtube'], accounts: { youtube: ['acct-1'] }, schedule: { startAt: futureISO(0.5), times: [lisbonTimePlus(1)], timezone: 'Europe/Lisbon' } } }),
+        );
+        const json = await res.json();
+        expect(res.status).toBe(400);
+        expect(json.code).toBe('SCHEDULE_OUT_OF_RANGE');
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('rejects a non-http audioUrl', async () => {
