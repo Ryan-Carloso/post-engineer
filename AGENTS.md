@@ -1519,6 +1519,19 @@ Follow these so the same issues don't come back:
   best-effort); keeping it inline reproduced the timeout failure mode the
   after() change exists to prevent.
 
+## Web/API review learnings, PR #41 round 10 (2026-10-02)
+- **Disable every interactive element during a pending mutation.** The
+  retry button survived the "disable while deleting" pass because it
+  lives in the videos section, not the confirm row. Any control that
+  re-fires the effect must be disabled too — and pinned by test.
+- **Pre-formed URLs need the same guard as constructed ones.**
+  `firstDownloadUrl` accepted `/api/persona/video-download/...` strings
+  verbatim; validate the task-id segment against SAFE_TASK_ID like every
+  other interpolation path.
+- **Cap reads that feed only cleanup loops.** The engine task-id select
+  exists solely for best-effort cleanup — cap it with loud-skip. Document
+  intentionally unbounded selects (schedules) at the call site.
+
 ## Engine review learnings (2026-10-02, PR #43)
 - **A test comment claiming a behavior must pin it with an assertion.** The
   reconcile test's comment said "the refund is skipped" but asserted only
