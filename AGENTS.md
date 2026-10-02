@@ -1622,6 +1622,39 @@ Follow these so the same issues don't come back:
   follow-up (persist per-slot cost at creation), so the trade-off is
   discoverable, not silent.
 
+## Engine review learnings (2026-10-02, PR #48)
+
+- **Verify a vendor schema against the vendored SDK, not the reviewer's
+  word alone.** The first version of the PostHog `$exception_list` emitted
+  `stacktrace` as a plain string; posthog-python 7.61.1's own
+  `exception_utils.py` (sitting in our venv) shows ingestion expects
+  `{"type": "raw", "frames": [...]}` Sentry-style. The installed SDK is the
+  ground truth for the wire format — read it before hand-rolling the shape.
+- **One predicate per concept.** The "is HttpException" classification used
+  `"http_status_code" in extra` while property forwarding used
+  `extra.get(...) is not None`: a None-bound status would mis-group in
+  Error Tracking with no filterable property explaining why. Same signal
+  gets the same gate, pinned by a dedicated test.
+- **Pin the default branch of a classification.** The `else "Error"` arm is
+  what most records take (e.g. task-context binds with no exception tuple);
+  assert it explicitly — a future regression relabeling plain errors would
+  otherwise pass the whole suite.
+- **Pin operation order behaviorally when no input distinguishes it.** For
+  scrub-before-truncate, no realistic input leaks under the old order with
+  this regex, so the test spies on `scrub_secret_values`' input length
+  (>5000 chars observed) instead of asserting on output — the order itself
+  is the contract.
+- **Round 3: don't scrub what isn't free text.** `http_status_code` went
+  through the free-text scrubber as a string, killing PostHog numeric
+  filters; typed ints now forward raw. The exemption mirrors analytics.py's
+  "a secret is never an int" rule — including its bool gate
+  (`isinstance(True, int)`), which round 4 caught missing.
+- **Round 5: a cap on an ordered list keeps the diagnostic end.** The
+  100-frame cap kept the FIRST frames (framework boilerplate); Sentry
+  frames end with the innermost frame, so the cap keeps the LAST N — the
+  error site. The cap test pins `frames[-1]` is the raise site, not just
+  the length.
+
 ## PR #46 review learnings (2026-10-02, OpenCode — 24h→3h schedule window)
 
 - **Dead `||` fallbacks with divergent copy.** `windowCheck.error ||`
