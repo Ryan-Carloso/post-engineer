@@ -39,7 +39,7 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   TOPICS_REQUIRED: 'At least one video idea is required.',
   TOPICS_LIMIT_EXCEEDED: 'You can generate up to 10 videos per request.',
   INVALID_SCHEDULE_TIME: 'One or more publishing times are invalid.',
-  SCHEDULE_OUT_OF_RANGE: 'Publishing must be scheduled between 24 hours and 30 days from now.',
+  SCHEDULE_OUT_OF_RANGE: 'Publishing must be scheduled between {minHours} hours and {maxDays} days from now.',
   INSUFFICIENT_TOKENS: 'You need {need} tokens, but only have {have}.',
   RATE_LIMIT_EXCEEDED: 'Too many video generation requests. Please try again later.',
   VALIDATION_FAILED: 'Request validation failed.',

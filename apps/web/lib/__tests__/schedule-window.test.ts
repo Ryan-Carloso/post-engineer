@@ -5,21 +5,27 @@ import {
   SCHEDULE_MAX_AHEAD_DAYS,
 } from '../schedule-window';
 
-describe('schedule-window validator (24h min / 30d max)', () => {
+describe('schedule-window validator (3h min / 30d max)', () => {
   it('exposes the expected window constants', () => {
-    expect(SCHEDULE_MIN_ADVANCE_HOURS).toBe(24);
+    expect(SCHEDULE_MIN_ADVANCE_HOURS).toBe(3);
     expect(SCHEDULE_MAX_AHEAD_DAYS).toBe(30);
   });
 
-  it('rejects datetimes less than 24 hours in the future', () => {
+  it('rejects datetimes less than 3 hours in the future', () => {
     const now = new Date('2026-09-18T09:00:00.000Z');
 
-    const tooSoon = validateScheduleWindow('2026-09-18T19:00:00.000Z', now);
+    const tooSoon = validateScheduleWindow('2026-09-18T11:00:00.000Z', now);
     expect(tooSoon.ok).toBe(false);
-    if (!tooSoon.ok) expect(tooSoon.error).toMatch(/at least 24 hours/i);
+    if (!tooSoon.ok) expect(tooSoon.error).toMatch(/at least 3 hours/i);
 
     const past = validateScheduleWindow('2026-09-17T09:00:00.000Z', now);
     expect(past.ok).toBe(false);
+  });
+
+  it('accepts a datetime exactly 3 hours in the future (boundary)', () => {
+    const now = new Date('2026-09-18T09:00:00.000Z');
+
+    expect(validateScheduleWindow('2026-09-18T12:00:00.000Z', now).ok).toBe(true);
   });
 
   it('rejects datetimes more than 30 days in the future', () => {
@@ -27,14 +33,15 @@ describe('schedule-window validator (24h min / 30d max)', () => {
 
     const tooFar = validateScheduleWindow('2026-10-19T09:00:00.000Z', now);
     expect(tooFar.ok).toBe(false);
-    if (!tooFar.ok) expect(tooFar.error).toMatch(/more than 30 days/i);
+    if (!tooFar.ok)
+      expect(tooFar.error).toMatch(new RegExp(`more than ${SCHEDULE_MAX_AHEAD_DAYS} days`, 'i'));
   });
 
-  it('accepts datetimes inside the 24h..30d window', () => {
+  it('accepts datetimes inside the 3h..30d window', () => {
     const now = new Date('2026-09-18T09:00:00.000Z');
 
+    expect(validateScheduleWindow('2026-09-18T12:00:00.000Z', now).ok).toBe(true);
     expect(validateScheduleWindow('2026-09-19T09:00:00.000Z', now).ok).toBe(true);
-    expect(validateScheduleWindow('2026-09-20T12:00:00.000Z', now).ok).toBe(true);
     expect(validateScheduleWindow('2026-10-18T09:00:00.000Z', now).ok).toBe(true);
   });
 

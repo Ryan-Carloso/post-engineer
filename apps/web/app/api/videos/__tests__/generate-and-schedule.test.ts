@@ -99,6 +99,15 @@ function futureISO(hoursAhead: number): string {
   return new Date(Date.now() + hoursAhead * 3600 * 1000).toISOString();
 }
 
+function lisbonTimePlus(hoursAhead: number): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Lisbon',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(Date.now() + hoursAhead * 3600 * 1000));
+}
+
 function makeClient(cfg: DbConfig): unknown {
   const table = (name: string): unknown => {
     const builder: Record<string, unknown> = {
@@ -395,13 +404,35 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(json.field).toBe('publishing.schedule.timezone');
     });
 
-    it('rejects slots outside the 24h-30d window', async () => {
+    it('rejects slots outside the 3h-30d window', async () => {
       const res = await post(
         baseBody({ publishing: { providers: ['youtube'], accounts: { youtube: ['acct-1'] }, schedule: { startAt: futureISO(31 * 24), times: ['18:00'], timezone: 'Europe/Lisbon' } } }),
       );
       const json = await res.json();
       expect(res.status).toBe(400);
       expect(json.code).toBe('SCHEDULE_OUT_OF_RANGE');
+    });
+
+    it('rejects a slot less than 3 hours in the future', async () => {
+      // Pin the clock to a mid-day instant: the wall-clock arithmetic below
+      // must stay deterministic no matter when the suite runs (midnight
+      // crossings and DST shifts would otherwise move the slot).
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-18T09:00:00.000Z'));
+      try {
+        const res = await post(
+          baseBody({ publishing: { providers: ['youtube'], accounts: { youtube: ['acct-1'] }, schedule: { startAt: futureISO(0.5), times: [lisbonTimePlus(1)], timezone: 'Europe/Lisbon' } } }),
+        );
+        const json = await res.json();
+        expect(res.status).toBe(400);
+        expect(json.code).toBe('SCHEDULE_OUT_OF_RANGE');
+        // The validator's message (with the interpolated window constants)
+        // is the copy clients receive — pin it so the code and the returned
+        // message can't silently diverge.
+        expect(json.error).toMatch(/at least 3 hours in advance/i);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('rejects a non-http audioUrl', async () => {

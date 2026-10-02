@@ -177,7 +177,7 @@ export const GeneratePersonaVideosShape = {
     .refine((value) => !Number.isNaN(Date.parse(value)), {
       message: 'startAt must be a valid ISO datetime (e.g. "2026-10-02T20:00:00")',
     })
-    .describe('When the first publish slot may start: ISO datetime. A naive "2026-10-02T20:00:00" is wall-clock in timezone. Slots before startAt are skipped; every slot must be 24h–30d ahead.'),
+    .describe('When the first publish slot may start: ISO datetime. A naive "2026-10-02T20:00:00" is wall-clock in timezone. Slots before startAt are skipped; every slot must be 3h–30d ahead.'),
   times: z
     .array(
       z

@@ -321,13 +321,16 @@ function validateSlots(
     }
     throw error;
   }
-  // Every slot must fall inside the 24h–30d publishing window.
+  // Every slot must fall inside the 3h–30d publishing window.
   for (const slot of slots) {
     const windowCheck = validateScheduleWindow(new Date(slot.slotAtISO));
     if (!windowCheck.ok) {
       return validationFailed(
         ERROR_CODES.SCHEDULE_OUT_OF_RANGE,
-        windowCheck.error || formatErrorMessage(ERROR_CODES.SCHEDULE_OUT_OF_RANGE),
+        // windowCheck.error is the only copy for this code at this call
+        // site: the validator always returns a non-empty message on the
+        // failure branch, and it already interpolates the window constants.
+        windowCheck.error,
         'publishing.schedule',
       );
     }
