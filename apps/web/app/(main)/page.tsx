@@ -120,9 +120,11 @@ const AutomationGrid = () => {
         const instagramAccounts = instagram.data?.accounts.filter((item) => schedule.instagramAccountIds.includes(item.igUserId)) ?? [];
         const linkedinAccounts = linkedin.data?.accounts.filter((item) => schedule.linkedinAccountIds.includes(item.providerAccountId)) ?? [];
         const nextSlot = status.data?.upcoming.find((slot) => slot.scheduleId === schedule.id) ?? status.data?.upcoming[0];
-        const days = schedule.daysOfWeek.length === 7
-          ? t('home.everyDay')
-          : schedule.daysOfWeek.map((day) => dayLabels[day]).join(', ');
+        const days = schedule.daysOfWeek.length === 0
+          ? t('home.waitingForSchedule')
+          : schedule.daysOfWeek.length === 7
+            ? t('home.everyDay')
+            : schedule.daysOfWeek.map((day) => dayLabels[day]).join(', ');
         const busy = updateSchedule.isPending || deleteSchedule.isPending;
 
         return (

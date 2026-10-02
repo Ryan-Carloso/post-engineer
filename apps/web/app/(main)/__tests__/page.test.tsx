@@ -59,6 +59,14 @@ describe('Home dashboard public seam', () => {
     expect(screen.queryByText(/null:00/)).not.toBeInTheDocument();
   });
 
+  it('renders the waiting fallback when daysOfWeek is empty (unified schedules store null)', () => {
+    apiState.schedules = [{ id: 's1', personaId: 'p1', youtubeAccountIds: [], instagramAccountIds: [], linkedinAccountIds: [], daysOfWeek: [], startHour: 9, endHour: 18, postsPerDay: 1, active: true }];
+    render(<Home />);
+    expect(screen.getByRole('heading', { name: 'Tech Explorer' })).toBeVisible();
+    expect(screen.getByText('home.waitingForSchedule')).toBeInTheDocument();
+    expect(screen.getByText(/09:00 - 18:00/)).toBeInTheDocument();
+  });
+
   it('exibe contas LinkedIn do autopiloto como chips', () => {
     apiState.schedules = [{ id: 's1', personaId: 'p1', youtubeAccountIds: [], instagramAccountIds: [], linkedinAccountIds: ['urn:li:person:1'], daysOfWeek: [1], startHour: 9, endHour: 18, postsPerDay: 1, active: true }];
     render(<Home />);

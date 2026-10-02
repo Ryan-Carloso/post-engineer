@@ -190,8 +190,8 @@ function jsonRequest(body: unknown, method = 'PATCH'): Request {
 }
 
 //---------------
-// One-off POST body — recurring fields (daysOfWeek/startHour/endHour) no
-// longer exist; POST is one-off-only since PR #21.
+// /api/schedule surface: GET (list), PATCH (update), DELETE (remove).
+// Schedules are created by POST /api/videos/generate-and-schedule, not here.
 //---------------
 describe('/api/schedule', () => {
   beforeEach(() => {

@@ -621,9 +621,11 @@ export function useVoiceSampleLanguagesQuery() {
 
 
 //---------------
-// Fill Schedule — automatic schedule (days + time window + posts/day).
-// The engine reads the config and does the rest: LLM topic, video in the 06h
-// UTC batch and publishing at each slot's time.
+// Fill Schedule — video publishing timetables (days + time window + posts/day).
+// Schedules are created by POST /api/videos/generate-and-schedule (1-10
+// topics, each becoming a video + slot + task); the engine reads these
+// tables via the service role and does the rest: video generation per slot,
+// then publishing at each slot's time via /api/upload-content.
 //---------------
 
 export interface ScheduleConfig {
