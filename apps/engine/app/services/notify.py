@@ -153,8 +153,10 @@ def redact_known_url(message: str, url: str) -> str:
     target (path + query). The key-anchored scrubber cannot match
     path-embedded tokens, so every variant must be replaced explicitly.
     Longest variants first, so a path replace cannot split a request-target
-    before it is matched. Never replace an empty string: it interleaves
-    "[redacted]" between characters.
+    before it is matched. Variants shorter than 8 chars are skipped: a
+    misconfigured URL with a trivial path ("/") would otherwise rewrite
+    every slash in the message. Never replace an empty string: it
+    interleaves "[redacted]" between characters.
     """
     if not url:
         return message
@@ -169,7 +171,7 @@ def redact_known_url(message: str, url: str) -> str:
         requote_uri(request_target),
     }
     for variant in sorted(variants, key=len, reverse=True):
-        if variant:
+        if variant and len(variant) >= 8:
             message = message.replace(variant, "[redacted]")
     return message
 

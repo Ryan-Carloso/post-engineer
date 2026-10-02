@@ -235,6 +235,19 @@ class SendDiscordTests(unittest.TestCase):
             self.assertEqual(nf.safe_reason(exc), "ConnectionError")
             self.assertNotIn("secret-token", nf.safe_reason(exc))
 
+    def test_redact_known_url_skips_degenerate_path(self):
+        # A misconfigured webhook URL with a trivial path ("/") must not
+        # rewrite every slash in the message — or collapse every
+        # safe_reason to the bare type name. Only the full URL is
+        # redacted in that case.
+        url = "https://hooks.example.com/"
+        message = "open /var/log/app.log: permission denied"
+        self.assertEqual(nf.redact_known_url(message, url), message)
+        with_slash_url = f"failed calling {url}: timeout"
+        redacted = nf.redact_known_url(with_slash_url, url)
+        self.assertNotIn(url, redacted)
+        self.assertIn("failed calling", redacted)
+
     def test_reason_scrubs_secrets_before_truncation(self):
         # safe_reason feeds Discord AND (via _fail_task) client-visible task
         # errors: the full message must be scrubbed before the 200-cut, like
