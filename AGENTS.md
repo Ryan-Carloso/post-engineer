@@ -1885,3 +1885,8 @@ Follow these so the same issues don't come back:
 ## Web review learnings, PR #55 follow-up (2026-10-02, OpenCode on 2613c4f)
 
 - **Generalize the phantom-key pin into a schema sync test.** The PR pinned the absence of `kind`, but the supabase-js mock records any payload key — the next speculative key would sail through tests and 500 every production call again. New sync test parses the `create table public.schedules` column list from `supabase/schema.sql` and asserts every key of the route's insert payload is a real column (mutation-verified: re-adding `kind: 'batch'` fails it). Pattern mirrors the existing SQL-literal sync tests.
+
+## Web review learnings, PR #55 round 2 (2026-10-02, OpenCode on 09c2c5d)
+
+- **A DDL column parser must exclude constraint keywords.** The schema sync test took the first token of every non-comment line — a future table-level constraint (`unique (user_id, persona_id),`) would enter the column set, letting a phantom key named like a SQL keyword false-pass. Filter `primary/unique/foreign/check/constraint/exclude` and assert a sentinel stable column (`scheduled_at`) so a degraded parse can't pass vacuously.
+- **Version-base drift note:** a reviewer flagged the PR "bumps 1.13.1 → 1.13.2 while main reads 1.13.3" — stale read; the merge had already re-bumped to 1.13.3 and `bump-version.sh check` confirmed all 5 locations in sync. Always verify the actual tree before acting on a version claim.
