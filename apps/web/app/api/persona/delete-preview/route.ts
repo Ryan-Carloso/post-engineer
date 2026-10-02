@@ -138,21 +138,36 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   // Independent reads go through Promise.all; the slot count needs the
-  // schedule ids first, so it runs after.
-  const [schedulesRes, generationsRes, imagesRes] = await Promise.all([
+  // schedule ids first, so it runs after. Counts use head+count (no rows
+  // cross the wire); the video list is bounded and deterministically
+  // ordered (created_at, id tie-break) so a huge library cannot blow up
+  // serverless memory.
+  const [schedulesRes, generationsCountRes, imagesCountRes, generationsListRes] = await Promise.all([
     supabase.from('schedules').select('id').eq('persona_id', personaId).eq('user_id', auth.userId),
+    supabase
+      .from('video_generations')
+      .select('id', { head: true, count: 'exact' })
+      .eq('persona_id', personaId)
+      .eq('user_id', auth.userId),
+    supabase
+      .from('persona_images')
+      .select('id', { head: true, count: 'exact' })
+      .eq('persona_id', personaId)
+      .eq('user_id', auth.userId),
     supabase
       .from('video_generations')
       .select('id, engine_task_id, video_subject, status')
       .eq('persona_id', personaId)
-      .eq('user_id', auth.userId),
-    supabase.from('persona_images').select('id').eq('persona_id', personaId).eq('user_id', auth.userId),
+      .eq('user_id', auth.userId)
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
+      .limit(PREVIEW_VIDEO_CAP),
   ]);
-  if (schedulesRes.error || generationsRes.error || imagesRes.error) {
+  if (schedulesRes.error || generationsCountRes.error || imagesCountRes.error || generationsListRes.error) {
     logger.error('[api/persona/delete-preview] count lookup failed', {
       schedules: schedulesRes.error,
-      generations: generationsRes.error,
-      images: imagesRes.error,
+      generations: generationsCountRes.error ?? generationsListRes.error,
+      images: imagesCountRes.error,
     });
     return apiErrorResponse(500, 'Failed to load delete preview.', {
       route: ROUTE,
@@ -165,9 +180,9 @@ export async function GET(request: Request): Promise<NextResponse> {
     .filter((id): id is string => typeof id === 'string');
   let upcomingSlots = 0;
   if (scheduleIds.length > 0) {
-    const { data: slots, error: slotsError } = await supabase
+    const { count: slotsCount, error: slotsError } = await supabase
       .from('scheduled_posts')
-      .select('id')
+      .select('id', { head: true, count: 'exact' })
       .in('schedule_id', scheduleIds)
       .in('status', UPCOMING_SLOT_STATUSES);
     if (slotsError) {
@@ -177,17 +192,17 @@ export async function GET(request: Request): Promise<NextResponse> {
         code: ERROR_CODES.INTERNAL_ERROR,
       });
     }
-    upcomingSlots = slots?.length ?? 0;
+    upcomingSlots = slotsCount ?? 0;
   }
 
-  const generations = (generationsRes.data ?? [])
+  const generations = (generationsListRes.data ?? [])
     .map(asGenerationRow)
     .filter((row): row is GenerationRow => row !== null);
+  const totalGenerations = generationsCountRes.count ?? 0;
 
   // Sequential on purpose: one small JSON body in flight at a time, and a
-  // slow engine cannot fan out into dozens of concurrent lookups. Capped
-  // at PREVIEW_VIDEO_CAP so a huge library cannot hold the request open
-  // for minutes on serverless.
+  // slow engine cannot fan out into dozens of concurrent lookups. The list
+  // query is already limited to PREVIEW_VIDEO_CAP rows.
   const baseUrl = process.env.MONEYPRINT_API_URL;
   const lookupStart = Date.now();
   let linksIncomplete = false;
@@ -197,7 +212,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     status: string;
     downloadUrl: string | null;
   }> = [];
-  for (const gen of generations.slice(0, PREVIEW_VIDEO_CAP)) {
+  for (const gen of generations) {
     let downloadUrl: string | null = null;
     if (gen.status === 'completed' && gen.engine_task_id && baseUrl) {
       if (Date.now() - lookupStart < PREVIEW_LOOKUP_BUDGET_MS) {
@@ -226,11 +241,11 @@ export async function GET(request: Request): Promise<NextResponse> {
     counts: {
       schedules: scheduleIds.length,
       upcomingSlots,
-      generatedVideos: generations.length,
-      personaImages: imagesRes.data?.length ?? 0,
+      generatedVideos: totalGenerations,
+      personaImages: imagesCountRes.count ?? 0,
     },
     videos,
-    videosTruncated: generations.length > videos.length,
+    videosTruncated: totalGenerations > videos.length,
     linksIncomplete,
   });
 }

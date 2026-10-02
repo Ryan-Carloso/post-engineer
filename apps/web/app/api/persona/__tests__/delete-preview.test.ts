@@ -77,21 +77,33 @@ const BASE_TABLES: TableData = {
 
 // Minimal thenable query builder: .select().eq()/.in() accumulate predicates
 // against the in-memory rows, so tests assert real scoping (user_id +
-// persona_id), not just call counts. `await` resolves { data, error }.
+// persona_id), not just call counts. `await` resolves { data, error } — or
+// { data: null, count, error } for head+count selects. .order()/.limit()
+// bound the list query like production.
 function makeClient(
   tables: Record<string, Array<Record<string, unknown>>>,
   errorOn?: string,
 ) {
   const from = (table: string) => {
     const predicates: Array<(row: Record<string, unknown>) => boolean> = [];
+    let headCount = false;
+    let limit: number | null = null;
     const builder = {
-      select: vi.fn(() => builder),
+      select: vi.fn((_cols: string, opts?: { head?: boolean; count?: string }) => {
+        headCount = opts?.head === true && opts?.count === 'exact';
+        return builder;
+      }),
       eq: vi.fn((col: string, val: unknown) => {
         predicates.push((row) => row[col] === val);
         return builder;
       }),
       in: vi.fn((col: string, vals: unknown[]) => {
         predicates.push((row) => vals.includes(row[col]));
+        return builder;
+      }),
+      order: vi.fn(() => builder),
+      limit: vi.fn((n: number) => {
+        limit = n;
         return builder;
       }),
       single: vi.fn(async () => {
@@ -107,8 +119,13 @@ function makeClient(
           resolve({ data: null, error: { message: 'db down' } });
           return;
         }
+        const rows = (tables[table] ?? []).filter((r) => predicates.every((p) => p(r)));
+        if (headCount) {
+          resolve({ data: null, count: rows.length, error: null });
+          return;
+        }
         resolve({
-          data: (tables[table] ?? []).filter((r) => predicates.every((p) => p(r))),
+          data: limit === null ? rows : rows.slice(0, limit),
           error: null,
         });
       },

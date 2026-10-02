@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '@/lib/i18n/provider';
 import {
   deletePersona,
@@ -32,12 +32,17 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
   const [preview, setPreview] = useState<DeletePreview | null>(null);
   const [typedName, setTypedName] = useState('');
   const [attempt, setAttempt] = useState(0);
+  const loadedPersonaId = useRef<string | null>(null);
 
   useEffect(() => {
     if (!persona) return;
+    // A new persona resets everything; a retry (attempt bump, e.g. from the
+    // links-incomplete note) keeps the typed confirmation name.
+    const isNewPersona = loadedPersonaId.current !== persona.id;
+    loadedPersonaId.current = persona.id;
     setPhase('loading');
     setPreview(null);
-    setTypedName('');
+    if (isNewPersona) setTypedName('');
     let cancelled = false;
     // Rejections (network failure, non-JSON body) surface as loadError —
     // the dialog must never wedge in 'loading' with no retry.

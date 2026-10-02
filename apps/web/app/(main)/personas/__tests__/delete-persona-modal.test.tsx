@@ -207,4 +207,20 @@ describe('DeletePersonaModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'personas.tryAgain' }));
     await waitFor(() => expect(fetchDeletePreview).toHaveBeenCalledTimes(2));
   });
+
+  it('keeps the typed name when retrying incomplete links', async () => {
+    vi.mocked(fetchDeletePreview)
+      .mockResolvedValueOnce({ ...PREVIEW, linksIncomplete: true })
+      .mockResolvedValueOnce(PREVIEW);
+    renderModal();
+    await screen.findByText('personas.deleteDialogLinksIncomplete');
+    fireEvent.change(screen.getByLabelText('personas.deleteDialogTypeName'), {
+      target: { value: 'Ryan' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'personas.tryAgain' }));
+    await waitFor(() => expect(fetchDeletePreview).toHaveBeenCalledTimes(2));
+    // The confirmation name survives the link refresh.
+    expect(screen.getByLabelText('personas.deleteDialogTypeName')).toHaveValue('Ryan');
+    expect(screen.getByRole('button', { name: 'personas.deleteConfirm' })).toBeEnabled();
+  });
 });

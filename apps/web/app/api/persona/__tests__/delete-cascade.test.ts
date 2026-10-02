@@ -273,6 +273,34 @@ describe('DELETE /api/persona cascade', () => {
     expect(engineDeletes).not.toContain(expect.stringContaining('..'));
   });
 
+  it('stops engine cleanup once the aggregate budget is spent', async () => {
+    const tables = baseTables();
+    tables.video_generations.push(
+      { id: 'gen-3', persona_id: PERSONA_ID, user_id: USER_ID, engine_task_id: 'task-bbb' },
+      { id: 'gen-4', persona_id: PERSONA_ID, user_id: USER_ID, engine_task_id: 'task-ccc' },
+    );
+    setup(tables);
+    let now = 1_000_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: { method?: string }) => {
+        if (init?.method === 'DELETE') {
+          engineDeletes.push(url);
+          now += 15_000; // each cleanup burns 15s; the budget is 20s
+        }
+        return { ok: true, status: 200, json: async () => ({}) };
+      }),
+    );
+    await del(PERSONA_ID);
+    await flushAfterCallbacks();
+    // task-aaa runs (t=0), task-bbb runs (t=15s < 20s), task-ccc is skipped (t=30s).
+    expect(engineDeletes).toContain('https://engine.internal:8080/api/v1/tasks/task-aaa');
+    expect(engineDeletes).toContain('https://engine.internal:8080/api/v1/tasks/task-bbb');
+    expect(engineDeletes).not.toContain(expect.stringContaining('task-ccc'));
+    vi.mocked(Date.now).mockRestore();
+  });
+
   it('uses the service client for OAuth callers (no cookie session)', async () => {
     const { client } = setup();
     const { createSupabaseServiceClient } = await import('@/lib/supabase/service');

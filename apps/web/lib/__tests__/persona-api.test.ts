@@ -278,6 +278,17 @@ describe('lib/api — persona', () => {
     });
   });
 
+  describe('updatePersona robustness', () => {
+    it('returns success:false on a non-ok response instead of throwing', async () => {
+      fetchMock.mockResolvedValue(new Response('<html>502</html>', { status: 502 }));
+
+      const result = await updatePersona('p-1', new FormData());
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('502');
+    });
+  });
+
   describe('updatePersona', () => {
     it('sends a multipart PATCH to /api/persona with the encoded id', async () => {
       fetchMock.mockResolvedValue(jsonResponse({ success: true }));

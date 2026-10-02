@@ -265,7 +265,14 @@ export async function updatePersona(
     `/api/persona?personaId=${encodeURIComponent(personaId)}`,
     { method: 'PATCH', body: formData },
   );
-  return response.json();
+  if (!response.ok) {
+    return { success: false, error: `Update request failed (${response.status}).` };
+  }
+  try {
+    return (await response.json()) as UpdatePersonaResult;
+  } catch {
+    return { success: false, error: 'Update returned an unreadable response.' };
+  }
 }
 
 export function useUpdatePersonaMutation() {
