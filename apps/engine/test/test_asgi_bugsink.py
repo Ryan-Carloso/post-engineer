@@ -46,6 +46,29 @@ class PostHogSinkTests(unittest.TestCase):
         assert exc_list[0]["value"] == "boom"
         assert exc_list[0]["type"] == "Error"
         assert exc_list[0]["stacktrace"] == {"type": "raw", "frames": []}
+        # handled: True matches posthog-python's own capture default
+        # (exception_utils.py): these records are caught-and-logged, the
+        # app keeps serving — pin the semantics explicitly.
+        assert exc_list[0]["mechanism"] == {"type": "generic", "handled": True}
+
+    def test_long_message_truncated(self):
+        # $exception_list is the surface whose absence broke ingestion;
+        # an unbounded value risks the event being dropped exactly when
+        # the payload is biggest — cap it like the stacktrace text.
+        long_message = "e" * 6000
+        with patch("app.asgi.track_event") as track_event:
+            asgi._loguru_posthog_sink(_message(message=long_message))
+        _, properties = track_event.call_args[0]
+        assert len(str(properties["$exception_message"])) <= 5000
+        assert len(str(properties["$exception_list"][0]["value"])) <= 5000
+
+    def test_long_exception_value_truncated(self):
+        error = ValueError("e" * 6000)
+        with patch("app.asgi.track_event") as track_event:
+            asgi._loguru_posthog_sink(_message(exception=(ValueError, error, None)))
+        _, properties = track_event.call_args[0]
+        assert len(str(properties["$exception_message"])) <= 5000
+        assert len(str(properties["$exception_list"][0]["value"])) <= 5000
 
     def test_task_id_only_record_stays_error(self):
         # A record that binds task_id without http_status_code (e.g.

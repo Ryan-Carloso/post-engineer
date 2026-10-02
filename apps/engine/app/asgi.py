@@ -51,6 +51,17 @@ _EXCEPTION_CONTEXT_EXTRAS = ("task_id", "http_status_code")
 # (e.g. RecursionError) must not blow up the event payload.
 _MAX_STACKTRACE_FRAMES = 100
 
+# Bound on free-text fields ($exception_message, entry value, stacktrace
+# text): oversized values risk ingestion dropping the event — or silently
+# truncating properties — exactly when the payload is biggest. Scrub the
+# full text first, then cut (PR #38 rule: a cut landing mid-key would
+# otherwise strip the regex anchor and leak the value).
+_MAX_TEXT_CHARS = 5000
+
+
+def _scrub_and_truncate(text: str) -> str:
+    return scrub_secret_values(text)[:_MAX_TEXT_CHARS]
+
 
 def _stacktrace_frames(exc_tb: TracebackType | None) -> list[dict[str, object]]:
     """Serialize a traceback into PostHog's {"type": "raw", "frames": [...]} shape.
@@ -84,6 +95,9 @@ def _exception_list_entry(
     # PostHog error tracking requires $exception_list on every $exception
     # event; without it ingestion flags $cymbal_errors ("missing field
     # $exception_list") and the event never groups in Error Tracking.
+    # handled: True matches posthog-python's own capture default — records
+    # reaching this sink were caught and logged while the app keeps
+    # serving, never process crashes.
     return {
         "type": exc_type,
         "value": value,
@@ -102,7 +116,7 @@ def _loguru_posthog_sink(message) -> None:
         record = message.record
         exception = record.get("exception")
         properties: dict[str, object] = {
-            "$exception_message": scrub_secret_values(str(record.get("message", ""))),
+            "$exception_message": _scrub_and_truncate(str(record.get("message", ""))),
         }
         extra = record.get("extra") or {}
         for key in _EXCEPTION_CONTEXT_EXTRAS:
@@ -122,18 +136,15 @@ def _loguru_posthog_sink(message) -> None:
             # loguru stores the exception as a (type, value, traceback) tuple
             exc_value = exception[1]
             exc_type_name = type(exc_value).__name__
-            exc_message = scrub_secret_values(str(exc_value))
+            exc_message = _scrub_and_truncate(str(exc_value))
             try:
-                # Scrub the full text BEFORE truncating: a cut landing
-                # mid-key would otherwise strip the regex anchor and leak
-                # the value (PR #38 learnings).
-                stacktrace_text = scrub_secret_values(
+                stacktrace_text = _scrub_and_truncate(
                     "".join(
                         traceback.format_exception(
                             type(exc_value), exc_value, exc_value.__traceback__
                         )
                     )
-                )[:5000]
+                )
             except Exception:
                 stacktrace_text = ""
             stacktrace: dict[str, object] = {
