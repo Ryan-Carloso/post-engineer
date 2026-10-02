@@ -55,8 +55,12 @@ def _post(webhook_url: str, payload: dict, task_id: str) -> None:
         # path-embedded tokens): requests embeds it in str(exc), and the
         # key-anchored scrubber cannot match path-embedded tokens — redact
         # the known URL first, then scrub-then-truncate the remainder like
-        # every other free-text error surface.
-        error = scrub_secret_values(str(exc).replace(webhook_url, "[redacted]"))[:500]
+        # every other free-text error surface. Never replace an empty
+        # string: it interleaves "[redacted]" between every character.
+        message = str(exc)
+        if webhook_url:
+            message = message.replace(webhook_url, "[redacted]")
+        error = scrub_secret_values(message)[:500]
         logger.bind(task_id=task_id).error(
             "terminal webhook delivery failed: {error}", error=error
         )

@@ -144,6 +144,21 @@ class NotifyTerminalTaskTests(unittest.TestCase):
         self.assertNotIn("abcdefGHIJKL-token-secret", logged)
         self.assertNotIn(webhook_url, logged)
 
+    def test_webhook_failure_empty_url_does_not_interleave_redacted(self):
+        # str.replace("", "[redacted]") interleaves the marker between
+        # every character — the emptiness guard keeps the log readable.
+        with (
+            patch(
+                "app.services.task_webhook.requests.post",
+                side_effect=requests.exceptions.HTTPError("boom"),
+            ),
+            patch("app.services.task_webhook.logger") as mock_logger,
+        ):
+            task_webhook._post("", {"task_id": "t-1"}, "t-1")
+        error_mock = mock_logger.bind.return_value.error
+        kwargs = error_mock.call_args_list[0].kwargs
+        self.assertEqual(kwargs["error"], "boom")
+
 
 class FailTaskWebhookTests(unittest.TestCase):
     def setUp(self):
