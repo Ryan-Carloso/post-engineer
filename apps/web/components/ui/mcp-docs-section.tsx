@@ -18,7 +18,6 @@ import {
   ImageIcon,
   KeyIcon,
   MicIcon,
-  PlayIcon,
   SparklesIcon,
   SpinnerIcon,
   TrashIcon,
