@@ -1384,3 +1384,21 @@ Follow these so the same issues don't come back:
   embed), the skip site carries a NOTE naming the consequence and the
   follow-up (persist per-slot cost at creation), so the trade-off is
   discoverable, not silent.
+
+## Web/API review learnings, PR #44 (2026-10-02)
+- **Delete the ENTIRE path, including the read side.** Removing a dead
+  engine flow leaves the consumer side (UI branches, API select fields,
+  client mappings, i18n keys, tests) as provably unreachable dead code.
+  Remove it in the same PR — a half-deleted flow is what the cleanup set
+  out to eliminate. Check: UI components, `lib/api.ts` mappings,
+  route selects, i18n keys in every locale, and tests asserting the dead
+  state.
+- **Reword every stale comment citing removed machinery, not just the
+  file you touched.** Sibling comments referencing a deleted path send
+  future readers hunting for code that isn't there. Grep the concept
+  name across the repo after any deletion.
+- **A dead i18n key in one namespace hints at dead keys in others.**
+  `home.oneOff` being dead led to `fillSchedule.oneOff*` (form fields
+  from the removed flow) — verify zero usages before deleting, and keep
+  keys that are still live (`home.waitingForSchedule` was reused by the
+  next-slot display).
