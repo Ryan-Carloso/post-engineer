@@ -1418,3 +1418,31 @@ Follow these so the same issues don't come back:
 - **Grep comments for deleted route names.** Removing an endpoint leaves
   "used by POST /api/schedule" in header comments — docs must describe
   what the code does, so the comment now names the real consumers.
+
+## PR #49 review learnings (2026-10-02)
+- **Sync tests must pin the actual producer artifact, not just the code.**
+  Pinning `categorize('engine_restart')` missed the real seam: the engine
+  writes the CODE to the row but records the _ORPHAN_ERROR_MESSAGE
+  *sentence* in `data.error`, and the web's video-status poll
+  re-categorizes from the sentence on the refund backstop — downgrading
+  the stored code to `unknown` (generic copy, not retryable). The sync
+  test now parses the sentence constant from the engine source.
+- **A backstop that re-derives state can downgrade it.** Prefer the stored
+  code over re-categorizing raw text; when re-categorization is the
+  design, teach the categorizer the producer's exact messages.
+- **Never write a boolean flag false over an unknown current value.**
+  The settle PATCH now only writes `tokens_refunded=true`; a failed refund
+  leaves the flag untouched so a concurrent true (web poll path) can
+  never flap back to false. Absence of a write is the safe default.
+- **Name billing trade-offs at the decision site.** The twice-lost
+  COMPLETE write → reconcile refunds an already-delivered video trade-off
+  is documented in the reconcile docstring (rare, bounded, accepted over
+  silently keeping the token) — not just in a review thread.
+- **Bound every boot-time loop.** Unbounded orphan SELECT + serial
+  per-row HTTP at boot stalls for minutes after a long outage: cap the
+  batch (100, ordered), log progress every 25, drain leftovers on later
+  boots. Idempotent ordering makes the drain safe.
+- **Single-writer assumptions need an ops constraint in tracked docs.**
+  The engine's boot reconcile assumes one process; rolling deploys would
+  double-reconcile. config.toml is gitignored, so the constraint lives in
+  config.example.toml (stop-then-start only, never rolling).
