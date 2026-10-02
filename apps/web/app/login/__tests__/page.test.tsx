@@ -67,6 +67,13 @@ describe('app/login/page — Login', () => {
     expect(screen.getAllByTestId('icon-bolt').length).toBeGreaterThan(0);
   });
 
+  it('renders the brand logo (not the legacy bolt mark)', () => {
+    // Pins the AppLogo usages: a silent revert to the old brand mark on
+    // the login surface would otherwise pass CI.
+    render(<Login />, { wrapper: createWrapper() });
+    expect(screen.getAllByTestId('app-logo')).toHaveLength(2);
+  });
+
   it('renders GitHub login button', () => {
     render(<Login />, { wrapper: createWrapper() });
     expect(screen.getByText('login.githubButton')).toBeTruthy();

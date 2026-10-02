@@ -1899,3 +1899,10 @@ Follow these so the same issues don't come back:
 - **Conflicting Tailwind utilities resolve by stylesheet order, not attribute order.** Hardcoding `rounded-2xl` in the base class string let it win over every caller's `rounded-lg`/`rounded-xl`. Lesson: overridable base classes go through `twMerge` (already a dependency); pin the override with a test.
 - **`next/image` `priority` emits `<link rel="preload">` — reserve it for LCP.** Unconditional `priority` on small brand marks preloads them on every page including below-the-fold instances. Lesson: no `priority` unless the image is genuinely the LCP candidate; the mock swallows unknown DOM attrs, so pin its absence at the prop level via a capturing `vi.mock`.
 - **`feat:` commits need a MINOR bump (1.13.x → 1.14.0), not patch.** `version-check` CI only enforces sync, not the level — the author owns the semver kind per the repo rule.
+
+## Web review learnings, PR #57 round 2 (2026-10-02, OpenCode on 25d922f)
+
+- **No CRITICAL/MAJOR on the follow-up head.** The round-1 fixes held up; the reviewer even verified the new favicon.ico pixels match the new logo.
+- **A stale version-level flag is still worth checking, not applying.** The reviewer re-flagged "feat bumped as patch 1.13.4 → 1.13.5" against a head already at 1.14.0 — verify the tree before acting on version claims (same lesson as PR #55 round 2).
+- **Dedupe identical binary assets instead of shipping twins.** `app/icon.png` was a byte-identical copy of `public/logo.png` — set `icons: { icon: '/logo.png' }` in the root layout metadata and delete the duplicate, so the next rebrand can't drift the two apart.
+- **Pin logo usages per surface.** The login/landing suites didn't assert the new brand mark — one `getAllByTestId('app-logo')` assertion per surface (mutation-verified: reverting one usage fails the pin), mirroring the existing layout-suite pattern.
