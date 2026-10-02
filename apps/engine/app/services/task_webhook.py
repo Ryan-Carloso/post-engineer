@@ -20,7 +20,8 @@ from typing import Optional
 
 import requests
 from loguru import logger
-from urllib.parse import quote
+from requests.utils import requote_uri
+from urllib.parse import urlparse
 
 from app.services.analytics import scrub_secret_values
 
@@ -52,18 +53,27 @@ def _post(webhook_url: str, payload: dict, task_id: str) -> None:
         # Never raise: a dead webhook must not fail or stall the task.
         # ERROR goes to PostHog via the asgi sink so the user can see why
         # the callback never arrived.
-        # The webhook URL itself is a credential (Discord/Slack-style
-        # path-embedded tokens): requests embeds it in str(exc), and the
-        # key-anchored scrubber cannot match path-embedded tokens — redact
-        # the known URL first, then scrub-then-truncate the remainder like
-        # every other free-text error surface. requests requotes the target
-        # URL when preparing it (response.url), so redact the configured
-        # string AND its percent-encoded form. Never replace an empty
-        # string: it interleaves "[redacted]" between every character.
+        # The webhook URL is a credential (Discord/Slack-style path-embedded
+        # tokens): requests embeds it in str(exc), and the key-anchored
+        # scrubber cannot match path-embedded tokens. Redact every
+        # serialization the transport can produce — the configured string,
+        # requests' own requote of it (response.url), and the path-only
+        # fragment that connection-phase errors (DNS/refused/TLS/timeout)
+        # embed instead of the full URL — then scrub-then-truncate the
+        # remainder like every other free-text error surface. Never replace
+        # an empty string: it interleaves "[redacted]" between characters.
         message = str(exc)
         if webhook_url:
-            for variant in {webhook_url, quote(webhook_url, safe=":/?&=%")}:
-                message = message.replace(variant, "[redacted]")
+            path = urlparse(webhook_url).path
+            variants = {
+                webhook_url,
+                requote_uri(webhook_url),
+                path,
+                requote_uri(path),
+            }
+            for variant in variants:
+                if variant:
+                    message = message.replace(variant, "[redacted]")
         error = scrub_secret_values(message)[:500]
         logger.bind(task_id=task_id).error(
             "terminal webhook delivery failed: {error}", error=error

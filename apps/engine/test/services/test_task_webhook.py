@@ -11,9 +11,10 @@ import time
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import requests
+from requests.utils import requote_uri
 from loguru import logger
 from pydantic import ValidationError
 
@@ -167,6 +168,33 @@ class NotifyTerminalTaskTests(unittest.TestCase):
         logged = " ".join(str(c) for c in error_mock.call_args_list)
         self.assertNotIn("secret-token", logged)
         self.assertNotIn(encoded, logged)
+
+    def test_webhook_failure_log_redacts_path_only_connection_error(self):
+        # Connection-phase errors (DNS/refused/TLS/timeout) embed only the
+        # path fragment — as requoted by requests — not the full URL. The
+        # path-embedded token must still be redacted before the log reaches
+        # PostHog.
+        webhook_url = "https://example.com/hooks/path with space/secret-token"
+        raw_path = urlparse(webhook_url).path
+        encoded_path = requote_uri(raw_path)
+        with (
+            patch(
+                "app.services.task_webhook.requests.post",
+                side_effect=requests.exceptions.ConnectionError(
+                    "HTTPConnectionPool(host='example.com', port=443): "
+                    f"Max retries exceeded with url: {encoded_path} "
+                    "(Caused by NewConnectionError('refused'))"
+                ),
+            ),
+            patch("app.services.task_webhook.logger") as mock_logger,
+        ):
+            task_webhook._post(webhook_url, {"task_id": "t-1"}, "t-1")
+        error_mock = mock_logger.bind.return_value.error
+        self.assertTrue(error_mock.call_args_list)
+        logged = " ".join(str(c) for c in error_mock.call_args_list)
+        self.assertNotIn("secret-token", logged)
+        self.assertNotIn(raw_path, logged)
+        self.assertNotIn(encoded_path, logged)
 
     def test_webhook_failure_empty_url_does_not_interleave_redacted(self):
         # str.replace("", "[redacted]") interleaves the marker between
