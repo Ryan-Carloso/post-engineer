@@ -310,6 +310,49 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(binds[0].fields.task_id).toBe('task-Idea 1');
     });
 
+    it('inserts only columns that exist on public.schedules', async () => {
+      // Sync test: the supabase-js mock records any payload key, so a
+      // speculative key (like the removed 'kind') sailed through tests and
+      // 500d every production call — PostgREST rejects unknown keys. Parse
+      // the canonical schema and assert every insert key is a real column,
+      // so the next phantom key fails CI instead of production.
+      const { readFileSync } = await import('node:fs');
+      const { join, dirname } = await import('node:path');
+      const { fileURLToPath } = await import('node:url');
+      const sqlPath = join(
+        dirname(fileURLToPath(import.meta.url)),
+        '..',
+        '..',
+        '..',
+        '..',
+        '..',
+        '..',
+        'supabase',
+        'schema.sql',
+      );
+      const sql = readFileSync(sqlPath, 'utf8');
+      const tableMatch = sql.match(
+        /create table if not exists public\.schedules \(([\s\S]*?)\n\);/i,
+      );
+      expect(tableMatch).not.toBeNull();
+      const columnBlock = tableMatch?.[1] ?? '';
+      const columns = new Set(
+        columnBlock
+          .split('\n')
+          .map((line) => line.trim().split(/\s+/)[0]?.replace(/["`,]/g, ''))
+          .filter((name) => name && !name.startsWith('--')),
+      );
+      expect(columns.size).toBeGreaterThan(0);
+
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+      const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
+      expect(scheduleRows).toHaveLength(1);
+      for (const key of Object.keys(scheduleRows[0])) {
+        expect(columns.has(key)).toBe(true);
+      }
+    });
+
     it('distributes 10 topics across days preserving order', async () => {
       const topics = Array.from({ length: 10 }, (_, i) => `Topic ${i + 1}`);
       const res = await post(baseBody({ topics }));
