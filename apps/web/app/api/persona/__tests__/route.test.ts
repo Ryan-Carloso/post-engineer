@@ -630,6 +630,11 @@ function mockSupabaseForDelete(deleteError: { code?: string; message: string } |
               data: { id: 'persona-uuid-1', photo_path: null, voice_audio_path: null },
               error: null,
             })),
+            // Thenable for list selects (schedules, generations): resolves
+            // to an empty list so the cascade degenerates cleanly.
+            then: (resolve: (v: unknown) => void) => {
+              resolve({ data: [], error: null });
+            },
           })),
         })),
       })),
@@ -1052,6 +1057,9 @@ describe('DELETE /api/persona', () => {
                   data: { id: 'persona-uuid-1', photo_path: null, voice_audio_path: null },
                   error: null,
                 })),
+                then: (resolve: (v: unknown) => void) => {
+                  resolve({ data: [], error: null });
+                },
               })),
             })),
           })),
@@ -1107,6 +1115,9 @@ describe('DELETE /api/persona', () => {
                   data: { id: 'persona-uuid-1', photo_path: null, voice_audio_path: null },
                   error: null,
                 })),
+                then: (resolve: (v: unknown) => void) => {
+                  resolve({ data: [], error: null });
+                },
               })),
             })),
           })),

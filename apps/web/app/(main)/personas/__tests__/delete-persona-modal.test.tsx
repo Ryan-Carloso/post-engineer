@@ -293,4 +293,45 @@ describe('DeletePersonaModal', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it('closes and refetches when the preview reports PERSONA_NOT_FOUND', async () => {
+    const onClose = vi.fn();
+    const onDeleted = vi.fn();
+    vi.mocked(fetchDeletePreview).mockResolvedValue({
+      success: false,
+      code: 'PERSONA_NOT_FOUND',
+    });
+    renderModal({ onClose, onDeleted });
+    // No retry loop for a permanent failure: close and refetch.
+    await waitFor(() => expect(onDeleted).toHaveBeenCalledTimes(1));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes and refetches when the delete reports PERSONA_NOT_FOUND', async () => {
+    const onClose = vi.fn();
+    const onDeleted = vi.fn();
+    vi.mocked(deletePersona).mockResolvedValue({
+      success: false,
+      error: 'Persona not found.',
+      code: 'PERSONA_NOT_FOUND',
+    });
+    renderModal({ onClose, onDeleted });
+    await screen.findByText('personas.deleteDialogNoRefund');
+    fireEvent.change(screen.getByLabelText('personas.deleteDialogTypeName'), {
+      target: { value: 'Ryan' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'personas.deleteConfirm' }));
+    await waitFor(() => expect(onDeleted).toHaveBeenCalledTimes(1));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders published and failed slot history counts', async () => {
+    vi.mocked(fetchDeletePreview).mockResolvedValue({
+      ...PREVIEW,
+      counts: { ...PREVIEW.counts, publishedSlots: 1, failedSlots: 2 },
+    });
+    renderModal();
+    await screen.findByText('personas.deleteDialogPublishedSlot');
+    expect(screen.getByText('personas.deleteDialogFailedSlots')).toBeInTheDocument();
+  });
 });
