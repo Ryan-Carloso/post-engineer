@@ -174,6 +174,13 @@ class RedisState(BaseState):
         return value_str
 
 
+# HTTP timeout for task-state requests: short enough that a Supabase outage
+# fails fast instead of wedging writers behind update_task's RLock (each
+# holder would otherwise block up to 30s per call, serializing every
+# concurrent task thread's progress writes).
+_STATE_REQUEST_TIMEOUT_SECONDS = 10
+
+
 class _SupabaseAuthError(RuntimeError):
     """Supabase rejected the service key (HTTP 401).
 
@@ -248,7 +255,7 @@ class SupabaseTaskState(BaseState):
             method,
             f"{self._base_url}/rest/v1/{target}?{query}",
             headers=kwargs.pop("headers", self._headers),
-            timeout=30,
+            timeout=_STATE_REQUEST_TIMEOUT_SECONDS,
             **kwargs,
         )
         self._raise_for_status(response)
@@ -261,7 +268,7 @@ class SupabaseTaskState(BaseState):
             "POST",
             f"{self._base_url}/rest/v1/rpc/{function}",
             headers=self._headers,
-            timeout=30,
+            timeout=_STATE_REQUEST_TIMEOUT_SECONDS,
             json=payload,
         )
         self._raise_for_status(response)
@@ -413,7 +420,8 @@ class SupabaseTaskState(BaseState):
         idempotent refund_generation_tokens RPC) — entirely inside the
         engine, so an away user still gets their token back without ever
         opening the web. A per-task failure is logged loudly and never
-        breaks the loop or the boot. Returns how many rows were failed.
+        breaks the loop or the boot: the task stays non-terminal and is
+        retried on the next boot. Returns how many rows were failed.
         """
         response = self._request(
             "GET",
@@ -423,24 +431,27 @@ class SupabaseTaskState(BaseState):
         failed = 0
         for row in response.json():
             task_id = row["task_id"]
-            data = dict(self._safe_data(row))
-            data["error"] = _ORPHAN_ERROR_MESSAGE
-            self._request(
-                "PATCH",
-                f"task_id=eq.{self._eq(task_id)}",
-                json={
-                    "state": const.TASK_STATE_FAILED,
-                    "data": data,
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                },
-            )
-            failed += 1
             try:
+                # Billing first: if the process dies after the settle but
+                # before the task PATCH, the next boot re-selects the still
+                # non-terminal task and the settle skips the already-terminal
+                # generation row (idempotent RPC) — a crash can never lose a
+                # refund that the task PATCH already survived.
                 self._settle_orphan_billing(task_id)
-            except Exception as exc:  # noqa: BLE001 - loud log, never break boot
-                logger.error(
-                    f"failed to settle billing for orphaned task {task_id}: {exc}"
+                data = dict(self._safe_data(row))
+                data["error"] = _ORPHAN_ERROR_MESSAGE
+                self._request(
+                    "PATCH",
+                    f"task_id=eq.{self._eq(task_id)}",
+                    json={
+                        "state": const.TASK_STATE_FAILED,
+                        "data": data,
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                    },
                 )
+                failed += 1
+            except Exception as exc:  # noqa: BLE001 - loud log, next boot retries
+                logger.error(f"failed to reconcile orphaned task {task_id}: {exc}")
         return failed
 
     def _settle_orphan_billing(self, task_id: str) -> None:
@@ -460,8 +471,13 @@ class SupabaseTaskState(BaseState):
         )
         rows = response.json()
         if not rows:
-            logger.error(
-                f"orphaned task {task_id} has no video_generations row; "
+            # No video_generations row is normal for fill_schedule batch
+            # tasks (the web never sees batch task ids; the batch reconciler
+            # settles those refunds separately) — warn, don't error, so the
+            # log doesn't read as stuck user tokens.
+            logger.warning(
+                f"orphaned task {task_id} has no video_generations row "
+                "(expected for fill_schedule batch tasks); "
                 "marking failed without refund"
             )
             return

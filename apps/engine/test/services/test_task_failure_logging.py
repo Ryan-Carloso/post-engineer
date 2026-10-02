@@ -139,6 +139,37 @@ class FailTaskLoggingTests(unittest.TestCase):
         self.assertEqual(offenders, [])
 
 
+class TerminalWriteWiringTests(unittest.TestCase):
+    def test_terminal_writes_use_persist_state_update(self):
+        # A lost terminal write with a network state backend leaves the row
+        # PROCESSING forever (no failure recorded, no refund). Every write
+        # of a terminal state must go through persist_state_update (retry
+        # once, then log loudly) — never a bare sm.state.update_task, which
+        # would silently drop the write on a network failure.
+        services_dir = Path(task_service.__file__).parent
+        offenders = []
+        for module_file in ("task.py", "task_publish.py"):
+            tree = ast.parse((services_dir / module_file).read_text())
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                func = node.func
+                if not (
+                    isinstance(func, ast.Attribute) and func.attr == "update_task"
+                ):
+                    continue
+                for kw in node.keywords:
+                    if kw.arg != "state":
+                        continue
+                    value = kw.value
+                    if isinstance(value, ast.Attribute) and value.attr in (
+                        "TASK_STATE_FAILED",
+                        "TASK_STATE_COMPLETE",
+                    ):
+                        offenders.append(f"{module_file}:{node.lineno}")
+        self.assertEqual(offenders, [])
+
+
 class StartCrashStageTests(unittest.TestCase):
     def _run_start_until_crash(self, fail_in):
         params = TaskVideoRequest(video_subject="topic")

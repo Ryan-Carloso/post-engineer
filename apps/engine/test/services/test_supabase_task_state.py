@@ -207,35 +207,61 @@ class SupabaseStateReconcileTests(unittest.TestCase):
         backend = _make_state(self.requests)
         self.requests.request.side_effect = [
             _response(json_data=orphans),  # SELECT non-terminal rows
-            _response(json_data=[{}]),  # PATCH t-1
             _response(json_data=[]),  # GET video_generations for t-1: no row
-            _response(json_data=[{}]),  # PATCH t-2
+            _response(json_data=[{}]),  # PATCH t-1 failed
             _response(json_data=[]),  # GET video_generations for t-2: no row
+            _response(json_data=[{}]),  # PATCH t-2 failed
         ]
-        with patch.object(state_module.logger, "error"):
-            backend.reconcile_orphaned_tasks()
+        with patch.object(state_module.logger, "warning"):
+            failed = backend.reconcile_orphaned_tasks()
 
-        select = self.requests.request.call_args_list[0]
-        self.assertIn("state=not.in.(-1,1)", select[0][1])
-        # billing lookups interleave: [SELECT, PATCH t-1, GET gen, PATCH t-2, GET gen]
-        for i, task_id in zip([1, 3], ["t-1", "t-2"]):
-            call = self.requests.request.call_args_list[i]
+        self.assertEqual(failed, 2)
+        calls = self.requests.request.call_args_list
+        self.assertIn("state=not.in.(-1,1)", calls[0][0][1])
+        # Billing settles before the terminal task PATCH, per task:
+        # [SELECT, GET gen t-1, PATCH t-1, GET gen t-2, PATCH t-2]
+        self.assertEqual(calls[1][0][0], "GET")
+        self.assertIn("video_generations", calls[1][0][1])
+        for i, task_id in zip([2, 4], ["t-1", "t-2"]):
+            call = calls[i]
             self.assertEqual(call[0][0], "PATCH")
             self.assertIn(f"task_id=eq.{task_id}", call[0][1])
             payload = call[1]["json"]
             self.assertEqual(payload["state"], const.TASK_STATE_FAILED)
             self.assertIn("error", payload["data"])
 
+    def test_reconcile_continues_when_task_patch_fails(self):
+        # A failed terminal PATCH must not abort the loop: the task stays
+        # non-terminal and is retried on the next boot, while the other
+        # orphans are still reconciled now.
+        orphans = [{"task_id": "t-1", "data": {}}, {"task_id": "t-2", "data": {}}]
+        backend = _make_state(self.requests)
+        self.requests.request.side_effect = [
+            _response(json_data=orphans),  # SELECT non-terminal rows
+            _response(json_data=[]),  # GET video_generations for t-1: no row
+            _http_error(500),  # PATCH t-1 failed: boom
+            _response(json_data=[]),  # GET video_generations for t-2: no row
+            _response(json_data=[{}]),  # PATCH t-2 failed
+        ]
+        with patch.object(state_module.logger, "warning"), patch.object(
+            state_module.logger, "error"
+        ) as log_error:
+            failed = backend.reconcile_orphaned_tasks()
+        self.assertEqual(failed, 1)
+        self.assertTrue(log_error.called)
+        last_patch = self.requests.request.call_args_list[-1][1]["json"]
+        self.assertEqual(last_patch["state"], const.TASK_STATE_FAILED)
+
     def test_reconcile_keeps_existing_data(self):
         backend = _make_state(self.requests)
         self.requests.request.side_effect = [
             _response(json_data=[{"task_id": "t-1", "data": {"stage": "render"}}]),
-            _response(json_data=[{}]),  # PATCH task
             _response(json_data=[]),  # GET video_generations: no row
+            _response(json_data=[{}]),  # PATCH task
         ]
-        with patch.object(state_module.logger, "error"):
+        with patch.object(state_module.logger, "warning"):
             backend.reconcile_orphaned_tasks()
-        payload = self.requests.request.call_args_list[1][1]["json"]
+        payload = self.requests.request.call_args_list[2][1]["json"]
         self.assertEqual(payload["data"]["stage"], "render")
         self.assertIn("error", payload["data"])
 
@@ -286,15 +312,15 @@ class SupabaseStateBillingReconcileTests(unittest.TestCase):
         backend = _make_state(self.requests)
         self.requests.request.side_effect = [
             _response(json_data=self._orphan()),  # SELECT orphaned tasks
-            _response(json_data=[{}]),  # PATCH task failed
             _response(json_data=[self._generation()]),  # GET video_generations
             _response(json_data={"refunded": True}),  # POST refund RPC
             _response(json_data=[{}]),  # PATCH video_generations
+            _response(json_data=[{}]),  # PATCH task failed
         ]
         backend.reconcile_orphaned_tasks()
 
         calls = self.requests.request.call_args_list
-        rpc = calls[3]
+        rpc = calls[2]
         self.assertIn("rpc/refund_generation_tokens", rpc[0][1])
         self.assertEqual(
             rpc[1]["json"],
@@ -304,7 +330,7 @@ class SupabaseStateBillingReconcileTests(unittest.TestCase):
                 "p_reason": f"{state_module._ORPHAN_ERROR_MESSAGE}; tokens refunded",
             },
         )
-        settle = calls[4]
+        settle = calls[3]
         self.assertIn("video_generations", settle[0][1])
         self.assertIn("generation_id=eq.g-1", settle[0][1])
         payload = settle[1]["json"]
@@ -312,16 +338,21 @@ class SupabaseStateBillingReconcileTests(unittest.TestCase):
         self.assertEqual(payload["error_code"], "engine_restart")
         self.assertTrue(payload["tokens_refunded"])
         self.assertIn("completed_at", payload)
+        # the terminal task PATCH runs after the billing settle
+        task_patch = calls[4]
+        self.assertEqual(task_patch[0][0], "PATCH")
+        self.assertIn("task_id=eq.t-1", task_patch[0][1])
+        self.assertEqual(task_patch[1]["json"]["state"], const.TASK_STATE_FAILED)
 
     def test_reconcile_skips_already_settled_generation(self):
         backend = _make_state(self.requests)
         self.requests.request.side_effect = [
             _response(json_data=self._orphan()),
-            _response(json_data=[{}]),  # PATCH task failed
             _response(json_data=[self._generation(status="failed", tokens_refunded=True)]),
+            _response(json_data=[{}]),  # PATCH task failed
         ]
         backend.reconcile_orphaned_tasks()
-        # SELECT tasks, PATCH task, GET generation — nothing more
+        # SELECT tasks, GET generation, PATCH task — nothing more
         self.assertEqual(self.requests.request.call_count, 3)
         urls = [c[0][1] for c in self.requests.request.call_args_list]
         self.assertFalse(any("rpc/" in url for url in urls))
@@ -330,29 +361,34 @@ class SupabaseStateBillingReconcileTests(unittest.TestCase):
         backend = _make_state(self.requests)
         self.requests.request.side_effect = [
             _response(json_data=self._orphan()),
-            _response(json_data=[{}]),  # PATCH task failed
             _response(json_data=[self._generation(tokens_refunded=True)]),
             _response(json_data=[{}]),  # PATCH video_generations
+            _response(json_data=[{}]),  # PATCH task failed
         ]
         backend.reconcile_orphaned_tasks()
         urls = [c[0][1] for c in self.requests.request.call_args_list]
         self.assertFalse(any("rpc/" in url for url in urls))
-        settle = self.requests.request.call_args_list[3][1]["json"]
+        settle = self.requests.request.call_args_list[2][1]["json"]
         self.assertTrue(settle["tokens_refunded"])
         self.assertEqual(settle["status"], "failed")
 
-    def test_reconcile_logs_loudly_when_no_generation_row(self):
+    def test_reconcile_warns_when_no_generation_row(self):
+        # No video_generations row is normal for fill_schedule batch tasks
+        # (the batch reconciler settles those); warn, don't error.
         backend = _make_state(self.requests)
         self.requests.request.side_effect = [
             _response(json_data=self._orphan()),
-            _response(json_data=[{}]),  # PATCH task failed
             _response(json_data=[]),  # GET video_generations: no row
+            _response(json_data=[{}]),  # PATCH task failed
         ]
-        with patch.object(state_module.logger, "error") as log_error:
+        with patch.object(state_module.logger, "warning") as log_warning, patch.object(
+            state_module.logger, "error"
+        ) as log_error:
             settled = backend.reconcile_orphaned_tasks()
-        # the task is still failed; the missing billing row is loud, not fatal
+        # the task is still failed; the missing billing row is a warning, not an error
         self.assertEqual(settled, 1)
-        self.assertTrue(log_error.called)
+        self.assertTrue(log_warning.called)
+        self.assertFalse(log_error.called)
         urls = [c[0][1] for c in self.requests.request.call_args_list]
         self.assertFalse(any("rpc/" in url for url in urls))
 
@@ -361,19 +397,21 @@ class SupabaseStateBillingReconcileTests(unittest.TestCase):
         orphans = [{"task_id": "t-1", "data": {}}, {"task_id": "t-2", "data": {}}]
         self.requests.request.side_effect = [
             _response(json_data=orphans),
-            _response(json_data=[{}]),  # PATCH t-1 failed
             _response(json_data=[self._generation()]),  # GET generation t-1
             _http_error(500),  # POST refund RPC fails
             _response(json_data=[{}]),  # PATCH video_generations anyway
-            _response(json_data=[{}]),  # PATCH t-2 failed
+            _response(json_data=[{}]),  # PATCH t-1 failed
             _response(json_data=[]),  # GET video_generations t-2: no row
+            _response(json_data=[{}]),  # PATCH t-2 failed
         ]
-        with patch.object(state_module.logger, "error"):
+        with patch.object(state_module.logger, "error"), patch.object(
+            state_module.logger, "warning"
+        ):
             settled = backend.reconcile_orphaned_tasks()
         self.assertEqual(settled, 2)
         # the failed refund is recorded honestly so the web's poll path can
         # retry it as a backstop when the user next checks
-        gen_patch = self.requests.request.call_args_list[4][1]["json"]
+        gen_patch = self.requests.request.call_args_list[3][1]["json"]
         self.assertEqual(gen_patch["status"], "failed")
         self.assertFalse(gen_patch["tokens_refunded"])
 
@@ -395,6 +433,27 @@ class SupabaseStateAuthTests(unittest.TestCase):
         requests_mock.request.return_value = _http_error(500)
         with self.assertRaises(requests.HTTPError):
             backend._request("GET", "select=task_id&limit=1")
+
+
+class SupabaseStateTimeoutTests(unittest.TestCase):
+    def test_state_requests_use_short_timeout(self):
+        # A Supabase outage must fail fast: update_task holds the RLock
+        # across its calls, and a 30s timeout would serialize every
+        # concurrent task thread's progress writes behind one wedged holder.
+        requests_mock = MagicMock()
+        backend = _make_state(requests_mock)
+        requests_mock.request.side_effect = [_response(json_data=[])]
+        backend.get_task("t-1")
+        call = requests_mock.request.call_args
+        self.assertEqual(call[1]["timeout"], 10)
+
+    def test_rpc_uses_short_timeout(self):
+        requests_mock = MagicMock()
+        backend = _make_state(requests_mock)
+        requests_mock.request.side_effect = [_response(json_data={"refunded": True})]
+        backend._rpc("refund_generation_tokens", {"p_user_id": "u-1"})
+        call = requests_mock.request.call_args
+        self.assertEqual(call[1]["timeout"], 10)
 
 
 class SupabaseStateQuotingTests(unittest.TestCase):
@@ -462,10 +521,12 @@ class SupabaseStateShapeGuardTests(unittest.TestCase):
         backend = _make_state(self.requests)
         self.requests.request.side_effect = [
             _response(json_data=orphans),
-            _response(json_data=[{}]),
+            _response(json_data=[]),  # GET video_generations: no row
+            _response(json_data=[{}]),  # PATCH task failed
         ]
-        self.assertEqual(backend.reconcile_orphaned_tasks(), 1)
-        payload = self.requests.request.call_args_list[1][1]["json"]
+        with patch.object(state_module.logger, "warning"):
+            self.assertEqual(backend.reconcile_orphaned_tasks(), 1)
+        payload = self.requests.request.call_args_list[2][1]["json"]
         self.assertEqual(payload["state"], const.TASK_STATE_FAILED)
         self.assertIn("error", payload["data"])
 
