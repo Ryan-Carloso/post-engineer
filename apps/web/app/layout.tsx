@@ -21,10 +21,10 @@ const geistMono = process.env.CYPRESS_COVERAGE === '1'
 export const metadata: Metadata = {
   title: "Post Engineer",
   description: "Publique vídeos no seu canal do YouTube",
-  // Single icon source: /public/logo.png. (app/icon.png was deleted to avoid
-  // a byte-identical duplicate drifting on the next rebrand; apple-icon.png
-  // stays as the 180x180 iOS home-screen icon.)
-  icons: { icon: "/logo.png" },
+  // Single icon source set in /public (no file-convention twins in app/:
+  // once any config `icons` object exists, Next.js skips the file-convention
+  // icons entirely — so every role must be declared here).
+  icons: { icon: "/icon-128.png", apple: "/apple-icon.png" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
