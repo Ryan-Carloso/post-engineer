@@ -1597,6 +1597,14 @@ Follow these so the same issues don't come back:
 - **Parallelize independent counts.** Three serial head+count queries
   become one Promise.all.
 
+## Web/API review learnings, PR #41 round 17 (2026-10-02)
+- **Validators must accept what encoders produce.** encodeURIComponent
+  emits %XX; a validator rejecting % contradicts its own encoder. Test
+  the decoded form.
+- **Producer tests need the same fixtures as consumer tests.** The modal
+  pinned failedSlots rendering, but the route never counted one — both
+  sides need >0 fixtures.
+
 ## Engine review learnings (2026-10-02, PR #43)
 - **A test comment claiming a behavior must pin it with an assertion.** The
   reconcile test's comment said "the refund is skipped" but asserted only
