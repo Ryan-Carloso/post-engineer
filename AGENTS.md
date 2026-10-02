@@ -1532,6 +1532,19 @@ Follow these so the same issues don't come back:
   exists solely for best-effort cleanup — cap it with loud-skip. Document
   intentionally unbounded selects (schedules) at the call site.
 
+## Web/API review learnings, PR #41 round 11 (2026-10-02)
+- **Client helpers must surface structured server errors.** A generic
+  "failed (404)" invites endless retries on a persona that no longer
+  exists; parse the body on non-ok and surface code/error.
+- **Narrow every field, including ids.** `persona.id` from an untyped
+  row is any; the typeof guard costs one line and matches the file's
+  own convention.
+- **Destructive dialogs need the a11y trio.** Initial focus, Escape to
+  cancel (not while deleting), focus trap. Type-to-confirm mitigates
+  but does not replace.
+- **Relocated branches need re-pinned tests.** Moving storage cleanup
+  into after() moved its failure log; the test must follow the branch.
+
 ## Engine review learnings (2026-10-02, PR #43)
 - **A test comment claiming a behavior must pin it with an assertion.** The
   reconcile test's comment said "the refund is skipped" but asserted only
