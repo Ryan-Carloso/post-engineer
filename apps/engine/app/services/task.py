@@ -75,8 +75,10 @@ _discord_notified_failed_tasks_lock = Lock()
 # always emits video_generation_failed, even when the FAILED state was
 # pre-written by an earlier stage (the publish stage writes FAILED
 # directly before raising). Later notices stay deduped. Bounded like the
-# alert cache above: task ids are never reused, so eviction only drops
-# ids whose terminal event was long since emitted.
+# alert cache above. Entries leave two ways: natural deque aging, and
+# explicit release via discard_failed_event when a batch re-dispatch
+# succeeds after a transient dispatch failure (deterministic uuid5 ids
+# are re-armed within one process lifetime on that path).
 #---------------
 MAX_FAILED_EVENT_IDS = 1000
 _failed_event_emitted_tasks: deque[str] = deque(maxlen=MAX_FAILED_EVENT_IDS)
