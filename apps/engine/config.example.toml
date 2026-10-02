@@ -1,6 +1,13 @@
 # VPS runtime environment (Docker Compose injects these; keep secrets out of
 # this file):
-# - MPT_STATE_BACKEND=memory (task state in memory; no external dependency)
+# - MPT_STATE_BACKEND=memory (task state in memory; no external dependency).
+#   Use MPT_STATE_BACKEND=supabase to persist task state in the
+#   engine_task_state Supabase table instead: status polls then survive
+#   engine restarts/redeploys (memory state is wiped on restart and polls
+#   answer 404 "task not found" forever). Requires SUPABASE_URL and
+#   SUPABASE_SERVICE_ROLE_KEY, plus supabase/engine-task-state.sql applied
+#   once in the Supabase dashboard SQL editor. On boot, tasks left running
+#   are marked failed so the web records the failure and refunds the token.
 # - MPT_UPLOAD_API_BASE_URL=https://your-domain.example
 # - MONEYPRINT_API_SECRET: shared auth secret — the web proxy sends it as
 #   ``Authorization: Bearer`` plus ``x-user-id``; publish-back uses it too
