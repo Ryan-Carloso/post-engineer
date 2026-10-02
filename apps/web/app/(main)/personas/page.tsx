@@ -17,7 +17,6 @@ import {
   PlusIcon,
   GlobeIcon,
   TrashIcon,
-  ComposeIcon,
 } from '@/lib/ui';
 
 export default function PersonasPage() {
@@ -133,16 +132,6 @@ const PersonasList = ({ personas }: { personas: PersonaRecord[] }) => {
             <PlusIcon />
           </span>
           {t('personas.createNew')}
-        </Link>
-        <Link
-          href="/schedule"
-          data-testid="schedule-new-tile"
-          className="group flex min-h-30 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-blue-300 bg-blue-50/40 px-4 py-6 text-sm font-medium text-blue-600 transition-all hover:border-blue-500 hover:bg-blue-50"
-        >
-          <span className="flex size-10 items-center justify-center rounded-full bg-blue-100 text-blue-600 [&_svg]:size-5">
-            <ComposeIcon />
-          </span>
-          {t('nav.schedule')}
         </Link>
       </div>
     </section>

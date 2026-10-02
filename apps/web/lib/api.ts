@@ -721,46 +721,11 @@ function mapSchedule(row: ScheduleRow): ScheduleConfig {
   };
 }
 
-interface ScheduleSlotInput {
-  personaId: string;
-  providers: string[];
-  youtubeAccountIds: string[];
-  instagramAccountIds: string[];
-  linkedinAccountIds: string[];
-  blueskyAccountIds: string[];
-  daysOfWeek: number[];
-  startHour: number;
-  endHour: number;
-  postsPerDay: number;
-  timezone: string;
-}
-
 async function fetchSchedules(): Promise<ScheduleConfig[]> {
   const response = await fetch('/api/schedule');
   const data: { success: boolean; schedules?: ScheduleRow[] } = await response.json();
   if (!response.ok || !data.success) throw new Error('Failed to fetch schedules');
   return (data.schedules ?? []).map(mapSchedule);
-}
-
-export async function updateSchedule(
-  id: string,
-  updates: Partial<
-    Pick<ScheduleSlotInput, 'daysOfWeek' | 'startHour' | 'endHour' | 'postsPerDay' | 'providers' | 'youtubeAccountIds' | 'instagramAccountIds' | 'linkedinAccountIds' | 'blueskyAccountIds' | 'timezone'>
-  > & { active?: boolean },
-): Promise<void> {
-  const response = await fetch('/api/schedule', {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id, ...updates }),
-  });
-  const data: { success: boolean; error?: string } = await response.json();
-  if (!response.ok || !data.success) throw new Error(data.error ?? 'Failed to update schedule');
-}
-
-async function deleteSchedule(id: string): Promise<void> {
-  const response = await fetch(`/api/schedule?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
-  const data: { success: boolean; error?: string } = await response.json();
-  if (!response.ok || !data.success) throw new Error(data.error ?? 'Failed to delete schedule');
 }
 
 interface ScheduleStatusPayload {
@@ -920,29 +885,6 @@ export function useVideoGenerationsQuery(limit?: number) {
     queryKey: ['video-generations', limit ?? 'default'],
     queryFn: () => fetchVideoGenerations(limit),
     refetchInterval: 60_000,
-  });
-}
-
-export function useUpdateScheduleMutation() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, ...updates }: { id: string } & Parameters<typeof updateSchedule>[1]) =>
-      updateSchedule(id, updates),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['fill-schedules'] });
-      void queryClient.invalidateQueries({ queryKey: ['fill-schedule-status'] });
-    },
-  });
-}
-
-export function useDeleteScheduleMutation() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: deleteSchedule,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['fill-schedules'] });
-      void queryClient.invalidateQueries({ queryKey: ['fill-schedule-status'] });
-    },
   });
 }
 

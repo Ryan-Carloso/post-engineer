@@ -196,7 +196,10 @@ describe('app/(main)/persona/page — PersonaPage', () => {
     render(<PersonaPage />, { wrapper: createWrapper() });
 
     expect(screen.getByText('persona.title')).toBeTruthy();
-    expect(screen.queryByText('fillSchedule.noAccountsHint')).toBeNull();
+    // Loading the persona form must not depend on connected accounts, and
+    // no scheduling UI may render while it does.
+    expect(document.querySelector('input[type="time"]')).toBeNull();
+    expect(screen.queryByText('publishing.mustSelectAccount')).toBeNull();
   });
 
   it('mostra uma página de erro e permite tentar carregar as vozes novamente', async () => {
@@ -345,7 +348,9 @@ describe('app/(main)/persona/page — PersonaPage', () => {
     expect(formData.get('voiceId')).toBe('calm');
     expect(formData.get('videoAspect')).toBe('9:16');
     expect(await screen.findByText('persona.created')).toBeTruthy();
-    expect(navigation.push).toHaveBeenCalledWith('/schedule?personaId=p-1');
+    // The scheduling screen is gone; creating a persona lands on the posts
+    // list, where the user sees whatever was generated for it.
+    expect(navigation.push).toHaveBeenCalledWith('/posts');
   });
 
   it('mostra o aviso de sucesso parcial quando a criação retorna warnings', async () => {
@@ -466,10 +471,12 @@ describe('app/(main)/persona/page — persona enxuta (sem schedule)', () => {
     mockConnectedAccounts();
     render(<PersonaPage />, { wrapper: createWrapper() });
 
-    expect(screen.queryByText('fillSchedule.destinationsLabel')).toBeNull();
+    // Scheduling has no screen of its own, so the persona form must not
+    // carry account pickers, weekday toggles or time inputs. Asserted on
+    // what the page actually renders, not on translation keys.
     expect(screen.queryByTitle('Meu canal')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'fillSchedule.day0' })).toBeNull();
-    expect(screen.queryByLabelText('fillSchedule.scheduleTime 1')).toBeNull();
+    expect(document.querySelector('input[type="time"]')).toBeNull();
+    expect(document.querySelector('[data-testid="schedule-new-tile"]')).toBeNull();
   });
 
   it('submit NÃO exige contas conectadas e chama POST /api/persona (persona sozinha)', async () => {
@@ -486,7 +493,7 @@ describe('app/(main)/persona/page — persona enxuta (sem schedule)', () => {
     expect(formData.has('schedule')).toBe(false);
   });
 
-  it('sucesso na criação redireciona para /schedule?personaId= com CTA de agendar', async () => {
+  it('sucesso na criação leva o usuário para a lista de posts', async () => {
     mockNoAccounts();
     const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });
@@ -494,7 +501,7 @@ describe('app/(main)/persona/page — persona enxuta (sem schedule)', () => {
     await preencherFormularioValido(user);
     await user.click(screen.getByText('persona.submit'));
 
-    await waitFor(() => expect(navigation.push).toHaveBeenCalledWith('/schedule?personaId=p-1'));
+    await waitFor(() => expect(navigation.push).toHaveBeenCalledWith('/posts'));
   });
 
   it('não mostra erro de conta obrigatória nunca mais', async () => {
@@ -506,7 +513,7 @@ describe('app/(main)/persona/page — persona enxuta (sem schedule)', () => {
     await user.click(screen.getByText('persona.submit'));
 
     await waitFor(() => expect(createPersona).toHaveBeenCalled());
-    expect(screen.queryByText('fillSchedule.mustSelectAccount')).toBeNull();
+    expect(screen.queryByText('publishing.mustSelectAccount')).toBeNull();
   });
 });
 

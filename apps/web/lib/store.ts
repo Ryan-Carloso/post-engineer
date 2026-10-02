@@ -214,14 +214,6 @@ interface PersonaFormState {
   // 100% very_good (720p) = 2 tokens. Cost is weighted by the mix.
   faceMixPercent: number;
   faceQuality: FaceQuality;
-  // Autopilot (schedule) — state moved to the /schedule flow;
-  // these fields only feed the scheduling page, not the persona.
-  scheduleDays: number[];
-  scheduleTimes: string[];
-  timezone: string;
-  youtubeSelectedIds: string[];
-  instagramSelectedIds: string[];
-  linkedinSelectedIds: string[];
   setPersonaMode: (mode: PersonaMode) => void;
   setName: (value: string) => void;
   setPhoto: (file: File | null) => void;
@@ -238,17 +230,6 @@ interface PersonaFormState {
   setFaceQuality: (quality: FaceQuality) => void;
   resetForm: () => void;
   buildPersonaFormData: (language?: string) => FormData;
-  setScheduleDays: (days: number[]) => void;
-  toggleScheduleDay: (day: number) => void;
-  setScheduleTimes: (times: string[]) => void;
-  addScheduleTime: (time?: string) => void;
-  removeScheduleTime: (time: string) => void;
-  setYoutubeSelectedIds: (ids: string[]) => void;
-  setInstagramSelectedIds: (ids: string[]) => void;
-  setLinkedInSelectedIds: (ids: string[]) => void;
-  toggleYoutubeSelectedId: (id: string) => void;
-  toggleInstagramSelectedId: (id: string) => void;
-  toggleLinkedInSelectedId: (id: string) => void;
 }
 
 const initialPersonaState = {
@@ -266,12 +247,6 @@ const initialPersonaState = {
   // creation route's insert coercion so the two can't drift apart.
   faceMixPercent: DEFAULT_FACE_MIX_PERCENT,
   faceQuality: 'ok' as FaceQuality,
-  scheduleDays: [0, 1, 2, 3, 4, 5, 6],
-  scheduleTimes: ['09:00'],
-  timezone: 'UTC',
-  youtubeSelectedIds: [],
-  instagramSelectedIds: [],
-  linkedinSelectedIds: [],
 };
 
 export const usePersonaStore = create<PersonaFormState>()(
@@ -294,39 +269,6 @@ export const usePersonaStore = create<PersonaFormState>()(
       }),
     setFaceQuality: (faceQuality) => set({ faceQuality }),
     resetForm: () => set({ ...initialPersonaState }),
-    setScheduleDays: (scheduleDays) => set({ scheduleDays }),
-    toggleScheduleDay: (day) =>
-      set((state) => {
-        const current = state.scheduleDays;
-        const next = current.includes(day)
-          ? current.filter((d) => d !== day)
-          : [...current, day];
-        return { scheduleDays: next.sort((a, b) => a - b) };
-      }),
-    setScheduleTimes: (scheduleTimes) => set({ scheduleTimes: [...new Set(scheduleTimes)].sort() }),
-    addScheduleTime: (time = '12:00') => set((state) => ({ scheduleTimes: [...new Set([...state.scheduleTimes, time])].sort() })),
-    removeScheduleTime: (time) => set((state) => ({ scheduleTimes: state.scheduleTimes.filter((item) => item !== time) })),
-    setYoutubeSelectedIds: (youtubeSelectedIds) => set({ youtubeSelectedIds }),
-    setInstagramSelectedIds: (instagramSelectedIds) => set({ instagramSelectedIds }),
-    setLinkedInSelectedIds: (linkedinSelectedIds) => set({ linkedinSelectedIds }),
-    toggleYoutubeSelectedId: (id) =>
-      set((state) => {
-        const current = state.youtubeSelectedIds;
-        const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id];
-        return { youtubeSelectedIds: next };
-      }),
-    toggleInstagramSelectedId: (id) =>
-      set((state) => {
-        const current = state.instagramSelectedIds;
-        const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id];
-        return { instagramSelectedIds: next };
-      }),
-    toggleLinkedInSelectedId: (id) =>
-      set((state) => {
-        const current = state.linkedinSelectedIds;
-        const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id];
-        return { linkedinSelectedIds: next };
-      }),
     buildPersonaFormData: (language?: string) => {
       const s = get();
       const formData = new FormData();

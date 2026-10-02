@@ -258,23 +258,6 @@ describe('api', () => {
     expect(fetch).toHaveBeenCalledWith('/api/schedule/status');
   });
 
-  it('updateSchedule sends only the changed fields in PATCH', async () => {
-    const { updateSchedule } = await import('@/lib/api');
-    await updateSchedule('s-1', { linkedinAccountIds: ['urn:li:org:9'] });
-
-    expect(fetch).toHaveBeenCalledWith('/api/schedule', expect.objectContaining({ method: 'PATCH' }));
-    const call = vi.mocked(fetch).mock.calls.find(([url]) => String(url) === '/api/schedule');
-    const init = call?.[1] as { body: string };
-    const payload = JSON.parse(init.body) as Record<string, unknown>;
-    expect(payload).toMatchObject({
-      id: 's-1',
-      linkedinAccountIds: ['urn:li:org:9'],
-    });
-    // Fields not sent must not appear in the payload — the server preserves them.
-    expect(payload).not.toHaveProperty('youtubeAccountIds');
-    expect(payload).not.toHaveProperty('instagramAccountIds');
-  });
-
   it('useSessionQuery loads the session', async () => {
     mockGetSession.mockResolvedValue({
       data: { session: { user: { id: 'u9', user_metadata: {} } } },

@@ -804,8 +804,8 @@ const PersonaPreferencesSection = () => {
 
 //---------------
 // PersonaSubmit — persona validation and submit (create/edit).
-// Create: POST /api/persona (persona alone — scheduling is a separate flow,
-// at /schedule). Success → /schedule?personaId= to schedule right after.
+// Create: POST /api/persona (persona alone). Success → /posts, the app's
+// home, so the user lands where the results are.
 // In edit mode the button shows the save copy instead of the create copy.
 //---------------
 const PersonaSubmit = ({ editId }: { editId: string | null }) => {
@@ -867,7 +867,9 @@ const PersonaSubmit = ({ editId }: { editId: string | null }) => {
         usePersonaStore.getState().setResult(result);
         if (result.success) {
           await queryClient.invalidateQueries({ queryKey: ['persona-list'] });
-          router.push(`/schedule?personaId=${result.personaId}`);
+          // Scheduling has no screen of its own; the posts list is where
+          // the user goes to see what came out of the new persona.
+          router.push('/posts');
         } else if (result.error === 'prompt_rejected') {
           scrollToErrorField('script');
         }
@@ -963,7 +965,7 @@ const PersonaFeedback = () => {
     result.error === t('persona.errName') ||
     result.error === t('persona.errAvatar') ||
     result.error === t('persona.errVoice') ||
-    result.error === t('fillSchedule.mustSelectAccount')
+    result.error === t('publishing.mustSelectAccount')
   ) {
     return null;
   }

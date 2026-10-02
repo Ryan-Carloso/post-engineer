@@ -49,6 +49,23 @@ describe('Main Layout — Sidebar', () => {
       statusCode: 200,
       body: { status: 'ok' },
     }).as('getHealth');
+
+    // "/" redirects to the posts list, so these tests need that page's
+    // data to render without hitting the real API.
+    cy.intercept('GET', '/api/schedule', {
+      statusCode: 200,
+      body: { success: true, schedules: [] },
+    }).as('getSchedules');
+
+    cy.intercept('GET', '/api/schedule/status**', {
+      statusCode: 200,
+      body: { success: true, upcoming: [], recent: [] },
+    }).as('getScheduleStatus');
+
+    cy.intercept('GET', '/api/persona/video-generations**', {
+      statusCode: 200,
+      body: { success: true, generations: [] },
+    }).as('getGenerations');
   });
 
   it('renderiza marca, subtítulo e as abas de navegação', () => {
@@ -58,7 +75,7 @@ describe('Main Layout — Sidebar', () => {
     cy.contains('Post Engineer').should('be.visible');
     cy.contains('YouTube · Instagram').should('be.visible');
 
-    cy.contains('a', 'Início').should('be.visible');
+    cy.contains('a', 'Posts').should('be.visible');
     cy.contains('a', 'Contas').should('be.visible');
     cy.contains('a', 'Criar post').should('be.visible');
   });
@@ -70,8 +87,8 @@ describe('Main Layout — Sidebar', () => {
     cy.url().should('include', '/accounts');
     cy.wait('@getAccounts');
 
-    cy.contains('a', 'Início').click();
-    cy.url().should('eq', 'http://localhost:3434/');
+    cy.contains('a', 'Posts').click();
+    cy.url().should('include', '/posts');
   });
 
   it('destaca a aba ativa conforme a rota atual', () => {
@@ -82,7 +99,7 @@ describe('Main Layout — Sidebar', () => {
       .should('have.attr', 'class')
       .and('contain', 'bg-white/10');
 
-    cy.contains('a', 'Início')
+    cy.contains('a', 'Posts')
       .should('have.attr', 'class')
       .and('not.contain', 'bg-white/10');
   });

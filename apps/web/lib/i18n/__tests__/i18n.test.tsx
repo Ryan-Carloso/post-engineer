@@ -8,12 +8,12 @@ import { I18nProvider, useI18n } from '@/lib/i18n/provider';
 describe('i18n dictionaries', () => {
   it('exposes pt dictionary', () => {
     expect(ptDictionary.nav.brand).toBe('Post Engineer');
-    expect(ptDictionary.home.title).toBe('Sua equipe de conteúdo com IA');
+    expect(ptDictionary.posts.title).toBeTruthy();
   });
 
   it('exposes en dictionary', () => {
     expect(enDictionary.nav.brand).toBe('Post Engineer');
-    expect(enDictionary.home.subtitle).toContain('automatically');
+    expect(enDictionary.posts.title).toBeTruthy();
   });
 
   it('dictionaries maps locales to data', () => {
@@ -39,6 +39,21 @@ describe('i18n dictionaries', () => {
         keys(enSection as Record<string, unknown>),
       );
     }
+  });
+
+  //---------------
+  // The home dashboard and the scheduling screen are gone. Their copy must
+  // go with them: an orphaned key is dead weight that will drift, and a
+  // resurrected key is a hint that the old screens are creeping back.
+  //---------------
+  it('carries no home or scheduling copy', () => {
+    expect(ptDictionary).not.toHaveProperty('home');
+    for (const key of ['home', 'homeHint', 'schedule', 'scheduleHint'] as const) {
+      expect(ptDictionary.nav).not.toHaveProperty(key);
+      expect(enDictionary.nav).not.toHaveProperty(key);
+    }
+    expect(ptDictionary).not.toHaveProperty('fillSchedule');
+    expect(enDictionary).not.toHaveProperty('fillSchedule');
   });
 });
 
