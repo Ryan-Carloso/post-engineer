@@ -109,6 +109,10 @@ def _should_emit_failed_event(task_id: str) -> bool:
 # failure are two real incidents for one deterministic id, and both must
 # emit — a shared guard suppresses one side or the other. Kept separate,
 # neither path can arm, suppress, or re-arm the other's terminal event.
+# Funnel trade-off, named: video_generation_requested stays deduped for
+# the re-dispatched id, so the failure % can briefly exceed 100% in this
+# window. Both failures are real; growing the denominator to match would
+# reintroduce the double-count this guard prevents.
 #---------------
 MAX_DISPATCH_FAILED_EVENT_IDS = 1000
 _dispatch_failed_event_emitted_tasks: deque[str] = deque(maxlen=MAX_DISPATCH_FAILED_EVENT_IDS)
