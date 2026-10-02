@@ -46,7 +46,7 @@ export function validateScheduleWindow(
   if (diffMs > SCHEDULE_MAX_AHEAD_MS) {
     return {
       ok: false,
-      error: `scheduledAt cannot be more than 30 days in advance (latest allowed is ${new Date(
+      error: `scheduledAt cannot be more than ${SCHEDULE_MAX_AHEAD_DAYS} days in advance (latest allowed is ${new Date(
         now.getTime() + SCHEDULE_MAX_AHEAD_MS,
       ).toISOString()}).`,
     };

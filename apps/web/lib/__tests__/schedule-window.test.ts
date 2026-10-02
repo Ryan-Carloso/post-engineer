@@ -33,7 +33,8 @@ describe('schedule-window validator (3h min / 30d max)', () => {
 
     const tooFar = validateScheduleWindow('2026-10-19T09:00:00.000Z', now);
     expect(tooFar.ok).toBe(false);
-    if (!tooFar.ok) expect(tooFar.error).toMatch(/more than 30 days/i);
+    if (!tooFar.ok)
+      expect(tooFar.error).toMatch(new RegExp(`more than ${SCHEDULE_MAX_AHEAD_DAYS} days`, 'i'));
   });
 
   it('accepts datetimes inside the 3h..30d window', () => {
