@@ -20,6 +20,7 @@ from typing import Optional
 
 import requests
 from loguru import logger
+from urllib.parse import quote
 
 from app.services.analytics import scrub_secret_values
 
@@ -55,11 +56,14 @@ def _post(webhook_url: str, payload: dict, task_id: str) -> None:
         # path-embedded tokens): requests embeds it in str(exc), and the
         # key-anchored scrubber cannot match path-embedded tokens — redact
         # the known URL first, then scrub-then-truncate the remainder like
-        # every other free-text error surface. Never replace an empty
+        # every other free-text error surface. requests requotes the target
+        # URL when preparing it (response.url), so redact the configured
+        # string AND its percent-encoded form. Never replace an empty
         # string: it interleaves "[redacted]" between every character.
         message = str(exc)
         if webhook_url:
-            message = message.replace(webhook_url, "[redacted]")
+            for variant in {webhook_url, quote(webhook_url, safe=":/?&=%")}:
+                message = message.replace(variant, "[redacted]")
         error = scrub_secret_values(message)[:500]
         logger.bind(task_id=task_id).error(
             "terminal webhook delivery failed: {error}", error=error

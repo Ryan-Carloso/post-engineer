@@ -11,6 +11,7 @@ import time
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+from urllib.parse import quote
 
 import requests
 from loguru import logger
@@ -143,6 +144,29 @@ class NotifyTerminalTaskTests(unittest.TestCase):
         logged = " ".join(str(c) for c in error_mock.call_args_list)
         self.assertNotIn("abcdefGHIJKL-token-secret", logged)
         self.assertNotIn(webhook_url, logged)
+
+    def test_webhook_failure_log_redacts_encoded_url_variant(self):
+        # requests requotes the target URL when preparing it (response.url),
+        # so the exception may carry the percent-encoded form instead of
+        # the configured string — both variants must be redacted.
+        webhook_url = "https://example.com/hooks/path with space/secret-token"
+        encoded = quote(webhook_url, safe=":/?&=%")
+        response = MagicMock()
+        response.raise_for_status.side_effect = requests.exceptions.HTTPError(
+            f"500 Server Error: Internal Server Error for url: {encoded}"
+        )
+        with (
+            patch(
+                "app.services.task_webhook.requests.post", return_value=response
+            ),
+            patch("app.services.task_webhook.logger") as mock_logger,
+        ):
+            task_webhook._post(webhook_url, {"task_id": "t-1"}, "t-1")
+        error_mock = mock_logger.bind.return_value.error
+        self.assertTrue(error_mock.call_args_list)
+        logged = " ".join(str(c) for c in error_mock.call_args_list)
+        self.assertNotIn("secret-token", logged)
+        self.assertNotIn(encoded, logged)
 
     def test_webhook_failure_empty_url_does_not_interleave_redacted(self):
         # str.replace("", "[redacted]") interleaves the marker between
