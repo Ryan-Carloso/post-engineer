@@ -107,7 +107,7 @@ class BatchReconciler:
                 self.store.update_slot(
                     slot["id"],
                     status=SLOT_FAILED,
-                    error=scrub_secret_values(str(task.get("error", "")))[:500],
+                    error=scrub_secret_values(str(task.get("error") or ""))[:500],
                 )
                 updated += 1
         return updated

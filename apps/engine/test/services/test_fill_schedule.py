@@ -354,6 +354,32 @@ class ReconcileTests(unittest.TestCase):
         self.assertNotIn("TOPSECRET123", error)
         self.assertLessEqual(len(error), 500)
 
+    def test_failed_task_none_error_stores_empty_string(self):
+        # .get's default does not fire on an explicitly-stored None — the
+        # same failure mode this PR fixed for the identity props with `or`.
+        # A None task error must not persist the literal string "None" into
+        # the client-visible slot error column.
+        slot = {
+            "id": "slot-1",
+            "task_id": "t-1",
+            "user_id": "user-1",
+            "schedules": {
+                "id": "sched-1",
+                                "user_id": "user-1",
+                "personas": {"name": "Ana", "face_mix_percent": 0, "face_quality": "ok"},
+            },
+        }
+        store = _FakeStore()
+        store.generating_slots = lambda: [slot]
+        state = MagicMock()
+        state.get_task.return_value = {"state": -1, "error": None}
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=state,
+            publish_video=MagicMock(),
+        )
+        self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
+        self.assertEqual(store.updates[0][1]["error"], "")
+
     def test_failed_task_without_persona_embed_marks_failed_without_throwing(self):
         # Regression: a schedule with no persona embed (deleted persona)
         # must not kill the reconcile stage with a RuntimeError every tick.
