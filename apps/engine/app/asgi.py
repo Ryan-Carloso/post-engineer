@@ -2,6 +2,7 @@
 
 import os
 import traceback
+from types import TracebackType
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
@@ -46,8 +47,39 @@ def should_init_error_tracking() -> bool:
 # Anything else bound to a record stays out of telemetry.
 _EXCEPTION_CONTEXT_EXTRAS = ("task_id", "http_status_code")
 
+# Bound on serialized frames per $exception_list entry: deep tracebacks
+# (e.g. RecursionError) must not blow up the event payload.
+_MAX_STACKTRACE_FRAMES = 100
 
-def _exception_list_entry(exc_type: str, value: str, stacktrace: str) -> dict[str, object]:
+
+def _stacktrace_frames(exc_tb: TracebackType | None) -> list[dict[str, object]]:
+    """Serialize a traceback into PostHog's {"type": "raw", "frames": [...]} shape.
+
+    Mirrors posthog-python's own exception capture (exception_utils.py):
+    ingestion models $exception_list[].stacktrace Sentry-style, and a plain
+    string risks failing its serde check — the exact failure this sink exists
+    to fix.
+    """
+    try:
+        frames: list[dict[str, object]] = []
+        for summary in traceback.extract_tb(exc_tb):
+            frames.append(
+                {
+                    "filename": scrub_secret_values(summary.filename or ""),
+                    "lineno": summary.lineno,
+                    "function": scrub_secret_values(summary.name or ""),
+                }
+            )
+            if len(frames) >= _MAX_STACKTRACE_FRAMES:
+                break
+        return frames
+    except Exception:
+        return []
+
+
+def _exception_list_entry(
+    exc_type: str, value: str, stacktrace: dict[str, object]
+) -> dict[str, object]:
     # PostHog error tracking requires $exception_list on every $exception
     # event; without it ingestion flags $cymbal_errors ("missing field
     # $exception_list") and the event never groups in Error Tracking.
@@ -81,14 +113,25 @@ def _loguru_posthog_sink(message) -> None:
             exc_type_name = type(exc_value).__name__
             exc_message = scrub_secret_values(str(exc_value))
             try:
-                stacktrace = scrub_secret_values("".join(
-                    traceback.format_exception(type(exc_value), exc_value, exc_value.__traceback__)
-                )[:5000])
+                # Scrub the full text BEFORE truncating: a cut landing
+                # mid-key would otherwise strip the regex anchor and leak
+                # the value (PR #38 learnings).
+                stacktrace_text = scrub_secret_values(
+                    "".join(
+                        traceback.format_exception(
+                            type(exc_value), exc_value, exc_value.__traceback__
+                        )
+                    )
+                )[:5000]
             except Exception:
-                stacktrace = ""
+                stacktrace_text = ""
+            stacktrace: dict[str, object] = {
+                "type": "raw",
+                "frames": _stacktrace_frames(exception[2]),
+            }
             properties["$exception_type"] = exc_type_name
             properties["$exception_message"] = exc_message
-            properties["$exception_stacktrace"] = stacktrace
+            properties["$exception_stacktrace"] = stacktrace_text
         else:
             # No live exception tuple (e.g. HttpException logs its own flat
             # message): synthesize the entry so the event still ingests.
@@ -101,7 +144,7 @@ def _loguru_posthog_sink(message) -> None:
                 else "Error"
             )
             exc_message = str(properties["$exception_message"])
-            stacktrace = ""
+            stacktrace = {"type": "raw", "frames": []}
         properties["$exception_list"] = [
             _exception_list_entry(exc_type_name, exc_message, stacktrace)
         ]

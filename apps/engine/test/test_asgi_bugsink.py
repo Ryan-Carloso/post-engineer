@@ -6,6 +6,7 @@ the real PostHog init (and therefore the sink installation) is always skipped.
 """
 
 import unittest
+import sys
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -44,6 +45,7 @@ class PostHogSinkTests(unittest.TestCase):
         assert isinstance(exc_list, list) and len(exc_list) == 1
         assert exc_list[0]["value"] == "boom"
         assert exc_list[0]["type"] == "Error"
+        assert exc_list[0]["stacktrace"] == {"type": "raw", "frames": []}
 
     def test_task_id_only_record_stays_error(self):
         # A record that binds task_id without http_status_code (e.g.
@@ -78,14 +80,51 @@ class PostHogSinkTests(unittest.TestCase):
         assert properties["$exception_message"] == "kaput"
 
     def test_record_with_exception_builds_exception_list_from_tuple(self):
-        error = ValueError("kaput")
+        try:
+            raise ValueError("kaput")
+        except ValueError:
+            exc_info = sys.exc_info()
         with patch("app.asgi.track_event") as track_event:
-            asgi._loguru_posthog_sink(_message(exception=(ValueError, error, None)))
+            asgi._loguru_posthog_sink(_message(exception=exc_info))
         _, properties = track_event.call_args[0]
         exc_list = properties["$exception_list"]
         assert len(exc_list) == 1
         assert exc_list[0]["type"] == "ValueError"
         assert exc_list[0]["value"] == "kaput"
+        # PostHog models $exception_list[].stacktrace Sentry-style
+        # ({"type": "raw", "frames": [...]}, like posthog-python's own
+        # capture); a plain string fails ingestion serde.
+        stacktrace = exc_list[0]["stacktrace"]
+        assert stacktrace["type"] == "raw"
+        assert len(stacktrace["frames"]) >= 1
+        frame = stacktrace["frames"][-1]
+        assert frame["function"] == "test_record_with_exception_builds_exception_list_from_tuple"
+        assert isinstance(frame["lineno"], int)
+
+    def test_stacktrace_scrubbed_before_truncate(self):
+        # Pin the PR #38 rule (scrub the full free text before truncating):
+        # spy on scrub_secret_values and assert it observes the untruncated
+        # stacktrace. A truncate-first order would only ever hand it <=5000
+        # chars, letting a cut that strips the regex key-anchor leak the
+        # value that follows it.
+        raw = "x" * 6000
+        seen_lengths: list[int] = []
+        real_scrub = asgi.scrub_secret_values
+
+        def spy_scrub(text: str) -> str:
+            seen_lengths.append(len(text))
+            return real_scrub(text)
+
+        error = ValueError("kaput")
+        with (
+            patch("app.asgi.track_event") as track_event,
+            patch("traceback.format_exception", return_value=[raw]),
+            patch("app.asgi.scrub_secret_values", side_effect=spy_scrub),
+        ):
+            asgi._loguru_posthog_sink(_message(exception=(ValueError, error, None)))
+        _, properties = track_event.call_args[0]
+        assert seen_lengths and max(seen_lengths) > 5000
+        assert len(str(properties["$exception_stacktrace"])) <= 5000
 
     def test_bound_task_context_forwarded_as_properties(self):
         # HttpException logs via logger.bind(task_id=..., http_status_code=...):
