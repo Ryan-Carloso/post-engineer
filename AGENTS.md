@@ -1925,6 +1925,12 @@ Follow these so the same issues don't come back:
 - **Replace longest variants first.** The variant set contains both `/hooks/path` and `/hooks/path?sig=...` — replacing the path first splits the request target before it can match. `sorted(variants, key=len, reverse=True)`.
 - **urllib3 embeds the request target, not just the path.** Connection-phase errors carry `/path?query=...`; the path-only variant left a query-string credential exposed. The helper adds the `path + ("?" + query)` variant and its requote.
 - **A passing test can pass for the wrong reason.** My first query-string probe used `?token=secret-token` — the key-anchored scrubber matched `token=` and the test passed without the variant redaction. Probe values must dodge every other defense layer (`?sig=abc123xyz`) so the test pins the intended code path.
+
+## Engine review learnings, PR #53 round-14 (2026-10-02, OpenCode on 1f60132)
+
+- **Redaction variant sets need a length floor.** `redact_known_url` replaced `parsed.path` with no minimum length — a misconfigured webhook URL with a trivial path (`/`) rewrote every slash in `_post` log lines and collapsed every `safe_reason` to the bare type name (the `!= message` trigger fired on any message). Skip variants shorter than 8 chars; the full URL (always long) still redacts.
+- **Probe the degenerate config, not just the happy path.** The first degenerate-path test passed trivially because its message had no slashes — the assertion was vacuous. A redaction test must include content the buggy code would actually mangle (`/var/log/app.log`).
+- **Retitle the PR when a rebase changes the version.** The title said "(1.13.2)" from the original base while the rebased branch bumps 1.14.0 → 1.14.1 — cosmetic, but the title is the first thing a reviewer reads.
 ## Engine review learnings, PR #51 follow-up (2026-10-02, OpenCode on merged main)
 
 Five MINORs on the merged funnel, fixed as a follow-up PR with one focused TDD commit each:
