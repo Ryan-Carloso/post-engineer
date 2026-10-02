@@ -212,6 +212,24 @@ class SendDiscordTests(unittest.TestCase):
             exc = RuntimeError("failed calling https://discord/hook: timeout")
             self.assertEqual(nf.safe_reason(exc), "RuntimeError")
 
+    def test_reason_scrubs_secrets_before_truncation(self):
+        # safe_reason feeds Discord AND (via _fail_task) client-visible task
+        # errors: the full message must be scrubbed before the 200-cut, like
+        # the telemetry reason. The probe is longer than the cap — with a
+        # shorter message [:200] is a no-op and a truncate-first revert
+        # would stay green.
+        from app.services import analytics as analytics_module
+
+        exc = RuntimeError("E" * 150 + " api_key=TOPSECRET123" + "F" * 150)
+        with patch.object(
+            nf, "scrub_secret_values", wraps=analytics_module.scrub_secret_values
+        ) as scrub:
+            reason = nf.safe_reason(exc)
+        scrub.assert_called_once_with(str(exc))
+        self.assertIn("[redacted]", reason)
+        self.assertNotIn("TOPSECRET123", reason)
+        self.assertLessEqual(len(reason), 200)
+
     def test_long_messages_are_truncated_to_discord_limit(self):
         # m2: Discord rejects messages > 2000 chars — the builder truncates.
         message = nf.generation_batch_msg(3, ["t" * 900] * 3)

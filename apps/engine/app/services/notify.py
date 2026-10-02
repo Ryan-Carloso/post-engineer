@@ -18,6 +18,8 @@ from typing import Any, Callable
 
 from loguru import logger
 
+from app.services.analytics import scrub_secret_values
+
 ENV_WEBHOOK_URL = "DISCORD_WEBHOOK_URL"
 
 # Simple post: {url, json}. Injectable for tests.
@@ -154,7 +156,11 @@ def safe_reason(exc: BaseException) -> str:
         return type(exc).__name__
     if webhook_url and webhook_url in message:
         return type(exc).__name__
-    return message[:200]
+    # The summary reaches Discord, logs, and (via _fail_task) client-visible
+    # task errors: scrub the full message before the 200-cut, like the
+    # telemetry reason — a cut landing mid-key would leave a fragment the
+    # key-anchored pattern can no longer match.
+    return scrub_secret_values(message)[:200]
 
 
 # ---------------------------------------------------------------------------
