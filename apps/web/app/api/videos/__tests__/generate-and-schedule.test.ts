@@ -287,12 +287,13 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(spends[0].args.p_amount).toBe(4);
       expect(spends[0].args.p_user_id).toBe(USER_ID);
 
-// Schedule row: deterministic id, scheduled_at stays NULL during
-      // dispatch (the tick must not race us). `kind` was dropped from the
-      // schema (3bbbb65) — the insert must not resurrect the removed column.
+// Schedule row: deterministic id; scheduled_at is the legacy column
+      // and the insert pins it NULL. No 'kind' key: the schedules table
+      // has no kind column (it never landed in the schema), and inserting
+      // an unknown key makes PostgREST reject the whole insert (500).
       const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
       expect(scheduleRows).toHaveLength(1);
-      expect(scheduleRows[0].kind).toBeUndefined();
+      expect(scheduleRows[0]).not.toHaveProperty('kind');
       expect(scheduleRows[0].scheduled_at).toBeNull();
       expect(scheduleRows[0].posts_per_day).toBe(2);
       expect(scheduleRows[0].youtube_account_ids).toEqual(['acct-1']);
@@ -307,6 +308,64 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const binds = updates.filter((u) => u.table === 'scheduled_posts' && u.fields.status === 'generating');
       expect(binds).toHaveLength(2);
       expect(binds[0].fields.task_id).toBe('task-Idea 1');
+    });
+
+    it('inserts only columns that exist on public.schedules', async () => {
+      // Sync test: the supabase-js mock records any payload key, so a
+      // speculative key (like the removed 'kind') sailed through tests and
+      // 500d every production call — PostgREST rejects unknown keys. Parse
+      // the canonical schema and assert every insert key is a real column,
+      // so the next phantom key fails CI instead of production.
+      const { readFileSync } = await import('node:fs');
+      const { join, dirname } = await import('node:path');
+      const { fileURLToPath } = await import('node:url');
+      const sqlPath = join(
+        dirname(fileURLToPath(import.meta.url)),
+        '..',
+        '..',
+        '..',
+        '..',
+        '..',
+        '..',
+        'supabase',
+        'schema.sql',
+      );
+      const sql = readFileSync(sqlPath, 'utf8');
+      const tableMatch = sql.match(
+        /create table if not exists public\.schedules \(([\s\S]*?)\n\);/i,
+      );
+      expect(tableMatch).not.toBeNull();
+      const columnBlock = tableMatch?.[1] ?? '';
+      // Table-level constraints (e.g. `unique (user_id, persona_id),`) start
+      // with a keyword, not a column name — filter them so a future phantom
+      // key named like a SQL keyword can't false-pass.
+      const constraintKeywords = new Set([
+        'primary',
+        'unique',
+        'foreign',
+        'check',
+        'constraint',
+        'exclude',
+      ]);
+      const columns = new Set(
+        columnBlock
+          .split('\n')
+          .map((line) => line.trim().split(/\s+/)[0]?.replace(/["`,]/g, ''))
+          .filter(
+            (name) =>
+              name && !name.startsWith('--') && !constraintKeywords.has(name),
+          ),
+      );
+      // Sentinel: guards against a degraded parse passing vacuously.
+      expect(columns.has('scheduled_at')).toBe(true);
+
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+      const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
+      expect(scheduleRows).toHaveLength(1);
+      for (const key of Object.keys(scheduleRows[0])) {
+        expect(columns.has(key)).toBe(true);
+      }
     });
 
     it('distributes 10 topics across days preserving order', async () => {
