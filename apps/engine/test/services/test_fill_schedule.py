@@ -314,6 +314,11 @@ class ReconcileTests(unittest.TestCase):
         # Engine task errors can echo bearer tokens/DSNs (AGENTS.md PR #17);
         # the slot error column reaches clients via /api/schedule/status,
         # so it is scrubbed before truncating, like the telemetry reason.
+        # The probe is longer than the 500-char cap: with a shorter message
+        # [:500] is a no-op and a truncate-first revert would stay green.
+        from app.services import analytics as analytics_module
+        from app.services.fill_schedule import reconcile as rec_module
+
         slot = {
             "id": "slot-1",
             "task_id": "t-1",
@@ -327,15 +332,23 @@ class ReconcileTests(unittest.TestCase):
         store = _FakeStore()
         store.generating_slots = lambda: [slot]
         state = MagicMock()
+        task_error = "E" * 450 + " api_key=TOPSECRET123" + "F" * 200
         state.get_task.return_value = {
             "state": -1,
-            "error": "gpu exploded: api_key=TOPSECRET123",
+            "error": task_error,
         }
         scheduler = fs.FillScheduleScheduler(
             store=store, task_state=state,
             publish_video=MagicMock(),
         )
-        self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
+        with patch.object(
+            rec_module,
+            "scrub_secret_values",
+            wraps=analytics_module.scrub_secret_values,
+        ) as scrub:
+            self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
+        # The scrubber saw the whole message, not the 500-char slice.
+        scrub.assert_called_once_with(task_error)
         error = store.updates[0][1]["error"]
         self.assertIn("[redacted]", error)
         self.assertNotIn("TOPSECRET123", error)

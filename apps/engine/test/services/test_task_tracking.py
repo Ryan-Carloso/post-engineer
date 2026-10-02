@@ -663,6 +663,7 @@ class BatchFailedTests(unittest.TestCase):
         # spreads the row into the response), so it gets the same
         # scrub-then-truncate treatment as the telemetry reason — a raw
         # str(exc) here would leak bearer tokens/DSNs to clients.
+        from app.services import analytics as analytics_module
         from app.services.fill_schedule import generate as gen_module
 
         store = MagicMock()
@@ -670,12 +671,25 @@ class BatchFailedTests(unittest.TestCase):
         generator = gen_module.BatchGenerator(
             store=store, task_state=MagicMock(), notify=MagicMock()
         )
-        boom = RuntimeError("dispatch exploded: api_key=TOPSECRET123")
+        boom = RuntimeError("E" * 450 + " api_key=TOPSECRET123" + "F" * 200)
         with (
             patch.object(generator, "_dispatch_generation", side_effect=boom),
             patch.object(gen_module, "track_event"),
+            patch.object(
+                gen_module,
+                "scrub_secret_values",
+                wraps=analytics_module.scrub_secret_values,
+            ) as scrub,
         ):
             self.assertIsNone(generator._generate_slot(self._slot()))
+        # The stored-error site truncates at 500: only a longer probe pins
+        # the scrub-then-truncate order — with a shorter message [:500] is
+        # a no-op and a truncate-first revert would stay green. Both the
+        # stored-error site and the telemetry-reason site must scrub the
+        # whole message, truncating only after.
+        self.assertTrue(scrub.call_args_list)
+        for c in scrub.call_args_list:
+            self.assertEqual(c, call(str(boom)))
         _, fields = store.update_slot.call_args
         self.assertIn("[redacted]", fields["error"])
         self.assertNotIn("TOPSECRET123", fields["error"])
