@@ -1585,6 +1585,18 @@ Follow these so the same issues don't come back:
   thenable degenerates the cascade silently; give generic mocks the same
   shape as the real builder.
 
+## Web/API review learnings, PR #41 round 16 (2026-10-02)
+- **Verify race claims against the actual predicates.** The "multi-statement
+  race" MAJOR overstated: schedules/generations deletes use persona_id
+  (catching late rows); only slots use the select snapshot, and that race
+  is documented. Check the WHERE clause before accepting the claim.
+- **Validate every segment of a pre-formed URL.** First-segment checks
+  leave later segments unencoded; test all of them.
+- **Gate global listeners on open state.** A mounted-but-closed modal
+  should not run key handlers on every page keypress.
+- **Parallelize independent counts.** Three serial head+count queries
+  become one Promise.all.
+
 ## Engine review learnings (2026-10-02, PR #43)
 - **A test comment claiming a behavior must pin it with an assertion.** The
   reconcile test's comment said "the refund is skipped" but asserted only
