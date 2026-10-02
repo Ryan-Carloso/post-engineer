@@ -51,11 +51,11 @@ describe('Home dashboard public seam', () => {
     expect(screen.queryByText('fillSchedule.daysLabel')).not.toBeInTheDocument();
   });
 
-  it('renders the waiting fallback when the schedule window is null', () => {
+  it('renders the per-video-times fallback when the schedule window is null', () => {
     apiState.schedules = [{ id: 's1', personaId: 'p1', youtubeAccountIds: [], instagramAccountIds: [], linkedinAccountIds: [], daysOfWeek: [1], startHour: null, endHour: null, postsPerDay: 1, active: true }];
     render(<Home />);
     expect(screen.getByRole('heading', { name: 'Tech Explorer' })).toBeVisible();
-    expect(screen.getByText(/◷ home\.waitingForSchedule/)).toBeInTheDocument();
+    expect(screen.getByText(/◷ home\.perVideoTimes/)).toBeInTheDocument();
     expect(screen.queryByText(/null:00/)).not.toBeInTheDocument();
   });
 
@@ -71,9 +71,9 @@ describe('Home dashboard public seam', () => {
     apiState.schedules = [{ id: 's1', personaId: 'p1', youtubeAccountIds: [], instagramAccountIds: [], linkedinAccountIds: [], daysOfWeek: [], startHour: null, endHour: null, postsPerDay: 1, active: true }];
     render(<Home />);
     expect(screen.getByRole('heading', { name: 'Tech Explorer' })).toBeVisible();
-    // Days cell gets the neutral copy; window cell keeps the waiting copy.
+    // Days cell gets the neutral copy; window cell gets the per-video-times copy.
     expect(screen.getByText(/▣ home\.customDays/)).toBeInTheDocument();
-    expect(screen.getByText(/◷ home\.waitingForSchedule/)).toBeInTheDocument();
+    expect(screen.getByText(/◷ home\.perVideoTimes/)).toBeInTheDocument();
     expect(screen.queryByText(/null:00/)).not.toBeInTheDocument();
   });
 

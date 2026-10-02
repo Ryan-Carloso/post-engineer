@@ -158,7 +158,7 @@ const AutomationGrid = () => {
                 <span>▣ {days}</span>
                 <span>◷ {schedule.startHour !== null && schedule.endHour !== null
                   ? `${String(schedule.startHour).padStart(2, '0')}:00 - ${String(schedule.endHour).padStart(2, '0')}:00`
-                  : t('home.waitingForSchedule')}</span>
+                  : t('home.perVideoTimes')}</span>
                 <span>▤ {schedule.postsPerDay} {t('home.postsPerDay')}</span>
               </div>
 

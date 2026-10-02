@@ -176,6 +176,7 @@ export const enDictionary: Dictionary = {
     postsPerDay: 'post/day',
     nextPost: 'Next post',
     waitingForSchedule: 'Preparing the next publishing times',
+    perVideoTimes: 'Per-video times',
     deleteConfirm: 'Delete this autopilot?',
     createAnother: 'Create another autopilot',
     createAnotherHint: 'Choose a persona and connect your accounts.',

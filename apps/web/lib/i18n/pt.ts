@@ -176,6 +176,7 @@ export const ptDictionary = {
     postsPerDay: 'post/dia',
     nextPost: 'Próximo post',
     waitingForSchedule: 'Preparando os próximos horários',
+    perVideoTimes: 'Horários por vídeo',
     deleteConfirm: 'Excluir este autopiloto?',
     createAnother: 'Criar outro autopiloto',
     createAnotherHint: 'Escolha uma persona e conecte suas contas.',
