@@ -713,12 +713,14 @@ export async function DELETE(request: Request): Promise<NextResponse> {
   }
   completedSteps.push('personas');
 
-  if (paths.length > 0) {
-    const { error: storageError } = await supabase.storage.from(IMAGE_BUCKET).remove(paths);
-    if (storageError) {
-      logger.error('[api/persona] storage cleanup failed after delete', storageError, { paths });
-    }
-  }
+  // Row first, storage second: if the row delete fails, nothing is lost; if
+  // the storage remove fails afterwards, the persona is already gone and the
+  // orphaned files are cleanable — never destroy data still referenced by a
+  // surviving row. Cleanup runs after() the response: the DB delete is
+  // committed, and a hung Supabase storage call must not turn a successful
+  // delete into a client-side timeout.
+  const imagePaths = paths.length > 0 ? [...paths] : null;
+  const engineTaskIdsForCleanup = engineTaskIds.length > 0 ? [...engineTaskIds] : null;
 
   // Engine task directories would orphan on the engine host now that their
   // generation rows are gone. This runs after() the response is sent: the
@@ -730,14 +732,27 @@ export async function DELETE(request: Request): Promise<NextResponse> {
   // loop would orphan the tail silently when the function is cut off.
   // Skipped ids are logged loudly, never dropped quietly.
   const engineBaseUrl = process.env.MONEYPRINT_API_URL;
-  if (engineBaseUrl && engineTaskIds.length > 0) {
-    const taskIds = [...engineTaskIds];
-    const userId = user.id;
-    after(() => {
-      void (async () => {
-        const start = Date.now();
-        const skipped: string[] = [];
-        for (const taskId of taskIds) {
+  if (!engineBaseUrl && engineTaskIds.length > 0) {
+    logger.warn('[api/persona] MONEYPRINT_API_URL is not set; engine task dirs will orphan');
+  }
+  after(() => {
+    void (async () => {
+      // Storage cleanup first (persona images), then engine task dirs —
+      // both best-effort, both after the committed delete.
+      if (imagePaths) {
+        const { error: storageError } = await supabase.storage.from(IMAGE_BUCKET).remove(imagePaths);
+        if (storageError) {
+          logger.error('[api/persona] storage cleanup failed after delete', storageError, {
+            paths: imagePaths,
+          });
+        }
+      }
+      if (!engineBaseUrl || !engineTaskIdsForCleanup) return;
+      const taskIds = engineTaskIdsForCleanup;
+      const userId = user.id;
+      const start = Date.now();
+      const skipped: string[] = [];
+      for (const taskId of taskIds) {
           if (Date.now() - start >= ENGINE_CLEANUP_BUDGET_MS) {
             skipped.push(taskId);
             continue;
@@ -773,7 +788,6 @@ export async function DELETE(request: Request): Promise<NextResponse> {
         }
       })();
     });
-  }
 
   trackApiEvent('persona_deleted', {
     userId: user.id,

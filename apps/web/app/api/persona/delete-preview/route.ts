@@ -78,15 +78,29 @@ async function resolveDownloadUrl(
       { headers: engineAuthHeaders(userId), cache: 'no-store', signal: controller.signal },
     );
     if (!response.ok) {
-      const transient = response.status !== 404;
-      logger.warn('[api/persona/delete-preview] engine task lookup failed', {
+      // 404: task pruned, truly gone. 401/403: auth misconfig — retry
+      // cannot fix it. 5xx/429: transient.
+      const transient = response.status >= 500 || response.status === 429;
+      const logFn = response.status === 401 || response.status === 403 ? logger.error : logger.warn;
+      logFn('[api/persona/delete-preview] engine task lookup failed', {
         engineTaskId,
         status: response.status,
         transient,
       });
       return { url: null, transientFailure: transient };
     }
-    const body: unknown = await response.json().catch(() => null);
+    const body: unknown = await response.json().catch((error: unknown) => {
+      // A 200 with a garbled body is almost certainly transient — never
+      // present it as unrecoverable.
+      logger.warn('[api/persona/delete-preview] engine task response unparseable', {
+        engineTaskId,
+        error,
+      });
+      return undefined;
+    });
+    if (body === undefined) {
+      return { url: null, transientFailure: true };
+    }
     return { url: firstDownloadUrl(rewriteVideoUrls(body, engineTaskId, baseUrl)), transientFailure: false };
   } catch (error) {
     logger.warn('[api/persona/delete-preview] engine task lookup failed', { engineTaskId, error });
@@ -217,6 +231,9 @@ export async function GET(request: Request): Promise<NextResponse> {
   // slow engine cannot fan out into dozens of concurrent lookups. The list
   // query is already limited to PREVIEW_VIDEO_CAP rows.
   const baseUrl = process.env.MONEYPRINT_API_URL;
+  if (!baseUrl) {
+    logger.warn('[api/persona/delete-preview] MONEYPRINT_API_URL is not set; download links unavailable');
+  }
   const lookupStart = Date.now();
   let linksIncomplete = false;
   const videos: Array<{

@@ -34,8 +34,13 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
   const [attempt, setAttempt] = useState(0);
   const loadedPersonaId = useRef<string | null>(null);
 
+  // Depend on the id, not the object: a background list refetch replaces
+  // `persona` with a new object, which must not reset the dialog
+  // mid-confirmation.
+  const personaId = persona?.id ?? null;
+
   useEffect(() => {
-    if (!persona) {
+    if (!personaId) {
       // The modal stays mounted while closed (persona flips to null); clear
       // the ref so reopening always re-arms the type-to-confirm gate.
       loadedPersonaId.current = null;
@@ -43,15 +48,15 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
     }
     // A new persona resets everything; a retry (attempt bump, e.g. from the
     // links-incomplete note) keeps the typed confirmation name.
-    const isNewPersona = loadedPersonaId.current !== persona.id;
-    loadedPersonaId.current = persona.id;
+    const isNewPersona = loadedPersonaId.current !== personaId;
+    loadedPersonaId.current = personaId;
     setPhase('loading');
     setPreview(null);
     if (isNewPersona) setTypedName('');
     let cancelled = false;
     // Rejections (network failure, non-JSON body) surface as loadError —
     // the dialog must never wedge in 'loading' with no retry.
-    void fetchDeletePreview(persona.id)
+    void fetchDeletePreview(personaId)
       .then((result) => {
         if (cancelled) return;
         if (result.success) {
@@ -67,7 +72,7 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
     return () => {
       cancelled = true;
     };
-  }, [persona, attempt]);
+  }, [personaId, attempt]);
 
   if (!persona) return null;
 

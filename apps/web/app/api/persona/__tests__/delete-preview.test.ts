@@ -370,6 +370,35 @@ describe('GET /api/persona/delete-preview', () => {
     );
   });
 
+  it('flags unparseable engine bodies as transient and logs them', async () => {
+    getClient();
+    // Engine 200 with a garbled body: almost certainly transient.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => {
+          throw new Error('unexpected token');
+        },
+      })),
+    );
+    const res = await GET(
+      new Request(`http://localhost/api/persona/delete-preview?personaId=${PERSONA_ID}`),
+    );
+    const body = (await res.json()) as {
+      videos: Array<{ downloadUrl: string | null }>;
+      linksIncomplete: boolean;
+    };
+    expect(res.status).toBe(200);
+    expect(body.videos[0]?.downloadUrl).toBeNull();
+    expect(body.linksIncomplete).toBe(true);
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[api/persona/delete-preview] engine task response unparseable',
+      expect.objectContaining({ engineTaskId: 'task-aaa' }),
+    );
+  });
+
   it('does not flag 404 engine responses as incomplete', async () => {
     getClient();
     // Engine 404: task pruned — truly gone, not transient.
