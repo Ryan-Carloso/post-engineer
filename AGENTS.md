@@ -1480,6 +1480,15 @@ Follow these so the same issues don't come back:
   now have both non-ok and non-JSON tests — the catch branch is the last
   defense against proxy HTML bodies.
 
+## Web/API review learnings, PR #41 round 7 (2026-10-02)
+- **Scope the count query, not just the delete.** The preview's slot count
+  used schedule ids from a user-scoped select but skipped its own
+  `.eq('user_id')` — transitively safe today, a silent widening tomorrow.
+  A cross-user fixture row pins it for free.
+- **Justifications must survive the prepaid case.** "Work already
+  happened" was false for batch-prepaid, never-generated slots. State the
+  forfeiture honestly in both the code comment and the user-facing copy.
+
 ## Engine review learnings (2026-10-02, PR #43)
 - **A test comment claiming a behavior must pin it with an assertion.** The
   reconcile test's comment said "the refund is skipped" but asserted only
