@@ -95,7 +95,7 @@ class UploadPostService:
             # The error dict is persisted into client-visible task state
             # (cross_post_results): scrub before storing, like every other
             # free-text error surface.
-            return {"success": False, "error": scrub_secret_values(str(e))}
+            return {"success": False, "error": scrub_secret_values(str(e))[:500]}
 
     def check_status(self, request_id: str) -> dict:
         """
@@ -127,7 +127,7 @@ class UploadPostService:
             # The error dict is persisted into client-visible task state
             # (cross_post_results): scrub before storing, like every other
             # free-text error surface.
-            return {"success": False, "error": scrub_secret_values(str(e))}
+            return {"success": False, "error": scrub_secret_values(str(e))[:500]}
 
 
 # Singleton instance

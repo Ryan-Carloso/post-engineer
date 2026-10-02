@@ -148,6 +148,7 @@ class TestUploadPostErrorScrubbing(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertIn("[redacted]", result["error"])
         self.assertNotIn("TOPSECRET123", result["error"])
+        self.assertLessEqual(len(result["error"]), 500)
 
     @patch("app.services.upload_post.config.app", _CONFIG_BASE)
     @patch("app.services.upload_post.requests.get")
@@ -162,6 +163,7 @@ class TestUploadPostErrorScrubbing(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertIn("[redacted]", result["error"])
         self.assertNotIn("TOPSECRET123", result["error"])
+        self.assertLessEqual(len(result["error"]), 500)
 
 
     # The ERROR log lines sit one line above the scrubbed dicts: they go to
