@@ -118,7 +118,7 @@ describe('McpDocsSection', () => {
     expect(prompt).toContain('post-engineer');
     expect(prompt).toContain('POST_ENGINEER_API_KEY');
     expect(prompt).toContain('generate_persona_videos');
-    expect(prompt).toContain('"command": ["npx", "-y", "post-engineer-mcp"]');
+    expect(prompt).toContain('"command": ["npx", "-y", "post-engineer-mcp@latest"]');
     expect(prompt).toContain('list_personas');
     expect(prompt).toContain('list_voices');
     expect(prompt).toContain('list_faces');
@@ -192,6 +192,16 @@ describe('McpDocsSection', () => {
         .find((line) => line.startsWith('5. '));
       expect(step5Line, `${locale} prompt step 5`).toBeDefined();
       expect(step5Line, `${locale} prompt step 5`).toContain('3h');
+      // The npx install command must pin @latest in both locales: npx
+      // reuses its cached copy without checking for updates, so an
+      // unpinned command silently serves a stale server version.
+      const commandLine = prompts[locale]
+        .split('\n')
+        .find((line) => line.includes('"command":') && line.includes('npx'));
+      expect(commandLine, `${locale} prompt npx command`).toBeDefined();
+      expect(commandLine, `${locale} prompt npx command`).toContain(
+        'post-engineer-mcp@latest',
+      );
     }
   });
 });

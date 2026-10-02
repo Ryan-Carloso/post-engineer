@@ -182,7 +182,7 @@ hosted platform:
   "mcpServers": {
     "post-engineer": {
       "type": "local",
-      "command": ["npx", "-y", "post-engineer-mcp"],
+      "command": ["npx", "-y", "post-engineer-mcp@latest"],
       "environment": {
         "POST_ENGINEER_API_KEY": "<MY_API_KEY>"
       }
@@ -192,7 +192,9 @@ hosted platform:
 ```
 
 Generate `<MY_API_KEY>` at
-[post-engineer.com/api-keys](https://post-engineer.com/api-keys). To point the
+[post-engineer.com/api-keys](https://post-engineer.com/api-keys). The
+`@latest` tag matters: `npx` reuses its cached copy without checking for
+updates. To point the
 server at your own self-hosted instance instead, set
 `POST_ENGINEER_API_URL` (see [apps/mcp/README.md](apps/mcp/README.md) for the
 full tool list, OpenCode timeout tips, and local development).
