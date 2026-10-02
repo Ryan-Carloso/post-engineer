@@ -65,6 +65,7 @@ export const ptDictionary = {
     errorEngineRejected: 'O serviço de vídeo recusou o trabalho. Tente novamente.',
     errorNoTaskId: 'O serviço de vídeo não retornou uma tarefa. Tente novamente.',
     errorInvalidTaskResponse: 'O serviço de vídeo retornou uma resposta inesperada. Tente novamente.',
+    errorEngineRestart: 'O motor reiniciou durante a geração do vídeo. Tente novamente.',
     errorUnknown: 'O vídeo não pôde ser gerado. Tente novamente.',
   },
 

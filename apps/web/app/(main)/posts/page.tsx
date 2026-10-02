@@ -14,6 +14,7 @@ import {
   type ScheduleConfig,
   type VideoGeneration,
 } from '@/lib/api';
+import { GENERATION_ERROR_KEY } from '@/lib/generation/generation-errors';
 import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
 import { SpinnerIcon } from '@/lib/ui';
@@ -84,15 +85,6 @@ const GENERATION_STATUS_KEY: Record<string, TranslationKey> = {
   running: 'posts.statusRunning',
   completed: 'posts.statusCompleted',
   failed: 'posts.statusFailed',
-};
-
-const GENERATION_ERROR_KEY: Record<string, TranslationKey> = {
-  custom_audio_invalid: 'posts.errorCustomAudio',
-  engine_unavailable: 'posts.errorEngineUnavailable',
-  engine_rejected: 'posts.errorEngineRejected',
-  no_task_id: 'posts.errorNoTaskId',
-  invalid_task_response: 'posts.errorInvalidTaskResponse',
-  unknown: 'posts.errorUnknown',
 };
 
 const GenerationCard = ({
