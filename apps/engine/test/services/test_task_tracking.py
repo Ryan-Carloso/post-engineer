@@ -701,7 +701,8 @@ class BatchFailedTests(unittest.TestCase):
         # (dispatch fails -> update_slot(generating) lost -> slot stays
         # pending -> same uuid5 id dispatched again). The failure event
         # must not double-count: the second notice for the same task id
-        # is suppressed by the same bounded guard _fail_task uses.
+        # is suppressed by the dedicated dispatch-failure guard (separate
+        # from the pipeline terminal guard _fail_task uses).
         from app.services.fill_schedule import generate as gen_module
 
         store = MagicMock()
@@ -751,10 +752,11 @@ class BatchFailedTests(unittest.TestCase):
             patch.object(generator, "_dispatch_generation", side_effect=[boom, None]),
         ):
             # Tick 1: transient dispatch failure -> failed event emitted,
-            # guard records the id.
+            # dispatch guard records the id.
             self.assertIsNone(generator._generate_slot(slot))
-            # Tick 2: re-dispatch succeeds -> slot marked generating, the
-            # guard entry is released.
+            # Tick 2: re-dispatch succeeds -> slot marked generating. The
+            # dispatch guard is separate from the pipeline terminal guard,
+            # so no release is needed for the next step to emit.
             self.assertIsNotNone(generator._generate_slot(slot))
             # Tick 3: the re-dispatched task genuinely fails in the pipeline.
             tm._fail_task(task_id, "gpu exploded", _params(), stage="render")
