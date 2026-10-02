@@ -138,8 +138,11 @@ class BatchGenerator:
             return f"{persona.get('name', 'Persona')}: {topic}"
         except Exception as exc:
             # A failed slot is a real recurring error: log at ERROR so the
-            # Bugsink bridge (loguru sink, ERROR+) forwards it.
-            logger.error(f"fill_schedule: slot {slot['id']} generation failed: {exc}")
+            # PostHog bridge (loguru sink, ERROR+) forwards it, scrubbed.
+            logger.error(
+                f"fill_schedule: slot {slot['id']} generation failed: "
+                f"{scrub_secret_values(str(exc))}"
+            )
             # The error column is client-visible (/api/schedule/status spreads
             # the row into the response): scrub the full message before
             # truncating, like the telemetry reason below — a raw str(exc)
