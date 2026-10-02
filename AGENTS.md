@@ -1413,3 +1413,14 @@ Follow these so the same issues don't come back:
   surviving consumer must define what NULL means (fallback UI here) and
   a test must pin it — the deleted test was the only pin on the null
   shape, so its replacement belongs in the same PR.
+
+## Web/API review learnings, PR #44 round 3 (2026-10-02)
+- **The production-norm fixture is the one that must be tested.** The
+  unified endpoint stores `days_of_week: null` → `daysOfWeek: []`, so the
+  empty-days render is what every real card hits — test fixtures must
+  include the production shape, not just the tidy non-empty one.
+- **Deleting the last branch that handled a null shape promotes the null
+  to the default path.** When the dead branch goes, every nullable field
+  it guarded needs the same fallback+test treatment as its siblings got —
+  audit all consumers of the removed discriminator, not just the obvious
+  one.
