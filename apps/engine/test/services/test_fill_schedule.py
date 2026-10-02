@@ -701,7 +701,7 @@ class CoverageGapTests(unittest.TestCase):
         self.assertEqual(params["photo_url"], "https://signed/u/f.png")
         self.assertEqual(params["voice_audio_url"], "https://signed/u/v.mp3")
 
-    # -- publish_due sem env configurada --------------------------------------
+    # -- publish_due without env configured -------------------------------------
     def test_publish_due_skips_without_base_url(self):
         scheduler = self._scheduler(_FakeStore())
         scheduler.publisher.base_url = ""
@@ -732,7 +732,7 @@ class CoverageGapTests(unittest.TestCase):
         self.assertEqual(store.updates[0][1]["status"], "failed")
         self.assertIn("no finished videos", store.updates[0][1]["error"])
 
-    # -- reconcile com task inexistente ---------------------------------------
+    # -- reconcile with missing task ------------------------------------------
     def test_reconcile_skips_unknown_task(self):
         store = _FakeStore()
         store.generating_slots = lambda: [
@@ -788,7 +788,7 @@ class CoverageGapTests(unittest.TestCase):
             fs.metadata_for("tiktok", "topic", {})
         self.assertIn("unsupported schedule provider", str(ctx.exception))
 
-    # -- _validate_publish_plan com bluesky+linkedin (caminho completo) --------
+    # -- _validate_publish_plan with bluesky+linkedin (full path) ----------------
     def test_validate_publish_plan_accepts_all_providers(self):
         schedule = {
             "providers": ["youtube", "instagram", "bluesky", "linkedin"],
@@ -821,7 +821,7 @@ class CoverageGapTests(unittest.TestCase):
         thread = fs.start_fill_schedule_thread(_SpyScheduler())
         self.assertIsInstance(thread, threading.Thread)
         self.assertTrue(thread.daemon)
-        time_module.sleep(0.15)  # TICK_SECONDS=60 real; thread roda 1x imediatamente
+        time_module.sleep(0.15)  # TICK_SECONDS=60 real; thread runs 1x immediately
         self.assertGreaterEqual(len(ticks), 1)
 
 
@@ -839,7 +839,7 @@ class CoverageGapTests(unittest.TestCase):
 
         published = scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
         self.assertEqual(published, 1)
-        # claim acontece ANTES do primeiro publish_video
+        # claim happens BEFORE the first publish_video
         store.claim_ready_slot.assert_called_once_with("slot-1")
         self.assertLess(
             store.claim_ready_slot.call_args.call_index or 0,
@@ -938,7 +938,7 @@ class CoverageGapTests(unittest.TestCase):
             task_id, fs.new_task_id({"id": "slot-1"})
         )
 
-    # -- horizonte validado (M1) ------------------------------------------------
+    # -- horizon validated (M1) --------------------------------------------------
     def test_invalid_horizon_falls_back_to_default(self):
         from app.config import config as app_config
 

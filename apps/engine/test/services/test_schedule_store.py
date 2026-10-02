@@ -85,7 +85,7 @@ class StoreRequestsTests(unittest.TestCase):
             self.assertIn(field, select)
 
     def test_ready_due_slots_embeds_personas_for_notification(self):
-        # A mensagem Discord de publish precisa do nome da persona.
+        # The Discord publish message needs the persona name.
         self.store.ready_due_slots(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
         _, _, kwargs = self._last_call()
         self.assertIn("personas(", kwargs["params"]["select"])
@@ -228,7 +228,7 @@ class GenerationHorizonTests(unittest.TestCase):
                 app_config.app["fill_schedule_generation_horizon_hours"] = original
         kwargs = self._pair(store)[1]
         slot_at = kwargs["params"]["slot_at"]
-        # 12:00 + 1h de horizonte → limite 13:00 do mesmo dia
+        # 12:00 + 1h horizon -> 13:00 cutoff on the same day
         self.assertEqual(slot_at, "lte.2026-09-06T13:00:00+00:00")
 
     @staticmethod
