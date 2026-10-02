@@ -220,9 +220,11 @@ def _task_tracking_context(task_id: str) -> dict[str, object]:
         task = {}
     return {
         "task_id": task_id,
-        "user_id": task.get("user_id", "unknown"),
-        "flow": task.get("flow", "unknown"),
-        "pipeline": task.get("pipeline", "unknown"),
+        # `or` (not a get-default): a row that stored an explicit None
+        # must degrade to the sentinel too, never a null prop in PostHog.
+        "user_id": task.get("user_id") or "unknown",
+        "flow": task.get("flow") or "unknown",
+        "pipeline": task.get("pipeline") or "unknown",
     }
 
 

@@ -83,6 +83,21 @@ class RequestedTests(unittest.TestCase):
         self.assertEqual(context["flow"], "unknown")
         self.assertEqual(context["pipeline"], "unknown")
 
+    def test_tracking_context_maps_explicit_none_to_unknown_sentinels(self):
+        # dict.get's default only fires on a MISSING key — a row that
+        # stored an explicit None would otherwise slip a null prop into
+        # PostHog, breaking the "degraded identity props use the unknown
+        # sentinel" invariant.
+        with patch.object(
+            tm.sm.state,
+            "get_task",
+            return_value={"user_id": None, "flow": None, "pipeline": None},
+        ):
+            context = tm._task_tracking_context("none-task-1")
+        self.assertEqual(context["user_id"], "unknown")
+        self.assertEqual(context["flow"], "unknown")
+        self.assertEqual(context["pipeline"], "unknown")
+
 
 class StartedTests(unittest.TestCase):
     def setUp(self):
