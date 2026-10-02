@@ -177,7 +177,11 @@ describe('McpDocsSection', () => {
     // Step 5 of the prompt carries the same window and is pinned too, plus
     // a prompt-wide guard so no 24h copy can slip back in anywhere.
     for (const locale of ['en', 'pt'] as const) {
-      expect(prompts[locale], `${locale} prompt`).not.toContain('24h');
+      // Scoped to the window phrase: a bare '24h' token would false-fail if
+      // clock-format copy like "times (HH:MM, 24h)" is ever added to the prompt.
+      expect(prompts[locale], `${locale} prompt`).not.toMatch(
+        /24h\s*[-–]\s*30d|between 24h and 30|de 24h a 30/,
+      );
       const videoLine = prompts[locale]
         .split('\n')
         .find((line) => line.includes('- generate_persona_videos:'));

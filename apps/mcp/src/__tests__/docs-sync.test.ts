@@ -43,3 +43,30 @@ describe('MCP tool docs sync', () => {
     });
   }
 });
+
+describe('MCP schedule window copy sync', () => {
+  // Every surface that tells agents the schedule window must advertise the
+  // same 3h minimum: a one-sided edit (or a bad conflict resolution) would
+  // silently teach agents the old rule while the server enforces the real
+  // one. Change all three surfaces together, or update this test.
+  const windowSurfaces = [
+    { label: 'apps/mcp/src/index.ts', rel: '../index.ts' },
+    { label: 'apps/mcp/src/tools.ts', rel: '../tools.ts' },
+    { label: 'apps/mcp/README.md', rel: '../../README.md' },
+  ].map(({ label, rel }) => ({
+    label,
+    content: readFileSync(join(here, rel), 'utf8'),
+  }));
+
+  for (const { label, content } of windowSurfaces) {
+    it(`advertises the 3h minimum schedule window in ${label}`, () => {
+      expect(content).toMatch(/3h[-–]30d/);
+    });
+
+    it(`does not advertise the old 24h schedule window in ${label}`, () => {
+      // Scoped to the window phrase: a bare '24h' is legitimate clock-format
+      // copy ("times (HH:MM, 24h)").
+      expect(content).not.toMatch(/24h\s*[-–]\s*30d/);
+    });
+  }
+});

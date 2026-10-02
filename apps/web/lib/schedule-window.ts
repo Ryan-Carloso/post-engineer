@@ -4,8 +4,9 @@
 //
 // Callers pass the CONVERTED instant (a Date): timezone-aware parsing
 // happens before this validator runs — see parseZonedDateTime in
-// lib/timezone.ts, used by POST /api/schedule so a naive wall clock in
-// the caller's timezone is not measured as if it were UTC.
+// lib/timezone.ts, used by POST /api/videos/generate-and-schedule (via
+// lib/schedule/slot-distribution.ts) and the schedule form so a naive wall
+// clock in the caller's timezone is not measured as if it were UTC.
 //---------------
 
 export const SCHEDULE_MIN_ADVANCE_HOURS = 3;
