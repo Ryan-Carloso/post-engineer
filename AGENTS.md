@@ -1503,6 +1503,22 @@ Follow these so the same issues don't come back:
   left `imagesDeleted` assigned-but-unused; the lint error is the
   reminder — delete the source variable too.
 
+## Web/API review learnings, PR #41 round 9 (2026-10-02)
+- **Effect deps key on identity, not the object.** A background refetch
+  replaces the persona object; depending on `persona` resets the dialog
+  mid-confirmation. Derive `personaId` and depend on that.
+- **HTTP status classes are not binary.** 404 = gone, 401/403 = config
+  error (log at error, never transient), 5xx/429 = transient. A 200 with
+  an unparseable body is transient too — never dead-end copy for a
+  garbled response.
+- **Missing env vars deserve a warn.** A config error that degrades the
+  UI silently is undiagnosable. One logger.warn per request when the var
+  is absent.
+- **Cleanup that must not block the response belongs in after().** The
+  storage remove was the same class as the engine fan-out (post-commit,
+  best-effort); keeping it inline reproduced the timeout failure mode the
+  after() change exists to prevent.
+
 ## Engine review learnings (2026-10-02, PR #43)
 - **A test comment claiming a behavior must pin it with an assertion.** The
   reconcile test's comment said "the refund is skipped" but asserted only
