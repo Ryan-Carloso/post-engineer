@@ -106,7 +106,13 @@ def _loguru_posthog_sink(message) -> None:
         extra = record.get("extra") or {}
         for key in _EXCEPTION_CONTEXT_EXTRAS:
             if isinstance(extra, dict) and extra.get(key) is not None:
-                properties[key] = scrub_secret_values(str(extra[key]))
+                value = extra[key]
+                # Typed ints (e.g. http_status_code) are not free text:
+                # forward them raw so PostHog numeric filters/breakdowns
+                # work; everything else goes through the scrubber.
+                properties[key] = (
+                    value if isinstance(value, int) else scrub_secret_values(str(value))
+                )
         if exception is not None:
             # loguru stores the exception as a (type, value, traceback) tuple
             exc_value = exception[1]

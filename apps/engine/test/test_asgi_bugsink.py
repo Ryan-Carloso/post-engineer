@@ -139,8 +139,26 @@ class PostHogSinkTests(unittest.TestCase):
             )
         _, properties = track_event.call_args[0]
         assert properties["task_id"] == "task-1"
-        assert properties["http_status_code"] == "404"
+        assert properties["http_status_code"] == 404
         assert properties["$exception_list"][0]["type"] == "HttpException"
+
+    def test_stacktrace_frames_capped(self):
+        # The _MAX_STACKTRACE_FRAMES cap keeps deep tracebacks (e.g.
+        # RecursionError) from blowing up the event payload — pin it.
+        def recurse(depth: int) -> None:
+            if depth <= 0:
+                raise ValueError("deep")
+            recurse(depth - 1)
+
+        try:
+            recurse(200)
+        except ValueError:
+            exc_info = sys.exc_info()
+        with patch("app.asgi.track_event") as track_event:
+            asgi._loguru_posthog_sink(_message(exception=exc_info))
+        _, properties = track_event.call_args[0]
+        frames = properties["$exception_list"][0]["stacktrace"]["frames"]
+        assert len(frames) == asgi._MAX_STACKTRACE_FRAMES
 
     def test_unlisted_extras_are_not_forwarded(self):
         with patch("app.asgi.track_event") as track_event:
