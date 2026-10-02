@@ -59,7 +59,13 @@ describe('oauth tokens', () => {
       scope: 'mcp:tools',
       resource: RESOURCE,
     });
-    const tampered = `${token.slice(0, -2)}aa`;
+    // Flip a fully-significant base64url char of the signature. The last
+    // signature char carries only 2 data bits (the rest is padding), so
+    // replacing the tail (e.g. slice(0, -2) + "aa") is a byte-level no-op
+    // ~1/256 of the time and the "tampered" token still verifies (flaky).
+    const [header, payload, signature] = token.split('.');
+    const flipped = signature[0] === 'a' ? 'b' : 'a';
+    const tampered = `${header}.${payload}.${flipped}${signature.slice(1)}`;
     await expect(verifyAccessToken(keys, tampered, { resource: RESOURCE })).rejects.toThrow();
     await expect(verifyAccessToken(other, token, { resource: RESOURCE })).rejects.toThrow();
   });

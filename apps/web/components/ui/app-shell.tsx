@@ -8,9 +8,10 @@ import { useI18n } from '@/lib/i18n/provider';
 import { LOCALES } from '@/lib/i18n';
 import { TokenBalance } from '@/app/(main)/token-balance';
 import { InsufficientTokensDialog } from '@/components/ui/insufficient-tokens-dialog';
+import VersionBadge from '@/components/ui/version-badge';
+import AppLogo from '@/components/ui/app-logo';
 import {
   AccountsIcon,
-  BoltIcon,
   CoinsIcon,
   HistoryIcon,
   SparklesIcon,
@@ -71,11 +72,14 @@ const MainSidebar = () => {
         aria-label={t('nav.brand')}
         className="group flex items-center gap-3 px-5 pt-8 pb-6 text-left transition-colors hover:bg-[#fff8f7] lg:gap-4 lg:px-10 lg:pt-10 lg:pb-8"
       >
-        <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-[#ff544c] text-white shadow-[0_10px_24px_rgba(255,84,76,0.18)] transition-transform group-hover:rotate-3 lg:size-[68px] lg:rounded-[27px] [&>svg]:size-6 lg:[&>svg]:size-9">
-          <BoltIcon />
+        <span className="shrink-0 transition-transform group-hover:rotate-3">
+          <AppLogo size={48} className="shadow-[0_10px_24px_rgba(20,32,51,0.18)] lg:size-[68px]" />
         </span>
         <div className="hidden min-w-0 md:block">
-          <p className="text-[19px] leading-tight font-bold tracking-[-0.03em] text-[#101728]">{t('nav.brand')}</p>
+          <p className="text-[19px] leading-tight font-bold tracking-[-0.03em] text-[#101728]">
+            {t('nav.brand')}
+            <VersionBadge />
+          </p>
           <p className="text-[15px] leading-snug text-[#718096] lg:text-[16px]">{t('nav.brandSubtitle')}</p>
         </div>
       </div>
@@ -128,7 +132,7 @@ const MobileHeader = () => {
   return (
     <header className="flex items-center border-b border-[#d8e4ec] bg-white/90 px-5 py-4 shadow-[0_2px_12px_rgba(13,43,69,0.04)] backdrop-blur md:hidden">
       <div className="flex min-w-0 items-center gap-2.5">
-        <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-[#ff5a4e] text-white [&>svg]:size-4"><BoltIcon /></span>
+        <AppLogo size={28} className="rounded-lg" />
         <span className="truncate text-sm font-bold text-[#0d2b45]">{t('nav.brand')}</span>
       </div>
     </header>
