@@ -43,6 +43,29 @@ class PostHogSinkTests(unittest.TestCase):
         exc_list = properties["$exception_list"]
         assert isinstance(exc_list, list) and len(exc_list) == 1
         assert exc_list[0]["value"] == "boom"
+        assert exc_list[0]["type"] == "Error"
+
+    def test_task_id_only_record_stays_error(self):
+        # A record that binds task_id without http_status_code (e.g.
+        # task.py's task_id/stage/error_type context) is not an
+        # HttpException: the classification must stay "Error".
+        with patch("app.asgi.track_event") as track_event:
+            asgi._loguru_posthog_sink(_message(extra={"task_id": "task-1"}))
+        _, properties = track_event.call_args[0]
+        assert properties["task_id"] == "task-1"
+        assert properties["$exception_list"][0]["type"] == "Error"
+
+    def test_none_status_code_not_classified_as_http_exception(self):
+        # The "is HttpException" gate must match the property-forwarding
+        # gate (not-None): a None http_status_code forwards no property,
+        # so it must not classify as HttpException either.
+        with patch("app.asgi.track_event") as track_event:
+            asgi._loguru_posthog_sink(
+                _message(extra={"task_id": "t", "http_status_code": None})
+            )
+        _, properties = track_event.call_args[0]
+        assert "http_status_code" not in properties
+        assert properties["$exception_list"][0]["type"] == "Error"
 
     def test_record_with_exception_forwards_exception_details(self):
         error = ValueError("kaput")

@@ -92,9 +92,12 @@ def _loguru_posthog_sink(message) -> None:
         else:
             # No live exception tuple (e.g. HttpException logs its own flat
             # message): synthesize the entry so the event still ingests.
-            # The http_status_code extra marks our HttpException path.
+            # The http_status_code extra marks our HttpException path — same
+            # not-None gate as the property forwarding above, so the
+            # classification can never drift from the forwarded signal.
             exc_type_name = (
-                "HttpException" if isinstance(extra, dict) and "http_status_code" in extra
+                "HttpException"
+                if isinstance(extra, dict) and extra.get("http_status_code") is not None
                 else "Error"
             )
             exc_message = str(properties["$exception_message"])
