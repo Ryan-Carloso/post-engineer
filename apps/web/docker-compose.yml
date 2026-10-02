@@ -1,0 +1,35 @@
+# Web (Next.js) on the VPS — replaced Vercel.
+#
+# Deployed by ../../../../deploy.sh (docker compose up -d --build when
+# apps/web changes). Sits behind the Caddy edge proxy (post-engineer.com).
+#
+# Secrets come from .env next to this file (never committed):
+#   NEXT_PUBLIC_* -> inlined at build time (image must be rebuilt on change)
+#   server-only   -> passed to the container at runtime via env_file
+
+services:
+  web:
+    image: post-engineer-web:latest
+    build:
+      # Monorepo root: pnpm workspace lockfile + VERSION live there.
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    container_name: post-engineer-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    env_file:
+      - .env
+    environment:
+      TZ: UTC
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/login"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
