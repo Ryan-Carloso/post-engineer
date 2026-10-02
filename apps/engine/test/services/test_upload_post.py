@@ -141,7 +141,7 @@ class TestUploadPostErrorScrubbing(unittest.TestCase):
         import requests
 
         mock_post.side_effect = requests.exceptions.RequestException(
-            "connection failed: api_key=TOPSECRET123"
+            "E" * 450 + " api_key=TOPSECRET123 " + "F" * 200
         )
         svc = UploadPostService()
         result = svc.upload_video("/fake/v.mp4", "Title")
@@ -156,7 +156,7 @@ class TestUploadPostErrorScrubbing(unittest.TestCase):
         import requests
 
         mock_get.side_effect = requests.exceptions.RequestException(
-            "timeout: api_key=TOPSECRET123"
+            "E" * 450 + " api_key=TOPSECRET123 " + "F" * 200
         )
         svc = UploadPostService()
         result = svc.check_status("req-1")
