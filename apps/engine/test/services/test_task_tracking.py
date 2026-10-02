@@ -199,6 +199,7 @@ class CompleteTaskTests(unittest.TestCase):
 class FailTaskTests(unittest.TestCase):
     def setUp(self):
         tm._progress_milestones.clear()
+        tm._failed_event_emitted_tasks.clear()
         self.task_id = "fail-task-1"
         sm.state.update_task(
             self.task_id, user_id="user-1", flow="direct", pipeline="video"
@@ -206,6 +207,7 @@ class FailTaskTests(unittest.TestCase):
 
     def tearDown(self):
         tm._progress_milestones.clear()
+        tm._failed_event_emitted_tasks.clear()
         sm.state.delete_task(self.task_id)
 
     def _fail(self):
@@ -265,6 +267,89 @@ class FailTaskTests(unittest.TestCase):
         self._fail()
         task = sm.state.get_task(self.task_id)
         self.assertEqual(task["state"], const.TASK_STATE_FAILED)
+
+
+class PublishFailureTests(unittest.TestCase):
+    """A publish-stage failure emits exactly one terminal funnel event.
+
+    The publish stage pre-writes FAILED before raising PublishFailedError;
+    the pipeline's generic handler then calls _fail_task, which must still
+    emit video_generation_failed on this FIRST notice (dedup is by notice,
+    not by state) and pop the milestone cache.
+    """
+
+    def setUp(self):
+        tm._progress_milestones.clear()
+        tm._failed_event_emitted_tasks.clear()
+        self.task_id = "publish-fail-1"
+        sm.state.update_task(
+            self.task_id, user_id="user-1", flow="direct", pipeline="video"
+        )
+        tm._progress_milestones[self.task_id] = 70
+
+    def tearDown(self):
+        tm._progress_milestones.clear()
+        tm._failed_event_emitted_tasks.clear()
+        sm.state.delete_task(self.task_id)
+
+    def test_publish_failure_emits_failed_event_once(self):
+        from app.services import notify as notify_module
+        from app.services import task_publish as publish_module
+
+        # Mirror task_publish: FAILED is pre-written, then the error raises
+        # into the pipeline's generic handler.
+        sm.state.update_task(
+            self.task_id,
+            state=const.TASK_STATE_FAILED,
+            error="publish failed for clip.mp4: HTTP 500",
+        )
+        exc = publish_module.PublishFailedError("publish failed for clip.mp4: HTTP 500")
+        with (
+            patch.object(tm, "track_event") as track,
+            patch.object(tm.task_webhook, "notify_terminal_task"),
+            patch.object(tm, "send_discord", return_value=True),
+        ):
+            # The generic handler's call: safe_reason(exc), stage="publish".
+            tm._fail_task(
+                self.task_id,
+                notify_module.safe_reason(exc),
+                _params(),
+                stage="publish",
+            )
+        track.assert_called_once()
+        name, props = track.call_args[0]
+        self.assertEqual(name, "video_generation_failed")
+        self.assertEqual(props["task_id"], self.task_id)
+        self.assertEqual(props["stage"], "publish")
+        self.assertIn("publish failed", props["reason"])
+        # The pre-written publish error survives (first failure wins).
+        task = sm.state.get_task(self.task_id)
+        self.assertIn("publish failed", task["error"])
+        # Terminal either way: the milestone entry is popped.
+        self.assertNotIn(self.task_id, tm._progress_milestones)
+
+    def test_second_notice_after_publish_failure_stays_deduped(self):
+        from app.services import notify as notify_module
+        from app.services import task_publish as publish_module
+
+        sm.state.update_task(
+            self.task_id,
+            state=const.TASK_STATE_FAILED,
+            error="publish failed for clip.mp4: HTTP 500",
+        )
+        exc = publish_module.PublishFailedError("publish failed for clip.mp4: HTTP 500")
+        with (
+            patch.object(tm, "track_event") as track,
+            patch.object(tm.task_webhook, "notify_terminal_task"),
+            patch.object(tm, "send_discord", return_value=True),
+        ):
+            tm._fail_task(
+                self.task_id, notify_module.safe_reason(exc), _params(), stage="publish"
+            )
+            tm._fail_task(
+                self.task_id, "generic follow-up notice", _params(), stage="publish"
+            )
+        track.assert_called_once()
 
 
 class CreateTaskControllerTests(unittest.TestCase):

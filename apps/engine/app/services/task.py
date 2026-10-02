@@ -70,6 +70,37 @@ _discord_notified_failed_tasks: deque[str] = deque(maxlen=MAX_FAILED_ALERTS)
 _discord_notified_failed_tasks_lock = Lock()
 
 
+#---------------
+# Terminal-event emission dedup: the FIRST _fail_task notice for a task
+# always emits video_generation_failed, even when the FAILED state was
+# pre-written by an earlier stage (the publish stage writes FAILED
+# directly before raising). Later notices stay deduped. Bounded like the
+# alert cache above: task ids are never reused, so eviction only drops
+# ids whose terminal event was long since emitted.
+#---------------
+MAX_FAILED_EVENT_IDS = 1000
+_failed_event_emitted_tasks: deque[str] = deque(maxlen=MAX_FAILED_EVENT_IDS)
+_failed_event_emitted_tasks_lock = Lock()
+
+
+def _should_emit_failed_event(task_id: str) -> bool:
+    """Atomically check-and-record ``task_id``; True only on first sight.
+
+    Falls back to emitting (True) if the lock can't be acquired in time —
+    a duplicate terminal event is less harmful than a missing one for the
+    requested-vs-failed funnel.
+    """
+    if not _failed_event_emitted_tasks_lock.acquire(timeout=_ALERT_LOCK_TIMEOUT_SECONDS):
+        return True
+    try:
+        if task_id in _failed_event_emitted_tasks:
+            return False
+        _failed_event_emitted_tasks.append(task_id)
+        return True
+    finally:
+        _failed_event_emitted_tasks_lock.release()
+
+
 def _should_send_failure_alert(task_id: str) -> bool:
     """Atomically check-and-record ``task_id``; True only on first sight.
 
@@ -277,7 +308,14 @@ def _fail_task(
         sm.state.update_task(task_id, state=const.TASK_STATE_FAILED, **kwargs)
     else:
         sm.state.update_task(task_id, state=const.TASK_STATE_FAILED, error=error, **kwargs)
-        _progress_milestones.pop(task_id, None)
+    # Terminal either way: drop the milestone cache on every failure
+    # notice, including repeats for an already-FAILED task (the publish
+    # stage pre-writes FAILED before raising into the generic handler).
+    _progress_milestones.pop(task_id, None)
+    # The first _fail_task notice always emits the terminal funnel event,
+    # even when the state was already FAILED — dedup is by notice, not by
+    # state, so publish-stage failures are not lost from the funnel.
+    if _should_emit_failed_event(task_id):
         context = _task_tracking_context(task_id)
         context["stage"] = failed_stage
         # Scrub the full message before truncating: a cut landing mid-key
@@ -1206,6 +1244,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             cleanup_task_intermediates(task_id, ())
             return
 
+        _mark("publish")
         task_publish.maybe_publish_finished_videos(
             task_id=task_id,
             params=params,
