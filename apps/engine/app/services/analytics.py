@@ -126,6 +126,17 @@ def _get_client() -> Any:
         return None
 
 
+def warm_client() -> None:
+    """Construct the PostHog client now (idempotent, never raises).
+
+    The first ``track_event`` in a process pays the ``posthog`` import plus
+    client construction. The ``on_accepted`` funnel callback runs under the
+    task-manager lock, so call this once at controller startup to keep the
+    lock hold short. With no API key it is a no-op (warn-once inside).
+    """
+    _get_client()
+
+
 def track_event(event_name: str, properties: dict[str, Any] | None = None) -> None:
     """Track a product-analytics event.
 

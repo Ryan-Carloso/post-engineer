@@ -24,6 +24,11 @@ def _params():
 
 
 class RequestedTests(unittest.TestCase):
+    def setUp(self):
+        # The requested-event guard is process-local: clear it so each
+        # test starts from a fresh emission state.
+        tm._requested_event_emitted_tasks.clear()
+
     def test_track_generation_requested_emits_event_with_context(self):
         with patch.object(tm, "track_event") as track:
             tm.track_generation_requested(
@@ -52,14 +57,31 @@ class RequestedTests(unittest.TestCase):
         self.assertEqual(props["slot_id"], "slot-9")
         self.assertEqual(props["flow"], "batch")
 
+    def test_requested_emits_only_once_per_task_id(self):
+        # Batch task ids are deterministic (uuid5 per slot): a crash between
+        # dispatch and update_slot(generating) re-dispatches the SAME id on
+        # the next tick. The re-dispatch must not double-fire requested —
+        # it would inflate the failure-% denominator.
+        tm._requested_event_emitted_tasks.clear()
+        with patch.object(tm, "track_event") as track:
+            tm.track_generation_requested(
+                "batch-task-1", user_id="user-1", flow="batch", pipeline="video"
+            )
+            tm.track_generation_requested(
+                "batch-task-1", user_id="user-1", flow="batch", pipeline="video"
+            )
+        self.assertEqual(track.call_count, 1)
+        tm._requested_event_emitted_tasks.clear()
+
     def test_tracking_context_degrades_to_unknown_sentinels(self):
         # An unreadable/missing row degrades every identity prop to the
-        # "unknown" sentinel — never a fabricated user id that looks real
+        # "unknown" sentinel — never a fabricated value that looks real
         # in PostHog breakdowns.
         context = tm._task_tracking_context("ghost-task-xyz")
         self.assertEqual(context["task_id"], "ghost-task-xyz")
         self.assertEqual(context["user_id"], "unknown")
         self.assertEqual(context["flow"], "unknown")
+        self.assertEqual(context["pipeline"], "unknown")
 
 
 class StartedTests(unittest.TestCase):

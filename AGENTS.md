@@ -1493,3 +1493,10 @@ Follow these so the same issues don't come back:
   truncate-then-scrub on `video_publish_failed` was left for a follow-up
   in round 1; round 3 correctly called it a live leak in the same
   family — fixed here with the same white-box pin.
+
+## PR #51 round-4 review learnings (2026-10-02, OpenCode on bb7dadc)
+
+- **Deterministic ids need emission dedup, not just comments.** Batch task ids are uuid5 per slot, so a crash between dispatch and `update_slot(generating)` re-dispatches the SAME id — the "never re-dispatched" comment was false and the re-dispatch double-fired `video_generation_requested`, inflating the funnel denominator. Fix: bounded check-and-record guard (`_should_emit_requested_event`, mirroring `_should_emit_failed_event`) + honest comment. Process-local guards bound within-process damage; cross-crash duplicates are rare and documented.
+- **New process-local guards break tests that reuse ids.** Two existing tests both used `"task-1"` — the second silently stopped emitting after the guard landed. Clear the guard deque in `setUp`, same as the failed-event guard pattern.
+- **Degraded identity props must ALL use the "unknown" sentinel.** `user_id`/`flow` were converted in round 3 but `pipeline` kept the plausible `"video"` default — a failed state read on a `stop_at="subtitle"` task would silently re-segment into the video funnel. Extend the sentinel test to assert every prop.
+- **Warm expensive lazy imports out from under locks.** The `on_accepted` funnel callback runs under the task-manager lock and the first `track_event` paid the `posthog` import + client construction there. `analytics.warm_client()` at controller startup moves the one-time cost out of the lock hold.

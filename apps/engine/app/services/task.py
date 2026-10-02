@@ -101,6 +101,35 @@ def _should_emit_failed_event(task_id: str) -> bool:
         _failed_event_emitted_tasks_lock.release()
 
 
+#---------------
+MAX_REQUESTED_EVENT_IDS = 1000
+_requested_event_emitted_tasks: deque[str] = deque(maxlen=MAX_REQUESTED_EVENT_IDS)
+_requested_event_emitted_tasks_lock = Lock()
+
+
+def _should_emit_requested_event(task_id: str) -> bool:
+    """Atomically check-and-record ``task_id``; True only on first sight.
+
+    Batch task ids are deterministic (uuid5 per slot), so a crash between
+    dispatch and ``update_slot(generating)`` re-dispatches the SAME id on
+    the next tick (see ``generate.py`` ``new_task_id``) — without this guard
+    the re-dispatch would double-fire ``video_generation_requested`` and
+    inflate the failure-% denominator.
+
+    Falls back to emitting (True) if the lock can't be acquired in time —
+    a duplicate funnel entry is less harmful than a missing one.
+    """
+    if not _requested_event_emitted_tasks_lock.acquire(timeout=_ALERT_LOCK_TIMEOUT_SECONDS):
+        return True
+    try:
+        if task_id in _requested_event_emitted_tasks:
+            return False
+        _requested_event_emitted_tasks.append(task_id)
+        return True
+    finally:
+        _requested_event_emitted_tasks_lock.release()
+
+
 def _should_send_failure_alert(task_id: str) -> bool:
     """Atomically check-and-record ``task_id``; True only on first sight.
 
@@ -174,10 +203,12 @@ def _first_http_url(paths: object) -> str | None:
 # of raising.
 #---------------
 # Highest 10% milestone already reported per task. Process-local: the dict
-# starts empty in every process, direct task ids are uuid4 (never reused),
-# batch task ids are uuid5 and never re-dispatched (only pending slots
-# dispatch), and terminal transitions pop the entry — so a stale entry can
-# never double-report.
+# starts empty in every process and direct task ids are uuid4 (never
+# reused). Batch task ids are uuid5 and CAN be re-dispatched after a crash
+# (see generate.py new_task_id) — requested and failed emission are
+# therefore deduped per process by the bounded check-and-record guards
+# above, and terminal transitions pop the milestone entry, so a stale
+# entry can never double-report within one process lifetime.
 _progress_milestones: dict[str, int] = {}
 
 
@@ -191,7 +222,7 @@ def _task_tracking_context(task_id: str) -> dict[str, object]:
         "task_id": task_id,
         "user_id": task.get("user_id", "unknown"),
         "flow": task.get("flow", "unknown"),
-        "pipeline": task.get("pipeline", "video"),
+        "pipeline": task.get("pipeline", "unknown"),
     }
 
 
@@ -208,7 +239,13 @@ def track_generation_requested(
     Called at task acceptance (API controller, batch dispatch) — not when
     the worker thread picks the task up, so "accepted but never ran" is
     visible as requested-without-started.
+
+    Emission is deduped per task id (bounded check-and-record): batch ids
+    are deterministic, so a crash re-dispatch must not double-count one
+    logical generation.
     """
+    if not _should_emit_requested_event(task_id):
+        return
     track_event(
         "video_generation_requested",
         {
