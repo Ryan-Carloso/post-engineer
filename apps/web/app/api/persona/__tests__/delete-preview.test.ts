@@ -196,10 +196,12 @@ describe('GET /api/persona/delete-preview', () => {
     };
     expect(res.status).toBe(200);
     expect(body.success).toBe(true);
-    // 2 schedules; upcoming = pending + ready (published is terminal)
+    // 2 schedules; upcoming = pending + ready (published is terminal);
+    // publishedSlots counts the history the cascade also deletes.
     expect(body.counts).toMatchObject({
       schedules: 2,
       upcomingSlots: 2,
+      publishedSlots: 1,
       generatedVideos: 2,
       personaImages: 3,
     });

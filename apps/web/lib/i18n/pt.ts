@@ -508,6 +508,8 @@ export const ptDictionary = {
     deleteDialogSchedules: 'agendamentos',
     deleteDialogSlot: 'post futuro',
     deleteDialogSlots: 'posts futuros',
+    deleteDialogPublishedSlot: 'post publicado (histórico)',
+    deleteDialogPublishedSlots: 'posts publicados (histórico)',
     deleteDialogVideo: 'vídeo gerado',
     deleteDialogVideos: 'vídeos gerados',
     deleteDialogImage: 'imagem da biblioteca',

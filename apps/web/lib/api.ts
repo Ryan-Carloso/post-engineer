@@ -203,6 +203,7 @@ export interface DeletePreview {
   counts?: {
     schedules: number;
     upcomingSlots: number;
+    publishedSlots: number;
     generatedVideos: number;
     personaImages: number;
   };

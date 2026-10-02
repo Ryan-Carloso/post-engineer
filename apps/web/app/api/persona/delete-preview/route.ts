@@ -216,6 +216,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     .map((row) => (typeof row === 'object' && row !== null ? (row as { id: unknown }).id : null))
     .filter((id): id is string => typeof id === 'string');
   let upcomingSlots = 0;
+  let publishedSlots = 0;
   if (scheduleIds.length > 0) {
     const { count: slotsCount, error: slotsError } = await supabase
       .from('scheduled_posts')
@@ -231,6 +232,23 @@ export async function GET(request: Request): Promise<NextResponse> {
       });
     }
     upcomingSlots = slotsCount ?? 0;
+    // The cascade deletes ALL slots for the persona's schedules, including
+    // published history — count those too so the preview is honest about
+    // what disappears.
+    const { count: publishedCount, error: publishedError } = await supabase
+      .from('scheduled_posts')
+      .select('id', { head: true, count: 'exact' })
+      .in('schedule_id', scheduleIds)
+      .eq('status', 'published')
+      .eq('user_id', auth.userId);
+    if (publishedError) {
+      logger.error('[api/persona/delete-preview] published slot lookup failed', publishedError);
+      return apiErrorResponse(500, 'Failed to load delete preview.', {
+        route: ROUTE,
+        code: ERROR_CODES.INTERNAL_ERROR,
+      });
+    }
+    publishedSlots = publishedCount ?? 0;
   }
 
   const generations = (generationsListRes.data ?? [])
@@ -286,6 +304,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     counts: {
       schedules: scheduleIds.length,
       upcomingSlots,
+      publishedSlots,
       generatedVideos: totalGenerations,
       personaImages: imagesCountRes.count ?? 0,
     },

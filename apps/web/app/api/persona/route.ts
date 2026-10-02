@@ -764,6 +764,16 @@ export async function DELETE(request: Request): Promise<NextResponse> {
       if (!engineBaseUrl || !engineTaskIdsForCleanup) return;
       const taskIds = engineTaskIdsForCleanup;
       const userId = user.id;
+      // engineAuthHeaders throws on missing MONEYPRINT_API_SECRET: a config
+      // error, not a transient failure. Hoist it out of the loop so the
+      // catch below only sees fetch/abort/network errors.
+      let authHeaders: Record<string, string>;
+      try {
+        authHeaders = engineAuthHeaders(userId);
+      } catch (error) {
+        logger.error('[api/persona] engine auth misconfigured; task dirs will orphan', { error });
+        return;
+      }
       const start = Date.now();
       const skipped: string[] = [];
       for (const taskId of taskIds) {
@@ -782,7 +792,7 @@ export async function DELETE(request: Request): Promise<NextResponse> {
             `${engineBaseUrl.replace(/\/+$/, '')}/api/v1/tasks/${encodeURIComponent(taskId)}`,
             {
               method: 'DELETE',
-              headers: engineAuthHeaders(userId),
+              headers: authHeaders,
               signal: controller.signal,
             },
           );

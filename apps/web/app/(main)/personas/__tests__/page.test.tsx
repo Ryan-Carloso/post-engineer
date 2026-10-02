@@ -147,7 +147,7 @@ describe('app/(main)/personas/page — PersonasPage', () => {
   it('cartão tem botão de deletar que abre o modal de confirmação', async () => {
     vi.mocked(fetchDeletePreview).mockResolvedValue({
       success: true,
-      counts: { schedules: 0, upcomingSlots: 0, generatedVideos: 0, personaImages: 0 },
+      counts: { schedules: 0, upcomingSlots: 0, publishedSlots: 0, generatedVideos: 0, personaImages: 0 },
       videos: [],
     });
     render(<PersonasPage />, { wrapper: createWrapper() });
@@ -166,7 +166,7 @@ describe('app/(main)/personas/page — PersonasPage', () => {
   it('deleta após digitar o nome e fecha o modal', async () => {
     vi.mocked(fetchDeletePreview).mockResolvedValue({
       success: true,
-      counts: { schedules: 0, upcomingSlots: 0, generatedVideos: 0, personaImages: 0 },
+      counts: { schedules: 0, upcomingSlots: 0, publishedSlots: 0, generatedVideos: 0, personaImages: 0 },
       videos: [],
     });
     vi.mocked(deletePersona).mockResolvedValue({ success: true });
@@ -190,7 +190,7 @@ describe('app/(main)/personas/page — PersonasPage', () => {
   it('não deleta quando o usuário fecha o modal sem confirmar', async () => {
     vi.mocked(fetchDeletePreview).mockResolvedValue({
       success: true,
-      counts: { schedules: 0, upcomingSlots: 0, generatedVideos: 0, personaImages: 0 },
+      counts: { schedules: 0, upcomingSlots: 0, publishedSlots: 0, generatedVideos: 0, personaImages: 0 },
       videos: [],
     });
     render(<PersonasPage />, { wrapper: createWrapper() });

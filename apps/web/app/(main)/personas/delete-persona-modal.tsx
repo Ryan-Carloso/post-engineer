@@ -178,6 +178,16 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
                 <strong className="font-semibold">{counts.upcomingSlots}</strong>{' '}
                 {t(counts.upcomingSlots === 1 ? 'personas.deleteDialogSlot' : 'personas.deleteDialogSlots')}
               </li>
+              {counts.publishedSlots > 0 && (
+                <li>
+                  <strong className="font-semibold">{counts.publishedSlots}</strong>{' '}
+                  {t(
+                    counts.publishedSlots === 1
+                      ? 'personas.deleteDialogPublishedSlot'
+                      : 'personas.deleteDialogPublishedSlots',
+                  )}
+                </li>
+              )}
               <li>
                 <strong className="font-semibold">{counts.generatedVideos}</strong>{' '}
                 {t(counts.generatedVideos === 1 ? 'personas.deleteDialogVideo' : 'personas.deleteDialogVideos')}
