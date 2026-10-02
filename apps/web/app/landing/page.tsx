@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useI18n } from '@/lib/i18n/provider';
-import { BoltIcon, FacebookIcon, InstagramIcon } from '@/lib/ui';
+import { FacebookIcon, InstagramIcon } from '@/lib/ui';
+import AppLogo from '@/components/ui/app-logo';
 import { LOCALES } from '@/lib/i18n';
 import { TokenPackCards, EnterpriseCard, packActionClassName } from '@/components/ui/token-pack-cards';
 import {
@@ -96,9 +97,7 @@ const LandingHeader = () => {
           onClick={() => setMenuOpen(false)}
           className="flex min-w-0 items-center gap-2"
         >
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#ff544c] text-white shadow-[0_6px_16px_rgba(255,84,76,0.25)]">
-            <BoltIcon />
-          </span>
+          <AppLogo size={36} className="rounded-xl" />
           <span className="truncate text-[17px] font-bold tracking-[-0.02em] text-[#101728]">
             PostEngineer
           </span>
@@ -318,9 +317,7 @@ const HeroMockup = () => {
       <div className="rounded-3xl bg-white p-5 shadow-[0_24px_64px_rgba(20,32,51,0.12)] ring-1 ring-[#edf0f4]">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="flex size-7 items-center justify-center rounded-lg bg-[#ff544c] text-white [&>svg]:size-4">
-              <BoltIcon />
-            </span>
+            <AppLogo size={28} className="rounded-lg" />
             <span className="text-sm font-bold text-[#101728]">PostEngineer</span>
           </div>
           <div className="flex gap-1.5 text-[11px] font-medium text-[#657184]">

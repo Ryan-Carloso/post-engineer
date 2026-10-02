@@ -154,12 +154,16 @@ describe('app/(main)/layout — MainLayout', () => {
     expect(screen.getByTestId('page')).toHaveTextContent('page content');
   });
 
-  it('renders brand icon in sidebar', () => {
+  it('renders brand logo in sidebar', () => {
     render(
       <MainLayout>child</MainLayout>,
       { wrapper: createWrapper() },
     );
-    expect(screen.getAllByTestId('icon-bolt').length).toBeGreaterThan(0);
+    const logos = screen.getAllByTestId('app-logo');
+    expect(logos.length).toBeGreaterThan(0);
+    for (const logo of logos) {
+      expect(logo).toHaveAttribute('src', '/logo.png');
+    }
   });
 
   it('renders all navigation items', () => {
@@ -252,7 +256,7 @@ describe('app/(main)/layout — MainLayout', () => {
       isLoading: false,
     } as never);
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-    const img = screen.getByRole('img');
+    const img = screen.getByRole('img', { name: 'A' });
     expect(img).toHaveAttribute('src', 'https://example.com/avatar.png');
   });
 
