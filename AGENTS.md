@@ -1368,6 +1368,243 @@ Follow these so the same issues don't come back:
   `NEXT_PUBLIC_*` vars; a dummy `.env` suffices for verification — never
   commit it).
 
+## Web/API review learnings, PR #41 (2026-10-01)
+- **OAuth callers take the service-client branch too.** `requireSupabaseSession`
+  returns `isOAuth: true` for MCP/OAuth callers, who have no cookie session —
+  `request-auth.ts` says to treat them like API keys. Every new route must
+  branch `auth.isApiKey === true || auth.isOAuth === true`, not just
+  `isApiKey`; otherwise RLS returns zero rows and the route 404s on data the
+  caller owns. Pinned by OAuth tests on delete-preview and the DELETE cascade.
+- **Every promise chain in a component gets a `.catch`.** A `.then` without
+  one leaves the dialog in `loading`/`deleting` forever on network failure —
+  all inputs disabled, no retry, the only escape a reload. Rejections surface
+  as the component's error state, never a wedged UI.
+- **Client fetch helpers never throw on HTTP errors.** Check `response.ok`
+  and guard `response.json()` (Vercel 502 HTML bodies throw on parse);
+  return `{ success: false, error }` so the caller's existing
+  `result.success` branch handles it.
+- **Bound downstream fan-out on read paths; `after()` post-commit cleanup.**
+  A per-video engine lookup loop gets a cap (counts still report the full
+  total). Post-commit cleanup (engine task dirs) runs in `after()` from
+  `next/server` — a slow downstream must not turn a committed mutation into
+  a client-side timeout that reports failure for a delete that happened.
+  In tests, mock `after` to run the callback inline (the real one needs a
+  request scope).
+- **Expensive authenticated GETs get a rate-limit profile too.** The house
+  rule was upload/POST surfaces; a GET that fans out to the engine (up to
+  N lookups) gets its own `RATE_LIMITS` profile keyed by user id, applied
+  right after auth. Payload tests mock the limiter no-op; one dedicated
+  test owns the 429 path.
+
+## Web/API review learnings, PR #41 round 2 (2026-10-01)
+- **User-scope every child query, not just the siblings.** The delete-preview
+  persona_images count was persona-scoped while schedules/generations were
+  user-scoped — the "every query is re-scoped by user_id" comment overclaimed.
+  When a comment asserts a guarantee, grep every query under it.
+- **Aggregate budgets on bounded loops.** A per-call timeout does not bound
+  a loop: 20 x 8s = 160s against a slow-but-alive downstream. Gate the loop
+  on `Date.now() - start < BUDGET_MS`; items past budget degrade to null,
+  counts stay complete. Pinned with a mocked-clock test.
+- **Truncation is part of the contract.** A capped list needs a `truncated`
+  flag in the response, the client type, and the UI — a silent cap hides
+  unrecoverable data loss behind a destructive confirm.
+- **Singular/plural keys for count labels.** Follow the
+  `accountConnected`/`accountsConnected` convention; never render "1
+  schedules". If the count already renders in `<strong>`, the label key
+  carries no `{count}` of its own.
+
+## Web/API review learnings, PR #41 round 3 (2026-10-02)
+- **Budget the `after()` loop too.** `after()` has no deadline of its own —
+  Vercel cuts the function off and the tail orphans silently. Give
+  post-commit cleanup the same aggregate budget as the read path and log
+  skipped ids loudly; best-effort is not silent.
+- **Log inside never-throw helpers, with the id.** `resolveDownloadUrl`
+  returned null on every failure path with zero trail. Warn with the task
+  id and failure class (non-ok status, abort, unsafe id) so "download
+  unavailable" is diagnosable server-side.
+- **Name the degradation honestly in the UI.** A budget-cut lookup is not
+  "unavailable" — the video exists. A `linksIncomplete` flag drives a
+  distinct "could not be loaded in time" note with retry, not the
+  unrecoverable copy.
+- **Share input-class guards across sibling boundaries.** `SAFE_TASK_ID`
+  lived only in delete-preview while the DELETE cleanup interpolated the
+  same DB-sourced ids. One shared guard in the leaf module, used by both
+  loops, pinned by unit tests.
+- **Test env vars via `vi.stubEnv`, never manual delete.**
+  `vi.unstubAllEnvs()` only restores stubbed values; a manual
+  `delete process.env.X` permanently removes a genuinely-set var for later
+  test files in the worker.
+
+## Web/API review learnings, PR #41 round 4 (2026-10-02)
+- **Bound the DB reads, not just the downstream fan-out.** `head: true,
+  count: 'exact'` for pure counts; `.limit()` + deterministic
+  `.order('created_at').order('id')` for the list. A capped API over an
+  unbounded query still pulls every row into serverless memory.
+- **One shared guard per input class.** `SAFE_TASK_ID` now lives in
+  `lib/video-urls.ts` next to the other engine-URL helpers; the download
+  proxy imports it instead of its local duplicate. Identical regexes drift.
+- **Retry must not wipe user input.** The modal's refetch effect resets
+  state per persona id (via ref), not per attempt — the links-incomplete
+  retry keeps the typed confirmation name.
+- **Harden the closest sibling too.** `updatePersona` had the same bare
+  `response.json()` the PR fixed elsewhere; a 5-line hardening now beats
+  the next review round flagging it.
+- **Test the budget-skip branch, not just the happy path.** The `after()`
+  cleanup budget got a mocked-clock test mirroring the preview's — the
+  skip-and-log path is production logic, not an edge.
+
+## Web/API review learnings, PR #41 round 5 (2026-10-02)
+- **Reset-on-close is part of the confirmation gate.** A ref keyed on
+  "is new" must clear when the dialog closes — otherwise cancel → reopen
+  pre-arms the destructive button. The modal stays mounted; `persona: null`
+  is the close signal. Pin both directions: retry keeps the name, reopen
+  clears it.
+- **Destructive mutations get their own rate-limit profile.** The DELETE
+  cascade (multi-table + engine fan-out) got `personaDelete` at 10/min,
+  lower than the preview's 30/min. Expensive + irreversible = stricter.
+- **Clock mocks restore in afterEach, not at test end.** A failing
+  assertion before a manual `mockRestore()` leaks the frozen clock into
+  later tests in the worker. `vi.restoreAllMocks()` in afterEach covers
+  every spy.
+
+## Web/API review learnings, PR #41 round 6 (2026-10-02)
+- **Test names must match their assertions.** "naming the step" asserted
+  only the status code; the step name lived solely in the server log.
+  Mock the logger and assert the exact message — or drop the claim from
+  the name. (PR #27 rule, re-offended.)
+- **Document intentional unboundedness.** The schedules id list stays
+  unbounded because schedules are posting configs (handful per persona),
+  not per-video rows. Say so at the call site; a comment claiming a
+  bound that isn't there is worse than no comment.
+- **Mirror every hardening branch with a test.** All three client helpers
+  now have both non-ok and non-JSON tests — the catch branch is the last
+  defense against proxy HTML bodies.
+
+## Web/API review learnings, PR #41 round 7 (2026-10-02)
+- **Scope the count query, not just the delete.** The preview's slot count
+  used schedule ids from a user-scoped select but skipped its own
+  `.eq('user_id')` — transitively safe today, a silent widening tomorrow.
+  A cross-user fixture row pins it for free.
+- **Justifications must survive the prepaid case.** "Work already
+  happened" was false for batch-prepaid, never-generated slots. State the
+  forfeiture honestly in both the code comment and the user-facing copy.
+
+## Web/API review learnings, PR #41 round 8 (2026-10-02)
+- **Transient vs gone is a product-critical distinction.** An engine 5xx/
+  abort during the pre-delete window is not "download unavailable" — the
+  video exists and deletion is irreversible. Return a failure class from
+  the lookup (or at least split 404 from the rest) and flag the UI for
+  retry. The round-3 budget rule generalizes: any lookup that can fail
+  without the asset being gone must say so.
+- **completedSteps must describe reality, not intent.** A push outside
+  its `if` guard claims a step that never ran — the exact lie the field
+  exists to prevent in partial-failure states.
+- **Removing a response field orphans its locals.** Dropping `deleted`
+  left `imagesDeleted` assigned-but-unused; the lint error is the
+  reminder — delete the source variable too.
+
+## Web/API review learnings, PR #41 round 9 (2026-10-02)
+- **Effect deps key on identity, not the object.** A background refetch
+  replaces the persona object; depending on `persona` resets the dialog
+  mid-confirmation. Derive `personaId` and depend on that.
+- **HTTP status classes are not binary.** 404 = gone, 401/403 = config
+  error (log at error, never transient), 5xx/429 = transient. A 200 with
+  an unparseable body is transient too — never dead-end copy for a
+  garbled response.
+- **Missing env vars deserve a warn.** A config error that degrades the
+  UI silently is undiagnosable. One logger.warn per request when the var
+  is absent.
+- **Cleanup that must not block the response belongs in after().** The
+  storage remove was the same class as the engine fan-out (post-commit,
+  best-effort); keeping it inline reproduced the timeout failure mode the
+  after() change exists to prevent.
+
+## Web/API review learnings, PR #41 round 10 (2026-10-02)
+- **Disable every interactive element during a pending mutation.** The
+  retry button survived the "disable while deleting" pass because it
+  lives in the videos section, not the confirm row. Any control that
+  re-fires the effect must be disabled too — and pinned by test.
+- **Pre-formed URLs need the same guard as constructed ones.**
+  `firstDownloadUrl` accepted `/api/persona/video-download/...` strings
+  verbatim; validate the task-id segment against SAFE_TASK_ID like every
+  other interpolation path.
+- **Cap reads that feed only cleanup loops.** The engine task-id select
+  exists solely for best-effort cleanup — cap it with loud-skip. Document
+  intentionally unbounded selects (schedules) at the call site.
+
+## Web/API review learnings, PR #41 round 11 (2026-10-02)
+- **Client helpers must surface structured server errors.** A generic
+  "failed (404)" invites endless retries on a persona that no longer
+  exists; parse the body on non-ok and surface code/error.
+- **Narrow every field, including ids.** `persona.id` from an untyped
+  row is any; the typeof guard costs one line and matches the file's
+  own convention.
+- **Destructive dialogs need the a11y trio.** Initial focus, Escape to
+  cancel (not while deleting), focus trap. Type-to-confirm mitigates
+  but does not replace.
+- **Relocated branches need re-pinned tests.** Moving storage cleanup
+  into after() moved its failure log; the test must follow the branch.
+
+## Web/API review learnings, PR #41 round 12 (2026-10-02)
+- **A declared ref with no reader is dead code.** Either wire the focus
+  trap through it or delete it — an unused a11y affordance is worse than
+  none, it claims a guarantee that isn't there.
+- **Config throws are not transient.** engineAuthHeaders throwing on a
+  missing secret must not ride the catch-all transient path; hoist it
+  out and log at error.
+- **One helper per input class.** Three copies of "parse non-ok body"
+  is a contract waiting to diverge; extract it on the third copy.
+
+## Web/API review learnings, PR #41 round 13 (2026-10-02)
+- **Hoist config-throwing helpers out of transient catch blocks —
+  everywhere.** The preview got it right; the sibling after() loop
+  re-offended. When a helper throws on config, the catch must only see
+  I/O errors.
+- **The preview must count everything the cascade deletes.** "Lists
+  exactly what will be deleted" is a contract; published-post history
+  goes too, so count it and show it.
+
+## Web/API review learnings, PR #41 round 14 (2026-10-02)
+- **A parsed flag with no UI consumer is an overclaim.** parseErrorResponse
+  extracted code but the modal ignored it; PERSONA_NOT_FOUND must close +
+  refetch, not offer retry.
+- **"Everything the cascade deletes" includes failed rows.** The status
+  enum has more members than the happy path; enumerate them or count the
+  total.
+- **Behavioral branches need tests, not just logging branches.** The
+  config-throw path changes what the user sees (no retry note); pin it.
+
+## Web/API review learnings, PR #41 round 15 (2026-10-02)
+- **Consumer-side tests close the loop.** The lib parsed PERSONA_NOT_FOUND
+  but no modal test consumed it — the overclaim moved from server to
+  client. Pin both sides.
+- **Conditional UI rows need >0 fixtures.** publishedSlots/failedSlots
+  render only when nonzero; every fixture used 0, so the branches never
+  ran.
+- **Legacy mocks must mirror the production chain.** A select without a
+  thenable degenerates the cascade silently; give generic mocks the same
+  shape as the real builder.
+
+## Web/API review learnings, PR #41 round 16 (2026-10-02)
+- **Verify race claims against the actual predicates.** The "multi-statement
+  race" MAJOR overstated: schedules/generations deletes use persona_id
+  (catching late rows); only slots use the select snapshot, and that race
+  is documented. Check the WHERE clause before accepting the claim.
+- **Validate every segment of a pre-formed URL.** First-segment checks
+  leave later segments unencoded; test all of them.
+- **Gate global listeners on open state.** A mounted-but-closed modal
+  should not run key handlers on every page keypress.
+- **Parallelize independent counts.** Three serial head+count queries
+  become one Promise.all.
+
+## Web/API review learnings, PR #41 round 17 (2026-10-02)
+- **Validators must accept what encoders produce.** encodeURIComponent
+  emits %XX; a validator rejecting % contradicts its own encoder. Test
+  the decoded form.
+- **Producer tests need the same fixtures as consumer tests.** The modal
+  pinned failedSlots rendering, but the route never counted one — both
+  sides need >0 fixtures.
+
 ## Engine review learnings (2026-10-02, PR #43)
 - **A test comment claiming a behavior must pin it with an assertion.** The
   reconcile test's comment said "the refund is skipped" but asserted only
