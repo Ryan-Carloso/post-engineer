@@ -29,12 +29,18 @@ def test_publish_module_wires_track_event():
     assert callable(pub_module.track_event)
 
 
-def test_generate_emits_started_and_failed_event_names():
-    """Verify the expected event names are used in generate.py."""
+def test_generate_emits_requested_and_failed_event_names():
+    """Verify the expected event names are used in generate.py.
+
+    The batch funnel entry is video_generation_requested (fired before
+    dispatch); the pipeline itself reports video_generation_started.
+    """
     import inspect
 
     source = inspect.getsource(gen_module)
-    assert "video_generation_started" in source
+    # The event name itself lives in task.track_generation_requested;
+    # generate.py pins the call site.
+    assert "track_generation_requested" in source
     assert "video_generation_failed" in source
 
 

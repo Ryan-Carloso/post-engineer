@@ -218,7 +218,15 @@ def create_task(
             "params": body.model_dump(),
             "user_id": auth.user_id,
         }
-        sm.state.update_task(task_id, user_id=auth.user_id)
+        sm.state.update_task(
+            task_id, user_id=auth.user_id, flow="direct", pipeline=stop_at
+        )
+        # Funnel entry: requested BEFORE the worker thread starts, so
+        # requested-vs-failed gives the failure % even when the pipeline
+        # never runs.
+        tm.track_generation_requested(
+            task_id, user_id=auth.user_id, flow="direct", pipeline=stop_at
+        )
         task_manager.add_task(tm.start, task_id=task_id, params=body, stop_at=stop_at)
         logger.success(f"Task created: task_id={task_id}")
         return utils.get_response(200, task)

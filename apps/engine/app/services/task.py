@@ -28,6 +28,7 @@ from app.services import state as sm
 from app.services import task_publish
 from app.services import task_webhook
 from app.services.bgm_history import history_repository
+from app.services.analytics import scrub_secret_values, track_event
 from app.services.notify import safe_reason, send_discord, task_failed_msg
 from app.utils import file_security, ssrf, utils
 
@@ -131,6 +132,89 @@ def _first_http_url(paths: object) -> str | None:
     return None
 
 
+#---------------
+# PostHog lifecycle funnel: the user watches these events to compute the
+# failure % per flow (direct API vs batch fill_schedule):
+#   video_generation_requested (at task acceptance, BEFORE the pipeline
+#     starts) -> video_generation_started -> video_generation_progress
+#     (every 10%) -> video_generation_failed / video_generated.
+# track_event never raises (analytics.py), so telemetry can't break the
+# pipeline — and the task-state reads below degrade to "unknown" instead
+# of raising.
+#---------------
+# Highest 10% milestone already reported per task. Process-local: after a
+# restart the reconciler fails orphan tasks before any progress write, so
+# a stale entry can never double-report.
+_progress_milestones: dict[str, int] = {}
+
+
+def _task_tracking_context(task_id: str) -> dict[str, object]:
+    """task_id/user_id/flow/pipeline props shared by every lifecycle event."""
+    try:
+        task = sm.state.get_task(task_id) or {}
+    except Exception:  # noqa: BLE001 — tracking degrades, the pipeline continues
+        task = {}
+    return {
+        "task_id": task_id,
+        "user_id": task.get("user_id", "internal"),
+        "flow": task.get("flow", "unknown"),
+        "pipeline": task.get("pipeline", "video"),
+    }
+
+
+def track_generation_requested(
+    task_id: str,
+    user_id: str,
+    flow: str,
+    pipeline: str = "video",
+    **extra: object,
+) -> None:
+    """Report a generation request BEFORE the pipeline starts.
+
+    This is the funnel entry: requested vs failed gives the failure %.
+    Called at task acceptance (API controller, batch dispatch) — not when
+    the worker thread picks the task up, so "accepted but never ran" is
+    visible as requested-without-started.
+    """
+    track_event(
+        "video_generation_requested",
+        {
+            "task_id": task_id,
+            "user_id": user_id,
+            "flow": flow,
+            "pipeline": pipeline,
+            **extra,
+        },
+    )
+
+
+def track_generation_started(task_id: str) -> None:
+    """Report that the pipeline actually began executing the task."""
+    track_event("video_generation_started", _task_tracking_context(task_id))
+
+
+def _update_task(task_id: str, **kwargs: object) -> None:
+    """Write task state; report PostHog progress at every 10% milestone.
+
+    Emits ``video_generation_progress`` once per 10% boundary crossed
+    (10, 20, ..., 100) so the funnel shows drop-off across pipeline stages.
+    A jump (e.g. 5 -> 30) reports each crossed milestone.
+    """
+    sm.state.update_task(task_id, **kwargs)
+    progress = kwargs.get("progress")
+    if not isinstance(progress, (int, float)) or isinstance(progress, bool):
+        return
+    milestone = int(progress // 10) * 10
+    last = _progress_milestones.get(task_id, 0)
+    if milestone <= last:
+        return
+    context = _task_tracking_context(task_id)
+    context["progress"] = progress
+    for crossed in range(last + 10, milestone + 1, 10):
+        track_event("video_generation_progress", {**context, "milestone": crossed})
+    _progress_milestones[task_id] = milestone
+
+
 def _complete_task(
     task_id: str,
     params: VideoParams,
@@ -141,6 +225,12 @@ def _complete_task(
     sm.state.update_task(
         task_id, state=const.TASK_STATE_COMPLETE, progress=100, **kwargs
     )
+    _progress_milestones.pop(task_id, None)
+    context = _task_tracking_context(task_id)
+    # Batch completions are reported by the fill_schedule reconciler (which
+    # also attaches cost_usd); reporting here too would double count.
+    if context.get("flow") != "batch":
+        track_event("video_generated", context)
     task_webhook.notify_terminal_task(
         task_id,
         status="completed",
@@ -183,6 +273,11 @@ def _fail_task(
         sm.state.update_task(task_id, state=const.TASK_STATE_FAILED, **kwargs)
     else:
         sm.state.update_task(task_id, state=const.TASK_STATE_FAILED, error=error, **kwargs)
+        _progress_milestones.pop(task_id, None)
+        context = _task_tracking_context(task_id)
+        context["stage"] = failed_stage
+        context["reason"] = scrub_secret_values(str(error)[:200])
+        track_event("video_generation_failed", context)
     # Terminal webhook (at most once per task, deduped inside): a failing
     # delivery only logs, it never changes the task outcome.
     task_webhook.notify_terminal_task(
@@ -827,7 +922,7 @@ def generate_final_videos(
             subtitle_path=subtitle_path,
         )
 
-    sm.state.update_task(task_id, progress=75, music_mood=music_mood)
+    _update_task(task_id, progress=75, music_mood=music_mood)
 
     final_video_path = path.join(utils.task_dir(task_id), "final-1.mp4")
     logger.info(f"\n\n## generating video => {final_video_path}")
@@ -843,7 +938,7 @@ def generate_final_videos(
     if len(recent_bgm_files) > bgm_history_count:
         history_repository.record(user_id, recent_bgm_files[-1])
 
-    sm.state.update_task(task_id, progress=100, music_mood=music_mood)
+    _update_task(task_id, progress=100, music_mood=music_mood)
 
     final_video_paths.append(final_video_path)
     combined_video_paths.append(combined_video_path)
@@ -952,7 +1047,8 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             logger.warning(f"could not persist stage for task {task_id}")
 
     try:
-        sm.state.update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=5)
+        _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=5)
+        track_generation_started(task_id)
 
         # 1. Generate script
         video_script = generate_script(task_id, params)
@@ -962,7 +1058,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             cleanup_task_intermediates(task_id, ())
             return
 
-        sm.state.update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=10)
+        _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=10)
 
         if stop_at == "script":
             _complete_task(task_id, params, script=video_script)
@@ -984,7 +1080,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             _complete_task(task_id, params, terms=video_terms)
             return {"script": video_script, "terms": video_terms}
 
-        sm.state.update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=20)
+        _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=20)
 
         # 3. Generate audio
         audio_file, audio_duration, sub_maker = generate_audio(
@@ -1013,7 +1109,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             audio_file = limited_audio_file
             audio_duration = max_duration
 
-        sm.state.update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=30)
+        _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=30)
 
         if stop_at == "audio":
             _complete_task(
@@ -1055,7 +1151,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         if video_script != script_before_hook_guard:
             save_script_data(task_id, video_script, video_terms, params)
 
-        sm.state.update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=40)
+        _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=40)
 
         # 5. Get video materials
         downloaded_videos = get_video_materials(
@@ -1071,7 +1167,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             _complete_task(task_id, params, materials=downloaded_videos)
             return {"materials": downloaded_videos}
 
-        sm.state.update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=50)
+        _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=50)
 
         available_moods = video.get_available_music_moods()
         logger.info(f"available BGM moods for video: {available_moods}")

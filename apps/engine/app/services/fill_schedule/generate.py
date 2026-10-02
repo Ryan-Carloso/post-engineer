@@ -12,6 +12,7 @@ from loguru import logger
 
 from app.models.schema import TaskVideoRequest
 from app.services import notify as notify_module
+from app.services import task as tm
 from app.services.analytics import scrub_secret_values, track_event
 from app.services.fill_schedule.constants import (
     SLOT_FAILED,
@@ -116,6 +117,7 @@ class BatchGenerator:
         None when the slot failed (already recorded + notified)."""
         schedule = slot.get("schedules") or {}
         persona: dict[str, Any] = {}
+        task_id: str | None = None
         try:
             # The persona may have been deleted after the schedule was
             # created: fail the slot instead of killing the whole generate
@@ -148,6 +150,16 @@ class BatchGenerator:
             # refund if dispatch itself fails.
             generation_id = f"batch:{schedule['id']}"
             task_id = new_task_id(slot)
+            # Funnel entry: requested BEFORE dispatch, so a dispatch failure
+            # still counts as requested -> failed in the failure % funnel.
+            tm.track_generation_requested(
+                task_id,
+                user_id=user_id,
+                flow="batch",
+                pipeline="video",
+                slot_id=slot["id"],
+                persona_id=persona.get("id"),
+            )
             try:
                 self._dispatch_generation(task_id, request, user_id)
             except Exception:
@@ -164,20 +176,20 @@ class BatchGenerator:
             self.store.update_slot(
                 slot["id"], status=SLOT_GENERATING, topic=topic, task_id=task_id
             )
-            track_event(
-                "video_generation_started",
-                {"slotId": slot["id"], "personaId": persona.get("id")},
-            )
             return f"{persona.get('name', 'Persona')}: {topic}"
         except Exception as exc:
             # A failed slot is a real recurring error: log at ERROR so the
             # Bugsink bridge (loguru sink, ERROR+) forwards it.
             logger.error(f"fill_schedule: slot {slot['id']} generation failed: {exc}")
             self.store.update_slot(slot["id"], status=SLOT_FAILED, error=str(exc)[:500])
-            track_event(
-                "video_generation_failed",
-                {"slotId": slot["id"], "reason": scrub_secret_values(str(exc)[:200])},
-            )
+            failed_props: dict[str, object] = {
+                "flow": "batch",
+                "slotId": slot["id"],
+                "reason": scrub_secret_values(str(exc)[:200]),
+            }
+            if task_id is not None:
+                failed_props["task_id"] = task_id
+            track_event("video_generation_failed", failed_props)
             notify_safe(
                 self.notify,
                 notify_module.slot_failed_msg(
@@ -196,9 +208,9 @@ class BatchGenerator:
         then run the pipeline in a daemon thread so the tick never blocks
         on a long generation.
         """
-        from app.services import task as tm
-
-        self.task_state.update_task(task_id, user_id=user_id)
+        self.task_state.update_task(
+            task_id, user_id=user_id, flow="batch", pipeline="video"
+        )
         thread = threading.Thread(
             target=tm.start,
             kwargs={"task_id": task_id, "params": request, "stop_at": "video"},

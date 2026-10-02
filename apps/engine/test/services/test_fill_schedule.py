@@ -226,7 +226,7 @@ class BatchScheduleTests(unittest.TestCase):
             scheduler.generator._dispatch_generation("task-1", request, "user-1")
 
         scheduler.task_state.update_task.assert_called_once_with(
-            "task-1", user_id="user-1"
+            "task-1", user_id="user-1", flow="batch", pipeline="video"
         )
         mock_thread.assert_called_once()
         _, kwargs = mock_thread.call_args
