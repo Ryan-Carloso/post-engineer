@@ -3,6 +3,10 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import McpDocsSection from '@/components/ui/mcp-docs-section';
 
+// Mutable locale so tests can render the component in either language and
+// compare the generated install prompts.
+let mockLocale = 'en';
+
 vi.mock('@/lib/i18n/provider', () => {
   const translations: Record<string, string> = {
     'apiKeys.connectTitle': 'Connect to your AI agent (MCP)',
@@ -25,7 +29,10 @@ vi.mock('@/lib/i18n/provider', () => {
   return {
     useI18n: () => ({
       t: (key: string) => translations[key] ?? key,
-      locale: 'en',
+      // Getter so tests can flip mockLocale between renders.
+      get locale() {
+        return mockLocale;
+      },
       setLocale: vi.fn(),
     }),
   };
@@ -36,6 +43,7 @@ describe('McpDocsSection', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockLocale = 'en';
     process.env.NEXT_PUBLIC_WHATSAPP_NUMBER = '15551234567';
     Object.defineProperty(window.navigator, 'clipboard', {
       value: { writeText: vi.fn().mockResolvedValue(undefined) },
@@ -151,5 +159,28 @@ describe('McpDocsSection', () => {
     expect(visiblePrompt).toHaveTextContent('post-engineer-mcp');
     expect(visiblePrompt).toHaveTextContent('How to work with me');
     expect(screen.getByText('Copied!')).toBeInTheDocument();
+  });
+
+  it('documents the same minimum schedule window in the EN and PT install prompts', () => {
+    const prompts: Record<string, string> = {};
+    for (const locale of ['en', 'pt'] as const) {
+      mockLocale = locale;
+      const { unmount } = render(<McpDocsSection />);
+      fireEvent.click(screen.getByTestId('copy-mcp-prompt-btn'));
+      const calls = vi.mocked(window.navigator.clipboard.writeText).mock.calls;
+      prompts[locale] = calls[calls.length - 1][0] as string;
+      unmount();
+    }
+    // The generate_persona_videos doc line is the agent's source of truth
+    // for the schedule window; EN and PT must agree on the minimum advance
+    // (regression: the PT line still advertised the old 24h window).
+    for (const locale of ['en', 'pt'] as const) {
+      const videoLine = prompts[locale]
+        .split('\n')
+        .find((line) => line.includes('- generate_persona_videos:'));
+      expect(videoLine, `${locale} prompt`).toBeDefined();
+      expect(videoLine, `${locale} prompt`).toContain('3h');
+      expect(videoLine, `${locale} prompt`).not.toContain('24h');
+    }
   });
 });
