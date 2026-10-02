@@ -83,6 +83,21 @@ class RequestedTests(unittest.TestCase):
         self.assertEqual(context["flow"], "unknown")
         self.assertEqual(context["pipeline"], "unknown")
 
+    def test_tracking_context_defends_against_explicit_none(self):
+        # dict.get(key, default) only applies when the key is ABSENT — a row
+        # that stored user_id/pipeline as None would bypass the sentinel and
+        # put a null prop into PostHog. Explicit None degrades too.
+        sm.state.update_task(
+            "none-row-task", user_id=None, flow=None, pipeline=None
+        )
+        try:
+            context = tm._task_tracking_context("none-row-task")
+        finally:
+            sm.state.delete_task("none-row-task")
+        self.assertEqual(context["user_id"], "unknown")
+        self.assertEqual(context["flow"], "unknown")
+        self.assertEqual(context["pipeline"], "unknown")
+
 
 class StartedTests(unittest.TestCase):
     def setUp(self):
@@ -536,6 +551,14 @@ class BatchRequestedTests(unittest.TestCase):
 
 class BatchFailedTests(unittest.TestCase):
     """Batch dispatch failures carry the full funnel context."""
+
+    def setUp(self):
+        # The dispatch-failure emission shares the module-global terminal
+        # dedup guard; clear it so each test starts with a fresh guard.
+        tm._failed_event_emitted_tasks.clear()
+
+    def tearDown(self):
+        tm._failed_event_emitted_tasks.clear()
 
     def _slot(self):
         return {
