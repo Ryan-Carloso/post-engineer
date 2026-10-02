@@ -119,7 +119,10 @@ class BatchPublisher:
                     "video_publish_failed",
                     {
                         "slotId": str(slot["id"]),
-                        "reason": scrub_secret_values(str(exc)[:200]),
+                        # Scrub the full message before truncating: a cut
+                        # landing mid-key would leave a fragment the
+                        # key-anchored pattern can no longer match.
+                        "reason": scrub_secret_values(str(exc))[:200],
                         "retryable": True,
                     },
                 )
