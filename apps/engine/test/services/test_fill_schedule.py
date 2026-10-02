@@ -301,9 +301,11 @@ class ReconcileTests(unittest.TestCase):
             store=store, task_state=state,
             publish_video=MagicMock(),
         )
-        # Must not raise; slot marked failed.
+        # Must not raise; slot marked failed; refund skipped (no persona
+        # to compute the cost from).
         self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
         self.assertEqual(store.updates[0][1]["status"], "failed")
+        self.assertEqual(store.refund_batch_calls, [])
 
     def test_failed_batch_task_refunds_batch_charge(self):
         # Batch slots are prepaid under `batch:{scheduleId}`; a failed task

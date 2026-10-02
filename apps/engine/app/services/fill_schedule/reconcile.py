@@ -63,6 +63,11 @@ class BatchReconciler:
                         # created: no embed to compute the refund cost from.
                         # Mark the slot failed and move on — throwing here
                         # would kill the whole reconcile stage every tick.
+                        # NOTE: the prepaid tokens for this slot are
+                        # permanently burned (the cost is unrecoverable
+                        # without the persona embed). Follow-up: persist the
+                        # per-slot cost on the slot row at schedule creation
+                        # so refunds never depend on a joinable persona.
                         logger.warning(
                             "fill_schedule: skipping refund for failed slot "
                             "without persona embed",
