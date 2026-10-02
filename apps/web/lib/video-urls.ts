@@ -56,10 +56,10 @@ export function firstDownloadUrl(rewrittenBody: unknown): string | null {
   const visit = (value: unknown): void => {
     if (typeof value === 'string') {
       if (value.startsWith('/api/persona/video-download/') && !value.includes('?source=stream')) {
-        // Validate the task-id segment: a pre-formed string from the engine
-        // body must not smuggle an arbitrary same-origin path into the href.
-        const segment = value.slice('/api/persona/video-download/'.length).split('/')[0];
-        if (segment !== undefined && SAFE_TASK_ID.test(segment)) {
+        // Validate every segment: a pre-formed string from the engine body
+        // must not smuggle an arbitrary same-origin path into the href.
+        const segments = value.slice('/api/persona/video-download/'.length).split('/');
+        if (segments.length > 0 && segments.every((s) => s.length > 0 && SAFE_TASK_ID.test(s))) {
           found.push(value);
         }
       }

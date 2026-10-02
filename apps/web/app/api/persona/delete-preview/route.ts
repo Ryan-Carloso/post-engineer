@@ -219,52 +219,44 @@ export async function GET(request: Request): Promise<NextResponse> {
   let publishedSlots = 0;
   let failedSlots = 0;
   if (scheduleIds.length > 0) {
-    const { count: slotsCount, error: slotsError } = await supabase
-      .from('scheduled_posts')
-      .select('id', { head: true, count: 'exact' })
-      .in('schedule_id', scheduleIds)
-      .in('status', UPCOMING_SLOT_STATUSES)
-      .eq('user_id', auth.userId);
-    if (slotsError) {
-      logger.error('[api/persona/delete-preview] slot lookup failed', slotsError);
+    // The three counts are independent — run them in parallel.
+    const [upcomingRes, publishedRes, failedRes] = await Promise.all([
+      supabase
+        .from('scheduled_posts')
+        .select('id', { head: true, count: 'exact' })
+        .in('schedule_id', scheduleIds)
+        .in('status', UPCOMING_SLOT_STATUSES)
+        .eq('user_id', auth.userId),
+      supabase
+        .from('scheduled_posts')
+        .select('id', { head: true, count: 'exact' })
+        .in('schedule_id', scheduleIds)
+        .eq('status', 'published')
+        .eq('user_id', auth.userId),
+      supabase
+        .from('scheduled_posts')
+        .select('id', { head: true, count: 'exact' })
+        .in('schedule_id', scheduleIds)
+        .eq('status', 'failed')
+        .eq('user_id', auth.userId),
+    ]);
+    if (upcomingRes.error || publishedRes.error || failedRes.error) {
+      logger.error('[api/persona/delete-preview] slot lookup failed', {
+        upcoming: upcomingRes.error,
+        published: publishedRes.error,
+        failed: failedRes.error,
+      });
       return apiErrorResponse(500, 'Failed to load delete preview.', {
         route: ROUTE,
         code: ERROR_CODES.INTERNAL_ERROR,
       });
     }
-    upcomingSlots = slotsCount ?? 0;
+    upcomingSlots = upcomingRes.count ?? 0;
     // The cascade deletes ALL slots for the persona's schedules, including
-    // published history — count those too so the preview is honest about
-    // what disappears.
-    const { count: publishedCount, error: publishedError } = await supabase
-      .from('scheduled_posts')
-      .select('id', { head: true, count: 'exact' })
-      .in('schedule_id', scheduleIds)
-      .eq('status', 'published')
-      .eq('user_id', auth.userId);
-    if (publishedError) {
-      logger.error('[api/persona/delete-preview] published slot lookup failed', publishedError);
-      return apiErrorResponse(500, 'Failed to load delete preview.', {
-        route: ROUTE,
-        code: ERROR_CODES.INTERNAL_ERROR,
-      });
-    }
-    publishedSlots = publishedCount ?? 0;
-    // Failed slots are real history rows the cascade also deletes.
-    const { count: failedCount, error: failedError } = await supabase
-      .from('scheduled_posts')
-      .select('id', { head: true, count: 'exact' })
-      .in('schedule_id', scheduleIds)
-      .eq('status', 'failed')
-      .eq('user_id', auth.userId);
-    if (failedError) {
-      logger.error('[api/persona/delete-preview] failed slot lookup failed', failedError);
-      return apiErrorResponse(500, 'Failed to load delete preview.', {
-        route: ROUTE,
-        code: ERROR_CODES.INTERNAL_ERROR,
-      });
-    }
-    failedSlots = failedCount ?? 0;
+    // published history and failed records — count those too so the preview
+    // is honest about what disappears.
+    publishedSlots = publishedRes.count ?? 0;
+    failedSlots = failedRes.count ?? 0;
   }
 
   const generations = (generationsListRes.data ?? [])

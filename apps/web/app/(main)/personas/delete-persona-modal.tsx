@@ -36,6 +36,11 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
   const dialogRef = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
+  // Depend on the id, not the object: a background list refetch replaces
+  // `persona` with a new object, which must not reset the dialog
+  // mid-confirmation.
+  const personaId = persona?.id ?? null;
+
   // Focus the name input when the preview is ready; Escape closes the
   // dialog unless a delete is in flight.
   useEffect(() => {
@@ -45,6 +50,8 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
   }, [phase]);
 
   useEffect(() => {
+    // The modal stays mounted while closed; only listen while open.
+    if (!personaId) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && phase !== 'deleting') {
         onClose();
@@ -69,12 +76,7 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose, phase]);
-
-  // Depend on the id, not the object: a background list refetch replaces
-  // `persona` with a new object, which must not reset the dialog
-  // mid-confirmation.
-  const personaId = persona?.id ?? null;
+  }, [onClose, phase, personaId]);
 
   useEffect(() => {
     if (!personaId) {
