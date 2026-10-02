@@ -336,13 +336,28 @@ describe('POST /api/videos/generate-and-schedule', () => {
       );
       expect(tableMatch).not.toBeNull();
       const columnBlock = tableMatch?.[1] ?? '';
+      // Table-level constraints (e.g. `unique (user_id, persona_id),`) start
+      // with a keyword, not a column name — filter them so a future phantom
+      // key named like a SQL keyword can't false-pass.
+      const constraintKeywords = new Set([
+        'primary',
+        'unique',
+        'foreign',
+        'check',
+        'constraint',
+        'exclude',
+      ]);
       const columns = new Set(
         columnBlock
           .split('\n')
           .map((line) => line.trim().split(/\s+/)[0]?.replace(/["`,]/g, ''))
-          .filter((name) => name && !name.startsWith('--')),
+          .filter(
+            (name) =>
+              name && !name.startsWith('--') && !constraintKeywords.has(name),
+          ),
       );
-      expect(columns.size).toBeGreaterThan(0);
+      // Sentinel: guards against a degraded parse passing vacuously.
+      expect(columns.has('scheduled_at')).toBe(true);
 
       const res = await post(baseBody());
       expect(res.status).toBe(200);
