@@ -256,6 +256,20 @@ describe('lib/api — persona', () => {
       expect(result.error).toContain('502');
     });
 
+    it('surfaces the server structured error on a non-ok JSON response', async () => {
+      fetchMock.mockResolvedValue(
+        new Response(JSON.stringify({ success: false, error: 'Persona not found.', code: 'PERSONA_NOT_FOUND' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+      const result = await fetchDeletePreview('p-1');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Persona not found.');
+    });
+
     it('returns success:false on a non-JSON body instead of throwing', async () => {
       fetchMock.mockResolvedValue(
         new Response('not json', { status: 200, headers: { 'Content-Type': 'text/plain' } }),

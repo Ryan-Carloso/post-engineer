@@ -265,4 +265,32 @@ describe('DeletePersonaModal', () => {
     expect(screen.getByLabelText('personas.deleteDialogTypeName')).toHaveValue('');
     expect(screen.getByRole('button', { name: 'personas.deleteConfirm' })).toBeDisabled();
   });
+
+  it('focuses the name input when the preview is ready', async () => {
+    renderModal();
+    const input = await screen.findByLabelText('personas.deleteDialogTypeName');
+    await waitFor(() => expect(input).toHaveFocus());
+  });
+
+  it('closes on Escape unless a delete is in flight', async () => {
+    const onClose = vi.fn();
+    renderModal({ onClose });
+    await screen.findByText('personas.deleteDialogNoRefund');
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores Escape while a delete is in flight', async () => {
+    const onClose = vi.fn();
+    vi.mocked(deletePersona).mockImplementation(() => new Promise(() => {}));
+    renderModal({ onClose });
+    await screen.findByText('personas.deleteDialogNoRefund');
+    fireEvent.change(screen.getByLabelText('personas.deleteDialogTypeName'), {
+      target: { value: 'Ryan' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'personas.deleteConfirm' }));
+    await waitFor(() => expect(deletePersona).toHaveBeenCalled());
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });

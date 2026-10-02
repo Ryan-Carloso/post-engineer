@@ -269,7 +269,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   return NextResponse.json({
     success: true,
     persona: {
-      id: persona.id,
+      id: typeof persona.id === 'string' ? persona.id : '',
       name: typeof persona.name === 'string' ? persona.name : '',
     },
     counts: {

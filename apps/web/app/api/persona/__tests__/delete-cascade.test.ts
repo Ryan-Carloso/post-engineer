@@ -80,15 +80,15 @@ function baseTables(): Record<string, Row[]> {
       { id: 'gen-9', persona_id: OTHER_PERSONA, user_id: OTHER_USER, engine_task_id: 'task-zzz' },
     ],
     persona_images: [
-      { id: 'img-1', persona_id: PERSONA_ID, image_path: 'uid/img1.png' },
-      { id: 'img-9', persona_id: OTHER_PERSONA, image_path: 'uid/img9.png' },
+      { id: 'img-1', persona_id: PERSONA_ID, image_path: 'uid/img1.png', user_id: USER_ID },
+      { id: 'img-9', persona_id: OTHER_PERSONA, image_path: 'uid/img9.png', user_id: 'user-uuid-2' },
     ],
   };
 }
 
 // Thenable query builder with real in-memory filtering and real deletes,
 // recording delete order per table.
-function makeClient(tables: Record<string, Row[]>, deleteErrorOn?: string) {
+function makeClient(tables: Record<string, Row[]>, deleteErrorOn?: string, removeError: unknown = null) {
   const deletes: string[] = [];
   const from = (table: string) => {
     const predicates: Array<(row: Row) => boolean> = [];
@@ -156,7 +156,7 @@ function makeClient(tables: Record<string, Row[]>, deleteErrorOn?: string) {
       from: vi.fn(() => ({
         remove: vi.fn(async (paths: string[]) => {
           removed.push(paths);
-          return { error: null };
+          return { error: removeError };
         }),
       })),
     },
@@ -164,9 +164,14 @@ function makeClient(tables: Record<string, Row[]>, deleteErrorOn?: string) {
   return { client, deletes, removed };
 }
 
-function setup(tables?: Record<string, Row[]>, deleteErrorOn?: string, personaIds: string[] | null = null) {
+function setup(
+  tables?: Record<string, Row[]>,
+  deleteErrorOn?: string,
+  personaIds: string[] | null = null,
+  removeError: unknown = null,
+) {
   const t = tables ?? baseTables();
-  const { client, deletes, removed } = makeClient(t, deleteErrorOn);
+  const { client, deletes, removed } = makeClient(t, deleteErrorOn, removeError);
   vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
   vi.mocked(requireSupabaseSession).mockResolvedValue({
     auth: { userId: USER_ID, personaIds, accessToken: 'cookie-token' },
@@ -213,6 +218,19 @@ describe('DELETE /api/persona cascade', () => {
     expect(res.status).toBe(200);
     expect(body.success).toBe(true);
     expect(deletes).toEqual(['scheduled_posts', 'schedules', 'video_generations', 'personas']);
+  });
+
+  it('logs storage cleanup failures on the after() path without failing the delete', async () => {
+    // after() runs inline in tests; the microtask flush below lets it land.
+    setup(undefined, undefined, null, { message: 'storage down' });
+    const res = await del(PERSONA_ID);
+    expect(res.status).toBe(200);
+    await flushAfterCallbacks();
+    expect(logger.error).toHaveBeenCalledWith(
+      '[api/persona] storage cleanup failed after delete',
+      expect.objectContaining({ message: 'storage down' }),
+      expect.objectContaining({ paths: expect.any(Array) }),
+    );
   });
 
   it('leaves no orphan rows behind', async () => {

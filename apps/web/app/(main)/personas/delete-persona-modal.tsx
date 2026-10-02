@@ -33,6 +33,26 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
   const [typedName, setTypedName] = useState('');
   const [attempt, setAttempt] = useState(0);
   const loadedPersonaId = useRef<string | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
+  // Focus the name input when the preview is ready; Escape closes the
+  // dialog unless a delete is in flight.
+  useEffect(() => {
+    if (phase === 'ready') {
+      nameInputRef.current?.focus();
+    }
+  }, [phase]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && phase !== 'deleting') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose, phase]);
 
   // Depend on the id, not the object: a background list refetch replaces
   // `persona` with a new object, which must not reset the dialog
@@ -99,6 +119,7 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
 
   return (
     <div
+      ref={dialogRef}
       role="alertdialog"
       aria-modal="true"
       aria-labelledby="delete-persona-title"
@@ -219,6 +240,7 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
               {t('personas.deleteDialogTypeName')}
             </label>
             <input
+              ref={nameInputRef}
               id="delete-persona-confirm-name"
               type="text"
               value={typedName}
