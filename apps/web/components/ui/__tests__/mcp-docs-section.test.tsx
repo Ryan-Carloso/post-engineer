@@ -174,13 +174,20 @@ describe('McpDocsSection', () => {
     // The generate_persona_videos doc line is the agent's source of truth
     // for the schedule window; EN and PT must agree on the minimum advance
     // (regression: the PT line still advertised the old 24h window).
+    // Step 5 of the prompt carries the same window and is pinned too, plus
+    // a prompt-wide guard so no 24h copy can slip back in anywhere.
     for (const locale of ['en', 'pt'] as const) {
+      expect(prompts[locale], `${locale} prompt`).not.toContain('24h');
       const videoLine = prompts[locale]
         .split('\n')
         .find((line) => line.includes('- generate_persona_videos:'));
       expect(videoLine, `${locale} prompt`).toBeDefined();
       expect(videoLine, `${locale} prompt`).toContain('3h');
-      expect(videoLine, `${locale} prompt`).not.toContain('24h');
+      const step5Line = prompts[locale]
+        .split('\n')
+        .find((line) => line.startsWith('5. '));
+      expect(step5Line, `${locale} prompt step 5`).toBeDefined();
+      expect(step5Line, `${locale} prompt step 5`).toContain('3h');
     }
   });
 });
