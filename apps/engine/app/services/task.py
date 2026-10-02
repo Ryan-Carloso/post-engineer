@@ -101,6 +101,27 @@ def _should_emit_failed_event(task_id: str) -> bool:
         _failed_event_emitted_tasks_lock.release()
 
 
+def discard_failed_event(task_id: str) -> None:
+    """Release ``task_id`` from the failed-event dedup guard.
+
+    Call when a dispatch for ``task_id`` succeeds after an earlier tick's
+    dispatch failure recorded it: the earlier failure already emitted its
+    terminal event, so the stale entry must not suppress a later genuine
+    pipeline failure of the re-dispatched task (fail -> succeed -> fail
+    would otherwise lose the real terminal event from the funnel).
+    """
+    if not _failed_event_emitted_tasks_lock.acquire(timeout=_ALERT_LOCK_TIMEOUT_SECONDS):
+        logger.warning("discard_failed_event: lock timeout", task_id=task_id)
+        return
+    try:
+        try:
+            _failed_event_emitted_tasks.remove(task_id)
+        except ValueError:
+            pass
+    finally:
+        _failed_event_emitted_tasks_lock.release()
+
+
 #---------------
 MAX_REQUESTED_EVENT_IDS = 1000
 _requested_event_emitted_tasks: deque[str] = deque(maxlen=MAX_REQUESTED_EVENT_IDS)

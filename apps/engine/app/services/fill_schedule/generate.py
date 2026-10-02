@@ -121,6 +121,13 @@ class BatchGenerator:
             )
             try:
                 self._dispatch_generation(task_id, request, user_id)
+                # The dispatch itself succeeded: release the failed-event
+                # dedup entry for this deterministic id. An earlier tick's
+                # transient dispatch failure recorded it, and without the
+                # release a genuine pipeline failure of this re-dispatched
+                # task would be suppressed by the stale entry — the real
+                # terminal event would never reach the funnel.
+                tm.discard_failed_event(task_id)
             except Exception:
                 # Refund just this video's prepaid cost; the id keeps the
                 # other videos' charges intact.

@@ -706,6 +706,59 @@ class BatchFailedTests(unittest.TestCase):
         ]
         self.assertEqual(len(failed_calls), 1)
 
+    def test_successful_redispatch_releases_failed_event_guard(self):
+        # Fail -> succeed -> fail: a transient dispatch failure records the
+        # deterministic id in the failed-event guard; the re-dispatch then
+        # succeeds and the task genuinely fails in the pipeline. The stale
+        # guard entry must not suppress the real terminal event — the
+        # successful dispatch closes the dispatch-failure incident, so the
+        # later pipeline failure still reaches the funnel.
+        from app.services.fill_schedule import generate as gen_module
+
+        store = MagicMock()
+        store.signed_url = MagicMock(return_value="https://signed/foto.png")
+        generator = gen_module.BatchGenerator(
+            store=store, task_state=MagicMock(), notify=MagicMock()
+        )
+        slot = self._slot()
+        task_id = gen_module.new_task_id(slot)
+        sm.state.update_task(
+            task_id, user_id="user-1", flow="batch", pipeline="video"
+        )
+        self.addCleanup(sm.state.delete_task, task_id)
+        boom = RuntimeError("transient dispatch blip")
+        with (
+            patch.object(gen_module.tm, "track_generation_requested"),
+            patch.object(gen_module, "track_event") as gen_track,
+            patch.object(tm, "track_event") as task_track,
+            patch.object(tm.task_webhook, "notify_terminal_task"),
+            patch.object(tm, "send_discord", return_value=True),
+            patch.object(generator, "_dispatch_generation", side_effect=[boom, None]),
+        ):
+            # Tick 1: transient dispatch failure -> failed event emitted,
+            # guard records the id.
+            self.assertIsNone(generator._generate_slot(slot))
+            # Tick 2: re-dispatch succeeds -> slot marked generating, the
+            # guard entry is released.
+            self.assertIsNotNone(generator._generate_slot(slot))
+            # Tick 3: the re-dispatched task genuinely fails in the pipeline.
+            tm._fail_task(task_id, "gpu exploded", _params(), stage="render")
+        dispatch_failed = [
+            c
+            for c in gen_track.call_args_list
+            if c[0][0] == "video_generation_failed"
+        ]
+        terminal_failed = [
+            c
+            for c in task_track.call_args_list
+            if c[0][0] == "video_generation_failed"
+        ]
+        self.assertEqual(len(dispatch_failed), 1)
+        self.assertEqual(len(terminal_failed), 1)
+        _, props = terminal_failed[0][0]
+        self.assertEqual(props["task_id"], task_id)
+        self.assertEqual(props["stage"], "render")
+
 
 if __name__ == "__main__":
     unittest.main()
