@@ -227,6 +227,24 @@ describe('DeletePersonaModal', () => {
     expect(fetchDeletePreview).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the Delete label on the destructive button while deleting', async () => {
+    // Regression pin: the button rendered t('personas.delete') — the card
+    // button's aria-label copy ("Delete persona") — during the deleting
+    // phase, visibly mutating from "Delete" to "Delete persona" mid-flight.
+    // Delete hangs so the dialog stays in 'deleting'.
+    vi.mocked(deletePersona).mockImplementation(() => new Promise(() => {}));
+    renderModal();
+    await screen.findByText('personas.deleteDialogNoRefund');
+    fireEvent.change(screen.getByLabelText('personas.deleteDialogTypeName'), {
+      target: { value: 'Ryan' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'personas.deleteConfirm' }));
+    await waitFor(() => expect(deletePersona).toHaveBeenCalled());
+    // Still "Delete", disabled — no label mutation while the request is in flight.
+    const button = screen.getByRole('button', { name: 'personas.deleteConfirm' });
+    expect(button).toBeDisabled();
+  });
+
   it('keeps the typed name when retrying incomplete links', async () => {
     vi.mocked(fetchDeletePreview)
       .mockResolvedValueOnce({ ...PREVIEW, linksIncomplete: true })

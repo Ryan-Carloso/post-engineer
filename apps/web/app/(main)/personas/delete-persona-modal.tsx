@@ -324,7 +324,7 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
               disabled={!nameMatches || phase === 'deleting'}
               className="inline-flex min-h-11 items-center justify-center rounded-lg bg-red-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-40"
             >
-              {phase === 'deleting' ? t('personas.delete') : t('personas.deleteConfirm')}
+              {t('personas.deleteConfirm')}
             </button>
           )}
         </div>
