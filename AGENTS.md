@@ -1470,3 +1470,26 @@ Follow these so the same issues don't come back:
   no-op, so a truncate-first revert there passed CI. Every scrub site
   gets a >200-char secret-bearing test asserting the scrubber received
   the full string.
+
+## Engine review learnings, PR #51 round 3 (2026-10-02)
+- **Dedup terminal events by notice, not by state.** The publish stage
+  pre-writes FAILED before raising, so `_fail_task`'s "already failed"
+  branch skipped the funnel event entirely — publish failures had no
+  terminal event. A bounded emission set (`_should_emit_failed_event`,
+  mirroring `_should_send_failure_alert`) makes the FIRST notice always
+  emit while later notices stay deduped; the milestone cache now pops on
+  every notice, not just the first.
+- **Funnel entry ordering must be deterministic, not probable.** Firing
+  requested after `add_task` returns still races the synchronously
+  started worker thread. `TaskManager.add_task` takes an `on_accepted`
+  callback fired after acceptance but before thread start (never on
+  429) — pinned at the manager level with a fake that records
+  callback-vs-execute order.
+- **Degraded identity props use the "unknown" sentinel, never a
+  plausible-looking value.** `user_id="internal"` read as a real person
+  in PostHog breakdowns; it now degrades to "unknown" like flow.
+- **A deferred pre-existing instance stops being "out of scope" when
+  the reviewer re-flags it in the same event family.** publish.py's
+  truncate-then-scrub on `video_publish_failed` was left for a follow-up
+  in round 1; round 3 correctly called it a live leak in the same
+  family — fixed here with the same white-box pin.
