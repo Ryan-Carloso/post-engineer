@@ -1136,7 +1136,7 @@ class CoverageGapTests(unittest.TestCase):
 
     def test_failed_stage_logs_at_error_level(self):
         # A failed tick stage is a real recurring error: it must be logged at
-        # ERROR so the Bugsink bridge (loguru sink, ERROR+) forwards it.
+        # ERROR so the PostHog bridge (loguru sink, ERROR+) forwards it.
         store = _FakeStore()
         store.pending_slots = MagicMock(side_effect=RuntimeError("supabase down"))
         scheduler = self._scheduler(store)
