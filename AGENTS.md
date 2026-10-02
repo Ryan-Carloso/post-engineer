@@ -1424,3 +1424,13 @@ Follow these so the same issues don't come back:
   it guarded needs the same fallback+test treatment as its siblings got —
   audit all consumers of the removed discriminator, not just the obvious
   one.
+
+## Web/API review learnings, PR #44 round 4 (2026-10-02)
+- **Test the combined production shape, not just each null in isolation.**
+  The unified endpoint stores `days_of_week: null` AND no window together —
+  fixtures must cover the combination, since that is what every real card
+  renders.
+- **`getByText` exact-match hides prefixed copies.** A `<span>▣ key</span>`
+  never exact-matches `key` — scope fallback assertions by the cell's
+  distinctive prefix (`/▣ key/`, `/◷ key/`) so the test pins the intended
+  cell instead of accidentally passing on an unrelated element.
