@@ -1916,3 +1916,6 @@ Follow these so the same issues don't come back:
 
 - **No CRITICAL/MAJOR on the follow-up head.** Round-3 fixes verified in the tree.
 - **Pin config-declared metadata in tests.** `metadata.icons` is the exact line whose omission once silently dropped the apple-touch-icon — a future rebrand can drop a role again with zero CI signal. `metadata` is a plain static export, so `app/__tests__/layout.test.tsx` pins it directly plus an existence check that each href resolves under `public/` (both mutation-verified).
+
+## PR #58 round-6 review learnings (2026-10-02, CI web failure)
+- **JWT tamper tests must flip a fully-significant base64url char.** `token.slice(0, -2) + "aa"` is a byte-level no-op ~1/256 of the time: an ES256 signature is 64 bytes = 86 base64url chars, and the last char carries only 2 data bits (low 4 are padding, ignored by decoders). When the 85th char is already `a` and the 86th's 2 significant bits match, the "tampered" token verifies fine — flaky CI failure. Fix: flip the FIRST signature char (fully significant). Proven with a 300-iteration loop asserting the signature bytes always change and verification always rejects.
