@@ -53,6 +53,7 @@ const BASE_TABLES: TableData = {
     { id: 'slot-1', schedule_id: 'sched-1', status: 'pending', user_id: USER_ID },
     { id: 'slot-2', schedule_id: 'sched-1', status: 'published', user_id: USER_ID },
     { id: 'slot-3', schedule_id: 'sched-2', status: 'ready', user_id: USER_ID },
+    { id: 'slot-4', schedule_id: 'sched-2', status: 'failed', user_id: USER_ID },
     // Cross-user slot on the same schedule id shape: must never be counted.
     { id: 'slot-x', schedule_id: 'sched-1', status: 'pending', user_id: 'user-uuid-2' },
   ],
@@ -197,11 +198,12 @@ describe('GET /api/persona/delete-preview', () => {
     expect(res.status).toBe(200);
     expect(body.success).toBe(true);
     // 2 schedules; upcoming = pending + ready (published is terminal);
-    // publishedSlots counts the history the cascade also deletes.
+    // publishedSlots/failedSlots count the history the cascade also deletes.
     expect(body.counts).toMatchObject({
       schedules: 2,
       upcomingSlots: 2,
       publishedSlots: 1,
+      failedSlots: 1,
       generatedVideos: 2,
       personaImages: 3,
     });

@@ -58,8 +58,18 @@ export function firstDownloadUrl(rewrittenBody: unknown): string | null {
       if (value.startsWith('/api/persona/video-download/') && !value.includes('?source=stream')) {
         // Validate every segment: a pre-formed string from the engine body
         // must not smuggle an arbitrary same-origin path into the href.
+        // Segments are percent-encoded by the encoder, so test the decoded
+        // form (a decode failure is itself a rejection).
         const segments = value.slice('/api/persona/video-download/'.length).split('/');
-        if (segments.length > 0 && segments.every((s) => s.length > 0 && SAFE_TASK_ID.test(s))) {
+        const valid = segments.length > 0 && segments.every((s) => {
+          if (s.length === 0) return false;
+          try {
+            return SAFE_TASK_ID.test(decodeURIComponent(s));
+          } catch {
+            return false;
+          }
+        });
+        if (valid) {
           found.push(value);
         }
       }
