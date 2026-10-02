@@ -8,6 +8,7 @@ import { isOwnVercelPreviewHost } from '@/lib/vercel-preview-host';
 import { useI18n } from '@/lib/i18n/provider';
 import { LOCALES } from '@/lib/i18n';
 import { BoltIcon } from '@/lib/ui';
+import AppLogo from '@/components/ui/app-logo';
 import { ArrowRight, CalendarDays, ChartBar } from 'lucide-react';
 import { logClientError } from '@/lib/client-logger';
 
@@ -160,9 +161,7 @@ const LoginHero = () => {
       />
 
       <div className="relative flex items-center gap-2.5">
-        <span className="flex size-10 items-center justify-center rounded-xl bg-white text-[#0d1220] shadow-[0_6px_20px_rgba(255,84,76,0.35)] [&>svg]:size-5">
-          <BoltIcon />
-        </span>
+        <AppLogo size={40} className="rounded-xl shadow-[0_6px_20px_rgba(255,84,76,0.35)]" />
         <span className="text-xl font-bold tracking-[-0.02em] text-white">Post Engineer</span>
       </div>
 
@@ -260,9 +259,7 @@ const LoginCardHeader = () => {
   return (
     <div className="mb-8 text-center">
       <div className="flex items-center justify-center gap-2.5">
-        <span className="flex size-10 items-center justify-center rounded-xl bg-linear-to-br from-[#ff6b64] to-[#e04540] text-white shadow-[0_8px_20px_rgba(255,84,76,0.35)]">
-          <BoltIcon />
-        </span>
+        <AppLogo size={40} className="rounded-xl shadow-[0_8px_20px_rgba(255,84,76,0.35)]" />
         <span className="text-xl font-bold tracking-[-0.02em] text-[#101728]">Post Engineer</span>
       </div>
       <h2 className="mt-6 text-3xl font-bold tracking-tight text-[#101728]">
