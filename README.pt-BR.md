@@ -185,7 +185,7 @@ usá-lo com a plataforma hospedada:
   "mcpServers": {
     "post-engineer": {
       "type": "local",
-      "command": ["npx", "-y", "post-engineer-mcp"],
+      "command": ["npx", "-y", "post-engineer-mcp@latest"],
       "environment": {
         "POST_ENGINEER_API_KEY": "<MY_API_KEY>"
       }
@@ -195,7 +195,9 @@ usá-lo com a plataforma hospedada:
 ```
 
 Gere `<MY_API_KEY>` em
-[post-engineer.com/api-keys](https://post-engineer.com/api-keys). Para apontar
+[post-engineer.com/api-keys](https://post-engineer.com/api-keys). A tag
+`@latest` é importante: o `npx` reutiliza a cópia em cache sem verificar
+atualizações. Para apontar
 o servidor para sua própria instância self-hosted, defina
 `POST_ENGINEER_API_URL` (veja [apps/mcp/README.md](apps/mcp/README.md) para a
 lista completa de tools, dicas de timeout no OpenCode e desenvolvimento local).
