@@ -332,7 +332,7 @@ class ReconcileTests(unittest.TestCase):
         store = _FakeStore()
         store.generating_slots = lambda: [slot]
         state = MagicMock()
-        task_error = "E" * 450 + " api_key=TOPSECRET123" + "F" * 200
+        task_error = "E" * 450 + " api_key=TOPSECRET123 " + "F" * 200
         state.get_task.return_value = {
             "state": -1,
             "error": task_error,
@@ -568,7 +568,7 @@ class PublishDueTests(unittest.TestCase):
         store.ready_due_slots = lambda now: [self._slot()]
         state = MagicMock()
         state.get_task.return_value = {"state": 1, "videos": [self.video_path]}
-        error = PublishError("E" * 150 + " api_key=TOPSECRET123" + "F" * 150)
+        error = PublishError("E" * 150 + " api_key=TOPSECRET123 " + "F" * 150)
         publish = MagicMock(side_effect=error)
         scheduler = fs.FillScheduleScheduler(
             store=store, task_state=state,

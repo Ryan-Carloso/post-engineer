@@ -220,7 +220,7 @@ class SendDiscordTests(unittest.TestCase):
         # would stay green.
         from app.services import analytics as analytics_module
 
-        exc = RuntimeError("E" * 150 + " api_key=TOPSECRET123" + "F" * 150)
+        exc = RuntimeError("E" * 150 + " api_key=TOPSECRET123 " + "F" * 150)
         with patch.object(
             nf, "scrub_secret_values", wraps=analytics_module.scrub_secret_values
         ) as scrub:

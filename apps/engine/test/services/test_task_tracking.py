@@ -282,7 +282,7 @@ class FailTaskTests(unittest.TestCase):
         # see the full message; truncation happens after.
         from app.services import analytics as analytics_module
 
-        error = "E" * 150 + " api_key=TOPSECRET123" + "F" * 150
+        error = "E" * 150 + " api_key=TOPSECRET123 " + "F" * 150
         with (
             patch.object(tm, "track_event") as track,
             patch.object(tm.task_webhook, "notify_terminal_task"),
@@ -634,7 +634,7 @@ class BatchFailedTests(unittest.TestCase):
         generator = gen_module.BatchGenerator(
             store=store, task_state=MagicMock(), notify=MagicMock()
         )
-        error = RuntimeError("E" * 150 + " api_key=TOPSECRET123" + "F" * 150)
+        error = RuntimeError("E" * 150 + " api_key=TOPSECRET123 " + "F" * 150)
         with (
             patch.object(gen_module.tm, "track_generation_requested"),
             patch.object(gen_module, "track_event") as track,
@@ -672,7 +672,7 @@ class BatchFailedTests(unittest.TestCase):
         generator = gen_module.BatchGenerator(
             store=store, task_state=MagicMock(), notify=MagicMock()
         )
-        boom = RuntimeError("E" * 450 + " api_key=TOPSECRET123" + "F" * 200)
+        boom = RuntimeError("E" * 450 + " api_key=TOPSECRET123 " + "F" * 200)
         with (
             patch.object(generator, "_dispatch_generation", side_effect=boom),
             patch.object(gen_module, "track_event"),
