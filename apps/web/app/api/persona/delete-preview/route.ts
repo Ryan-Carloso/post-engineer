@@ -57,7 +57,11 @@ type DownloadLookup = {
   url: string | null;
   // True when the lookup failed transiently (engine 5xx, network error,
   // abort): the video file may still exist, so the UI must not present
-  // this as unrecoverable. False for 404/unsafe-id (truly gone).
+  // this as unrecoverable. False for 404/unsafe-id (truly gone) AND for
+  // 401/403 and engine-auth misconfiguration (broken MONEYPRINT_API_SECRET):
+  // those are config errors, never transient — retry cannot fix them, so
+  // the UI renders the dead-end "Download unavailable" copy without a
+  // retry note. Do not reclassify either side without updating the UI copy.
   transientFailure: boolean;
 };
 

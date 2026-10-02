@@ -1765,3 +1765,9 @@ Follow these so the same issues don't come back:
   The engine's boot reconcile assumes one process; rolling deploys would
   double-reconcile. config.toml is gitignored, so the constraint lives in
   config.example.toml (stop-then-start only, never rolling).
+
+## PR #52 consolidation review learnings (2026-10-02, OpenCode on the merge)
+
+- **Conflict resolution on user-facing copy needs semantic verification, not just marker removal.** Merging #44 (dead-code removal) into the consolidated branch silently reverted its own "Publish time" reword on two of three validator branches — the 3h parameterization from #46 was authored against the pre-reword copy and the merge kept that older text. Markers resolved cleanly while the meaning regressed. After resolving copy conflicts, diff the resolved strings against BOTH sides' intent (reword vs parameterization), not just the markers.
+- **Pin copy rewords with negative-match tests.** A regex test matching `/at least 3 hours/i` cannot catch a field-name regression. Pair every user-facing reword with `expect(error).not.toMatch(/<removedName>/i)` so the next stacked merge can't silently resurrect a deleted field name in 400 bodies.
+- **Name every non-transient case in failure-classification comments.** A doc comment saying "False for 404/unsafe-id (truly gone)" understated a contract that also returns false for 401/403 and auth misconfiguration. Future readers "fix" classifications they don't understand — document the full decision table where the type is defined, including which UI copy each side drives.

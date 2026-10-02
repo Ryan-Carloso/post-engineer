@@ -39,7 +39,7 @@ export function validateScheduleWindow(
   if (diffMs < SCHEDULE_MIN_ADVANCE_MS) {
     return {
       ok: false,
-      error: `scheduledAt must be at least ${SCHEDULE_MIN_ADVANCE_HOURS} hours in advance (earliest allowed is ${new Date(
+      error: `Publish time must be at least ${SCHEDULE_MIN_ADVANCE_HOURS} hours in advance (earliest allowed is ${new Date(
         now.getTime() + SCHEDULE_MIN_ADVANCE_MS,
       ).toISOString()}).`,
     };
@@ -48,7 +48,7 @@ export function validateScheduleWindow(
   if (diffMs > SCHEDULE_MAX_AHEAD_MS) {
     return {
       ok: false,
-      error: `scheduledAt cannot be more than ${SCHEDULE_MAX_AHEAD_DAYS} days in advance (latest allowed is ${new Date(
+      error: `Publish time cannot be more than ${SCHEDULE_MAX_AHEAD_DAYS} days in advance (latest allowed is ${new Date(
         now.getTime() + SCHEDULE_MAX_AHEAD_MS,
       ).toISOString()}).`,
     };
