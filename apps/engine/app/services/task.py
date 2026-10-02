@@ -75,10 +75,8 @@ _discord_notified_failed_tasks_lock = Lock()
 # always emits video_generation_failed, even when the FAILED state was
 # pre-written by an earlier stage (the publish stage writes FAILED
 # directly before raising). Later notices stay deduped. Bounded like the
-# alert cache above. Entries leave two ways: natural deque aging, and
-# explicit release via discard_failed_event when a batch re-dispatch
-# succeeds after a transient dispatch failure (deterministic uuid5 ids
-# are re-armed within one process lifetime on that path).
+# alert cache above: task ids are never reused, so eviction only drops
+# ids whose terminal event was long since emitted.
 #---------------
 MAX_FAILED_EVENT_IDS = 1000
 _failed_event_emitted_tasks: deque[str] = deque(maxlen=MAX_FAILED_EVENT_IDS)
@@ -103,25 +101,35 @@ def _should_emit_failed_event(task_id: str) -> bool:
         _failed_event_emitted_tasks_lock.release()
 
 
-def discard_failed_event(task_id: str) -> None:
-    """Release ``task_id`` from the failed-event dedup guard.
+#---------------
+# Dispatch-failure emission dedup: the batch dispatch-failure path emits
+# video_generation_failed for incidents that never started a task, so it
+# must NOT share the pipeline terminal guard above. A transient dispatch
+# failure followed by a successful re-dispatch and a genuine pipeline
+# failure are two real incidents for one deterministic id, and both must
+# emit — a shared guard suppresses one side or the other. Kept separate,
+# neither path can arm, suppress, or re-arm the other's terminal event.
+#---------------
+MAX_DISPATCH_FAILED_EVENT_IDS = 1000
+_dispatch_failed_event_emitted_tasks: deque[str] = deque(maxlen=MAX_DISPATCH_FAILED_EVENT_IDS)
+_dispatch_failed_event_emitted_tasks_lock = Lock()
 
-    Call when a dispatch for ``task_id`` succeeds after an earlier tick's
-    dispatch failure recorded it: the earlier failure already emitted its
-    terminal event, so the stale entry must not suppress a later genuine
-    pipeline failure of the re-dispatched task (fail -> succeed -> fail
-    would otherwise lose the real terminal event from the funnel).
+
+def _should_emit_dispatch_failed_event(task_id: str) -> bool:
+    """Atomically check-and-record ``task_id``; True only on first sight.
+
+    Same fail-open lock semantics as the pipeline guard: a duplicate
+    dispatch-failure event is less harmful than a missing one.
     """
-    if not _failed_event_emitted_tasks_lock.acquire(timeout=_ALERT_LOCK_TIMEOUT_SECONDS):
-        logger.warning("discard_failed_event: lock timeout", task_id=task_id)
-        return
+    if not _dispatch_failed_event_emitted_tasks_lock.acquire(timeout=_ALERT_LOCK_TIMEOUT_SECONDS):
+        return True
     try:
-        try:
-            _failed_event_emitted_tasks.remove(task_id)
-        except ValueError:
-            pass
+        if task_id in _dispatch_failed_event_emitted_tasks:
+            return False
+        _dispatch_failed_event_emitted_tasks.append(task_id)
+        return True
     finally:
-        _failed_event_emitted_tasks_lock.release()
+        _dispatch_failed_event_emitted_tasks_lock.release()
 
 
 #---------------

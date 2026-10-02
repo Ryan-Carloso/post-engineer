@@ -121,19 +121,6 @@ class BatchGenerator:
             )
             try:
                 self._dispatch_generation(task_id, request, user_id)
-                # The dispatch itself succeeded: release the failed-event
-                # dedup entry for this deterministic id. An earlier tick's
-                # transient dispatch failure recorded it, and without the
-                # release a genuine pipeline failure of this re-dispatched
-                # task would be suppressed by the stale entry — the real
-                # terminal event would never reach the funnel.
-                # Trade-off, named: the worker thread starts inside
-                # _dispatch_generation, so a task failing fast enough to
-                # reach _fail_task before this line still hits the stale
-                # entry. The window is one deque-remove wide (accepted);
-                # evicting before dispatch would break the
-                # repeat-dispatch-failure dedup instead.
-                tm.discard_failed_event(task_id)
             except Exception:
                 # Refund just this video's prepaid cost; the id keeps the
                 # other videos' charges intact.
@@ -179,13 +166,17 @@ class BatchGenerator:
                 failed_props["task_id"] = task_id
             if user_id is not None:
                 failed_props["user_id"] = user_id
-            # Dedup by task id (the same bounded guard _fail_task uses): a
-            # crash between dispatch and update_slot(generating) re-dispatches
-            # the same deterministic id, and without the guard the second
-            # failed dispatch would double-count the failure numerator while
-            # requested stays suppressed. Pre-task failures (task_id None)
-            # have no requested event, so they always emit.
-            if task_id is None or tm._should_emit_failed_event(task_id):
+            # Dedup by task id on a dedicated dispatch-failure guard (separate
+            # from the pipeline terminal guard _fail_task uses): a crash
+            # between dispatch and update_slot(generating) re-dispatches the
+            # same deterministic id, and without the guard the second failed
+            # dispatch would double-count the failure numerator while
+            # requested stays suppressed. The guards stay separate so a
+            # dispatch failure can never suppress — or re-arm — the genuine
+            # pipeline terminal event of a later successful re-dispatch.
+            # Pre-task failures (task_id None) have no requested event, so
+            # they always emit.
+            if task_id is None or tm._should_emit_dispatch_failed_event(task_id):
                 track_event("video_generation_failed", failed_props)
             notify_safe(
                 self.notify,

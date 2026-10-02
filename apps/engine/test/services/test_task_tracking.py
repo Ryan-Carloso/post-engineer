@@ -582,11 +582,12 @@ class BatchFailedTests(unittest.TestCase):
 
     def setUp(self):
         # The emission guards are process-local: a task id recorded by an
-        # earlier test would silently suppress emissions here. Clear both
-        # deques so every test starts from a clean slate.
+        # earlier test would silently suppress emissions here. Clear all
+        # three deques so every test starts from a clean slate.
         from app.services.fill_schedule import generate as gen_module
 
         gen_module.tm._failed_event_emitted_tasks.clear()
+        gen_module.tm._dispatch_failed_event_emitted_tasks.clear()
         gen_module.tm._requested_event_emitted_tasks.clear()
 
     def test_dispatch_failure_tracks_failed_with_funnel_context(self):
@@ -720,13 +721,13 @@ class BatchFailedTests(unittest.TestCase):
         ]
         self.assertEqual(len(failed_calls), 1)
 
-    def test_successful_redispatch_releases_failed_event_guard(self):
+    def test_pipeline_failure_after_redispatch_emits_terminal_event(self):
         # Fail -> succeed -> fail: a transient dispatch failure records the
-        # deterministic id in the failed-event guard; the re-dispatch then
-        # succeeds and the task genuinely fails in the pipeline. The stale
-        # guard entry must not suppress the real terminal event — the
-        # successful dispatch closes the dispatch-failure incident, so the
-        # later pipeline failure still reaches the funnel.
+        # deterministic id in the dispatch-failure guard; the re-dispatch
+        # then succeeds and the task genuinely fails in the pipeline. The
+        # dispatch guard is separate from the pipeline terminal guard, so
+        # the earlier dispatch incident can neither suppress nor re-arm the
+        # real terminal event — both incidents reach the funnel.
         from app.services.fill_schedule import generate as gen_module
 
         store = MagicMock()
@@ -772,6 +773,46 @@ class BatchFailedTests(unittest.TestCase):
         _, props = terminal_failed[0][0]
         self.assertEqual(props["task_id"], task_id)
         self.assertEqual(props["stage"], "render")
+
+    def test_dispatch_failure_does_not_consume_pipeline_guard(self):
+        # The dispatch-failure emission must record only the dedicated
+        # dispatch guard — never the pipeline terminal guard _fail_task
+        # uses. After a dispatch failure, the first genuine pipeline
+        # failure notice for the same id still emits its terminal event.
+        from app.services.fill_schedule import generate as gen_module
+
+        store = MagicMock()
+        store.signed_url = MagicMock(return_value="https://signed/foto.png")
+        generator = gen_module.BatchGenerator(
+            store=store, task_state=MagicMock(), notify=MagicMock()
+        )
+        slot = self._slot()
+        task_id = gen_module.new_task_id(slot)
+        sm.state.update_task(
+            task_id, user_id="user-1", flow="batch", pipeline="video"
+        )
+        self.addCleanup(sm.state.delete_task, task_id)
+        boom = RuntimeError("transient dispatch blip")
+        with (
+            patch.object(gen_module.tm, "track_generation_requested"),
+            patch.object(gen_module, "track_event"),
+            patch.object(generator, "_dispatch_generation", side_effect=boom),
+        ):
+            self.assertIsNone(generator._generate_slot(slot))
+        self.assertIn(task_id, gen_module.tm._dispatch_failed_event_emitted_tasks)
+        self.assertNotIn(task_id, tm._failed_event_emitted_tasks)
+        with (
+            patch.object(tm, "track_event") as task_track,
+            patch.object(tm.task_webhook, "notify_terminal_task"),
+            patch.object(tm, "send_discord", return_value=True),
+        ):
+            tm._fail_task(task_id, "gpu exploded", _params(), stage="render")
+        terminal_failed = [
+            c
+            for c in task_track.call_args_list
+            if c[0][0] == "video_generation_failed"
+        ]
+        self.assertEqual(len(terminal_failed), 1)
 
 
 if __name__ == "__main__":
