@@ -8,7 +8,7 @@ POSTs a small JSON payload to the caller-supplied ``webhook_url`` (if any):
 
 Delivery is best-effort and never affects the task: the POST runs on a
 short-lived daemon thread with a short timeout, and any delivery failure
-only logs at ERROR (forwarded to Bugsink by the asgi sink). Each task
+only logs at ERROR (forwarded to PostHog by the asgi sink). Each task
 notifies at most once — the dedupe is a bounded deque with a lock, so a
 task that fails in several phases still sends a single webhook.
 """
@@ -47,7 +47,7 @@ def _post(webhook_url: str, payload: dict, task_id: str) -> None:
         response.raise_for_status()
     except Exception as exc:  # noqa: BLE001 — delivery is best-effort by design
         # Never raise: a dead webhook must not fail or stall the task.
-        # ERROR goes to Bugsink via the asgi sink so the user can see why
+        # ERROR goes to PostHog via the asgi sink so the user can see why
         # the callback never arrived.
         logger.bind(task_id=task_id).error(
             "terminal webhook delivery failed: {error}", error=str(exc)[:500]

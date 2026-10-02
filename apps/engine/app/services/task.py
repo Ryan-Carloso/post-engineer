@@ -361,7 +361,7 @@ def _fail_task(
     """Mark a task FAILED; fire-and-forget Discord alert (once per task).
 
     Every call emits a structured Loguru ERROR record (forwarded to
-    Bugsink by the asgi sink, ERROR+) with the task id, the pipeline
+    PostHog by the asgi sink, ERROR+) with the task id, the pipeline
     stage that failed and the error type — so the reason is visible per
     step. The full params are never logged: they may carry secrets,
     signed URLs or tokens.
