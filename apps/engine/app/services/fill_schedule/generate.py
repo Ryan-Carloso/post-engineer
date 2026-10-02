@@ -166,7 +166,14 @@ class BatchGenerator:
                 failed_props["task_id"] = task_id
             if user_id is not None:
                 failed_props["user_id"] = user_id
-            track_event("video_generation_failed", failed_props)
+            # Dedup by task id (the same bounded guard _fail_task uses): a
+            # crash between dispatch and update_slot(generating) re-dispatches
+            # the same deterministic id, and without the guard the second
+            # failed dispatch would double-count the failure numerator while
+            # requested stays suppressed. Pre-task failures (task_id None)
+            # have no requested event, so they always emit.
+            if task_id is None or tm._should_emit_failed_event(task_id):
+                track_event("video_generation_failed", failed_props)
             notify_safe(
                 self.notify,
                 notify_module.slot_failed_msg(

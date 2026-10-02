@@ -666,6 +666,31 @@ class BatchFailedTests(unittest.TestCase):
         self.assertNotIn("TOPSECRET123", fields["error"])
         self.assertLessEqual(len(fields["error"]), 500)
 
+    def test_repeat_dispatch_failure_emits_failed_event_once(self):
+        # Deterministic batch ids can be re-dispatched after a crash
+        # (dispatch fails -> update_slot(generating) lost -> slot stays
+        # pending -> same uuid5 id dispatched again). The failure event
+        # must not double-count: the second notice for the same task id
+        # is suppressed by the same bounded guard _fail_task uses.
+        from app.services.fill_schedule import generate as gen_module
+
+        store = MagicMock()
+        store.signed_url = MagicMock(return_value="https://signed/foto.png")
+        generator = gen_module.BatchGenerator(
+            store=store, task_state=MagicMock(), notify=MagicMock()
+        )
+        boom = RuntimeError("dispatch exploded")
+        with (
+            patch.object(generator, "_dispatch_generation", side_effect=boom),
+            patch.object(gen_module, "track_event") as track,
+        ):
+            self.assertIsNone(generator._generate_slot(self._slot()))
+            self.assertIsNone(generator._generate_slot(self._slot()))
+        failed_calls = [
+            c for c in track.call_args_list if c[0][0] == "video_generation_failed"
+        ]
+        self.assertEqual(len(failed_calls), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
