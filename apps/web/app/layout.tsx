@@ -21,6 +21,10 @@ const geistMono = process.env.CYPRESS_COVERAGE === '1'
 export const metadata: Metadata = {
   title: "Post Engineer",
   description: "Publique vídeos no seu canal do YouTube",
+  // Single icon source set in /public (no file-convention twins in app/:
+  // once any config `icons` object exists, Next.js skips the file-convention
+  // icons entirely — so every role must be declared here).
+  icons: { icon: "/icon-128.png", apple: "/apple-icon.png" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

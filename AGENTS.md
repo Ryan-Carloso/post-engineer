@@ -1899,3 +1899,23 @@ Follow these so the same issues don't come back:
 - **Conflicting Tailwind utilities resolve by stylesheet order, not attribute order.** Hardcoding `rounded-2xl` in the base class string let it win over every caller's `rounded-lg`/`rounded-xl`. Lesson: overridable base classes go through `twMerge` (already a dependency); pin the override with a test.
 - **`next/image` `priority` emits `<link rel="preload">` — reserve it for LCP.** Unconditional `priority` on small brand marks preloads them on every page including below-the-fold instances. Lesson: no `priority` unless the image is genuinely the LCP candidate; the mock swallows unknown DOM attrs, so pin its absence at the prop level via a capturing `vi.mock`.
 - **`feat:` commits need a MINOR bump (1.13.x → 1.14.0), not patch.** `version-check` CI only enforces sync, not the level — the author owns the semver kind per the repo rule.
+
+## Web review learnings, PR #57 round 2 (2026-10-02, OpenCode on 25d922f)
+
+- **No CRITICAL/MAJOR on the follow-up head.** The round-1 fixes held up; the reviewer even verified the new favicon.ico pixels match the new logo.
+- **A stale version-level flag is still worth checking, not applying.** The reviewer re-flagged "feat bumped as patch 1.13.4 → 1.13.5" against a head already at 1.14.0 — verify the tree before acting on version claims (same lesson as PR #55 round 2).
+- **Dedupe identical binary assets instead of shipping twins.** `app/icon.png` was a byte-identical copy of `public/logo.png` — set `icons: { icon: '/logo.png' }` in the root layout metadata and delete the duplicate, so the next rebrand can't drift the two apart.
+- **Pin logo usages per surface.** The login/landing suites didn't assert the new brand mark — one `getAllByTestId('app-logo')` assertion per surface (mutation-verified: reverting one usage fails the pin), mirroring the existing layout-suite pattern.
+
+## Web review learnings, PR #58 (2026-10-02, OpenCode on 109a2ec)
+
+- **Config `icons` and file-convention icons do NOT merge in Next.js 15.** Once any `icons` object exists in metadata, `resolve-metadata.ts` skips the file-convention icons entirely (`if (!resolvedMetadata.icons)` — favicon.ico survives via a separate special case). Declaring only `icon:` silently dropped the `apple-touch-icon` link. Lesson: declare EVERY icon role in config when using it; verify framework merge semantics in `node_modules/next/dist` before assuming additive behavior.
+- **Give the tab-icon role its own small asset.** A 222 KB `logo.png` as the raw tab icon wastes bandwidth on a 16–32 px slot — export a 128 px variant for the `icon` role and keep the full logo for in-page display.
+
+## Web review learnings, PR #58 round 2 (2026-10-02, OpenCode on 203f253)
+
+- **No CRITICAL/MAJOR on the follow-up head.** Round-3 fixes verified in the tree.
+- **Pin config-declared metadata in tests.** `metadata.icons` is the exact line whose omission once silently dropped the apple-touch-icon — a future rebrand can drop a role again with zero CI signal. `metadata` is a plain static export, so `app/__tests__/layout.test.tsx` pins it directly plus an existence check that each href resolves under `public/` (both mutation-verified).
+
+## PR #58 round-6 review learnings (2026-10-02, CI web failure)
+- **JWT tamper tests must flip a fully-significant base64url char.** `token.slice(0, -2) + "aa"` is a byte-level no-op ~1/256 of the time: an ES256 signature is 64 bytes = 86 base64url chars, and the last char carries only 2 data bits (low 4 are padding, ignored by decoders). When the 85th char is already `a` and the 86th's 2 significant bits match, the "tampered" token verifies fine — flaky CI failure. Fix: flip the FIRST signature char (fully significant). Proven with a 300-iteration loop asserting the signature bytes always change and verification always rejects.
