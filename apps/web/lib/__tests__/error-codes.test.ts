@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { ERROR_CODES, errorMessage, formatErrorMessage, isErrorCode } from '../error-codes';
+import { SCHEDULE_MAX_AHEAD_DAYS, SCHEDULE_MIN_ADVANCE_HOURS } from '../schedule-window';
 
 describe('error-codes', () => {
   it('exposes every code required by the generate-and-schedule contract', () => {
@@ -41,6 +42,19 @@ describe('error-codes', () => {
     expect(formatErrorMessage('SOCIAL_ACCOUNT_NOT_OWNED', { provider: 'youtube' })).toBe(
       'Selected youtube account does not belong to this user.',
     );
+  });
+
+  it('keeps SCHEDULE_OUT_OF_RANGE as a {minHours}/{maxDays} template fed from the shared constants', () => {
+    // The default message must stay a template: hardcoding the window here
+    // is exactly the drift this PR's reviewer flagged.
+    expect(errorMessage('SCHEDULE_OUT_OF_RANGE')).toContain('{minHours}');
+    expect(errorMessage('SCHEDULE_OUT_OF_RANGE')).toContain('{maxDays}');
+    expect(
+      formatErrorMessage('SCHEDULE_OUT_OF_RANGE', {
+        minHours: SCHEDULE_MIN_ADVANCE_HOURS,
+        maxDays: SCHEDULE_MAX_AHEAD_DAYS,
+      }),
+    ).toBe('Publishing must be scheduled between 3 hours and 30 days from now.');
   });
 
   it('leaves unknown placeholders untouched instead of breaking the sentence', () => {
