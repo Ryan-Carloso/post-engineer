@@ -56,19 +56,32 @@ class BatchReconciler:
                 # just this video's cost; the batch id keeps the other
                 # videos' charges intact.
                 if user_id is not None:
-                    persona = persona_for(schedule)
-                    cost = token_cost(
-                        float(persona.get("face_mix_percent") or 0),
-                        str(persona.get("face_quality") or "ok"),
-                    )
-                    batch_generation_id = f"batch:{schedule['id']}"
-                    self.store.refund_batch_tokens(
-                        user_id,
-                        batch_generation_id,
-                        f"{batch_generation_id}:slot:{slot['id']}",
-                        cost,
-                        "Batch generation failed",
-                    )
+                    try:
+                        persona = persona_for(schedule)
+                    except RuntimeError:
+                        # The persona was deleted after the schedule was
+                        # created: no embed to compute the refund cost from.
+                        # Mark the slot failed and move on — throwing here
+                        # would kill the whole reconcile stage every tick.
+                        logger.warning(
+                            "fill_schedule: skipping refund for failed slot "
+                            "without persona embed",
+                            slot_id=slot.get("id"),
+                            schedule_id=schedule.get("id"),
+                        )
+                    else:
+                        cost = token_cost(
+                            float(persona.get("face_mix_percent") or 0),
+                            str(persona.get("face_quality") or "ok"),
+                        )
+                        batch_generation_id = f"batch:{schedule['id']}"
+                        self.store.refund_batch_tokens(
+                            user_id,
+                            batch_generation_id,
+                            f"{batch_generation_id}:slot:{slot['id']}",
+                            cost,
+                            "Batch generation failed",
+                        )
                 else:
                     logger.error(
                         "fill_schedule: cannot refund failed batch slot without user_id",
