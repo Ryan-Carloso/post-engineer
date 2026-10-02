@@ -127,6 +127,12 @@ class BatchGenerator:
                 # release a genuine pipeline failure of this re-dispatched
                 # task would be suppressed by the stale entry — the real
                 # terminal event would never reach the funnel.
+                # Trade-off, named: the worker thread starts inside
+                # _dispatch_generation, so a task failing fast enough to
+                # reach _fail_task before this line still hits the stale
+                # entry. The window is one deque-remove wide (accepted);
+                # evicting before dispatch would break the
+                # repeat-dispatch-failure dedup instead.
                 tm.discard_failed_event(task_id)
             except Exception:
                 # Refund just this video's prepaid cost; the id keeps the
