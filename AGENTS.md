@@ -1367,3 +1367,20 @@ Follow these so the same issues don't come back:
   `npx nx build web --skip-nx-cache` (local env needs the build-time
   `NEXT_PUBLIC_*` vars; a dummy `.env` suffices for verification — never
   commit it).
+
+## Engine review learnings (2026-10-02, PR #43)
+- **A test comment claiming a behavior must pin it with an assertion.** The
+  reconcile test's comment said "the refund is skipped" but asserted only
+  "no raise" + status — a future refactor that refunded would pass silently.
+  Mirror the sibling pattern (`assertEqual(store.refund_batch_calls, [])`):
+  every claimed behavior gets its assertion, or the comment is a hollow claim.
+- **A stage that throws on data issues spams every tick.** `persona_for`
+  raising inside `reconcile`/`generate` killed the whole stage per tick and
+  the ERROR log fed PostHog `$exception` every minute. Data-dependent
+  failures (deleted persona, missing embed) must fail the slot once, never
+  the stage repeatedly — move fallible lookups inside the per-item try.
+- **Name the token-loss trade-off in a tracking comment.** When a fix
+  deliberately burns prepaid tokens (unrecoverable cost without the persona
+  embed), the skip site carries a NOTE naming the consequence and the
+  follow-up (persist per-slot cost at creation), so the trade-off is
+  discoverable, not silent.
