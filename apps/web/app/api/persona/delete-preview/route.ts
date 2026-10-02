@@ -186,7 +186,8 @@ export async function GET(request: Request): Promise<NextResponse> {
       .from('scheduled_posts')
       .select('id', { head: true, count: 'exact' })
       .in('schedule_id', scheduleIds)
-      .in('status', UPCOMING_SLOT_STATUSES);
+      .in('status', UPCOMING_SLOT_STATUSES)
+      .eq('user_id', auth.userId);
     if (slotsError) {
       logger.error('[api/persona/delete-preview] slot lookup failed', slotsError);
       return apiErrorResponse(500, 'Failed to load delete preview.', {

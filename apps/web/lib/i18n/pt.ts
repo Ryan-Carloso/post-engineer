@@ -513,7 +513,7 @@ export const ptDictionary = {
     deleteDialogImage: 'imagem da biblioteca',
     deleteDialogImages: 'imagens da biblioteca',
     deleteDialogNoRefund:
-      'Os tokens não serão devolvidos. Os tokens gastos pagaram geração e publicação que já aconteceram.',
+      'Os tokens não serão devolvidos — incluindo tokens pré-pagos de vídeos ainda não gerados.',
     deleteDialogDownloadHint: 'Baixe seus vídeos antes — eles sumirão após a exclusão.',
     deleteDialogVideosTruncated: 'Mostrando os primeiros {shown} de {total} vídeos.',
     deleteDialogLinksIncomplete: 'Alguns links de download não puderam ser carregados a tempo.',

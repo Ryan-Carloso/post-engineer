@@ -46,9 +46,11 @@ const BASE_TABLES: TableData = {
     { id: 'sched-2', persona_id: PERSONA_ID, user_id: USER_ID },
   ],
   scheduled_posts: [
-    { id: 'slot-1', schedule_id: 'sched-1', status: 'pending' },
-    { id: 'slot-2', schedule_id: 'sched-1', status: 'published' },
-    { id: 'slot-3', schedule_id: 'sched-2', status: 'ready' },
+    { id: 'slot-1', schedule_id: 'sched-1', status: 'pending', user_id: USER_ID },
+    { id: 'slot-2', schedule_id: 'sched-1', status: 'published', user_id: USER_ID },
+    { id: 'slot-3', schedule_id: 'sched-2', status: 'ready', user_id: USER_ID },
+    // Cross-user slot on the same schedule id shape: must never be counted.
+    { id: 'slot-x', schedule_id: 'sched-1', status: 'pending', user_id: 'user-uuid-2' },
   ],
   video_generations: [
     {

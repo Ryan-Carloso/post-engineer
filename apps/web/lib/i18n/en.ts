@@ -516,7 +516,7 @@ export const enDictionary: Dictionary = {
     deleteDialogImage: 'library image',
     deleteDialogImages: 'library images',
     deleteDialogNoRefund:
-      'Tokens will not be refunded. Spent tokens paid for generation and publishing work that already happened.',
+      'Tokens will not be refunded — including prepaid tokens for videos not yet generated.',
     deleteDialogDownloadHint: 'Download your videos first — they will be gone after deletion.',
     deleteDialogVideosTruncated: 'Showing the first {shown} of {total} videos.',
     deleteDialogLinksIncomplete: 'Some download links could not be loaded in time.',

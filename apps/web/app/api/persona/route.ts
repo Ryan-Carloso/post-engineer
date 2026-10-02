@@ -623,10 +623,11 @@ export async function DELETE(request: Request): Promise<NextResponse> {
   // dependency order: slots -> schedules -> generations -> persona row
   // (persona_images rows vanish via ON DELETE CASCADE).
   //
-  // No token refunds, ever: spent tokens bought generation and publishing
-  // work that already happened. Deleting the persona does not undo that
-  // cost. This is a deliberate product decision, stated here and in the
-  // UI confirmation dialog.
+  // No token refunds, ever: this is a deliberate product decision, stated
+  // here and in the UI confirmation dialog. Note the forfeiture is real —
+  // the batch flow prepays generation cost up front, so deleting a persona
+  // with pending/ready slots destroys prepaid tokens for work that will now
+  // never happen.
   //
   // PostgREST has no multi-statement transactions, so a mid-cascade
   // failure cannot roll back. completedSteps names what already went
