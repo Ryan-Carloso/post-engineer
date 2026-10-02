@@ -30,7 +30,7 @@ export function validateScheduleWindow(
   const targetDate = typeof target === 'string' ? new Date(target) : target;
 
   if (!(targetDate instanceof Date) || Number.isNaN(targetDate.getTime())) {
-    return { ok: false, error: 'scheduledAt must be a valid ISO date.' };
+    return { ok: false, error: 'Publish time must be a valid ISO date.' };
   }
 
   const diffMs = targetDate.getTime() - now.getTime();
@@ -38,7 +38,7 @@ export function validateScheduleWindow(
   if (diffMs < SCHEDULE_MIN_ADVANCE_MS) {
     return {
       ok: false,
-      error: `scheduledAt must be at least 24 hours in advance (earliest allowed is ${new Date(
+      error: `Publish time must be at least 24 hours in advance (earliest allowed is ${new Date(
         now.getTime() + SCHEDULE_MIN_ADVANCE_MS,
       ).toISOString()}).`,
     };
@@ -47,7 +47,7 @@ export function validateScheduleWindow(
   if (diffMs > SCHEDULE_MAX_AHEAD_MS) {
     return {
       ok: false,
-      error: `scheduledAt cannot be more than 30 days in advance (latest allowed is ${new Date(
+      error: `Publish time cannot be more than 30 days in advance (latest allowed is ${new Date(
         now.getTime() + SCHEDULE_MAX_AHEAD_MS,
       ).toISOString()}).`,
     };

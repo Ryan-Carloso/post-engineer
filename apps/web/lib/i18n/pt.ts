@@ -82,8 +82,6 @@ export const ptDictionary = {
     postsPerDay: 'Posts por dia',
     personaLabel: 'Persona',
     personaHelper: 'Escolha quem define o tom, o tema e a voz dos próximos posts.',
-    modeRecurring: 'Autopiloto (toda semana)',
-    modeRecurringHint: 'Publica automaticamente nos dias e horários escolhidos.',
     alreadyScheduled: 'Esta persona já tem um agendamento ativo — gerencie na home.',
     allScheduled: 'Todas as suas personas já têm agendamento. Crie uma nova persona para agendar de novo.',
     scheduledFor: 'Agendar para',

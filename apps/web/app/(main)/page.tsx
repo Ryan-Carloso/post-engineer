@@ -154,7 +154,9 @@ const AutomationGrid = () => {
 
               <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-[#edf2f5] pt-4 text-xs text-[#0d2b45] sm:grid-cols-3">
                 <span>▣ {days}</span>
-                <span>◷ {String(schedule.startHour).padStart(2, '0')}:00 - {String(schedule.endHour).padStart(2, '0')}:00</span>
+                <span>◷ {schedule.startHour !== null && schedule.endHour !== null
+                  ? `${String(schedule.startHour).padStart(2, '0')}:00 - ${String(schedule.endHour).padStart(2, '0')}:00`
+                  : t('home.waitingForSchedule')}</span>
                 <span>▤ {schedule.postsPerDay} {t('home.postsPerDay')}</span>
               </div>
 

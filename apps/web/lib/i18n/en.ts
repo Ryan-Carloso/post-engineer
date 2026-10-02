@@ -82,8 +82,6 @@ export const enDictionary: Dictionary = {
     postsPerDay: 'Posts per day',
     personaLabel: 'Persona',
     personaHelper: 'Choose the identity that defines the tone, topic and voice of upcoming posts.',
-    modeRecurring: 'Autopilot (every week)',
-    modeRecurringHint: 'Publishes automatically on your chosen days and times.',
     alreadyScheduled: 'This persona already has an active schedule — manage it on home.',
     allScheduled: 'All your personas already have a schedule. Create a new persona to schedule again.',
     scheduledFor: 'Schedule for',

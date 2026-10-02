@@ -47,7 +47,16 @@ describe('Home dashboard public seam', () => {
     expect(screen.getByRole('heading', { name: 'Tech Explorer' })).toBeVisible();
     expect(screen.getByText('Canal Europa')).toBeVisible();
     expect(screen.getByText('@ryan.tech')).toBeVisible();
+    expect(screen.getByText(/09:00 - 18:00/)).toBeInTheDocument();
     expect(screen.queryByText('fillSchedule.daysLabel')).not.toBeInTheDocument();
+  });
+
+  it('renders the waiting fallback when the schedule window is null', () => {
+    apiState.schedules = [{ id: 's1', personaId: 'p1', youtubeAccountIds: [], instagramAccountIds: [], linkedinAccountIds: [], daysOfWeek: [1], startHour: null, endHour: null, postsPerDay: 1, active: true }];
+    render(<Home />);
+    expect(screen.getByRole('heading', { name: 'Tech Explorer' })).toBeVisible();
+    expect(screen.getByText('home.waitingForSchedule')).toBeInTheDocument();
+    expect(screen.queryByText(/null:00/)).not.toBeInTheDocument();
   });
 
   it('exibe contas LinkedIn do autopiloto como chips', () => {
