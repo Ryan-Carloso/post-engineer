@@ -65,6 +65,7 @@ export const enDictionary: Dictionary = {
     errorEngineRestart: 'The engine restarted while generating your video. Please try again.',
     errorUnknown: 'The video could not be generated. Please try again.',
     detailsTitle: 'Post details',
+    publishedLinksTitle: 'Published to',
     close: 'Close',
     topicLabel: 'Topic',
     edit: 'Edit topic',

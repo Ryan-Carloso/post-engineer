@@ -17,6 +17,8 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ProviderIcon } from '@/components/provider-icon';
+import { ExternalLinkIcon } from '@/lib/ui';
+import type { PublishLink } from '@/lib/publish-links';
 import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
 
@@ -71,6 +73,19 @@ function videoUrlFor(taskId: string | null | undefined): string | null {
 }
 
 const SLOT_VIDEO_STATUSES = new Set<ScheduledSlot['status']>(['ready', 'publishing', 'published']);
+
+//---------------
+// PUBLISH_LINK_LABEL — the display name per provider. A fixed literal map
+// rather than the raw provider id so the UI never shows an internal slug,
+// and rather than the slug's capitalization so a new provider cannot leak
+// untranslated into the page.
+//---------------
+const PUBLISH_LINK_LABEL: Record<PublishLink['provider'], string> = {
+  youtube: 'YouTube',
+  instagram: 'Instagram',
+  bluesky: 'Bluesky',
+  linkedin: 'LinkedIn',
+};
 
 function formatDateTime(value: string, locale: 'pt' | 'en'): string {
   return new Date(value).toLocaleString(locale === 'pt' ? 'pt-BR' : 'en-US', {
@@ -188,7 +203,14 @@ export default function PostDetailPage() {
         statusLabel={t(STATUS_KEY[slot?.status ?? 'pending'] ?? 'posts.statusPending')}
         statusStyle={STATUS_STYLE[slot?.status ?? 'pending'] ?? STATUS_STYLE.pending}
       />
-      {slot && <SlotDetail slot={slot} accounts={accounts} locale={locale} />}
+      {slot && (
+        <SlotDetail
+          slot={slot}
+          accounts={accounts}
+          locale={locale}
+          publishLinks={slotDetail?.slot.publishLinks ?? []}
+        />
+      )}
     </div>
   );
 }
@@ -305,6 +327,41 @@ const DetailPlayer = ({ src, placeholder }: { src: string | null; placeholder: s
 };
 
 //---------------
+// PublishLinks — where the post went: one link per provider the engine
+// published to. Renders nothing when there are no links, so the section
+// never appears empty (a post that has not gone out, or an engine that
+// recorded nothing).
+//
+// The href comes from the server, which already restricted it to https;
+// target/rel keep the external site from reaching back into this tab.
+//---------------
+const PublishLinks = ({ links }: { links: PublishLink[] }) => {
+  const { t } = useI18n();
+  if (links.length === 0) return null;
+
+  return (
+    <section aria-label={t('posts.publishedLinksTitle')} className="mt-6">
+      <h2 className="text-sm font-semibold text-[#0d2b45]">{t('posts.publishedLinksTitle')}</h2>
+      <ul className="mt-3 flex flex-wrap gap-2">
+        {links.map((link) => (
+          <li key={`${link.provider}:${link.url}`}>
+            <a
+              href={link.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-xl border border-input bg-white px-3 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb]"
+            >
+              {PUBLISH_LINK_LABEL[link.provider]}
+              <ExternalLinkIcon />
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+};
+
+//---------------
 // SlotDetail — the scheduled-post body: player or generating progress,
 // topic (editable while awaiting), target accounts, error, and the
 // per-status actions. Delete redirects back to /posts on success;
@@ -314,10 +371,12 @@ const SlotDetail = ({
   slot,
   accounts,
   locale,
+  publishLinks,
 }: {
   slot: ScheduledSlot;
   accounts: AccountOption[];
   locale: 'pt' | 'en';
+  publishLinks: PublishLink[];
 }) => {
   const { t } = useI18n();
   const router = useRouter();
@@ -442,6 +501,8 @@ const SlotDetail = ({
       {slot.status === 'failed' && slot.error && (
         <p className="mt-6 text-sm text-destructive">{slot.error}</p>
       )}
+
+      <PublishLinks links={publishLinks} />
 
       {mutationError && (
         <p className="mt-6 rounded-xl bg-[#ffe1de] p-3 text-sm text-destructive" role="alert">

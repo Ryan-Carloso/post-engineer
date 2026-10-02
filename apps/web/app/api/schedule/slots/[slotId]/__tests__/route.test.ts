@@ -404,6 +404,134 @@ describe('GET /api/schedule/slots/[slotId]', () => {
 });
 
 //---------------
+// Published links — the engine records one publish_results entry per
+// (provider, video) it published; the detail endpoint surfaces them so the
+// user can open where the post actually went. Only a published slot is
+// worth the engine round-trip: everything earlier has nothing to link to.
+//---------------
+
+describe('GET /api/schedule/slots/[slotId] published links', () => {
+  const PUBLISHED_ROW = { ...SLOT_DETAIL_ROW, status: 'published', task_id: 'task-1' };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
+    vi.stubEnv('MONEYPRINT_API_SECRET', 'secret');
+    mockAuth();
+  });
+
+  function mockPublished(publishResults: unknown) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: { state: 2, progress: 100, publish_results: publishResults } }),
+      })),
+    );
+    const client = mockSlotsClient({
+      slot: PUBLISHED_ROW,
+      schedule: SCHEDULE_ROW,
+      persona: { id: 'p1', name: 'Viva Leve' },
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+  }
+
+  async function getBody(): Promise<{ slot: { publishLinks: unknown } }> {
+    const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
+      params: Promise.resolve({ slotId: 'slot-1' }),
+    });
+    expect(response.status).toBe(200);
+    return (await response.json()) as { slot: { publishLinks: unknown } };
+  }
+
+  it('returns the provider links recorded by the engine', async () => {
+    mockPublished([
+      { provider: 'youtube', video: 'final-1.mp4', videoUrl: 'https://www.youtube.com/watch?v=abc' },
+      { provider: 'instagram', video: 'final-1.mp4', permalink: 'https://www.instagram.com/p/xyz/' },
+    ]);
+
+    const body = await getBody();
+    expect(body.slot.publishLinks).toEqual([
+      { provider: 'youtube', url: 'https://www.youtube.com/watch?v=abc' },
+      { provider: 'instagram', url: 'https://www.instagram.com/p/xyz/' },
+    ]);
+  });
+
+  it('derives the Bluesky URL from the at:// record URI', async () => {
+    mockPublished([
+      { provider: 'bluesky', video: 'final-1.mp4', postId: 'at://did:plc:abc/app.bsky.feed.post/xyz' },
+    ]);
+
+    const body = await getBody();
+    expect(body.slot.publishLinks).toEqual([
+      { provider: 'bluesky', url: 'https://bsky.app/profile/did:plc:abc/post/xyz' },
+    ]);
+  });
+
+  it('returns no links when the engine recorded none', async () => {
+    mockPublished([]);
+
+    const body = await getBody();
+    expect(body.slot.publishLinks).toEqual([]);
+  });
+
+  it('drops a provider entry with no usable URL', async () => {
+    mockPublished([{ provider: 'linkedin', video: 'final-1.mp4' }]);
+
+    const body = await getBody();
+    expect(body.slot.publishLinks).toEqual([]);
+  });
+
+  // A slot that never reached published has nothing to link to — the engine
+  // round-trip would be a wasted request on every detail view.
+  it('does not call the engine for a slot that is not published', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const client = mockSlotsClient({
+      slot: { ...SLOT_DETAIL_ROW, status: 'awaiting', task_id: null },
+      schedule: SCHEDULE_ROW,
+      persona: { id: 'p1', name: 'Viva Leve' },
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const body = await getBody();
+    expect(body.slot.publishLinks).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  // The post itself is already loaded and renderable — a failed engine
+  // lookup must degrade to "no links", never a 404/500 on the detail page.
+  it('degrades to no links when the engine lookup fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('engine down'); }));
+    const client = mockSlotsClient({
+      slot: PUBLISHED_ROW,
+      schedule: SCHEDULE_ROW,
+      persona: { id: 'p1', name: 'Viva Leve' },
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const body = await getBody();
+    expect(body.slot.publishLinks).toEqual([]);
+  });
+
+  it('has no links for a published slot with no engine task id', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const client = mockSlotsClient({
+      slot: { ...SLOT_DETAIL_ROW, status: 'published', task_id: null },
+      schedule: SCHEDULE_ROW,
+      persona: { id: 'p1', name: 'Viva Leve' },
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const body = await getBody();
+    expect(body.slot.publishLinks).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+//---------------
 // GET failure logging — a DB outage must NEVER masquerade as "not
 // found": PGRST116 (zero rows) is the only 404; anything else is a loud
 // logger.error with the real error and a 500.

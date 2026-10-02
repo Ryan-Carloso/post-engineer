@@ -112,3 +112,49 @@ export async function fetchEngineTaskProgress(
     clearTimeout(timeout);
   }
 }
+
+//---------------
+// fetchEnginePublishResults — read the raw publish_results array the engine
+// recorded for a task (one entry per provider it published to).
+//
+// Kept separate from fetchEngineTaskProgress on purpose: the returned
+// payload is handed straight to resolvePublishLinks, which owns the
+// per-provider URL derivation and the validation of every field. This
+// function only fetches; it never interprets.
+//
+// Throws on the same conditions as fetchEngineTaskProgress (unsafe id,
+// unconfigured engine, failed lookup) — the caller decides the fallback.
+//---------------
+export async function fetchEnginePublishResults(
+  taskId: string,
+  userId: string,
+): Promise<unknown[]> {
+  if (!SAFE_TASK_ID.test(taskId)) {
+    throw new Error(`Invalid taskId: ${taskId}`);
+  }
+  const baseUrl = process.env.MONEYPRINT_API_URL;
+  if (!baseUrl) {
+    throw new Error('MONEYPRINT_API_URL is not defined');
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), ENGINE_TASK_PROGRESS_TIMEOUT_MS);
+  try {
+    const response = await fetch(
+      `${baseUrl.replace(/\/+$/, '')}/api/v1/tasks/${encodeURIComponent(taskId)}`,
+      {
+        headers: engineAuthHeaders(userId),
+        cache: 'no-store',
+        signal: controller.signal,
+      },
+    );
+    if (!response.ok) {
+      throw new Error(`Engine task lookup failed with status ${response.status}`);
+    }
+    const body: unknown = await response.json().catch(() => null);
+    const task = taskPayload(body);
+    const results = task ? task.publish_results : null;
+    return Array.isArray(results) ? results : [];
+  } finally {
+    clearTimeout(timeout);
+  }
+}

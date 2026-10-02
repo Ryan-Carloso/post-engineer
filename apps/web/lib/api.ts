@@ -16,6 +16,7 @@ import type {
   VoiceOption,
 } from '@/lib/types';
 import { logger } from '@/lib/logger';
+import type { PublishLink } from '@/lib/publish-links';
 
 //---------------
 // API — typed fetch clients
@@ -1024,6 +1025,9 @@ export interface SlotDetailPayload {
     retryable: boolean | null;
     queuePosition: number | null;
     queueTotal: number | null;
+    // Where the post went, one entry per provider. Empty until the slot is
+    // published (nothing exists to link to before that).
+    publishLinks: PublishLink[];
   };
   schedule: {
     id: string;
@@ -1036,15 +1040,46 @@ export interface SlotDetailPayload {
   persona: { id: string; name: string } | null;
 }
 
+//---------------
+// narrowPublishLinks — the route has already derived and validated each
+// link, so this validates the FINAL shape ({ provider, url }) rather than
+// re-deriving it: resolvePublishLinks consumes the engine's raw shape
+// (videoUrl / permalink / postId) and would drop everything here.
+//
+// The payload still crosses a network boundary, so a slot row predating the
+// field — or a malformed entry — must read as "no links" instead of handing
+// the UI an undefined it would have to guard at every render.
+//---------------
+function narrowPublishLinks(value: unknown): PublishLink[] {
+  if (!Array.isArray(value)) return [];
+  const links: PublishLink[] = [];
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const record = entry as Record<string, unknown>;
+    const provider = record.provider;
+    const url = record.url;
+    if (typeof provider !== 'string' || typeof url !== 'string') continue;
+    // An href reaching the DOM must stay https — a "javascript:" value in
+    // the payload is an injection surface, not a broken link.
+    if (!url.startsWith('https://')) continue;
+    links.push({ provider: provider as PublishLink['provider'], url });
+  }
+  return links;
+}
+
 export async function fetchSlotDetail(slotId: string): Promise<SlotDetailPayload | null> {
   const response = await fetch(`/api/schedule/slots/${encodeURIComponent(slotId)}`, {
     method: 'GET',
   });
   if (response.status === 404) return null;
-  const data: { success: boolean; slot?: SlotDetailPayload['slot']; schedule?: SlotDetailPayload['schedule']; persona?: SlotDetailPayload['persona']; error?: string } = await response.json();
+  const data: { success: boolean; slot?: Omit<SlotDetailPayload['slot'], 'publishLinks'> & { publishLinks?: unknown }; schedule?: SlotDetailPayload['schedule']; persona?: SlotDetailPayload['persona']; error?: string } = await response.json();
   if (!response.ok || !data.success) throw new Error(data.error ?? 'Failed to load post.');
   if (!data.slot || !data.schedule) throw new Error('Failed to load post.');
-  return { slot: data.slot, schedule: data.schedule, persona: data.persona ?? null };
+  return {
+    slot: { ...data.slot, publishLinks: narrowPublishLinks(data.slot.publishLinks) },
+    schedule: data.schedule,
+    persona: data.persona ?? null,
+  };
 }
 
 export async function fetchGenerationDetail(generationId: string): Promise<VideoGeneration | null> {

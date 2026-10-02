@@ -30,6 +30,7 @@ vi.mock('@/lib/api', () => ({
 
 vi.mock('@/lib/ui', () => ({
   SpinnerIcon: () => <span data-testid="icon-spinner" />,
+  ExternalLinkIcon: () => <span data-testid="icon-external-link" />,
 }));
 
 vi.mock('@/lib/i18n/provider', () => {
@@ -218,6 +219,67 @@ describe('PostDetailPage', () => {
 
     const mutate = vi.mocked(useUpdateSlotMutation).mock.results[0].value.mutate as ReturnType<typeof vi.fn>;
     expect(mutate).toHaveBeenCalledWith({ slotId: 'u1', topic: 'New topic' }, expect.anything());
+  });
+
+  it('lists where the post was published, one link per provider', () => {
+    mockQueries({
+      slot: slotPayload({
+        id: 'r1',
+        status: 'published',
+        taskId: 'task-9',
+        publishedAt: '2020-01-01T10:05:00.000Z',
+        progress: 100,
+        publishLinks: [
+          { provider: 'youtube', url: 'https://www.youtube.com/watch?v=abc' },
+          { provider: 'instagram', url: 'https://www.instagram.com/p/xyz/' },
+        ],
+      }),
+    });
+    vi.mocked(useParams).mockReturnValue({ id: 'r1' });
+    render(<DetailPage />);
+
+    const youtube = screen.getByRole('link', { name: /YouTube/ });
+    expect(youtube).toHaveAttribute('href', 'https://www.youtube.com/watch?v=abc');
+    const instagram = screen.getByRole('link', { name: /Instagram/ });
+    expect(instagram).toHaveAttribute('href', 'https://www.instagram.com/p/xyz/');
+  });
+
+  // Published links open another site, so they must never share the tab
+  // with the app itself.
+  it('opens each published link in a new tab', () => {
+    mockQueries({
+      slot: slotPayload({
+        id: 'r1',
+        status: 'published',
+        taskId: 'task-9',
+        publishLinks: [{ provider: 'youtube', url: 'https://www.youtube.com/watch?v=abc' }],
+      }),
+    });
+    vi.mocked(useParams).mockReturnValue({ id: 'r1' });
+    render(<DetailPage />);
+
+    const link = screen.getByRole('link', { name: /YouTube/ });
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link.getAttribute('rel')).toContain('noopener');
+  });
+
+  it('shows no published-links section when the post is not published yet', () => {
+    mockQueries({ slot: slotPayload({ id: 'u1', status: 'generating', taskId: 'task-7' }) });
+    vi.mocked(useParams).mockReturnValue({ id: 'u1' });
+    render(<DetailPage />);
+
+    expect(screen.queryByRole('link', { name: /YouTube/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Instagram/ })).not.toBeInTheDocument();
+  });
+
+  it('shows no published-links section when the engine recorded no links', () => {
+    mockQueries({
+      slot: slotPayload({ id: 'r1', status: 'published', taskId: 'task-9', publishLinks: [] }),
+    });
+    vi.mocked(useParams).mockReturnValue({ id: 'r1' });
+    render(<DetailPage />);
+
+    expect(screen.queryByRole('link', { name: /YouTube/ })).not.toBeInTheDocument();
   });
 
   it('plays the video full-width for a published slot and hides the actions', () => {

@@ -64,6 +64,7 @@ export const ptDictionary = {
     errorEngineRestart: 'O motor reiniciou durante a geração do vídeo. Tente novamente.',
     errorUnknown: 'O vídeo não pôde ser gerado. Tente novamente.',
     detailsTitle: 'Detalhes do post',
+    publishedLinksTitle: 'Publicado em',
     close: 'Fechar',
     topicLabel: 'Tema',
     edit: 'Editar tema',

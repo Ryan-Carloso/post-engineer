@@ -526,6 +526,48 @@ describe('api', () => {
     await expect(fetchSlotDetail('slot-1')).rejects.toThrow('boom');
   });
 
+  it('fetchSlotDetail carries the published links through', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
+      success: true,
+      slot: {
+        id: 'slot-1',
+        status: 'published',
+        publishLinks: [{ provider: 'youtube', url: 'https://www.youtube.com/watch?v=abc' }],
+      },
+      schedule: { id: 's1' },
+      persona: null,
+    }));
+    const { fetchSlotDetail } = await import('@/lib/api');
+    const detail = await fetchSlotDetail('slot-1');
+    expect(detail?.slot.publishLinks).toEqual([
+      { provider: 'youtube', url: 'https://www.youtube.com/watch?v=abc' },
+    ]);
+  });
+
+  // The payload crosses a network boundary, so a slot that predates this
+  // field (or a malformed one) must read as "no links" instead of handing
+  // the UI an undefined it would have to guard at every render.
+  it('fetchSlotDetail defaults missing or malformed publishLinks to an empty list', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
+      success: true,
+      slot: { id: 'slot-1', status: 'published' },
+      schedule: { id: 's1' },
+      persona: null,
+    }));
+    const { fetchSlotDetail } = await import('@/lib/api');
+    const detail = await fetchSlotDetail('slot-1');
+    expect(detail?.slot.publishLinks).toEqual([]);
+
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
+      success: true,
+      slot: { id: 'slot-1', publishLinks: 'not-an-array' },
+      schedule: { id: 's1' },
+      persona: null,
+    }));
+    const second = await fetchSlotDetail('slot-1');
+    expect(second?.slot.publishLinks).toEqual([]);
+  });
+
   it('fetchGenerationDetail GETs /api/persona/video-generations/:id, null on 404', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
       success: true,

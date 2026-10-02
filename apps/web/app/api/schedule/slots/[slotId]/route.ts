@@ -4,6 +4,8 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { apiErrorResponse } from '@/lib/api-error';
 import { enrichSlot } from '@/lib/schedule-slot-presentation';
+import { fetchEnginePublishResults } from '@/lib/engine-tasks';
+import { resolvePublishLinks, type PublishLink } from '@/lib/publish-links';
 import { logger } from '@/lib/logger';
 
 //---------------
@@ -55,6 +57,35 @@ async function loadOwnedSlot(
     return { error: apiErrorResponse(404, 'Slot not found.', { route: 'SLOT_OPS /api/schedule/slots' }) };
   }
   return { slot: row };
+}
+
+//---------------
+// resolveSlotPublishLinks — where the post went, per provider.
+//
+// publish_results only exists in the engine's task record, so a published
+// slot costs one engine round-trip here (single slot, not a list — no N+1).
+// Only a published slot is worth it: nothing earlier has a link yet.
+//
+// Best-effort by design. The post is already loaded and renderable, so a
+// failed lookup degrades to "no links" and logs loudly instead of turning a
+// published post into a 404/500. Never throws.
+//---------------
+async function resolveSlotPublishLinks(
+  row: { status?: unknown; task_id?: unknown },
+  userId: string,
+): Promise<PublishLink[]> {
+  if (row.status !== 'published') return [];
+  const taskId = typeof row.task_id === 'string' ? row.task_id : null;
+  if (taskId === null || taskId.length === 0) return [];
+  try {
+    return resolvePublishLinks(await fetchEnginePublishResults(taskId, userId));
+  } catch (error) {
+    logger.warn('[api/schedule/slots] publish results unavailable', {
+      taskId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return [];
+  }
 }
 
 //---------------
@@ -152,6 +183,7 @@ export async function GET(
   const personaRow = persona as { id: string; name: string } | null;
 
   const enrichment = await enrichSlot(row, auth.userId);
+  const publishLinks = await resolveSlotPublishLinks(row, auth.userId);
 
   return NextResponse.json({
     success: true,
@@ -167,6 +199,7 @@ export async function GET(
       progress: enrichment.progress,
       stage: enrichment.stage,
       retryable: enrichment.retryable,
+      publishLinks,
       // Queue position is a list concept (position among the schedule's
       // pending slots); the detail view doesn't render it.
       queuePosition: null,
