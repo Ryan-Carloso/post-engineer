@@ -138,10 +138,12 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   // Independent reads go through Promise.all; the slot count needs the
-  // schedule ids first, so it runs after. Counts use head+count (no rows
-  // cross the wire); the video list is bounded and deterministically
-  // ordered (created_at, id tie-break) so a huge library cannot blow up
-  // serverless memory.
+  // schedule ids first, so it runs after. Generation/image counts use
+  // head+count (no rows cross the wire); the video list is bounded and
+  // deterministically ordered (created_at, id tie-break). The schedules id
+  // list is intentionally unbounded: schedules are posting configurations
+  // (a handful per persona), not per-video rows — unlike generations, they
+  // cannot number in the thousands.
   const [schedulesRes, generationsCountRes, imagesCountRes, generationsListRes] = await Promise.all([
     supabase.from('schedules').select('id').eq('persona_id', personaId).eq('user_id', auth.userId),
     supabase

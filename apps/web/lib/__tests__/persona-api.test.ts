@@ -276,6 +276,16 @@ describe('lib/api — persona', () => {
       expect(result.success).toBe(false);
       expect(result.error).toContain('504');
     });
+
+    it('returns success:false on a non-JSON body instead of throwing', async () => {
+      fetchMock.mockResolvedValue(
+        new Response('not json', { status: 200, headers: { 'Content-Type': 'text/plain' } }),
+      );
+
+      const result = await deletePersona('p-1');
+
+      expect(result.success).toBe(false);
+    });
   });
 
   describe('updatePersona robustness', () => {
@@ -286,6 +296,16 @@ describe('lib/api — persona', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('502');
+    });
+
+    it('returns success:false on a non-JSON body instead of throwing', async () => {
+      fetchMock.mockResolvedValue(
+        new Response('not json', { status: 200, headers: { 'Content-Type': 'text/plain' } }),
+      );
+
+      const result = await updatePersona('p-1', new FormData());
+
+      expect(result.success).toBe(false);
     });
   });
 

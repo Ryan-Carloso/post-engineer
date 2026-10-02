@@ -22,6 +22,9 @@ vi.mock('@/lib/request-auth', () => ({
 vi.mock('@/lib/analytics', () => ({
   trackApiEvent: vi.fn(),
 }));
+vi.mock('@/lib/logger', () => ({
+  logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
+}));
 vi.mock('@/lib/rate-limit', async (importOriginal) => {
   // Rate limiting is bypassed for payload-behavior tests; one dedicated
   // test below covers the 429 path.
@@ -44,6 +47,7 @@ import { DELETE } from '../route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { trackApiEvent } from '@/lib/analytics';
+import { logger } from '@/lib/logger';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 const USER_ID = 'user-uuid-1';
@@ -362,6 +366,12 @@ describe('DELETE /api/persona cascade', () => {
     expect(res.status).toBe(500);
     expect(body.success).toBe(false);
     expect(body.code).toBe('INTERNAL_ERROR');
+    // The failed step is named in the server log (loud, never silent).
+    expect(logger.error).toHaveBeenCalledWith(
+      '[api/persona] cascade delete failed at schedules',
+      expect.anything(),
+      expect.objectContaining({ personaId: PERSONA_ID }),
+    );
     // Slots were deleted, schedules failed: the persona row must survive
     // (loud failure, never a silent half-delete).
     expect(deletes).toEqual(['scheduled_posts', 'schedules']);
