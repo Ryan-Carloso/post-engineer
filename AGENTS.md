@@ -1881,3 +1881,7 @@ Follow these so the same issues don't come back:
 
 - **An insert key must exist in the table.** `POST /api/videos/generate-and-schedule` inserted `kind: 'batch'` into `schedules`, but the column never landed in `supabase/schema.sql` — PostgREST rejects the whole insert on an unknown key, so EVERY call 500d from the v1.12.0 merge until the fix. The route test even pinned `kind: 'batch'` as correct. Lesson: when a PR introduces a new insert, cross-check every key against the canonical schema file; a test asserting the insert shape should assert the ABSENCE of phantom keys, not just the presence of expected ones.
 - **Stale comments outlive the schema they describe.** The `kind='batch'` line carried a comment about a `'recurring'` default and partial unique index — neither exists anymore. A comment that justifies a line by referencing dead schema is a smell: verify the schema objects it names still exist.
+
+## Web review learnings, PR #55 follow-up (2026-10-02, OpenCode on 2613c4f)
+
+- **Generalize the phantom-key pin into a schema sync test.** The PR pinned the absence of `kind`, but the supabase-js mock records any payload key — the next speculative key would sail through tests and 500 every production call again. New sync test parses the `create table public.schedules` column list from `supabase/schema.sql` and asserts every key of the route's insert payload is a real column (mutation-verified: re-adding `kind: 'batch'` fails it). Pattern mirrors the existing SQL-literal sync tests.
