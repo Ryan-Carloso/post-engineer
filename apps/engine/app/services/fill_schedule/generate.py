@@ -79,8 +79,8 @@ class BatchGenerator:
             # created: fail the slot instead of killing the whole generate
             # stage every tick.
             persona = persona_for(schedule)
-            # Topics are stored at creation; there
-            # is no LLM fallback, so an empty topic fails the slot loudly.
+            # Topics are stored at creation; there is no LLM fallback,
+            # so an empty topic fails the slot loudly.
             topic = str(slot.get("topic") or "").strip()
             if not topic:
                 raise RuntimeError("Batch slot has no topic")

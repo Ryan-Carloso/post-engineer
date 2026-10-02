@@ -55,7 +55,7 @@ describe('Home dashboard public seam', () => {
     apiState.schedules = [{ id: 's1', personaId: 'p1', youtubeAccountIds: [], instagramAccountIds: [], linkedinAccountIds: [], daysOfWeek: [1], startHour: null, endHour: null, postsPerDay: 1, active: true }];
     render(<Home />);
     expect(screen.getByRole('heading', { name: 'Tech Explorer' })).toBeVisible();
-    expect(screen.getByText('home.waitingForSchedule')).toBeInTheDocument();
+    expect(screen.getByText(/◷ home\.waitingForSchedule/)).toBeInTheDocument();
     expect(screen.queryByText(/null:00/)).not.toBeInTheDocument();
   });
 
@@ -63,8 +63,18 @@ describe('Home dashboard public seam', () => {
     apiState.schedules = [{ id: 's1', personaId: 'p1', youtubeAccountIds: [], instagramAccountIds: [], linkedinAccountIds: [], daysOfWeek: [], startHour: 9, endHour: 18, postsPerDay: 1, active: true }];
     render(<Home />);
     expect(screen.getByRole('heading', { name: 'Tech Explorer' })).toBeVisible();
-    expect(screen.getByText('home.waitingForSchedule')).toBeInTheDocument();
+    expect(screen.getByText(/▣ home\.waitingForSchedule/)).toBeInTheDocument();
     expect(screen.getByText(/09:00 - 18:00/)).toBeInTheDocument();
+  });
+
+  it('renders the waiting fallback twice when both days and window are null (unified production shape)', () => {
+    apiState.schedules = [{ id: 's1', personaId: 'p1', youtubeAccountIds: [], instagramAccountIds: [], linkedinAccountIds: [], daysOfWeek: [], startHour: null, endHour: null, postsPerDay: 1, active: true }];
+    render(<Home />);
+    expect(screen.getByRole('heading', { name: 'Tech Explorer' })).toBeVisible();
+    // Both grid cells fall back to the same copy — documents the current render.
+    expect(screen.getByText(/▣ home\.waitingForSchedule/)).toBeInTheDocument();
+    expect(screen.getByText(/◷ home\.waitingForSchedule/)).toBeInTheDocument();
+    expect(screen.queryByText(/null:00/)).not.toBeInTheDocument();
   });
 
   it('exibe contas LinkedIn do autopiloto como chips', () => {
