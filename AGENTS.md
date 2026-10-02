@@ -1467,6 +1467,19 @@ Follow these so the same issues don't come back:
   later tests in the worker. `vi.restoreAllMocks()` in afterEach covers
   every spy.
 
+## Web/API review learnings, PR #41 round 6 (2026-10-02)
+- **Test names must match their assertions.** "naming the step" asserted
+  only the status code; the step name lived solely in the server log.
+  Mock the logger and assert the exact message — or drop the claim from
+  the name. (PR #27 rule, re-offended.)
+- **Document intentional unboundedness.** The schedules id list stays
+  unbounded because schedules are posting configs (handful per persona),
+  not per-video rows. Say so at the call site; a comment claiming a
+  bound that isn't there is worse than no comment.
+- **Mirror every hardening branch with a test.** All three client helpers
+  now have both non-ok and non-JSON tests — the catch branch is the last
+  defense against proxy HTML bodies.
+
 ## Engine review learnings (2026-10-02, PR #43)
 - **A test comment claiming a behavior must pin it with an assertion.** The
   reconcile test's comment said "the refund is skipped" but asserted only
