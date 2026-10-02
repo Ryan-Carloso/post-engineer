@@ -3,10 +3,11 @@
 // Product rule: minimum 3h in advance, maximum 30 days ahead.
 //
 // Callers pass the CONVERTED instant (a Date): timezone-aware parsing
-// happens before this validator runs — see parseZonedDateTime in
-// lib/timezone.ts, used by POST /api/videos/generate-and-schedule (via
-// lib/schedule/slot-distribution.ts) and the schedule form so a naive wall
-// clock in the caller's timezone is not measured as if it were UTC.
+// happens before this validator runs — the route passes slots already
+// converted to UTC instants by distributeSlots (zonedTimeToUtc in
+// lib/schedule/slot-distribution.ts). The schedule form parses the naive
+// start date with parseZonedDateTime but does not run this validator;
+// the server enforces the window.
 //---------------
 
 export const SCHEDULE_MIN_ADVANCE_HOURS = 3;
