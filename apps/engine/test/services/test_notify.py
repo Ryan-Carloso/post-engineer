@@ -10,6 +10,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+from urllib.parse import urlparse
+
+from requests.utils import requote_uri
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -211,6 +214,26 @@ class SendDiscordTests(unittest.TestCase):
         with patch.dict(os_environ(), {"DISCORD_WEBHOOK_URL": "https://discord/hook"}, clear=True):
             exc = RuntimeError("failed calling https://discord/hook: timeout")
             self.assertEqual(nf.safe_reason(exc), "RuntimeError")
+
+    def test_reason_strips_requoted_url_variant(self):
+        # requests requotes the target URL (response.url), so the exception
+        # may carry the percent-encoded form instead of the configured
+        # string — safe_reason must treat it as the webhook URL too.
+        url = "https://discord/hook with space/secret-token"
+        with patch.dict(os_environ(), {"DISCORD_WEBHOOK_URL": url}, clear=True):
+            exc = RuntimeError(f"failed calling {requote_uri(url)}: timeout")
+            self.assertEqual(nf.safe_reason(exc), "RuntimeError")
+            self.assertNotIn("secret-token", nf.safe_reason(exc))
+
+    def test_reason_strips_path_fragment_variant(self):
+        # Connection-phase errors embed only the requoted path fragment —
+        # the path-embedded token must still collapse the reason to the type.
+        url = "https://discord/hook with space/secret-token"
+        with patch.dict(os_environ(), {"DISCORD_WEBHOOK_URL": url}, clear=True):
+            fragment = requote_uri(urlparse(url).path)
+            exc = ConnectionError(f"connection refused: url: {fragment}")
+            self.assertEqual(nf.safe_reason(exc), "ConnectionError")
+            self.assertNotIn("secret-token", nf.safe_reason(exc))
 
     def test_reason_scrubs_secrets_before_truncation(self):
         # safe_reason feeds Discord AND (via _fail_task) client-visible task

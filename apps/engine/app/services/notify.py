@@ -15,8 +15,10 @@ from __future__ import annotations
 import os
 import sys
 from typing import Any, Callable
+from urllib.parse import urlparse
 
 from loguru import logger
+from requests.utils import requote_uri
 
 from app.services.analytics import scrub_secret_values
 
@@ -142,6 +144,36 @@ def send_discord(message: str, post: PostFn | None = None) -> bool:
         return False
 
 
+def redact_known_url(message: str, url: str) -> str:
+    """Replace every transport serialization of a webhook URL with [redacted].
+
+    requests/urllib3 can embed the URL in several forms in exception text:
+    the configured string, requests' own requote of it (response.url), the
+    path-only fragment (connection-phase errors), and the full request
+    target (path + query). The key-anchored scrubber cannot match
+    path-embedded tokens, so every variant must be replaced explicitly.
+    Longest variants first, so a path replace cannot split a request-target
+    before it is matched. Never replace an empty string: it interleaves
+    "[redacted]" between characters.
+    """
+    if not url:
+        return message
+    parsed = urlparse(url)
+    request_target = parsed.path + ("?" + parsed.query if parsed.query else "")
+    variants = {
+        url,
+        requote_uri(url),
+        parsed.path,
+        requote_uri(parsed.path),
+        request_target,
+        requote_uri(request_target),
+    }
+    for variant in sorted(variants, key=len, reverse=True):
+        if variant:
+            message = message.replace(variant, "[redacted]")
+    return message
+
+
 def safe_reason(exc: BaseException) -> str:
     """Exception summary safe for Discord.
 
@@ -154,7 +186,7 @@ def safe_reason(exc: BaseException) -> str:
     message = str(exc)
     if not message:
         return type(exc).__name__
-    if webhook_url and webhook_url in message:
+    if redact_known_url(message, webhook_url) != message:
         return type(exc).__name__
     # The summary reaches Discord, logs, and (via _fail_task) client-visible
     # task errors: scrub the full message before the 200-cut, like the

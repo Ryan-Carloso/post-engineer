@@ -20,10 +20,9 @@ from typing import Optional
 
 import requests
 from loguru import logger
-from requests.utils import requote_uri
-from urllib.parse import urlparse
 
 from app.services.analytics import scrub_secret_values
+from app.services.notify import redact_known_url
 
 WEBHOOK_TIMEOUT_SECONDS = 10
 
@@ -56,24 +55,10 @@ def _post(webhook_url: str, payload: dict, task_id: str) -> None:
         # The webhook URL is a credential (Discord/Slack-style path-embedded
         # tokens): requests embeds it in str(exc), and the key-anchored
         # scrubber cannot match path-embedded tokens. Redact every
-        # serialization the transport can produce — the configured string,
-        # requests' own requote of it (response.url), and the path-only
-        # fragment that connection-phase errors (DNS/refused/TLS/timeout)
-        # embed instead of the full URL — then scrub-then-truncate the
-        # remainder like every other free-text error surface. Never replace
-        # an empty string: it interleaves "[redacted]" between characters.
-        message = str(exc)
-        if webhook_url:
-            path = urlparse(webhook_url).path
-            variants = {
-                webhook_url,
-                requote_uri(webhook_url),
-                path,
-                requote_uri(path),
-            }
-            for variant in variants:
-                if variant:
-                    message = message.replace(variant, "[redacted]")
+        # serialization the transport can produce via the shared helper,
+        # then scrub-then-truncate the remainder like every other
+        # free-text error surface.
+        message = redact_known_url(str(exc), webhook_url)
         error = scrub_secret_values(message)[:500]
         logger.bind(task_id=task_id).error(
             "terminal webhook delivery failed: {error}", error=error

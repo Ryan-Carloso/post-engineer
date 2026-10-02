@@ -196,6 +196,32 @@ class NotifyTerminalTaskTests(unittest.TestCase):
         self.assertNotIn(raw_path, logged)
         self.assertNotIn(encoded_path, logged)
 
+    def test_webhook_failure_log_redacts_query_string_variant(self):
+        # urllib3 connection-phase errors embed the full request target
+        # (/path?query=...) — a credential in the query string must be
+        # redacted even though the path-only variant does not cover it.
+        # The param name/value are chosen so the key-anchored scrubber
+        # cannot catch them: only the variant redaction can.
+        webhook_url = "https://example.com/hooks/path?sig=abc123xyz"
+        target = "/hooks/path?sig=abc123xyz"
+        with (
+            patch(
+                "app.services.task_webhook.requests.post",
+                side_effect=requests.exceptions.ConnectionError(
+                    "HTTPConnectionPool(host='example.com', port=443): "
+                    f"Max retries exceeded with url: {target} "
+                    "(Caused by NewConnectionError('refused'))"
+                ),
+            ),
+            patch("app.services.task_webhook.logger") as mock_logger,
+        ):
+            task_webhook._post(webhook_url, {"task_id": "t-1"}, "t-1")
+        error_mock = mock_logger.bind.return_value.error
+        self.assertTrue(error_mock.call_args_list)
+        logged = " ".join(str(c) for c in error_mock.call_args_list)
+        self.assertNotIn("abc123xyz", logged)
+        self.assertNotIn(target, logged)
+
     def test_webhook_failure_empty_url_does_not_interleave_redacted(self):
         # str.replace("", "[redacted]") interleaves the marker between
         # every character — the emptiness guard keeps the log readable.
