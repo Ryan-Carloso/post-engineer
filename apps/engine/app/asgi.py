@@ -109,9 +109,13 @@ def _loguru_posthog_sink(message) -> None:
                 value = extra[key]
                 # Typed ints (e.g. http_status_code) are not free text:
                 # forward them raw so PostHog numeric filters/breakdowns
-                # work; everything else goes through the scrubber.
+                # work; everything else goes through the scrubber. Bools
+                # are excluded explicitly — isinstance(True, int) is True,
+                # and a secret is never an int (analytics.py rule).
                 properties[key] = (
-                    value if isinstance(value, int) else scrub_secret_values(str(value))
+                    value
+                    if isinstance(value, int) and not isinstance(value, bool)
+                    else scrub_secret_values(str(value))
                 )
         if exception is not None:
             # loguru stores the exception as a (type, value, traceback) tuple

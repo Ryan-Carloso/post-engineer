@@ -69,6 +69,18 @@ class PostHogSinkTests(unittest.TestCase):
         assert "http_status_code" not in properties
         assert properties["$exception_list"][0]["type"] == "Error"
 
+    def test_bool_extra_forwarded_as_scrubbed_string(self):
+        # isinstance(True, int) is True: a bool must not take the int
+        # exemption — the repo's "a secret is never an int" rule
+        # (analytics.py) gates bools out explicitly.
+        with patch("app.asgi.track_event") as track_event:
+            asgi._loguru_posthog_sink(
+                _message(extra={"task_id": "t", "http_status_code": True})
+            )
+        _, properties = track_event.call_args[0]
+        assert properties["http_status_code"] == "True"
+        assert not isinstance(properties["http_status_code"], bool)
+
     def test_record_with_exception_forwards_exception_details(self):
         error = ValueError("kaput")
         with patch("app.asgi.track_event") as track_event:
