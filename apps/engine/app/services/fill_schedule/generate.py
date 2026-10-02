@@ -202,7 +202,14 @@ class BatchGenerator:
                 failed_props["task_id"] = task_id
             if user_id is not None:
                 failed_props["user_id"] = user_id
-            track_event("video_generation_failed", failed_props)
+            # Funnel dedup: a crash between the dispatch failure and the
+            # slot FAILED write re-dispatches the same uuid5 id on the next
+            # tick. Gate on the shared terminal-event guard so the second
+            # failed dispatch does not emit a second video_generation_failed
+            # for one logical generation. (Pre-id failures — deleted persona,
+            # empty topic — have no task id to dedupe by and keep emitting.)
+            if task_id is None or tm._should_emit_failed_event(task_id):
+                track_event("video_generation_failed", failed_props)
             notify_safe(
                 self.notify,
                 notify_module.slot_failed_msg(

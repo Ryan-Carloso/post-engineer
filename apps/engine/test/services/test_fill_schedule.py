@@ -206,6 +206,51 @@ class BatchScheduleTests(unittest.TestCase):
         self.assertEqual(amount, 2)  # face_mix 50% @ ok = ceil(0.5*2 + 0.5*1) = 2
         self.assertEqual(store.updates[0][1]["status"], "failed")
 
+    def test_redispatch_after_failed_dispatch_emits_failed_once(self):
+        # A crash between the dispatch failure and the slot FAILED write
+        # re-dispatches the same uuid5 id on the next tick. The second
+        # failed dispatch must not emit a second video_generation_failed
+        # for one logical generation — it would inflate the failure-%
+        # numerator the funnel exists to measure.
+        from app.services import task as tm
+        from app.services.fill_schedule import generate as gen_module
+
+        tm._failed_event_emitted_tasks.clear()
+        tm._requested_event_emitted_tasks.clear()
+        try:
+            slot = self._batch_slot()
+            store = _FakeStore()
+            store.refund_batch_tokens = lambda *args: True
+            scheduler = self._scheduler(store)
+            scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
+
+            with (
+                patch.object(
+                    scheduler.generator, "_dispatch_generation",
+                    side_effect=RuntimeError("dispatch down"),
+                ),
+                patch.object(gen_module, "track_event") as gen_track,
+                patch.object(tm, "track_event") as task_track,
+            ):
+                scheduler.generator._generate_slot(slot)
+                # Crash window: the FAILED write never landed, so the next
+                # tick re-dispatches the same slot (same uuid5 task id).
+                scheduler.generator._generate_slot(slot)
+
+            failed = [
+                c for c in gen_track.call_args_list
+                if c[0][0] == "video_generation_failed"
+            ]
+            self.assertEqual(len(failed), 1)
+            requested = [
+                c for c in task_track.call_args_list
+                if c[0][0] == "video_generation_requested"
+            ]
+            self.assertEqual(len(requested), 1)
+        finally:
+            tm._failed_event_emitted_tasks.clear()
+            tm._requested_event_emitted_tasks.clear()
+
 
 
 
