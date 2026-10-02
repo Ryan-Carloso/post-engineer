@@ -91,7 +91,7 @@ class UploadPostService:
                 return result
 
         except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to cross-post video: {str(e)}")
+            logger.error(f"Failed to cross-post video: {scrub_secret_values(str(e))}")
             # The error dict is persisted into client-visible task state
             # (cross_post_results): scrub before storing, like every other
             # free-text error surface.
@@ -123,7 +123,7 @@ class UploadPostService:
             return response.json()
 
         except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to check status: {str(e)}")
+            logger.error(f"Failed to check status: {scrub_secret_values(str(e))}")
             # The error dict is persisted into client-visible task state
             # (cross_post_results): scrub before storing, like every other
             # free-text error surface.
