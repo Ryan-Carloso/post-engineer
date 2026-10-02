@@ -1453,6 +1453,20 @@ Follow these so the same issues don't come back:
   cleanup budget got a mocked-clock test mirroring the preview's — the
   skip-and-log path is production logic, not an edge.
 
+## Web/API review learnings, PR #41 round 5 (2026-10-02)
+- **Reset-on-close is part of the confirmation gate.** A ref keyed on
+  "is new" must clear when the dialog closes — otherwise cancel → reopen
+  pre-arms the destructive button. The modal stays mounted; `persona: null`
+  is the close signal. Pin both directions: retry keeps the name, reopen
+  clears it.
+- **Destructive mutations get their own rate-limit profile.** The DELETE
+  cascade (multi-table + engine fan-out) got `personaDelete` at 10/min,
+  lower than the preview's 30/min. Expensive + irreversible = stricter.
+- **Clock mocks restore in afterEach, not at test end.** A failing
+  assertion before a manual `mockRestore()` leaks the frozen clock into
+  later tests in the worker. `vi.restoreAllMocks()` in afterEach covers
+  every spy.
+
 ## Engine review learnings (2026-10-02, PR #43)
 - **A test comment claiming a behavior must pin it with an assertion.** The
   reconcile test's comment said "the refund is skipped" but asserted only
