@@ -753,41 +753,41 @@ export async function DELETE(request: Request): Promise<NextResponse> {
       const start = Date.now();
       const skipped: string[] = [];
       for (const taskId of taskIds) {
-          if (Date.now() - start >= ENGINE_CLEANUP_BUDGET_MS) {
-            skipped.push(taskId);
-            continue;
-          }
-          if (!SAFE_TASK_ID.test(taskId)) {
-            logger.warn('[api/persona] skipping unsafe engine task id', { taskId });
-            continue;
-          }
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 8000);
-          try {
-            const res = await fetch(
-              `${engineBaseUrl.replace(/\/+$/, '')}/api/v1/tasks/${encodeURIComponent(taskId)}`,
-              {
-                method: 'DELETE',
-                headers: engineAuthHeaders(userId),
-                signal: controller.signal,
-              },
-            );
-            if (!res.ok) {
-              logger.warn('[api/persona] engine task cleanup failed', { taskId, status: res.status });
-            }
-          } catch (error) {
-            logger.warn('[api/persona] engine task cleanup failed', { taskId, error });
-          } finally {
-            clearTimeout(timeout);
-          }
+        if (Date.now() - start >= ENGINE_CLEANUP_BUDGET_MS) {
+          skipped.push(taskId);
+          continue;
         }
-        if (skipped.length > 0) {
-          logger.warn('[api/persona] engine task cleanup budget spent, ids skipped', {
-            skipped,
-          });
+        if (!SAFE_TASK_ID.test(taskId)) {
+          logger.warn('[api/persona] skipping unsafe engine task id', { taskId });
+          continue;
         }
-      })();
-    });
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        try {
+          const res = await fetch(
+            `${engineBaseUrl.replace(/\/+$/, '')}/api/v1/tasks/${encodeURIComponent(taskId)}`,
+            {
+              method: 'DELETE',
+              headers: engineAuthHeaders(userId),
+              signal: controller.signal,
+            },
+          );
+          if (!res.ok) {
+            logger.warn('[api/persona] engine task cleanup failed', { taskId, status: res.status });
+          }
+        } catch (error) {
+          logger.warn('[api/persona] engine task cleanup failed', { taskId, error });
+        } finally {
+          clearTimeout(timeout);
+        }
+      }
+      if (skipped.length > 0) {
+        logger.warn('[api/persona] engine task cleanup budget spent, ids skipped', {
+          skipped,
+        });
+      }
+    })();
+  });
 
   trackApiEvent('persona_deleted', {
     userId: user.id,
