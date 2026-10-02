@@ -160,6 +160,27 @@ class BatchScheduleTests(unittest.TestCase):
         self.assertEqual(store.spent, [])
         self.assertEqual(store.updates[0][1]["status"], "failed")
 
+    def test_generate_batch_slot_without_persona_fails_slot_without_throwing(self):
+        # Regression: a schedule with no persona embed (deleted persona)
+        # must fail the slot instead of killing the whole generate stage
+        # every tick with a RuntimeError.
+        slot = self._batch_slot()
+        del slot["schedules"]["personas"]
+        store = _FakeStore()
+        store.pending_slots = lambda now: [slot]
+        scheduler = self._scheduler(store)
+        scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
+
+        with patch.object(
+            scheduler.generator, "_dispatch_generation"
+        ) as dispatch_generation:
+            # Must not raise; slot marked failed.
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+
+        self.assertEqual(enqueued, 0)
+        dispatch_generation.assert_not_called()
+        self.assertEqual(store.updates[0][1]["status"], "failed")
+
     def test_generate_batch_dispatch_failure_refunds_single_video(self):
         slot = self._batch_slot()
         store = _FakeStore()
@@ -256,6 +277,35 @@ class ReconcileTests(unittest.TestCase):
         )
         self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
         self.assertEqual(store.updates[0][1]["status"], "failed")
+
+    def test_failed_task_without_persona_embed_marks_failed_without_throwing(self):
+        # Regression: a schedule with no persona embed (deleted persona)
+        # must not kill the reconcile stage with a RuntimeError every tick.
+        # The slot is marked failed, the refund is skipped, and processing
+        # continues instead of spamming PostHog with $exception.
+        slot = {
+            "id": "slot-1",
+            "task_id": "t-1",
+            "user_id": "user-1",
+            "schedules": {
+                "id": "sched-1",
+                "user_id": "user-1",
+                # No "personas" key: persona was deleted.
+            },
+        }
+        store = _FakeStore()
+        store.generating_slots = lambda: [slot]
+        state = MagicMock()
+        state.get_task.return_value = {"state": -1, "error": "gpu exploded"}
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=state,
+            publish_video=MagicMock(),
+        )
+        # Must not raise; slot marked failed; refund skipped (no persona
+        # to compute the cost from).
+        self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
+        self.assertEqual(store.updates[0][1]["status"], "failed")
+        self.assertEqual(store.refund_batch_calls, [])
 
     def test_failed_batch_task_refunds_batch_charge(self):
         # Batch slots are prepaid under `batch:{scheduleId}`; a failed task
