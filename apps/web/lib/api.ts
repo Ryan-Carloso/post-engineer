@@ -640,7 +640,6 @@ export interface ScheduleConfig {
   postsPerDay: number;
   timezone: string;
   active: boolean;
-  scheduledAt: string | null;
 }
 
 export interface ScheduledSlot {
@@ -682,7 +681,6 @@ interface ScheduleRow {
   posts_per_day: number;
   timezone: string;
   active: boolean;
-  scheduled_at: string | null;
 }
 
 interface SlotRow {
@@ -710,14 +708,12 @@ function mapSchedule(row: ScheduleRow): ScheduleConfig {
     instagramAccountIds: row.instagram_account_ids ?? [],
     linkedinAccountIds: row.linkedin_account_ids ?? [],
     blueskyAccountIds: row.bluesky_account_ids ?? [],
-    // One-off schedules: days/window are null in the database (scheduled_at instead).
     daysOfWeek: row.days_of_week ?? [],
     startHour: row.start_hour ?? null,
     endHour: row.end_hour ?? null,
     postsPerDay: row.posts_per_day,
     timezone: row.timezone,
     active: row.active,
-    scheduledAt: row.scheduled_at ?? null,
   };
 }
 

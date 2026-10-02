@@ -56,18 +56,6 @@ describe('Home dashboard public seam', () => {
     expect(screen.getByText('Ryan no LinkedIn')).toBeVisible();
   });
 
-  it('renderiza agendamento one-off (daysOfWeek null) sem quebrar e mostra a data agendada', () => {
-    // Forma que chega do mapSchedule quando days_of_week/start_hour são null (one-off).
-    apiState.schedules = [{ id: 's1', personaId: 'p1', providers: ['youtube'], youtubeAccountIds: ['yt1'], instagramAccountIds: [], linkedinAccountIds: [], daysOfWeek: null, startHour: null, endHour: null, postsPerDay: 1, timezone: 'America/Sao_Paulo', active: true, scheduledAt: '2026-12-25T17:00:00.000Z' }];
-    render(<Home />);
-
-    expect(screen.getByRole('heading', { name: 'Tech Explorer' })).toBeVisible();
-    expect(screen.getByText(/home\.oneOff/)).toBeInTheDocument();
-    expect(screen.getByText(/25\/12\/2026/)).toBeInTheDocument();
-    expect(screen.queryByText('home.everyDay')).not.toBeInTheDocument();
-    expect(screen.queryByText(/null/)).not.toBeInTheDocument();
-  });
-
   it('shows the skeleton instead of the empty state while query data is unavailable', () => {
     apiState.personas = undefined;
     apiState.schedules = undefined;

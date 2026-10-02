@@ -18,8 +18,7 @@
 //
 // The engine's 60s tick reconciles generating -> ready/failed and publishes
 // ready slots at slot_at; the tick never sees our slots while pending:
-// scheduled_at stays NULL during dispatch (it would otherwise trigger the
-// immediate one-off dispatch path and double-generate).
+// scheduled_at is a legacy column that always stays NULL now.
 //---------------
 
 import { NextResponse } from 'next/server';
@@ -744,9 +743,9 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   // 9. Insert the schedule. The id is deterministic (idempotency anchor);
   // kind='batch' (a finite prepaid set of slots — never the 'recurring'
-  // default, which would trip the partial unique index). scheduled_at stays
-  // NULL during dispatch so the engine's immediate one-off path cannot race
-  // us and double-generate; the tick only reconciles our generating slots.
+  // default, which would trip the partial unique index). scheduled_at is a
+  // legacy column that always stays NULL; the tick only reconciles our
+  // generating slots.
   const sortedTimes = [...new Set(schedule.times.map((t) => t.trim()))].sort();
   const { error: scheduleError } = await supabase.from('schedules').insert({
     id: idem.scheduleId,

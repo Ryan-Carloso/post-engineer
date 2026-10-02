@@ -120,12 +120,9 @@ const AutomationGrid = () => {
         const instagramAccounts = instagram.data?.accounts.filter((item) => schedule.instagramAccountIds.includes(item.igUserId)) ?? [];
         const linkedinAccounts = linkedin.data?.accounts.filter((item) => schedule.linkedinAccountIds.includes(item.providerAccountId)) ?? [];
         const nextSlot = status.data?.upcoming.find((slot) => slot.scheduleId === schedule.id) ?? status.data?.upcoming[0];
-        const isOneOff = schedule.scheduledAt !== null && schedule.scheduledAt !== undefined;
-        const days = isOneOff
-          ? t('home.oneOff')
-          : schedule.daysOfWeek.length === 7
-            ? t('home.everyDay')
-            : schedule.daysOfWeek.map((day) => dayLabels[day]).join(', ');
+        const days = schedule.daysOfWeek.length === 7
+          ? t('home.everyDay')
+          : schedule.daysOfWeek.map((day) => dayLabels[day]).join(', ');
         const busy = updateSchedule.isPending || deleteSchedule.isPending;
 
         return (
@@ -157,11 +154,7 @@ const AutomationGrid = () => {
 
               <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-[#edf2f5] pt-4 text-xs text-[#0d2b45] sm:grid-cols-3">
                 <span>▣ {days}</span>
-                {isOneOff ? (
-                  <span>◷ {schedule.scheduledAt ? new Date(schedule.scheduledAt).toLocaleString(locale === 'pt' ? 'pt-BR' : 'en-US', { dateStyle: 'short', timeStyle: 'short' }) : t('home.waitingForSchedule')}</span>
-                ) : (
-                  <span>◷ {String(schedule.startHour).padStart(2, '0')}:00 - {String(schedule.endHour).padStart(2, '0')}:00</span>
-                )}
+                <span>◷ {String(schedule.startHour).padStart(2, '0')}:00 - {String(schedule.endHour).padStart(2, '0')}:00</span>
                 <span>▤ {schedule.postsPerDay} {t('home.postsPerDay')}</span>
               </div>
 

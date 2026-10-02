@@ -148,12 +148,12 @@ export async function assertAccountsOwned(
 
 //---------------
 // SlotTime — one entry of the `times` array:
-// - { kind: 'time', time } — a wall-clock "HH:MM" applied to scheduledAt's
-//   calendar date in the request timezone (legacy behavior);
+// - { kind: 'time', time } — a wall-clock "HH:MM" publishing time, read in
+//   the request timezone;
 // - { kind: 'datetime', at } — a full ISO datetime, so a single request can
 //   batch videos across several different days. Naive wall clocks are read
 //   in the request timezone; an explicit offset (Z or ±hh:mm) is respected
-//   as-is, exactly like scheduledAt.
+//   as-is.
 //---------------
 export type SlotTime = { kind: 'time'; time: string } | { kind: 'datetime'; at: string };
 
@@ -220,7 +220,7 @@ export async function GET(request?: Request): Promise<NextResponse> {
 
   const { data, error } = await supabase
     .from('schedules')
-    .select('id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, days_of_week, start_hour, end_hour, posts_per_day, timezone, scheduled_at, active, created_at')
+    .select('id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, days_of_week, start_hour, end_hour, posts_per_day, timezone, active, created_at')
     .eq('user_id', user.id)
     .order('created_at', { ascending: true });
 

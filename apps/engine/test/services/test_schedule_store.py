@@ -241,11 +241,9 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class OneOffSlotsTests(unittest.TestCase):
-    """One-off schedule slots: dispatched immediately, ignoring the horizon.
-
-    Discriminator (no schema change): the joined schedule carries
-    scheduled_at (batch schedules leave it NULL).
+class SlotSelectTests(unittest.TestCase):
+    """SLOT_SELECT shape: the PostgREST select used for scheduled_posts
+    reads with the joined schedule (+persona) embed.
     """
 
     def setUp(self):
