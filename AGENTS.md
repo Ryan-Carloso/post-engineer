@@ -1413,6 +1413,28 @@ Follow these so the same issues don't come back:
   schedules". If the count already renders in `<strong>`, the label key
   carries no `{count}` of its own.
 
+## Web/API review learnings, PR #41 round 3 (2026-10-02)
+- **Budget the `after()` loop too.** `after()` has no deadline of its own —
+  Vercel cuts the function off and the tail orphans silently. Give
+  post-commit cleanup the same aggregate budget as the read path and log
+  skipped ids loudly; best-effort is not silent.
+- **Log inside never-throw helpers, with the id.** `resolveDownloadUrl`
+  returned null on every failure path with zero trail. Warn with the task
+  id and failure class (non-ok status, abort, unsafe id) so "download
+  unavailable" is diagnosable server-side.
+- **Name the degradation honestly in the UI.** A budget-cut lookup is not
+  "unavailable" — the video exists. A `linksIncomplete` flag drives a
+  distinct "could not be loaded in time" note with retry, not the
+  unrecoverable copy.
+- **Share input-class guards across sibling boundaries.** `SAFE_TASK_ID`
+  lived only in delete-preview while the DELETE cleanup interpolated the
+  same DB-sourced ids. One shared guard in the leaf module, used by both
+  loops, pinned by unit tests.
+- **Test env vars via `vi.stubEnv`, never manual delete.**
+  `vi.unstubAllEnvs()` only restores stubbed values; a manual
+  `delete process.env.X` permanently removes a genuinely-set var for later
+  test files in the worker.
+
 ## Engine review learnings (2026-10-02, PR #43)
 - **A test comment claiming a behavior must pin it with an assertion.** The
   reconcile test's comment said "the refund is skipped" but asserted only
