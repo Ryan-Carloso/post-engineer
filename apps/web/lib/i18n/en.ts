@@ -513,6 +513,8 @@ export const enDictionary: Dictionary = {
     deleteDialogSlots: 'upcoming posts',
     deleteDialogPublishedSlot: 'published post (history)',
     deleteDialogPublishedSlots: 'published posts (history)',
+    deleteDialogFailedSlot: 'failed post record',
+    deleteDialogFailedSlots: 'failed post records',
     deleteDialogVideo: 'generated video',
     deleteDialogVideos: 'generated videos',
     deleteDialogImage: 'library image',

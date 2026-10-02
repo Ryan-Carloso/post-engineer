@@ -188,6 +188,9 @@ export function usePersonasQuery() {
 export interface DeletePersonaResult {
   success: boolean;
   error?: string;
+  // Present on non-ok responses when the server sent a structured code
+  // (e.g. PERSONA_NOT_FOUND). Lets the UI stop retrying permanent failures.
+  code?: string;
 }
 
 export interface DeletePreviewVideo {
@@ -204,6 +207,7 @@ export interface DeletePreview {
     schedules: number;
     upcomingSlots: number;
     publishedSlots: number;
+    failedSlots: number;
     generatedVideos: number;
     personaImages: number;
   };
@@ -211,16 +215,26 @@ export interface DeletePreview {
   videosTruncated?: boolean;
   linksIncomplete?: boolean;
   error?: string;
+  code?: string;
 }
 
 // Extract the server's structured error from a non-ok response, falling
 // back to a generic message when the body is missing or unreadable.
-async function parseErrorResponse(response: Response, fallback: string): Promise<string> {
+// Returns the error text and, when present, the machine-readable code so
+// callers can distinguish permanent failures (PERSONA_NOT_FOUND) from
+// transient ones.
+async function parseErrorResponse(
+  response: Response,
+  fallback: string,
+): Promise<{ error: string; code?: string }> {
   const body = await response.json().catch(() => null);
-  if (body !== null && typeof body === 'object' && 'error' in body && typeof body.error === 'string') {
-    return body.error;
+  if (body !== null && typeof body === 'object') {
+    const error =
+      'error' in body && typeof body.error === 'string' ? body.error : null;
+    const code = 'code' in body && typeof body.code === 'string' ? body.code : undefined;
+    if (error !== null) return { error, code };
   }
-  return fallback;
+  return { error: fallback };
 }
 
 export async function fetchDeletePreview(personaId: string): Promise<DeletePreview> {
@@ -230,10 +244,8 @@ export async function fetchDeletePreview(personaId: string): Promise<DeletePrevi
   if (!response.ok) {
     // Surface the server's structured error (code/error) so the UI can
     // distinguish e.g. PERSONA_NOT_FOUND from a transient 500.
-    return {
-      success: false,
-      error: await parseErrorResponse(response, `Preview request failed (${response.status}).`),
-    };
+    const parsed = await parseErrorResponse(response, `Preview request failed (${response.status}).`);
+    return { success: false, error: parsed.error, code: parsed.code };
   }
   try {
     return (await response.json()) as DeletePreview;
@@ -248,10 +260,8 @@ export async function deletePersona(personaId: string): Promise<DeletePersonaRes
     { method: 'DELETE' },
   );
   if (!response.ok) {
-    return {
-      success: false,
-      error: await parseErrorResponse(response, `Delete request failed (${response.status}).`),
-    };
+    const parsed = await parseErrorResponse(response, `Delete request failed (${response.status}).`);
+    return { success: false, error: parsed.error, code: parsed.code };
   }
   try {
     return (await response.json()) as DeletePersonaResult;
@@ -279,10 +289,8 @@ export async function updatePersona(
     { method: 'PATCH', body: formData },
   );
   if (!response.ok) {
-    return {
-      success: false,
-      error: await parseErrorResponse(response, `Update request failed (${response.status}).`),
-    };
+    const parsed = await parseErrorResponse(response, `Update request failed (${response.status}).`);
+    return { success: false, error: parsed.error };
   }
   try {
     return (await response.json()) as UpdatePersonaResult;

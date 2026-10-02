@@ -99,6 +99,11 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
         if (result.success) {
           setPreview(result);
           setPhase('ready');
+        } else if (result.code === 'PERSONA_NOT_FOUND') {
+          // The persona is already gone (deleted elsewhere): no retry can
+          // fix this. Close and let the list refetch.
+          onDeleted();
+          onClose();
         } else {
           setPhase('loadError');
         }
@@ -122,9 +127,14 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
     setPhase('deleting');
     // A rejection after 'deleting' would disable Delete, Cancel and the
     // input at once — surface it as deleteError so the user can retry.
+    // PERSONA_NOT_FOUND means the persona is already gone: close and
+    // refetch instead of offering a retry that can never succeed.
     void deletePersona(persona.id)
       .then((result) => {
         if (result.success) {
+          onDeleted();
+          onClose();
+        } else if (result.code === 'PERSONA_NOT_FOUND') {
           onDeleted();
           onClose();
         } else {
@@ -185,6 +195,16 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
                     counts.publishedSlots === 1
                       ? 'personas.deleteDialogPublishedSlot'
                       : 'personas.deleteDialogPublishedSlots',
+                  )}
+                </li>
+              )}
+              {counts.failedSlots > 0 && (
+                <li>
+                  <strong className="font-semibold">{counts.failedSlots}</strong>{' '}
+                  {t(
+                    counts.failedSlots === 1
+                      ? 'personas.deleteDialogFailedSlot'
+                      : 'personas.deleteDialogFailedSlots',
                   )}
                 </li>
               )}

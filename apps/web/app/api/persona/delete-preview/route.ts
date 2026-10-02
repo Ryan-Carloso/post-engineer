@@ -217,6 +217,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     .filter((id): id is string => typeof id === 'string');
   let upcomingSlots = 0;
   let publishedSlots = 0;
+  let failedSlots = 0;
   if (scheduleIds.length > 0) {
     const { count: slotsCount, error: slotsError } = await supabase
       .from('scheduled_posts')
@@ -249,6 +250,21 @@ export async function GET(request: Request): Promise<NextResponse> {
       });
     }
     publishedSlots = publishedCount ?? 0;
+    // Failed slots are real history rows the cascade also deletes.
+    const { count: failedCount, error: failedError } = await supabase
+      .from('scheduled_posts')
+      .select('id', { head: true, count: 'exact' })
+      .in('schedule_id', scheduleIds)
+      .eq('status', 'failed')
+      .eq('user_id', auth.userId);
+    if (failedError) {
+      logger.error('[api/persona/delete-preview] failed slot lookup failed', failedError);
+      return apiErrorResponse(500, 'Failed to load delete preview.', {
+        route: ROUTE,
+        code: ERROR_CODES.INTERNAL_ERROR,
+      });
+    }
+    failedSlots = failedCount ?? 0;
   }
 
   const generations = (generationsListRes.data ?? [])
@@ -305,6 +321,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       schedules: scheduleIds.length,
       upcomingSlots,
       publishedSlots,
+      failedSlots,
       generatedVideos: totalGenerations,
       personaImages: imagesCountRes.count ?? 0,
     },

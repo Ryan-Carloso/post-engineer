@@ -34,7 +34,7 @@ const PERSONA = { id: 'persona-1', name: 'Ryan' };
 const PREVIEW = {
   success: true,
   persona: { id: 'persona-1', name: 'Ryan' },
-  counts: { schedules: 2, upcomingSlots: 3, publishedSlots: 0, generatedVideos: 2, personaImages: 1 },
+  counts: { schedules: 2, upcomingSlots: 3, publishedSlots: 0, failedSlots: 0, generatedVideos: 2, personaImages: 1 },
   videos: [
     { taskId: 'task-aaa', topic: 'Topic one', status: 'completed', downloadUrl: '/dl/task-aaa/f.mp4' },
     { taskId: 'task-bbb', topic: 'Topic two', status: 'failed', downloadUrl: null },
@@ -174,7 +174,7 @@ describe('DeletePersonaModal', () => {
   it('uses singular labels for a count of 1', async () => {
     vi.mocked(fetchDeletePreview).mockResolvedValue({
       ...PREVIEW,
-      counts: { schedules: 1, upcomingSlots: 1, publishedSlots: 0, generatedVideos: 1, personaImages: 1 },
+      counts: { schedules: 1, upcomingSlots: 1, publishedSlots: 0, failedSlots: 0, generatedVideos: 1, personaImages: 1 },
     });
     renderModal();
     await screen.findByText('personas.deleteDialogNoRefund');
@@ -188,7 +188,7 @@ describe('DeletePersonaModal', () => {
   it('notes when the video list was truncated', async () => {
     vi.mocked(fetchDeletePreview).mockResolvedValue({
       ...PREVIEW,
-      counts: { schedules: 0, upcomingSlots: 0, publishedSlots: 0, generatedVideos: 25, personaImages: 0 },
+      counts: { schedules: 0, upcomingSlots: 0, publishedSlots: 0, failedSlots: 0, generatedVideos: 25, personaImages: 0 },
       videosTruncated: true,
     });
     // The t mock returns the key; assert the key renders with interpolation params.

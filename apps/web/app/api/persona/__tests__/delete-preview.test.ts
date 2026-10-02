@@ -420,6 +420,29 @@ describe('GET /api/persona/delete-preview', () => {
     expect(body.linksIncomplete).toBe(false);
   });
 
+  it('treats engine auth misconfig as non-transient and logs at error', async () => {
+    getClient();
+    const { engineAuthHeaders } = await import('@/lib/request-auth');
+    vi.mocked(engineAuthHeaders).mockImplementationOnce(() => {
+      throw new Error('MONEYPRINT_API_SECRET is not set');
+    });
+    const res = await GET(
+      new Request(`http://localhost/api/persona/delete-preview?personaId=${PERSONA_ID}`),
+    );
+    const body = (await res.json()) as {
+      videos: Array<{ downloadUrl: string | null }>;
+      linksIncomplete: boolean;
+    };
+    expect(res.status).toBe(200);
+    expect(body.videos[0]?.downloadUrl).toBeNull();
+    // Config error: retry can never fix it, so no retry note.
+    expect(body.linksIncomplete).toBe(false);
+    expect(logger.error).toHaveBeenCalledWith(
+      '[api/persona/delete-preview] engine auth misconfigured',
+      expect.objectContaining({ engineTaskId: 'task-aaa' }),
+    );
+  });
+
   it('treats engine 401 as a config error, not transient', async () => {
     getClient();
     vi.stubGlobal(
