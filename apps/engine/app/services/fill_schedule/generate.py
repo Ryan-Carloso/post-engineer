@@ -115,8 +115,12 @@ class BatchGenerator:
         """Process one pending slot. Returns the notify label on success,
         None when the slot failed (already recorded + notified)."""
         schedule = slot.get("schedules") or {}
-        persona = persona_for(schedule)
+        persona: dict[str, Any] = {}
         try:
+            # The persona may have been deleted after the schedule was
+            # created: fail the slot instead of killing the whole generate
+            # stage every tick.
+            persona = persona_for(schedule)
             # Topics are stored at creation (batch and one-off alike); there
             # is no LLM fallback, so an empty topic fails the slot loudly.
             topic = str(slot.get("topic") or "").strip()
