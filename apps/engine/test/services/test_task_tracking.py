@@ -52,6 +52,15 @@ class RequestedTests(unittest.TestCase):
         self.assertEqual(props["slot_id"], "slot-9")
         self.assertEqual(props["flow"], "batch")
 
+    def test_tracking_context_degrades_to_unknown_sentinels(self):
+        # An unreadable/missing row degrades every identity prop to the
+        # "unknown" sentinel — never a fabricated user id that looks real
+        # in PostHog breakdowns.
+        context = tm._task_tracking_context("ghost-task-xyz")
+        self.assertEqual(context["task_id"], "ghost-task-xyz")
+        self.assertEqual(context["user_id"], "unknown")
+        self.assertEqual(context["flow"], "unknown")
+
 
 class StartedTests(unittest.TestCase):
     def setUp(self):

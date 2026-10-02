@@ -189,7 +189,7 @@ def _task_tracking_context(task_id: str) -> dict[str, object]:
         task = {}
     return {
         "task_id": task_id,
-        "user_id": task.get("user_id", "internal"),
+        "user_id": task.get("user_id", "unknown"),
         "flow": task.get("flow", "unknown"),
         "pipeline": task.get("pipeline", "video"),
     }
