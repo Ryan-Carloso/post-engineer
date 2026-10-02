@@ -1574,6 +1574,17 @@ Follow these so the same issues don't come back:
 - **Behavioral branches need tests, not just logging branches.** The
   config-throw path changes what the user sees (no retry note); pin it.
 
+## Web/API review learnings, PR #41 round 15 (2026-10-02)
+- **Consumer-side tests close the loop.** The lib parsed PERSONA_NOT_FOUND
+  but no modal test consumed it — the overclaim moved from server to
+  client. Pin both sides.
+- **Conditional UI rows need >0 fixtures.** publishedSlots/failedSlots
+  render only when nonzero; every fixture used 0, so the branches never
+  ran.
+- **Legacy mocks must mirror the production chain.** A select without a
+  thenable degenerates the cascade silently; give generic mocks the same
+  shape as the real builder.
+
 ## Engine review learnings (2026-10-02, PR #43)
 - **A test comment claiming a behavior must pin it with an assertion.** The
   reconcile test's comment said "the refund is skipped" but asserted only
