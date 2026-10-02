@@ -128,5 +128,41 @@ class TestUploadPostYouTube(unittest.TestCase):
         self.assertIn("youtube", platforms)
 
 
+class TestUploadPostErrorScrubbing(unittest.TestCase):
+    # The failure error dicts are persisted into client-visible task state
+    # (cross_post_results), so they get the scrub treatment like every
+    # other free-text error surface.
+
+    @patch("app.services.upload_post.config.app", _CONFIG_BASE)
+    @patch("app.services.upload_post.os.path.exists", return_value=True)
+    @patch("builtins.open", mock_open(read_data=b"fake"))
+    @patch("app.services.upload_post.requests.post")
+    def test_upload_failure_error_is_scrubbed(self, mock_post, _exists):
+        import requests
+
+        mock_post.side_effect = requests.exceptions.RequestException(
+            "connection failed: api_key=TOPSECRET123"
+        )
+        svc = UploadPostService()
+        result = svc.upload_video("/fake/v.mp4", "Title")
+        self.assertFalse(result["success"])
+        self.assertIn("[redacted]", result["error"])
+        self.assertNotIn("TOPSECRET123", result["error"])
+
+    @patch("app.services.upload_post.config.app", _CONFIG_BASE)
+    @patch("app.services.upload_post.requests.get")
+    def test_check_status_failure_error_is_scrubbed(self, mock_get):
+        import requests
+
+        mock_get.side_effect = requests.exceptions.RequestException(
+            "timeout: api_key=TOPSECRET123"
+        )
+        svc = UploadPostService()
+        result = svc.check_status("req-1")
+        self.assertFalse(result["success"])
+        self.assertIn("[redacted]", result["error"])
+        self.assertNotIn("TOPSECRET123", result["error"])
+
+
 if __name__ == "__main__":
     unittest.main()

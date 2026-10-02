@@ -9,6 +9,7 @@ from typing import Optional
 import requests
 from loguru import logger
 from app.config import config
+from app.services.analytics import scrub_secret_values
 
 
 class UploadPostService:
@@ -91,7 +92,10 @@ class UploadPostService:
 
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to cross-post video: {str(e)}")
-            return {"success": False, "error": str(e)}
+            # The error dict is persisted into client-visible task state
+            # (cross_post_results): scrub before storing, like every other
+            # free-text error surface.
+            return {"success": False, "error": scrub_secret_values(str(e))}
 
     def check_status(self, request_id: str) -> dict:
         """
@@ -120,7 +124,10 @@ class UploadPostService:
 
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to check status: {str(e)}")
-            return {"success": False, "error": str(e)}
+            # The error dict is persisted into client-visible task state
+            # (cross_post_results): scrub before storing, like every other
+            # free-text error surface.
+            return {"success": False, "error": scrub_secret_values(str(e))}
 
 
 # Singleton instance
