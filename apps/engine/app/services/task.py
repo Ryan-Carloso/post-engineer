@@ -142,9 +142,11 @@ def _first_http_url(paths: object) -> str | None:
 # pipeline — and the task-state reads below degrade to "unknown" instead
 # of raising.
 #---------------
-# Highest 10% milestone already reported per task. Process-local: after a
-# restart the reconciler fails orphan tasks before any progress write, so
-# a stale entry can never double-report.
+# Highest 10% milestone already reported per task. Process-local: the dict
+# starts empty in every process, direct task ids are uuid4 (never reused),
+# batch task ids are uuid5 and never re-dispatched (only pending slots
+# dispatch), and terminal transitions pop the entry — so a stale entry can
+# never double-report.
 _progress_milestones: dict[str, int] = {}
 
 
@@ -228,8 +230,10 @@ def _complete_task(
     _progress_milestones.pop(task_id, None)
     context = _task_tracking_context(task_id)
     # Batch completions are reported by the fill_schedule reconciler (which
-    # also attaches cost_usd); reporting here too would double count.
-    if context.get("flow") != "batch":
+    # also attaches cost_usd). Only a CONFIRMED direct flow reports here: a
+    # degraded context (flow "unknown", e.g. the row was deleted mid-flight)
+    # may be a batch task, and reporting it too would double count.
+    if context.get("flow") == "direct":
         track_event("video_generated", context)
     task_webhook.notify_terminal_task(
         task_id,

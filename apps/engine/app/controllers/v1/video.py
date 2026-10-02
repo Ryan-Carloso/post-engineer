@@ -224,9 +224,10 @@ def create_task(
         task_manager.add_task(tm.start, task_id=task_id, params=body, stop_at=stop_at)
         # Funnel entry: requested once the task is ACCEPTED into the queue —
         # a 429 queue-full rejection raises above and never enters the
-        # funnel — while the worker thread itself reports
-        # video_generation_started, so requested-vs-failed still gives the
-        # failure % even when the pipeline never runs.
+        # funnel. Note: add_task may start the worker thread synchronously
+        # when capacity is available, so video_generation_started can
+        # occasionally be timestamped before this entry; PostHog orders
+        # funnel steps by timestamp.
         tm.track_generation_requested(
             task_id, user_id=auth.user_id, flow="direct", pipeline=stop_at
         )

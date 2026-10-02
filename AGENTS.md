@@ -1445,3 +1445,28 @@ Follow these so the same issues don't come back:
   beyond the 200-char cut, so the assertion fails either way. Pin the
   order white-box (scrub called with the full string) plus the behavioral
   invariant (raw secret absent, length bounded).
+
+## Engine review learnings, PR #51 round 2 (2026-10-02)
+- **Comments must describe the mechanism that exists, not the one you
+  wish existed.** The milestone-dedup comment claimed "after a restart
+  the reconciler fails orphan tasks before any progress write" — no such
+  path exists. State the real invariants (empty dict per process, uuid4
+  direct ids never reused, uuid5 batch ids never re-dispatched, terminal
+  transitions pop the entry).
+- **Never overclaim ordering in comments/tests.** `add_task` starts the
+  worker synchronously when capacity is available, so
+  `video_generation_started` can be timestamped before
+  `video_generation_requested`; the test only proved mock call order.
+  Reword to the actual guarantee (PostHog orders funnel steps by
+  timestamp) instead of asserting an ordering the runtime doesn't give.
+- **Degraded contexts fail closed, not open.** `_complete_task` gated
+  batch reporting on `flow != "batch"`, but a failed state read degrades
+  to `flow="unknown"` — which passed the guard and double-counted batch
+  completions. Invert to `flow == "direct"` so only a confirmed direct
+  flow reports here; the reconciler owns batch reporting.
+- **Pin security orderings at every call site, not just the first.**
+  The white-box scrub-then-truncate pin existed only for `_fail_task`;
+  the batch dispatch site used a 43-char message where `[:200]` is a
+  no-op, so a truncate-first revert there passed CI. Every scrub site
+  gets a >200-char secret-bearing test asserting the scrubber received
+  the full string.

@@ -183,6 +183,18 @@ class CompleteTaskTests(unittest.TestCase):
             tm._complete_task(self.task_id, _params())
         track.assert_not_called()
 
+    def test_complete_task_skips_generated_for_unknown_flow(self):
+        """A degraded context (flow unknown, e.g. the row was deleted
+        mid-flight) must not emit video_generated here: it may be a batch
+        task, and the reconciler already reports those."""
+        sm.state.delete_task(self.task_id)
+        with (
+            patch.object(tm, "track_event") as track,
+            patch.object(tm.task_webhook, "notify_terminal_task"),
+        ):
+            tm._complete_task(self.task_id, _params())
+        track.assert_not_called()
+
 
 class FailTaskTests(unittest.TestCase):
     def setUp(self):
@@ -282,8 +294,10 @@ class CreateTaskControllerTests(unittest.TestCase):
             resp = video_controller.create_task(MagicMock(), body, stop_at="video")
             task_id = resp["data"]["task_id"]
             # The funnel entry fires after the task is accepted into the
-            # queue (a 429 rejection never becomes requested), still before
-            # the worker thread itself reports video_generation_started.
+            # queue (a 429 rejection never becomes requested). Note: add_task
+            # may start the worker thread synchronously, so started can
+            # occasionally be timestamped before requested — see the
+            # timestamp-ordering note in video.py.
             requested.assert_called_once_with(
                 task_id, user_id="user-1", flow="direct", pipeline="video"
             )
@@ -462,6 +476,43 @@ class BatchFailedTests(unittest.TestCase):
         self.assertIn("task_id", props)
         self.assertIn("[redacted]", props["reason"])
         self.assertNotIn("TOPSECRET123", props["reason"])
+
+
+    def test_dispatch_failure_scrubs_full_message_before_truncation(self):
+        # The batch call site must pin the scrub-then-truncate order too:
+        # a short message makes [:200] a no-op, so only a >200-char
+        # secret-bearing message guards against a truncate-first revert.
+        from app.services import analytics as analytics_module
+        from app.services.fill_schedule import generate as gen_module
+
+        store = MagicMock()
+        store.signed_url = MagicMock(return_value="https://signed/foto.png")
+        generator = gen_module.BatchGenerator(
+            store=store, task_state=MagicMock(), notify=MagicMock()
+        )
+        error = RuntimeError("E" * 150 + " api_key=TOPSECRET123" + "F" * 150)
+        with (
+            patch.object(gen_module.tm, "track_generation_requested"),
+            patch.object(gen_module, "track_event") as track,
+            patch.object(
+                gen_module,
+                "scrub_secret_values",
+                wraps=analytics_module.scrub_secret_values,
+            ) as scrub,
+            patch.object(generator, "_dispatch_generation", side_effect=error),
+        ):
+            label = generator._generate_slot(self._slot())
+        self.assertIsNone(label)
+        # The scrubber received the whole message, not the truncated slice.
+        scrub.assert_called_once_with(str(error))
+        failed_calls = [
+            c for c in track.call_args_list if c[0][0] == "video_generation_failed"
+        ]
+        self.assertEqual(len(failed_calls), 1)
+        _, props = failed_calls[0][0]
+        self.assertIn("[redacted]", props["reason"])
+        self.assertNotIn("TOPSECRET123", props["reason"])
+        self.assertLessEqual(len(str(props["reason"])), 200)
 
 
 if __name__ == "__main__":
