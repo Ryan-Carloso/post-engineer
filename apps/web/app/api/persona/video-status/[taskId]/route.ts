@@ -6,6 +6,7 @@ import { recordGenerationUpdate } from '@/lib/generation/video-generation';
 import { categorizeGenerationError } from '@/lib/generation/generation-errors';
 import { apiErrorResponse } from '@/lib/api-error';
 import { rewriteVideoUrls, SAFE_TASK_ID } from '@/lib/video-urls';
+import { logger } from '@/lib/logger';
 
 //---------------
 // GET /api/persona/video-status/:taskId — engine status proxy.
@@ -78,7 +79,16 @@ export async function GET(
         return NextResponse.json(rewriteVideoUrls(body, taskId, baseUrl), { status: response.ok ? 200 : 502 });
       }
       if (isFailedVideoStatus(body)) {
-        await refundTokens(supabase, auth.userId, generationId);
+        // Review round 5 (opencode): the refunded flag is written ONLY when
+        // the refund truly landed. A failed refund leaves tokens_refunded
+        // unset so the terminalRecorded gate above keeps retrying on the
+        // next poll — never mark it refunded optimistically.
+        const refunded = await refundTokens(supabase, auth.userId, generationId);
+        if (!refunded) {
+          logger.error('[api/persona/video-status] refund failed; leaving tokens_refunded unset', null, {
+            generationId,
+          });
+        }
         const rawError = extractTaskError(body);
         await recordGenerationUpdate({
           supabase,
@@ -87,7 +97,7 @@ export async function GET(
           engineTaskId: taskId,
           errorCode: categorizeGenerationError(rawError),
           errorMessage: rawError,
-          tokensRefunded: true,
+          tokensRefunded: refunded ? true : undefined,
         });
       } else {
         await recordGenerationUpdate({

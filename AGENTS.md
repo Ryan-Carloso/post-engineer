@@ -1782,6 +1782,11 @@ Follow these so the same issues don't come back:
 
 - **Never build a RegExp from an interpolated string — not even in tests.** CodeQL's "incomplete string escaping" rule fires on `new RegExp(...${path}...)` and fails the code-scanning check, even when the interpolated values are hardcoded constants. Use static string checks (`includes`/`toContain`) instead of dynamic regex construction.
 
+## PR #52 consolidation review learnings, round 5 (2026-10-02, OpenCode on 876d37d)
+
+- **A refund flag is written only when the refund actually landed.** The video-status poll wrote `tokens_refunded: true` unconditionally after calling `refundTokens` — but `refundTokens` returns `false` on both an RPC error and a soft failure (RPC answered, `refunded !== true`). The `terminalRecorded` gate requires the flag for failures, so one failed refund got marked refunded forever and the "next poll retries" backstop could never fire: silently lost tokens. Now the route passes `tokensRefunded: refunded ? true : undefined` (the updater already omits the key on `undefined`, mirroring the engine's settle), and a failed refund logs loudly so the retry is auditable. Same billing-rule class the engine already pins ("False is a real failure") — a soft failure now leaves zero-trail no longer.
+- **Sync tests pin every consumer the consolidation actually produced, not just the ones quoted.** The SAFE_TASK_ID sync test listed 4 consumers while three more (`video-download`, `delete-preview`, the persona route) had imported the shared guard during the same consolidation — a future merge could regress exactly the unpinned files. When a dedup test is added, grep the whole surface for the literal import and pin all of them.
+
 ## Engine review learnings, PR #51 (2026-10-02)
 - **Scrub-then-truncate is a repo-wide rule, not a one-file fix.** PR #38
   established "scrub the full free-text field before truncating"; PR #51

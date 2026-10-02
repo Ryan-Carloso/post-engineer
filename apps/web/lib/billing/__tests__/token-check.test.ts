@@ -11,6 +11,7 @@ vi.mock('@/lib/tokens', () => ({
 
 import { checkAndDeductTokens, refundTokens } from '@/lib/billing/token-check';
 import { computeVideoTokens } from '@/lib/tokens';
+import { logger } from '@/lib/logger';
 
 type RpcResponse = { data: unknown; error: unknown };
 
@@ -64,6 +65,25 @@ describe('token wallet operations', () => {
       p_user_id: 'user-1',
       p_generation_id: 'generation-1',
     }));
+  });
+
+  it('returns false and logs when the refund RPC answers without applying', async () => {
+    // Review round 5 (opencode): the soft-failure branch left zero trail —
+    // an "RPC answered, refund not applied" outcome was invisible.
+    const mock = createMockSupabase({
+      refund_generation_tokens: { data: { refunded: false }, error: null },
+    });
+    const errorSpy = vi.spyOn(logger, 'error').mockReturnValue('log-id');
+    try {
+      await expect(refundTokens(mock.client, 'user-1', 'generation-1')).resolves.toBe(false);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('refund not applied'),
+        null,
+        expect.objectContaining({ userId: 'user-1', generationId: 'generation-1' }),
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });
 

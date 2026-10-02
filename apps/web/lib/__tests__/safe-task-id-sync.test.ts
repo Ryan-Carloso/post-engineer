@@ -16,6 +16,11 @@ const CONSUMERS: { file: string; importFrom: string }[] = [
   { file: 'app/api/persona/video-events/[taskId]/route.ts', importFrom: '@/lib/video-urls' },
   { file: 'app/api/persona/video-status/[taskId]/route.ts', importFrom: '@/lib/video-urls' },
   { file: 'app/api/persona/video-task/[taskId]/route.ts', importFrom: '@/lib/video-urls' },
+  // Review round 5: these three also import the shared guard — pin them too
+  // so a future merge can't regress them back to inlined copies unnoticed.
+  { file: 'app/api/persona/video-download/[taskId]/[...path]/route.ts', importFrom: '@/lib/video-urls' },
+  { file: 'app/api/persona/delete-preview/route.ts', importFrom: '@/lib/video-urls' },
+  { file: 'app/api/persona/route.ts', importFrom: '@/lib/video-urls' },
   { file: 'lib/engine-tasks.ts', importFrom: './video-urls' },
 ];
 
