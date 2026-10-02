@@ -223,4 +223,27 @@ describe('DeletePersonaModal', () => {
     expect(screen.getByLabelText('personas.deleteDialogTypeName')).toHaveValue('Ryan');
     expect(screen.getByRole('button', { name: 'personas.deleteConfirm' })).toBeEnabled();
   });
+
+  it('resets the typed name when the modal is closed and reopened', async () => {
+    const { rerender } = renderModal();
+    await screen.findByText('personas.deleteDialogNoRefund');
+    fireEvent.change(screen.getByLabelText('personas.deleteDialogTypeName'), {
+      target: { value: 'Ryan' },
+    });
+    expect(screen.getByRole('button', { name: 'personas.deleteConfirm' })).toBeEnabled();
+
+    // Close (persona -> null) and reopen the same persona.
+    rerender(
+      <DeletePersonaModal persona={null} onClose={vi.fn()} onDeleted={vi.fn()} />,
+    );
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    rerender(
+      <DeletePersonaModal persona={PERSONA} onClose={vi.fn()} onDeleted={vi.fn()} />,
+    );
+
+    await screen.findByText('personas.deleteDialogNoRefund');
+    // The gate is re-armed: the name field is empty and Delete is disabled.
+    expect(screen.getByLabelText('personas.deleteDialogTypeName')).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'personas.deleteConfirm' })).toBeDisabled();
+  });
 });

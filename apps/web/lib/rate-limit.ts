@@ -53,6 +53,9 @@ export const RATE_LIMITS = {
   // Keyed by user id (falling back to API-key id, then IP inside
   // applyRateLimit).
   deletePreview: { name: 'delete-preview', limit: 30, windowMs: 60_000 },
+  // Persona delete: multi-table destructive cascade plus engine fan-out.
+  // Lower than the preview — a delete is rare and irreversible.
+  personaDelete: { name: 'persona-delete', limit: 10, windowMs: 60_000 },
 } as const satisfies Record<string, RateLimitProfile>;
 
 //---------------

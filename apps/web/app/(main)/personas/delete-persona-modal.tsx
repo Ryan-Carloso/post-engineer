@@ -35,7 +35,12 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
   const loadedPersonaId = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!persona) return;
+    if (!persona) {
+      // The modal stays mounted while closed (persona flips to null); clear
+      // the ref so reopening always re-arms the type-to-confirm gate.
+      loadedPersonaId.current = null;
+      return;
+    }
     // A new persona resets everything; a retry (attempt bump, e.g. from the
     // links-incomplete note) keeps the typed confirmation name.
     const isNewPersona = loadedPersonaId.current !== persona.id;

@@ -166,6 +166,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });
 
 function getClient(
@@ -383,6 +384,5 @@ describe('GET /api/persona/delete-preview', () => {
     expect(body.videos[4]?.downloadUrl).toBeNull();
     // The degradation is flagged so the UI does not call it "unavailable".
     expect(body.linksIncomplete).toBe(true);
-    vi.mocked(Date.now).mockRestore();
   });
 });

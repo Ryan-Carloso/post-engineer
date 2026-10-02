@@ -22,6 +22,12 @@ vi.mock('@/lib/request-auth', () => ({
 vi.mock('@/lib/analytics', () => ({
   trackApiEvent: vi.fn(),
 }));
+vi.mock('@/lib/rate-limit', async (importOriginal) => {
+  // Rate limiting is bypassed for payload-behavior tests; one dedicated
+  // test below covers the 429 path.
+  const actual = await importOriginal<typeof import('@/lib/rate-limit')>();
+  return { ...actual, applyRateLimit: vi.fn().mockResolvedValue(null) };
+});
 vi.mock('next/server', async (importOriginal) => {
   // after() needs a request scope; in tests the callback runs inline so
   // the post-response engine cleanup is still exercised.
@@ -38,6 +44,7 @@ import { DELETE } from '../route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { trackApiEvent } from '@/lib/analytics';
+import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 const USER_ID = 'user-uuid-1';
 const OTHER_USER = 'user-uuid-2';
@@ -58,10 +65,10 @@ function baseTables(): Record<string, Row[]> {
       { id: 'sched-9', persona_id: OTHER_PERSONA, user_id: OTHER_USER },
     ],
     scheduled_posts: [
-      { id: 'slot-1', schedule_id: 'sched-1' },
-      { id: 'slot-2', schedule_id: 'sched-1' },
-      { id: 'slot-3', schedule_id: 'sched-2' },
-      { id: 'slot-9', schedule_id: 'sched-9' },
+      { id: 'slot-1', schedule_id: 'sched-1', user_id: USER_ID },
+      { id: 'slot-2', schedule_id: 'sched-1', user_id: USER_ID },
+      { id: 'slot-3', schedule_id: 'sched-2', user_id: USER_ID },
+      { id: 'slot-9', schedule_id: 'sched-9', user_id: OTHER_USER },
     ],
     video_generations: [
       { id: 'gen-1', persona_id: PERSONA_ID, user_id: USER_ID, engine_task_id: 'task-aaa' },
@@ -181,6 +188,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });
 
 const del = (personaId: string) =>
@@ -298,7 +306,6 @@ describe('DELETE /api/persona cascade', () => {
     expect(engineDeletes).toContain('https://engine.internal:8080/api/v1/tasks/task-aaa');
     expect(engineDeletes).toContain('https://engine.internal:8080/api/v1/tasks/task-bbb');
     expect(engineDeletes).not.toContain(expect.stringContaining('task-ccc'));
-    vi.mocked(Date.now).mockRestore();
   });
 
   it('uses the service client for OAuth callers (no cookie session)', async () => {
@@ -333,6 +340,18 @@ describe('DELETE /api/persona cascade', () => {
     const body = (await res.json()) as { code: string };
     expect(res.status).toBe(403);
     expect(body.code).toBe('PERSONA_SCOPE_DENIED');
+    expect(deletes).toEqual([]);
+  });
+
+  it('returns 429 when the rate limiter rejects the request', async () => {
+    const { deletes } = setup();
+    const limited = new Response(JSON.stringify({ success: false, errorType: 'RATE_LIMITED' }), {
+      status: 429,
+    });
+    vi.mocked(applyRateLimit).mockResolvedValueOnce(limited as never);
+    const res = await del(PERSONA_ID);
+    expect(res.status).toBe(429);
+    expect(applyRateLimit).toHaveBeenCalledWith(expect.any(Request), RATE_LIMITS.personaDelete, USER_ID);
     expect(deletes).toEqual([]);
   });
 

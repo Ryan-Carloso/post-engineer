@@ -30,6 +30,7 @@ import { apiErrorResponse } from '@/lib/api-error';
 import { ERROR_CODES } from '@/lib/error-codes';
 import { trackApiEvent } from '@/lib/analytics';
 import { SAFE_TASK_ID } from '@/lib/video-urls';
+import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 // Aggregate budget for the post-delete engine task cleanup (see DELETE):
 // after() has no deadline of its own, so the loop must bound itself.
@@ -541,6 +542,8 @@ export async function DELETE(request: Request): Promise<NextResponse> {
   const ROUTE = 'DELETE /api/persona';
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
+  const limited = await applyRateLimit(request, RATE_LIMITS.personaDelete, auth.userId);
+  if (limited) return limited;
   const user = { id: auth.userId };
   // Service-role bypasses RLS: every query below is re-scoped by user_id,
   // and the persona row itself is the ownership proof. OAuth callers have
@@ -653,10 +656,15 @@ export async function DELETE(request: Request): Promise<NextResponse> {
 
   let slotsDeleted = 0;
   if (scheduleIds.length > 0) {
+    // Slots are deleted from the snapshot select above; a schedule created
+    // concurrently (another tab racing the delete) would leave its slots
+    // behind. The persona-scoped schedules delete below catches the schedule
+    // row itself; the residual slot race is noted, not solved, here.
     const { error: slotsError, count: slotsCount } = await supabase
       .from('scheduled_posts')
       .delete({ count: 'exact' })
-      .in('schedule_id', scheduleIds);
+      .in('schedule_id', scheduleIds)
+      .eq('user_id', user.id);
     if (slotsError) return cascadeFail('scheduled_posts', slotsError);
     slotsDeleted = slotsCount ?? 0;
   }
