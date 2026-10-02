@@ -11,6 +11,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // formData parsing, validations, path assembly, and payload.
 //---------------
 
+vi.mock('next/server', async (importOriginal) => {
+  // after() needs a request scope; in tests the callback runs inline.
+  const actual = await importOriginal<typeof import('next/server')>();
+  return {
+    ...actual,
+    after: (callback: () => unknown) => {
+      void Promise.resolve().then(() => callback());
+    },
+  };
+});
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn(),
 }));
