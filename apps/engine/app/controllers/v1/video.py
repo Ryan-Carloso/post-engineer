@@ -221,15 +221,18 @@ def create_task(
         sm.state.update_task(
             task_id, user_id=auth.user_id, flow="direct", pipeline=stop_at
         )
-        task_manager.add_task(tm.start, task_id=task_id, params=body, stop_at=stop_at)
-        # Funnel entry: requested once the task is ACCEPTED into the queue —
-        # a 429 queue-full rejection raises above and never enters the
-        # funnel. Note: add_task may start the worker thread synchronously
-        # when capacity is available, so video_generation_started can
-        # occasionally be timestamped before this entry; PostHog orders
-        # funnel steps by timestamp.
-        tm.track_generation_requested(
-            task_id, user_id=auth.user_id, flow="direct", pipeline=stop_at
+        # Funnel entry: requested fires from on_accepted once the task is
+        # ACCEPTED into the queue — strictly before the worker thread
+        # starts on the immediate path, and never on a 429 queue-full
+        # rejection.
+        task_manager.add_task(
+            tm.start,
+            task_id=task_id,
+            params=body,
+            stop_at=stop_at,
+            on_accepted=lambda: tm.track_generation_requested(
+                task_id, user_id=auth.user_id, flow="direct", pipeline=stop_at
+            ),
         )
         logger.success(f"Task created: task_id={task_id}")
         return utils.get_response(200, task)

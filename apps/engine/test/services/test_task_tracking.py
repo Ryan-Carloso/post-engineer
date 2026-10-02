@@ -353,7 +353,7 @@ class PublishFailureTests(unittest.TestCase):
 
 
 class CreateTaskControllerTests(unittest.TestCase):
-    """POST /videos (and siblings) report requested AFTER the task is queued."""
+    """POST /videos (and siblings) report requested via add_task's on_accepted."""
 
     def test_create_task_tracks_requested_and_stores_flow(self):
         from types import SimpleNamespace
@@ -373,22 +373,25 @@ class CreateTaskControllerTests(unittest.TestCase):
             patch.object(video_controller.task_manager, "add_task") as add_task,
             patch.object(tm, "track_generation_requested") as requested,
         ):
-            order = MagicMock()
-            order.attach_mock(requested, "requested")
-            order.attach_mock(add_task, "add_task")
+            def fake_add_task(func, *args, **kwargs):
+                # Mirror TaskManager: the on_accepted callback fires on
+                # acceptance, strictly before the worker could start.
+                on_accepted = kwargs.get("on_accepted")
+                assert on_accepted is not None
+                on_accepted()
+
+            add_task.side_effect = fake_add_task
             resp = video_controller.create_task(MagicMock(), body, stop_at="video")
             task_id = resp["data"]["task_id"]
-            # The funnel entry fires after the task is accepted into the
-            # queue (a 429 rejection never becomes requested). Note: add_task
-            # may start the worker thread synchronously, so started can
-            # occasionally be timestamped before requested — see the
-            # timestamp-ordering note in video.py.
+            # Requested fires from the on_accepted callback: after the task
+            # is accepted, strictly before the worker thread starts, and
+            # never on a 429 queue-full rejection.
             requested.assert_called_once_with(
                 task_id, user_id="user-1", flow="direct", pipeline="video"
             )
             add_task.assert_called_once()
-            call_order = [c[0] for c in order.mock_calls]
-            self.assertLess(call_order.index("add_task"), call_order.index("requested"))
+            _, kwargs = add_task.call_args
+            self.assertIn("on_accepted", kwargs)
         try:
             task = sm.state.get_task(task_id)
             self.assertEqual(task["flow"], "direct")
