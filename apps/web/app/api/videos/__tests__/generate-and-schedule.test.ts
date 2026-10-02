@@ -287,7 +287,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(spends[0].args.p_amount).toBe(4);
       expect(spends[0].args.p_user_id).toBe(USER_ID);
 
-// Schedule row: deterministic id; scheduled_at is the legacy column
+      // Schedule row: deterministic id; scheduled_at is the legacy column
       // and the insert pins it NULL. No 'kind' key: the schedules table
       // has no kind column (it never landed in the schema), and inserting
       // an unknown key makes PostgREST reject the whole insert (500).

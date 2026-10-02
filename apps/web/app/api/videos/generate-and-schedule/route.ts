@@ -744,7 +744,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     generationId: idem.generationId,
   });
 
-// 9. Insert the schedule. The id is deterministic (idempotency anchor).
+  // 9. Insert the schedule. The id is deterministic (idempotency anchor).
   // scheduled_at is a legacy column that always stays NULL during dispatch,
   // so the engine's immediate one-off path cannot race us and
   // double-generate; the tick only reconciles our generating slots.

@@ -23,6 +23,7 @@ import { ProviderIcon } from '@/components/provider-icon';
 import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
 import { SpinnerIcon } from '@/lib/ui';
+import { GENERATION_ERROR_KEY } from '@/lib/generation/generation-errors';
 
 //---------------
 // PostsPage — post history + upcoming posts on the same page, across all
