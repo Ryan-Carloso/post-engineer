@@ -10,8 +10,9 @@ import sys
 import time
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+import requests
 from loguru import logger
 from pydantic import ValidationError
 
@@ -114,8 +115,34 @@ class NotifyTerminalTaskTests(unittest.TestCase):
             logger.remove(handler_id)
         self.assertTrue(
             any(r["level"].name == "ERROR" for r in records),
-            "webhook delivery failure must log at ERROR (Bugsink)",
+            "webhook delivery failure must log at ERROR (PostHog)",
         )
+
+    def test_webhook_failure_log_redacts_path_token(self):
+        # requests embeds the target URL in str(exc); Discord/Slack-style
+        # path-embedded tokens do not match the key-anchored scrubber, so
+        # the known webhook URL is redacted before scrub-then-truncate.
+        webhook_url = (
+            "https://discord.com/api/webhooks/123456789/abcdefGHIJKL-token-secret"
+        )
+        response = MagicMock()
+        response.raise_for_status.side_effect = requests.exceptions.HTTPError(
+            f"500 Server Error: Internal Server Error for url: {webhook_url}"
+        )
+        with (
+            patch(
+                "app.services.task_webhook.requests.post", return_value=response
+            ),
+            patch("app.services.task_webhook.logger") as mock_logger,
+        ):
+            task_webhook._post(webhook_url, {"task_id": "t-1"}, "t-1")
+        # logger.bind(task_id=...) returns a child mock; the error call
+        # lands on it, not on the module logger mock itself.
+        error_mock = mock_logger.bind.return_value.error
+        self.assertTrue(error_mock.call_args_list)
+        logged = " ".join(str(c) for c in error_mock.call_args_list)
+        self.assertNotIn("abcdefGHIJKL-token-secret", logged)
+        self.assertNotIn(webhook_url, logged)
 
 
 class FailTaskWebhookTests(unittest.TestCase):

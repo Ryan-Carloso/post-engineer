@@ -21,6 +21,8 @@ from typing import Optional
 import requests
 from loguru import logger
 
+from app.services.analytics import scrub_secret_values
+
 WEBHOOK_TIMEOUT_SECONDS = 10
 
 # Bound the dedupe cache so the process can't grow it forever (same
@@ -49,8 +51,14 @@ def _post(webhook_url: str, payload: dict, task_id: str) -> None:
         # Never raise: a dead webhook must not fail or stall the task.
         # ERROR goes to PostHog via the asgi sink so the user can see why
         # the callback never arrived.
+        # The webhook URL itself is a credential (Discord/Slack-style
+        # path-embedded tokens): requests embeds it in str(exc), and the
+        # key-anchored scrubber cannot match path-embedded tokens — redact
+        # the known URL first, then scrub-then-truncate the remainder like
+        # every other free-text error surface.
+        error = scrub_secret_values(str(exc).replace(webhook_url, "[redacted]"))[:500]
         logger.bind(task_id=task_id).error(
-            "terminal webhook delivery failed: {error}", error=str(exc)[:500]
+            "terminal webhook delivery failed: {error}", error=error
         )
 
 
