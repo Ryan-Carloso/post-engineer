@@ -8,6 +8,7 @@ import { useI18n } from '@/lib/i18n/provider';
 import { LOCALES } from '@/lib/i18n';
 import { TokenBalance } from '@/app/(main)/token-balance';
 import { InsufficientTokensDialog } from '@/components/ui/insufficient-tokens-dialog';
+import VersionBadge from '@/components/ui/version-badge';
 import {
   AccountsIcon,
   BoltIcon,
@@ -77,7 +78,10 @@ const MainSidebar = () => {
           <BoltIcon />
         </span>
         <div className="hidden min-w-0 md:block">
-          <p className="text-[19px] leading-tight font-bold tracking-[-0.03em] text-[#101728]">{t('nav.brand')}</p>
+          <p className="text-[19px] leading-tight font-bold tracking-[-0.03em] text-[#101728]">
+            {t('nav.brand')}
+            <VersionBadge />
+          </p>
           <p className="text-[15px] leading-snug text-[#718096] lg:text-[16px]">{t('nav.brandSubtitle')}</p>
         </div>
       </div>
