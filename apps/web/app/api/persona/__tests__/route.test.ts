@@ -623,6 +623,9 @@ function mockSupabaseForDelete(deleteError: { code?: string; message: string } |
       select: vi.fn(() => ({
         eq: vi.fn(() => ({
           eq: vi.fn(() => ({
+            order: vi.fn(() => ({
+              limit: vi.fn(async () => ({ data: [], error: null, count: 0 })),
+            })),
             single: vi.fn(async () => ({
               data: { id: 'persona-uuid-1', photo_path: null, voice_audio_path: null },
               error: null,
@@ -1042,6 +1045,9 @@ describe('DELETE /api/persona', () => {
           select: vi.fn(() => ({
             eq: vi.fn(() => ({
               eq: vi.fn(() => ({
+                order: vi.fn(() => ({
+                  limit: vi.fn(async () => ({ data: [], error: null, count: 0 })),
+                })),
                 single: vi.fn(async () => ({
                   data: { id: 'persona-uuid-1', photo_path: null, voice_audio_path: null },
                   error: null,
@@ -1094,6 +1100,9 @@ describe('DELETE /api/persona', () => {
           select: vi.fn(() => ({
             eq: vi.fn(() => ({
               eq: vi.fn(() => ({
+                order: vi.fn(() => ({
+                  limit: vi.fn(async () => ({ data: [], error: null, count: 0 })),
+                })),
                 single: vi.fn(async () => ({
                   data: { id: 'persona-uuid-1', photo_path: null, voice_audio_path: null },
                   error: null,
