@@ -43,7 +43,15 @@ class BatchReconciler:
                 # GPU cost (USD) is calculated by the Modal app and returned
                 # in the task result. Include it for unit-economics tracking.
                 # Never in API responses — PostHog dashboard only.
-                properties: dict[str, object] = {"slotId": str(slot["id"])}
+                properties: dict[str, object] = {
+                    "task_id": str(slot["task_id"]),
+                    "flow": "batch",
+                    "pipeline": "video",
+                    "slotId": str(slot["id"]),
+                }
+                slot_user = slot_user_id(slot)
+                if slot_user is not None:
+                    properties["user_id"] = slot_user
                 result = task.get("result")
                 if isinstance(result, dict):
                     cost = result.get("cost_usd")

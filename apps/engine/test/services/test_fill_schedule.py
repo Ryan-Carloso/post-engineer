@@ -226,7 +226,7 @@ class BatchScheduleTests(unittest.TestCase):
             scheduler.generator._dispatch_generation("task-1", request, "user-1")
 
         scheduler.task_state.update_task.assert_called_once_with(
-            "task-1", user_id="user-1"
+            "task-1", user_id="user-1", flow="batch", pipeline="video"
         )
         mock_thread.assert_called_once()
         _, kwargs = mock_thread.call_args
@@ -255,6 +255,42 @@ class ReconcileTests(unittest.TestCase):
         )
         self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
         self.assertEqual(store.updates[0][1]["status"], "ready")
+
+    def test_reconcile_generated_event_carries_funnel_context(self):
+        from app.services.fill_schedule import reconcile as rec_module
+
+        slot = {
+            "id": "slot-1",
+            "task_id": "t-1",
+            "user_id": "user-1",
+            "schedules": {"id": "sched-1", "user_id": "user-1"},
+        }
+        store = _FakeStore()
+        store.generating_slots = lambda: [slot]
+        state = MagicMock()
+        state.get_task.return_value = {
+            "state": 1,
+            "result": {"cost_usd": 0.1},
+        }
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=state,
+            publish_video=MagicMock(),
+        )
+        with patch.object(rec_module, "track_event") as track:
+            self.assertEqual(
+                scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1
+            )
+        generated_calls = [
+            c for c in track.call_args_list if c[0][0] == "video_generated"
+        ]
+        self.assertEqual(len(generated_calls), 1)
+        _, props = generated_calls[0][0]
+        self.assertEqual(props["task_id"], "t-1")
+        self.assertEqual(props["flow"], "batch")
+        self.assertEqual(props["pipeline"], "video")
+        self.assertEqual(props["user_id"], "user-1")
+        self.assertEqual(props["slotId"], "slot-1")
+        self.assertEqual(props["cost_usd"], 0.1)
 
     def test_failed_task_becomes_failed(self):
         slot = {
@@ -453,6 +489,49 @@ class PublishDueTests(unittest.TestCase):
         published = scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
         self.assertEqual(published, 0)
         self.assertEqual(store.updates[0][1]["status"], "ready")
+
+    def test_publish_failure_scrubs_full_message_before_truncation(self):
+        # The video_publish_failed reason pins scrub-then-truncate like the
+        # other call sites: a short message makes [:200] a no-op, so only a
+        # >200-char secret-bearing message guards against a revert.
+        from app.services import analytics as analytics_module
+        from app.services.fill_schedule import publish as pub_module
+        from app.services.upload_publisher import PublishError
+
+        store = _FakeStore()
+        store.ready_due_slots = lambda now: [self._slot()]
+        state = MagicMock()
+        state.get_task.return_value = {"state": 1, "videos": [self.video_path]}
+        error = PublishError("E" * 150 + " api_key=TOPSECRET123" + "F" * 150)
+        publish = MagicMock(side_effect=error)
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=state,
+            publish_video=publish,
+        )
+        scheduler.publisher.base_url = "https://post-engineer.com"
+        scheduler.publisher.api_secret = "secret"
+        with (
+            patch.object(pub_module, "track_event") as track,
+            patch.object(
+                pub_module,
+                "scrub_secret_values",
+                wraps=analytics_module.scrub_secret_values,
+            ) as scrub,
+        ):
+            published = scheduler.publish_due(
+                datetime(2026, 9, 7, 12, 0, tzinfo=UTC)
+            )
+        self.assertEqual(published, 0)
+        # The scrubber received the whole message, not the truncated slice.
+        scrub.assert_called_once_with(str(error))
+        failed_calls = [
+            c for c in track.call_args_list if c[0][0] == "video_publish_failed"
+        ]
+        self.assertEqual(len(failed_calls), 1)
+        _, props = failed_calls[0][0]
+        self.assertIn("[redacted]", props["reason"])
+        self.assertNotIn("TOPSECRET123", props["reason"])
+        self.assertLessEqual(len(str(props["reason"])), 200)
 
 
 class NotifyIntegrationTests(unittest.TestCase):

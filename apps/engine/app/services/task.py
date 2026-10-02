@@ -28,6 +28,7 @@ from app.services import state as sm
 from app.services import task_publish
 from app.services import task_webhook
 from app.services.bgm_history import history_repository
+from app.services.analytics import scrub_secret_values, track_event
 from app.services.notify import safe_reason, send_discord, task_failed_msg
 from app.utils import file_security, ssrf, utils
 
@@ -67,6 +68,66 @@ MAX_FAILED_ALERTS = 1000
 _ALERT_LOCK_TIMEOUT_SECONDS = 0.5
 _discord_notified_failed_tasks: deque[str] = deque(maxlen=MAX_FAILED_ALERTS)
 _discord_notified_failed_tasks_lock = Lock()
+
+
+#---------------
+# Terminal-event emission dedup: the FIRST _fail_task notice for a task
+# always emits video_generation_failed, even when the FAILED state was
+# pre-written by an earlier stage (the publish stage writes FAILED
+# directly before raising). Later notices stay deduped. Bounded like the
+# alert cache above: task ids are never reused, so eviction only drops
+# ids whose terminal event was long since emitted.
+#---------------
+MAX_FAILED_EVENT_IDS = 1000
+_failed_event_emitted_tasks: deque[str] = deque(maxlen=MAX_FAILED_EVENT_IDS)
+_failed_event_emitted_tasks_lock = Lock()
+
+
+def _should_emit_failed_event(task_id: str) -> bool:
+    """Atomically check-and-record ``task_id``; True only on first sight.
+
+    Falls back to emitting (True) if the lock can't be acquired in time —
+    a duplicate terminal event is less harmful than a missing one for the
+    requested-vs-failed funnel.
+    """
+    if not _failed_event_emitted_tasks_lock.acquire(timeout=_ALERT_LOCK_TIMEOUT_SECONDS):
+        return True
+    try:
+        if task_id in _failed_event_emitted_tasks:
+            return False
+        _failed_event_emitted_tasks.append(task_id)
+        return True
+    finally:
+        _failed_event_emitted_tasks_lock.release()
+
+
+#---------------
+MAX_REQUESTED_EVENT_IDS = 1000
+_requested_event_emitted_tasks: deque[str] = deque(maxlen=MAX_REQUESTED_EVENT_IDS)
+_requested_event_emitted_tasks_lock = Lock()
+
+
+def _should_emit_requested_event(task_id: str) -> bool:
+    """Atomically check-and-record ``task_id``; True only on first sight.
+
+    Batch task ids are deterministic (uuid5 per slot), so a crash between
+    dispatch and ``update_slot(generating)`` re-dispatches the SAME id on
+    the next tick (see ``generate.py`` ``new_task_id``) — without this guard
+    the re-dispatch would double-fire ``video_generation_requested`` and
+    inflate the failure-% denominator.
+
+    Falls back to emitting (True) if the lock can't be acquired in time —
+    a duplicate funnel entry is less harmful than a missing one.
+    """
+    if not _requested_event_emitted_tasks_lock.acquire(timeout=_ALERT_LOCK_TIMEOUT_SECONDS):
+        return True
+    try:
+        if task_id in _requested_event_emitted_tasks:
+            return False
+        _requested_event_emitted_tasks.append(task_id)
+        return True
+    finally:
+        _requested_event_emitted_tasks_lock.release()
 
 
 def _should_send_failure_alert(task_id: str) -> bool:
@@ -131,6 +192,99 @@ def _first_http_url(paths: object) -> str | None:
     return None
 
 
+#---------------
+# PostHog lifecycle funnel: the user watches these events to compute the
+# failure % per flow (direct API vs batch fill_schedule):
+#   video_generation_requested (at task acceptance, BEFORE the pipeline
+#     starts) -> video_generation_started -> video_generation_progress
+#     (every 10%) -> video_generation_failed / video_generated.
+# track_event never raises (analytics.py), so telemetry can't break the
+# pipeline — and the task-state reads below degrade to "unknown" instead
+# of raising.
+#---------------
+# Highest 10% milestone already reported per task. Process-local: the dict
+# starts empty in every process and direct task ids are uuid4 (never
+# reused). Batch task ids are uuid5 and CAN be re-dispatched after a crash
+# (see generate.py new_task_id) — requested and failed emission are
+# therefore deduped per process by the bounded check-and-record guards
+# above, and terminal transitions pop the milestone entry, so a stale
+# entry can never double-report within one process lifetime.
+_progress_milestones: dict[str, int] = {}
+
+
+def _task_tracking_context(task_id: str) -> dict[str, object]:
+    """task_id/user_id/flow/pipeline props shared by every lifecycle event."""
+    try:
+        task = sm.state.get_task(task_id) or {}
+    except Exception:  # noqa: BLE001 — tracking degrades, the pipeline continues
+        task = {}
+    return {
+        "task_id": task_id,
+        "user_id": task.get("user_id", "unknown"),
+        "flow": task.get("flow", "unknown"),
+        "pipeline": task.get("pipeline", "unknown"),
+    }
+
+
+def track_generation_requested(
+    task_id: str,
+    user_id: str,
+    flow: str,
+    pipeline: str = "video",
+    **extra: object,
+) -> None:
+    """Report a generation request BEFORE the pipeline starts.
+
+    This is the funnel entry: requested vs failed gives the failure %.
+    Called at task acceptance (API controller, batch dispatch) — not when
+    the worker thread picks the task up, so "accepted but never ran" is
+    visible as requested-without-started.
+
+    Emission is deduped per task id (bounded check-and-record): batch ids
+    are deterministic, so a crash re-dispatch must not double-count one
+    logical generation.
+    """
+    if not _should_emit_requested_event(task_id):
+        return
+    track_event(
+        "video_generation_requested",
+        {
+            "task_id": task_id,
+            "user_id": user_id,
+            "flow": flow,
+            "pipeline": pipeline,
+            **extra,
+        },
+    )
+
+
+def track_generation_started(task_id: str) -> None:
+    """Report that the pipeline actually began executing the task."""
+    track_event("video_generation_started", _task_tracking_context(task_id))
+
+
+def _update_task(task_id: str, **kwargs: object) -> None:
+    """Write task state; report PostHog progress at every 10% milestone.
+
+    Emits ``video_generation_progress`` once per 10% boundary crossed
+    (10, 20, ..., 100) so the funnel shows drop-off across pipeline stages.
+    A jump (e.g. 5 -> 30) reports each crossed milestone.
+    """
+    sm.state.update_task(task_id, **kwargs)
+    progress = kwargs.get("progress")
+    if not isinstance(progress, (int, float)) or isinstance(progress, bool):
+        return
+    milestone = int(progress // 10) * 10
+    last = _progress_milestones.get(task_id, 0)
+    if milestone <= last:
+        return
+    context = _task_tracking_context(task_id)
+    context["progress"] = progress
+    for crossed in range(last + 10, milestone + 1, 10):
+        track_event("video_generation_progress", {**context, "milestone": crossed})
+    _progress_milestones[task_id] = milestone
+
+
 def _complete_task(
     task_id: str,
     params: VideoParams,
@@ -141,6 +295,14 @@ def _complete_task(
     sm.state.update_task(
         task_id, state=const.TASK_STATE_COMPLETE, progress=100, **kwargs
     )
+    _progress_milestones.pop(task_id, None)
+    context = _task_tracking_context(task_id)
+    # Batch completions are reported by the fill_schedule reconciler (which
+    # also attaches cost_usd). Only a CONFIRMED direct flow reports here: a
+    # degraded context (flow "unknown", e.g. the row was deleted mid-flight)
+    # may be a batch task, and reporting it too would double count.
+    if context.get("flow") == "direct":
+        track_event("video_generated", context)
     task_webhook.notify_terminal_task(
         task_id,
         status="completed",
@@ -183,6 +345,21 @@ def _fail_task(
         sm.state.update_task(task_id, state=const.TASK_STATE_FAILED, **kwargs)
     else:
         sm.state.update_task(task_id, state=const.TASK_STATE_FAILED, error=error, **kwargs)
+    # Terminal either way: drop the milestone cache on every failure
+    # notice, including repeats for an already-FAILED task (the publish
+    # stage pre-writes FAILED before raising into the generic handler).
+    _progress_milestones.pop(task_id, None)
+    # The first _fail_task notice always emits the terminal funnel event,
+    # even when the state was already FAILED — dedup is by notice, not by
+    # state, so publish-stage failures are not lost from the funnel.
+    if _should_emit_failed_event(task_id):
+        context = _task_tracking_context(task_id)
+        context["stage"] = failed_stage
+        # Scrub the full message before truncating: a cut landing mid-key
+        # would leave a fragment the key-anchored pattern can no longer
+        # match, leaking the raw remainder into PostHog properties.
+        context["reason"] = scrub_secret_values(str(error))[:200]
+        track_event("video_generation_failed", context)
     # Terminal webhook (at most once per task, deduped inside): a failing
     # delivery only logs, it never changes the task outcome.
     task_webhook.notify_terminal_task(
@@ -827,7 +1004,7 @@ def generate_final_videos(
             subtitle_path=subtitle_path,
         )
 
-    sm.state.update_task(task_id, progress=75, music_mood=music_mood)
+    _update_task(task_id, progress=75, music_mood=music_mood)
 
     final_video_path = path.join(utils.task_dir(task_id), "final-1.mp4")
     logger.info(f"\n\n## generating video => {final_video_path}")
@@ -843,7 +1020,7 @@ def generate_final_videos(
     if len(recent_bgm_files) > bgm_history_count:
         history_repository.record(user_id, recent_bgm_files[-1])
 
-    sm.state.update_task(task_id, progress=100, music_mood=music_mood)
+    _update_task(task_id, progress=100, music_mood=music_mood)
 
     final_video_paths.append(final_video_path)
     combined_video_paths.append(combined_video_path)
@@ -952,7 +1129,8 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             logger.warning(f"could not persist stage for task {task_id}")
 
     try:
-        sm.state.update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=5)
+        _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=5)
+        track_generation_started(task_id)
 
         # 1. Generate script
         video_script = generate_script(task_id, params)
@@ -962,7 +1140,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             cleanup_task_intermediates(task_id, ())
             return
 
-        sm.state.update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=10)
+        _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=10)
 
         if stop_at == "script":
             _complete_task(task_id, params, script=video_script)
@@ -984,7 +1162,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             _complete_task(task_id, params, terms=video_terms)
             return {"script": video_script, "terms": video_terms}
 
-        sm.state.update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=20)
+        _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=20)
 
         # 3. Generate audio
         audio_file, audio_duration, sub_maker = generate_audio(
@@ -1013,7 +1191,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             audio_file = limited_audio_file
             audio_duration = max_duration
 
-        sm.state.update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=30)
+        _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=30)
 
         if stop_at == "audio":
             _complete_task(
@@ -1055,7 +1233,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         if video_script != script_before_hook_guard:
             save_script_data(task_id, video_script, video_terms, params)
 
-        sm.state.update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=40)
+        _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=40)
 
         # 5. Get video materials
         downloaded_videos = get_video_materials(
@@ -1071,7 +1249,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             _complete_task(task_id, params, materials=downloaded_videos)
             return {"materials": downloaded_videos}
 
-        sm.state.update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=50)
+        _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=50)
 
         available_moods = video.get_available_music_moods()
         logger.info(f"available BGM moods for video: {available_moods}")
@@ -1103,6 +1281,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             cleanup_task_intermediates(task_id, ())
             return
 
+        _mark("publish")
         task_publish.maybe_publish_finished_videos(
             task_id=task_id,
             params=params,

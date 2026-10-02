@@ -19,12 +19,27 @@ class TaskManager:
     def create_queue(self):
         raise NotImplementedError()
 
-    def add_task(self, func: Callable, *args: Any, **kwargs: Any):
+    def add_task(
+        self,
+        func: Callable,
+        *args: Any,
+        on_accepted: Callable[[], None] | None = None,
+        **kwargs: Any,
+    ):
+        """Queue (or immediately run) ``func``.
+
+        ``on_accepted`` fires once the task is accepted — before the worker
+        thread starts on the immediate path, after enqueue on the queued
+        path — and never on a TaskQueueFullError rejection. It must stay
+        fast and non-blocking: it runs while the manager lock is held.
+        """
         with self.lock:
             if self.current_tasks < self.max_concurrent_tasks:
                 logger.info(
                     f"add task: {func.__name__}, current_tasks: {self.current_tasks}"
                 )
+                if on_accepted is not None:
+                    on_accepted()
                 self.execute_task(func, *args, **kwargs)
             else:
                 queue_size = self.queue_size()
@@ -42,6 +57,8 @@ class TaskManager:
                     f"queue_size: {queue_size}"
                 )
                 self.enqueue({"func": func, "args": args, "kwargs": kwargs})
+                if on_accepted is not None:
+                    on_accepted()
 
     def execute_task(self, func: Callable, *args: Any, **kwargs: Any):
         thread = threading.Thread(
