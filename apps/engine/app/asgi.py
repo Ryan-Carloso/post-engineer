@@ -59,20 +59,21 @@ def _stacktrace_frames(exc_tb: TracebackType | None) -> list[dict[str, object]]:
     ingestion models $exception_list[].stacktrace Sentry-style, and a plain
     string risks failing its serde check — the exact failure this sink exists
     to fix.
+
+    Frames are ordered oldest-first (Sentry convention: the innermost frame
+    is last), and the cap keeps the LAST N summaries — the error site —
+    never the outermost framework boilerplate.
     """
     try:
-        frames: list[dict[str, object]] = []
-        for summary in traceback.extract_tb(exc_tb):
-            frames.append(
-                {
-                    "filename": scrub_secret_values(summary.filename or ""),
-                    "lineno": summary.lineno,
-                    "function": scrub_secret_values(summary.name or ""),
-                }
-            )
-            if len(frames) >= _MAX_STACKTRACE_FRAMES:
-                break
-        return frames
+        summaries = traceback.extract_tb(exc_tb)[-_MAX_STACKTRACE_FRAMES:]
+        return [
+            {
+                "filename": scrub_secret_values(summary.filename or ""),
+                "lineno": summary.lineno,
+                "function": scrub_secret_values(summary.name or ""),
+            }
+            for summary in summaries
+        ]
     except Exception:
         return []
 

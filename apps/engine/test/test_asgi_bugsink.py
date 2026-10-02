@@ -156,11 +156,18 @@ class PostHogSinkTests(unittest.TestCase):
 
     def test_stacktrace_frames_capped(self):
         # The _MAX_STACKTRACE_FRAMES cap keeps deep tracebacks (e.g.
-        # RecursionError) from blowing up the event payload — pin it.
+        # RecursionError) from blowing up the event payload — pin it, and
+        # pin WHICH end survives: Sentry-style frames end with the innermost
+        # frame, so the cap must keep the last N (the error site), not the
+        # first N (framework boilerplate).
+        def _raise_deep() -> None:
+            raise ValueError("deep")
+
         def recurse(depth: int) -> None:
             if depth <= 0:
-                raise ValueError("deep")
-            recurse(depth - 1)
+                _raise_deep()
+            else:
+                recurse(depth - 1)
 
         try:
             recurse(200)
@@ -171,6 +178,7 @@ class PostHogSinkTests(unittest.TestCase):
         _, properties = track_event.call_args[0]
         frames = properties["$exception_list"][0]["stacktrace"]["frames"]
         assert len(frames) == asgi._MAX_STACKTRACE_FRAMES
+        assert frames[-1]["function"] == "_raise_deep"
 
     def test_unlisted_extras_are_not_forwarded(self):
         with patch("app.asgi.track_event") as track_event:
