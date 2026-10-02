@@ -174,7 +174,7 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
                       type="button"
                       onClick={() => setAttempt((n) => n + 1)}
                       disabled={phase === 'deleting'}
-                      className="font-medium underline hover:no-underline disabled:opacity-50 disabled:no-underline"
+                      className="font-medium underline hover:no-underline disabled:no-underline disabled:opacity-50"
                     >
                       {t('personas.tryAgain')}
                     </button>
