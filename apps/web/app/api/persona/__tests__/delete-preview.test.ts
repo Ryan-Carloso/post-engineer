@@ -21,6 +21,9 @@ vi.mock('@/lib/request-auth', () => ({
 vi.mock('@/lib/analytics', () => ({
   trackApiEvent: vi.fn(),
 }));
+vi.mock('@/lib/logger', () => ({
+  logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
+}));
 vi.mock('@/lib/rate-limit', async (importOriginal) => {
   // Rate limiting is bypassed for payload-behavior tests; one dedicated
   // test below covers the 429 path.
@@ -32,6 +35,7 @@ import { GET } from '../delete-preview/route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
+import { logger } from '@/lib/logger';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 const USER_ID = 'user-uuid-1';
@@ -341,6 +345,48 @@ describe('GET /api/persona/delete-preview', () => {
     );
     const body = (await res.json()) as { videosTruncated: boolean };
     expect(body.videosTruncated).toBe(false);
+  });
+
+  it('flags transient engine failures as incomplete and logs them', async () => {
+    getClient();
+    // Engine 500: transient — the video may still exist.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: false, status: 500, json: async () => null })),
+    );
+    const res = await GET(
+      new Request(`http://localhost/api/persona/delete-preview?personaId=${PERSONA_ID}`),
+    );
+    const body = (await res.json()) as {
+      videos: Array<{ downloadUrl: string | null }>;
+      linksIncomplete: boolean;
+    };
+    expect(res.status).toBe(200);
+    expect(body.videos[0]?.downloadUrl).toBeNull();
+    expect(body.linksIncomplete).toBe(true);
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[api/persona/delete-preview] engine task lookup failed',
+      expect.objectContaining({ engineTaskId: 'task-aaa', status: 500, transient: true }),
+    );
+  });
+
+  it('does not flag 404 engine responses as incomplete', async () => {
+    getClient();
+    // Engine 404: task pruned — truly gone, not transient.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: false, status: 404, json: async () => null })),
+    );
+    const res = await GET(
+      new Request(`http://localhost/api/persona/delete-preview?personaId=${PERSONA_ID}`),
+    );
+    const body = (await res.json()) as {
+      videos: Array<{ downloadUrl: string | null }>;
+      linksIncomplete: boolean;
+    };
+    expect(res.status).toBe(200);
+    expect(body.videos[0]?.downloadUrl).toBeNull();
+    expect(body.linksIncomplete).toBe(false);
   });
 
   it('stops engine lookups once the aggregate time budget is spent', async () => {

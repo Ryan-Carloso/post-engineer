@@ -188,12 +188,6 @@ export function usePersonasQuery() {
 export interface DeletePersonaResult {
   success: boolean;
   error?: string;
-  deleted?: {
-    schedules: number;
-    slots: number;
-    videos: number;
-    images: number;
-  };
 }
 
 export interface DeletePreviewVideo {

@@ -206,12 +206,11 @@ describe('DELETE /api/persona cascade', () => {
   it('deletes slots, schedules, generations and the persona — in that order', async () => {
     const { deletes } = setup();
     const res = await del(PERSONA_ID);
-    const body = (await res.json()) as { success: boolean; deleted: Record<string, number> };
+    const body = (await res.json()) as { success: boolean };
 
     expect(res.status).toBe(200);
     expect(body.success).toBe(true);
     expect(deletes).toEqual(['scheduled_posts', 'schedules', 'video_generations', 'personas']);
-    expect(body.deleted).toMatchObject({ schedules: 2, slots: 3, videos: 2 });
   });
 
   it('leaves no orphan rows behind', async () => {

@@ -613,7 +613,6 @@ export async function DELETE(request: Request): Promise<NextResponse> {
       paths.push(row.image_path);
     }
   }
-  const imagesDeleted = libraryRows?.length ?? 0;
 
   //--------------- Cascade delete: children before parents.
   //
@@ -668,8 +667,8 @@ export async function DELETE(request: Request): Promise<NextResponse> {
       .eq('user_id', user.id);
     if (slotsError) return cascadeFail('scheduled_posts', slotsError);
     slotsDeleted = slotsCount ?? 0;
+    completedSteps.push('scheduled_posts');
   }
-  completedSteps.push('scheduled_posts');
 
   const { error: schedulesDeleteError, count: schedulesCount } = await supabase
     .from('schedules')
@@ -786,12 +785,6 @@ export async function DELETE(request: Request): Promise<NextResponse> {
 
   return NextResponse.json({
     success: true,
-    deleted: {
-      schedules: schedulesCount ?? scheduleIds.length,
-      slots: slotsDeleted,
-      videos: generationsCount ?? 0,
-      images: imagesDeleted,
-    },
   });
 }
 

@@ -53,14 +53,22 @@ function asGenerationRow(row: unknown): GenerationRow | null {
 // downloadable video URL via the shared rewriter. Any failure (engine
 // down, task pruned, unsafe id) yields null — the UI renders "download
 // unavailable" instead of a broken link.
+type DownloadLookup = {
+  url: string | null;
+  // True when the lookup failed transiently (engine 5xx, network error,
+  // abort): the video file may still exist, so the UI must not present
+  // this as unrecoverable. False for 404/unsafe-id (truly gone).
+  transientFailure: boolean;
+};
+
 async function resolveDownloadUrl(
   engineTaskId: string,
   userId: string,
   baseUrl: string,
-): Promise<string | null> {
+): Promise<DownloadLookup> {
   if (!SAFE_TASK_ID.test(engineTaskId)) {
     logger.warn('[api/persona/delete-preview] skipping unsafe task id', { engineTaskId });
-    return null;
+    return { url: null, transientFailure: false };
   }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), ENGINE_LOOKUP_TIMEOUT_MS);
@@ -70,17 +78,19 @@ async function resolveDownloadUrl(
       { headers: engineAuthHeaders(userId), cache: 'no-store', signal: controller.signal },
     );
     if (!response.ok) {
+      const transient = response.status !== 404;
       logger.warn('[api/persona/delete-preview] engine task lookup failed', {
         engineTaskId,
         status: response.status,
+        transient,
       });
-      return null;
+      return { url: null, transientFailure: transient };
     }
     const body: unknown = await response.json().catch(() => null);
-    return firstDownloadUrl(rewriteVideoUrls(body, engineTaskId, baseUrl));
+    return { url: firstDownloadUrl(rewriteVideoUrls(body, engineTaskId, baseUrl)), transientFailure: false };
   } catch (error) {
     logger.warn('[api/persona/delete-preview] engine task lookup failed', { engineTaskId, error });
-    return null;
+    return { url: null, transientFailure: true };
   } finally {
     clearTimeout(timeout);
   }
@@ -219,7 +229,11 @@ export async function GET(request: Request): Promise<NextResponse> {
     let downloadUrl: string | null = null;
     if (gen.status === 'completed' && gen.engine_task_id && baseUrl) {
       if (Date.now() - lookupStart < PREVIEW_LOOKUP_BUDGET_MS) {
-        downloadUrl = await resolveDownloadUrl(gen.engine_task_id, auth.userId, baseUrl);
+        const lookup = await resolveDownloadUrl(gen.engine_task_id, auth.userId, baseUrl);
+        downloadUrl = lookup.url;
+        // A transient failure is not "unavailable": the video may still
+        // exist, so flag it for the retry note instead of the dead-end copy.
+        if (lookup.transientFailure) linksIncomplete = true;
       } else {
         // Budget spent: the video exists, but its download link could not
         // be confirmed. Flag it so the UI does not present this as
