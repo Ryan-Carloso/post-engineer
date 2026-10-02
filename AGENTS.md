@@ -1407,6 +1407,16 @@ Follow these so the same issues don't come back:
   this regex, so the test spies on `scrub_secret_values`' input length
   (>5000 chars observed) instead of asserting on output — the order itself
   is the contract.
+- **Round 3: don't scrub what isn't free text.** `http_status_code` went
+  through the free-text scrubber as a string, killing PostHog numeric
+  filters; typed ints now forward raw. The exemption mirrors analytics.py's
+  "a secret is never an int" rule — including its bool gate
+  (`isinstance(True, int)`), which round 4 caught missing.
+- **Round 5: a cap on an ordered list keeps the diagnostic end.** The
+  100-frame cap kept the FIRST frames (framework boilerplate); Sentry
+  frames end with the innermost frame, so the cap keeps the LAST N — the
+  error site. The cap test pins `frames[-1]` is the raise site, not just
+  the length.
 
 ## PR #46 review learnings (2026-10-02, OpenCode — 24h→3h schedule window)
 
