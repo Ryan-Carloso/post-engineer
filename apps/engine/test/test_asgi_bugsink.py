@@ -103,6 +103,17 @@ class PostHogSinkTests(unittest.TestCase):
         _, properties = track_event.call_args[0]
         assert properties["http_status_code"] == "True"
         assert not isinstance(properties["http_status_code"], bool)
+        # Classification still keys off presence (not-None gate): pin it so
+        # a future gate change can't silently re-label the entry.
+        assert properties["$exception_list"][0]["type"] == "HttpException"
+
+    def test_long_task_id_extra_truncated(self):
+        # Whitelisted string extras are scrubbed but must also be
+        # length-capped like every other free-text field.
+        with patch("app.asgi.track_event") as track_event:
+            asgi._loguru_posthog_sink(_message(extra={"task_id": "t" * 6000}))
+        _, properties = track_event.call_args[0]
+        assert len(str(properties["task_id"])) <= 5000
 
     def test_record_with_exception_forwards_exception_details(self):
         error = ValueError("kaput")
