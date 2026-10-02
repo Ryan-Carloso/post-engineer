@@ -41,6 +41,24 @@ def should_init_error_tracking() -> bool:
 # tracking (the engine also runs in dev/tests without a complete .env).
 # Under pytest the init is always skipped (see should_init_error_tracking).
 #---------------
+# Loguru extras forwarded as PostHog properties on $exception events.
+# Whitelisted: only filterable, non-sensitive context (ids, status codes).
+# Anything else bound to a record stays out of telemetry.
+_EXCEPTION_CONTEXT_EXTRAS = ("task_id", "http_status_code")
+
+
+def _exception_list_entry(exc_type: str, value: str, stacktrace: str) -> dict[str, object]:
+    # PostHog error tracking requires $exception_list on every $exception
+    # event; without it ingestion flags $cymbal_errors ("missing field
+    # $exception_list") and the event never groups in Error Tracking.
+    return {
+        "type": exc_type,
+        "value": value,
+        "stacktrace": stacktrace,
+        "mechanism": {"type": "generic", "handled": True},
+    }
+
+
 def _loguru_posthog_sink(message) -> None:
     """Forward ERROR+ loguru records to PostHog as $exception events.
 
@@ -53,17 +71,37 @@ def _loguru_posthog_sink(message) -> None:
         properties: dict[str, object] = {
             "$exception_message": scrub_secret_values(str(record.get("message", ""))),
         }
+        extra = record.get("extra") or {}
+        for key in _EXCEPTION_CONTEXT_EXTRAS:
+            if isinstance(extra, dict) and extra.get(key) is not None:
+                properties[key] = scrub_secret_values(str(extra[key]))
         if exception is not None:
             # loguru stores the exception as a (type, value, traceback) tuple
             exc_value = exception[1]
-            properties["$exception_type"] = type(exc_value).__name__
-            properties["$exception_message"] = scrub_secret_values(str(exc_value))
+            exc_type_name = type(exc_value).__name__
+            exc_message = scrub_secret_values(str(exc_value))
             try:
-                properties["$exception_stacktrace"] = scrub_secret_values("".join(
+                stacktrace = scrub_secret_values("".join(
                     traceback.format_exception(type(exc_value), exc_value, exc_value.__traceback__)
                 )[:5000])
             except Exception:
-                pass
+                stacktrace = ""
+            properties["$exception_type"] = exc_type_name
+            properties["$exception_message"] = exc_message
+            properties["$exception_stacktrace"] = stacktrace
+        else:
+            # No live exception tuple (e.g. HttpException logs its own flat
+            # message): synthesize the entry so the event still ingests.
+            # The http_status_code extra marks our HttpException path.
+            exc_type_name = (
+                "HttpException" if isinstance(extra, dict) and "http_status_code" in extra
+                else "Error"
+            )
+            exc_message = str(properties["$exception_message"])
+            stacktrace = ""
+        properties["$exception_list"] = [
+            _exception_list_entry(exc_type_name, exc_message, stacktrace)
+        ]
         track_event("$exception", properties)  # type: ignore[arg-type]
     except Exception:
         pass
