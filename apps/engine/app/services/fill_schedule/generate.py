@@ -1,5 +1,4 @@
-"""Video generation dispatch: pending batch slots (parallel) and one-off
-schedule slots (sequential per schedule) to the video pipeline."""
+"""Video generation dispatch: pending batch slots (parallel) to the video pipeline."""
 
 from __future__ import annotations
 
@@ -36,27 +35,12 @@ def new_task_id(slot: dict[str, Any]) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f"fill-schedule:{slot['id']}"))
 
 
-def is_oneoff_slot(slot: dict[str, Any]) -> bool:
-    """One-off discriminator (no schema change): the joined schedule carries
-    ``scheduled_at``. Unified generate+schedule operations (from POST
-    /api/videos/generate-and-schedule) leave it NULL."""
-    schedule = slot.get("schedules")
-    return isinstance(schedule, dict) and schedule.get("scheduled_at") is not None
-
-
 class BatchGenerator:
     """Starts video generation for pending batch slots.
 
     Batch slots are user-requested and prepaid at request time
     (``batch:{scheduleId}``): they always generate, using the slot's
     stored topic with no LLM call and no token spend.
-
-    One-off schedules (``schedules.scheduled_at`` set, created by POST
-    /api/schedule) generate SEQUENTIALLY: slot N+1 dispatches only after
-    slot N leaves generating, so the user watches one video complete
-    before the next starts. They bypass the generation horizon — dispatch
-    happens at the first tick after creation — while publishing still
-    waits for ``slot_at``.
     """
 
     def __init__(
@@ -73,35 +57,9 @@ class BatchGenerator:
         """Dispatch generation for pending slots. Returns enqueued count."""
         enqueued = 0
         enqueued_topics: list[str] = []
-        seen: set[str] = set()
-
-        # One-off schedules first: sequential, horizon-bypassed.
-        generating_schedule_ids = {
-            str((slot.get("schedules") or {}).get("id"))
-            for slot in self.store.generating_slots()
-        }
-        oneoff_by_schedule: dict[str, list[dict[str, Any]]] = {}
-        for slot in self.store.pending_oneoff_slots():
-            seen.add(str(slot.get("id")))
-            schedule_id = str((slot.get("schedules") or {}).get("id"))
-            oneoff_by_schedule.setdefault(schedule_id, []).append(slot)
-        for schedule_id, slots in oneoff_by_schedule.items():
-            if schedule_id in generating_schedule_ids:
-                # Slot N still generating — slot N+1 waits for the next tick.
-                continue
-            slots.sort(key=lambda s: str(s.get("slot_at") or ""))
-            label = self._generate_slot(slots[0])
-            if label is not None:
-                enqueued += 1
-                enqueued_topics.append(label)
 
         # Batch slots: parallel dispatch within the generation horizon.
-        # One-off slots are never dispatched here (already handled above,
-        # even when inside the horizon) — the `seen` guard is belt and
-        # braces for that.
         for slot in self.store.pending_slots(now):
-            if str(slot.get("id")) in seen or is_oneoff_slot(slot):
-                continue
             label = self._generate_slot(slot)
             if label is not None:
                 enqueued += 1
@@ -121,7 +79,7 @@ class BatchGenerator:
             # created: fail the slot instead of killing the whole generate
             # stage every tick.
             persona = persona_for(schedule)
-            # Topics are stored at creation (batch and one-off alike); there
+            # Topics are stored at creation; there
             # is no LLM fallback, so an empty topic fails the slot loudly.
             topic = str(slot.get("topic") or "").strip()
             if not topic:

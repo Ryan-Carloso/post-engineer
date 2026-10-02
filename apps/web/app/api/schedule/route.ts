@@ -7,11 +7,13 @@ import { isPersonaAllowed } from '@/lib/api-keys';
 import { apiErrorResponse } from '@/lib/api-error';
 
 //---------------
-// /api/schedule — CRUD for the automatic fill-schedule timetables.
-// One schedule per persona (schedules_persona_owner constraint). The engine
-// (fill-schedule-scheduler thread, starts with the app) reads these tables
-// via the service role and does the rest: LLM topic, video in the 06:00 UTC
-// batch, and publishing at each slot's time via /api/upload-content.
+// /api/schedule — CRUD (GET/PATCH/DELETE) for video publishing timetables.
+// One schedule per persona (schedules_persona_owner constraint). Schedules
+// are created by POST /api/videos/generate-and-schedule (1-10 topics, each
+// becoming a video + slot + task); the engine (fill-schedule-scheduler
+// thread, starts with the app) reads these tables via the service role and
+// does the rest: video generation per slot, then publishing at each slot's
+// time via /api/upload-content.
 //---------------
 
 const VALID_PROVIDERS = ['youtube', 'instagram', 'linkedin', 'bluesky'] as const;
