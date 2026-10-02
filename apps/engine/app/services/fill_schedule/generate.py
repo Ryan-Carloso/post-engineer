@@ -140,7 +140,13 @@ class BatchGenerator:
             # A failed slot is a real recurring error: log at ERROR so the
             # Bugsink bridge (loguru sink, ERROR+) forwards it.
             logger.error(f"fill_schedule: slot {slot['id']} generation failed: {exc}")
-            self.store.update_slot(slot["id"], status=SLOT_FAILED, error=str(exc)[:500])
+            # The error column is client-visible (/api/schedule/status spreads
+            # the row into the response): scrub the full message before
+            # truncating, like the telemetry reason below — a raw str(exc)
+            # could echo bearer tokens or DSNs to clients.
+            self.store.update_slot(
+                slot["id"], status=SLOT_FAILED, error=scrub_secret_values(str(exc))[:500]
+            )
             # Funnel note: slot failures raised before task creation (deleted
             # persona, empty topic, missing user_id) intentionally have no
             # matching video_generation_requested — they are scheduling/data

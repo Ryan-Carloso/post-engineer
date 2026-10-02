@@ -9,7 +9,7 @@ video_generation_failed / video_generated.
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -565,6 +565,15 @@ class BatchFailedTests(unittest.TestCase):
             },
         }
 
+    def setUp(self):
+        # The emission guards are process-local: a task id recorded by an
+        # earlier test would silently suppress emissions here. Clear both
+        # deques so every test starts from a clean slate.
+        from app.services.fill_schedule import generate as gen_module
+
+        gen_module.tm._failed_event_emitted_tasks.clear()
+        gen_module.tm._requested_event_emitted_tasks.clear()
+
     def test_dispatch_failure_tracks_failed_with_funnel_context(self):
         from app.services.fill_schedule import generate as gen_module
 
@@ -622,8 +631,9 @@ class BatchFailedTests(unittest.TestCase):
         ):
             label = generator._generate_slot(self._slot())
         self.assertIsNone(label)
-        # The scrubber received the whole message, not the truncated slice.
-        scrub.assert_called_once_with(str(error))
+        # The scrubber received the whole message, not the truncated slice —
+        # for both the stored slot error and the telemetry reason.
+        self.assertIn(call(str(error)), scrub.call_args_list)
         failed_calls = [
             c for c in track.call_args_list if c[0][0] == "video_generation_failed"
         ]
@@ -632,6 +642,29 @@ class BatchFailedTests(unittest.TestCase):
         self.assertIn("[redacted]", props["reason"])
         self.assertNotIn("TOPSECRET123", props["reason"])
         self.assertLessEqual(len(str(props["reason"])), 200)
+
+    def test_failed_slot_error_is_scrubbed_before_storage(self):
+        # The slot error column is client-visible (/api/schedule/status
+        # spreads the row into the response), so it gets the same
+        # scrub-then-truncate treatment as the telemetry reason — a raw
+        # str(exc) here would leak bearer tokens/DSNs to clients.
+        from app.services.fill_schedule import generate as gen_module
+
+        store = MagicMock()
+        store.signed_url = MagicMock(return_value="https://signed/foto.png")
+        generator = gen_module.BatchGenerator(
+            store=store, task_state=MagicMock(), notify=MagicMock()
+        )
+        boom = RuntimeError("dispatch exploded: api_key=TOPSECRET123")
+        with (
+            patch.object(generator, "_dispatch_generation", side_effect=boom),
+            patch.object(gen_module, "track_event"),
+        ):
+            self.assertIsNone(generator._generate_slot(self._slot()))
+        _, fields = store.update_slot.call_args
+        self.assertIn("[redacted]", fields["error"])
+        self.assertNotIn("TOPSECRET123", fields["error"])
+        self.assertLessEqual(len(fields["error"]), 500)
 
 
 if __name__ == "__main__":
