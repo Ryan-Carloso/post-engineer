@@ -110,4 +110,20 @@ describe('engine error-code contract', () => {
     expect(categorizeGenerationError('engine_restart')).toBe('engine_restart');
     expect(isRetryableGenerationError('engine_restart')).toBe(true);
   });
+
+  it('recognizes the engine orphan sentence (the refund-backstop seam)', () => {
+    // Cross-app contract: the engine's _ORPHAN_ERROR_MESSAGE is what the
+    // web's video-status poll re-categorizes when the refund backstop runs.
+    // Without this rule the stored engine_restart code would be downgraded
+    // to unknown (generic copy, not retryable).
+    const engineState = readFileSync(
+      join(process.cwd(), '..', 'engine', 'app', 'services', 'state.py'),
+      'utf8',
+    );
+    const match = engineState.match(/^_ORPHAN_ERROR_MESSAGE\s*=\s*"([^"]+)"/m);
+    expect(match, 'engine _ORPHAN_ERROR_MESSAGE not found').not.toBeNull();
+    const message = match![1];
+    expect(categorizeGenerationError(message)).toBe('engine_restart');
+    expect(isRetryableGenerationError(message)).toBe(true);
+  });
 });

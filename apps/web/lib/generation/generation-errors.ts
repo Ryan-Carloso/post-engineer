@@ -52,6 +52,12 @@ export function categorizeGenerationError(
   if ((GENERATION_ERROR_CODES as readonly string[]).includes(text)) {
     return text as GenerationErrorCode;
   }
+  // Engine orphan contract: tasks failed by the boot reconcile carry the
+  // engine's _ORPHAN_ERROR_MESSAGE sentence in data.error (see state.py).
+  // The web's video-status poll re-categorizes from that sentence when the
+  // refund backstop runs — without this rule it would downgrade the stored
+  // engine_restart code to unknown and lose the retryable classification.
+  if (text.includes('engine restart')) return 'engine_restart';
   if (text.includes('custom audio')) return 'custom_audio_invalid';
   if (text.includes('unavailable')) return 'engine_unavailable';
   if (text.includes('rejected the job')) return 'engine_rejected';
