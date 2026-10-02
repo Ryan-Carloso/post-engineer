@@ -37,7 +37,7 @@ import {
   SlotDistributionError,
   type DistributedSlot,
 } from '@/lib/schedule/slot-distribution';
-import { validateScheduleWindow, SCHEDULE_MAX_AHEAD_DAYS, SCHEDULE_MIN_ADVANCE_HOURS } from '@/lib/schedule-window';
+import { validateScheduleWindow } from '@/lib/schedule-window';
 import { computeVideoTokens, toFiniteNumber, type FaceQuality } from '@/lib/tokens';
 import {
   buildJobPayload,
@@ -327,11 +327,10 @@ function validateSlots(
     if (!windowCheck.ok) {
       return validationFailed(
         ERROR_CODES.SCHEDULE_OUT_OF_RANGE,
-        windowCheck.error ||
-          formatErrorMessage(ERROR_CODES.SCHEDULE_OUT_OF_RANGE, {
-            minHours: SCHEDULE_MIN_ADVANCE_HOURS,
-            maxDays: SCHEDULE_MAX_AHEAD_DAYS,
-          }),
+        // windowCheck.error is the only copy for this code at this call
+        // site: the validator always returns a non-empty message on the
+        // failure branch, and it already interpolates the window constants.
+        windowCheck.error,
         'publishing.schedule',
       );
     }

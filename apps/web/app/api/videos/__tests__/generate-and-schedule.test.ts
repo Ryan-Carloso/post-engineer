@@ -426,6 +426,10 @@ describe('POST /api/videos/generate-and-schedule', () => {
         const json = await res.json();
         expect(res.status).toBe(400);
         expect(json.code).toBe('SCHEDULE_OUT_OF_RANGE');
+        // The validator's message (with the interpolated window constants)
+        // is the copy clients receive — pin it so the code and the returned
+        // message can't silently diverge.
+        expect(json.error).toMatch(/at least 3 hours in advance/i);
       } finally {
         vi.useRealTimers();
       }

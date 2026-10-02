@@ -1384,3 +1384,37 @@ Follow these so the same issues don't come back:
   embed), the skip site carries a NOTE naming the consequence and the
   follow-up (persist per-slot cost at creation), so the trade-off is
   discoverable, not silent.
+
+## PR #46 review learnings (2026-10-02, OpenCode — 24h→3h schedule window)
+
+- **Dead `||` fallbacks with divergent copy.** `windowCheck.error ||`
+  `formatErrorMessage(...)` could never reach the right side (the failure
+  branch is typed `{ ok: false; error: string }` and every path returns a
+  non-empty string) — two user-facing copies for one error code, one of
+  them unreachable. Drop the dead branch so one code has one copy at the
+  call site; the registry's canonical template stays as the documented
+  API-client default.
+- **Scope negative copy guards to the phrase, not the bare token.**
+  `not.toContain('24h')` on a prompt false-fails the moment legitimate
+  same-token copy appears ("times (HH:MM, 24h)" clock format). Scope the
+  guard to the window phrase (`/24h\s*[-–]\s*30d|between 24h and 30|de
+  24h a 30/`), and carve out the legitimate usage in a comment.
+- **Cross-app copy needs a sync test in the same PR.** The 3h window is
+  advertised in web prompts, MCP tool descriptions, and the MCP README;
+  a one-sided future edit (or bad conflict resolution) would silently
+  teach agents the wrong rule while the server enforces the real one.
+  Pin the literal on every surface with a file-parsing test in the
+  docs-sync pattern; the same file covers both dash forms (`/3h[-–]30d/`).
+- **EN/PT prompt parity test for agent-facing docs.** The in-app MCP
+  install prompts exist in both locales; a loop over locales asserting
+  the window line (and the step-5 line) contains the new value pins both
+  at once — the PT line had silently kept the old 24h.
+- **Verify a reviewer's flake claim empirically before/while applying.**
+  The claimed ~30-min daily flake window for the sub-3h route test did
+  not reproduce in a 3,500-instant sweep across midnight and the DST
+  fall-back; the fake-timer pinning was still applied as cheap insurance,
+  with the non-reproduction recorded. Stale/wrong findings cost nothing
+  to double-check.
+- **Grep comments for deleted route names.** Removing an endpoint leaves
+  "used by POST /api/schedule" in header comments — docs must describe
+  what the code does, so the comment now names the real consumers.
