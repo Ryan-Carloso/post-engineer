@@ -814,6 +814,27 @@ class BatchFailedTests(unittest.TestCase):
         ]
         self.assertEqual(len(terminal_failed), 1)
 
+    def test_slot_failure_log_line_is_scrubbed(self):
+        # The slot-failure ERROR line feeds the loguru ERROR+ sink: scrub
+        # the exception like every other free-text surface in this handler.
+        from app.services.fill_schedule import generate as gen_module
+
+        store = MagicMock()
+        store.signed_url = MagicMock(return_value="https://signed/foto.png")
+        generator = gen_module.BatchGenerator(
+            store=store, task_state=MagicMock(), notify=MagicMock()
+        )
+        boom = RuntimeError("dispatch exploded: api_key=TOPSECRET123")
+        with (
+            patch.object(generator, "_dispatch_generation", side_effect=boom),
+            patch.object(gen_module, "track_event"),
+            patch.object(gen_module, "logger") as mock_logger,
+        ):
+            self.assertIsNone(generator._generate_slot(self._slot()))
+        logged = " ".join(str(c) for c in mock_logger.error.call_args_list)
+        self.assertIn("[redacted]", logged)
+        self.assertNotIn("TOPSECRET123", logged)
+
 
 if __name__ == "__main__":
     unittest.main()
