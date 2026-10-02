@@ -1555,6 +1555,15 @@ Follow these so the same issues don't come back:
 - **One helper per input class.** Three copies of "parse non-ok body"
   is a contract waiting to diverge; extract it on the third copy.
 
+## Web/API review learnings, PR #41 round 13 (2026-10-02)
+- **Hoist config-throwing helpers out of transient catch blocks —
+  everywhere.** The preview got it right; the sibling after() loop
+  re-offended. When a helper throws on config, the catch must only see
+  I/O errors.
+- **The preview must count everything the cascade deletes.** "Lists
+  exactly what will be deleted" is a contract; published-post history
+  goes too, so count it and show it.
+
 ## Engine review learnings (2026-10-02, PR #43)
 - **A test comment claiming a behavior must pin it with an assertion.** The
   reconcile test's comment said "the refund is skipped" but asserted only
