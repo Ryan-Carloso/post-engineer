@@ -1919,6 +1919,12 @@ Follow these so the same issues don't come back:
 
 ## PR #58 round-6 review learnings (2026-10-02, CI web failure)
 - **JWT tamper tests must flip a fully-significant base64url char.** `token.slice(0, -2) + "aa"` is a byte-level no-op ~1/256 of the time: an ES256 signature is 64 bytes = 86 base64url chars, and the last char carries only 2 data bits (low 4 are padding, ignored by decoders). When the 85th char is already `a` and the 86th's 2 significant bits match, the "tampered" token verifies fine — flaky CI failure. Fix: flip the FIRST signature char (fully significant). Proven with a 300-iteration loop asserting the signature bytes always change and verification always rejects.
+## Engine review learnings, PR #53 round-13 (2026-10-02, OpenCode on 31a39fb)
+
+- **One redaction helper for every surface that sees the same secret.** `safe_reason` (Discord alerts, logs, client-visible task errors) had only a raw-substring webhook check while `_post` redacted four transport variants — the requoted/path-fragment forms this PR proved exist slipped into the key-anchored scrubber, which cannot match path-embedded tokens. Extracted `redact_known_url(message, url)` into `notify.py` and used it in both places.
+- **Replace longest variants first.** The variant set contains both `/hooks/path` and `/hooks/path?sig=...` — replacing the path first splits the request target before it can match. `sorted(variants, key=len, reverse=True)`.
+- **urllib3 embeds the request target, not just the path.** Connection-phase errors carry `/path?query=...`; the path-only variant left a query-string credential exposed. The helper adds the `path + ("?" + query)` variant and its requote.
+- **A passing test can pass for the wrong reason.** My first query-string probe used `?token=secret-token` — the key-anchored scrubber matched `token=` and the test passed without the variant redaction. Probe values must dodge every other defense layer (`?sig=abc123xyz`) so the test pins the intended code path.
 ## Engine review learnings, PR #51 follow-up (2026-10-02, OpenCode on merged main)
 
 Five MINORs on the merged funnel, fixed as a follow-up PR with one focused TDD commit each:
