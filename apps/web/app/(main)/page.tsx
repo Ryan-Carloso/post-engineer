@@ -121,7 +121,7 @@ const AutomationGrid = () => {
         const linkedinAccounts = linkedin.data?.accounts.filter((item) => schedule.linkedinAccountIds.includes(item.providerAccountId)) ?? [];
         const nextSlot = status.data?.upcoming.find((slot) => slot.scheduleId === schedule.id) ?? status.data?.upcoming[0];
         const days = schedule.daysOfWeek.length === 0
-          ? t('home.waitingForSchedule')
+          ? t('home.customDays')
           : schedule.daysOfWeek.length === 7
             ? t('home.everyDay')
             : schedule.daysOfWeek.map((day) => dayLabels[day]).join(', ');

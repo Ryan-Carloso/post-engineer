@@ -171,6 +171,7 @@ export const ptDictionary = {
     unnamedPersona: 'Persona sem nome',
     personaFallback: 'Conteúdo criado com a sua identidade.',
     everyDay: 'Todos os dias',
+    customDays: 'Datas específicas',
     postsPerDay: 'post/dia',
     nextPost: 'Próximo post',
     waitingForSchedule: 'Preparando os próximos horários',

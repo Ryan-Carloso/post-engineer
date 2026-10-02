@@ -171,6 +171,7 @@ export const enDictionary: Dictionary = {
     unnamedPersona: 'Unnamed persona',
     personaFallback: 'Content created with your identity.',
     everyDay: 'Every day',
+    customDays: 'Custom dates',
     postsPerDay: 'post/day',
     nextPost: 'Next post',
     waitingForSchedule: 'Preparing the next publishing times',
