@@ -1876,3 +1876,17 @@ Follow these so the same issues don't come back:
 - **EN/PT parity tests must cover every pinned line, not just the headline one.** The parity test pinned the 3h window in both locales but not the `@latest` command line — extended it to find the `"command":` line per locale and assert the pin.
 - **Every PR bumps VERSION — CI enforces it, not memory.** The `version-check` workflow fails any PR whose diff doesn't touch `VERSION`; a docs-only PR still needs `scripts/bump-version.sh patch`. (This PR initially shipped without the bump and had to add it after the failure.)
 - **Two agents, one branch: a rebase can silently drop your commit.** The parent rebased the branch onto an earlier commit while this babysit had a version-bump commit pushed; the bump vanished from the branch and `version-check` failed again. Re-verify `git log origin/<branch>` after any concurrent work before assuming your commits are still there.
+
+## Web review learnings, PR #55 (2026-10-02, production 500)
+
+- **An insert key must exist in the table.** `POST /api/videos/generate-and-schedule` inserted `kind: 'batch'` into `schedules`, but the column never landed in `supabase/schema.sql` — PostgREST rejects the whole insert on an unknown key, so EVERY call 500d from the v1.12.0 merge until the fix. The route test even pinned `kind: 'batch'` as correct. Lesson: when a PR introduces a new insert, cross-check every key against the canonical schema file; a test asserting the insert shape should assert the ABSENCE of phantom keys, not just the presence of expected ones.
+- **Stale comments outlive the schema they describe.** The `kind='batch'` line carried a comment about a `'recurring'` default and partial unique index — neither exists anymore. A comment that justifies a line by referencing dead schema is a smell: verify the schema objects it names still exist.
+
+## Web review learnings, PR #55 follow-up (2026-10-02, OpenCode on 2613c4f)
+
+- **Generalize the phantom-key pin into a schema sync test.** The PR pinned the absence of `kind`, but the supabase-js mock records any payload key — the next speculative key would sail through tests and 500 every production call again. New sync test parses the `create table public.schedules` column list from `supabase/schema.sql` and asserts every key of the route's insert payload is a real column (mutation-verified: re-adding `kind: 'batch'` fails it). Pattern mirrors the existing SQL-literal sync tests.
+
+## Web review learnings, PR #55 round 2 (2026-10-02, OpenCode on 09c2c5d)
+
+- **A DDL column parser must exclude constraint keywords.** The schema sync test took the first token of every non-comment line — a future table-level constraint (`unique (user_id, persona_id),`) would enter the column set, letting a phantom key named like a SQL keyword false-pass. Filter `primary/unique/foreign/check/constraint/exclude` and assert a sentinel stable column (`scheduled_at`) so a degraded parse can't pass vacuously.
+- **Version-base drift note:** a reviewer flagged the PR "bumps 1.13.1 → 1.13.2 while main reads 1.13.3" — stale read; the merge had already re-bumped to 1.13.3 and `bump-version.sh check` confirmed all 5 locations in sync. Always verify the actual tree before acting on a version claim.

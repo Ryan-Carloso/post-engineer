@@ -744,17 +744,16 @@ export async function POST(request: Request): Promise<NextResponse> {
     generationId: idem.generationId,
   });
 
-  // 9. Insert the schedule. The id is deterministic (idempotency anchor);
-  // kind='batch' (a finite prepaid set of slots — never the 'recurring'
-  // default, which would trip the partial unique index). scheduled_at is a
-  // legacy column that always stays NULL; the tick only reconciles our
-  // generating slots.
+  // 9. Insert the schedule. The id is deterministic (idempotency anchor).
+  // scheduled_at is a legacy column that always stays NULL; the tick only
+  // reconciles our generating slots. NOTE: do not add a 'kind' key here —
+  // the schedules table has no kind column, and PostgREST rejects the
+  // whole insert on an unknown key (every call 500s).
   const sortedTimes = [...new Set(schedule.times.map((t) => t.trim()))].sort();
   const { error: scheduleError } = await supabase.from('schedules').insert({
     id: idem.scheduleId,
     user_id: userId,
     persona_id: personaId,
-    kind: 'batch',
     providers,
     youtube_account_ids: accountIds.youtube ?? [],
     instagram_account_ids: accountIds.instagram ?? [],
