@@ -1545,6 +1545,16 @@ Follow these so the same issues don't come back:
 - **Relocated branches need re-pinned tests.** Moving storage cleanup
   into after() moved its failure log; the test must follow the branch.
 
+## Web/API review learnings, PR #41 round 12 (2026-10-02)
+- **A declared ref with no reader is dead code.** Either wire the focus
+  trap through it or delete it — an unused a11y affordance is worse than
+  none, it claims a guarantee that isn't there.
+- **Config throws are not transient.** engineAuthHeaders throwing on a
+  missing secret must not ride the catch-all transient path; hoist it
+  out and log at error.
+- **One helper per input class.** Three copies of "parse non-ok body"
+  is a contract waiting to diverge; extract it on the third copy.
+
 ## Engine review learnings (2026-10-02, PR #43)
 - **A test comment claiming a behavior must pin it with an assertion.** The
   reconcile test's comment said "the refund is skipped" but asserted only
