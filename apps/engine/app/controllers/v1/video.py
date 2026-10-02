@@ -37,14 +37,7 @@ from app.models.schema import (
 )
 from app.services import state as sm
 from app.services import task as tm
-from app.services.analytics import warm_client as _warm_posthog_client
 from app.utils import file_security, upload_limits, utils
-
-# Warm the PostHog client at controller startup: the on_accepted funnel
-# callback runs under the task-manager lock, and the first track_event in
-# a process pays the posthog import + client construction. Doing it here
-# keeps the lock hold short. No-op when POSTHOG_API_KEY is unset.
-_warm_posthog_client()
 
 # Upload size caps: the handlers stream uploads in chunks instead of
 # buffering the whole body in RAM.

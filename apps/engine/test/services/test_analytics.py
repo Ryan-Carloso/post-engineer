@@ -172,3 +172,12 @@ def test_track_event_exemption_only_applies_to_numeric_values():
             props = instance.capture.call_args.kwargs["properties"]
             assert props["prompt_tokens"] == 12
             assert props["total_tokens"] == "[redacted]"
+
+
+def test_warm_client_invokes_get_client():
+    # warm_client() exists so the on_accepted funnel callback (which runs
+    # under the task-manager lock) never pays the first-call import +
+    # construction cost: it must actually trigger client construction.
+    with mock.patch.object(analytics, "_get_client") as get_client:
+        analytics.warm_client()
+    get_client.assert_called_once_with()
