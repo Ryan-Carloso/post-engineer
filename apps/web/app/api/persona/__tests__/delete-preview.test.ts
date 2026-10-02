@@ -142,14 +142,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockAuth(null);
   mockEngine('/api/v1/download/task-aaa/final.mp4');
-  process.env.MONEYPRINT_API_URL = 'https://engine.internal:8080';
-  process.env.MONEYPRINT_API_SECRET = 'test-secret';
+  vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.internal:8080');
+  vi.stubEnv('MONEYPRINT_API_SECRET', 'test-secret');
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  delete process.env.MONEYPRINT_API_URL;
-  delete process.env.MONEYPRINT_API_SECRET;
+  vi.unstubAllEnvs();
 });
 
 function getClient(
@@ -354,6 +353,7 @@ describe('GET /api/persona/delete-preview', () => {
     );
     const body = (await res.json()) as {
       videos: Array<{ downloadUrl: string | null }>;
+      linksIncomplete: boolean;
     };
     expect(res.status).toBe(200);
     // Lookups 0 and 1 run (t=0s, t=10s < 15s); 2..4 are skipped past budget.
@@ -364,6 +364,8 @@ describe('GET /api/persona/delete-preview', () => {
     expect(body.videos[2]?.downloadUrl).toBeNull();
     expect(body.videos[3]?.downloadUrl).toBeNull();
     expect(body.videos[4]?.downloadUrl).toBeNull();
+    // The degradation is flagged so the UI does not call it "unavailable".
+    expect(body.linksIncomplete).toBe(true);
     vi.mocked(Date.now).mockRestore();
   });
 });

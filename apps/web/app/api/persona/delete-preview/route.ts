@@ -7,7 +7,7 @@ import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { apiErrorResponse } from '@/lib/api-error';
 import { ERROR_CODES } from '@/lib/error-codes';
 import { logger } from '@/lib/logger';
-import { firstDownloadUrl, rewriteVideoUrls } from '@/lib/video-urls';
+import { firstDownloadUrl, rewriteVideoUrls, SAFE_TASK_ID } from '@/lib/video-urls';
 
 //---------------
 // GET /api/persona/delete-preview?personaId= — what deleting the persona
@@ -20,7 +20,6 @@ const ROUTE = 'GET /api/persona/delete-preview';
 // Slots that have not reached a terminal state: these are the ones the
 // user is giving up by deleting the persona.
 const UPCOMING_SLOT_STATUSES = ['pending', 'generating', 'ready', 'publishing'];
-const SAFE_TASK_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const ENGINE_LOOKUP_TIMEOUT_MS = 8000;
 // Cap on per-video engine lookups: each is a network call with its own
 // timeout, and a persona with hundreds of videos would otherwise hold the
@@ -59,7 +58,10 @@ async function resolveDownloadUrl(
   userId: string,
   baseUrl: string,
 ): Promise<string | null> {
-  if (!SAFE_TASK_ID.test(engineTaskId)) return null;
+  if (!SAFE_TASK_ID.test(engineTaskId)) {
+    logger.warn('[api/persona/delete-preview] skipping unsafe task id', { engineTaskId });
+    return null;
+  }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), ENGINE_LOOKUP_TIMEOUT_MS);
   try {
@@ -67,10 +69,17 @@ async function resolveDownloadUrl(
       `${baseUrl.replace(/\/+$/, '')}/api/v1/tasks/${encodeURIComponent(engineTaskId)}`,
       { headers: engineAuthHeaders(userId), cache: 'no-store', signal: controller.signal },
     );
-    if (!response.ok) return null;
+    if (!response.ok) {
+      logger.warn('[api/persona/delete-preview] engine task lookup failed', {
+        engineTaskId,
+        status: response.status,
+      });
+      return null;
+    }
     const body: unknown = await response.json().catch(() => null);
     return firstDownloadUrl(rewriteVideoUrls(body, engineTaskId, baseUrl));
-  } catch {
+  } catch (error) {
+    logger.warn('[api/persona/delete-preview] engine task lookup failed', { engineTaskId, error });
     return null;
   } finally {
     clearTimeout(timeout);
@@ -181,6 +190,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   // for minutes on serverless.
   const baseUrl = process.env.MONEYPRINT_API_URL;
   const lookupStart = Date.now();
+  let linksIncomplete = false;
   const videos: Array<{
     taskId: string | null;
     topic: string | null;
@@ -189,13 +199,15 @@ export async function GET(request: Request): Promise<NextResponse> {
   }> = [];
   for (const gen of generations.slice(0, PREVIEW_VIDEO_CAP)) {
     let downloadUrl: string | null = null;
-    if (
-      gen.status === 'completed' &&
-      gen.engine_task_id &&
-      baseUrl &&
-      Date.now() - lookupStart < PREVIEW_LOOKUP_BUDGET_MS
-    ) {
-      downloadUrl = await resolveDownloadUrl(gen.engine_task_id, auth.userId, baseUrl);
+    if (gen.status === 'completed' && gen.engine_task_id && baseUrl) {
+      if (Date.now() - lookupStart < PREVIEW_LOOKUP_BUDGET_MS) {
+        downloadUrl = await resolveDownloadUrl(gen.engine_task_id, auth.userId, baseUrl);
+      } else {
+        // Budget spent: the video exists, but its download link could not
+        // be confirmed. Flag it so the UI does not present this as
+        // "unrecoverable".
+        linksIncomplete = true;
+      }
     }
     videos.push({
       taskId: gen.engine_task_id,
@@ -219,5 +231,6 @@ export async function GET(request: Request): Promise<NextResponse> {
     },
     videos,
     videosTruncated: generations.length > videos.length,
+    linksIncomplete,
   });
 }

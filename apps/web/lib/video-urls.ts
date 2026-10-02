@@ -5,6 +5,14 @@
 //---------------
 
 /**
+ * Engine task ids are engine-generated uuid4-ish slugs. Guard interpolating
+ * DB-sourced ids into engine URLs: encoding alone blocks `/` traversal, but
+ * a visibly-malformed id is a caller bug worth skipping loudly, not a
+ * request to send.
+ */
+export const SAFE_TASK_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+
+/**
  * Rewrite engine `/api/v1/download|stream/...` URIs (relative or absolute
  * on the engine origin) to `/api/persona/video-download/:taskId/...`.
  * Absolute URLs from any other origin are nulled — the proxy must never

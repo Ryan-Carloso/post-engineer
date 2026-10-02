@@ -167,8 +167,8 @@ const engineDeletes: string[] = [];
 beforeEach(() => {
   vi.clearAllMocks();
   engineDeletes.length = 0;
-  process.env.MONEYPRINT_API_URL = 'https://engine.internal:8080';
-  process.env.MONEYPRINT_API_SECRET = 'test-secret';
+  vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.internal:8080');
+  vi.stubEnv('MONEYPRINT_API_SECRET', 'test-secret');
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: { method?: string }) => {
@@ -180,8 +180,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  delete process.env.MONEYPRINT_API_URL;
-  delete process.env.MONEYPRINT_API_SECRET;
+  vi.unstubAllEnvs();
 });
 
 const del = (personaId: string) =>
@@ -256,6 +255,22 @@ describe('DELETE /api/persona cascade', () => {
     expect(engineDeletes).not.toContain(
       expect.stringContaining('task-zzz'),
     );
+  });
+
+  it('skips unsafe engine task ids instead of interpolating them', async () => {
+    const tables = baseTables();
+    tables.video_generations.push({
+      id: 'gen-evil',
+      persona_id: PERSONA_ID,
+      user_id: USER_ID,
+      engine_task_id: '../../etc/passwd',
+    });
+    setup(tables);
+    await del(PERSONA_ID);
+    await flushAfterCallbacks();
+    expect(engineDeletes).toContain('https://engine.internal:8080/api/v1/tasks/task-aaa');
+    expect(engineDeletes).not.toContain(expect.stringContaining('etc'));
+    expect(engineDeletes).not.toContain(expect.stringContaining('..'));
   });
 
   it('uses the service client for OAuth callers (no cookie session)', async () => {

@@ -196,4 +196,15 @@ describe('DeletePersonaModal', () => {
     await screen.findByText('personas.deleteDialogVideosTruncated');
     expect(container.textContent).toContain('personas.deleteDialogVideosTruncated');
   });
+
+  it('warns with retry when download links are incomplete', async () => {
+    vi.mocked(fetchDeletePreview).mockResolvedValue({
+      ...PREVIEW,
+      linksIncomplete: true,
+    });
+    renderModal();
+    await screen.findByText('personas.deleteDialogLinksIncomplete');
+    fireEvent.click(screen.getByRole('button', { name: 'personas.tryAgain' }));
+    await waitFor(() => expect(fetchDeletePreview).toHaveBeenCalledTimes(2));
+  });
 });

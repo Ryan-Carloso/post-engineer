@@ -152,6 +152,18 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
                     })}
                   </p>
                 )}
+                {preview?.linksIncomplete === true && (
+                  <p className="mt-1 text-xs text-amber-700">
+                    {t('personas.deleteDialogLinksIncomplete')}{' '}
+                    <button
+                      type="button"
+                      onClick={() => setAttempt((n) => n + 1)}
+                      className="font-medium underline hover:no-underline"
+                    >
+                      {t('personas.tryAgain')}
+                    </button>
+                  </p>
+                )}
                 <ul className="mt-2 space-y-1.5">
                   {videos.map((video, index) => (
                     <li

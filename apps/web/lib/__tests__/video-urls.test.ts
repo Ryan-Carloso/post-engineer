@@ -7,7 +7,7 @@ import { describe, it, expect } from 'vitest';
 // reuse the exact same engine-URI → web-download-URL mapping.
 //---------------
 
-import { firstDownloadUrl, rewriteVideoUrls } from '../video-urls';
+import { firstDownloadUrl, rewriteVideoUrls, SAFE_TASK_ID } from '../video-urls';
 
 const BASE = 'https://engine.internal:8080';
 const TASK = 'task-abc-123';
@@ -75,5 +75,19 @@ describe('firstDownloadUrl', () => {
   it('returns null when there is no downloadable file', () => {
     expect(firstDownloadUrl({ state: 'failed', progress: 0 })).toBeNull();
     expect(firstDownloadUrl(null)).toBeNull();
+  });
+});
+
+describe('SAFE_TASK_ID', () => {
+  it('accepts engine-generated ids', () => {
+    expect(SAFE_TASK_ID.test('82024119-d80b-4759-83df-395ab044680a')).toBe(true);
+    expect(SAFE_TASK_ID.test('task_abc.123-XYZ')).toBe(true);
+  });
+
+  it('rejects traversal and injection shapes', () => {
+    expect(SAFE_TASK_ID.test('../../etc/passwd')).toBe(false);
+    expect(SAFE_TASK_ID.test('task;rm -rf /')).toBe(false);
+    expect(SAFE_TASK_ID.test('')).toBe(false);
+    expect(SAFE_TASK_ID.test('-leading-dash')).toBe(false);
   });
 });

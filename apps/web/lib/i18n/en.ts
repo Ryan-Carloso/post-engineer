@@ -519,6 +519,7 @@ export const enDictionary: Dictionary = {
       'Tokens will not be refunded. Spent tokens paid for generation and publishing work that already happened.',
     deleteDialogDownloadHint: 'Download your videos first — they will be gone after deletion.',
     deleteDialogVideosTruncated: 'Showing the first {shown} of {total} videos.',
+    deleteDialogLinksIncomplete: 'Some download links could not be loaded in time.',
     deleteDialogDownload: 'Download',
     deleteDialogDownloadUnavailable: 'Download unavailable',
     deleteDialogTypeName: 'Type the persona name to confirm:',

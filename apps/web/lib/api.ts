@@ -214,6 +214,7 @@ export interface DeletePreview {
   };
   videos?: DeletePreviewVideo[];
   videosTruncated?: boolean;
+  linksIncomplete?: boolean;
   error?: string;
 }
 

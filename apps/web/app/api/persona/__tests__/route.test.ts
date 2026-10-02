@@ -1019,9 +1019,11 @@ describe('DELETE /api/persona', () => {
         if (table === 'persona_images') {
           return {
             select: vi.fn(() => ({
-              eq: vi.fn(async () => ({
-                data: [{ image_path: 'uid/img1.png' }, { image_path: 'uid/img2.png' }],
-                error: null,
+              eq: vi.fn(() => ({
+                eq: vi.fn(async () => ({
+                  data: [{ image_path: 'uid/img1.png' }, { image_path: 'uid/img2.png' }],
+                  error: null,
+                })),
               })),
             })),
           };
@@ -1072,7 +1074,9 @@ describe('DELETE /api/persona', () => {
         if (table === 'persona_images') {
           return {
             select: vi.fn(() => ({
-              eq: vi.fn(async () => ({ data: null, error: { message: 'db down' } })),
+              eq: vi.fn(() => ({
+                eq: vi.fn(async () => ({ data: null, error: { message: 'db down' } })),
+              })),
             })),
           };
         }

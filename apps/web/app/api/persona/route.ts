@@ -29,6 +29,11 @@ import { logger } from '@/lib/logger';
 import { apiErrorResponse } from '@/lib/api-error';
 import { ERROR_CODES } from '@/lib/error-codes';
 import { trackApiEvent } from '@/lib/analytics';
+import { SAFE_TASK_ID } from '@/lib/video-urls';
+
+// Aggregate budget for the post-delete engine task cleanup (see DELETE):
+// after() has no deadline of its own, so the loop must bound itself.
+const ENGINE_CLEANUP_BUDGET_MS = 20_000;
 
 //---------------
 // POST /api/persona — creates the user's persona:
@@ -591,7 +596,8 @@ export async function DELETE(request: Request): Promise<NextResponse> {
   const { data: libraryRows, error: libraryError } = await supabase
     .from('persona_images')
     .select('image_path')
-    .eq('persona_id', personaId);
+    .eq('persona_id', personaId)
+    .eq('user_id', user.id);
   if (libraryError) {
     logger.error('[api/persona] library image cleanup lookup failed', libraryError);
     return apiErrorResponse(500, 'Failed to remove persona files.', {
@@ -711,15 +717,27 @@ export async function DELETE(request: Request): Promise<NextResponse> {
   // DB delete is already committed, and a slow or down engine must not
   // turn a successful delete into a client-side timeout (the UI would
   // report failure for a delete that happened). Sequential on purpose —
-  // one small DELETE in flight at a time — with a per-call timeout; every
-  // failure is logged loudly, never swallowed.
+  // one small DELETE in flight at a time — with a per-call timeout and an
+  // aggregate budget: after() has no deadline of its own, so an unbounded
+  // loop would orphan the tail silently when the function is cut off.
+  // Skipped ids are logged loudly, never dropped quietly.
   const engineBaseUrl = process.env.MONEYPRINT_API_URL;
   if (engineBaseUrl && engineTaskIds.length > 0) {
     const taskIds = [...engineTaskIds];
     const userId = user.id;
     after(() => {
       void (async () => {
+        const start = Date.now();
+        const skipped: string[] = [];
         for (const taskId of taskIds) {
+          if (Date.now() - start >= ENGINE_CLEANUP_BUDGET_MS) {
+            skipped.push(taskId);
+            continue;
+          }
+          if (!SAFE_TASK_ID.test(taskId)) {
+            logger.warn('[api/persona] skipping unsafe engine task id', { taskId });
+            continue;
+          }
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 8000);
           try {
@@ -739,6 +757,11 @@ export async function DELETE(request: Request): Promise<NextResponse> {
           } finally {
             clearTimeout(timeout);
           }
+        }
+        if (skipped.length > 0) {
+          logger.warn('[api/persona] engine task cleanup budget spent, ids skipped', {
+            skipped,
+          });
         }
       })();
     });
