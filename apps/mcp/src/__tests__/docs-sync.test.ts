@@ -70,3 +70,40 @@ describe('MCP schedule window copy sync', () => {
     });
   }
 });
+
+describe('MCP npx install command sync', () => {
+  // Every surface that tells users how to install the MCP server via npx
+  // must pin @latest: npx reuses its cached copy without checking for
+  // updates, so an unpinned command silently serves a stale version whose
+  // tools may no longer exist server-side. Change all surfaces together,
+  // or update this test.
+  const npxSurfaces = [
+    { label: 'apps/mcp/README.md', rel: ['..', '..', 'README.md'] },
+    {
+      label: 'apps/web/components/ui/mcp-docs-section.tsx',
+      rel: ['..', '..', '..', 'web', 'components', 'ui', 'mcp-docs-section.tsx'],
+    },
+    { label: 'README.md', rel: ['..', '..', '..', '..', 'README.md'] },
+    { label: 'README.pt-BR.md', rel: ['..', '..', '..', '..', 'README.pt-BR.md'] },
+  ].map(({ label, rel }) => ({
+    label,
+    content: readFileSync(join(here, ...rel), 'utf8'),
+  }));
+
+  for (const { label, content } of npxSurfaces) {
+    it(`pins post-engineer-mcp@latest in the npx command in ${label}`, () => {
+      const commandLines = content
+        .split('\n')
+        .filter((line) => line.includes('"command"') && line.includes('npx'));
+      expect(
+        commandLines.length,
+        `${label} is expected to carry an npx install command`,
+      ).toBeGreaterThan(0);
+      for (const line of commandLines) {
+        expect(line, `${label} npx command line`).toContain(
+          'post-engineer-mcp@latest',
+        );
+      }
+    });
+  }
+});
