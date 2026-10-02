@@ -138,8 +138,10 @@ def _complete_task(
     **kwargs: object,
 ) -> None:
     """Mark a task COMPLETE and fire the terminal webhook (once per task)."""
-    sm.state.update_task(
-        task_id, state=const.TASK_STATE_COMPLETE, progress=100, **kwargs
+    # Resilient write: with a network state backend the terminal update can
+    # fail, and a lost COMPLETE would leave the row PROCESSING forever.
+    sm.persist_state_update(
+        sm.state, task_id, state=const.TASK_STATE_COMPLETE, progress=100, **kwargs
     )
     task_webhook.notify_terminal_task(
         task_id,
@@ -180,9 +182,13 @@ def _fail_task(
         error=error,
     )
     if _task_already_failed(task_id):
-        sm.state.update_task(task_id, state=const.TASK_STATE_FAILED, **kwargs)
+        # Resilient write (see _complete_task): a lost FAILED update leaves
+        # the row PROCESSING with no failure recorded and no refund.
+        sm.persist_state_update(sm.state, task_id, state=const.TASK_STATE_FAILED, **kwargs)
     else:
-        sm.state.update_task(task_id, state=const.TASK_STATE_FAILED, error=error, **kwargs)
+        sm.persist_state_update(
+            sm.state, task_id, state=const.TASK_STATE_FAILED, error=error, **kwargs
+        )
     # Terminal webhook (at most once per task, deduped inside): a failing
     # delivery only logs, it never changes the task outcome.
     task_webhook.notify_terminal_task(
