@@ -56,7 +56,6 @@ const SCHEDULE = {
   postsPerDay: 1,
   timezone: 'UTC',
   active: true,
-  scheduledAt: null,
 };
 
 const UPCOMING_SLOT = {

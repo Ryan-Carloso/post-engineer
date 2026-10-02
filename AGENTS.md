@@ -1418,3 +1418,52 @@ Follow these so the same issues don't come back:
 - **Grep comments for deleted route names.** Removing an endpoint leaves
   "used by POST /api/schedule" in header comments — docs must describe
   what the code does, so the comment now names the real consumers.
+## Web/API review learnings, PR #44 (2026-10-02)
+- **Delete the ENTIRE path, including the read side.** Removing a dead
+  engine flow leaves the consumer side (UI branches, API select fields,
+  client mappings, i18n keys, tests) as provably unreachable dead code.
+  Remove it in the same PR — a half-deleted flow is what the cleanup set
+  out to eliminate. Check: UI components, `lib/api.ts` mappings,
+  route selects, i18n keys in every locale, and tests asserting the dead
+  state.
+- **Reword every stale comment citing removed machinery, not just the
+  file you touched.** Sibling comments referencing a deleted path send
+  future readers hunting for code that isn't there. Grep the concept
+  name across the repo after any deletion.
+- **A dead i18n key in one namespace hints at dead keys in others.**
+  `home.oneOff` being dead led to `fillSchedule.oneOff*` (form fields
+  from the removed flow) — verify zero usages before deleting, and keep
+  keys that are still live (`home.waitingForSchedule` was reused by the
+  next-slot display).
+
+## Web/API review learnings, PR #44 round 2 (2026-10-02)
+- **Runtime strings are part of the deleted path too.** Validator error
+  copy naming a removed field reaches API clients verbatim in 400 bodies —
+  reword it to the current concept, not just code comments. Tests that
+  regex-match the copy (not the literal) survive the reword untouched.
+- **A nullable field rendered unconditionally is a latent "null:00".**
+  When the dead branch that guarded a nullable field is removed, the
+  surviving consumer must define what NULL means (fallback UI here) and
+  a test must pin it — the deleted test was the only pin on the null
+  shape, so its replacement belongs in the same PR.
+
+## Web/API review learnings, PR #44 round 3 (2026-10-02)
+- **The production-norm fixture is the one that must be tested.** The
+  unified endpoint stores `days_of_week: null` → `daysOfWeek: []`, so the
+  empty-days render is what every real card hits — test fixtures must
+  include the production shape, not just the tidy non-empty one.
+- **Deleting the last branch that handled a null shape promotes the null
+  to the default path.** When the dead branch goes, every nullable field
+  it guarded needs the same fallback+test treatment as its siblings got —
+  audit all consumers of the removed discriminator, not just the obvious
+  one.
+
+## Web/API review learnings, PR #44 round 4 (2026-10-02)
+- **Test the combined production shape, not just each null in isolation.**
+  The unified endpoint stores `days_of_week: null` AND no window together —
+  fixtures must cover the combination, since that is what every real card
+  renders.
+- **`getByText` exact-match hides prefixed copies.** A `<span>▣ key</span>`
+  never exact-matches `key` — scope fallback assertions by the cell's
+  distinctive prefix (`/▣ key/`, `/◷ key/`) so the test pins the intended
+  cell instead of accidentally passing on an unrelated element.

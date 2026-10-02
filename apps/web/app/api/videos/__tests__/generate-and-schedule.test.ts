@@ -287,8 +287,8 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(spends[0].args.p_amount).toBe(4);
       expect(spends[0].args.p_user_id).toBe(USER_ID);
 
-      // Schedule row: kind=batch, deterministic id, scheduled_at stays NULL
-      // during dispatch (the tick must not race us).
+      // Schedule row: kind=batch, deterministic id; scheduled_at is the
+      // legacy column and the insert pins it NULL.
       const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
       expect(scheduleRows).toHaveLength(1);
       expect(scheduleRows[0].kind).toBe('batch');

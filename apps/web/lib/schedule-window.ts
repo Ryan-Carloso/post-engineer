@@ -30,7 +30,7 @@ export function validateScheduleWindow(
   const targetDate = typeof target === 'string' ? new Date(target) : target;
 
   if (!(targetDate instanceof Date) || Number.isNaN(targetDate.getTime())) {
-    return { ok: false, error: 'scheduledAt must be a valid ISO date.' };
+    return { ok: false, error: 'Publish time must be a valid ISO date.' };
   }
 
   const diffMs = targetDate.getTime() - now.getTime();
