@@ -674,6 +674,7 @@ class BatchFailedTests(unittest.TestCase):
         )
         boom = RuntimeError("E" * 450 + " api_key=TOPSECRET123 " + "F" * 200)
         with (
+            patch.object(gen_module.tm, "track_generation_requested"),
             patch.object(generator, "_dispatch_generation", side_effect=boom),
             patch.object(gen_module, "track_event"),
             patch.object(
@@ -712,6 +713,7 @@ class BatchFailedTests(unittest.TestCase):
         )
         boom = RuntimeError("dispatch exploded")
         with (
+            patch.object(gen_module.tm, "track_generation_requested"),
             patch.object(generator, "_dispatch_generation", side_effect=boom),
             patch.object(gen_module, "track_event") as track,
         ):
@@ -828,6 +830,7 @@ class BatchFailedTests(unittest.TestCase):
         )
         boom = RuntimeError("dispatch exploded: api_key=TOPSECRET123")
         with (
+            patch.object(gen_module.tm, "track_generation_requested"),
             patch.object(generator, "_dispatch_generation", side_effect=boom),
             patch.object(gen_module, "track_event"),
             patch.object(gen_module, "logger") as mock_logger,
