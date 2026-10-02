@@ -86,7 +86,7 @@ export const enDictionary: Dictionary = {
     modeRecurringHint: 'Publishes automatically on your chosen days and times.',
     oneOff: 'One-off video',
     oneOffHint: 'Schedules a single post on a specific day and time.',
-    oneOffMinNote: 'At least 24 hours in advance.',
+    oneOffMinNote: 'At least 3 hours in advance.',
     oneOffDate: 'Publish date',
     oneOffTime: 'Publish time',
     oneOffRequired: 'Pick the date and time for the one-off video.',

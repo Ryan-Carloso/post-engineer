@@ -321,7 +321,7 @@ function validateSlots(
     }
     throw error;
   }
-  // Every slot must fall inside the 24h–30d publishing window.
+  // Every slot must fall inside the 3h–30d publishing window.
   for (const slot of slots) {
     const windowCheck = validateScheduleWindow(new Date(slot.slotAtISO));
     if (!windowCheck.ok) {

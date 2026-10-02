@@ -86,7 +86,7 @@ export const ptDictionary = {
     modeRecurringHint: 'Publica automaticamente nos dias e horários escolhidos.',
     oneOff: 'Vídeo único',
     oneOffHint: 'Agenda uma única publicação em um dia e horário.',
-    oneOffMinNote: 'Mínimo de 24 horas de antecedência.',
+    oneOffMinNote: 'Mínimo de 3 horas de antecedência.',
     oneOffDate: 'Data da publicação',
     oneOffTime: 'Horário da publicação',
     oneOffRequired: 'Escolha a data e o horário do vídeo único.',

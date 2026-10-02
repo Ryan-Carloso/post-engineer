@@ -1,6 +1,6 @@
 //---------------
 // schedule-window — valid window for target date/time scheduling.
-// Product rule: minimum 24h in advance, maximum 30 days ahead.
+// Product rule: minimum 3h in advance, maximum 30 days ahead.
 //
 // Callers pass the CONVERTED instant (a Date): timezone-aware parsing
 // happens before this validator runs — see parseZonedDateTime in
@@ -8,7 +8,7 @@
 // the caller's timezone is not measured as if it were UTC.
 //---------------
 
-export const SCHEDULE_MIN_ADVANCE_HOURS = 24;
+export const SCHEDULE_MIN_ADVANCE_HOURS = 3;
 export const SCHEDULE_MIN_ADVANCE_MS = SCHEDULE_MIN_ADVANCE_HOURS * 60 * 60 * 1000;
 
 export const SCHEDULE_MAX_AHEAD_DAYS = 30;
@@ -20,7 +20,7 @@ export type ScheduleWindowResult =
 
 //---------------
 // validateScheduleWindow — validates a target datetime against the window
-// [now + 24h, now + 30d]. Accepts a Date or an ISO string.
+// [now + 3h, now + 30d]. Accepts a Date or an ISO string.
 //---------------
 export function validateScheduleWindow(
   target: Date | string | unknown,
@@ -37,7 +37,7 @@ export function validateScheduleWindow(
   if (diffMs < SCHEDULE_MIN_ADVANCE_MS) {
     return {
       ok: false,
-      error: `scheduledAt must be at least 24 hours in advance (earliest allowed is ${new Date(
+      error: `scheduledAt must be at least ${SCHEDULE_MIN_ADVANCE_HOURS} hours in advance (earliest allowed is ${new Date(
         now.getTime() + SCHEDULE_MIN_ADVANCE_MS,
       ).toISOString()}).`,
     };

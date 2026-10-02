@@ -99,6 +99,15 @@ function futureISO(hoursAhead: number): string {
   return new Date(Date.now() + hoursAhead * 3600 * 1000).toISOString();
 }
 
+function lisbonTimePlus(hoursAhead: number): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Lisbon',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(Date.now() + hoursAhead * 3600 * 1000));
+}
+
 function makeClient(cfg: DbConfig): unknown {
   const table = (name: string): unknown => {
     const builder: Record<string, unknown> = {
@@ -395,9 +404,18 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(json.field).toBe('publishing.schedule.timezone');
     });
 
-    it('rejects slots outside the 24h-30d window', async () => {
+    it('rejects slots outside the 3h-30d window', async () => {
       const res = await post(
         baseBody({ publishing: { providers: ['youtube'], accounts: { youtube: ['acct-1'] }, schedule: { startAt: futureISO(31 * 24), times: ['18:00'], timezone: 'Europe/Lisbon' } } }),
+      );
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('SCHEDULE_OUT_OF_RANGE');
+    });
+
+    it('rejects a slot less than 3 hours in the future', async () => {
+      const res = await post(
+        baseBody({ publishing: { providers: ['youtube'], accounts: { youtube: ['acct-1'] }, schedule: { startAt: futureISO(0.5), times: [lisbonTimePlus(1)], timezone: 'Europe/Lisbon' } } }),
       );
       const json = await res.json();
       expect(res.status).toBe(400);
