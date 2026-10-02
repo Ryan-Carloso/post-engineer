@@ -841,5 +841,24 @@ class BatchFailedTests(unittest.TestCase):
         self.assertNotIn("TOPSECRET123", logged)
 
 
+class TestDispatchFailedGuardLockFallback(unittest.TestCase):
+    """If the dedupe lock can't be acquired in time, err on the side of emitting."""
+
+    def setUp(self):
+        tm._dispatch_failed_event_emitted_tasks.clear()
+
+    def tearDown(self):
+        tm._dispatch_failed_event_emitted_tasks.clear()
+
+    def test_lock_unavailable_emits_failed_event(self):
+        tm._dispatch_failed_event_emitted_tasks_lock.acquire()
+        try:
+            self.assertTrue(
+                tm._should_emit_dispatch_failed_event("task-locked")
+            )
+        finally:
+            tm._dispatch_failed_event_emitted_tasks_lock.release()
+
+
 if __name__ == "__main__":
     unittest.main()
