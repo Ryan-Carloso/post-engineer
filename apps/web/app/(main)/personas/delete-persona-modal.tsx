@@ -48,6 +48,23 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && phase !== 'deleting') {
         onClose();
+        return;
+      }
+      // Focus trap: cycle Tab within the dialog while it claims exclusivity.
+      if (event.key === 'Tab' && dialogRef.current) {
+        const focusables = dialogRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), a[href]',
+        );
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
       }
     };
     window.addEventListener('keydown', onKeyDown);

@@ -418,6 +418,29 @@ describe('GET /api/persona/delete-preview', () => {
     expect(body.linksIncomplete).toBe(false);
   });
 
+  it('treats engine 401 as a config error, not transient', async () => {
+    getClient();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: false, status: 401, json: async () => null })),
+    );
+    const res = await GET(
+      new Request(`http://localhost/api/persona/delete-preview?personaId=${PERSONA_ID}`),
+    );
+    const body = (await res.json()) as {
+      videos: Array<{ downloadUrl: string | null }>;
+      linksIncomplete: boolean;
+    };
+    expect(res.status).toBe(200);
+    expect(body.videos[0]?.downloadUrl).toBeNull();
+    // Retry cannot fix an auth misconfig — no retry note.
+    expect(body.linksIncomplete).toBe(false);
+    expect(logger.error).toHaveBeenCalledWith(
+      '[api/persona/delete-preview] engine task lookup failed',
+      expect.objectContaining({ engineTaskId: 'task-aaa', status: 401, transient: false }),
+    );
+  });
+
   it('stops engine lookups once the aggregate time budget is spent', async () => {
     const generations = Array.from({ length: 5 }, (_, i) => ({
       id: `gen-${i}`,

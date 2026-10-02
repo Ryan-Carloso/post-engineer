@@ -212,6 +212,16 @@ export interface DeletePreview {
   error?: string;
 }
 
+// Extract the server's structured error from a non-ok response, falling
+// back to a generic message when the body is missing or unreadable.
+async function parseErrorResponse(response: Response, fallback: string): Promise<string> {
+  const body = await response.json().catch(() => null);
+  if (body !== null && typeof body === 'object' && 'error' in body && typeof body.error === 'string') {
+    return body.error;
+  }
+  return fallback;
+}
+
 export async function fetchDeletePreview(personaId: string): Promise<DeletePreview> {
   const response = await fetch(
     `/api/persona/delete-preview?personaId=${encodeURIComponent(personaId)}`,
@@ -219,12 +229,10 @@ export async function fetchDeletePreview(personaId: string): Promise<DeletePrevi
   if (!response.ok) {
     // Surface the server's structured error (code/error) so the UI can
     // distinguish e.g. PERSONA_NOT_FOUND from a transient 500.
-    const body = await response.json().catch(() => null);
-    const serverError =
-      body !== null && typeof body === 'object' && 'error' in body && typeof body.error === 'string'
-        ? body.error
-        : null;
-    return { success: false, error: serverError ?? `Preview request failed (${response.status}).` };
+    return {
+      success: false,
+      error: await parseErrorResponse(response, `Preview request failed (${response.status}).`),
+    };
   }
   try {
     return (await response.json()) as DeletePreview;
@@ -239,12 +247,10 @@ export async function deletePersona(personaId: string): Promise<DeletePersonaRes
     { method: 'DELETE' },
   );
   if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    const serverError =
-      body !== null && typeof body === 'object' && 'error' in body && typeof body.error === 'string'
-        ? body.error
-        : null;
-    return { success: false, error: serverError ?? `Delete request failed (${response.status}).` };
+    return {
+      success: false,
+      error: await parseErrorResponse(response, `Delete request failed (${response.status}).`),
+    };
   }
   try {
     return (await response.json()) as DeletePersonaResult;
@@ -272,12 +278,10 @@ export async function updatePersona(
     { method: 'PATCH', body: formData },
   );
   if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    const serverError =
-      body !== null && typeof body === 'object' && 'error' in body && typeof body.error === 'string'
-        ? body.error
-        : null;
-    return { success: false, error: serverError ?? `Update request failed (${response.status}).` };
+    return {
+      success: false,
+      error: await parseErrorResponse(response, `Update request failed (${response.status}).`),
+    };
   }
   try {
     return (await response.json()) as UpdatePersonaResult;

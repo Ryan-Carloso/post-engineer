@@ -72,10 +72,21 @@ async function resolveDownloadUrl(
   }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), ENGINE_LOOKUP_TIMEOUT_MS);
+  // engineAuthHeaders throws on missing MONEYPRINT_API_SECRET: a config
+  // error, not a transient failure. Compute it before the try so the catch
+  // below only sees fetch/abort/network errors (all transient).
+  let headers: Record<string, string>;
+  try {
+    headers = engineAuthHeaders(userId);
+  } catch (error) {
+    logger.error('[api/persona/delete-preview] engine auth misconfigured', { engineTaskId, error });
+    clearTimeout(timeout);
+    return { url: null, transientFailure: false };
+  }
   try {
     const response = await fetch(
       `${baseUrl.replace(/\/+$/, '')}/api/v1/tasks/${encodeURIComponent(engineTaskId)}`,
-      { headers: engineAuthHeaders(userId), cache: 'no-store', signal: controller.signal },
+      { headers, cache: 'no-store', signal: controller.signal },
     );
     if (!response.ok) {
       // 404: task pruned, truly gone. 401/403: auth misconfig — retry
