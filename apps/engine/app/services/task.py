@@ -276,7 +276,10 @@ def _fail_task(
         _progress_milestones.pop(task_id, None)
         context = _task_tracking_context(task_id)
         context["stage"] = failed_stage
-        context["reason"] = scrub_secret_values(str(error)[:200])
+        # Scrub the full message before truncating: a cut landing mid-key
+        # would leave a fragment the key-anchored pattern can no longer
+        # match, leaking the raw remainder into PostHog properties.
+        context["reason"] = scrub_secret_values(str(error))[:200]
         track_event("video_generation_failed", context)
     # Terminal webhook (at most once per task, deduped inside): a failing
     # delivery only logs, it never changes the task outcome.

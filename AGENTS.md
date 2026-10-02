@@ -1418,3 +1418,30 @@ Follow these so the same issues don't come back:
 - **Grep comments for deleted route names.** Removing an endpoint leaves
   "used by POST /api/schedule" in header comments — docs must describe
   what the code does, so the comment now names the real consumers.
+
+## Engine review learnings, PR #51 (2026-10-02)
+- **Scrub-then-truncate is a repo-wide rule, not a one-file fix.** PR #38
+  established "scrub the full free-text field before truncating"; PR #51
+  reintroduced `scrub_secret_values(str(x)[:200])` in two new call sites
+  (task.py `_fail_task`, generate.py batch dispatch failure). When a
+  reviewer flags a banned pattern, grep the whole repo for siblings — a
+  third pre-existing instance lives in publish.py (`video_publish_failed`
+  reason, out of this PR's scope, flagged for a follow-up PR).
+- **Funnel entry = accepted, not attempted.** `video_generation_requested`
+  fired before `task_manager.add_task`, so 429 queue-full rejections
+  entered the funnel with no terminal event. Requested now fires after a
+  successful enqueue; the rejection path is covered by a test asserting
+  requested is never emitted and the row is rolled back.
+- **Every lifecycle event carries the full segmentation context.**
+  Batch `video_generation_failed`/`video_generated` were missing
+  `user_id`/`pipeline`, silently dropping batch rows from PostHog
+  breakdowns. Guard optional ids (`if user_id is not None`) — pre-task
+  slot failures (deleted persona, empty topic) have no user yet — and
+  document at the call site that they sit outside the requested->failed
+  funnel by design.
+- **A reviewer's suggested test assertion can be wrong — verify it.**
+  OpenCode suggested asserting the redacted reason "contains [redacted]"
+  for a secret past position 200; on the fixed code the redaction lands
+  beyond the 200-char cut, so the assertion fails either way. Pin the
+  order white-box (scrub called with the full string) plus the behavioral
+  invariant (raw secret absent, length bounded).

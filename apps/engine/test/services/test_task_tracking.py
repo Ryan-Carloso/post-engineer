@@ -216,6 +216,29 @@ class FailTaskTests(unittest.TestCase):
         self.assertEqual(props["stage"], "audio")
         self.assertIn("boom", props["reason"])
 
+    def test_failed_reason_scrubs_full_message_before_truncation(self):
+        # Regression: truncate-then-scrub lets a secret fragmented by the
+        # 200-char cut slip past the key-anchored pattern. The scrubber must
+        # see the full message; truncation happens after.
+        from app.services import analytics as analytics_module
+
+        error = "E" * 150 + " api_key=TOPSECRET123" + "F" * 150
+        with (
+            patch.object(tm, "track_event") as track,
+            patch.object(tm.task_webhook, "notify_terminal_task"),
+            patch.object(tm, "send_discord", return_value=True),
+            patch.object(
+                tm, "scrub_secret_values", wraps=analytics_module.scrub_secret_values
+            ) as scrub,
+        ):
+            tm._fail_task(self.task_id, error, _params(), stage="audio")
+        # The scrubber received the whole message, not the truncated slice.
+        scrub.assert_called_once_with(str(error))
+        _, props = track.call_args[0]
+        self.assertIn("[redacted]", props["reason"])
+        self.assertNotIn("TOPSECRET123", props["reason"])
+        self.assertLessEqual(len(str(props["reason"])), 200)
+
     def test_second_failure_notice_does_not_retrack(self):
         self._fail()
         track = self._fail()
@@ -233,7 +256,7 @@ class FailTaskTests(unittest.TestCase):
 
 
 class CreateTaskControllerTests(unittest.TestCase):
-    """POST /videos (and siblings) report requested BEFORE the worker runs."""
+    """POST /videos (and siblings) report requested AFTER the task is queued."""
 
     def test_create_task_tracks_requested_and_stores_flow(self):
         from types import SimpleNamespace
@@ -258,19 +281,56 @@ class CreateTaskControllerTests(unittest.TestCase):
             order.attach_mock(add_task, "add_task")
             resp = video_controller.create_task(MagicMock(), body, stop_at="video")
             task_id = resp["data"]["task_id"]
-            # The funnel entry fires before the worker thread is queued.
+            # The funnel entry fires after the task is accepted into the
+            # queue (a 429 rejection never becomes requested), still before
+            # the worker thread itself reports video_generation_started.
             requested.assert_called_once_with(
                 task_id, user_id="user-1", flow="direct", pipeline="video"
             )
             add_task.assert_called_once()
             call_order = [c[0] for c in order.mock_calls]
-            self.assertLess(call_order.index("requested"), call_order.index("add_task"))
+            self.assertLess(call_order.index("add_task"), call_order.index("requested"))
         try:
             task = sm.state.get_task(task_id)
             self.assertEqual(task["flow"], "direct")
             self.assertEqual(task["pipeline"], "video")
         finally:
             sm.state.delete_task(task_id)
+
+    def test_queue_full_rejection_does_not_track_requested(self):
+        from types import SimpleNamespace
+
+        from app.controllers.manager.base_manager import TaskQueueFullError
+        from app.controllers.v1 import video as video_controller
+        from app.models.exception import HttpException
+        from app.models.schema import TaskVideoRequest
+
+        body = TaskVideoRequest(video_subject="subject", video_script="script")
+        auth = SimpleNamespace(user_id="user-1")
+        with (
+            patch.object(
+                video_controller.base, "get_task_id", return_value="req-2"
+            ),
+            patch.object(
+                video_controller.base, "get_auth_context", return_value=auth
+            ),
+            patch.object(
+                video_controller.utils, "get_uuid", return_value="task-429-1"
+            ),
+            patch.object(
+                video_controller.task_manager,
+                "add_task",
+                side_effect=TaskQueueFullError("task queue is full"),
+            ),
+            patch.object(tm, "track_generation_requested") as requested,
+        ):
+            with self.assertRaises(HttpException) as ctx:
+                video_controller.create_task(MagicMock(), body, stop_at="video")
+        # Admission refused: 429, the task row is rolled back, and the
+        # refused request never enters the requested -> failed funnel.
+        self.assertEqual(ctx.exception.status_code, 429)
+        requested.assert_not_called()
+        self.assertIsNone(sm.state.get_task("task-429-1"))
 
 
 class BatchRequestedTests(unittest.TestCase):
@@ -339,6 +399,69 @@ class BatchRequestedTests(unittest.TestCase):
             _, kwargs = generator.task_state.update_task.call_args
             self.assertEqual(kwargs["flow"], "batch")
             self.assertEqual(kwargs["pipeline"], "video")
+
+
+class BatchFailedTests(unittest.TestCase):
+    """Batch dispatch failures carry the full funnel context."""
+
+    def _slot(self):
+        return {
+            "id": "slot-batch-fail-1",
+            "slot_at": "2026-09-08T09:00:00+00:00",
+            "topic": "Batch topic one",
+            "schedules": {
+                "id": "sched-batch-1",
+                "user_id": "user-1",
+                "providers": ["youtube"],
+                "youtube_account_ids": ["yt-1"],
+                "personas": {
+                    "id": "persona-1",
+                    "name": "Ana",
+                    "niche": "travel",
+                    "script_prompt": "",
+                    "language": "en",
+                    "video_aspect": "9:16",
+                    "photo_path": "user-1/foto.png",
+                    "avatar_url": None,
+                    "voice_id": "calm",
+                    "voice_audio_path": None,
+                    "paragraph_number": 1,
+                    "face_mix_percent": 50,
+                    "face_quality": "ok",
+                },
+            },
+        }
+
+    def test_dispatch_failure_tracks_failed_with_funnel_context(self):
+        from app.services.fill_schedule import generate as gen_module
+
+        store = MagicMock()
+        store.signed_url = MagicMock(return_value="https://signed/foto.png")
+        generator = gen_module.BatchGenerator(
+            store=store, task_state=MagicMock(), notify=MagicMock()
+        )
+        boom = RuntimeError("dispatch exploded: api_key=TOPSECRET123")
+        with (
+            patch.object(gen_module.tm, "track_generation_requested"),
+            patch.object(gen_module, "track_event") as track,
+            patch.object(
+                generator, "_dispatch_generation", side_effect=boom
+            ),
+        ):
+            label = generator._generate_slot(self._slot())
+        self.assertIsNone(label)
+        failed_calls = [
+            c for c in track.call_args_list if c[0][0] == "video_generation_failed"
+        ]
+        self.assertEqual(len(failed_calls), 1)
+        _, props = failed_calls[0][0]
+        self.assertEqual(props["flow"], "batch")
+        self.assertEqual(props["pipeline"], "video")
+        self.assertEqual(props["user_id"], "user-1")
+        self.assertEqual(props["slotId"], "slot-batch-fail-1")
+        self.assertIn("task_id", props)
+        self.assertIn("[redacted]", props["reason"])
+        self.assertNotIn("TOPSECRET123", props["reason"])
 
 
 if __name__ == "__main__":

@@ -256,6 +256,42 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
         self.assertEqual(store.updates[0][1]["status"], "ready")
 
+    def test_reconcile_generated_event_carries_funnel_context(self):
+        from app.services.fill_schedule import reconcile as rec_module
+
+        slot = {
+            "id": "slot-1",
+            "task_id": "t-1",
+            "user_id": "user-1",
+            "schedules": {"id": "sched-1", "user_id": "user-1"},
+        }
+        store = _FakeStore()
+        store.generating_slots = lambda: [slot]
+        state = MagicMock()
+        state.get_task.return_value = {
+            "state": 1,
+            "result": {"cost_usd": 0.1},
+        }
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=state,
+            publish_video=MagicMock(),
+        )
+        with patch.object(rec_module, "track_event") as track:
+            self.assertEqual(
+                scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1
+            )
+        generated_calls = [
+            c for c in track.call_args_list if c[0][0] == "video_generated"
+        ]
+        self.assertEqual(len(generated_calls), 1)
+        _, props = generated_calls[0][0]
+        self.assertEqual(props["task_id"], "t-1")
+        self.assertEqual(props["flow"], "batch")
+        self.assertEqual(props["pipeline"], "video")
+        self.assertEqual(props["user_id"], "user-1")
+        self.assertEqual(props["slotId"], "slot-1")
+        self.assertEqual(props["cost_usd"], 0.1)
+
     def test_failed_task_becomes_failed(self):
         slot = {
             "id": "slot-1",

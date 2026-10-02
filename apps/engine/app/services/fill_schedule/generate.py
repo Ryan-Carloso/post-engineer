@@ -118,6 +118,7 @@ class BatchGenerator:
         schedule = slot.get("schedules") or {}
         persona: dict[str, Any] = {}
         task_id: str | None = None
+        user_id: str | None = None
         try:
             # The persona may have been deleted after the schedule was
             # created: fail the slot instead of killing the whole generate
@@ -182,13 +183,25 @@ class BatchGenerator:
             # Bugsink bridge (loguru sink, ERROR+) forwards it.
             logger.error(f"fill_schedule: slot {slot['id']} generation failed: {exc}")
             self.store.update_slot(slot["id"], status=SLOT_FAILED, error=str(exc)[:500])
+            # Funnel note: slot failures raised before task creation (deleted
+            # persona, empty topic, missing user_id) intentionally have no
+            # matching video_generation_requested — they are scheduling/data
+            # errors, not generation failures, so they sit outside the
+            # requested -> failed task funnel by design.
             failed_props: dict[str, object] = {
                 "flow": "batch",
+                "pipeline": "video",
                 "slotId": slot["id"],
-                "reason": scrub_secret_values(str(exc)[:200]),
+                # Scrub the full message before truncating: a cut landing
+                # mid-key would leave a fragment the key-anchored pattern
+                # can no longer match, leaking the raw remainder into
+                # PostHog properties.
+                "reason": scrub_secret_values(str(exc))[:200],
             }
             if task_id is not None:
                 failed_props["task_id"] = task_id
+            if user_id is not None:
+                failed_props["user_id"] = user_id
             track_event("video_generation_failed", failed_props)
             notify_safe(
                 self.notify,

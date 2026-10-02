@@ -46,8 +46,12 @@ class BatchReconciler:
                 properties: dict[str, object] = {
                     "task_id": str(slot["task_id"]),
                     "flow": "batch",
+                    "pipeline": "video",
                     "slotId": str(slot["id"]),
                 }
+                slot_user = slot_user_id(slot)
+                if slot_user is not None:
+                    properties["user_id"] = slot_user
                 result = task.get("result")
                 if isinstance(result, dict):
                     cost = result.get("cost_usd")

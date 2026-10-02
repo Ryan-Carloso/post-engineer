@@ -221,13 +221,15 @@ def create_task(
         sm.state.update_task(
             task_id, user_id=auth.user_id, flow="direct", pipeline=stop_at
         )
-        # Funnel entry: requested BEFORE the worker thread starts, so
-        # requested-vs-failed gives the failure % even when the pipeline
-        # never runs.
+        task_manager.add_task(tm.start, task_id=task_id, params=body, stop_at=stop_at)
+        # Funnel entry: requested once the task is ACCEPTED into the queue —
+        # a 429 queue-full rejection raises above and never enters the
+        # funnel — while the worker thread itself reports
+        # video_generation_started, so requested-vs-failed still gives the
+        # failure % even when the pipeline never runs.
         tm.track_generation_requested(
             task_id, user_id=auth.user_id, flow="direct", pipeline=stop_at
         )
-        task_manager.add_task(tm.start, task_id=task_id, params=body, stop_at=stop_at)
         logger.success(f"Task created: task_id={task_id}")
         return utils.get_response(200, task)
     except TaskQueueFullError as e:
