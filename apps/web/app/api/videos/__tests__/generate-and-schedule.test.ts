@@ -334,6 +334,17 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect((calls[0][1] as Record<string, unknown>).video_subject).toBe('Idea 1');
       expect((calls[1][1] as Record<string, unknown>).video_script_prompt).toBe('Second script');
     });
+
+    it('forwards the persona language, video_aspect and paragraph_number to the engine payload', async () => {
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+      const calls = vi.mocked(startEngineVideoTask).mock.calls;
+      expect(calls.length).toBeGreaterThan(0);
+      const payload = calls[0][1] as Record<string, unknown>;
+      expect(payload.video_language).toBe('en');
+      expect(payload.video_aspect).toBe('9:16');
+      expect(payload.paragraph_number).toBe(5);
+    });
   });
 
   describe('validation', () => {

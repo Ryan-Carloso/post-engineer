@@ -416,6 +416,9 @@ interface PersonaPrep {
   photoPath: string | null;
   niche: string | null;
   scriptPrompt: string | null;
+  language: string | null;
+  videoAspect: string | null;
+  paragraphNumber: number | null;
   photoRequired: boolean;
 }
 
@@ -497,6 +500,9 @@ async function preparePersona(
     photoPath: (persona.photo_path as string | null) ?? null,
     niche,
     scriptPrompt: (persona.script_prompt as string | null) ?? null,
+    language,
+    videoAspect: (persona.video_aspect as string | null) ?? null,
+    paragraphNumber,
     // A face-requiring persona (mix > 0, or legacy NULL mix) must resolve a
     // photo; only a genuinely faceless request may proceed without one.
     photoRequired: !opts.faceless && (storedMix === null || storedMix > 0),
@@ -879,10 +885,10 @@ export async function POST(request: Request): Promise<NextResponse> {
         photo_url: photoUrl,
         voice_id: prep.voiceAudioUrl ? undefined : prep.voiceIdValue,
         voice_audio_url: prep.voiceAudioUrl,
-        language: null,
-        video_aspect: null,
+        language: prep.language,
+        video_aspect: prep.videoAspect,
         script_prompt: prep.scriptPrompt,
-        paragraph_number: null,
+        paragraph_number: prep.paragraphNumber,
         niche: prep.niche,
         face_mix_percent: prep.effectiveMix,
         face_quality: prep.faceQuality,
