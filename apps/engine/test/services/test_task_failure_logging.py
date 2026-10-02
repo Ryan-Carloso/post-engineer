@@ -10,7 +10,7 @@ import ast
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from loguru import logger
 
@@ -92,6 +92,25 @@ class FailTaskLoggingTests(unittest.TestCase):
         self.assertEqual(stages, ["script", "pipeline"])
         send_discord.assert_called_once()
 
+    def test_fail_task_survives_state_write_failure(self):
+        # With a network state backend the terminal write can raise; the
+        # failure must still be recorded loudly, never propagate out of the
+        # pipeline's top-level except handler (which would leave the row
+        # PROCESSING forever with no refund).
+        failing_state = MagicMock()
+        failing_state.get_task.return_value = None
+        failing_state.update_task.side_effect = RuntimeError("supabase down")
+        with _LogCapture() as capture, patch.object(
+            task_service.sm, "state", failing_state
+        ), patch.object(task_service, "send_discord", return_value=True), patch.object(
+            task_service.task_webhook, "notify_terminal_task"
+        ):
+            task_service._fail_task("t-9", "boom", stage="audio")  # must not raise
+        loud = [
+            r for r in capture.errors() if "t-9" in r["message"] and "state" in r["message"].lower()
+        ]
+        self.assertTrue(loud, "permanent state-write loss must log loudly")
+
     def test_no_direct_failed_writes_outside_fail_task(self):
         # Pin: TASK_STATE_FAILED must only ever be written by _fail_task
         # (reads, e.g. _task_already_failed, are fine).
@@ -106,7 +125,8 @@ class FailTaskLoggingTests(unittest.TestCase):
                     continue
                 func = child.func
                 is_update_task = (
-                    isinstance(func, ast.Attribute) and func.attr == "update_task"
+                    isinstance(func, ast.Attribute)
+                    and func.attr in ("update_task", "persist_state_update")
                 )
                 if not is_update_task:
                     continue

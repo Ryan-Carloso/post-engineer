@@ -32,3 +32,9 @@ alter table public.engine_task_state enable row level security;
 -- 3. Fast "my tasks" listing for the engine task browser.
 create index if not exists engine_task_state_user_id_updated_at_idx
   on public.engine_task_state (user_id, updated_at desc);
+
+-- 4. Retention: rows are never deleted by the engine (delete_task only fires
+--    on the queue-full rejection path), so this table grows by one row per
+--    video task. Prune terminal rows periodically (e.g. delete where state
+--    in (-1, 1) and updated_at < now() - interval '90 days'), or add a
+--    scheduled cleanup job later.

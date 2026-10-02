@@ -208,13 +208,17 @@ class SupabaseStateReconcileTests(unittest.TestCase):
         self.requests.request.side_effect = [
             _response(json_data=orphans),  # SELECT non-terminal rows
             _response(json_data=[{}]),  # PATCH t-1
+            _response(json_data=[]),  # GET video_generations for t-1: no row
             _response(json_data=[{}]),  # PATCH t-2
+            _response(json_data=[]),  # GET video_generations for t-2: no row
         ]
-        backend.reconcile_orphaned_tasks()
+        with patch.object(state_module.logger, "error"):
+            backend.reconcile_orphaned_tasks()
 
         select = self.requests.request.call_args_list[0]
         self.assertIn("state=not.in.(-1,1)", select[0][1])
-        for i, task_id in enumerate(["t-1", "t-2"], start=1):
+        # billing lookups interleave: [SELECT, PATCH t-1, GET gen, PATCH t-2, GET gen]
+        for i, task_id in zip([1, 3], ["t-1", "t-2"]):
             call = self.requests.request.call_args_list[i]
             self.assertEqual(call[0][0], "PATCH")
             self.assertIn(f"task_id=eq.{task_id}", call[0][1])
@@ -226,9 +230,11 @@ class SupabaseStateReconcileTests(unittest.TestCase):
         backend = _make_state(self.requests)
         self.requests.request.side_effect = [
             _response(json_data=[{"task_id": "t-1", "data": {"stage": "render"}}]),
-            _response(json_data=[{}]),
+            _response(json_data=[{}]),  # PATCH task
+            _response(json_data=[]),  # GET video_generations: no row
         ]
-        backend.reconcile_orphaned_tasks()
+        with patch.object(state_module.logger, "error"):
+            backend.reconcile_orphaned_tasks()
         payload = self.requests.request.call_args_list[1][1]["json"]
         self.assertEqual(payload["data"]["stage"], "render")
         self.assertIn("error", payload["data"])
@@ -250,3 +256,324 @@ class SupabaseStateReconcileTests(unittest.TestCase):
             state_module.SupabaseTaskState(requests_module=requests_mock)
         select = requests_mock.request.call_args_list[1][0][1]
         self.assertIn("state=not.in.(-1,1)", select)
+
+
+class SupabaseStateBillingReconcileTests(unittest.TestCase):
+    """The engine settles orphaned tasks alone: no web visit required.
+
+    For each orphaned task the reconcile marks the video_generations row
+    failed and refunds the token via the idempotent
+    refund_generation_tokens RPC.
+    """
+
+    def setUp(self):
+        self.requests = MagicMock()
+
+    def _orphan(self):
+        return [{"task_id": "t-1", "data": {}}]
+
+    def _generation(self, **overrides):
+        row = {
+            "generation_id": "g-1",
+            "user_id": "u-1",
+            "status": "pending",
+            "tokens_refunded": False,
+        }
+        row.update(overrides)
+        return row
+
+    def test_reconcile_settles_generation_and_refunds(self):
+        backend = _make_state(self.requests)
+        self.requests.request.side_effect = [
+            _response(json_data=self._orphan()),  # SELECT orphaned tasks
+            _response(json_data=[{}]),  # PATCH task failed
+            _response(json_data=[self._generation()]),  # GET video_generations
+            _response(json_data={"refunded": True}),  # POST refund RPC
+            _response(json_data=[{}]),  # PATCH video_generations
+        ]
+        backend.reconcile_orphaned_tasks()
+
+        calls = self.requests.request.call_args_list
+        rpc = calls[3]
+        self.assertIn("rpc/refund_generation_tokens", rpc[0][1])
+        self.assertEqual(
+            rpc[1]["json"],
+            {
+                "p_user_id": "u-1",
+                "p_generation_id": "g-1",
+                "p_reason": f"{state_module._ORPHAN_ERROR_MESSAGE}; tokens refunded",
+            },
+        )
+        settle = calls[4]
+        self.assertIn("video_generations", settle[0][1])
+        self.assertIn("generation_id=eq.g-1", settle[0][1])
+        payload = settle[1]["json"]
+        self.assertEqual(payload["status"], "failed")
+        self.assertEqual(payload["error_code"], "engine_restart")
+        self.assertTrue(payload["tokens_refunded"])
+        self.assertIn("completed_at", payload)
+
+    def test_reconcile_skips_already_settled_generation(self):
+        backend = _make_state(self.requests)
+        self.requests.request.side_effect = [
+            _response(json_data=self._orphan()),
+            _response(json_data=[{}]),  # PATCH task failed
+            _response(json_data=[self._generation(status="failed", tokens_refunded=True)]),
+        ]
+        backend.reconcile_orphaned_tasks()
+        # SELECT tasks, PATCH task, GET generation — nothing more
+        self.assertEqual(self.requests.request.call_count, 3)
+        urls = [c[0][1] for c in self.requests.request.call_args_list]
+        self.assertFalse(any("rpc/" in url for url in urls))
+
+    def test_reconcile_skips_refund_when_already_refunded(self):
+        backend = _make_state(self.requests)
+        self.requests.request.side_effect = [
+            _response(json_data=self._orphan()),
+            _response(json_data=[{}]),  # PATCH task failed
+            _response(json_data=[self._generation(tokens_refunded=True)]),
+            _response(json_data=[{}]),  # PATCH video_generations
+        ]
+        backend.reconcile_orphaned_tasks()
+        urls = [c[0][1] for c in self.requests.request.call_args_list]
+        self.assertFalse(any("rpc/" in url for url in urls))
+        settle = self.requests.request.call_args_list[3][1]["json"]
+        self.assertTrue(settle["tokens_refunded"])
+        self.assertEqual(settle["status"], "failed")
+
+    def test_reconcile_logs_loudly_when_no_generation_row(self):
+        backend = _make_state(self.requests)
+        self.requests.request.side_effect = [
+            _response(json_data=self._orphan()),
+            _response(json_data=[{}]),  # PATCH task failed
+            _response(json_data=[]),  # GET video_generations: no row
+        ]
+        with patch.object(state_module.logger, "error") as log_error:
+            settled = backend.reconcile_orphaned_tasks()
+        # the task is still failed; the missing billing row is loud, not fatal
+        self.assertEqual(settled, 1)
+        self.assertTrue(log_error.called)
+        urls = [c[0][1] for c in self.requests.request.call_args_list]
+        self.assertFalse(any("rpc/" in url for url in urls))
+
+    def test_reconcile_continues_when_rpc_fails(self):
+        backend = _make_state(self.requests)
+        orphans = [{"task_id": "t-1", "data": {}}, {"task_id": "t-2", "data": {}}]
+        self.requests.request.side_effect = [
+            _response(json_data=orphans),
+            _response(json_data=[{}]),  # PATCH t-1 failed
+            _response(json_data=[self._generation()]),  # GET generation t-1
+            _http_error(500),  # POST refund RPC fails
+            _response(json_data=[{}]),  # PATCH video_generations anyway
+            _response(json_data=[{}]),  # PATCH t-2 failed
+            _response(json_data=[]),  # GET video_generations t-2: no row
+        ]
+        with patch.object(state_module.logger, "error"):
+            settled = backend.reconcile_orphaned_tasks()
+        self.assertEqual(settled, 2)
+        # the failed refund is recorded honestly so the web's poll path can
+        # retry it as a backstop when the user next checks
+        gen_patch = self.requests.request.call_args_list[4][1]["json"]
+        self.assertEqual(gen_patch["status"], "failed")
+        self.assertFalse(gen_patch["tokens_refunded"])
+
+
+class SupabaseStateAuthTests(unittest.TestCase):
+    def test_401_raises_auth_error_naming_env_var(self):
+        requests_mock = MagicMock()
+        backend = _make_state(requests_mock)
+        requests_mock.request.return_value = _http_error(401)
+        with self.assertRaises(state_module._SupabaseAuthError) as ctx:
+            backend._request("GET", "select=task_id&limit=1")
+        self.assertIn("SUPABASE_SERVICE_ROLE_KEY", str(ctx.exception))
+
+    def test_non_401_http_error_reraises_unchanged(self):
+        import requests
+
+        requests_mock = MagicMock()
+        backend = _make_state(requests_mock)
+        requests_mock.request.return_value = _http_error(500)
+        with self.assertRaises(requests.HTTPError):
+            backend._request("GET", "select=task_id&limit=1")
+
+
+class SupabaseStateQuotingTests(unittest.TestCase):
+    def setUp(self):
+        self.requests = MagicMock()
+        self.backend = _make_state(self.requests)
+
+    def test_task_id_special_chars_are_percent_encoded(self):
+        self.requests.request.side_effect = [_response(json_data=[])]
+        self.backend.get_task("a b&c=d")
+        query = self.requests.request.call_args_list[0][0][1]
+        self.assertIn("task_id=eq.a%20b%26c%3Dd", query)
+        self.assertNotIn(" ", query.split("task_id=eq.")[1].split("&select")[0])
+
+    def test_user_id_special_chars_are_percent_encoded(self):
+        self.requests.request.side_effect = [_response(json_data=[])]
+        self.backend.get_all_tasks(1, 10, user_id="u&1")
+        query = self.requests.request.call_args_list[0][0][1]
+        self.assertIn("user_id=eq.u%261", query)
+
+    def test_delete_task_encodes_task_id(self):
+        self.requests.request.side_effect = [_response(json_data=[])]
+        self.backend.delete_task("a/b")
+        query = self.requests.request.call_args_list[0][0][1]
+        self.assertIn("task_id=eq.a%2Fb", query)
+
+
+class SupabaseStateShapeGuardTests(unittest.TestCase):
+    def setUp(self):
+        self.requests = MagicMock()
+        self.backend = _make_state(self.requests)
+
+    def test_get_task_with_non_dict_data_degrades_to_empty(self):
+        row = {
+            "task_id": "t-1",
+            "state": const.TASK_STATE_PROCESSING,
+            "progress": 10,
+            "data": "not-a-dict",
+        }
+        self.requests.request.side_effect = [_response(json_data=[row])]
+        task = self.backend.get_task("t-1")
+        self.assertIsNotNone(task)
+        self.assertEqual(task["task_id"], "t-1")
+        self.assertNotIn("not-a-dict", str(task))
+
+    def test_update_task_with_non_dict_stored_data_merges_into_empty(self):
+        existing = {
+            "task_id": "t-1",
+            "user_id": "u-1",
+            "state": const.TASK_STATE_PROCESSING,
+            "progress": 10,
+            "data": ["a", "list"],
+        }
+        self.requests.request.side_effect = [
+            _response(json_data=[existing]),
+            _response(json_data=[{}]),
+        ]
+        # Must not raise; kwargs merge into a fresh dict.
+        self.backend.update_task("t-1", progress=50, stage="x")
+        payload = self.requests.request.call_args_list[1][1]["json"]
+        self.assertEqual(payload["data"], {"stage": "x"})
+
+    def test_reconcile_with_non_dict_data_still_fails_row(self):
+        orphans = [{"task_id": "t-1", "data": 42}]
+        backend = _make_state(self.requests)
+        self.requests.request.side_effect = [
+            _response(json_data=orphans),
+            _response(json_data=[{}]),
+        ]
+        self.assertEqual(backend.reconcile_orphaned_tasks(), 1)
+        payload = self.requests.request.call_args_list[1][1]["json"]
+        self.assertEqual(payload["state"], const.TASK_STATE_FAILED)
+        self.assertIn("error", payload["data"])
+
+
+class SupabaseStateLockTests(unittest.TestCase):
+    def setUp(self):
+        self.requests = MagicMock()
+
+    def test_update_task_holds_lock_for_select_and_post(self):
+        # The SELECT→POST read-modify-write must run under the instance
+        # lock: a probe thread attempting a non-blocking acquire from
+        # inside the request path must fail for both calls, proving
+        # neither can interleave with another writer's sequence.
+        # (Probed from a second thread because RLock re-acquire by the
+        # owning thread always succeeds.)
+        import threading
+
+        backend = _make_state(self.requests)
+        held = {}
+
+        def fake_request(method, url, **kwargs):
+            outcome = {}
+
+            def probe():
+                acquired = backend._lock.acquire(blocking=False)
+                outcome["free"] = acquired
+                if acquired:
+                    backend._lock.release()
+
+            t = threading.Thread(target=probe)
+            t.start()
+            t.join(timeout=5)
+            held[method] = not outcome.get("free", True)
+            return _response(json_data=[])
+
+        self.requests.request.side_effect = fake_request
+        backend.update_task("t-1", progress=5, stage="x")
+        self.assertTrue(held.get("GET"), "SELECT ran outside the lock")
+        self.assertTrue(held.get("POST"), "POST ran outside the lock")
+
+    def test_concurrent_update_tasks_do_not_lose_kwargs(self):
+        import threading
+        import time
+
+        db = {}
+
+        def fake_request(method, url, **kwargs):
+            if method == "GET":
+                time.sleep(0.02)  # widen the race window
+                task_id = url.split("task_id=eq.")[1].split("&")[0]
+                return _response(json_data=[db[task_id]] if task_id in db else [])
+            payload = kwargs["json"]
+            db[payload["task_id"]] = payload
+            return _response(json_data=[payload])
+
+        requests_mock = MagicMock()
+        backend = _make_state(requests_mock)
+        requests_mock.request.side_effect = fake_request
+
+        def writer(kwarg):
+            backend.update_task("t-race", **{kwarg: True})
+
+        threads = [threading.Thread(target=writer, args=(f"kw{i}",)) for i in range(4)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=30)
+
+        final = db["t-race"]["data"]
+        for i in range(4):
+            self.assertTrue(final.get(f"kw{i}"), f"kw{i} lost: {final}")
+
+
+class PersistStateUpdateTests(unittest.TestCase):
+    def test_success_returns_true_single_call(self):
+        state = MagicMock()
+        self.assertTrue(state_module.persist_state_update(state, "t-1", progress=5))
+        state.update_task.assert_called_once_with("t-1", progress=5)
+
+    def test_transient_failure_retries_once(self):
+        state = MagicMock()
+        state.update_task.side_effect = [RuntimeError("blip"), None]
+        self.assertTrue(state_module.persist_state_update(state, "t-1", progress=5))
+        self.assertEqual(state.update_task.call_count, 2)
+
+    def test_permanent_failure_returns_false_and_logs_loudly(self):
+        from loguru import logger
+
+        state = MagicMock()
+        state.update_task.side_effect = RuntimeError("supabase down")
+        records = []
+        handler = logger.add(lambda m: records.append(m.record))
+        try:
+            result = state_module.persist_state_update(
+                state, "t-1", state_=const.TASK_STATE_FAILED
+            )
+        finally:
+            logger.remove(handler)
+        self.assertFalse(result)
+        self.assertEqual(state.update_task.call_count, 2)
+        errors = [r for r in records if r["level"].name == "ERROR"]
+        self.assertTrue(
+            any("t-1" in r["message"] for r in errors),
+            "permanent write loss must log loudly with the task id",
+        )
+
+    def test_never_raises(self):
+        state = MagicMock()
+        state.update_task.side_effect = RuntimeError("down")
+        # Must not raise: a persistence failure must never mask the outcome.
+        state_module.persist_state_update(state, "t-1", progress=1)

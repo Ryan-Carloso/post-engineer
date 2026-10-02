@@ -5,6 +5,9 @@ import os
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import quote
+
+from loguru import logger
 
 from app.config import config
 from app.models import const
@@ -179,6 +182,12 @@ class _SupabaseAuthError(RuntimeError):
     """
 
 
+# Reason recorded on tasks (and their video_generations rows) orphaned by an
+# engine restart: shared between the task-state write and the billing write
+# so both surfaces tell the same story.
+_ORPHAN_ERROR_MESSAGE = "engine restarted while the task was still running"
+
+
 class SupabaseTaskState(BaseState):
     """PostgREST-backed task state.
 
@@ -219,18 +228,47 @@ class SupabaseTaskState(BaseState):
             "Authorization": f"Bearer {key}",
             "Content-Type": "application/json",
         }
+        # Serializes the SELECT→POST read-modify-write in update_task:
+        # in-process writers are multi-threaded (task thread, publish
+        # thread, fill-schedule thread), and without the lock two writers
+        # can read the same base row and the last POST wins, silently
+        # dropping the other's kwargs. Same role as MemoryState's RLock.
+        self._lock = threading.RLock()
         self._verify_table()
         if reconcile_on_boot:
-            self.reconcile_orphaned_tasks()
+            failed = self.reconcile_orphaned_tasks()
+            if failed:
+                logger.info(f"marked {failed} orphaned task(s) failed at boot")
 
-    def _request(self, method: str, query: str, **kwargs: Any) -> Any:
+    def _request(
+        self, method: str, query: str, table: str | None = None, **kwargs: Any
+    ) -> Any:
+        target = table or self._table
         response = self._requests.request(
             method,
-            f"{self._base_url}/rest/v1/{self._table}?{query}",
+            f"{self._base_url}/rest/v1/{target}?{query}",
             headers=kwargs.pop("headers", self._headers),
             timeout=30,
             **kwargs,
         )
+        self._raise_for_status(response)
+        return response
+
+    def _rpc(self, function: str, payload: dict[str, Any]) -> Any:
+        # PostgREST stored-procedure call, e.g. the idempotent
+        # refund_generation_tokens used to return tokens for dead tasks.
+        response = self._requests.request(
+            "POST",
+            f"{self._base_url}/rest/v1/rpc/{function}",
+            headers=self._headers,
+            timeout=30,
+            json=payload,
+        )
+        self._raise_for_status(response)
+        return response
+
+    @staticmethod
+    def _raise_for_status(response: Any) -> None:
         try:
             response.raise_for_status()
         except Exception as exc:  # noqa: BLE001 - translated below when 401
@@ -243,7 +281,6 @@ class SupabaseTaskState(BaseState):
                     "the engine."
                 ) from exc
             raise
-        return response
 
     def _verify_table(self) -> None:
         # Fail fast at boot when the migration was not applied: every later
@@ -263,14 +300,37 @@ class SupabaseTaskState(BaseState):
     def _select_row(self, task_id: str) -> dict[str, Any] | None:
         response = self._request(
             "GET",
-            f"task_id=eq.{task_id}&select=task_id,user_id,state,progress,data",
+            f"task_id=eq.{self._eq(task_id)}&select=task_id,user_id,state,progress,data",
         )
         rows = response.json()
         return rows[0] if rows else None
 
     @staticmethod
+    def _eq(value: str) -> str:
+        # Percent-encode PostgREST filter values: task_id/user_id originate
+        # partly from caller-controlled headers, and a raw space, & or ,
+        # would otherwise produce 400s or silently wrong filters.
+        return quote(value, safe="")
+
+    @staticmethod
+    def _safe_data(row: dict[str, Any]) -> dict[str, Any]:
+        # The data column is untyped JSONB: a non-object value (manual
+        # dashboard edit, future writer) must degrade to {} with a log,
+        # never brick the row by raising on every subsequent read/write.
+        data = row.get("data")
+        if not isinstance(data, dict):
+            logger.warning(
+                "engine_task_state row for task {} holds non-object data ({}); "
+                "treating as empty",
+                row.get("task_id"),
+                type(data).__name__,
+            )
+            return {}
+        return data
+
+    @staticmethod
     def _row_to_task(row: dict[str, Any]) -> dict[str, object]:
-        data = row.get("data") or {}
+        data = SupabaseTaskState._safe_data(row)
         return {
             "task_id": row["task_id"],
             "state": row["state"],
@@ -288,23 +348,29 @@ class SupabaseTaskState(BaseState):
         progress = int(progress)
         if progress > 100:
             progress = 100
-        existing = self._select_row(task_id)
-        data: dict[str, Any] = dict(existing.get("data") or {}) if existing else {}
-        data.update(kwargs)
-        user_id = kwargs.get("user_id", existing.get("user_id") if existing else None)
-        self._request(
-            "POST",
-            "",
-            headers={**self._headers, "Prefer": "resolution=merge-duplicates"},
-            json={
-                "task_id": task_id,
-                "user_id": user_id,
-                "state": state,
-                "progress": progress,
-                "data": data,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            },
-        )
+        # The SELECT→POST below is a read-modify-write: hold the lock for
+        # the whole sequence so concurrent writers cannot read the same
+        # base row and silently drop each other's kwargs (last POST wins).
+        with self._lock:
+            existing = self._select_row(task_id)
+            data: dict[str, Any] = (
+                dict(self._safe_data(existing)) if existing else {}
+            )
+            data.update(kwargs)
+            user_id = kwargs.get("user_id", existing.get("user_id") if existing else None)
+            self._request(
+                "POST",
+                "",
+                headers={**self._headers, "Prefer": "resolution=merge-duplicates"},
+                json={
+                    "task_id": task_id,
+                    "user_id": user_id,
+                    "state": state,
+                    "progress": progress,
+                    "data": data,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                },
+            )
 
     def get_task(self, task_id: str, user_id: str | None = None) -> dict[str, object] | None:
         row = self._select_row(task_id)
@@ -321,7 +387,7 @@ class SupabaseTaskState(BaseState):
             f"&order=updated_at.desc&limit={page_size}&offset={offset}"
         )
         if user_id is not None:
-            query += f"&user_id=eq.{user_id}"
+            query += f"&user_id=eq.{self._eq(user_id)}"
         response = self._request(
             "GET", query, headers={**self._headers, "Prefer": "count=exact"}
         )
@@ -336,15 +402,18 @@ class SupabaseTaskState(BaseState):
         return tasks, total
 
     def delete_task(self, task_id: str) -> None:
-        self._request("DELETE", f"task_id=eq.{task_id}")
+        self._request("DELETE", f"task_id=eq.{self._eq(task_id)}")
 
     def reconcile_orphaned_tasks(self) -> int:
-        """Mark tasks left running across a restart as failed.
+        """Mark tasks left running across a restart as failed, and settle them.
 
         Their GPU handles died with the old process, so they can never
-        complete; failing them once lets the web record the failure (and
-        refund the token) instead of polling a 404 forever. Returns how
-        many rows were failed.
+        complete. Each orphan is failed in the task table AND its billing is
+        settled (video_generations marked failed + token refunded via the
+        idempotent refund_generation_tokens RPC) — entirely inside the
+        engine, so an away user still gets their token back without ever
+        opening the web. A per-task failure is logged loudly and never
+        breaks the loop or the boot. Returns how many rows were failed.
         """
         response = self._request(
             "GET",
@@ -353,11 +422,12 @@ class SupabaseTaskState(BaseState):
         )
         failed = 0
         for row in response.json():
-            data = dict(row.get("data") or {})
-            data["error"] = "engine restarted while the task was still running"
+            task_id = row["task_id"]
+            data = dict(self._safe_data(row))
+            data["error"] = _ORPHAN_ERROR_MESSAGE
             self._request(
                 "PATCH",
-                f"task_id=eq.{row['task_id']}",
+                f"task_id=eq.{self._eq(task_id)}",
                 json={
                     "state": const.TASK_STATE_FAILED,
                     "data": data,
@@ -365,7 +435,98 @@ class SupabaseTaskState(BaseState):
                 },
             )
             failed += 1
+            try:
+                self._settle_orphan_billing(task_id)
+            except Exception as exc:  # noqa: BLE001 - loud log, never break boot
+                logger.error(
+                    f"failed to settle billing for orphaned task {task_id}: {exc}"
+                )
         return failed
+
+    def _settle_orphan_billing(self, task_id: str) -> None:
+        """Record the failure and refund the token for one orphaned task.
+
+        Finds the video_generations row by engine_task_id, marks it failed,
+        and calls the idempotent refund_generation_tokens RPC. Rows that
+        are already terminal are left alone; rows whose refund never lands
+        keep tokens_refunded=false so the web's poll path retries the
+        refund as a backstop when the user next checks.
+        """
+        response = self._request(
+            "GET",
+            f"engine_task_id=eq.{self._eq(task_id)}"
+            "&select=generation_id,user_id,status,tokens_refunded",
+            table="video_generations",
+        )
+        rows = response.json()
+        if not rows:
+            logger.error(
+                f"orphaned task {task_id} has no video_generations row; "
+                "marking failed without refund"
+            )
+            return
+        gen = rows[0]
+        if gen.get("status") in ("failed", "completed"):
+            return
+        refunded = bool(gen.get("tokens_refunded"))
+        if not refunded:
+            try:
+                rpc_response = self._rpc(
+                    "refund_generation_tokens",
+                    {
+                        "p_user_id": gen["user_id"],
+                        "p_generation_id": gen["generation_id"],
+                        "p_reason": f"{_ORPHAN_ERROR_MESSAGE}; tokens refunded",
+                    },
+                )
+                refunded = bool((rpc_response.json() or {}).get("refunded"))
+            except Exception as exc:  # noqa: BLE001 - recorded below; web poll retries
+                logger.error(
+                    f"refund RPC failed for generation {gen['generation_id']}: {exc}"
+                )
+                refunded = False
+        now = datetime.now(timezone.utc).isoformat()
+        self._request(
+            "PATCH",
+            f"generation_id=eq.{self._eq(gen['generation_id'])}",
+            table="video_generations",
+            json={
+                "status": "failed",
+                "error_code": "engine_restart",
+                "error_message": _ORPHAN_ERROR_MESSAGE,
+                "tokens_refunded": refunded,
+                "completed_at": now,
+                "updated_at": now,
+            },
+        )
+
+
+def persist_state_update(backend: BaseState, task_id: str, **kwargs: object) -> bool:
+    """Write a task-state update that must not be silently lost, retrying once.
+
+    With the memory backend update_task() effectively cannot fail; with a
+    network backend (Supabase) every write is an HTTP request that can raise
+    (timeout, 5xx, rotated key). A lost terminal write leaves the row
+    PROCESSING forever — the web polls with no failure recorded and no
+    refund, which is exactly the failure mode persistence was added to
+    eliminate. Retry once, then log loudly and report the loss. Never
+    raises: a persistence failure must not mask the task outcome it was
+    recording.
+    """
+    try:
+        backend.update_task(task_id, **kwargs)
+        return True
+    except Exception as exc:  # noqa: BLE001 - one retry before giving up
+        logger.warning(f"task state write failed for {task_id}, retrying: {exc}")
+    try:
+        backend.update_task(task_id, **kwargs)
+        return True
+    except Exception as exc:  # noqa: BLE001 - loud, then report the loss
+        logger.error(
+            f"task state write permanently failed for {task_id}; "
+            f"the task row may be stale: {exc}"
+        )
+        return False
 
 
 # Global state — memory by default; redis when enable_redis=true; supabase
