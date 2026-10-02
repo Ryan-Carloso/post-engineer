@@ -409,11 +409,13 @@ class SupabaseStateBillingReconcileTests(unittest.TestCase):
         ):
             settled = backend.reconcile_orphaned_tasks()
         self.assertEqual(settled, 2)
-        # the failed refund is recorded honestly so the web's poll path can
-        # retry it as a backstop when the user next checks
+        # the failed refund is recorded honestly: tokens_refunded is left
+        # untouched (not forced to false) so a concurrent true can never be
+        # clobbered, and the web's poll path retries the refund as a
+        # backstop when the user next checks
         gen_patch = self.requests.request.call_args_list[3][1]["json"]
         self.assertEqual(gen_patch["status"], "failed")
-        self.assertFalse(gen_patch["tokens_refunded"])
+        self.assertNotIn("tokens_refunded", gen_patch)
 
 
 class SupabaseStateAuthTests(unittest.TestCase):
@@ -638,3 +640,105 @@ class PersistStateUpdateTests(unittest.TestCase):
         state.update_task.side_effect = RuntimeError("down")
         # Must not raise: a persistence failure must never mask the outcome.
         state_module.persist_state_update(state, "t-1", progress=1)
+
+
+class SupabaseStateReconcileBatchTests(unittest.TestCase):
+    """Batch bounds for the boot reconcile (MINOR review findings)."""
+
+    def setUp(self):
+        self.requests = MagicMock()
+
+    def _orphan(self, task_id):
+        return {"task_id": task_id, "data": {}}
+
+    def _generation(self, **overrides):
+        row = {
+            "generation_id": "g-1",
+            "user_id": "u-1",
+            "status": "pending",
+            "tokens_refunded": False,
+        }
+        row.update(overrides)
+        return row
+
+    def test_reconcile_select_is_capped_and_ordered(self):
+        backend = _make_state(self.requests)
+        self.requests.request.side_effect = [
+            _response(json_data=[]),  # SELECT orphaned tasks: none
+        ]
+        backend.reconcile_orphaned_tasks()
+        params = self.requests.request.call_args[0][1]
+        self.assertIn(
+            f"limit={state_module._RECONCILE_BATCH_LIMIT}", params
+        )
+        self.assertIn("order=updated_at.asc", params)
+
+    def test_reconcile_warns_when_batch_cap_hit(self):
+        backend = _make_state(self.requests)
+        cap = state_module._RECONCILE_BATCH_LIMIT
+        orphans = [self._orphan(f"t-{i}") for i in range(cap)]
+        self.requests.request.side_effect = [
+            _response(json_data=orphans),
+            *[
+                response
+                for _ in orphans
+                for response in (
+                    _response(json_data=[]),  # GET video_generations: no row
+                    _response(json_data=[{}]),  # PATCH task failed
+                )
+            ],
+        ]
+        with patch.object(state_module.logger, "warning") as log_warning:
+            settled = backend.reconcile_orphaned_tasks()
+        self.assertEqual(settled, cap)
+        cap_warnings = [
+            c for c in log_warning.call_args_list if "batch cap" in str(c)
+        ]
+        self.assertEqual(len(cap_warnings), 1)
+
+    def test_reconcile_warns_on_multiple_generation_rows(self):
+        backend = _make_state(self.requests)
+        rows = [
+            self._generation(generation_id="g-old"),
+            self._generation(generation_id="g-new"),
+        ]
+        self.requests.request.side_effect = [
+            _response(json_data=[self._orphan("t-1")]),
+            _response(json_data=rows),  # GET video_generations: two rows
+            _response(json_data={"refunded": True}),  # POST refund RPC
+            _response(json_data=[{}]),  # PATCH video_generations
+            _response(json_data=[{}]),  # PATCH task failed
+        ]
+        with patch.object(state_module.logger, "warning") as log_warning:
+            backend.reconcile_orphaned_tasks()
+        multi_warnings = [
+            c for c in log_warning.call_args_list if "2 video_generations" in str(c)
+        ]
+        self.assertEqual(len(multi_warnings), 1)
+        # the oldest row (rows[0]) is the one settled
+        rpc = self.requests.request.call_args_list[2]
+        self.assertEqual(rpc[1]["json"]["p_generation_id"], "g-old")
+
+    def test_reconcile_logs_progress_every_n_rows(self):
+        backend = _make_state(self.requests)
+        every = state_module._RECONCILE_PROGRESS_EVERY
+        orphans = [self._orphan(f"t-{i}") for i in range(every)]
+        self.requests.request.side_effect = [
+            _response(json_data=orphans),
+            *[
+                response
+                for _ in orphans
+                for response in (
+                    _response(json_data=[]),  # GET video_generations: no row
+                    _response(json_data=[{}]),  # PATCH task failed
+                )
+            ],
+        ]
+        with patch.object(state_module.logger, "info") as log_info:
+            with patch.object(state_module.logger, "warning"):
+                backend.reconcile_orphaned_tasks()
+        progress = [
+            c for c in log_info.call_args_list if "reconcile progress" in str(c)
+        ]
+        self.assertEqual(len(progress), 1)
+        self.assertIn(f"{every}/{every}", str(progress[0]))

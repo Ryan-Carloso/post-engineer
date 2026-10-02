@@ -180,6 +180,11 @@ class RedisState(BaseState):
 # concurrent task thread's progress writes).
 _STATE_REQUEST_TIMEOUT_SECONDS = 10
 
+# Boot reconcile bounds: a huge orphan backlog after a long outage must not
+# stall boot — leftover rows are drained by subsequent boots.
+_RECONCILE_BATCH_LIMIT = 100
+_RECONCILE_PROGRESS_EVERY = 25
+
 
 class _SupabaseAuthError(RuntimeError):
     """Supabase rejected the service key (HTTP 401).
@@ -414,22 +419,45 @@ class SupabaseTaskState(BaseState):
     def reconcile_orphaned_tasks(self) -> int:
         """Mark tasks left running across a restart as failed, and settle them.
 
-        Their GPU handles died with the old process, so they can never
-        complete. Each orphan is failed in the task table AND its billing is
-        settled (video_generations marked failed + token refunded via the
-        idempotent refund_generation_tokens RPC) — entirely inside the
-        engine, so an away user still gets their token back without ever
+        Their GPU handles died with the old process, so they can (almost)
+        never complete. Each orphan is failed in the task table AND its
+        billing is settled (video_generations marked failed + token refunded
+        via the idempotent refund_generation_tokens RPC) — entirely inside
+        the engine, so an away user still gets their token back without ever
         opening the web. A per-task failure is logged loudly and never
         breaks the loop or the boot: the task stays non-terminal and is
         retried on the next boot. Returns how many rows were failed.
+
+        Billing trade-off (rare, bounded): if a terminal COMPLETE write was
+        lost twice, the terminal webhook still delivered the video, yet the
+        row is non-terminal — this reconcile then marks it failed and refunds
+        the token, so the user keeps the video AND the token. Requires two
+        consecutive write failures plus a restart; accepted over the worse
+        alternative (a delivered-but-unrecorded task silently keeping the
+        token).
+
+        The batch is capped (_RECONCILE_BATCH_LIMIT) so a huge backlog after
+        a long outage cannot stall boot: leftover rows are drained by later
+        boots, and the ordering is idempotent.
         """
         response = self._request(
             "GET",
             "select=task_id,data"
-            f"&state=not.in.({const.TASK_STATE_FAILED},{const.TASK_STATE_COMPLETE})",
+            f"&state=not.in.({const.TASK_STATE_FAILED},{const.TASK_STATE_COMPLETE})"
+            f"&order=updated_at.asc&limit={_RECONCILE_BATCH_LIMIT}",
         )
+        rows = response.json()
+        if len(rows) >= _RECONCILE_BATCH_LIMIT:
+            logger.warning(
+                f"orphan reconcile hit the batch cap ({_RECONCILE_BATCH_LIMIT}); "
+                "remaining rows will be drained by subsequent boots"
+            )
         failed = 0
-        for row in response.json():
+        for index, row in enumerate(rows, start=1):
+            if index % _RECONCILE_PROGRESS_EVERY == 0:
+                logger.info(
+                    f"orphan reconcile progress: {index}/{len(rows)} rows processed"
+                )
             task_id = row["task_id"]
             try:
                 # Billing first: if the process dies after the settle but
@@ -466,7 +494,8 @@ class SupabaseTaskState(BaseState):
         response = self._request(
             "GET",
             f"engine_task_id=eq.{self._eq(task_id)}"
-            "&select=generation_id,user_id,status,tokens_refunded",
+            "&select=generation_id,user_id,status,tokens_refunded"
+            "&order=created_at.asc",
             table="video_generations",
         )
         rows = response.json()
@@ -481,6 +510,14 @@ class SupabaseTaskState(BaseState):
                 "marking failed without refund"
             )
             return
+        if len(rows) > 1:
+            # The relation is 1:1 today; a second row would silently stay
+            # pending and unrefunded if we only settled rows[0]. Settle the
+            # oldest and say so loudly so the new flow gets a row per task.
+            logger.warning(
+                f"orphaned task {task_id} has {len(rows)} video_generations "
+                "rows; settling the oldest only"
+            )
         gen = rows[0]
         if gen.get("status") in ("failed", "completed"):
             return
@@ -502,18 +539,25 @@ class SupabaseTaskState(BaseState):
                 )
                 refunded = False
         now = datetime.now(timezone.utc).isoformat()
+        patch = {
+            "status": "failed",
+            "error_code": "engine_restart",
+            "error_message": _ORPHAN_ERROR_MESSAGE,
+            "completed_at": now,
+            "updated_at": now,
+        }
+        if refunded:
+            # Never write tokens_refunded=false over a row that already
+            # carries true (the refund RPC may have landed on an earlier
+            # attempt, or the web poll path settled concurrently): the web
+            # backstop heals a false flag on the next poll, but a true flag
+            # must never flap back to false.
+            patch["tokens_refunded"] = True
         self._request(
             "PATCH",
             f"generation_id=eq.{self._eq(gen['generation_id'])}",
             table="video_generations",
-            json={
-                "status": "failed",
-                "error_code": "engine_restart",
-                "error_message": _ORPHAN_ERROR_MESSAGE,
-                "tokens_refunded": refunded,
-                "completed_at": now,
-                "updated_at": now,
-            },
+            json=patch,
         )
 
 
