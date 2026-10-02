@@ -39,8 +39,8 @@ def running_under_test() -> bool:
 
     The engine test suite imports app.asgi at collection time, whose
     load_dotenv() loads the tracked .env — including the REAL
-    DISCORD_WEBHOOK_URL and BUGSINK_DSN. Production side effects (Discord
-    alerts, error-tracking init) must stay off in that case.
+    DISCORD_WEBHOOK_URL. Production side effects (Discord alerts,
+    error-tracking init) must stay off in that case.
 
     Detection, most to least authoritative:
     - ``ENGINE_UNDER_TEST=1``: set by the test-suite bootstrap
