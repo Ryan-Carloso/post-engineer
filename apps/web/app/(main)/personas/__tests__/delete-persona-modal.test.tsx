@@ -208,6 +208,25 @@ describe('DeletePersonaModal', () => {
     await waitFor(() => expect(fetchDeletePreview).toHaveBeenCalledTimes(2));
   });
 
+  it('disables the links-incomplete retry while a delete is in flight', async () => {
+    vi.mocked(fetchDeletePreview).mockResolvedValue({ ...PREVIEW, linksIncomplete: true });
+    // Delete hangs so the dialog stays in 'deleting'.
+    vi.mocked(deletePersona).mockImplementation(() => new Promise(() => {}));
+    renderModal();
+    await screen.findByText('personas.deleteDialogLinksIncomplete');
+    // Arm the confirm gate and start the delete.
+    fireEvent.change(screen.getByLabelText('personas.deleteDialogTypeName'), {
+      target: { value: 'Ryan' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'personas.deleteConfirm' }));
+    await waitFor(() => expect(deletePersona).toHaveBeenCalled());
+    // The retry must not fire a preview refresh mid-delete.
+    const retry = screen.getByRole('button', { name: 'personas.tryAgain' });
+    expect(retry).toBeDisabled();
+    fireEvent.click(retry);
+    expect(fetchDeletePreview).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the typed name when retrying incomplete links', async () => {
     vi.mocked(fetchDeletePreview)
       .mockResolvedValueOnce({ ...PREVIEW, linksIncomplete: true })

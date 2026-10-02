@@ -644,6 +644,8 @@ export async function DELETE(request: Request): Promise<NextResponse> {
     });
   };
 
+  // Schedules are posting configs (handful per persona), not per-video
+  // rows — intentionally unbounded here; the delete needs every id.
   const { data: scheduleRows, error: schedulesError } = await supabase
     .from('schedules')
     .select('id')
@@ -679,13 +681,25 @@ export async function DELETE(request: Request): Promise<NextResponse> {
   completedSteps.push('schedules');
 
   // Engine task ids are collected before the generation rows die, so the
-  // engine's task directories can be cleaned up best-effort below.
-  const { data: generationRows, error: generationsSelectError } = await supabase
+  // engine's task directories can be cleaned up best-effort below. Capped:
+  // the cleanup loop has its own budget/skip machinery, and a persona with
+  // thousands of generations must not load them all into serverless memory.
+  const ENGINE_TASK_ID_CAP = 500;
+  const { data: generationRows, error: generationsSelectError, count: generationRowsCount } = await supabase
     .from('video_generations')
-    .select('engine_task_id')
+    .select('engine_task_id', { count: 'exact' })
     .eq('persona_id', personaId)
-    .eq('user_id', user.id);
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(ENGINE_TASK_ID_CAP);
   if (generationsSelectError) return cascadeFail('video_generations-select', generationsSelectError);
+  if ((generationRowsCount ?? 0) > ENGINE_TASK_ID_CAP) {
+    logger.warn('[api/persona] engine task id list truncated by cap', {
+      personaId,
+      total: generationRowsCount,
+      cap: ENGINE_TASK_ID_CAP,
+    });
+  }
   const engineTaskIds = (generationRows ?? [])
     .map((row) =>
       typeof row === 'object' && row !== null ? (row as { engine_task_id: unknown }).engine_task_id : null,

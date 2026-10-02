@@ -76,6 +76,16 @@ describe('firstDownloadUrl', () => {
     expect(firstDownloadUrl({ state: 'failed', progress: 0 })).toBeNull();
     expect(firstDownloadUrl(null)).toBeNull();
   });
+
+  it('rejects pre-formed URLs with an unsafe task-id segment', () => {
+    // Path traversal smuggled into a same-origin download href.
+    expect(
+      firstDownloadUrl({ video: '/api/persona/video-download/../../settings' }),
+    ).toBeNull();
+    expect(
+      firstDownloadUrl({ video: '/api/persona/video-download/%2e%2e/x' }),
+    ).toBeNull();
+  });
 });
 
 describe('SAFE_TASK_ID', () => {
