@@ -829,15 +829,27 @@ export async function POST(request: Request): Promise<NextResponse> {
       // When we skipped our spend (alreadySpent), there is nothing of ours
       // to undo — refunding would steal the legitimate prior spend.
       if (!alreadySpent) {
-        await supabase.rpc('refund_generation_tokens', {
+        const { error: refundError } = await supabase.rpc('refund_generation_tokens', {
           p_user_id: userId,
           p_generation_id: idem.generationId,
           p_reason: 'PK race; refunded redundant spend',
         });
-        logger.error('[generate-and-schedule] schedule PK race; refunded redundant spend, replaying winner', scheduleError, {
-          scheduleId: idem.scheduleId,
-          userId,
-        });
+        if (refundError) {
+          // The winner's schedule exists regardless of whether our refund
+          // landed: still replay it below. A failed refund is a billing
+          // discrepancy, not a request failure — log it loudly for
+          // investigation instead of letting the log claim success.
+          logger.error('[generate-and-schedule] PK race refund failed; replaying winner anyway', refundError, {
+            scheduleId: idem.scheduleId,
+            userId,
+            generationId: idem.generationId,
+          });
+        } else {
+          logger.error('[generate-and-schedule] schedule PK race; refunded redundant spend, replaying winner', scheduleError, {
+            scheduleId: idem.scheduleId,
+            userId,
+          });
+        }
       } else {
         logger.error('[generate-and-schedule] schedule PK race; already spent, nothing to refund, replaying winner', scheduleError, {
           scheduleId: idem.scheduleId,
@@ -858,11 +870,18 @@ export async function POST(request: Request): Promise<NextResponse> {
       scheduleId: idem.scheduleId,
       userId,
     });
-    await supabase.rpc('refund_generation_tokens', {
+    const { error: refundError } = await supabase.rpc('refund_generation_tokens', {
       p_user_id: userId,
       p_generation_id: idem.generationId,
       p_reason: 'Unified generate+schedule: schedule insert failed; tokens refunded',
     });
+    if (refundError) {
+      logger.error('[generate-and-schedule] refund after schedule insert failure failed', refundError, {
+        scheduleId: idem.scheduleId,
+        userId,
+        generationId: idem.generationId,
+      });
+    }
     trackApiEvent('video_creation_failed', { userId, errorCode: ERROR_CODES.INTERNAL_ERROR, failureStage: 'schedule_insert' });
     return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
   }

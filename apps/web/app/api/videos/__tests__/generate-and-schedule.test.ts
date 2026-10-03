@@ -22,6 +22,10 @@ vi.mock('@/lib/rate-limit', async (importOriginal) => {
 
 vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn() }));
 
+vi.mock('@/lib/logger', () => ({
+  logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
+}));
+
 vi.mock('@/lib/api-keys', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/api-keys')>();
   return { ...actual, isPersonaAllowed: vi.fn().mockReturnValue(true) };
@@ -56,6 +60,7 @@ import { startEngineVideoTask } from '@/lib/generation/video-generation';
 import { checkCustomAudioUrl } from '@/lib/generation/custom-audio';
 import { resolveVideoImage } from '@/lib/persona-images';
 import { IDEMPOTENCY_NAMESPACE, deterministicUuid } from '@/lib/idempotency';
+import { logger } from '@/lib/logger';
 
 const USER_ID = 'user-uuid-1';
 
@@ -89,6 +94,7 @@ interface DbConfig {
   ledgerError?: boolean;
   spend?: { spent: boolean; balance: number };
   spendErrorCode?: string;
+  refundErrorCode?: string;
   scheduleInsertErrorCode?: string;
   slotInsertFails?: boolean;
   engineFailSubjects?: string[];
@@ -223,6 +229,9 @@ function makeClient(cfg: DbConfig): unknown {
         return { data: cfg.spend ?? { spent: true, balance: 100 }, error: null };
       }
       if (name === 'refund_batch_tokens' || name === 'refund_generation_tokens') {
+        if (name === 'refund_generation_tokens' && cfg.refundErrorCode) {
+          return { data: null, error: { code: cfg.refundErrorCode, message: 'refund failed' } };
+        }
         return { data: { refunded: true }, error: null };
       }
       return { data: null, error: null };
@@ -696,6 +705,27 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
       const refunds = rpcCalls.filter((c) => c.name === 'refund_generation_tokens');
       expect(refunds).toHaveLength(0);
+    });
+
+    it('still replays the winner when the PK-race refund RPC fails', async () => {
+      const key = 'race-key-3';
+      // The refund RPC reports { data, error } without throwing, so a
+      // failed refund used to be swallowed while the log claimed success.
+      // The failure must be logged loudly, but the winner's schedule still
+      // exists — return it instead of a 500 that hides it.
+      vi.mocked(logger.error).mockClear();
+      setup({ ...DEFAULT_CFG, scheduleInsertErrorCode: '23505', refundErrorCode: 'XX000', replaySlots: [] });
+      const res = await post(baseBody({ idempotencyKey: key }));
+      const json = await res.json();
+      expect(res.status).toBe(200);
+      expect(json.replayed).toBe(true);
+      const refunds = rpcCalls.filter((c) => c.name === 'refund_generation_tokens');
+      expect(refunds).toHaveLength(1);
+      expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
+        expect.stringMatching(/PK race refund failed/),
+        expect.objectContaining({ code: 'XX000' }),
+        expect.objectContaining({ userId: USER_ID }),
+      );
     });
 
     it('deletes a zombie schedule (0 slots, old) and completes without charging twice', async () => {
