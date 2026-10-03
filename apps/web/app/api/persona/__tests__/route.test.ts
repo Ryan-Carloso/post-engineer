@@ -130,7 +130,7 @@ describe('POST /api/persona — modo faceless (100% stock, sem avatar)', () => {
     });
   });
 
-  it('includes recent_image_ids in the insert (NOT NULL column without DB default)', async () => {
+  it('includes recent_image_ids in the insert (supplies the NOT NULL column explicitly, independent of the DB default)', async () => {
     // Regression: the personas.recent_image_ids column is NOT NULL, and DBs
     // created from the pre-fix consolidated schema have no DEFAULT for it —
     // omitting it from the insert makes PostgreSQL reject every persona
@@ -217,7 +217,10 @@ describe('POST /api/persona — modo faceless (100% stock, sem avatar)', () => {
 
     // Direction 1: every insert key is a real public.personas column.
     for (const key of Object.keys(payload)) {
-      expect(columns.has(key)).toBe(true);
+      expect(
+        columns.has(key),
+        `insert key "${key}" is not a public.personas column`,
+      ).toBe(true);
     }
     // Direction 2: every NOT NULL-without-DEFAULT column is supplied.
     for (const [name, required] of columns) {
