@@ -1085,7 +1085,7 @@ class TestLiteLLMProvider(unittest.TestCase):
         so a primary failure never spends money while a zero-cost tier is
         available.
         """
-        config.app["llm_provider"] = "omniroute"
+        config.app["llm_provider"] = "groq"
         config.app["openrouter_api_key"] = "paid-key"
         config.app["openrouter_free_api_key"] = "free-key"
 
@@ -1099,7 +1099,7 @@ class TestLiteLLMProvider(unittest.TestCase):
         self.assertEqual(result, "free script")
         self.assertEqual(
             generate.call_args_list,
-            [call("test", "omniroute"), call("test", "openrouter_free")],
+            [call("test", "groq"), call("test", "openrouter_free")],
         )
 
     def test_fallback_escalates_to_paid_when_free_tier_fails(self):
@@ -1108,7 +1108,7 @@ class TestLiteLLMProvider(unittest.TestCase):
         tier errors, the paid tier must absorb it rather than the request
         failing outright.
         """
-        config.app["llm_provider"] = "omniroute"
+        config.app["llm_provider"] = "groq"
         config.app["openrouter_api_key"] = "paid-key"
         config.app["openrouter_free_api_key"] = "free-key"
 
@@ -1127,7 +1127,7 @@ class TestLiteLLMProvider(unittest.TestCase):
         self.assertEqual(
             generate.call_args_list,
             [
-                call("test", "omniroute"),
+                call("test", "groq"),
                 call("test", "openrouter_free"),
                 call("test", "openrouter"),
             ],
@@ -1139,7 +1139,7 @@ class TestLiteLLMProvider(unittest.TestCase):
         is the credential the user has to fix. Reporting the primary's error
         would point at a provider that was never the problem.
         """
-        config.app["llm_provider"] = "omniroute"
+        config.app["llm_provider"] = "groq"
         config.app["openrouter_api_key"] = "paid-key"
         config.app["openrouter_free_api_key"] = "free-key"
 
@@ -1161,7 +1161,7 @@ class TestLiteLLMProvider(unittest.TestCase):
         A partially-configured install (paid key only) must still fall back,
         instead of failing outright because the free key is absent.
         """
-        config.app["llm_provider"] = "omniroute"
+        config.app["llm_provider"] = "groq"
         config.app["openrouter_api_key"] = "paid-key"
         config.app["openrouter_free_api_key"] = ""
 
@@ -1175,7 +1175,7 @@ class TestLiteLLMProvider(unittest.TestCase):
         self.assertEqual(result, "paid script")
         self.assertEqual(
             generate.call_args_list,
-            [call("test", "omniroute"), call("test", "openrouter")],
+            [call("test", "groq"), call("test", "openrouter")],
         )
 
     def test_fallback_skipped_when_primary_is_a_free_tier(self):
