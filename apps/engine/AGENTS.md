@@ -1,4 +1,4 @@
-# MoneyPrinterTurbo — Agent Rules
+# Post Engineer (engine) — Agent Rules
 
 These rules apply to every agent (human or AI) making changes in this repository.
 They exist so that video-generation behaviour stays consistent across every
