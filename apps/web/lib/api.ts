@@ -987,8 +987,11 @@ export function useUpdateSlotMutation() {
   return useMutation({
     mutationFn: ({ slotId, topic }: { slotId: string; topic: string }) =>
       updateSlotTopic(slotId, topic),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['fill-schedule-status'] });
+      // The detail page reads ['schedule-slot', slotId] with a 30s staleTime;
+      // invalidate it too so the saved topic shows immediately.
+      void queryClient.invalidateQueries({ queryKey: ['schedule-slot', variables.slotId] });
     },
   });
 }
