@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { ImageIcon } from '@/lib/ui';
+import { logger } from '@/lib/logger';
+import { logClientError } from '@/lib/client-logger';
+import { describeImageSource } from '@/lib/image-source';
 
 //---------------
 // PersonaAvatar — the persona's face, as the app shows it everywhere: the
@@ -50,6 +53,33 @@ export default function PersonaAvatar({
     setImageFailed(false);
   }, [imageUrl]);
 
+  //---------------
+  // Why no photo: the two silent causes are "the row has no avatar at all"
+  // and "the URL exists but the browser refuses it". Both ended as a silent
+  // initials circle until now, so each one leaves a trail (redacted: the
+  // Supabase signature token lives in the query string).
+  //---------------
+  useEffect(() => {
+    if (imageUrl === undefined) {
+      logger.debug('[persona-avatar] no avatar source, showing initials', { name });
+    }
+  }, [imageUrl, name]);
+
+  //---------------
+  // An aborted load (unmount, Fast Refresh, navigation) also fires `error`,
+  // and treating that as a broken avatar logged a false failure and swapped a
+  // perfectly good photo for the initials. A real failure leaves the element
+  // in the document; an aborted one is already detached.
+  //---------------
+  const handleImageError = (event: React.SyntheticEvent<HTMLImageElement>) => {
+    if (!event.currentTarget.isConnected) return;
+    setImageFailed(true);
+    logClientError('[persona-avatar] avatar image failed to load', undefined, {
+      name,
+      source: describeImageSource(imageUrl),
+    });
+  };
+
   return (
     <span
       className={cn(
@@ -65,7 +95,7 @@ export default function PersonaAvatar({
           width={size}
           height={size}
           unoptimized
-          onError={() => setImageFailed(true)}
+          onError={handleImageError}
           className="size-full object-cover"
         />
       ) : initials.length > 0 ? (

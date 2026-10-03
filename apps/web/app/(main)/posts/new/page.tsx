@@ -369,7 +369,7 @@ const NewPostPersonaField = () => {
                 'flex cursor-pointer items-center gap-3 rounded-2xl border bg-white p-3 transition-colors',
                 // Foco no mesmo azul-marinho da seleção (o token `ring` é
                 // outro azul e brigaria com o anel de selecionado).
-                'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent/40 has-[:focus-visible]:ring-offset-2',
+                'has-focus-visible:ring-2 has-focus-visible:ring-accent/40 has-focus-visible:ring-offset-2',
                 selected
                   ? 'border-accent bg-accent/5 ring-1 ring-accent'
                   : 'border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50',
