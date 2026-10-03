@@ -170,6 +170,13 @@ describe('NewPostPage', () => {
     expect(screen.getByRole('button', { name: 'newPost.submit' })).toBeInTheDocument();
   });
 
+  it('renders no feedback banner before any submit', () => {
+    render(<NewPostPage />);
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('shows a skeleton while the persona list loads', () => {
     mockQueries({ isLoading: true });
 
