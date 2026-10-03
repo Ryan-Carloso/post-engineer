@@ -149,8 +149,19 @@ def track_event(event_name: str, properties: dict[str, Any] | None = None) -> No
         if client is None:
             return
         props = _scrub_secrets(dict(properties or {}))
+        # Attribute the event to the real user when known so PostHog breaks
+        # the funnel down per person; the engine pseudo-person is only the
+        # fallback for events without a user (e.g. background jobs).
+        raw_user_id = (properties or {}).get("user_id")
+        distinct_id = (
+            raw_user_id
+            if isinstance(raw_user_id, str)
+            and raw_user_id
+            and raw_user_id != "unknown"
+            else "post-engineer-engine"
+        )
         client.capture(
-            distinct_id="post-engineer-engine",
+            distinct_id=distinct_id,
             event=event_name,
             properties=props,
         )

@@ -34,6 +34,35 @@ def test_track_event_captures_with_properties():
             assert call.kwargs["properties"]["slotId"] == "s1"
 
 
+def test_track_event_uses_user_id_as_distinct_id():
+    # PostHog person attribution: a real user_id becomes the distinct_id so
+    # the funnel breaks down per person instead of one engine pseudo-person.
+    with mock.patch.dict(os.environ, {"POSTHOG_API_KEY": "phc_test_key"}):
+        with mock.patch("posthog.Posthog") as mock_cls:
+            instance = mock_cls.return_value
+            analytics.track_event(
+                "video_generation_started",
+                {"user_id": "user-123", "task_id": "t1"},
+            )
+            call = instance.capture.call_args
+            assert call.kwargs["distinct_id"] == "user-123"
+
+
+@pytest.mark.parametrize("user_id", ["unknown", "", None, 12345])
+def test_track_event_falls_back_to_engine_distinct_id(user_id):
+    # Missing, sentinel ("unknown"), empty, or non-string user_id keeps the
+    # engine pseudo-person as distinct_id.
+    with mock.patch.dict(os.environ, {"POSTHOG_API_KEY": "phc_test_key"}):
+        with mock.patch("posthog.Posthog") as mock_cls:
+            instance = mock_cls.return_value
+            analytics.track_event(
+                "video_generation_started",
+                {"user_id": user_id, "task_id": "t1"},
+            )
+            call = instance.capture.call_args
+            assert call.kwargs["distinct_id"] == "post-engineer-engine"
+
+
 def test_track_event_noop_when_key_missing():
     with mock.patch.dict(os.environ, {}, clear=True):
         with mock.patch("posthog.Posthog") as mock_cls:
