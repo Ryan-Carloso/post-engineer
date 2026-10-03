@@ -112,6 +112,13 @@ function loadSdk(): Promise<PostHogNodeClient | null> {
 
 export interface ServerPostHogClient {
   capture(event: string, properties?: Record<string, unknown>): void;
+  /**
+   * Capture an event attributed to a specific user (distinct_id).
+   * Used by server jobs acting on behalf of a user (e.g. billing
+   * reconciliation refunds) where the shared service id would hide who
+   * was affected.
+   */
+  captureAs(distinctId: string, event: string, properties?: Record<string, unknown>): void;
   captureException(error: unknown, properties?: Record<string, unknown>): void;
 }
 
@@ -119,6 +126,9 @@ function toClient(sdk: PostHogNodeClient): ServerPostHogClient {
   return {
     capture: (event, properties) => {
       sdk.capture({ distinctId: SERVER_DISTINCT_ID, event, properties });
+    },
+    captureAs: (distinctId, event, properties) => {
+      sdk.capture({ distinctId, event, properties });
     },
     captureException: (error, properties) => {
       sdk.captureException(error, SERVER_DISTINCT_ID, properties);
@@ -149,6 +159,9 @@ export function getPostHogServer(): ServerPostHogClient | null {
   queuingClient = {
     capture: (event, properties) => {
       pending.push(() => cachedClient?.capture(event, properties));
+    },
+    captureAs: (distinctId, event, properties) => {
+      pending.push(() => cachedClient?.captureAs(distinctId, event, properties));
     },
     captureException: (error, properties) => {
       pending.push(() => cachedClient?.captureException(error, properties));
