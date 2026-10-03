@@ -860,5 +860,59 @@ class TestDispatchFailedGuardLockFallback(unittest.TestCase):
             tm._dispatch_failed_event_emitted_tasks_lock.release()
 
 
+class TrackingContextIdentityTests(unittest.TestCase):
+    """Optional identity props on the shared tracking context.
+
+    persona_id/slot_id/schedule_id ride along when the task row carries
+    them, so every lifecycle event (started/progress/failed/generated)
+    can be broken down per persona and per schedule in PostHog. They are
+    OMITTED when absent — never the "unknown" sentinel — so breakdowns
+    don't fill with noise.
+    """
+
+    def test_tracking_context_includes_identity_ids_from_task_row(self):
+        sm.state.update_task(
+            "ctx-task-1",
+            user_id="user-1",
+            flow="batch",
+            pipeline="video",
+            persona_id="persona-9",
+            slot_id="slot-7",
+            schedule_id="sched-3",
+        )
+        try:
+            context = tm._task_tracking_context("ctx-task-1")
+        finally:
+            sm.state.delete_task("ctx-task-1")
+        self.assertEqual(context["persona_id"], "persona-9")
+        self.assertEqual(context["slot_id"], "slot-7")
+        self.assertEqual(context["schedule_id"], "sched-3")
+        # The base identity props are untouched.
+        self.assertEqual(context["user_id"], "user-1")
+        self.assertEqual(context["flow"], "batch")
+
+    def test_tracking_context_omits_identity_ids_when_task_row_lacks_them(self):
+        context = tm._task_tracking_context("ghost-task-xyz")
+        for key in ("persona_id", "slot_id", "schedule_id"):
+            self.assertNotIn(key, context)
+
+    def test_tracking_context_omits_blank_identity_ids(self):
+        with patch.object(
+            tm.sm.state,
+            "get_task",
+            return_value={
+                "user_id": "user-1",
+                "flow": "direct",
+                "pipeline": "video",
+                "persona_id": "",
+                "slot_id": None,
+                "schedule_id": "",
+            },
+        ):
+            context = tm._task_tracking_context("blank-task-1")
+        for key in ("persona_id", "slot_id", "schedule_id"):
+            self.assertNotIn(key, context)
+
+
 if __name__ == "__main__":
     unittest.main()

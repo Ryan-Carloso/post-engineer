@@ -60,3 +60,34 @@ def test_publish_emits_lifecycle_event_names():
     assert "video_publish_started" in source
     assert "video_published" in source
     assert "video_publish_failed" in source
+
+
+def test_publish_tracking_context_carries_identity_props():
+    """The publish lifecycle events attribute per task/user/schedule/persona."""
+    context = pub_module._publish_tracking_context(
+        {"id": "slot-1", "task_id": "task-9", "user_id": "user-1"},
+        {"id": "sched-2", "user_id": "user-1", "persona_id": "persona-3"},
+    )
+    assert context["slotId"] == "slot-1"
+    assert context["task_id"] == "task-9"
+    assert context["user_id"] == "user-1"
+    assert context["schedule_id"] == "sched-2"
+    assert context["persona_id"] == "persona-3"
+
+
+def test_publish_tracking_context_omits_blank_props():
+    """Blank identity props are omitted, never blank strings in PostHog."""
+    context = pub_module._publish_tracking_context(
+        {"id": "slot-1", "task_id": ""},
+        {"id": "", "user_id": "", "persona_id": None},
+    )
+    assert context == {"slotId": "slot-1"}
+
+
+def test_publish_tracking_context_prefers_slot_user_id():
+    """The slot row's user_id wins over the schedule embed (slot_user_id)."""
+    context = pub_module._publish_tracking_context(
+        {"id": "slot-1", "user_id": "user-slot"},
+        {"id": "sched-2", "user_id": "user-sched"},
+    )
+    assert context["user_id"] == "user-slot"
