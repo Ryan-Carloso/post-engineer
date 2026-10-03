@@ -745,7 +745,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   });
 
   // 9. Insert the schedule. The id is deterministic (idempotency anchor).
-// scheduled_at is a legacy column that always stays NULL during dispatch,
+  // scheduled_at is a legacy column that always stays NULL during dispatch,
   // so the engine's immediate one-off path cannot race us and
   // double-generate; the tick only reconciles our generating slots.
   // NOTE: do not add a 'kind' key here — the schedules table has no kind

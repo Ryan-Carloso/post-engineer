@@ -102,9 +102,10 @@ export async function GET(
 ): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
-  const supabase = auth.isApiKey === true
-    ? createSupabaseServiceClient()
-    : await createSupabaseServerClient();
+  const supabase =
+    auth.isApiKey === true || auth.isOAuth === true
+      ? createSupabaseServiceClient()
+      : await createSupabaseServerClient();
 
   const { slotId } = await context.params;
 
@@ -223,9 +224,10 @@ export async function DELETE(
 ): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
-  const supabase = auth.isApiKey === true
-    ? createSupabaseServiceClient()
-    : await createSupabaseServerClient();
+  const supabase =
+    auth.isApiKey === true || auth.isOAuth === true
+      ? createSupabaseServiceClient()
+      : await createSupabaseServerClient();
 
   const { slotId } = await context.params;
 
@@ -291,9 +293,10 @@ export async function PATCH(
 ): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
-  const supabase = auth.isApiKey === true
-    ? createSupabaseServiceClient()
-    : await createSupabaseServerClient();
+  const supabase =
+    auth.isApiKey === true || auth.isOAuth === true
+      ? createSupabaseServiceClient()
+      : await createSupabaseServerClient();
 
   const { slotId } = await context.params;
 

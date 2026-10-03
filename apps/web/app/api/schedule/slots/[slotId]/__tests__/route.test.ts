@@ -21,6 +21,7 @@ vi.mock('@/lib/supabase/service', () => ({
 import { DELETE, GET, PATCH } from '../route';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 //---------------
 // DELETE /api/schedule/slots/:slotId — a user can delete a single slot of
@@ -88,6 +89,13 @@ function mockAuth() {
   } as never);
 }
 
+function mockOAuthAuth() {
+  vi.mocked(requireSupabaseSession).mockResolvedValue({
+    auth: { userId: USER_ID, accessToken: 'oauth-token', isOAuth: true },
+    error: null,
+  } as never);
+}
+
 async function deleteSlot(slotId: string): Promise<Response> {
   return DELETE(new Request(`https://example.com/api/schedule/slots/${slotId}`), {
     params: Promise.resolve({ slotId }),
@@ -110,12 +118,27 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
 
     const response = await deleteSlot('slot-1');
 
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as { success: boolean };
+    expect(response.status).toBe(200);    const body = (await response.json()) as { success: boolean };
     expect(body.success).toBe(true);
     // The delete must be scoped to the slot id AND the owner.
     const deleteCall = client.calls.find((c) => c.op === 'delete');
     expect(deleteCall?.table).toBe('scheduled_posts');
+  });
+
+  it('uses the service client for OAuth callers (no cookie session)', async () => {
+    const client = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', topic: 'T' },
+      schedule: { id: 's1', user_id: USER_ID },
+      remaining: [{ id: 'slot-2' }],
+    });
+    mockOAuthAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await deleteSlot('slot-1');
+
+    expect(response.status).toBe(200);
+    expect(createSupabaseServiceClient).toHaveBeenCalled();
+    expect(createSupabaseServerClient).not.toHaveBeenCalled();
   });
 
   it('returns 409 for a published slot', async () => {
@@ -227,6 +250,21 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
     const updateCall = client.calls.find((c) => c.op === 'update');
     expect(updateCall).toBeDefined();
     expect(updateCall?.args?.[0]).toEqual({ topic: 'Novo tema' });
+  });
+
+  it('uses the service client for OAuth callers (no cookie session)', async () => {
+    const client = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', topic: 'Old' },
+      schedule: { id: 's1', user_id: USER_ID },
+    });
+    mockOAuthAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await patchSlot('slot-1', { topic: 'Novo tema' });
+
+    expect(response.status).toBe(200);
+    expect(createSupabaseServiceClient).toHaveBeenCalled();
+    expect(createSupabaseServerClient).not.toHaveBeenCalled();
   });
 
   it('returns 400 for an empty or whitespace-only topic', async () => {
@@ -343,6 +381,24 @@ describe('GET /api/schedule/slots/[slotId]', () => {
       instagramAccountIds: ['ig1'],
     });
     expect(body.persona).toEqual({ id: 'p1', name: 'Viva Leve' });
+  });
+
+  it('uses the service client for OAuth callers (no cookie session)', async () => {
+    const client = mockSlotsClient({
+      slot: SLOT_DETAIL_ROW,
+      schedule: SCHEDULE_ROW,
+      persona: { id: 'p1', name: 'Viva Leve' },
+    });
+    mockOAuthAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
+      params: Promise.resolve({ slotId: 'slot-1' }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(createSupabaseServiceClient).toHaveBeenCalled();
+    expect(createSupabaseServerClient).not.toHaveBeenCalled();
   });
 
   it('enriches a generating slot with live engine progress', async () => {
