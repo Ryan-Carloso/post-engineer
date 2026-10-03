@@ -189,6 +189,9 @@ describe('POST /api/persona — modo faceless (100% stock, sem avatar)', () => {
     // Column name -> true when the column is NOT NULL with no DEFAULT (the
     // insert MUST supply it) — e.g. `user_id uuid not null` vs
     // `created_at timestamptz not null default now()`.
+    // Assumes one column per physical line: a wrapped definition (e.g. the
+    // `default` on its own continuation line) would misparse — fail-closed,
+    // but join continuation lines before changing the format.
     const columns = new Map<string, boolean>();
     for (const line of columnBlock.split('\n')) {
       const trimmed = line.trim();
@@ -205,6 +208,9 @@ describe('POST /api/persona — modo faceless (100% stock, sem avatar)', () => {
     expect(columns.has('recent_image_ids')).toBe(true);
     expect(columns.get('user_id')).toBe(true);
     expect(columns.get('created_at')).toBe(false);
+    // Pins the DEFAULT this PR restores: dropping `default '{}'` from
+    // schema.sql must fail CI, not just leave the insert pin green.
+    expect(columns.get('recent_image_ids')).toBe(false);
 
     const { inserted } = mockSupabase();
     const res = await POST(
