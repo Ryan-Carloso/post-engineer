@@ -575,7 +575,7 @@ describe('validateImageBuffer', () => {
   });
 });
 
-describe('supabase/002_persona-images.sql literals', () => {
+describe('supabase/migrations/002_persona-images.sql literals', () => {
   it('keeps the SQL literals in sync with the TypeScript constants', async () => {
     // The trigger/RPC literals have no import of the TS constants; a
     // one-sided change would silently desynchronize app-side 400s from the
@@ -591,6 +591,7 @@ describe('supabase/002_persona-images.sql literals', () => {
       '..',
       '..',
       'supabase',
+      'migrations',
       '002_persona-images.sql',
     );
     const sql = readFileSync(sqlPath, 'utf8');
