@@ -1,6 +1,6 @@
 {
   "name": "post-engineer",
-  "version": "1.17.0",
+  "version": "1.17.1",
   "private": true,
   "description": "Post Engineer monorepo: Next.js web + video generation engine + MCP server",
   "packageManager": "pnpm@10.22.0",
