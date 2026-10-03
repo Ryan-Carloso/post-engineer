@@ -71,11 +71,18 @@ deploy) — marks the previously dashboard-applied migrations as applied so
 the first `db push` only picks up genuinely new files:
 
 ```bash
-supabase link --project-ref "$SUPABASE_PROJECT_ID"
-supabase migration repair --status applied --version 001
-supabase migration repair --status applied --version 002
-supabase migration repair --status applied --version 003
+# Roda na sua máquina (não no CI nem na VPS), uma única vez, antes do
+# primeiro deploy automático. Marca 001-003 como aplicadas no histórico
+# (elas já foram aplicadas manualmente pelo dashboard) sem rodar o SQL.
+# Não precisa de `supabase link` nem de access token para este passo.
+supabase migration repair --status applied 001 002 003 \
+  --db-url "postgresql://postgres:<DB_PASSWORD>@db.<PROJECT_REF>.supabase.co:5432/postgres"
 ```
+- `<DB_PASSWORD>`: Supabase Dashboard → Project Settings → Database
+  (se perdeu, dá para resetar lá). Se a senha tiver caracteres especiais
+  (`@`, `/`, `:`…), use a forma percent-encoded na URL (`@` → `%40`).
+- `<PROJECT_REF>`: Dashboard → Project Settings → General → Reference ID
+  (o `<ref>` de `https://<ref>.supabase.co`).
 
 (All statements are idempotent, so skipping the repair is safe — the first
 push would just re-apply everything as no-ops.)
