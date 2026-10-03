@@ -24,11 +24,9 @@ manually. After a PR merges to `main`:
 2. The Deploy workflow (`.github/workflows/deploy.yml`) runs
    `supabase db push --linked`, which applies **only pending migrations**
    (tracked in `supabase_migrations.schema_migrations`).
-3. Only after migrations succeed, the workflow triggers the Vercel
-   production deploy via deploy hook. Vercel's automatic GitHub deployment
-   for `main` is disabled (`apps/web/vercel.json`,
-   `git.deploymentEnabled.main: false`), so production can never deploy
-   before (or without) its migrations. PR previews are unaffected.
+3. The web app itself is deployed to our own VPS
+   (`apps/web/docker-compose.yml`, via `deploy.sh` on the host) — migrations
+   land first, then the host is redeployed.
 
 **Self-hosters / local:** for each file, in order: Supabase Dashboard →
 SQL Editor → New query → paste the file → run — or, from the repo root,
@@ -67,7 +65,6 @@ safe.
 | `SUPABASE_ACCESS_TOKEN`  | `supabase link` authentication                        |
 | `SUPABASE_PROJECT_ID`    | `supabase link --project-ref`                         |
 | `SUPABASE_DB_PASSWORD`   | Direct Postgres connection used by `supabase db push` |
-| `VERCEL_DEPLOY_HOOK_URL` | Deploy hook for the `main` branch (Vercel dashboard → project → Settings → Git → Deploy Hooks) |
 
 One-time production bootstrap (run once locally, before the first automated
 deploy) — marks the previously dashboard-applied migrations as applied so

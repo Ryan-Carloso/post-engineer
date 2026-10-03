@@ -112,6 +112,20 @@ jobs:
         # silently skip coverage generation (no report files written).
         run: pnpm exec vitest run --coverage --coverage.reporter=text --coverage.reporter=cobertura
 
+      # Production build check. Vercel preview builds used to be the only
+      # `next build` verification in CI; now that deploys target our own VPS,
+      # the build runs here with dummy build-time env (NEXT_PUBLIC_* values
+      # are inlined at build time; dummies are enough to prove it compiles).
+      - name: Production build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: dummy-anon-key
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+          NEXT_PUBLIC_POSTHOG_HOST: https://example.posthog.com
+          NEXT_PUBLIC_POSTHOG_KEY: dummy-posthog-key
+          NEXT_PUBLIC_WHATSAPP_NUMBER: "000000000000"
+        run: pnpm build
+
       # Best-effort until GitHub Code Quality is enabled on the repo: with
       # fail-on-error 'false' a missing Code Quality setup warns instead of
       # failing CI. Flip to 'true' once the coverage gate is enforced.

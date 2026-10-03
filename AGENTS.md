@@ -202,12 +202,11 @@ migrations" were declined as reviewer churn.
   DDL (`DROP COLUMN`, `TRUNCATE`, unconditional `DROP TABLE`) blocked
   unless the PR has the `db:destructive-approved` label, and the full
   chain must apply cleanly to an ephemeral Postgres.
-- **CD applies migrations before deploy** (`deploy.yml`, on CI success on
-  `main`): `supabase db push --linked` (pending only), then the Vercel
-  production deploy hook. Vercel auto-deploy for `main` is disabled in
-  `apps/web/vercel.json` (`git.deploymentEnabled.main: false`) so
-  production can never deploy ahead of its migrations; PR previews are
-  unaffected. If migrations fail, no deploy happens.
+- **CD applies migrations after CI on `main`** (`deploy.yml`, on CI success):
+  `supabase db push --linked` (pending only). The web app itself deploys to
+  our own VPS (`apps/web/docker-compose.yml`, via `deploy.sh` on the host)
+  — migrations land first, then the host is redeployed. If migrations fail,
+  the workflow fails loudly and nothing else runs.
 - **Moving a migration file breaks its readers.** The `git mv` of
   001-003 into `supabase/migrations/` turned three SQL-sync tests red
   (ENOENT in CI, PR #65): grep every test for the old path in the same

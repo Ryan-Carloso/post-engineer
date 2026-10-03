@@ -1,34 +1,20 @@
 name: Deploy
 
-# CD: runs after CI passes on main. Applies pending Supabase migrations,
-# then triggers the Vercel production deploy via deploy hook.
+# Applies pending Supabase migrations after CI passes on main.
 #
-# Ordering is guaranteed by construction:
-#   1. Vercel's automatic GitHub deployment for `main` is disabled in
-#      apps/web/vercel.json (git.deploymentEnabled.main = false), so a push
-#      to main never starts a production build on its own. PR previews are
-#      unaffected (only `main` is disabled).
-#   2. This workflow applies migrations with `supabase db push` (pending
-#      migrations only, tracked in supabase_migrations.schema_migrations).
-#   3. Only if migrations succeed, the Vercel deploy hook builds & deploys
-#      the latest main commit to production.
-# If migrations fail, no deploy happens and production keeps serving the
-# last good build.
+# Flow:
+#   1. This workflow runs `supabase db push --linked`, which applies ONLY
+#      pending migrations (tracked in supabase_migrations.schema_migrations).
+#   2. The web app itself is deployed to our own VPS (see
+#      apps/web/docker-compose.yml, deployed with deploy.sh on the host) —
+#      migrations land first, then the host is redeployed.
 #
 # Required repository secrets (Settings > Secrets and variables > Actions):
 #   SUPABASE_ACCESS_TOKEN  - Supabase personal access token (for `supabase link`)
 #   SUPABASE_PROJECT_ID    - Supabase project ref (for `supabase link`)
 #   SUPABASE_DB_PASSWORD   - Database password (direct Postgres connection for `db push`)
-#   VERCEL_DEPLOY_HOOK_URL - Deploy hook URL for the main branch
-#                            (Vercel dashboard > project > Settings > Git > Deploy Hooks)
-# One-time production bootstrap (run once, locally, before the first deploy):
-#   supabase link --project-ref "$SUPABASE_PROJECT_ID"
-#   supabase migration repair --status applied --version 001
-#   supabase migration repair --status applied --version 002
-#   supabase migration repair --status applied --version 003
-# (Marks the dashboard-applied migrations as applied so the first
-# `db push` only applies genuinely new files. All statements are idempotent,
-# so skipping this is safe but slower/noisier.)
+# One-time production bootstrap (run once, locally, before the first automated
+# run): see supabase/README.md ("Pipeline secrets").
 
 on:
   workflow_run:
@@ -71,19 +57,3 @@ jobs:
           # PR plus pending-only semantics, not from an interactive prompt.)
           supabase db push --yes --linked
           echo "production migrations up to date"
-
-  deploy-vercel:
-    needs: [migrate]
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - name: Trigger Vercel production deploy
-        env:
-          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
-        run: |
-          set -euo pipefail
-          : "${VERCEL_DEPLOY_HOOK_URL:?VERCEL_DEPLOY_HOOK_URL secret is not set}"
-          resp="$(curl -fsS --max-time 30 -X POST "$VERCEL_DEPLOY_HOOK_URL")"
-          echo "$resp" | python3 -c "import json,sys; d=json.load(sys.stdin); print('deploy hook accepted, job:', d.get('job', {}).get('id', '?'))"
