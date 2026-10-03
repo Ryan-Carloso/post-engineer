@@ -41,7 +41,7 @@ export const IMAGE_BUCKET = 'personas';
 export const IMAGE_URL_TTL_SECONDS = 3600;
 /**
  * Stable SQLSTATE raised by the enforce_persona_image_limit trigger
- * (supabase/002_persona-images.sql). The app maps this code — not the English
+ * (supabase/migrations/002_persona-images.sql). The app maps this code — not the English
  * trigger message — to a 400 "library full". Keep in sync with the SQL.
  */
 export const PERSONA_IMAGE_LIMIT_SQLSTATE = 'PEL01';

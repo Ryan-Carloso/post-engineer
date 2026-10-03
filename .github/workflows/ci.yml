@@ -227,3 +227,116 @@ jobs:
           language: Python
           label: code-coverage/engine
           fail-on-error: 'false'
+
+  # Validates Supabase migrations on every PR and push: numbering stays
+  # append-only and strictly increasing, destructive DDL is blocked unless
+  # explicitly approved, and the whole chain applies cleanly to a fresh
+  # database. The CD workflow (.github/workflows/deploy.yml) runs
+  # `supabase db push` against production after merge.
+  supabase-migrations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
+        with:
+          fetch-depth: 0
+
+      - name: Validate migration numbering and destructive changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          # 1. Every file is NNN_name.sql with a unique, strictly increasing
+          #    numeric prefix (the prefix IS the apply order).
+          prev_num=""
+          prev_file=""
+          for f in supabase/migrations/*.sql; do
+            base="$(basename "$f")"
+            if [[ ! "$base" =~ ^([0-9]+)_(.+)\.sql$ ]]; then
+              echo "::error file=$f::Migration filename must match NNN_name.sql (got '$base')"
+              exit 1
+            fi
+            num="${BASH_REMATCH[1]}"
+            if [[ -n "$prev_num" ]] && (( 10#$num <= 10#$prev_num )); then
+              echo "::error file=$f::Migration numbers must be unique and strictly increasing ('$num' after '$prev_num' in '$prev_file')"
+              exit 1
+            fi
+            prev_num="$num"
+            prev_file="$base"
+          done
+          echo "numbering OK (${prev_file:-no migrations} is latest)"
+
+          # 2. Destructive DDL gate (PRs only): DROP COLUMN, TRUNCATE, or an
+          #    unconditional DROP TABLE in added lines needs the
+          #    'db:destructive-approved' label. The recreate pattern
+          #    (DROP ... IF EXISTS) is allowed.
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base_ref="origin/${{ github.base_ref }}"
+            changed="$(git diff --name-only --diff-filter=AMR "$base_ref"...HEAD -- 'supabase/migrations/*.sql' || true)"
+            destructive=0
+            for f in $changed; do
+              added="$(git diff -U0 "$base_ref"...HEAD -- "$f" | grep '^+' | grep -v '^+++' | sed 's/^+//' | grep -v '^[[:space:]]*--' || true)"
+              if echo "$added" | grep -iqE 'drop[[:space:]]+column|truncate([[:space:]]|$)'; then
+                echo "::error file=$f::Destructive statement (DROP COLUMN / TRUNCATE) in added lines"
+                destructive=1
+              fi
+              if echo "$added" | grep -iqE 'drop[[:space:]]+table' | grep -qviE 'if[[:space:]]+exists'; then
+                echo "::error file=$f::Unconditional DROP TABLE in added lines (use DROP ... IF EXISTS for the recreate pattern)"
+                destructive=1
+              fi
+            done
+            if [[ "$destructive" == "1" ]]; then
+              labels="$(gh pr view "${{ github.event.pull_request.number }}" --json labels --jq '.labels[].name' || true)"
+              if ! echo "$labels" | grep -qx 'db:destructive-approved'; then
+                echo "::error::Destructive migration blocked: add the 'db:destructive-approved' label to approve data-loss DDL explicitly."
+                exit 1
+              fi
+              echo "destructive migration explicitly approved via label"
+            else
+              echo "no destructive DDL in changed migrations"
+            fi
+          fi
+
+      - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1 pinned 2026-10-03
+        with:
+          version: '2.119.0'
+
+      - name: Create Supabase-compat stubs on ephemeral Postgres
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+          # Vanilla Postgres lacks Supabase's auth schema, but migrations
+          # reference auth.uid() in RLS policies (name-resolved at DDL time).
+          # Stub it so validation matches production name resolution.
+          psql "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable" -v ON_ERROR_STOP=1 <<'SQL'
+          create schema if not exists auth;
+          create or replace function auth.uid() returns uuid
+            language sql stable as $$ select null::uuid $$;
+          SQL
+
+      - name: Apply migrations to ephemeral Postgres
+        run: |
+          set -euo pipefail
+          # Proves the whole chain applies cleanly, in order, to a fresh DB.
+          # (sslmode=disable: the ephemeral service has no TLS; production
+          # uses `supabase link` + `db push --linked`, which negotiates TLS.)
+          supabase db push --yes --db-url "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable"
+          echo "migrations applied cleanly"

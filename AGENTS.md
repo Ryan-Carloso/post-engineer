@@ -175,10 +175,12 @@ The user asked for numbered migrations so self-hosters know the apply
 order — this supersedes the earlier triage note that "versioned SQL
 migrations" were declined as reviewer churn.
 
-- **Numbered, append-only.** `supabase/NNN_name.sql` — the numeric prefix
-  IS the apply order (dashboard SQL editor, lowest number first). New
-  migrations always append a new number; never edit a shipped number.
-  Existing self-hosters then apply only the new files.
+- **Numbered, append-only, in `supabase/migrations/`.** The numeric prefix
+  IS the apply order (`supabase db push` reads that directory and applies
+  only pending migrations, tracked in
+  `supabase_migrations.schema_migrations`). New migrations always append a
+  new number; never edit a shipped number. Existing databases then apply
+  only the new files.
 - **Everything idempotent.** `create table/index if not exists`,
   `add column if not exists`, `create or replace`, `drop ... if exists`
   before recreating an incompatible object.
@@ -187,13 +189,25 @@ migrations" were declined as reviewer churn.
   earlier migration (or the 001 snapshot) already created the table — the
   FK silently never exists on that DB. Declare FKs on existing tables in
   an explicit do-block guarded on `pg_constraint` (pattern: section 1b of
-  `002_persona-images.sql`; pinned by the FK assertions in the SQL-literals
-  sync test).
+  `migrations/002_persona-images.sql`; pinned by the FK assertions in the
+  SQL-literals sync test).
 - **Pin app-coupled SQL with a static sync test.** When the app depends on
   SQL behavior, a test parses the migration file and asserts the literals
-  (pattern: the `supabase/002_persona-images.sql literals` describe block).
+  (pattern: the `supabase/migrations/002_persona-images.sql literals` describe block;
+  note the test resolves the file under `supabase/migrations/`).
 - **Update `supabase/README.md` and `docs/SELF_HOSTING.md`** when adding a
   migration.
+- **CI validates every migration PR** (`supabase-migrations` job in
+  `ci.yml`): filename numbering unique + strictly increasing, destructive
+  DDL (`DROP COLUMN`, `TRUNCATE`, unconditional `DROP TABLE`) blocked
+  unless the PR has the `db:destructive-approved` label, and the full
+  chain must apply cleanly to an ephemeral Postgres.
+- **CD applies migrations before deploy** (`deploy.yml`, on CI success on
+  `main`): `supabase db push --linked` (pending only), then the Vercel
+  production deploy hook. Vercel auto-deploy for `main` is disabled in
+  `apps/web/vercel.json` (`git.deploymentEnabled.main: false`) so
+  production can never deploy ahead of its migrations; PR previews are
+  unaffected. If migrations fail, no deploy happens.
 
 ## MCP review learnings (standing rules, distilled 2026-09-27)
 
