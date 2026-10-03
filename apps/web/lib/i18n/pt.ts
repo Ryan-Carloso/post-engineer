@@ -353,6 +353,7 @@ export const ptDictionary = {
     characterLabel: 'Escolha um personagem',
     characterHint: 'Clique em um card para usar esse personagem pronto.',
     photoUpload: 'Enviar foto',
+    photoCurrent: 'Foto atual',
     photoHint: 'Para melhores resultados, envie uma foto nítida, de frente e enquadrada dos ombros para cima. Evite fotos de corpo inteiro. Formatos aceitos: JPG ou PNG.',
     libraryLabel: 'Biblioteca de imagens',
     libraryHint: 'Até {max} fotos da mesma pessoa. Cada vídeo escolhe a melhor pela tag, então variedade melhora os resultados. Formatos aceitos: JPG/JPEG, PNG ou WebP (máx. {sizeMb}MB).',

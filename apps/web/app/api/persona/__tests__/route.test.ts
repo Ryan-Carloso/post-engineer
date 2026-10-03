@@ -954,6 +954,38 @@ describe('PATCH /api/persona', () => {
     expect(removed).toContain(`${USER_ID}/foto-antiga.png`);
   });
 
+  //---------------
+  // personas_visual_identity_check: photo_path + avatar_url = at most one.
+  // Setting avatar_url without clearing photo_path left the row with BOTH,
+  // the check rejected the update (500 on every save) and, without the
+  // check, the UI would silently prefer the wrong face.
+  //---------------
+  it('trocar de foto para personagem limpa photo_path no MESMO update', async () => {
+    const { updated, removed } = mockSupabaseForPatch({
+      existing: {
+        id: 'persona-uuid-1',
+        user_id: USER_ID,
+        name: 'Com Foto',
+        photo_path: `${USER_ID}/foto-antiga.png`,
+        avatar_url: null,
+        voice_id: 'voz',
+        voice_audio_path: null,
+      },
+    });
+
+    const res = await PATCH(
+      patchRequest('persona-uuid-1', { avatarUrl: '/caracter-samples/file-3.png' }),
+    );
+
+    expect(res.status).toBe(200);
+    // The single update carries the swap; a separate clear would race.
+    expect(updated[0]).toMatchObject({
+      avatar_url: '/caracter-samples/file-3.png',
+      photo_path: null,
+    });
+    expect(removed).toContain(`${USER_ID}/foto-antiga.png`);
+  });
+
   it('trocar para voz da casa grava voice_id e limpa voice_audio_path', async () => {
     const { updated, removed } = mockSupabaseForPatch({
       existing: {

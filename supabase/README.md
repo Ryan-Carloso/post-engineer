@@ -10,6 +10,7 @@ the order — you never need to guess or read docs to know what comes next:
 | 002 | `migrations/002_persona-images.sql`         | Persona image library: constraints, trigger, RPCs   |
 | 003 | `migrations/003_engine-task-state.sql`      | Engine task state (only for `MPT_STATE_BACKEND=supabase`) |
 | 004 | `migrations/004_billing_reconcile.sql`        | Billing reconciliation: zombie/stuck detectors, daily pg_cron trigger (fully automatic, no review queue) |
+| 005 | `migrations/005_persona-visual-identity.sql` | CHECK: a persona never has both `photo_path` and `avatar_url` |
 
 ## How to apply
 
@@ -41,8 +42,8 @@ safe.
 
 ## Adding a new migration (maintainers)
 
-- **Append** a new numbered file (`migrations/004_....sql`,
-  `migrations/005_....sql`, …). Never edit an already-shipped number —
+- **Append** a new numbered file (`migrations/005_....sql`,
+  `migrations/006_....sql`, …). Never edit an already-shipped number —
   existing databases must be able to apply only the new files.
 - Keep every statement idempotent (`create table if not exists`,
   `add column if not exists`, `create or replace`, `drop ... if exists`
@@ -76,6 +77,7 @@ supabase link --project-ref "$SUPABASE_PROJECT_ID"
 supabase migration repair --status applied --version 001
 supabase migration repair --status applied --version 002
 supabase migration repair --status applied --version 003
+supabase migration repair --status applied --version 004
 ```
 
 (All statements are idempotent, so skipping the repair is safe — the first

@@ -354,6 +354,7 @@ export const enDictionary: Dictionary = {
     characterLabel: 'Choose a character',
     characterHint: 'Click a card to use that ready-made character.',
     photoUpload: 'Upload photo',
+    photoCurrent: 'Current photo',
     photoHint: 'For best results, upload a clear, front-facing photo framed from the shoulders up. Avoid full-body photos. Accepted formats: JPG or PNG.',
     libraryLabel: 'Image library',
     libraryHint: 'Up to {max} photos of the same person. Each video picks the best match by tag, so variety improves results. Accepted formats: JPG/JPEG, PNG, or WebP (max {sizeMb}MB).',

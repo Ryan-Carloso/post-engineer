@@ -206,6 +206,10 @@ interface PersonaFormState {
   photo: File | null;
   prompt: string;
   avatarUrl: string | null;
+  /** Signed URL of the ALREADY uploaded photo (edit-mode display only).
+      Never sent back to the server — photo_path is the stored identity and
+      the link expires in 1h. */
+  storedPhotoUrl: string | null;
   voiceId: string | null;
   videoAspect: string;
   scriptPrompt: string;
@@ -221,6 +225,7 @@ interface PersonaFormState {
   setPhoto: (file: File | null) => void;
   setPrompt: (value: string) => void;
   setAvatarUrl: (url: string | null) => void;
+  setStoredPhotoUrl: (url: string | null) => void;
   setVoiceId: (id: string | null) => void;
   setVideoAspect: (value: string) => void;
   setScriptPrompt: (value: string) => void;
@@ -240,6 +245,7 @@ const initialPersonaState = {
   photo: null,
   prompt: '',
   avatarUrl: null,
+  storedPhotoUrl: null,
   voiceId: null,
   videoAspect: '9:16',
   scriptPrompt: '',
@@ -259,6 +265,7 @@ export const usePersonaStore = create<PersonaFormState>()(
     setPhoto: (photo) => set({ photo }),
     setPrompt: (prompt) => set({ prompt }),
     setAvatarUrl: (avatarUrl) => set({ avatarUrl }),
+    setStoredPhotoUrl: (storedPhotoUrl) => set({ storedPhotoUrl }),
     setVoiceId: (voiceId) => set({ voiceId }),
     setVideoAspect: (videoAspect) => set({ videoAspect }),
     setScriptPrompt: (scriptPrompt) => set({ scriptPrompt }),

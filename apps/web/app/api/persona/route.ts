@@ -423,6 +423,12 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     }
   } else if (patch.avatarUrl !== null) {
     updates.avatar_url = patch.avatarUrl;
+    // Exactly one visual identity per persona (personas_visual_identity_check:
+    // photo_path + avatar_url = 1). Switching a photo persona to a character
+    // must CLEAR photo_path in the same update, exactly like the photo branch
+    // above clears avatar_url — without it the update violates the check and
+    // every edit of a photo persona 500s.
+    updates.photo_path = null;
     if (typeof persona.photo_path === 'string' && persona.photo_path) {
       stalePaths.push(persona.photo_path);
     }
