@@ -3,9 +3,12 @@ name: release-mcp
 # Publishes post-engineer-mcp to npm via trusted publishing (GitHub OIDC, no token).
 #
 # How to cut a release (after the changes are merged to main):
-#   1. Bump the version in apps/mcp/package.json (e.g. 1.2.0 -> 1.3.0) and push.
-#   2. git tag -a mcp-v1.3.0 -m "post-engineer-mcp v1.3.0"
-#   3. git push origin mcp-v1.3.0
+#   AUTOMATIC (preferred): the release-mcp-auto.yml workflow tags every main
+#   merge that touches apps/mcp/ — no manual steps needed.
+#   MANUAL (fallback):
+#     1. Bump the version in apps/mcp/package.json (e.g. 1.2.0 -> 1.3.0) and push.
+#     2. git tag -a mcp-v1.3.0 -m "post-engineer-mcp v1.3.0"
+#     3. git push origin mcp-v1.3.0
 #
 # The tag version MUST match apps/mcp/package.json or the job fails before
 # publishing. One-time npm setup required: on npmjs.com, add this repo as a
