@@ -53,6 +53,7 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           set -euo pipefail
+          : "${SUPABASE_ACCESS_TOKEN:?SUPABASE_ACCESS_TOKEN secret is not set}"
           : "${SUPABASE_PROJECT_ID:?SUPABASE_PROJECT_ID secret is not set}"
           : "${SUPABASE_DB_PASSWORD:?SUPABASE_DB_PASSWORD secret is not set}"
           supabase link --project-ref "$SUPABASE_PROJECT_ID" --password "$SUPABASE_DB_PASSWORD"
