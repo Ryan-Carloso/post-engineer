@@ -330,6 +330,32 @@ class BatchScheduleTests(unittest.TestCase):
             persona_id="persona-4",
         )
 
+    def test_dispatch_generation_omits_all_explicitly_blank_identity_ids(self):
+        # Explicit empty strings (not just None defaults): all three blank
+        # must be omitted from the persisted row.
+        from app.models.schema import TaskVideoRequest
+
+        store = _FakeStore()
+        scheduler = self._scheduler(store)
+        request = TaskVideoRequest(video_subject="Batch topic one")
+
+        with (
+            patch("app.services.task.start"),
+            patch("app.services.fill_schedule.generate.threading.Thread"),
+        ):
+            scheduler.generator._dispatch_generation(
+                "task-5",
+                request,
+                "user-1",
+                slot_id="",
+                schedule_id="",
+                persona_id="",
+            )
+
+        scheduler.task_state.update_task.assert_called_once_with(
+            "task-5", user_id="user-1", flow="batch", pipeline="video"
+        )
+
 
 
 
