@@ -182,9 +182,9 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
   });
 
   it('1 — cria a persona pela UI real', () => {
-    cy.intercept('POST', '/api/persona', {
-      statusCode: 200,
-      body: { success: true, personaId: PERSONA.id },
+    cy.intercept('POST', '/api/persona', (req) => {
+      console.log('[DEBUG] Create persona request body:', req.body);
+      req.reply({ statusCode: 200, body: { success: true, personaId: PERSONA.id } });
     }).as('createPersona');
 
     cy.visit('/persona');
@@ -204,6 +204,7 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
   it('2 — conecta o Bluesky (mockado, sem OAuth)', () => {
     cy.intercept('POST', '/api/bluesky-connect', (req) => {
       blueskyConnected = true;
+      console.log('[DEBUG] Bluesky connect request body:', req.body);
       req.reply({ statusCode: 200, body: { success: true, accountId: 'row-e2e', did: BLUESKY_ACCOUNT.did } });
     }).as('blueskyConnect');
 
@@ -231,6 +232,7 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
   it('3 — cria e agenda o vídeo para amanhã (agendar é obrigatório)', () => {
     const startAtDate = tomorrowDateInput();
     cy.intercept('POST', '/api/videos/generate-and-schedule', (req) => {
+      console.log('[DEBUG] Create and schedule request body:', req.body);
       req.reply({
         statusCode: 200,
         body: {
