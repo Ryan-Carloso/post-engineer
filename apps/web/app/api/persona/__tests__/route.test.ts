@@ -243,6 +243,42 @@ describe('POST /api/persona — modo faceless (100% stock, sem avatar)', () => {
     }
   });
 
+  it("keeps the recent_image_ids '{}' default literal in sync across SQL files", async () => {
+    // The restored default literal now lives in three SQL files; a value
+    // drift between them (e.g. a non-empty literal in one) would diverge
+    // the migration chain, the canonical schema, and the deployed-DB fix
+    // script silently. Static `includes` checks only — no dynamic RegExp
+    // (CodeQL rule).
+    const { readFileSync } = await import('node:fs');
+    const { join, dirname } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const supabaseDir = join(
+      dirname(fileURLToPath(import.meta.url)),
+      '..',
+      '..',
+      '..',
+      '..',
+      '..',
+      '..',
+      'supabase',
+    );
+    const expectations: Array<[string, string]> = [
+      ['schema.sql', `recent_image_ids uuid[] not null default '{}'`],
+      ['persona-images.sql', `recent_image_ids uuid[] not null default '{}'`],
+      [
+        'fix-recent-image-ids-default.sql',
+        `alter column recent_image_ids set default '{}'`,
+      ],
+    ];
+    for (const [file, literal] of expectations) {
+      const sql = readFileSync(join(supabaseDir, file), 'utf8');
+      expect(
+        sql.includes(literal),
+        `${file} drifted from the recent_image_ids '{}' default`,
+      ).toBe(true);
+    }
+  });
+
   it('rejeita foto enviada em modo faceless (evita reativar avatar no engine)', async () => {
     mockSupabase();
 
