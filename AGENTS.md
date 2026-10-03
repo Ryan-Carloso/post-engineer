@@ -125,6 +125,26 @@ notices.
   reviewer). Read reviewer feedback before requesting merge; address findings
   in focused follow-up commits.
 
+## Billing reconciliation (2026-10-03)
+
+- **Never treat engine HTTP 200 as "task alive".** The task endpoint
+  returns a numeric `state` (-1 failed, 1 complete, 3 queued, 4
+  processing) plus the failure reason — a 200 with `state: -1` is a
+  provably dead task, and treating it as alive silently routes
+  refundable failures into "ambiguous, wait for a human". Always parse
+  the body; only -1/1 are terminal, everything else is active, and a
+  200 without a readable state is unverifiable (not active).
+- **Time-boxed auto-refund beats a human queue for stuck jobs.** Past
+  N days (default 3) with no video and no provable delivery, refund:
+  a wrong refund costs ~$0.10 of GPU, charging a user for nothing is
+  the worse error. Every refund emits `refund_issued` as the audit
+  trail — the queue was process theater around a decision the data
+  already made.
+- **Backfill, don't fail, on proof of delivery.** A published slot
+  means the video shipped: mark the generation `completed`, not
+  `failed`. A `failed` row for a published video lies to every
+  consumer of the history.
+
 ## API naming lint (2026-10-03)
 
 - `.github/workflows/api-naming.yml` lints only NEW field/param names in the
