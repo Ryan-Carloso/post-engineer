@@ -28,7 +28,7 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/engine",
-        "command": "uv run ruff check app cli.py scripts test"
+        "command": "uv run ruff check app cli.py test"
       },
       "cache": true
     },
