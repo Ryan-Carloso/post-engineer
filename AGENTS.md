@@ -208,6 +208,12 @@ migrations" were declined as reviewer churn.
   `apps/web/vercel.json` (`git.deploymentEnabled.main: false`) so
   production can never deploy ahead of its migrations; PR previews are
   unaffected. If migrations fail, no deploy happens.
+- **Moving a migration file breaks its readers.** The `git mv` of
+  001-003 into `supabase/migrations/` turned three SQL-sync tests red
+  (ENOENT in CI, PR #65): grep every test for the old path in the same
+  PR — the sync tests are the coupling that pins app behavior to the
+  migration chain. Migration files stay byte-identical across moves so
+  `db push` checksums keep matching.
 
 ## MCP review learnings (standing rules, distilled 2026-09-27)
 

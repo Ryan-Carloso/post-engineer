@@ -167,6 +167,7 @@ describe('POST /api/persona — modo faceless (100% stock, sem avatar)', () => {
       '..',
       '..',
       'supabase',
+      'migrations',
       '001_schema.sql',
     );
     const sql = readFileSync(sqlPath, 'utf8');
@@ -244,9 +245,10 @@ describe('POST /api/persona — modo faceless (100% stock, sem avatar)', () => {
   });
 
   it("keeps the recent_image_ids '{}' default literal in sync across SQL files", async () => {
-    // The restored default literal now lives in three SQL files; a value
-    // drift between them (e.g. a non-empty literal in one) would diverge
-    // the migration chain, the canonical schema, and the deployed-DB fix
+    // The restored default literal now lives in three SQL files (two in
+    // supabase/migrations/, plus the deployed-DB fix script at the
+    // supabase/ root); a value drift between them would diverge the
+    // migration chain, the canonical schema, and the deployed-DB fix
     // script silently. Static `includes` checks only — no dynamic RegExp
     // (CodeQL rule).
     const { readFileSync } = await import('node:fs');
@@ -263,8 +265,11 @@ describe('POST /api/persona — modo faceless (100% stock, sem avatar)', () => {
       'supabase',
     );
     const expectations: Array<[string, string]> = [
-      ['001_schema.sql', `recent_image_ids uuid[] not null default '{}'`],
-      ['002_persona-images.sql', `recent_image_ids uuid[] not null default '{}'`],
+      [join('migrations', '001_schema.sql'), `recent_image_ids uuid[] not null default '{}'`],
+      [
+        join('migrations', '002_persona-images.sql'),
+        `recent_image_ids uuid[] not null default '{}'`,
+      ],
       [
         'fix-recent-image-ids-default.sql',
         `alter column recent_image_ids set default '{}'`,
