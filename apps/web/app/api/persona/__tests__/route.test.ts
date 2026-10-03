@@ -130,6 +130,21 @@ describe('POST /api/persona — modo faceless (100% stock, sem avatar)', () => {
     });
   });
 
+  it('includes recent_image_ids in the insert (NOT NULL column without DB default)', async () => {
+    // Regression: the personas.recent_image_ids column is NOT NULL with no
+    // DEFAULT in the canonical schema, so omitting it from the insert makes
+    // PostgreSQL reject every persona creation with a 23502 violation (500).
+    const { inserted } = mockSupabase();
+
+    const res = await POST(
+      formRequest({ name: 'Canal Ninja', personaMode: 'faceless', voiceId: 'voz-1' }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(inserted[0]).toHaveProperty('recent_image_ids');
+    expect(inserted[0].recent_image_ids).toEqual([]);
+  });
+
   it('rejeita foto enviada em modo faceless (evita reativar avatar no engine)', async () => {
     mockSupabase();
 

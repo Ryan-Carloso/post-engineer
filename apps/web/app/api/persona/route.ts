@@ -182,6 +182,9 @@ export async function POST(request: Request): Promise<NextResponse> {
         body.values.faceMixPercent,
       ),
       face_quality: body.values.faceQuality,
+      // recent_image_ids is NOT NULL with no DB default in the canonical
+      // schema: omitting it makes PostgreSQL reject the insert (23502).
+      recent_image_ids: [],
     })
     .select('id')
     .single();

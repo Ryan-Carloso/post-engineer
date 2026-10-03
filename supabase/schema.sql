@@ -64,7 +64,7 @@ create table if not exists public.personas (
   niche text,
   face_mix_percent integer,
   face_quality public.face_quality,
-  recent_image_ids uuid[] not null
+  recent_image_ids uuid[] not null default '{}'
 );
 
 create table if not exists public.persona_images (
