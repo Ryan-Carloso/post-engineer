@@ -55,6 +55,7 @@ function mockSlotsClient(options: {
   deleteError?: unknown;
   rpcResult?: string;
   rpcError?: unknown;
+  updateConflict?: boolean;
 }) {
   const calls: ChainCall[] = [];
   const makeChain = (table: string) => {
@@ -68,10 +69,19 @@ function mockSlotsClient(options: {
       select: track('select'),
       eq: track('eq'),
       neq: track('neq'),
-      single: vi.fn(async () => ({
-        data: table === 'personas' ? (options.persona ?? null) : (options.slot ?? null),
-        error: (table === 'personas' ? options.persona : options.slot) ? null : { code: 'PGRST116' },
-      })),
+      single: vi.fn(async () => {
+        // PATCH's UPDATE ... .select('id').single() runs after an update()
+        // call; updateConflict simulates the row dispatching (pending →
+        // generating) between the status check and the write.
+        const sawUpdate = calls.some((c) => c.table === table && c.op === 'update');
+        if (sawUpdate && options.updateConflict) {
+          return { data: null, error: { code: 'PGRST116' } };
+        }
+        return {
+          data: table === 'personas' ? (options.persona ?? null) : (options.slot ?? null),
+          error: (table === 'personas' ? options.persona : options.slot) ? null : { code: 'PGRST116' },
+        };
+      }),
       maybeSingle: vi.fn(async () => ({ data: options.schedule ?? null, error: null })),
       delete: track('delete'),
       update: track('update'),
@@ -285,6 +295,23 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
     const updateCall = client.calls.find((c) => c.op === 'update');
     expect(updateCall).toBeDefined();
     expect(updateCall?.args?.[0]).toEqual({ topic: 'Novo tema' });
+    // The status guard is re-checked in the UPDATE predicate itself.
+    const eqCalls = client.calls.filter((c) => c.op === 'eq');
+    expect(eqCalls.some((c) => c.args?.[0] === 'status' && c.args?.[1] === 'pending')).toBe(true);
+  });
+
+  it('returns 409 when the slot dispatches between the status check and the update', async () => {
+    const client = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', topic: 'Old' },
+      schedule: { id: 's1', user_id: USER_ID },
+      updateConflict: true,
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await patchSlot('slot-1', { topic: 'Novo tema' });
+
+    expect(response.status).toBe(409);
   });
 
   it('uses the service client for OAuth callers (no cookie session)', async () => {

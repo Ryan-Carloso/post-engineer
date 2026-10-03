@@ -370,8 +370,21 @@ export async function PATCH(
     .from('scheduled_posts')
     .update({ topic })
     .eq('id', slot.id)
-    .eq('user_id', auth.userId);
+    .eq('user_id', auth.userId)
+    // Re-check the status in the UPDATE predicate itself: the slot may have
+    // dispatched (pending → generating) between the check above and this
+    // write. Zero affected rows means the guard failed — surface 409 so the
+    // caller refetches instead of believing the edit landed.
+    .eq('status', 'pending')
+    .select('id')
+    .single();
   if (updateError) {
+    if ((updateError as { code?: string }).code === 'PGRST116') {
+      return apiErrorResponse(409, 'Only a slot that has not started generating can be edited.', {
+        route: 'PATCH /api/schedule/slots',
+        metadata: { status: slot.status },
+      });
+    }
     return apiErrorResponse(500, 'Failed to update slot.', {
       route: 'PATCH /api/schedule/slots',
       cause: updateError,
