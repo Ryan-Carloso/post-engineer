@@ -1,0 +1,51 @@
+name: Release MCP (auto)
+
+# Automatically releases post-engineer-mcp to npm whenever a merge to main
+# changes apps/mcp/. It creates and pushes the mcp-v<VERSION> tag; the
+# existing release-mcp.yml workflow picks up the tag and publishes via
+# trusted publishing (GitHub OIDC, no token).
+#
+# Versioning note: the MCP package shares the unified platform version —
+# every PR bumps VERSION through the version-check gate — so no separate
+# bump is needed here. This workflow only creates the tag, and only when
+# the merge actually touched apps/mcp/.
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  tag-and-release:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write # needed to push the release tag
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 2 # need the parent commit to diff the merge
+
+      - name: Tag MCP release when apps/mcp changed
+        run: |
+          set -euo pipefail
+          # NOTE: apps/mcp/package.json is excluded — every merge bumps it via
+          # the unified platform version, so it alone must not trigger a release.
+          if ! git diff --name-only HEAD~1 HEAD -- apps/mcp/ | grep -v '^apps/mcp/package.json$' | grep -q .; then
+            echo "apps/mcp/ unchanged in this merge (besides the version bump) — nothing to release."
+            exit 0
+          fi
+          MCP_VERSION="$(node -p "require('./apps/mcp/package.json').version")"
+          TAG="mcp-v${MCP_VERSION}"
+          if git ls-remote --tags origin "refs/tags/${TAG}" | grep -q .; then
+            echo "Tag ${TAG} already exists — skipping."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${TAG}" -m "post-engineer-mcp v${MCP_VERSION}"
+          git push origin "${TAG}"
+          echo "Pushed ${TAG} — release-mcp.yml will publish it to npm."
