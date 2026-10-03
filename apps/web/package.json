@@ -1,6 +1,6 @@
 {
   "name": "Post-Engineer",
-  "version": "1.17.2",
+  "version": "1.17.3",
   "private": true,
   "description": "Post Engineer API - Next.js with enhanced error logging and timeout management",
   "main": "src/api/server.js",
