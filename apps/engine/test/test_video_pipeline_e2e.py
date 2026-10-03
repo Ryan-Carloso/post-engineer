@@ -2,8 +2,10 @@
 
 Runs the full faceless generation pipeline (script -> audio -> materials ->
 combine -> mux) with the REAL pipeline code and REAL ffmpeg. The ONLY thing
-bypassed is the LLM: the script is passed directly (a supported
-``VideoParams`` input), so no AI tokens are spent in CI.
+mocked is the LLM itself: the pipeline still builds the real script prompt
+and calls ``app.services.llm.generate_script``, but that seam returns a
+canned script instead of spending AI tokens — the mock lives inside the
+engine, at the paid-API boundary, not in the web layer.
 
 Materials are generated locally by ffmpeg as three distinct solid colors
 and the audio is a real sine-wave file — no API keys, no network. The
@@ -20,6 +22,7 @@ import uuid
 from pathlib import Path
 
 from app.models.schema import MaterialInfo, TaskVideoRequest
+from app.services import llm as llm_service
 from app.services import task as tm
 
 MATERIAL_COLORS = {
@@ -27,6 +30,13 @@ MATERIAL_COLORS = {
     "green": "0x00FF00",
     "blue": "0x0000FF",
 }
+# The script the mocked LLM returns: two paragraphs, matching what the
+# real prompt asks for. The pipeline builds the real prompt and calls the
+# real llm.generate_script seam — only the response text is canned.
+MOCKED_SCRIPT = (
+    "First paragraph of the validation script. "
+    "Second paragraph of the validation script."
+)
 AUDIO_SECONDS = 12
 MATERIAL_SECONDS = 6
 WIDTH, HEIGHT = 1080, 1920
@@ -127,15 +137,18 @@ def test_faceless_pipeline_renders_multi_material_video(tmp_path, monkeypatch):
     local_videos = storage / "local_videos"
     local_videos.mkdir(parents=True)
 
+    # Mock the LLM inside the engine, at the paid-API boundary: the
+    # pipeline builds the real prompt and calls llm.generate_script, but
+    # gets a canned script back instead of spending AI tokens.
+    monkeypatch.setattr(
+        llm_service, "generate_script", lambda **kwargs: MOCKED_SCRIPT
+    )
+
     material_names = _make_materials(local_videos)
     audio_name = _make_audio(local_videos)
 
     params = TaskVideoRequest(
         video_subject="E2E validation",
-        video_script=(
-            "First paragraph of the validation script. "
-            "Second paragraph of the validation script."
-        ),
         video_materials=[
             MaterialInfo(provider="local", url=name, duration=0)
             for name in material_names
