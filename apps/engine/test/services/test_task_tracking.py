@@ -913,6 +913,26 @@ class TrackingContextIdentityTests(unittest.TestCase):
         for key in ("persona_id", "slot_id", "schedule_id"):
             self.assertNotIn(key, context)
 
+    def test_tracking_context_keeps_set_identity_ids_while_omitting_blank_ones(
+        self,
+    ):
+        with patch.object(
+            tm.sm.state,
+            "get_task",
+            return_value={
+                "user_id": "user-1",
+                "flow": "batch",
+                "pipeline": "video",
+                "persona_id": "persona-9",
+                "slot_id": "",
+                "schedule_id": "sched-3",
+            },
+        ):
+            context = tm._task_tracking_context("mixed-task-1")
+        self.assertEqual(context["persona_id"], "persona-9")
+        self.assertEqual(context["schedule_id"], "sched-3")
+        self.assertNotIn("slot_id", context)
+
 
 if __name__ == "__main__":
     unittest.main()
