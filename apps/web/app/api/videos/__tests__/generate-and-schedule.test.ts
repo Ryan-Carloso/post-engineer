@@ -328,7 +328,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
         '..',
         '..',
         'supabase',
-        'schema.sql',
+        '001_schema.sql',
       );
       const sql = readFileSync(sqlPath, 'utf8');
       const tableMatch = sql.match(

@@ -1,8 +1,8 @@
 -- ============================================================================
--- Persona image library
+-- Migration 002 — Persona image library
 -- ----------------------------------------------------------------------------
--- HOW TO APPLY: Supabase Dashboard > SQL Editor > New query > paste & run.
--- The schema is not versioned in this repo; apply once per Supabase project.
+-- HOW TO APPLY: Supabase Dashboard > SQL Editor > New query > paste & run,
+-- after 001_schema.sql (it needs the public.personas table).
 -- Safe to re-run (all statements are idempotent).
 -- ============================================================================
 
@@ -26,6 +26,25 @@ create index if not exists idx_persona_images_persona
 create unique index if not exists uq_persona_images_primary
   on public.persona_images(persona_id)
   where is_primary;
+
+-- 1b. persona_images -> personas foreign key, added explicitly and
+--     idempotently. The inline `references` in the CREATE TABLE above only
+--     fires when the table is actually created; 001_schema.sql's snapshot
+--     already creates persona_images WITHOUT the FK, so on DBs that ran
+--     001 first the FK would silently never exist. This do-block covers
+--     that case (and is a no-op where the FK already exists, e.g. older
+--     DBs where this file created the table from scratch).
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'fk_persona_images_persona'
+  ) then
+    alter table public.persona_images
+      add constraint fk_persona_images_persona
+      foreign key (persona_id) references public.personas(id) on delete cascade;
+  end if;
+end
+$$;
 
 -- 2. Anti-repeat history (mirrors the BGM history window): ids of the most
 --    recently used library images, newest first. The selector excludes these

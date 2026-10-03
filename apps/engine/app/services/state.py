@@ -304,7 +304,7 @@ class SupabaseTaskState(BaseState):
             if status == 404:
                 raise RuntimeError(
                     "engine_task_state table not found in Supabase: apply "
-                    "supabase/engine-task-state.sql in the Supabase dashboard "
+                    "supabase/003_engine-task-state.sql in the Supabase dashboard "
                     "SQL editor, then restart the engine."
                 ) from exc
             raise
@@ -591,7 +591,7 @@ def persist_state_update(backend: BaseState, task_id: str, **kwargs: object) -> 
 
 # Global state — memory by default; redis when enable_redis=true; supabase
 # when MPT_STATE_BACKEND=supabase (persistent: survives restarts/redeploys;
-# requires the engine_task_state table — see supabase/engine-task-state.sql).
+# requires the engine_task_state table — see supabase/003_engine-task-state.sql).
 _enable_redis = config.app.get("enable_redis", False)
 _redis_host = config.app.get("redis_host", "localhost")
 _redis_port = config.app.get("redis_port", 6379)

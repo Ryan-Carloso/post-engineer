@@ -164,10 +164,36 @@ Recurring findings from OpenCode/OCR review of the persona image library
   ownership explicitly; say so in a comment at each call site.
 - **Rollback failures are loud.** Creation rollback logs persona-delete and
   photo-remove failures instead of discarding them.
-- **Keep SQL literals coupled.** The `10` in `persona-images.sql` mirrors
+- **Keep SQL literals coupled.** The `10` in `002_persona-images.sql` mirrors
   `MAX_PERSONA_IMAGES`; the coupling is documented in both places.
 - **Sync editor state with refetches.** Local editor copies re-sync from
   props when not editing; in-progress edits are never clobbered.
+
+## Supabase migrations (standing rules, 2026-10-03)
+
+The user asked for numbered migrations so self-hosters know the apply
+order — this supersedes the earlier triage note that "versioned SQL
+migrations" were declined as reviewer churn.
+
+- **Numbered, append-only.** `supabase/NNN_name.sql` — the numeric prefix
+  IS the apply order (dashboard SQL editor, lowest number first). New
+  migrations always append a new number; never edit a shipped number.
+  Existing self-hosters then apply only the new files.
+- **Everything idempotent.** `create table/index if not exists`,
+  `add column if not exists`, `create or replace`, `drop ... if exists`
+  before recreating an incompatible object.
+- **Inline `references` never fires on an existing table.**
+  `create table if not exists` with an inline FK is a no-op when an
+  earlier migration (or the 001 snapshot) already created the table — the
+  FK silently never exists on that DB. Declare FKs on existing tables in
+  an explicit do-block guarded on `pg_constraint` (pattern: section 1b of
+  `002_persona-images.sql`; pinned by the FK assertions in the SQL-literals
+  sync test).
+- **Pin app-coupled SQL with a static sync test.** When the app depends on
+  SQL behavior, a test parses the migration file and asserts the literals
+  (pattern: the `supabase/002_persona-images.sql literals` describe block).
+- **Update `supabase/README.md` and `docs/SELF_HOSTING.md`** when adding a
+  migration.
 
 ## MCP review learnings (standing rules, distilled 2026-09-27)
 
@@ -465,7 +491,7 @@ Follow these so the same issues don't come back:
   the detected MIME (not the declared type) for the storage contentType.
 - **Test SQL literals against TS constants.** The trigger limit, errcode,
   and history window are manually synced; a unit test parses
-  `supabase/persona-images.sql` and asserts they equal
+  `supabase/002_persona-images.sql` and asserts they equal
   `MAX_PERSONA_IMAGES`, `PERSONA_IMAGE_LIMIT_SQLSTATE`, and
   `PERSONA_IMAGE_HISTORY_LIMIT`.
 - **Factory for repeated mutation shapes.** Three hooks duplicated the
@@ -594,7 +620,7 @@ Follow these so the same issues don't come back:
   hardcoded 10 next to MAX_PERSONA_IMAGES = 10; import the shared
   constant instead of duplicating the literal.
 - **Answer "already covered" with the test name.** The SQL sync test from
-  round 8 (parses persona-images.sql, asserts literals vs TS constants)
+  round 8 (parses 002_persona-images.sql, asserts literals vs TS constants)
   is the proof — cite it, don't re-argue.
 
 ## Web/API review learnings, round 13 (2026-09-28)
@@ -1288,7 +1314,7 @@ Follow these so the same issues don't come back:
   silently desyncs them — and analytics paths swallow delivery errors by
   design, so nothing surfaces. Pin them with a file-parsing sync test that
   asserts the literals match, mirroring the SQL-literals precedent
-  (`supabase/persona-images.sql` vs TS constants). The test comment must
+  (`supabase/002_persona-images.sql` vs TS constants). The test comment must
   spell out the self-hoster trade-off (change all three, or update the test
   to assert the intended mapping) so a divergent host is always conscious.
 - **Delete env vars in tests via `vi.stubEnv(key, undefined)`, never a
@@ -1880,12 +1906,12 @@ Follow these so the same issues don't come back:
 
 ## Web review learnings, PR #55 (2026-10-02, production 500)
 
-- **An insert key must exist in the table.** `POST /api/videos/generate-and-schedule` inserted `kind: 'batch'` into `schedules`, but the column never landed in `supabase/schema.sql` — PostgREST rejects the whole insert on an unknown key, so EVERY call 500d from the v1.12.0 merge until the fix. The route test even pinned `kind: 'batch'` as correct. Lesson: when a PR introduces a new insert, cross-check every key against the canonical schema file; a test asserting the insert shape should assert the ABSENCE of phantom keys, not just the presence of expected ones.
+- **An insert key must exist in the table.** `POST /api/videos/generate-and-schedule` inserted `kind: 'batch'` into `schedules`, but the column never landed in `supabase/001_schema.sql` — PostgREST rejects the whole insert on an unknown key, so EVERY call 500d from the v1.12.0 merge until the fix. The route test even pinned `kind: 'batch'` as correct. Lesson: when a PR introduces a new insert, cross-check every key against the canonical schema file; a test asserting the insert shape should assert the ABSENCE of phantom keys, not just the presence of expected ones.
 - **Stale comments outlive the schema they describe.** The `kind='batch'` line carried a comment about a `'recurring'` default and partial unique index — neither exists anymore. A comment that justifies a line by referencing dead schema is a smell: verify the schema objects it names still exist.
 
 ## Web review learnings, PR #55 follow-up (2026-10-02, OpenCode on 2613c4f)
 
-- **Generalize the phantom-key pin into a schema sync test.** The PR pinned the absence of `kind`, but the supabase-js mock records any payload key — the next speculative key would sail through tests and 500 every production call again. New sync test parses the `create table public.schedules` column list from `supabase/schema.sql` and asserts every key of the route's insert payload is a real column (mutation-verified: re-adding `kind: 'batch'` fails it). Pattern mirrors the existing SQL-literal sync tests.
+- **Generalize the phantom-key pin into a schema sync test.** The PR pinned the absence of `kind`, but the supabase-js mock records any payload key — the next speculative key would sail through tests and 500 every production call again. New sync test parses the `create table public.schedules` column list from `supabase/001_schema.sql` and asserts every key of the route's insert payload is a real column (mutation-verified: re-adding `kind: 'batch'` fails it). Pattern mirrors the existing SQL-literal sync tests.
 
 ## Web review learnings, PR #55 round 2 (2026-10-02, OpenCode on 09c2c5d)
 
@@ -1978,12 +2004,12 @@ Five MINORs on the merged funnel, fixed as a follow-up PR with one focused TDD c
 
 ## Web review learnings, PR #55 (2026-10-02, production 500)
 
-- **An insert key must exist in the table.** `POST /api/videos/generate-and-schedule` inserted `kind: 'batch'` into `schedules`, but the column never landed in `supabase/schema.sql` — PostgREST rejects the whole insert on an unknown key, so EVERY call 500d from the v1.12.0 merge until the fix. The route test even pinned `kind: 'batch'` as correct. Lesson: when a PR introduces a new insert, cross-check every key against the canonical schema file; a test asserting the insert shape should assert the ABSENCE of phantom keys, not just the presence of expected ones.
+- **An insert key must exist in the table.** `POST /api/videos/generate-and-schedule` inserted `kind: 'batch'` into `schedules`, but the column never landed in `supabase/001_schema.sql` — PostgREST rejects the whole insert on an unknown key, so EVERY call 500d from the v1.12.0 merge until the fix. The route test even pinned `kind: 'batch'` as correct. Lesson: when a PR introduces a new insert, cross-check every key against the canonical schema file; a test asserting the insert shape should assert the ABSENCE of phantom keys, not just the presence of expected ones.
 - **Stale comments outlive the schema they describe.** The `kind='batch'` line carried a comment about a `'recurring'` default and partial unique index — neither exists anymore. A comment that justifies a line by referencing dead schema is a smell: verify the schema objects it names still exist.
 
 ## Web review learnings, PR #55 follow-up (2026-10-02, OpenCode on 2613c4f)
 
-- **Generalize the phantom-key pin into a schema sync test.** The PR pinned the absence of `kind`, but the supabase-js mock records any payload key — the next speculative key would sail through tests and 500 every production call again. New sync test parses the `create table public.schedules` column list from `supabase/schema.sql` and asserts every key of the route's insert payload is a real column (mutation-verified: re-adding `kind: 'batch'` fails it). Pattern mirrors the existing SQL-literal sync tests.
+- **Generalize the phantom-key pin into a schema sync test.** The PR pinned the absence of `kind`, but the supabase-js mock records any payload key — the next speculative key would sail through tests and 500 every production call again. New sync test parses the `create table public.schedules` column list from `supabase/001_schema.sql` and asserts every key of the route's insert payload is a real column (mutation-verified: re-adding `kind: 'batch'` fails it). Pattern mirrors the existing SQL-literal sync tests.
 
 ## Web review learnings, PR #55 round 2 (2026-10-02, OpenCode on 09c2c5d)
 

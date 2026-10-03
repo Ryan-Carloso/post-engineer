@@ -575,7 +575,7 @@ describe('validateImageBuffer', () => {
   });
 });
 
-describe('supabase/persona-images.sql literals', () => {
+describe('supabase/002_persona-images.sql literals', () => {
   it('keeps the SQL literals in sync with the TypeScript constants', async () => {
     // The trigger/RPC literals have no import of the TS constants; a
     // one-sided change would silently desynchronize app-side 400s from the
@@ -591,7 +591,7 @@ describe('supabase/persona-images.sql literals', () => {
       '..',
       '..',
       'supabase',
-      'persona-images.sql',
+      '002_persona-images.sql',
     );
     const sql = readFileSync(sqlPath, 'utf8');
     const { MAX_PERSONA_IMAGES, PERSONA_IMAGE_LIMIT_SQLSTATE } = await import('../persona-images');
@@ -630,5 +630,16 @@ describe('supabase/persona-images.sql literals', () => {
     // nothing when no row matches.
     const noRowRaises = sql.match(/if not found then\s+raise exception 'persona % not found for caller'/g);
     expect(noRowRaises).toHaveLength(2);
+
+    // The persona_images -> personas FK must be declared EXPLICITLY in an
+    // idempotent do-block, not only inline in `create table if not exists`.
+    // 001_schema.sql's snapshot creates persona_images WITHOUT the FK, so
+    // the inline reference never fires for self-hosters who run 001 before
+    // 002 (create-if-not-exists is a no-op on an existing table) and the FK
+    // would silently never exist on their DB.
+    expect(sql).toMatch(/pg_constraint where conname = 'fk_persona_images_persona'/);
+    expect(sql).toMatch(
+      /add constraint fk_persona_images_persona\s+foreign key \(persona_id\) references public\.personas\(id\) on delete cascade/,
+    );
   });
 });
