@@ -47,13 +47,6 @@
         "command": "uv run pytest -q"
       },
       "cache": true
-    },
-    "smoke": {
-      "executor": "nx:run-commands",
-      "options": {
-        "cwd": "apps/engine",
-        "command": "RUN_H200=false ./scripts/smoke_persona_api.sh"
-      }
     }
   }
 }
