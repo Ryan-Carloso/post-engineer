@@ -170,7 +170,7 @@ export async function GET(
 
   const { data: schedule, error: scheduleError } = await supabase
     .from('schedules')
-    .select('id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids')
+    .select('id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids')
     .eq('id', row.schedule_id)
     .eq('user_id', auth.userId)
     .maybeSingle();
@@ -190,6 +190,7 @@ export async function GET(
     youtube_account_ids: string[] | null;
     instagram_account_ids: string[] | null;
     linkedin_account_ids: string[] | null;
+    bluesky_account_ids: string[] | null;
   } | null;
   // Ownership re-check: the service client (API-key/OAuth callers)
   // bypasses RLS, so the schedule must belong to the caller.
@@ -242,6 +243,7 @@ export async function GET(
       youtubeAccountIds: scheduleRow.youtube_account_ids ?? [],
       instagramAccountIds: scheduleRow.instagram_account_ids ?? [],
       linkedinAccountIds: scheduleRow.linkedin_account_ids ?? [],
+      blueskyAccountIds: scheduleRow.bluesky_account_ids ?? [],
     },
     persona: personaRow ? { id: personaRow.id, name: personaRow.name } : null,
   });

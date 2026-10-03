@@ -145,6 +145,7 @@ export default function PostDetailPage() {
       ...slotDetail.schedule.youtubeAccountIds,
       ...slotDetail.schedule.instagramAccountIds,
       ...slotDetail.schedule.linkedinAccountIds,
+      ...slotDetail.schedule.blueskyAccountIds,
     ]);
     return accountOptions.filter((account) => ids.has(account.id));
   }, [slotDetail, accountOptions]);

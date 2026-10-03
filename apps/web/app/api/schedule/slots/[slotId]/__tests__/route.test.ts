@@ -360,6 +360,7 @@ const SCHEDULE_ROW = {
   youtube_account_ids: ['ch1'],
   instagram_account_ids: ['ig1'],
   linkedin_account_ids: [],
+  bluesky_account_ids: ['bsky1'],
 };
 
 describe('GET /api/schedule/slots/[slotId]', () => {
@@ -403,6 +404,7 @@ describe('GET /api/schedule/slots/[slotId]', () => {
       personaId: 'p1',
       youtubeAccountIds: ['ch1'],
       instagramAccountIds: ['ig1'],
+      blueskyAccountIds: ['bsky1'],
     });
     expect(body.persona).toEqual({ id: 'p1', name: 'Viva Leve' });
   });

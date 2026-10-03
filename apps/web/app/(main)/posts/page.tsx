@@ -176,6 +176,7 @@ function resolveSlotAccounts(
     ...schedule.youtubeAccountIds,
     ...schedule.instagramAccountIds,
     ...schedule.linkedinAccountIds,
+    ...schedule.blueskyAccountIds,
   ]);
   return accounts.filter((account) => ids.has(account.id));
 }
@@ -366,6 +367,7 @@ export default function PostsPage() {
           ...schedule.youtubeAccountIds,
           ...schedule.instagramAccountIds,
           ...schedule.linkedinAccountIds,
+          ...schedule.blueskyAccountIds,
         ]);
         if (!ids.has(effectiveAccountFilter)) return false;
       }

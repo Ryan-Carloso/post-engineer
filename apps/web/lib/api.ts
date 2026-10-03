@@ -1064,6 +1064,7 @@ export interface SlotDetailPayload {
     youtubeAccountIds: string[];
     instagramAccountIds: string[];
     linkedinAccountIds: string[];
+    blueskyAccountIds: string[];
   };
   persona: { id: string; name: string } | null;
 }
