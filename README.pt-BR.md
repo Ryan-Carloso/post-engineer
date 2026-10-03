@@ -78,7 +78,7 @@ pnpm install
    instância self-hosted).
 2. No SQL editor do Supabase, aplique os scripts do banco. O script da
    biblioteca de imagens da persona está neste repositório:
-   [`supabase/002_persona-images.sql`](supabase/002_persona-images.sql)
+   [`supabase/migrations/002_persona-images.sql`](supabase/migrations/002_persona-images.sql)
    (aplicação manual, por design).
 
    > **Precisa de ajuda?** Se você está configurando um projeto novo e precisa
