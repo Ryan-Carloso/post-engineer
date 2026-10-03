@@ -1,12 +1,86 @@
 // @vitest-environment node
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
+  personaAssetPath,
   recordRecentImageId,
   resolveVideoImage,
   setPrimaryLibraryImage,
   validateImageFile,
 } from '../persona-images';
+
+//---------------
+// The documented layout + policy shape (supabase/README.md "personas storage
+// bucket" section). Pinned here because NEITHER the bucket policy NOR the
+// layout lives in a migration: the policy is dashboard-only, so the doc is
+// the only in-repo statement of it. If someone hardens the policy to require
+// the persona segment, every object written before the per-persona folders
+// (the DB stores the full path, there is no backfill) becomes unreachable for
+// its owner — and this test is what says so out loud.
+//---------------
+const STORAGE_DOC_PATH = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  '..',
+  '..',
+  'supabase',
+  'README.md',
+);
+
+describe('supabase/README.md — personas storage layout', () => {
+  const doc = readFileSync(STORAGE_DOC_PATH, 'utf8');
+
+  it('documents the {userId}/{personaId}/ layout the helper builds', () => {
+    expect(doc).toContain('personas/{userId}/{personaId}/photo.');
+    expect(doc).toContain('personas/{userId}/{personaId}/images/{uuid}.{ext}');
+    // The legacy flat layout must stay documented: those objects are valid.
+    expect(doc).toContain('{userId}/{uuid}.{ext}');
+  });
+
+  it('states that the policy reads only the FIRST segment', () => {
+    expect(doc).toContain('foldername(name))[1] = auth.uid()');
+    expect(doc).toContain('Do not "harden" the policy to require two segments');
+  });
+
+  it('names personaAssetPath as the only path builder', () => {
+    expect(doc).toContain('personaAssetPath');
+  });
+});
+
+//---------------
+// personaAssetPath — the single source of the storage layout
+// {userId}/{personaId}/…. The segment checks are a security boundary: a
+// personaId with a slash would place the object outside the user's folder,
+// where the RLS first-segment check no longer describes it.
+//---------------
+describe('personaAssetPath', () => {
+  it('nests the file under the user and the persona', () => {
+    expect(personaAssetPath('user-1', 'persona-1', 'photo.png')).toBe('user-1/persona-1/photo.png');
+    expect(personaAssetPath('user-1', 'persona-1', 'images/abc.png')).toBe(
+      'user-1/persona-1/images/abc.png',
+    );
+  });
+
+  it('rejects an empty segment', () => {
+    expect(() => personaAssetPath('', 'persona-1', 'photo.png')).toThrow(/non-empty/);
+    expect(() => personaAssetPath('user-1', '', 'photo.png')).toThrow(/non-empty/);
+  });
+
+  it('rejects a segment that would escape the user folder', () => {
+    expect(() => personaAssetPath('user-1', '../other-user/photo.png', 'photo.png')).toThrow(/non-empty/);
+    expect(() => personaAssetPath('user-1', 'a/b', 'photo.png')).toThrow(/non-empty/);
+    expect(() => personaAssetPath('user/1', 'persona-1', 'photo.png')).toThrow(/non-empty/);
+  });
+
+  it('rejects an empty or absolute file name', () => {
+    expect(() => personaAssetPath('user-1', 'persona-1', '')).toThrow(/relative path/);
+    expect(() => personaAssetPath('user-1', 'persona-1', '/photo.png')).toThrow(/relative path/);
+  });
+});
 
 const LIBRARY = [
   {
@@ -395,6 +469,8 @@ describe('addLibraryImages', () => {
     const leftover = (result as { leftoverPaths: { orphanPaths: string[] } }).leftoverPaths;
     expect(leftover.orphanPaths).toHaveLength(2);
     expect(leftover.orphanPaths.every((p) => p.startsWith('user-1/'))).toBe(true);
+    // Second segment is the persona folder: {userId}/{personaId}/images/{uuid}.{ext}
+    expect(leftover.orphanPaths.every((p) => p.startsWith('user-1/persona-1/images/'))).toBe(true);
   });
 
   it('returns added image paths when the rollback row delete fails', async () => {

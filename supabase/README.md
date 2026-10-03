@@ -40,6 +40,33 @@ details (some dashboard-only steps like RLS policies, FK checks and the
 All statements are idempotent, so re-running the whole sequence is always
 safe.
 
+## `personas` storage bucket (private) — object layout
+
+Objects live under the user's folder, then the persona's:
+
+```
+personas/{userId}/{personaId}/photo.{jpg|png}        the persona's single visual identity
+personas/{userId}/{personaId}/images/{uuid}.{ext}    the image library (0-10 items)
+```
+
+The persona folder is for **debugging in this dashboard** (you can tell whose
+file it is without opening the database). It is not a second security gate:
+
+- `personas_storage_own_all` checks ONLY the first segment —
+  `(storage.foldername(name))[1] = auth.uid()`. A deeper path keeps working
+  untouched, and the objects written before this layout (flat
+  `{userId}/{uuid}.{ext}`) stay valid: the DB stores the full path in
+  `personas.photo_path` / `persona_images.image_path`, so no backfill exists or
+  is needed.
+- Real ownership is enforced on the TABLE (`personas.user_id`,
+  `persona_images.user_id`), re-checked by every route, and the bucket is
+  private behind signed URLs.
+
+Do not "harden" the policy to require two segments: that locks every legacy
+object out of its owner with no way to recover the files.
+`apps/web/lib/persona-images.ts` (`personaAssetPath`) is the only place that
+builds these paths, and the tests pin the shape per writer.
+
 ## Adding a new migration (maintainers)
 
 - **Append** a new numbered file (`migrations/005_....sql`,

@@ -388,14 +388,22 @@ describe('POST /api/persona', () => {
 
     expect(res.status).toBe(200);
     expect(body.success).toBe(true);
-    expect(body.personaId).toBe('persona-uuid-1');
+    // The route generates the persona id before the upload (the storage folder
+    // is {userId}/{personaId}/), so the response id is a fresh UUID — not the
+    // fixture's.
+    expect(body.personaId).toMatch(/^[0-9a-f-]{36}$/);
     expect(uploaded).toHaveLength(1);
-    expect(uploaded[0].path).toMatch(new RegExp(`^${USER_ID}/[a-f0-9-]+\\.png$`));
+    // Pinned layout: {userId}/{personaId}/photo.png — the folder says whose
+    // file it is in the Supabase dashboard.
+    expect(uploaded[0].path).toBe(`${USER_ID}/${body.personaId}/photo.png`);
     expect(uploaded[0].options.contentType).toBe('image/png');
     expect(inserted[0]).toMatchObject({
+      // The route generates the id before the upload, so the folder is known
+      // before the row exists (personas.id defaults to gen_random_uuid()).
+      id: body.personaId,
       user_id: USER_ID,
       name: 'Ana',
-      photo_path: expect.stringMatching(new RegExp(`^${USER_ID}/[a-f0-9-]+\\.png$`)),
+      photo_path: `${USER_ID}/${body.personaId}/photo.png`,
       voice_id: 'voz-1',
     });
   });
@@ -430,9 +438,10 @@ describe('POST /api/persona', () => {
 
     expect(res.status).toBe(200);
     expect(body.success).toBe(true);
+    // The event must carry the id the route actually used.
     expect(trackApiEvent).toHaveBeenCalledWith(
       'persona_created',
-      expect.objectContaining({ personaId: 'persona-uuid-1' }),
+      expect.objectContaining({ personaId: body.personaId }),
     );
   });
 
@@ -949,7 +958,8 @@ describe('PATCH /api/persona', () => {
     const res = await PATCH(patchRequest('persona-uuid-1', { name: 'Com Foto' }, [photo()]));
 
     expect(res.status).toBe(200);
-    expect(uploaded[0].path).toMatch(new RegExp(`^${USER_ID}/[a-f0-9-]+\\.png$`));
+    // Pinned layout, PATCH writer: {userId}/{personaId}/photo.png
+    expect(uploaded[0].path).toBe(`${USER_ID}/persona-uuid-1/photo.png`);
     expect(updated[0]).toMatchObject({ photo_path: uploaded[0].path });
     expect(removed).toContain(`${USER_ID}/foto-antiga.png`);
   });

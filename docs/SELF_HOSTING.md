@@ -155,6 +155,13 @@ Back up regularly:
   dumps off-host.
 - **`apps/engine/storage`** (Docker volume `engine_storage`) — rendered videos
   and task artifacts. Snapshot the volume or sync it to object storage.
+- **The `personas` storage bucket (private, Supabase)** — persona photos and
+  image libraries, under `personas/{userId}/{personaId}/…`. Back it up together
+  with Postgres: the rows store the *path*, so a bucket restored under a
+  different layout loses its files. The `personas_storage_own_all` policy only
+  reads the FIRST path segment (`foldername(name)[1] = auth.uid()`) — keep it
+  that way, or the objects written before the per-persona folders become
+  unreachable for their owner. See `supabase/README.md` for the full layout.
 - **Env files** (`apps/web/.env`, `apps/engine/.env`, `apps/engine/config.toml`)
   — keep an encrypted copy somewhere safe; they contain the keys needed to
   decrypt OAuth tokens (`TOKEN_ENCRYPTION_KEY`).

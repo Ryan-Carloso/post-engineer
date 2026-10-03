@@ -17,6 +17,7 @@ import {
   addLibraryImages,
   IMAGE_BUCKET,
   isFileLike,
+  personaAssetPath,
   readValidatedImage,
   removeOrphanedUploadPaths,
   setPrimaryLibraryImage,
@@ -154,9 +155,15 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
   const validatedLibraryInputs = libraryValidation.inputs;
 
+  // The persona id is generated HERE, before the upload, so the photo can
+  // land in {userId}/{personaId}/photo.{ext} (the folder says whose file it
+  // is). The upload still happens BEFORE the insert on purpose: if the insert
+  // fails, the rollback removes the file by its exact path — swapping the
+  // order would leave a row with no file.
+  const personaId = randomUUID();
   const photoPath =
     body.photo && body.photoExtension
-      ? await uploadFile(supabase, user.id, body.photo, body.photoExtension)
+      ? await uploadFile(supabase, user.id, personaId, body.photo, body.photoExtension)
       : null;
   if (body.photo && !photoPath) {
     return errorResponse(500, 'Failed to upload photo.', 'POST /api/persona');
@@ -165,6 +172,10 @@ export async function POST(request: Request): Promise<NextResponse> {
   const { data: persona, error: insertError } = await supabase
     .from('personas')
     .insert({
+      // Explicit id: the column already defaults to gen_random_uuid(), so
+      // this changes nothing for the schema — it only lets the storage
+      // folder be known before the row exists.
+      id: personaId,
       user_id: user.id,
       name: (body.values.name ?? '').trim(),
       photo_path: photoPath,
@@ -200,7 +211,10 @@ export async function POST(request: Request): Promise<NextResponse> {
   let libraryImageIds: string[] = [];
   const warnings: string[] = [];
   if (validatedLibraryInputs.length > 0) {
-    const added = await addLibraryImages(supabase, user.id, persona.id, validatedLibraryInputs);
+    // The MINTED id, not `persona.id`: the storage folder must be the id that
+    // went into the row, so a future divergence between the two can't scatter
+    // a persona's files across folders.
+    const added = await addLibraryImages(supabase, user.id, personaId, validatedLibraryInputs);
     if ('error' in added) {
       // Roll back the whole creation so a half-written persona never survives.
       // Rollback failures are logged loudly: an invisible failed rollback is
@@ -414,7 +428,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
   }
 
   if (patch.photo && patch.photoExtension) {
-    const photoPath = await uploadFile(supabase, user.id, patch.photo, patch.photoExtension);
+    const photoPath = await uploadFile(supabase, user.id, personaId, patch.photo, patch.photoExtension);
     if (!photoPath) return errorResponse(500, 'Failed to upload photo.', 'PATCH /api/persona');
     updates.photo_path = photoPath;
     updates.avatar_url = null;
@@ -853,10 +867,14 @@ function optionalString(value: FormDataEntryValue | null): string | null {
 export async function uploadFile(
   supabase: SupabaseClient,
   userId: string,
+  personaId: string,
   file: File,
   extension: string,
 ): Promise<string | null> {
-  const path = `${userId}/${randomUUID()}.${extension}`;
+  // Fixed file name: a persona has exactly ONE visual identity (enforced by
+  // personas_visual_identity_check), so the dashboard can answer "does this
+  // folder hold a photo?" without opening the database.
+  const path = personaAssetPath(userId, personaId, `photo.${extension}`);
   const bytes = new Uint8Array(await file.arrayBuffer());
   const { error } = await supabase.storage.from(IMAGE_BUCKET).upload(path, bytes, {
     contentType: file.type,

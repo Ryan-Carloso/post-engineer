@@ -4,7 +4,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 //---------------
-// supabase/migrations/004_persona-visual-identity.sql — the invariant the app
+// supabase/migrations/005_persona-visual-identity.sql — the invariant the app
 // depends on when PATCH swaps a persona's face.
 //
 // The production database got this constraint by hand, so it was invisible to
@@ -25,7 +25,7 @@ const migrationPath = join(
   '..',
   'supabase',
   'migrations',
-  '004_persona-visual-identity.sql',
+  '005_persona-visual-identity.sql',
 );
 
 const routePath = join(
@@ -38,7 +38,7 @@ const routePath = join(
   'route.ts',
 );
 
-describe('supabase/migrations/004_persona-visual-identity.sql', () => {
+describe('supabase/migrations/005_persona-visual-identity.sql', () => {
   it('declares the constraint idempotently', () => {
     const sql = readFileSync(migrationPath, 'utf8');
 
