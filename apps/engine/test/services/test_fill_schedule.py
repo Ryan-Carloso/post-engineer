@@ -265,6 +265,39 @@ class BatchScheduleTests(unittest.TestCase):
             "task-2", user_id="user-1", flow="batch", pipeline="video"
         )
 
+    def test_dispatch_generation_omits_only_the_blank_identity_ids(self):
+        # Mixed context: a blank slot_id must be dropped while the set
+        # persona_id is persisted — PostHog breakdowns must not fill with
+        # empty-string noise for one prop while losing a real value in
+        # another.
+        from app.models.schema import TaskVideoRequest
+
+        store = _FakeStore()
+        scheduler = self._scheduler(store)
+        request = TaskVideoRequest(video_subject="Batch topic one")
+
+        with (
+            patch("app.services.task.start"),
+            patch("app.services.fill_schedule.generate.threading.Thread"),
+        ):
+            scheduler.generator._dispatch_generation(
+                "task-3",
+                request,
+                "user-1",
+                slot_id="",
+                schedule_id="sched-3",
+                persona_id="persona-3",
+            )
+
+        scheduler.task_state.update_task.assert_called_once_with(
+            "task-3",
+            user_id="user-1",
+            flow="batch",
+            pipeline="video",
+            schedule_id="sched-3",
+            persona_id="persona-3",
+        )
+
 
 
 
