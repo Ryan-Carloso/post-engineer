@@ -9,6 +9,7 @@ the order — you never need to guess or read docs to know what comes next:
 | 001 | `migrations/001_schema.sql`                 | Base schema: tables, types, defaults (snapshot)     |
 | 002 | `migrations/002_persona-images.sql`         | Persona image library: constraints, trigger, RPCs   |
 | 003 | `migrations/003_engine-task-state.sql`      | Engine task state (only for `MPT_STATE_BACKEND=supabase`) |
+| 004 | `migrations/004_billing_reconcile.sql`        | Billing reconciliation: `refund_reviews` queue, zombie/stuck detectors, daily pg_cron trigger |
 
 ## How to apply
 
