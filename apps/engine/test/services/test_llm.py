@@ -1039,6 +1039,7 @@ class TestLiteLLMProvider(unittest.TestCase):
         """
         config.app["llm_provider"] = "groq"
         config.app["openrouter_api_key"] = "or-key"
+        config.app["openrouter_free_api_key"] = ""
 
         with patch.object(
             llm,
@@ -1062,6 +1063,7 @@ class TestLiteLLMProvider(unittest.TestCase):
         """
         config.app["llm_provider"] = "groq"
         config.app["openrouter_api_key"] = "or-key"
+        config.app["openrouter_free_api_key"] = ""
 
         with patch.object(
             llm,
@@ -1076,6 +1078,157 @@ class TestLiteLLMProvider(unittest.TestCase):
             [call("test", "groq"), call("test", "openrouter")],
         )
         self.assertEqual(config.app["llm_provider"], "groq")
+
+    def test_fallback_prefers_free_tier_before_paid(self):
+        """
+        Cost guard: the free OpenRouter key must be tried BEFORE the paid one,
+        so a primary failure never spends money while a zero-cost tier is
+        available.
+        """
+        config.app["llm_provider"] = "groq"
+        config.app["openrouter_api_key"] = "paid-key"
+        config.app["openrouter_free_api_key"] = "free-key"
+
+        with patch.object(
+            llm,
+            "_generate_response_inner",
+            side_effect=[Exception("primary down"), ("free script", {})],
+        ) as generate:
+            result = llm._generate_response_with_fallback("test")
+
+        self.assertEqual(result, "free script")
+        self.assertEqual(
+            generate.call_args_list,
+            [call("test", "groq"), call("test", "openrouter_free")],
+        )
+
+    def test_fallback_escalates_to_paid_when_free_tier_fails(self):
+        """
+        Free models are rate-limited and frequently saturated. When the free
+        tier errors, the paid tier must absorb it rather than the request
+        failing outright.
+        """
+        config.app["llm_provider"] = "groq"
+        config.app["openrouter_api_key"] = "paid-key"
+        config.app["openrouter_free_api_key"] = "free-key"
+
+        with patch.object(
+            llm,
+            "_generate_response_inner",
+            side_effect=[
+                Exception("primary down"),
+                Exception("free tier 429"),
+                ("paid script", {}),
+            ],
+        ) as generate:
+            result = llm._generate_response_with_fallback("test")
+
+        self.assertEqual(result, "paid script")
+        self.assertEqual(
+            generate.call_args_list,
+            [
+                call("test", "groq"),
+                call("test", "openrouter_free"),
+                call("test", "openrouter"),
+            ],
+        )
+
+    def test_fallback_reports_paid_error_when_all_tiers_fail(self):
+        """
+        When every tier fails, the error must name the LAST tier tried — that
+        is the credential the user has to fix. Reporting the primary's error
+        would point at a provider that was never the problem.
+        """
+        config.app["llm_provider"] = "groq"
+        config.app["openrouter_api_key"] = "paid-key"
+        config.app["openrouter_free_api_key"] = "free-key"
+
+        with patch.object(
+            llm,
+            "_generate_response_inner",
+            side_effect=[
+                Exception("primary down"),
+                Exception("free tier 429"),
+                Exception("paid tier 402"),
+            ],
+        ):
+            result = llm._generate_response_with_fallback("test")
+
+        self.assertEqual(result, "Error: paid tier 402")
+
+    def test_fallback_skips_free_tier_without_its_key(self):
+        """
+        A partially-configured install (paid key only) must still fall back,
+        instead of failing outright because the free key is absent.
+        """
+        config.app["llm_provider"] = "groq"
+        config.app["openrouter_api_key"] = "paid-key"
+        config.app["openrouter_free_api_key"] = ""
+
+        with patch.object(
+            llm,
+            "_generate_response_inner",
+            side_effect=[Exception("primary down"), ("paid script", {})],
+        ) as generate:
+            result = llm._generate_response_with_fallback("test")
+
+        self.assertEqual(result, "paid script")
+        self.assertEqual(
+            generate.call_args_list,
+            [call("test", "groq"), call("test", "openrouter")],
+        )
+
+    def test_fallback_skipped_when_primary_is_a_free_tier(self):
+        """
+        An OpenRouter tier as the primary must not be retried against the
+        same gateway: repeating it only doubles cost and latency.
+        """
+        config.app["llm_provider"] = "openrouter_free"
+        config.app["openrouter_api_key"] = "paid-key"
+        config.app["openrouter_free_api_key"] = "free-key"
+
+        with patch.object(
+            llm, "_generate_response_inner", side_effect=Exception("free tier 429")
+        ) as generate:
+            result = llm._generate_response_with_fallback("test")
+
+        self.assertEqual(result, "Error: free tier 429")
+        generate.assert_called_once_with("test", "openrouter_free")
+
+    def test_openrouter_free_provider_uses_defaults(self):
+        """
+        The free tier defaults to the Free Router ("openrouter/free") on the
+        public endpoint, so a self-hoster needs only the key.
+        """
+        config.app["llm_provider"] = "openrouter_free"
+        config.app["openrouter_free_api_key"] = "free-key"
+        config.app["openrouter_base_url"] = ""
+        config.app["openrouter_free_model_name"] = ""
+        # Pin the attribution config: both are optional, so asserting
+        # default_headers=None only holds when they are unset. Inheriting a
+        # real config.toml made this pass locally and fail on CI.
+        config.app["openrouter_site_url"] = ""
+        config.app["openrouter_app_name"] = ""
+
+        result, openai_client, fake_completions = self._run_openrouter()
+
+        openai_client.assert_called_once_with(
+            api_key="free-key",
+            base_url="https://openrouter.ai/api/v1",
+            timeout=llm.LLM_CLIENT_TIMEOUT_SECONDS,
+            max_retries=llm.LLM_CLIENT_MAX_RETRIES,
+            default_headers=None,
+        )
+        self.assertEqual(fake_completions.kwargs["model"], "openrouter/free")
+        self.assertEqual(result, "hello openrouter")
+
+    def test_free_tier_default_model_is_pinned(self):
+        """
+        The _PROVIDER_DEFAULT_MODELS entry and the provider branch must agree,
+        or telemetry reports a model the request never used.
+        """
+        self.assertEqual(llm._PROVIDER_DEFAULT_MODELS["openrouter_free"], "openrouter/free")
+        self.assertEqual(llm._resolve_model_name("openrouter_free"), "openrouter/free")
 
     def test_successful_response_with_error_prefix_is_not_retried(self):
         """
@@ -1208,6 +1361,7 @@ class TestAIRequestTracking(unittest.TestCase):
         config.app["groq_model_name"] = ""
         config.app["openrouter_api_key"] = "or-key"
         config.app["openrouter_model_name"] = ""
+        config.app["openrouter_free_api_key"] = ""
 
         with patch.object(
             llm,
@@ -1248,6 +1402,7 @@ class TestAIRequestTracking(unittest.TestCase):
         config.app["groq_model_name"] = ""
         config.app["openrouter_api_key"] = "or-key"
         config.app["openrouter_model_name"] = ""
+        config.app["openrouter_free_api_key"] = ""
 
         with patch.object(
             llm,
@@ -1306,6 +1461,7 @@ class TestAIRequestTracking(unittest.TestCase):
             "volcengine": "doubao-seed-2-1-turbo-260628",
             "zai": "glm-5.3-flash",
             "openrouter": "openrouter/auto",
+            "openrouter_free": "openrouter/free",
             "gemini": "gemini-2.5-flash",
             "pollinations": "openai-fast",
         }

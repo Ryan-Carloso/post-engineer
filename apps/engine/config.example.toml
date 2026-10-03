@@ -135,7 +135,10 @@ twelvelabs_rerank_terms = false
 #   modelscope  (魔搭社区)
 #   litellm     (100+ providers via LiteLLM gateway)
 #   groq        (Groq LPU inference API)
-#   openrouter  (unified gateway, https://openrouter.ai — automatic fallback)
+#   openrouter  (unified gateway, https://openrouter.ai — automatic fallback;
+#                the free tier is tried first, then this paid tier)
+#   openrouter_free (same gateway, zero-cost models only — usually left as the
+#                fallback tier rather than selected here)
 llm_provider = "groq"
 
 ########## Pollinations AI Settings
@@ -297,6 +300,18 @@ openrouter_model_name = "openrouter/auto"
 # Optional attribution headers shown in the OpenRouter dashboard.
 openrouter_site_url = ""
 openrouter_app_name = "Post Engineer"
+
+########## OpenRouter Free-Tier API Key (first fallback)
+# A second OpenRouter key used ONLY for zero-cost models, tried before the
+# paid key above. Order: primary provider -> this free tier -> paid tier.
+# Separate keys matter because OpenRouter meters free-model rate limits per
+# key, so free traffic can never exhaust the paid budget (and vice versa).
+# Leave empty to skip this tier and fall back straight to the paid key.
+# The default model is the Free Router (openrouter/free), which routes
+# server-side to free models only — retiring a free model needs no code
+# change. Override with any ":free" model id to pin one model.
+openrouter_free_api_key = ""
+openrouter_free_model_name = "openrouter/free"
 
 
 ########## ModelScope API Key
