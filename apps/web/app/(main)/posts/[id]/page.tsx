@@ -35,7 +35,7 @@ import type { TranslationKey } from '@/lib/i18n';
 
 interface AccountOption {
   id: string;
-  provider: 'youtube' | 'instagram' | 'linkedin';
+  provider: 'youtube' | 'instagram' | 'linkedin' | 'bluesky';
   label: string;
 }
 

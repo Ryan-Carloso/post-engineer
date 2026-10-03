@@ -34,7 +34,7 @@ import { GENERATION_ERROR_KEY } from '@/lib/generation/generation-errors';
 //---------------
 
 type Tab = 'upcoming' | 'history';
-type ProviderFilter = 'all' | 'youtube' | 'instagram' | 'linkedin';
+type ProviderFilter = 'all' | 'youtube' | 'instagram' | 'linkedin' | 'bluesky';
 
 interface AccountOption {
   id: string;
