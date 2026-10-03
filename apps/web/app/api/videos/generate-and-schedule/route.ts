@@ -829,7 +829,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       await supabase.rpc('refund_generation_tokens', {
         p_user_id: userId,
         p_generation_id: idem.generationId,
-        p_reason: 'Unified generate+schedule: schedule PK race; refunded redundant spend',
+        p_reason: 'PK race; refunded redundant spend',
       });
       logger.error('[generate-and-schedule] schedule PK race; refunded redundant spend, replaying winner', scheduleError, {
         scheduleId: idem.scheduleId,
