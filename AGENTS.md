@@ -2023,3 +2023,10 @@ Five MINORs on the merged funnel, fixed as a follow-up PR with one focused TDD c
 
 ## Faceless persona 500 — OpenCode round 5 (2026-10-03, review on 370e971)
 - **Pin parallel SQL literals by value, not just existence.** The restored `'{}'` default now lives in three SQL files (schema.sql, persona-images.sql, fix-recent-image-ids-default.sql); the existence sentinel couldn't see a value drift in the other two. Added a test asserting each file's exact literal via static `includes` — no dynamic RegExp (CodeQL rule). Mutation-verified: drifting the literal in persona-images.sql fails only the new test while the other 60 stay green.
+
+## SSRF fix, PR #64 (2026-10-03, CodeQL #17 Critical)
+
+- **SSRF guard shape for server-side fetches of attacker-controlled URLs:** DNS-resolve the host (`node:dns/promises` `lookup` with `{all:true}`), refuse when ANY resolved address is non-public (loopback/private/link-local incl. 169.254.169.254/CGNAT/multicast/reserved + IPv4-mapped IPv6), fail closed on DNS errors, and fetch with `redirect: 'error'` so a 3xx to an internal URL is never followed. Keep existing https-only + timeout guards. Name the DNS-rebinding residual in a comment at the check site.
+- **Make the DNS lookup injectable for tests:** `fetchCimdDocument(clientId, fetchImpl = fetch, lookupImpl = defaultLookup)` — unit tests inject a fake lookup, no network in tests.
+- **Decline reviewer suggestions that make failure modes worse.** OpenCode suggested `ipv4ToInt` throw instead of returning null — but the `addresses.some(...)` call site has no try/catch, so a throw would propagate uncaught to the authorize route (500). Null degrades safely (falls through to the IPv6 prefix checks, then allow). Verify where an exception would land before accepting a "throw instead of null" suggestion.
+- **Worktree without node_modules:** a fresh `git worktree add` has no node_modules; symlink `apps/web/node_modules` from the main checkout to run vitest/tsc/eslint, and DELETE the symlink before committing (it would otherwise be staged as a symlink).
