@@ -1,4 +1,4 @@
-# MoneyPrinterTurbo — Agent Rules
+# Post Engineer (engine) — Agent Rules
 
 These rules apply to every agent (human or AI) making changes in this repository.
 They exist so that video-generation behaviour stays consistent across every
@@ -113,8 +113,8 @@ unavailable, so this is safe on any host.
   **production defaults** produce a valid video — not for redefining those
   defaults.
 - The engine test suite must maintain at least **60% line coverage**. Run
-  `make coverage` (or the equivalent `uv run coverage ...` commands) and treat
-  any result below 60% as a failure.
+  `uv run coverage run --source=app,cli -m pytest -q && uv run coverage report -m`
+  and treat any result below 60% as a failure.
 
 ---
 

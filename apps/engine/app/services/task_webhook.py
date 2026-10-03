@@ -8,7 +8,7 @@ POSTs a small JSON payload to the caller-supplied ``webhook_url`` (if any):
 
 Delivery is best-effort and never affects the task: the POST runs on a
 short-lived daemon thread with a short timeout, and any delivery failure
-only logs at ERROR (forwarded to Bugsink by the asgi sink). Each task
+only logs at ERROR (forwarded to PostHog by the asgi sink). Each task
 notifies at most once — the dedupe is a bounded deque with a lock, so a
 task that fails in several phases still sends a single webhook.
 """
@@ -20,6 +20,9 @@ from typing import Optional
 
 import requests
 from loguru import logger
+
+from app.services.analytics import scrub_secret_values
+from app.services.notify import redact_known_url
 
 WEBHOOK_TIMEOUT_SECONDS = 10
 
@@ -47,10 +50,18 @@ def _post(webhook_url: str, payload: dict, task_id: str) -> None:
         response.raise_for_status()
     except Exception as exc:  # noqa: BLE001 — delivery is best-effort by design
         # Never raise: a dead webhook must not fail or stall the task.
-        # ERROR goes to Bugsink via the asgi sink so the user can see why
+        # ERROR goes to PostHog via the asgi sink so the user can see why
         # the callback never arrived.
+        # The webhook URL is a credential (Discord/Slack-style path-embedded
+        # tokens): requests embeds it in str(exc), and the key-anchored
+        # scrubber cannot match path-embedded tokens. Redact every
+        # serialization the transport can produce via the shared helper,
+        # then scrub-then-truncate the remainder like every other
+        # free-text error surface.
+        message = redact_known_url(str(exc), webhook_url)
+        error = scrub_secret_values(message)[:500]
         logger.bind(task_id=task_id).error(
-            "terminal webhook delivery failed: {error}", error=str(exc)[:500]
+            "terminal webhook delivery failed: {error}", error=error
         )
 
 

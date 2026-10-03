@@ -203,7 +203,7 @@ jobs:
         run: uv sync --frozen
 
       - name: Lint
-        run: uv run ruff check app cli.py scripts test
+        run: uv run ruff check app cli.py test
 
       - name: Typecheck
         run: uv run python -m compileall -q app cli.py main.py

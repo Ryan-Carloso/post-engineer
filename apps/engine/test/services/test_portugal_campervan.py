@@ -1,7 +1,7 @@
 """
 End-to-end flow test for the Portugal campervan theme.
 
-Runs the FULL MoneyPrinterTurbo pipeline in-process (no HTTP server, no Docker):
+Runs the FULL Post Engineer pipeline in-process (no HTTP server, no Docker):
     subject → z.ai GLM-5.2 script → search terms → Pexels footage download
             → edge-tts narration → subtitles → moviepy/ffmpeg render → final .mp4
 

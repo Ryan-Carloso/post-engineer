@@ -72,7 +72,7 @@ def _transition_mode(value: str) -> str | None:
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="MoneyPrinterTurbo command line video generation"
+        description="Post Engineer command line video generation"
     )
     parser.add_argument("--video-subject", required=True, help="video subject")
     parser.add_argument("--video-script", default="", help="custom script")

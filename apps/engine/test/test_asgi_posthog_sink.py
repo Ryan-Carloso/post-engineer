@@ -234,3 +234,17 @@ class PostHogSinkTests(unittest.TestCase):
         with patch("app.asgi.track_event", side_effect=RuntimeError("posthog down")):
             asgi._loguru_posthog_sink(BadMessage())
             asgi._loguru_posthog_sink(_message())
+
+
+class StartupWarmClientTests(unittest.TestCase):
+    def test_startup_event_warms_posthog_client(self):
+        # The PostHog client must be warmed by the server startup hook —
+        # not at controller import time (which also runs under pytest,
+        # CLI/webui entry points, and anything else that imports the
+        # controller module).
+        with (
+            patch("app.asgi.warm_client") as warm,
+            patch("app.asgi.start_fill_schedule_scheduler"),
+        ):
+            asgi.startup_event()
+        warm.assert_called_once_with()

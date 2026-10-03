@@ -102,6 +102,41 @@ def _should_emit_failed_event(task_id: str) -> bool:
 
 
 #---------------
+# Dispatch-failure emission dedup: the batch dispatch-failure path emits
+# video_generation_failed for incidents that never started a task, so it
+# must NOT share the pipeline terminal guard above. A transient dispatch
+# failure followed by a successful re-dispatch and a genuine pipeline
+# failure are two real incidents for one deterministic id, and both must
+# emit — a shared guard suppresses one side or the other. Kept separate,
+# neither path can arm, suppress, or re-arm the other's terminal event.
+# Funnel trade-off, named: video_generation_requested stays deduped for
+# the re-dispatched id, so the failure % can briefly exceed 100% in this
+# window. Both failures are real; growing the denominator to match would
+# reintroduce the double-count this guard prevents.
+#---------------
+MAX_DISPATCH_FAILED_EVENT_IDS = 1000
+_dispatch_failed_event_emitted_tasks: deque[str] = deque(maxlen=MAX_DISPATCH_FAILED_EVENT_IDS)
+_dispatch_failed_event_emitted_tasks_lock = Lock()
+
+
+def _should_emit_dispatch_failed_event(task_id: str) -> bool:
+    """Atomically check-and-record ``task_id``; True only on first sight.
+
+    Same fail-open lock semantics as the pipeline guard: a duplicate
+    dispatch-failure event is less harmful than a missing one.
+    """
+    if not _dispatch_failed_event_emitted_tasks_lock.acquire(timeout=_ALERT_LOCK_TIMEOUT_SECONDS):
+        return True
+    try:
+        if task_id in _dispatch_failed_event_emitted_tasks:
+            return False
+        _dispatch_failed_event_emitted_tasks.append(task_id)
+        return True
+    finally:
+        _dispatch_failed_event_emitted_tasks_lock.release()
+
+
+#---------------
 MAX_REQUESTED_EVENT_IDS = 1000
 _requested_event_emitted_tasks: deque[str] = deque(maxlen=MAX_REQUESTED_EVENT_IDS)
 _requested_event_emitted_tasks_lock = Lock()
@@ -220,9 +255,11 @@ def _task_tracking_context(task_id: str) -> dict[str, object]:
         task = {}
     return {
         "task_id": task_id,
-        "user_id": task.get("user_id", "unknown"),
-        "flow": task.get("flow", "unknown"),
-        "pipeline": task.get("pipeline", "unknown"),
+        # `or` (not a get-default): a row that stored an explicit None
+        # must degrade to the sentinel too, never a null prop in PostHog.
+        "user_id": task.get("user_id") or "unknown",
+        "flow": task.get("flow") or "unknown",
+        "pipeline": task.get("pipeline") or "unknown",
     }
 
 
@@ -324,7 +361,7 @@ def _fail_task(
     """Mark a task FAILED; fire-and-forget Discord alert (once per task).
 
     Every call emits a structured Loguru ERROR record (forwarded to
-    Bugsink by the asgi sink, ERROR+) with the task id, the pipeline
+    PostHog by the asgi sink, ERROR+) with the task id, the pipeline
     stage that failed and the error type — so the reason is visible per
     step. The full params are never logged: they may carry secrets,
     signed URLs or tokens.

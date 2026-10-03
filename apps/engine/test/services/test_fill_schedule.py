@@ -310,6 +310,76 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
         self.assertEqual(store.updates[0][1]["status"], "failed")
 
+    def test_failed_task_error_is_scrubbed_before_storage(self):
+        # Engine task errors can echo bearer tokens/DSNs (AGENTS.md PR #17);
+        # the slot error column reaches clients via /api/schedule/status,
+        # so it is scrubbed before truncating, like the telemetry reason.
+        # The probe is longer than the 500-char cap: with a shorter message
+        # [:500] is a no-op and a truncate-first revert would stay green.
+        from app.services import analytics as analytics_module
+        from app.services.fill_schedule import reconcile as rec_module
+
+        slot = {
+            "id": "slot-1",
+            "task_id": "t-1",
+            "user_id": "user-1",
+            "schedules": {
+                "id": "sched-1",
+                                "user_id": "user-1",
+                "personas": {"name": "Ana", "face_mix_percent": 0, "face_quality": "ok"},
+            },
+        }
+        store = _FakeStore()
+        store.generating_slots = lambda: [slot]
+        state = MagicMock()
+        task_error = "E" * 450 + " api_key=TOPSECRET123 " + "F" * 200
+        state.get_task.return_value = {
+            "state": -1,
+            "error": task_error,
+        }
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=state,
+            publish_video=MagicMock(),
+        )
+        with patch.object(
+            rec_module,
+            "scrub_secret_values",
+            wraps=analytics_module.scrub_secret_values,
+        ) as scrub:
+            self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
+        # The scrubber saw the whole message, not the 500-char slice.
+        scrub.assert_called_once_with(task_error)
+        error = store.updates[0][1]["error"]
+        self.assertIn("[redacted]", error)
+        self.assertNotIn("TOPSECRET123", error)
+        self.assertLessEqual(len(error), 500)
+
+    def test_failed_task_none_error_stores_empty_string(self):
+        # .get's default does not fire on an explicitly-stored None — the
+        # same failure mode this PR fixed for the identity props with `or`.
+        # A None task error must not persist the literal string "None" into
+        # the client-visible slot error column.
+        slot = {
+            "id": "slot-1",
+            "task_id": "t-1",
+            "user_id": "user-1",
+            "schedules": {
+                "id": "sched-1",
+                                "user_id": "user-1",
+                "personas": {"name": "Ana", "face_mix_percent": 0, "face_quality": "ok"},
+            },
+        }
+        store = _FakeStore()
+        store.generating_slots = lambda: [slot]
+        state = MagicMock()
+        state.get_task.return_value = {"state": -1, "error": None}
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=state,
+            publish_video=MagicMock(),
+        )
+        self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
+        self.assertEqual(store.updates[0][1]["error"], "")
+
     def test_failed_task_without_persona_embed_marks_failed_without_throwing(self):
         # Regression: a schedule with no persona embed (deleted persona)
         # must not kill the reconcile stage with a RuntimeError every tick.
@@ -498,7 +568,7 @@ class PublishDueTests(unittest.TestCase):
         store.ready_due_slots = lambda now: [self._slot()]
         state = MagicMock()
         state.get_task.return_value = {"state": 1, "videos": [self.video_path]}
-        error = PublishError("E" * 150 + " api_key=TOPSECRET123" + "F" * 150)
+        error = PublishError("E" * 150 + " api_key=TOPSECRET123 " + "F" * 150)
         publish = MagicMock(side_effect=error)
         scheduler = fs.FillScheduleScheduler(
             store=store, task_state=state,
@@ -1066,7 +1136,7 @@ class CoverageGapTests(unittest.TestCase):
 
     def test_failed_stage_logs_at_error_level(self):
         # A failed tick stage is a real recurring error: it must be logged at
-        # ERROR so the Bugsink bridge (loguru sink, ERROR+) forwards it.
+        # ERROR so the PostHog bridge (loguru sink, ERROR+) forwards it.
         store = _FakeStore()
         store.pending_slots = MagicMock(side_effect=RuntimeError("supabase down"))
         scheduler = self._scheduler(store)

@@ -15,8 +15,12 @@ from __future__ import annotations
 import os
 import sys
 from typing import Any, Callable
+from urllib.parse import urlparse
 
 from loguru import logger
+from requests.utils import requote_uri
+
+from app.services.analytics import scrub_secret_values
 
 ENV_WEBHOOK_URL = "DISCORD_WEBHOOK_URL"
 
@@ -37,8 +41,8 @@ def running_under_test() -> bool:
 
     The engine test suite imports app.asgi at collection time, whose
     load_dotenv() loads the tracked .env — including the REAL
-    DISCORD_WEBHOOK_URL and BUGSINK_DSN. Production side effects (Discord
-    alerts, error-tracking init) must stay off in that case.
+    DISCORD_WEBHOOK_URL. Production side effects (Discord alerts,
+    error-tracking init) must stay off in that case.
 
     Detection, most to least authoritative:
     - ``ENGINE_UNDER_TEST=1``: set by the test-suite bootstrap
@@ -140,6 +144,38 @@ def send_discord(message: str, post: PostFn | None = None) -> bool:
         return False
 
 
+def redact_known_url(message: str, url: str) -> str:
+    """Replace every transport serialization of a webhook URL with [redacted].
+
+    requests/urllib3 can embed the URL in several forms in exception text:
+    the configured string, requests' own requote of it (response.url), the
+    path-only fragment (connection-phase errors), and the full request
+    target (path + query). The key-anchored scrubber cannot match
+    path-embedded tokens, so every variant must be replaced explicitly.
+    Longest variants first, so a path replace cannot split a request-target
+    before it is matched. Variants shorter than 8 chars are skipped: a
+    misconfigured URL with a trivial path ("/") would otherwise rewrite
+    every slash in the message. Never replace an empty string: it
+    interleaves "[redacted]" between characters.
+    """
+    if not url:
+        return message
+    parsed = urlparse(url)
+    request_target = parsed.path + ("?" + parsed.query if parsed.query else "")
+    variants = {
+        url,
+        requote_uri(url),
+        parsed.path,
+        requote_uri(parsed.path),
+        request_target,
+        requote_uri(request_target),
+    }
+    for variant in sorted(variants, key=len, reverse=True):
+        if variant and len(variant) >= 8:
+            message = message.replace(variant, "[redacted]")
+    return message
+
+
 def safe_reason(exc: BaseException) -> str:
     """Exception summary safe for Discord.
 
@@ -152,9 +188,13 @@ def safe_reason(exc: BaseException) -> str:
     message = str(exc)
     if not message:
         return type(exc).__name__
-    if webhook_url and webhook_url in message:
+    if redact_known_url(message, webhook_url) != message:
         return type(exc).__name__
-    return message[:200]
+    # The summary reaches Discord, logs, and (via _fail_task) client-visible
+    # task errors: scrub the full message before the 200-cut, like the
+    # telemetry reason — a cut landing mid-key would leave a fragment the
+    # key-anchored pattern can no longer match.
+    return scrub_secret_values(message)[:200]
 
 
 # ---------------------------------------------------------------------------

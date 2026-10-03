@@ -138,9 +138,18 @@ class BatchGenerator:
             return f"{persona.get('name', 'Persona')}: {topic}"
         except Exception as exc:
             # A failed slot is a real recurring error: log at ERROR so the
-            # Bugsink bridge (loguru sink, ERROR+) forwards it.
-            logger.error(f"fill_schedule: slot {slot['id']} generation failed: {exc}")
-            self.store.update_slot(slot["id"], status=SLOT_FAILED, error=str(exc)[:500])
+            # PostHog bridge (loguru sink, ERROR+) forwards it, scrubbed.
+            logger.error(
+                f"fill_schedule: slot {slot['id']} generation failed: "
+                f"{scrub_secret_values(str(exc))}"
+            )
+            # The error column is client-visible (/api/schedule/status spreads
+            # the row into the response): scrub the full message before
+            # truncating, like the telemetry reason below — a raw str(exc)
+            # could echo bearer tokens or DSNs to clients.
+            self.store.update_slot(
+                slot["id"], status=SLOT_FAILED, error=scrub_secret_values(str(exc))[:500]
+            )
             # Funnel note: slot failures raised before task creation (deleted
             # persona, empty topic, missing user_id) intentionally have no
             # matching video_generation_requested — they are scheduling/data
@@ -160,7 +169,18 @@ class BatchGenerator:
                 failed_props["task_id"] = task_id
             if user_id is not None:
                 failed_props["user_id"] = user_id
-            track_event("video_generation_failed", failed_props)
+            # Dedup by task id on a dedicated dispatch-failure guard (separate
+            # from the pipeline terminal guard _fail_task uses): a crash
+            # between dispatch and update_slot(generating) re-dispatches the
+            # same deterministic id, and without the guard the second failed
+            # dispatch would double-count the failure numerator while
+            # requested stays suppressed. The guards stay separate so a
+            # dispatch failure can never suppress — or re-arm — the genuine
+            # pipeline terminal event of a later successful re-dispatch.
+            # Pre-task failures (task_id None) have no requested event, so
+            # they always emit.
+            if task_id is None or tm._should_emit_dispatch_failed_event(task_id):
+                track_event("video_generation_failed", failed_props)
             notify_safe(
                 self.notify,
                 notify_module.slot_failed_msg(
