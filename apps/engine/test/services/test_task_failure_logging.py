@@ -1,9 +1,9 @@
 """Structured failure logging for video tasks.
 
 Every _fail_task call must emit a Loguru ERROR record (forwarded to
-Bugsink by the asgi sink) with task_id, stage and error_type bound —
+PostHog by the asgi sink) with task_id, stage and error_type bound —
 never the full params. The stage names the pipeline step that failed so
-the reason is visible per step in Bugsink.
+the reason is visible per step in PostHog.
 """
 
 import ast
@@ -79,7 +79,7 @@ class FailTaskLoggingTests(unittest.TestCase):
         self.assertEqual(capture.errors()[0]["extra"].get("stage"), "unknown")
 
     def test_every_fail_task_call_logs_each_step(self):
-        # The user wants the failure reason visible per step in Bugsink:
+        # The user wants the failure reason visible per step in PostHog:
         # repeated notices log every time (the Discord alert stays deduped).
         with _LogCapture() as capture, patch.object(
             task_service, "send_discord", return_value=True

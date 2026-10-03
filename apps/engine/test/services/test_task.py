@@ -895,6 +895,49 @@ class TestPublishFailureDiscordAlert(unittest.TestCase):
         self.assertIn("final.mp4", message)
         self.assertNotIn("/tmp/", message)
 
+    def test_publish_failure_funnel_event_carries_publish_stage(self):
+        # Route-level pin for the _mark("publish") wiring in start(): the
+        # generic handler passes stage=_last_phase to _fail_task, so a
+        # revert of the _mark insertion would surface here as stage="render".
+        from app.services.task_publish import PublishFailedError
+
+        params = VideoParams(
+            video_subject="Lisbon trams",
+            video_materials=[{"provider": "local", "url": "x", "duration": 1}],
+        )
+        tm._failed_event_emitted_tasks.clear()
+        try:
+            with (
+                patch.object(tm.sm.state, "update_task"),
+                patch.object(tm, "send_discord"),
+                patch.object(tm, "generate_script", return_value="script"),
+                patch.object(tm, "save_script_data"),
+                patch.object(tm, "generate_audio", return_value=("audio.mp3", 10.0, None)),
+                patch.object(tm, "generate_subtitle", return_value="sub.srt"),
+                patch.object(tm, "get_video_materials", return_value=["v.mp4"]),
+                patch.object(tm.video, "get_available_music_moods", return_value=[]),
+                patch.object(tm.llm, "generate_music_mood", return_value="chill"),
+                patch.object(
+                    tm, "generate_final_videos", return_value=(["/tmp/x/final.mp4"], [])
+                ),
+                patch.object(
+                    tm.task_publish,
+                    "maybe_publish_finished_videos",
+                    side_effect=PublishFailedError("publish failed for final.mp4: 403"),
+                ),
+                patch.object(tm, "cleanup_task_intermediates"),
+                patch.object(tm, "track_event") as track,
+            ):
+                tm.start(task_id="task-pub-stage", params=params)
+        finally:
+            tm._failed_event_emitted_tasks.clear()
+        failed_calls = [
+            c for c in track.call_args_list if c[0][0] == "video_generation_failed"
+        ]
+        self.assertEqual(len(failed_calls), 1)
+        _, props = failed_calls[0][0]
+        self.assertEqual(props["stage"], "publish")
+
 
 class TestShouldSendFailureAlertLockFallback(unittest.TestCase):
     """If the dedupe lock can't be acquired in time, err on the side of alerting."""

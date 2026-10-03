@@ -10,6 +10,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+from urllib.parse import urlparse
+
+from requests.utils import requote_uri
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -211,6 +214,57 @@ class SendDiscordTests(unittest.TestCase):
         with patch.dict(os_environ(), {"DISCORD_WEBHOOK_URL": "https://discord/hook"}, clear=True):
             exc = RuntimeError("failed calling https://discord/hook: timeout")
             self.assertEqual(nf.safe_reason(exc), "RuntimeError")
+
+    def test_reason_strips_requoted_url_variant(self):
+        # requests requotes the target URL (response.url), so the exception
+        # may carry the percent-encoded form instead of the configured
+        # string — safe_reason must treat it as the webhook URL too.
+        url = "https://discord/hook with space/secret-token"
+        with patch.dict(os_environ(), {"DISCORD_WEBHOOK_URL": url}, clear=True):
+            exc = RuntimeError(f"failed calling {requote_uri(url)}: timeout")
+            self.assertEqual(nf.safe_reason(exc), "RuntimeError")
+            self.assertNotIn("secret-token", nf.safe_reason(exc))
+
+    def test_reason_strips_path_fragment_variant(self):
+        # Connection-phase errors embed only the requoted path fragment —
+        # the path-embedded token must still collapse the reason to the type.
+        url = "https://discord/hook with space/secret-token"
+        with patch.dict(os_environ(), {"DISCORD_WEBHOOK_URL": url}, clear=True):
+            fragment = requote_uri(urlparse(url).path)
+            exc = ConnectionError(f"connection refused: url: {fragment}")
+            self.assertEqual(nf.safe_reason(exc), "ConnectionError")
+            self.assertNotIn("secret-token", nf.safe_reason(exc))
+
+    def test_redact_known_url_skips_degenerate_path(self):
+        # A misconfigured webhook URL with a trivial path ("/") must not
+        # rewrite every slash in the message — or collapse every
+        # safe_reason to the bare type name. Only the full URL is
+        # redacted in that case.
+        url = "https://hooks.example.com/"
+        message = "open /var/log/app.log: permission denied"
+        self.assertEqual(nf.redact_known_url(message, url), message)
+        with_slash_url = f"failed calling {url}: timeout"
+        redacted = nf.redact_known_url(with_slash_url, url)
+        self.assertNotIn(url, redacted)
+        self.assertIn("failed calling", redacted)
+
+    def test_reason_scrubs_secrets_before_truncation(self):
+        # safe_reason feeds Discord AND (via _fail_task) client-visible task
+        # errors: the full message must be scrubbed before the 200-cut, like
+        # the telemetry reason. The probe is longer than the cap — with a
+        # shorter message [:200] is a no-op and a truncate-first revert
+        # would stay green.
+        from app.services import analytics as analytics_module
+
+        exc = RuntimeError("E" * 150 + " api_key=TOPSECRET123 " + "F" * 150)
+        with patch.object(
+            nf, "scrub_secret_values", wraps=analytics_module.scrub_secret_values
+        ) as scrub:
+            reason = nf.safe_reason(exc)
+        scrub.assert_called_once_with(str(exc))
+        self.assertIn("[redacted]", reason)
+        self.assertNotIn("TOPSECRET123", reason)
+        self.assertLessEqual(len(reason), 200)
 
     def test_long_messages_are_truncated_to_discord_limit(self):
         # m2: Discord rejects messages > 2000 chars — the builder truncates.

@@ -9,7 +9,7 @@ video_generation_failed / video_generated.
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -79,6 +79,21 @@ class RequestedTests(unittest.TestCase):
         # in PostHog breakdowns.
         context = tm._task_tracking_context("ghost-task-xyz")
         self.assertEqual(context["task_id"], "ghost-task-xyz")
+        self.assertEqual(context["user_id"], "unknown")
+        self.assertEqual(context["flow"], "unknown")
+        self.assertEqual(context["pipeline"], "unknown")
+
+    def test_tracking_context_maps_explicit_none_to_unknown_sentinels(self):
+        # dict.get's default only fires on a MISSING key — a row that
+        # stored an explicit None would otherwise slip a null prop into
+        # PostHog, breaking the "degraded identity props use the unknown
+        # sentinel" invariant.
+        with patch.object(
+            tm.sm.state,
+            "get_task",
+            return_value={"user_id": None, "flow": None, "pipeline": None},
+        ):
+            context = tm._task_tracking_context("none-task-1")
         self.assertEqual(context["user_id"], "unknown")
         self.assertEqual(context["flow"], "unknown")
         self.assertEqual(context["pipeline"], "unknown")
@@ -267,7 +282,7 @@ class FailTaskTests(unittest.TestCase):
         # see the full message; truncation happens after.
         from app.services import analytics as analytics_module
 
-        error = "E" * 150 + " api_key=TOPSECRET123" + "F" * 150
+        error = "E" * 150 + " api_key=TOPSECRET123 " + "F" * 150
         with (
             patch.object(tm, "track_event") as track,
             patch.object(tm.task_webhook, "notify_terminal_task"),
@@ -565,6 +580,16 @@ class BatchFailedTests(unittest.TestCase):
             },
         }
 
+    def setUp(self):
+        # The emission guards are process-local: a task id recorded by an
+        # earlier test would silently suppress emissions here. Clear all
+        # three deques so every test starts from a clean slate.
+        from app.services.fill_schedule import generate as gen_module
+
+        gen_module.tm._failed_event_emitted_tasks.clear()
+        gen_module.tm._dispatch_failed_event_emitted_tasks.clear()
+        gen_module.tm._requested_event_emitted_tasks.clear()
+
     def test_dispatch_failure_tracks_failed_with_funnel_context(self):
         from app.services.fill_schedule import generate as gen_module
 
@@ -609,7 +634,7 @@ class BatchFailedTests(unittest.TestCase):
         generator = gen_module.BatchGenerator(
             store=store, task_state=MagicMock(), notify=MagicMock()
         )
-        error = RuntimeError("E" * 150 + " api_key=TOPSECRET123" + "F" * 150)
+        error = RuntimeError("E" * 150 + " api_key=TOPSECRET123 " + "F" * 150)
         with (
             patch.object(gen_module.tm, "track_generation_requested"),
             patch.object(gen_module, "track_event") as track,
@@ -622,8 +647,9 @@ class BatchFailedTests(unittest.TestCase):
         ):
             label = generator._generate_slot(self._slot())
         self.assertIsNone(label)
-        # The scrubber received the whole message, not the truncated slice.
-        scrub.assert_called_once_with(str(error))
+        # The scrubber received the whole message, not the truncated slice —
+        # for both the stored slot error and the telemetry reason.
+        self.assertIn(call(str(error)), scrub.call_args_list)
         failed_calls = [
             c for c in track.call_args_list if c[0][0] == "video_generation_failed"
         ]
@@ -632,6 +658,206 @@ class BatchFailedTests(unittest.TestCase):
         self.assertIn("[redacted]", props["reason"])
         self.assertNotIn("TOPSECRET123", props["reason"])
         self.assertLessEqual(len(str(props["reason"])), 200)
+
+    def test_failed_slot_error_is_scrubbed_before_storage(self):
+        # The slot error column is client-visible (/api/schedule/status
+        # spreads the row into the response), so it gets the same
+        # scrub-then-truncate treatment as the telemetry reason — a raw
+        # str(exc) here would leak bearer tokens/DSNs to clients.
+        from app.services import analytics as analytics_module
+        from app.services.fill_schedule import generate as gen_module
+
+        store = MagicMock()
+        store.signed_url = MagicMock(return_value="https://signed/foto.png")
+        generator = gen_module.BatchGenerator(
+            store=store, task_state=MagicMock(), notify=MagicMock()
+        )
+        boom = RuntimeError("E" * 450 + " api_key=TOPSECRET123 " + "F" * 200)
+        with (
+            patch.object(gen_module.tm, "track_generation_requested"),
+            patch.object(generator, "_dispatch_generation", side_effect=boom),
+            patch.object(gen_module, "track_event"),
+            patch.object(
+                gen_module,
+                "scrub_secret_values",
+                wraps=analytics_module.scrub_secret_values,
+            ) as scrub,
+        ):
+            self.assertIsNone(generator._generate_slot(self._slot()))
+        # The stored-error site truncates at 500: only a longer probe pins
+        # the scrub-then-truncate order — with a shorter message [:500] is
+        # a no-op and a truncate-first revert would stay green. Both the
+        # stored-error site and the telemetry-reason site must scrub the
+        # whole message, truncating only after.
+        self.assertTrue(scrub.call_args_list)
+        for c in scrub.call_args_list:
+            self.assertEqual(c, call(str(boom)))
+        _, fields = store.update_slot.call_args
+        self.assertIn("[redacted]", fields["error"])
+        self.assertNotIn("TOPSECRET123", fields["error"])
+        self.assertLessEqual(len(fields["error"]), 500)
+
+    def test_repeat_dispatch_failure_emits_failed_event_once(self):
+        # Deterministic batch ids can be re-dispatched after a crash
+        # (dispatch fails -> update_slot(generating) lost -> slot stays
+        # pending -> same uuid5 id dispatched again). The failure event
+        # must not double-count: the second notice for the same task id
+        # is suppressed by the dedicated dispatch-failure guard (separate
+        # from the pipeline terminal guard _fail_task uses).
+        from app.services.fill_schedule import generate as gen_module
+
+        store = MagicMock()
+        store.signed_url = MagicMock(return_value="https://signed/foto.png")
+        generator = gen_module.BatchGenerator(
+            store=store, task_state=MagicMock(), notify=MagicMock()
+        )
+        boom = RuntimeError("dispatch exploded")
+        with (
+            patch.object(gen_module.tm, "track_generation_requested"),
+            patch.object(generator, "_dispatch_generation", side_effect=boom),
+            patch.object(gen_module, "track_event") as track,
+        ):
+            self.assertIsNone(generator._generate_slot(self._slot()))
+            self.assertIsNone(generator._generate_slot(self._slot()))
+        failed_calls = [
+            c for c in track.call_args_list if c[0][0] == "video_generation_failed"
+        ]
+        self.assertEqual(len(failed_calls), 1)
+
+    def test_pipeline_failure_after_redispatch_emits_terminal_event(self):
+        # Fail -> succeed -> fail: a transient dispatch failure records the
+        # deterministic id in the dispatch-failure guard; the re-dispatch
+        # then succeeds and the task genuinely fails in the pipeline. The
+        # dispatch guard is separate from the pipeline terminal guard, so
+        # the earlier dispatch incident can neither suppress nor re-arm the
+        # real terminal event — both incidents reach the funnel.
+        from app.services.fill_schedule import generate as gen_module
+
+        store = MagicMock()
+        store.signed_url = MagicMock(return_value="https://signed/foto.png")
+        generator = gen_module.BatchGenerator(
+            store=store, task_state=MagicMock(), notify=MagicMock()
+        )
+        slot = self._slot()
+        task_id = gen_module.new_task_id(slot)
+        sm.state.update_task(
+            task_id, user_id="user-1", flow="batch", pipeline="video"
+        )
+        self.addCleanup(sm.state.delete_task, task_id)
+        boom = RuntimeError("transient dispatch blip")
+        with (
+            patch.object(gen_module.tm, "track_generation_requested"),
+            patch.object(gen_module, "track_event") as gen_track,
+            patch.object(tm, "track_event") as task_track,
+            patch.object(tm.task_webhook, "notify_terminal_task"),
+            patch.object(tm, "send_discord", return_value=True),
+            patch.object(generator, "_dispatch_generation", side_effect=[boom, None]),
+        ):
+            # Tick 1: transient dispatch failure -> failed event emitted,
+            # dispatch guard records the id.
+            self.assertIsNone(generator._generate_slot(slot))
+            # Tick 2: re-dispatch succeeds -> slot marked generating. The
+            # dispatch guard is separate from the pipeline terminal guard,
+            # so no release is needed for the next step to emit.
+            self.assertIsNotNone(generator._generate_slot(slot))
+            # Tick 3: the re-dispatched task genuinely fails in the pipeline.
+            tm._fail_task(task_id, "gpu exploded", _params(), stage="render")
+        dispatch_failed = [
+            c
+            for c in gen_track.call_args_list
+            if c[0][0] == "video_generation_failed"
+        ]
+        terminal_failed = [
+            c
+            for c in task_track.call_args_list
+            if c[0][0] == "video_generation_failed"
+        ]
+        self.assertEqual(len(dispatch_failed), 1)
+        self.assertEqual(len(terminal_failed), 1)
+        _, props = terminal_failed[0][0]
+        self.assertEqual(props["task_id"], task_id)
+        self.assertEqual(props["stage"], "render")
+
+    def test_dispatch_failure_does_not_consume_pipeline_guard(self):
+        # The dispatch-failure emission must record only the dedicated
+        # dispatch guard — never the pipeline terminal guard _fail_task
+        # uses. After a dispatch failure, the first genuine pipeline
+        # failure notice for the same id still emits its terminal event.
+        from app.services.fill_schedule import generate as gen_module
+
+        store = MagicMock()
+        store.signed_url = MagicMock(return_value="https://signed/foto.png")
+        generator = gen_module.BatchGenerator(
+            store=store, task_state=MagicMock(), notify=MagicMock()
+        )
+        slot = self._slot()
+        task_id = gen_module.new_task_id(slot)
+        sm.state.update_task(
+            task_id, user_id="user-1", flow="batch", pipeline="video"
+        )
+        self.addCleanup(sm.state.delete_task, task_id)
+        boom = RuntimeError("transient dispatch blip")
+        with (
+            patch.object(gen_module.tm, "track_generation_requested"),
+            patch.object(gen_module, "track_event"),
+            patch.object(generator, "_dispatch_generation", side_effect=boom),
+        ):
+            self.assertIsNone(generator._generate_slot(slot))
+        self.assertIn(task_id, gen_module.tm._dispatch_failed_event_emitted_tasks)
+        self.assertNotIn(task_id, tm._failed_event_emitted_tasks)
+        with (
+            patch.object(tm, "track_event") as task_track,
+            patch.object(tm.task_webhook, "notify_terminal_task"),
+            patch.object(tm, "send_discord", return_value=True),
+        ):
+            tm._fail_task(task_id, "gpu exploded", _params(), stage="render")
+        terminal_failed = [
+            c
+            for c in task_track.call_args_list
+            if c[0][0] == "video_generation_failed"
+        ]
+        self.assertEqual(len(terminal_failed), 1)
+
+    def test_slot_failure_log_line_is_scrubbed(self):
+        # The slot-failure ERROR line feeds the loguru ERROR+ sink: scrub
+        # the exception like every other free-text surface in this handler.
+        from app.services.fill_schedule import generate as gen_module
+
+        store = MagicMock()
+        store.signed_url = MagicMock(return_value="https://signed/foto.png")
+        generator = gen_module.BatchGenerator(
+            store=store, task_state=MagicMock(), notify=MagicMock()
+        )
+        boom = RuntimeError("dispatch exploded: api_key=TOPSECRET123")
+        with (
+            patch.object(gen_module.tm, "track_generation_requested"),
+            patch.object(generator, "_dispatch_generation", side_effect=boom),
+            patch.object(gen_module, "track_event"),
+            patch.object(gen_module, "logger") as mock_logger,
+        ):
+            self.assertIsNone(generator._generate_slot(self._slot()))
+        logged = " ".join(str(c) for c in mock_logger.error.call_args_list)
+        self.assertIn("[redacted]", logged)
+        self.assertNotIn("TOPSECRET123", logged)
+
+
+class TestDispatchFailedGuardLockFallback(unittest.TestCase):
+    """If the dedupe lock can't be acquired in time, err on the side of emitting."""
+
+    def setUp(self):
+        tm._dispatch_failed_event_emitted_tasks.clear()
+
+    def tearDown(self):
+        tm._dispatch_failed_event_emitted_tasks.clear()
+
+    def test_lock_unavailable_emits_failed_event(self):
+        tm._dispatch_failed_event_emitted_tasks_lock.acquire()
+        try:
+            self.assertTrue(
+                tm._should_emit_dispatch_failed_event("task-locked")
+            )
+        finally:
+            tm._dispatch_failed_event_emitted_tasks_lock.release()
 
 
 if __name__ == "__main__":

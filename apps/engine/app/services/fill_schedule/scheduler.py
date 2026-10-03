@@ -71,7 +71,7 @@ class FillScheduleScheduler:
                 results[stage_name] = stage(now)
             except Exception as exc:  # noqa: BLE001
                 # A failed tick stage is a real recurring error: log at ERROR
-                # so the Bugsink bridge (loguru sink, ERROR+) forwards it.
+                # so the PostHog bridge (loguru sink, ERROR+) forwards it.
                 logger.error(f"fill_schedule: stage {stage_name} failed: {notify_module.safe_reason(exc)}")
                 results[stage_name] = -1
         if any(value != 0 for value in results.values()):

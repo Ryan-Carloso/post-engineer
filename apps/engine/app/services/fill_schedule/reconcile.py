@@ -11,7 +11,7 @@ from app.services.fill_schedule.constants import (
     SLOT_FAILED,
     SLOT_READY,
 )
-from app.services.analytics import track_event
+from app.services.analytics import scrub_secret_values, track_event
 from app.services.fill_schedule.store import ScheduleStore
 from app.services.fill_schedule.support import (
     persona_for,
@@ -100,8 +100,14 @@ class BatchReconciler:
                         "fill_schedule: cannot refund failed batch slot without user_id",
                         slot_id=slot.get("id"),
                     )
+                # The error column is client-visible (/api/schedule/status spreads
+                # the row into the response): scrub the full message before
+                # truncating — engine task errors can echo bearer tokens or
+                # DSNs (AGENTS.md PR #17).
                 self.store.update_slot(
-                    slot["id"], status=SLOT_FAILED, error=str(task.get("error", ""))[:500]
+                    slot["id"],
+                    status=SLOT_FAILED,
+                    error=scrub_secret_values(str(task.get("error") or ""))[:500],
                 )
                 updated += 1
         return updated

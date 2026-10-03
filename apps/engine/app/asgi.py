@@ -14,7 +14,7 @@ from loguru import logger
 from app.config import config
 from app.models.exception import HttpException
 from app.router import root_api_router
-from app.services.analytics import scrub_secret_values, track_event
+from app.services.analytics import scrub_secret_values, track_event, warm_client
 from app.services.fill_schedule import (
     FillScheduleScheduler,
     ScheduleStore,
@@ -292,4 +292,11 @@ def shutdown_event():
 @app.on_event("startup")
 def startup_event():
     logger.info(f"startup event (version {get_deployed_version()})")
+    # Warm the PostHog client on server startup — not at controller import
+    # time: the on_accepted funnel callback runs under the task-manager
+    # lock, and the first track_event in a process pays the posthog import
+    # + client construction. Confining it here keeps the side effect in the
+    # process that actually serves traffic. No-op when POSTHOG_API_KEY is
+    # unset.
+    warm_client()
     start_fill_schedule_scheduler()

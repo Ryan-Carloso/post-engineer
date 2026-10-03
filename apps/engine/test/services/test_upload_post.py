@@ -128,5 +128,82 @@ class TestUploadPostYouTube(unittest.TestCase):
         self.assertIn("youtube", platforms)
 
 
+class TestUploadPostErrorScrubbing(unittest.TestCase):
+    # The failure error dicts are persisted into client-visible task state
+    # (cross_post_results), so they get the scrub treatment like every
+    # other free-text error surface.
+
+    @patch("app.services.upload_post.config.app", _CONFIG_BASE)
+    @patch("app.services.upload_post.os.path.exists", return_value=True)
+    @patch("builtins.open", mock_open(read_data=b"fake"))
+    @patch("app.services.upload_post.requests.post")
+    def test_upload_failure_error_is_scrubbed(self, mock_post, _exists):
+        import requests
+
+        mock_post.side_effect = requests.exceptions.RequestException(
+            "E" * 450 + " api_key=TOPSECRET123 " + "F" * 200
+        )
+        svc = UploadPostService()
+        result = svc.upload_video("/fake/v.mp4", "Title")
+        self.assertFalse(result["success"])
+        self.assertIn("[redacted]", result["error"])
+        self.assertNotIn("TOPSECRET123", result["error"])
+        self.assertLessEqual(len(result["error"]), 500)
+
+    @patch("app.services.upload_post.config.app", _CONFIG_BASE)
+    @patch("app.services.upload_post.requests.get")
+    def test_check_status_failure_error_is_scrubbed(self, mock_get):
+        import requests
+
+        mock_get.side_effect = requests.exceptions.RequestException(
+            "E" * 450 + " api_key=TOPSECRET123 " + "F" * 200
+        )
+        svc = UploadPostService()
+        result = svc.check_status("req-1")
+        self.assertFalse(result["success"])
+        self.assertIn("[redacted]", result["error"])
+        self.assertNotIn("TOPSECRET123", result["error"])
+        self.assertLessEqual(len(result["error"]), 500)
+
+
+    # The ERROR log lines sit one line above the scrubbed dicts: they go to
+    # the loguru ERROR+ sink, so they get the same scrub treatment.
+    @patch("app.services.upload_post.config.app", _CONFIG_BASE)
+    @patch("app.services.upload_post.os.path.exists", return_value=True)
+    @patch("builtins.open", mock_open(read_data=b"fake"))
+    @patch("app.services.upload_post.requests.post")
+    def test_upload_failure_log_line_is_scrubbed(self, mock_post, _exists):
+        import requests
+
+        from app.services import upload_post as up_module
+
+        mock_post.side_effect = requests.exceptions.RequestException(
+            "connection failed: api_key=TOPSECRET123"
+        )
+        svc = UploadPostService()
+        with patch.object(up_module, "logger") as mock_logger:
+            svc.upload_video("/fake/v.mp4", "Title")
+        logged = " ".join(str(c) for c in mock_logger.error.call_args_list)
+        self.assertIn("[redacted]", logged)
+        self.assertNotIn("TOPSECRET123", logged)
+
+    @patch("app.services.upload_post.config.app", _CONFIG_BASE)
+    @patch("app.services.upload_post.requests.get")
+    def test_check_status_failure_log_line_is_scrubbed(self, mock_get):
+        import requests
+
+        from app.services import upload_post as up_module
+
+        mock_get.side_effect = requests.exceptions.RequestException(
+            "timeout: api_key=TOPSECRET123"
+        )
+        svc = UploadPostService()
+        with patch.object(up_module, "logger") as mock_logger:
+            svc.check_status("req-1")
+        logged = " ".join(str(c) for c in mock_logger.error.call_args_list)
+        self.assertIn("[redacted]", logged)
+        self.assertNotIn("TOPSECRET123", logged)
+
+
 if __name__ == "__main__":
     unittest.main()
