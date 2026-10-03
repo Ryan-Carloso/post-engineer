@@ -167,7 +167,7 @@ describe('POST /api/persona — modo faceless (100% stock, sem avatar)', () => {
       '..',
       '..',
       'supabase',
-      'schema.sql',
+      '001_schema.sql',
     );
     const sql = readFileSync(sqlPath, 'utf8');
     const tableMatch = sql.match(
@@ -216,7 +216,7 @@ describe('POST /api/persona — modo faceless (100% stock, sem avatar)', () => {
     expect(columns.get('user_id')).toBe(true);
     expect(columns.get('created_at')).toBe(false);
     // Pins the DEFAULT this PR restores: dropping `default '{}'` from
-    // schema.sql must fail CI, not just leave the insert pin green.
+    // 001_schema.sql must fail CI, not just leave the insert pin green.
     expect(columns.get('recent_image_ids')).toBe(false);
 
     const { inserted } = mockSupabase();
@@ -263,8 +263,8 @@ describe('POST /api/persona — modo faceless (100% stock, sem avatar)', () => {
       'supabase',
     );
     const expectations: Array<[string, string]> = [
-      ['schema.sql', `recent_image_ids uuid[] not null default '{}'`],
-      ['persona-images.sql', `recent_image_ids uuid[] not null default '{}'`],
+      ['001_schema.sql', `recent_image_ids uuid[] not null default '{}'`],
+      ['002_persona-images.sql', `recent_image_ids uuid[] not null default '{}'`],
       [
         'fix-recent-image-ids-default.sql',
         `alter column recent_image_ids set default '{}'`,

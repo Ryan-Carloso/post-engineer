@@ -76,7 +76,7 @@ pnpm install
 1. Create a project at [supabase.com](https://supabase.com) (or point at your
    self-hosted instance).
 2. In the Supabase SQL editor, apply the database scripts. The persona image
-   library script lives in this repo: [`supabase/persona-images.sql`](supabase/persona-images.sql)
+   library script lives in this repo: [`supabase/002_persona-images.sql`](supabase/002_persona-images.sql)
    (manual-apply by design).
 
    > **Need help?** If you are setting up a fresh project and need the current

@@ -49,15 +49,20 @@ openssl rand -base64 32  # TOKEN_ENCRYPTION_KEY
 
 Provision the database schema in your Supabase project:
 
-1. `supabase/schema.sql` — tables, types and defaults (idempotent snapshot;
-   see its header for what it covers and what to finish in the dashboard:
-   RLS policies, FK constraints, RPC function bodies, the `personas`
-   storage bucket).
-2. `supabase/persona-images.sql` — persona image library constraints.
-3. `supabase/engine-task-state.sql` — engine task state (only needed when
-   running the engine with `MPT_STATE_BACKEND=supabase`).
+1. `supabase/001_schema.sql` — tables, types and defaults (idempotent
+   snapshot; see its header for what it covers and what to finish in the
+   dashboard: RLS policies, FK constraints, RPC function bodies, the
+   `personas` storage bucket).
+2. `supabase/002_persona-images.sql` — persona image library constraints.
+3. `supabase/003_engine-task-state.sql` — engine task state (only needed
+   when running the engine with `MPT_STATE_BACKEND=supabase`).
 
-Paste each file into the Supabase Dashboard > SQL Editor and run, in order.
+Paste each file into the Supabase Dashboard > SQL Editor and run, in order
+(the `001_`, `002_`, `003_` prefixes encode the order — always apply the
+lowest number first). When the project adds new migrations they arrive as
+new numbered files (`004_...`, ...); you only need to run the ones newer
+than what you already applied. All files are idempotent, so re-running the
+whole sequence is safe.
 
 ## 3. Run the engine with Docker Compose
 

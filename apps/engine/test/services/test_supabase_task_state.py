@@ -83,7 +83,7 @@ class SupabaseStateEnvTests(unittest.TestCase):
                 state_module.SupabaseTaskState(
                     requests_module=requests_mock, reconcile_on_boot=False
                 )
-        self.assertIn("engine-task-state.sql", str(ctx.exception))
+        self.assertIn("003_engine-task-state.sql", str(ctx.exception))
 
 
 class SupabaseStateUpdateTests(unittest.TestCase):

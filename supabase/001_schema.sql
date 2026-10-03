@@ -1,8 +1,17 @@
 -- ============================================================================
--- Post Engineer — Supabase schema snapshot
+-- Migration 001 — Post Engineer base schema snapshot
 -- ----------------------------------------------------------------------------
--- HOW TO APPLY: Supabase Dashboard > SQL Editor > New query > paste & run.
--- Safe to re-run (all statements are idempotent).
+-- HOW TO APPLY: run the numbered migrations in order, lowest number first:
+--   supabase/001_schema.sql
+--   supabase/002_persona-images.sql
+--   supabase/003_engine-task-state.sql
+-- Paste each file into the Supabase Dashboard > SQL Editor > New query and
+-- run it. All statements are idempotent, so re-running the whole sequence
+-- is always safe (e.g. when picking up new migrations on an existing DB).
+--
+-- New migrations always APPEND a new numbered file (002, 003, ...) — never
+-- edit an already-shipped number. Existing self-hosters then only need to
+-- run the files newer than what they already applied.
 --
 -- SOURCE: generated from a read-only introspection of the production
 -- PostgREST OpenAPI schema (2026-10-02). It captures tables, columns,
@@ -23,10 +32,10 @@
 --     (used for persona photos/voices; IMAGE_BUCKET in apps/web).
 --
 -- PER-FEATURE MIGRATIONS (authoritative for their tables — apply after
--- this file; they are idempotent and add the constraints/indexes/RLS
--- this snapshot cannot see):
---   * supabase/persona-images.sql    — persona_images constraints, trigger
---   * supabase/engine-task-state.sql — engine_task_state (engine task state)
+-- this file, in numeric order; they are idempotent and add the
+-- constraints/indexes/RLS this snapshot cannot see):
+--   * supabase/002_persona-images.sql    — persona_images constraints, trigger
+--   * supabase/003_engine-task-state.sql — engine_task_state (engine task state)
 -- ============================================================================
 
 -- 1. Enum types
@@ -213,8 +222,8 @@ create table if not exists public.oauth_states (
 --     add constraint fk_video_generations_persona foreign key (persona_id)
 --     references public.personas (id) on delete set null;
 --
--- (persona-images.sql already declares the persona_images -> personas
--- foreign key; do not add it twice.)
+-- (002_persona-images.sql declares the persona_images -> personas
+-- foreign key as `fk_persona_images_persona`; do not add it twice.)
 
 -- 5. RPC functions called by the app (bodies NOT introspectable read-only;
 -- copy definitions from the dashboard under Database > Functions):

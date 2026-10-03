@@ -1,9 +1,9 @@
 -- ============================================================================
--- Engine task state (persistent, survives engine restarts/redeploys)
+-- Migration 003 — Engine task state (persistent, survives restarts/redeploys)
 -- ----------------------------------------------------------------------------
--- HOW TO APPLY: Supabase Dashboard > SQL Editor > New query > paste & run.
--- The schema is not versioned in this repo; apply once per Supabase project.
--- Safe to re-run (all statements are idempotent).
+-- HOW TO APPLY: Supabase Dashboard > SQL Editor > New query > paste & run,
+-- after 001_schema.sql. Only needed when running the engine with
+-- MPT_STATE_BACKEND=supabase. Safe to re-run (all statements are idempotent).
 --
 -- WHY: the engine kept video-generation task state in process memory, so
 -- every restart/redeploy wiped it and status polls answered 404 "task not
