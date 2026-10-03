@@ -27,6 +27,13 @@ export interface DistributeSlotsInput {
   count: number;
 }
 
+//---------------
+// MAX_POST_TOPICS — one create mints one video + slot per topic, so this is
+// both the API's per-request limit and the /posts/new form's cap (one source
+// for the route, the UI hint and the "add topic" button state).
+//---------------
+export const MAX_POST_TOPICS = 10;
+
 export interface DistributedSlot {
   /** UTC instant of the slot, ISO string. */
   slotAtISO: string;

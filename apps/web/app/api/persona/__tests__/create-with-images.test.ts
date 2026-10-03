@@ -155,6 +155,26 @@ describe('POST /api/persona with image library', () => {
     expect(calls.imageInserts[1].description).toBe('at the office');
   });
 
+  //---------------
+  // Storage layout pin (creation writer): {userId}/{personaId}/images/{uuid}.{ext}.
+  // The persona id is minted by the route BEFORE the upload so the folder can
+  // be per persona; the insert must carry that same id, otherwise the folder
+  // and the row disagree.
+  //---------------
+  it('stores library images under {userId}/{personaId}/images/', async () => {
+    const calls = mockClient();
+    const res = await POST(createRequest(BASE_FIELDS, [png('a.png'), png('b.png')]));
+    expect(res.status).toBe(200);
+
+    const mintedId = calls.personaInsertValues?.id;
+    expect(typeof mintedId).toBe('string');
+    for (const values of calls.imageInserts) {
+      const stored = values.image_path as string;
+      expect(stored.startsWith(`${USER_ID}/${mintedId}/images/`)).toBe(true);
+      expect(stored.endsWith('.png')).toBe(true);
+    }
+  });
+
   it('marks the chosen primary index via the atomic primary-swap RPC', async () => {
     const calls = mockClient();
     const res = await POST(

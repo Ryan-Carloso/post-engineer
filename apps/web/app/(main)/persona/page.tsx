@@ -101,7 +101,13 @@ const PersonaPageContent = () => {
     if (!persona) return;
     const store = usePersonaStore.getState();
     store.setName(persona.name);
-    store.setAvatarUrl(persona.avatarUrl ?? persona.photoUrl ?? null);
+    // avatarUrl is a CHOSEN character (public/caracter-samples or an AI
+    // avatar). photoUrl is the 1h signed link to an uploaded photo — putting
+    // it here made every save send it back as avatarUrl, which either stored
+    // an expiring URL or (with the visual-identity check) 500'd. A photo
+    // persona simply has no character selected.
+    store.setAvatarUrl(persona.avatarUrl ?? null);
+    store.setStoredPhotoUrl(persona.photoUrl ?? null);
     store.setVoiceId(persona.voiceId ?? null);
     store.setVideoAspect(persona.videoAspect ?? '9:16');
     store.setScriptPrompt(persona.scriptPrompt ?? '');
@@ -505,6 +511,7 @@ const PersonaCharacterPicker = () => {
 //---------------
 const PersonaPhotoPicker = () => {
   const photo = usePersonaStore((s) => s.photo);
+  const storedPhotoUrl = usePersonaStore((s) => s.storedPhotoUrl);
   const inputRef = useRef<HTMLInputElement>(null);
   const { t } = useI18n();
 
@@ -513,6 +520,40 @@ const PersonaPhotoPicker = () => {
     usePersonaStore.getState().setPhoto(file);
     e.target.value = '';
   };
+
+  // Edit mode with no new file: show the photo already stored, so the tab is
+  // not an empty uploader for a persona that clearly has a face.
+  if (!photo && storedPhotoUrl) {
+    return (
+      <div className="mt-4 flex items-center gap-3 rounded-lg border border-neutral-300 bg-white p-3">
+        <Image
+          src={storedPhotoUrl}
+          alt={t('persona.photoLabel')}
+          width={56}
+          height={96}
+          unoptimized
+          className="aspect-9/16 h-24 w-14 rounded-lg object-cover"
+        />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium text-neutral-900">{t('persona.photoCurrent')}</div>
+        </div>
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          className="text-xs font-medium text-accent hover:underline"
+        >
+          {t('persona.photoUpload')}
+        </button>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/jpeg,image/png"
+          onChange={handlePick}
+          className="hidden"
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="mt-4">
@@ -829,7 +870,10 @@ const PersonaSubmit = ({ editId }: { editId: string | null }) => {
       scrollToErrorField('name');
       return;
     }
-    if (!state.photo && !state.avatarUrl) {
+    // storedPhotoUrl: the persona already has an uploaded photo (photo_path),
+    // so editing it needs no new file and no character. Without this the
+    // "pick a face" validation blocked every save of a photo persona.
+    if (!state.photo && !state.avatarUrl && !state.storedPhotoUrl) {
       state.setResult({ success: false, error: t('persona.errAvatar') });
       scrollToErrorField('avatar');
       return;

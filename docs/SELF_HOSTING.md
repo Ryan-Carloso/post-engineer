@@ -63,13 +63,18 @@ Provision the database schema in your Supabase project:
    `app.cron_secret` database settings; without them the schedule step
    no-ops with a NOTICE — see the file header). The reconciliation is
    fully automatic (engine-state-verified refunds, no human queue).
+5. `supabase/migrations/005_persona-visual-identity.sql` — CHECK constraint
+   that a persona never carries both an uploaded photo (`photo_path`) and a
+   chosen character/AI avatar (`avatar_url`). The web app swaps the two in a
+   single update when you change a persona's face, so this is what keeps the
+   face unambiguous.
 
 Paste each file into the Supabase Dashboard > SQL Editor and run, in order
-(the `001_`, `002_`, `003_` prefixes encode the order — always apply the
+(the numeric prefixes encode the order — always apply the
 lowest number first), or apply them with the Supabase CLI from the repo
 root: `supabase db push --db-url "<connection-string>"` (reads
 `supabase/migrations/`). When the project adds new migrations they arrive
-as new numbered files (`004_...`, ...); you only need to run the ones newer
+as new numbered files (`005_...`, ...); you only need to run the ones newer
 than what you already applied. All files are idempotent, so re-running the
 whole sequence is safe.
 
@@ -150,6 +155,13 @@ Back up regularly:
   dumps off-host.
 - **`apps/engine/storage`** (Docker volume `engine_storage`) — rendered videos
   and task artifacts. Snapshot the volume or sync it to object storage.
+- **The `personas` storage bucket (private, Supabase)** — persona photos and
+  image libraries, under `personas/{userId}/{personaId}/…`. Back it up together
+  with Postgres: the rows store the *path*, so a bucket restored under a
+  different layout loses its files. The `personas_storage_own_all` policy only
+  reads the FIRST path segment (`foldername(name)[1] = auth.uid()`) — keep it
+  that way, or the objects written before the per-persona folders become
+  unreachable for their owner. See `supabase/README.md` for the full layout.
 - **Env files** (`apps/web/.env`, `apps/engine/.env`, `apps/engine/config.toml`)
   — keep an encrypted copy somewhere safe; they contain the keys needed to
   decrypt OAuth tokens (`TOKEN_ENCRYPTION_KEY`).

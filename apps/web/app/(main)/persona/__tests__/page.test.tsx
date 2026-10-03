@@ -569,6 +569,61 @@ describe('app/(main)/persona/page — modo edição (mesma página do create)', 
     expect(createPersona).not.toHaveBeenCalled();
   });
 
+  //---------------
+  // Persona com FOTO enviada pelo usuário (photo_path): não tem personagem
+  // escolhido. O editor usava `avatarUrl ?? photoUrl`, o que punha a signed
+  // URL (expira em 1h) no lugar de um personagem e a reenviava como avatarUrl
+  // em cada save — quebrava o check photo_path+avatar_url e, sem ele, trocava
+  // o rosto do usuário por uma face que ele não escolheu.
+  //---------------
+  it('em edição, persona com foto não ganha avatarUrl a partir da photoUrl assinada', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useUpdatePersonaMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    searchParams.value = new URLSearchParams('edit=p-9');
+    vi.mocked(usePersonaListQuery).mockReturnValue({
+      data: [
+        {
+          ...EDIT_PERSONA,
+          avatarUrl: undefined,
+          photoUrl: 'https://abc.supabase.co/storage/v1/object/sign/personas/u/9a42.png?token=SECRET',
+        },
+      ],
+      isLoading: false,
+    } as never);
+    const user = userEvent.setup();
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    // The stored photo is shown in the upload tab instead of an empty uploader.
+    await user.click(screen.getByRole('tab', { name: 'persona.uploadTab' }));
+    expect(screen.getByText('persona.photoCurrent')).toBeTruthy();
+
+    // No character is selected in the carousel...
+    expect(usePersonaStore.getState().avatarUrl).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'personas.save' }));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    const formData = vi.mocked(mutateAsync).mock.calls[0][0].formData as FormData;
+    // ...and the save never sends a signed storage URL as avatarUrl.
+    expect(formData.has('avatarUrl')).toBe(false);
+  });
+
+  it('em edição, persona com foto mostra o avatar atual na aba de personagens', async () => {
+    searchParams.value = new URLSearchParams('edit=p-9');
+    vi.mocked(usePersonaListQuery).mockReturnValue({
+      data: [{ ...EDIT_PERSONA, avatarUrl: undefined, photoUrl: 'https://abc.supabase.co/p.png' }],
+      isLoading: false,
+    } as never);
+
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    // No house character is highlighted (the persona has its own photo).
+    expect(screen.getByRole('button', { name: 'persona.characterLabel 1' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
+
   it('modo criação mantém o botão "Criar persona" e o cabeçalho de criação', () => {
     render(<PersonaPage />, { wrapper: createWrapper() });
 

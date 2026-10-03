@@ -10,6 +10,7 @@ the order — you never need to guess or read docs to know what comes next:
 | 002 | `migrations/002_persona-images.sql`         | Persona image library: constraints, trigger, RPCs   |
 | 003 | `migrations/003_engine-task-state.sql`      | Engine task state (only for `MPT_STATE_BACKEND=supabase`) |
 | 004 | `migrations/004_billing_reconcile.sql`        | Billing reconciliation: zombie/stuck detectors, daily pg_cron trigger (fully automatic, no review queue) |
+| 005 | `migrations/005_persona-visual-identity.sql` | CHECK: a persona never has both `photo_path` and `avatar_url` |
 
 ## How to apply
 
@@ -39,10 +40,37 @@ details (some dashboard-only steps like RLS policies, FK checks and the
 All statements are idempotent, so re-running the whole sequence is always
 safe.
 
+## `personas` storage bucket (private) — object layout
+
+Objects live under the user's folder, then the persona's:
+
+```
+personas/{userId}/{personaId}/photo.{jpg|png}        the persona's single visual identity
+personas/{userId}/{personaId}/images/{uuid}.{ext}    the image library (0-10 items)
+```
+
+The persona folder is for **debugging in this dashboard** (you can tell whose
+file it is without opening the database). It is not a second security gate:
+
+- `personas_storage_own_all` checks ONLY the first segment —
+  `(storage.foldername(name))[1] = auth.uid()`. A deeper path keeps working
+  untouched, and the objects written before this layout (flat
+  `{userId}/{uuid}.{ext}`) stay valid: the DB stores the full path in
+  `personas.photo_path` / `persona_images.image_path`, so no backfill exists or
+  is needed.
+- Real ownership is enforced on the TABLE (`personas.user_id`,
+  `persona_images.user_id`), re-checked by every route, and the bucket is
+  private behind signed URLs.
+
+Do not "harden" the policy to require two segments: that locks every legacy
+object out of its owner with no way to recover the files.
+`apps/web/lib/persona-images.ts` (`personaAssetPath`) is the only place that
+builds these paths, and the tests pin the shape per writer.
+
 ## Adding a new migration (maintainers)
 
-- **Append** a new numbered file (`migrations/004_....sql`,
-  `migrations/005_....sql`, …). Never edit an already-shipped number —
+- **Append** a new numbered file (`migrations/005_....sql`,
+  `migrations/006_....sql`, …). Never edit an already-shipped number —
   existing databases must be able to apply only the new files.
 - Keep every statement idempotent (`create table if not exists`,
   `add column if not exists`, `create or replace`, `drop ... if exists`
@@ -76,6 +104,7 @@ supabase link --project-ref "$SUPABASE_PROJECT_ID"
 supabase migration repair --status applied --version 001
 supabase migration repair --status applied --version 002
 supabase migration repair --status applied --version 003
+supabase migration repair --status applied --version 004
 ```
 
 (All statements are idempotent, so skipping the repair is safe — the first

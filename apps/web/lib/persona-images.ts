@@ -46,6 +46,39 @@ export const IMAGE_URL_TTL_SECONDS = 3600;
  */
 export const PERSONA_IMAGE_LIMIT_SQLSTATE = 'PEL01';
 
+//---------------
+// personaAssetPath — the ONE place that builds a persona storage path.
+//
+// Layout (private `personas` bucket):
+//   {userId}/{personaId}/photo.{ext}        the persona's single identity
+//   {userId}/{personaId}/images/{uuid}.{ext}  the 0-10 item image library
+//
+// The second segment exists for DEBUGGING, not security: the RLS policy
+// `personas_storage_own_all` checks ONLY `(storage.foldername(name))[1] =
+// auth.uid()`, so a deeper path keeps working untouched and the 49 objects
+// written before this layout stay valid (the DB stores the full path and no
+// backfill is needed). Real ownership is enforced on the TABLE
+// (`personas.user_id` / `persona_images.user_id`) by the route, and the
+// bucket is private behind signed URLs. Do NOT harden the policy to two
+// segments: that would lock every legacy object out of its owner.
+//
+// The segment validation is a security boundary, not cosmetics: a personaId
+// carrying `/` would place the object outside the user's folder, where the
+// policy's first-segment check no longer describes it.
+//---------------
+export function personaAssetPath(userId: string, personaId: string, fileName: string): string {
+  const segments = [userId, personaId];
+  for (const segment of segments) {
+    if (segment.length === 0 || segment.includes('/')) {
+      throw new Error('personaAssetPath: userId and personaId must be non-empty path segments.');
+    }
+  }
+  if (fileName.length === 0 || fileName.startsWith('/')) {
+    throw new Error('personaAssetPath: fileName must be a non-empty relative path.');
+  }
+  return `${userId}/${personaId}/${fileName}`;
+}
+
 export interface LibraryImageInput {
   file: File;
   tag?: string;
@@ -260,7 +293,7 @@ export async function addLibraryImages(
     if ('error' in content) return fail(content.error, 400);
     const { bytes, mime } = content;
     const extension = DETECTED_MIME_TO_EXTENSION[mime] ?? validated.extension;
-    const path = `${userId}/${randomUUID()}.${extension}`;
+    const path = personaAssetPath(userId, personaId, `images/${randomUUID()}.${extension}`);
     const { error: uploadError } = await supabase.storage
       .from(IMAGE_BUCKET)
       .upload(path, bytes, { contentType: mime });
