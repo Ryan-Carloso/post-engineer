@@ -1136,6 +1136,124 @@ export function useSlotDetailQuery(slotId: string) {
   });
 }
 
+//---------------
+// Create post — POST /api/videos/generate-and-schedule. One call mints the
+// videos AND their publishing schedule (1-10 topics, one slot each): the
+// web had no client for this route until the /posts/new screen.
+//---------------
+
+export interface CreatePostInput {
+  personaId: string;
+  topics: string[];
+  providers: string[];
+  accounts: Record<string, string[]>;
+  /** Offset-aware ISO instant the publishing window opens. */
+  startAt: string;
+  /** Daily publish times as "HH:MM", wall clock in `timezone`. */
+  times: string[];
+  timezone: string;
+}
+
+export interface CreatedSlot {
+  slotId: string;
+  slotAt: string;
+  topic: string;
+  taskId: string | null;
+  status: string;
+  errorCode?: string;
+}
+
+export interface CreatePostResult {
+  success: boolean;
+  /** Null when the request failed before a schedule existed (never charged). */
+  scheduleId: string | null;
+  slots: CreatedSlot[];
+  replayed: boolean;
+  error: string | null;
+  /** Stable machine code (lib/error-codes.ts) so the UI can localize. */
+  code: string | null;
+  /** INSUFFICIENT_TOKENS only: tokens needed / tokens available. */
+  need: number | null;
+  have: number | null;
+}
+
+//---------------
+// narrowCreatedSlots — the payload crosses a network boundary, so every
+// field the success screen reads is checked; a malformed entry is dropped
+// instead of reaching the UI as `undefined`.
+//---------------
+function narrowCreatedSlots(value: unknown): CreatedSlot[] {
+  if (!Array.isArray(value)) return [];
+  const slots: CreatedSlot[] = [];
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const record = entry as Record<string, unknown>;
+    if (typeof record.slotId !== 'string' || typeof record.slotAt !== 'string') continue;
+    slots.push({
+      slotId: record.slotId,
+      slotAt: record.slotAt,
+      topic: typeof record.topic === 'string' ? record.topic : '',
+      taskId: typeof record.taskId === 'string' ? record.taskId : null,
+      status: typeof record.status === 'string' ? record.status : 'pending',
+      ...(typeof record.errorCode === 'string' ? { errorCode: record.errorCode } : {}),
+    });
+  }
+  return slots;
+}
+
+export async function createPost(input: CreatePostInput): Promise<CreatePostResult> {
+  const response = await fetch('/api/videos/generate-and-schedule', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      personaId: input.personaId,
+      topics: input.topics,
+      publishing: {
+        providers: input.providers,
+        accounts: input.accounts,
+        schedule: { startAt: input.startAt, times: input.times, timezone: input.timezone },
+      },
+    }),
+  });
+  const body = await parseJsonBody<Record<string, unknown>>(response);
+  const schedule = body !== null ? body.schedule : null;
+  const scheduleId =
+    typeof schedule === 'object' && schedule !== null && typeof (schedule as { id?: unknown }).id === 'string'
+      ? (schedule as { id: string }).id
+      : null;
+  const failure: CreatePostResult = {
+    success: false,
+    scheduleId,
+    slots: narrowCreatedSlots(body !== null ? body.slots : null),
+    replayed: body !== null && body.replayed === true,
+    error:
+      body !== null && typeof body.error === 'string' && body.error.length > 0
+        ? body.error
+        : `Post creation failed with status ${response.status}.`,
+    code: body !== null && typeof body.code === 'string' ? body.code : null,
+    need: body !== null && typeof body.need === 'number' ? body.need : null,
+    have: body !== null && typeof body.have === 'number' ? body.have : null,
+  };
+  // A non-ok response, an unreadable body, or success:false is never success.
+  if (!response.ok || body === null || body.success !== true) return failure;
+  return { ...failure, success: true, error: null, code: null };
+}
+
+export function useCreatePostMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreatePostInput) => createPost(input),
+    onSuccess: (result) => {
+      // A failed create charges nothing and created nothing — never
+      // invalidate on it, so the caches keep showing the true state.
+      if (!result.success) return;
+      void queryClient.invalidateQueries({ queryKey: ['fill-schedule-status'] });
+      void queryClient.invalidateQueries({ queryKey: ['fill-schedules'] });
+      void queryClient.invalidateQueries({ queryKey: ['video-generations'] });
+    },
+  });
+}
+
 export function useGenerationDetailQuery(generationId: string) {
   return useQuery<VideoGeneration | null>({
     queryKey: ['video-generation', generationId],

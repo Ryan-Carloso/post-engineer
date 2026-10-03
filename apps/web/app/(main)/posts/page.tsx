@@ -418,7 +418,7 @@ export default function PostsPage() {
           >
             {t('posts.refresh')}
           </button>
-          <Link href="/personas" className="rounded-xl bg-[#0d2b45] px-4 py-2 text-sm font-semibold text-white hover:bg-[#123a5e]">
+          <Link href="/posts/new" className="rounded-xl bg-[#0d2b45] px-4 py-2 text-sm font-semibold text-white hover:bg-[#123a5e]">
             {t('posts.newPost')}
           </Link>
         </div>

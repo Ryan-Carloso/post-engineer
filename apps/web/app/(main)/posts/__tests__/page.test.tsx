@@ -159,6 +159,14 @@ describe('PostsPage', () => {
     expect(screen.queryByText('Past topic')).not.toBeInTheDocument();
   });
 
+  // The primary CTA must open the create-post screen, not the persona list:
+  // a post is a video + publishing slot, a persona is its face/voice.
+  it('links the new-post CTA to /posts/new', () => {
+    render(<PostsPage />);
+
+    expect(screen.getByRole('link', { name: 'posts.newPost' })).toHaveAttribute('href', '/posts/new');
+  });
+
   it('renders the network icon at the card top and initial avatars in the footer', () => {
     render(<PostsPage />);
 

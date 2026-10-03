@@ -12,6 +12,12 @@
   new or updated tests, and the relevant suite is green before committing.
 - Keep PRs small and focused; CI must be green and review threads resolved
   before merge.
+- **Look at the UI you changed.** A green test suite says nothing about layout:
+  after editing anything under `apps/web`, load the `preview-ui` skill
+  (`.opencode/skills/preview-ui/SKILL.md`) and verify the screen in the running
+  dev server at `http://localhost:3434` — screenshots, both locales (PT is the
+  default), and the console. Never schedule a real post or spend tokens to take
+  a picture.
 - **Every PR bumps the repo-root `VERSION` file** (minor for features,
   patch for fixes) via `scripts/bump-version.sh [patch|minor|major]` — it
   updates `VERSION`, the repo-root `package.json`, `apps/mcp/package.json`,

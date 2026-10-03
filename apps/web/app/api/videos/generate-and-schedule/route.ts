@@ -34,6 +34,7 @@ import { ERROR_CODES, formatErrorMessage, type ErrorCode } from '@/lib/error-cod
 import {
   distributeSlots,
   SlotDistributionError,
+  MAX_POST_TOPICS,
   type DistributedSlot,
 } from '@/lib/schedule/slot-distribution';
 import { validateScheduleWindow } from '@/lib/schedule-window';
@@ -56,7 +57,8 @@ import { trackApiEvent } from '@/lib/analytics';
 import { logger } from '@/lib/logger';
 
 const ROUTE = 'POST /api/videos/generate-and-schedule';
-const MAX_TOPICS = 10;
+// Shared with the /posts/new form so the UI cap and the API cap can't drift.
+const MAX_TOPICS = MAX_POST_TOPICS;
 const MAX_TOPIC_CHARS = 300;
 const MAX_SCRIPT_PROMPT_CHARS = 2000;
 const SIGNED_URL_TTL_SECONDS = 3600;

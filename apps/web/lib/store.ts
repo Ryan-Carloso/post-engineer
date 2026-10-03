@@ -10,6 +10,8 @@ import type {
 import { SOCIAL_PROVIDERS } from '@/lib/types';
 import type { FaceQuality } from '@/lib/tokens';
 import { DEFAULT_FACE_MIX_PERCENT } from '@/lib/persona-schema';
+import { MAX_POST_TOPICS } from '@/lib/schedule/slot-distribution';
+import type { TranslationKey } from '@/lib/i18n';
 
 //---------------
 // UploadStore — global state shared between screens
@@ -296,5 +298,112 @@ export const usePersonaStore = create<PersonaFormState>()(
       if (videoSubject) formData.append('video_subject', videoSubject);
       return formData;
     },
+  }),
+);
+
+//---------------
+// NewPostState — /posts/new draft (persona, topics, publish plan).
+//
+// Account selection is NOT duplicated here: it lives in useUploadStore
+// (selectedAccountIds), which the accounts screen already writes and the
+// creation screen reads — one selection for the whole app.
+//---------------
+
+export interface NewPostState {
+  personaId: string;
+  topics: string[];
+  /** Naive "YYYY-MM-DDTHH:mm" wall clock, resolved against `timezone`. */
+  startAt: string;
+  /** Daily publish times as "HH:MM". */
+  times: string[];
+  timezone: string;
+  /** Last create outcome, so every local component can render it without
+      props. A projection of api.ts' CreatePostResult (only the fields the UI
+      reads) — declared here so lib/store.ts never imports lib/api.ts, which
+      imports this store (accounts selection) back. */
+  result: NewPostOutcome | null;
+  /** Localized failure key for a client-side rejection (never sent). */
+  validationKey: TranslationKey | null;
+  /** True while the create request is in flight. */
+  pending: boolean;
+  setPersonaId: (personaId: string) => void;
+  setTopic: (index: number, value: string) => void;
+  addTopic: () => void;
+  removeTopic: (index: number) => void;
+  setStartAt: (value: string) => void;
+  setTime: (index: number, value: string) => void;
+  addTime: () => void;
+  removeTime: (index: number) => void;
+  setTimezone: (value: string) => void;
+  setResult: (result: NewPostOutcome | null) => void;
+  setValidationKey: (key: TranslationKey | null) => void;
+  setPending: (pending: boolean) => void;
+  reset: () => void;
+}
+
+/** The slice of the create response the screen renders. */
+export interface NewPostOutcome {
+  success: boolean;
+  /** Null when the request failed before a schedule existed. */
+  scheduleId: string | null;
+  /** Number of slots the server created (drives the success copy). */
+  slotCount: number;
+  code: string | null;
+  need: number | null;
+  have: number | null;
+}
+
+/** A topic list always has at least one editable row, same for times. */
+function emptyList(): string[] {
+  return [''];
+}
+
+const initialNewPostState = {
+  personaId: '',
+  topics: emptyList(),
+  startAt: '',
+  times: ['18:00'],
+  timezone: 'UTC',
+  result: null as NewPostOutcome | null,
+  validationKey: null as TranslationKey | null,
+  pending: false,
+};
+
+function replaceAt(list: string[], index: number, value: string): string[] {
+  if (index < 0 || index >= list.length) return list;
+  const next = [...list];
+  next[index] = value;
+  return next;
+}
+
+export const useNewPostStore = create<NewPostState>()(
+  (set) => ({
+    ...initialNewPostState,
+    setPersonaId: (personaId) => set({ personaId }),
+    setTopic: (index, value) => set((state) => ({ topics: replaceAt(state.topics, index, value) })),
+    // The cap lives in lib/schedule/slot-distribution (the API enforces the
+    // same number), so the button can't offer a topic the API would reject.
+    addTopic: () =>
+      set((state) =>
+        state.topics.length >= MAX_POST_TOPICS ? state : { topics: [...state.topics, ''] },
+      ),
+    removeTopic: (index) =>
+      set((state) => {
+        if (state.topics.length <= 1) return state;
+        return { topics: state.topics.filter((_, i) => i !== index) };
+      }),
+    setStartAt: (startAt) => set({ startAt }),
+    setTime: (index, value) => set((state) => ({ times: replaceAt(state.times, index, value) })),
+    addTime: () => set((state) => ({ times: [...state.times, ''] })),
+    removeTime: (index) =>
+      set((state) => {
+        if (state.times.length <= 1) return state;
+        return { times: state.times.filter((_, i) => i !== index) };
+      }),
+    setTimezone: (timezone) => set({ timezone }),
+    setResult: (result) => set({ result }),
+    setValidationKey: (validationKey) => set({ validationKey }),
+    setPending: (pending) => set({ pending }),
+    reset: () => set({ ...initialNewPostState, topics: emptyList(), times: ['18:00'] }),
   }),
 );
