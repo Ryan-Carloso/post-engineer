@@ -1,0 +1,72 @@
+# API naming lint — versioned configuration.
+#
+# Only names ADDED in a PR diff are checked; existing names are grandfathered
+# (the lint never asks you to rename an existing field).
+#
+# The parser supports a restricted YAML subset: top-level scalar keys,
+# lists of scalars, lists of one-level maps, and one level of nested maps.
+# Keep values simple (no anchors, no multiline strings).
+
+# Contract surface: files whose ADDED field/param names are linted.
+# Glob syntax: `*` matches within a path segment, `**` crosses segments.
+api_paths:
+  - "apps/web/app/api/**/route.ts"
+  - "apps/mcp/src/tools.ts"
+  - "apps/engine/app/models/**/*.py"
+  - "apps/engine/app/controllers/**/*.py"
+
+# Deterministic denylist.
+# Match rule: case-insensitive EXACT match on the full identifier.
+# No substring matching: `replay` fails, but `replayed`, `replayCount`
+# and `metadata` do not (ambiguous-but-valid names go to the LLM layer).
+denylist:
+  replay:
+    severity: error
+    reason: "Unclear from the JSON alone: replaying data, rerunning a job, or retrying execution?"
+  data:
+    severity: error
+    reason: "Says nothing about what the payload holds; name the domain object instead."
+  info:
+    severity: error
+    reason: "Says nothing about what information is carried; name it explicitly."
+  result:
+    severity: error
+    reason: "Result of what? Name the produced value instead."
+  value:
+    severity: error
+    reason: "Value of what, in which unit? Name the quantity instead."
+  item:
+    severity: error
+    reason: "Item of what? Name the domain object instead."
+  thing:
+    severity: error
+    reason: "Placeholder noun; name the domain object instead."
+  stuff:
+    severity: error
+    reason: "Placeholder noun; name the domain object instead."
+  payload:
+    severity: error
+    reason: "Transport jargon, not domain language; name the content instead."
+
+# Names that are always allowed, even if they resemble a denylisted word.
+allowlist:
+  - "id"
+
+# Targeted exceptions: [path glob, name] pairs that skip the lint.
+# Use for established project conventions, not to silence new ambiguity.
+exceptions:
+  - path: "apps/engine/app/models/schema.py"
+    names: ["data"]
+    reason: "Legacy BaseResponse envelope convention; new engine response models follow it."
+
+# LLM review layer (second pass over names that clear the denylist).
+llm:
+  enabled: true
+  # OpenAI-compatible chat-completions endpoint. Any provider that speaks
+  # this protocol works (OpenAI, Azure, z.ai, local gateways, ...).
+  base_url: "https://api.openai.com/v1"
+  model: "gpt-4o-mini"
+  # Max new names sent to the LLM per run (cost guard); extras are skipped
+  # with a warning, never failed.
+  max_names: 20
+  timeout_ms: 30000

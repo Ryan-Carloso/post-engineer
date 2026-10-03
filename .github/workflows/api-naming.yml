@@ -1,0 +1,113 @@
+name: api-naming
+
+# Blocks bad/ambiguous names in externally-exposed API contracts.
+#
+# Diff-based: only names ADDED in the PR diff under the contract surface
+# (.github/api-naming.yml `api_paths`) are linted — existing names are
+# grandfathered, so this never asks for renames of shipped fields.
+#
+# Two layers:
+#   1. Deterministic denylist (exact, case-insensitive match).
+#   2. LLM review of the remaining new names with code context
+#      (skipped gracefully when API_NAMING_LLM_API_KEY is not set).
+#
+# Findings become ::error/::warning annotations, fail the job on errors,
+# and are posted as an upserted PR comment.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      base:
+        description: 'Base ref for the diff'
+        required: false
+        default: 'origin/main'
+      head:
+        description: 'Head ref for the diff'
+        required: false
+        default: 'HEAD'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 pinned 2026-09-25
+        with:
+          node-version: '22'
+
+      - name: Unit tests (api-naming lint)
+        run: node --test .github/scripts/api-naming/*.test.mjs
+
+      - name: Run API naming lint
+        id: lint
+        env:
+          # Optional: when unset, the LLM layer skips with a warning and the
+          # deterministic denylist layer still runs. Set in repo Settings >
+          # Secrets and variables > Actions.
+          API_NAMING_LLM_API_KEY: ${{ secrets.API_NAMING_LLM_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.sha }}"
+          else
+            base="${{ inputs.base }}"
+            head="${{ inputs.head }}"
+          fi
+          echo "head_sha=$head" >> "$GITHUB_OUTPUT"
+          set +e
+          node .github/scripts/api-naming/run.mjs \
+            --base "$base" --head "$head" \
+            --findings-out /tmp/api-naming-findings.json
+          code=$?
+          set -e
+          echo "lint_exit=$code" >> "$GITHUB_OUTPUT"
+          echo "lint failed with exit $code (reported as a job failure below, after the PR comment)"
+
+      - name: Post/update PR comment
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          findings=/tmp/api-naming-findings.json
+          pr="${{ github.event.pull_request.number }}"
+          repo="${{ github.repository }}"
+          head_sha="${{ steps.lint.outputs.head_sha }}"
+          if [[ ! -f "$findings" ]]; then
+            echo "no findings file; skipping PR comment"
+            exit 0
+          fi
+          finding_count=$(node --input-type=module -e "import fs from 'node:fs'; console.log(JSON.parse(fs.readFileSync('$findings','utf8')).findings.length)")
+          existing_id=$(gh api "repos/$repo/issues/$pr/comments" --jq '.[] | select(.body | contains("<!-- api-naming-lint -->")) | .id' | head -n 1 || true)
+          if [[ "$finding_count" == "0" && -z "$existing_id" ]]; then
+            echo "no findings and no previous comment; nothing to post"
+            exit 0
+          fi
+          body_file="$(mktemp)"
+          node .github/scripts/api-naming/comment.mjs --findings "$findings" --head-sha "$head_sha" > "$body_file"
+          if [[ -n "$existing_id" ]]; then
+            gh api -X PATCH "repos/$repo/issues/comments/$existing_id" -F body=@"$body_file" > /dev/null
+            echo "updated PR comment $existing_id"
+          else
+            gh pr comment "$pr" --repo "$repo" --body-file "$body_file" > /dev/null
+            echo "posted new PR comment"
+          fi
+
+      - name: Fail on naming errors
+        if: always()
+        run: |
+          if [[ "${{ steps.lint.outputs.lint_exit }}" != "0" ]]; then
+            echo "::error::API naming lint found error-severity findings (see annotations and the PR comment)."
+            exit 1
+          fi
+          echo "API naming lint clean."

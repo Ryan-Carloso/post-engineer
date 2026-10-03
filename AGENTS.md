@@ -125,6 +125,22 @@ notices.
   reviewer). Read reviewer feedback before requesting merge; address findings
   in focused follow-up commits.
 
+## API naming lint (2026-10-03)
+
+- `.github/workflows/api-naming.yml` lints only NEW field/param names in the
+  PR diff under the contract surface (`apps/web/app/api/**/route.ts`,
+  `apps/mcp/src/tools.ts`, engine Pydantic models/controllers). Existing
+  names are grandfathered — never rename a shipped field to satisfy it.
+- Denylist (`.github/api-naming.yml`) is exact-match, case-insensitive:
+  `replay` fails, `replayed`/`replayCount` do not (those go to the LLM
+  layer). Ambiguous-but-valid names are judged by the optional LLM layer,
+  which skips gracefully without `API_NAMING_LLM_API_KEY`.
+- Implementation is dependency-free Node ESM in
+  `.github/scripts/api-naming/`, tested with
+  `node --test .github/scripts/api-naming/*.test.mjs`. The config parser
+  supports a restricted YAML subset only (documented in the config file) —
+  keep new config values simple.
+
 ## Web/API review learnings (standing rules, distilled 2026-09-28)
 
 Recurring findings from OpenCode/OCR review of the persona image library
