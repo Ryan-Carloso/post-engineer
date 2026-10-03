@@ -822,19 +822,28 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (scheduleError) {
     if (isUniqueViolation(scheduleError)) {
       // Lost a PK race with a concurrent duplicate (or a replay slipped past
-      // the pre-check). Our spend did not create this schedule, so undo it:
+      // the pre-check). If we spent in this request, our spend is redundant:
       // the winner's own spend under the same generation_id is the single
-      // charge. Without this, the missing unique constraint on
+      // charge, so undo ours. Without this, the missing unique constraint on
       // token_transactions.generation_id lets both spends stand.
-      await supabase.rpc('refund_generation_tokens', {
-        p_user_id: userId,
-        p_generation_id: idem.generationId,
-        p_reason: 'PK race; refunded redundant spend',
-      });
-      logger.error('[generate-and-schedule] schedule PK race; refunded redundant spend, replaying winner', scheduleError, {
-        scheduleId: idem.scheduleId,
-        userId,
-      });
+      // When we skipped our spend (alreadySpent), there is nothing of ours
+      // to undo — refunding would steal the legitimate prior spend.
+      if (!alreadySpent) {
+        await supabase.rpc('refund_generation_tokens', {
+          p_user_id: userId,
+          p_generation_id: idem.generationId,
+          p_reason: 'PK race; refunded redundant spend',
+        });
+        logger.error('[generate-and-schedule] schedule PK race; refunded redundant spend, replaying winner', scheduleError, {
+          scheduleId: idem.scheduleId,
+          userId,
+        });
+      } else {
+        logger.error('[generate-and-schedule] schedule PK race; already spent, nothing to refund, replaying winner', scheduleError, {
+          scheduleId: idem.scheduleId,
+          userId,
+        });
+      }
       trackApiEvent('video_creation_failed', {
         userId,
         scheduleId: idem.scheduleId,

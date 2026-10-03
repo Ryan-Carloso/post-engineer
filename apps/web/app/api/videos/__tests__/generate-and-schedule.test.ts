@@ -682,6 +682,22 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(refunds[0].args.p_reason).toMatch(/PK race/);
     });
 
+    it('does not refund on a schedule PK conflict when we skipped our spend (already spent)', async () => {
+      const key = 'race-key-2';
+      // The ledger already holds this generation_id, so this request skips
+      // its spend. If the schedule insert then PK-conflicts with a concurrent
+      // winner, there is no redundant spend of ours to undo: refunding would
+      // steal the legitimate prior spend.
+      setup({ ...DEFAULT_CFG, ledgerIds: ['tx-old'], scheduleInsertErrorCode: '23505', replaySlots: [] });
+      const res = await post(baseBody({ idempotencyKey: key }));
+      const json = await res.json();
+      expect(res.status).toBe(200);
+      expect(json.replayed).toBe(true);
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+      const refunds = rpcCalls.filter((c) => c.name === 'refund_generation_tokens');
+      expect(refunds).toHaveLength(0);
+    });
+
     it('deletes a zombie schedule (0 slots, old) and completes without charging twice', async () => {
       const key = 'zombie-key-1';
       const scheduleId = deterministicUuid(IDEMPOTENCY_NAMESPACE, `${USER_ID}:${key}`);
