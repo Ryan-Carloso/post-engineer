@@ -498,5 +498,97 @@ describe('GET /api/persona/video-status/:taskId', () => {
         updateSpy.mockRestore();
       }
     });
+
+    it('treats an engine 404 as terminal: records the failure with engine_restart and refunds', async () => {
+      // The engine lost the task (restart/redeploy with the in-memory state
+      // backend) — polling again 404s forever, so the proxy must fail the
+      // generation and refund NOW instead of passing a 502 through and
+      // letting the caller poll forever.
+      mockTaskBody({ status: 404, message: 'req-1: task not found' }, 404);
+      const serviceClient = mockServiceClient('gen-1');
+      vi.mocked(refundTokens).mockResolvedValue(true);
+      const updateSpy = vi
+        .spyOn(videoGeneration, 'recordGenerationUpdate')
+        .mockResolvedValue(undefined);
+      try {
+        const response = await poll();
+        expect(response.status).toBe(410);
+        expect(await response.json()).toMatchObject({ success: false, terminal: true });
+        expect(refundTokens).toHaveBeenCalledWith(serviceClient, USER_ID, 'gen-1');
+        expect(updateSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            generationId: 'gen-1',
+            status: 'failed',
+            engineTaskId: 'task-1',
+            errorCode: 'engine_restart',
+            errorMessage: 'req-1: task not found',
+            tokensRefunded: true,
+          }),
+        );
+      } finally {
+        updateSpy.mockRestore();
+      }
+    });
+
+    it('does not re-run terminal side effects when a 404 arrives for an already-recorded and refunded failure', async () => {
+      mockTaskBody({ status: 404, message: 'req-1: task not found' }, 404);
+      mockServiceClient('gen-1', { status: 'failed', tokens_refunded: true });
+      const updateSpy = vi
+        .spyOn(videoGeneration, 'recordGenerationUpdate')
+        .mockResolvedValue(undefined);
+      try {
+        const response = await poll();
+        expect(response.status).toBe(410);
+        expect(await response.json()).toMatchObject({ terminal: true });
+        expect(refundTokens).not.toHaveBeenCalled();
+        expect(updateSpy).not.toHaveBeenCalled();
+      } finally {
+        updateSpy.mockRestore();
+      }
+    });
+
+    it('still retries the refund when the 404 failure was recorded but not refunded', async () => {
+      mockTaskBody({ status: 404, message: 'req-1: task not found' }, 404);
+      const serviceClient = mockServiceClient('gen-1', { status: 'failed', tokens_refunded: false });
+      vi.mocked(refundTokens).mockResolvedValue(true);
+      const updateSpy = vi
+        .spyOn(videoGeneration, 'recordGenerationUpdate')
+        .mockResolvedValue(undefined);
+      try {
+        const response = await poll();
+        expect(response.status).toBe(410);
+        expect(refundTokens).toHaveBeenCalledWith(serviceClient, USER_ID, 'gen-1');
+        expect(updateSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            generationId: 'gen-1',
+            status: 'failed',
+            errorCode: 'engine_restart',
+            tokensRefunded: true,
+          }),
+        );
+      } finally {
+        updateSpy.mockRestore();
+      }
+    });
+
+    it('answers terminal on 404 without touching history when no charge row links the task', async () => {
+      // Ghost task: the engine never knew it and no tokens were spent.
+      // Nothing to refund or record, but the caller must still get a
+      // terminal answer so it stops polling.
+      mockTaskBody({ status: 404, message: 'req-1: task not found' }, 404);
+      mockServiceClient(null);
+      const updateSpy = vi
+        .spyOn(videoGeneration, 'recordGenerationUpdate')
+        .mockResolvedValue(undefined);
+      try {
+        const response = await poll();
+        expect(response.status).toBe(410);
+        expect(await response.json()).toMatchObject({ success: false, terminal: true });
+        expect(refundTokens).not.toHaveBeenCalled();
+        expect(updateSpy).not.toHaveBeenCalled();
+      } finally {
+        updateSpy.mockRestore();
+      }
+    });
   });
 });
