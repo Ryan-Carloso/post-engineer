@@ -200,10 +200,9 @@ LLM_CLIENT_MAX_RETRIES = 1
 # changing a provider branch, update its entry here too.
 _PROVIDER_DEFAULT_MODELS = {
     "g4f": "gpt-3.5-turbo-16k-0613",
-    "omniroute": "auto",
     "aihubmix": "gpt-5.4-mini",
     "aimlapi": "openai/gpt-4o-mini",
-    "groq": "llama-3.3-70b-versatile",
+    "groq": "qwen/qwen3.8-27b",
     "evolink": "gpt-5.5",
     "mimo": "mimo-v2.5-pro",
     "volcengine": "doubao-seed-2-1-turbo-260628",
@@ -286,7 +285,7 @@ def _generate_response(prompt: str) -> str:
     # Compatibility wrapper: converts failures into the "Error: ..." string
     # expected by legacy callers (WebUI, tests, and internal services).
     # Every call is tracked as an ai_request event (backend=llm).
-    llm_provider = str(config.app.get("llm_provider", "omniroute"))
+    llm_provider = str(config.app.get("llm_provider", "groq"))
     start = time.monotonic()
     usage: dict[str, Any] = {}
     try:
@@ -375,23 +374,6 @@ def _generate_response_inner(
                 base_url = config.app.get("openai_base_url", "")
                 if not base_url:
                     base_url = "https://api.openai.com/v1"
-            elif llm_provider == "omniroute":
-                api_key = config.app.get("omniroute_api_key")
-                model_name = config.app.get("omniroute_model_name")
-                base_url = config.app.get("omniroute_base_url", "")
-                # OmniRoute (https://github.com/diegosouzapw/OmniRoute) is a
-                # local OpenAI-compatible gateway running via Docker that
-                # exposes hundreds of providers behind a single endpoint. It
-                # accepts requests without an API key (the "auto" combo
-                # already includes free keyless providers), so an empty
-                # api_key falls back to a placeholder, following the ollama
-                # provider pattern.
-                if not base_url:
-                    base_url = "http://localhost:20128/v1"
-                if not model_name:
-                    model_name = "auto"
-                if not api_key:
-                    api_key = "omniroute"
             elif llm_provider == "aihubmix":
                 api_key = config.app.get("aihubmix_api_key")
                 model_name = config.app.get("aihubmix_model_name")
@@ -444,7 +426,7 @@ def _generate_response_inner(
                 api_key = config.app.get("groq_api_key")
                 model_name = config.app.get("groq_model_name")
                 if not model_name:
-                    model_name = "llama-3.3-70b-versatile"
+                    model_name = "qwen/qwen3.8-27b"
                 base_url = config.app.get("groq_base_url", "")
                 if not base_url:
                     base_url = "https://api.groq.com/openai/v1"
@@ -585,7 +567,7 @@ def _generate_response_inner(
             elif llm_provider == "litellm":
                 model_name = config.app.get("litellm_model_name")
 
-            if llm_provider not in ["pollinations", "ollama", "litellm", "omniroute"]:  # Skip validation for providers that don't require API key
+            if llm_provider not in ["pollinations", "ollama", "litellm"]:  # Skip validation for providers that don't require API key
                 if not api_key:
                     raise ValueError(
                         f"{llm_provider}: api_key is not set, please set it in the config.toml file."
@@ -898,7 +880,7 @@ def _generate_response_with_fallback(prompt: str) -> str:
     # Every call is tracked as one ai_request event (backend=llm) with the
     # provider that actually served it, whether the fallback ran, and the
     # sanitized error when it failed.
-    primary_provider = str(config.app.get("llm_provider", "omniroute"))
+    primary_provider = str(config.app.get("llm_provider", "groq"))
     start = time.monotonic()
     used_provider = primary_provider
     fallback_used = False

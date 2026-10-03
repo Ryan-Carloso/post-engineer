@@ -34,7 +34,7 @@ test_*.py
 streamlit.log
 /docs/superpowers
 .understand-anything
-/omniroute-data/call_logs/
+
 /mutants/
 
 
