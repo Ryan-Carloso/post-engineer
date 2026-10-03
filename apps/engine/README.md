@@ -35,7 +35,7 @@ Docker (CPU): `docker compose up -d --build` (service `engine`,
 
 ```bash
 uv run pytest -q                          # test suite
-uv run ruff check app cli.py scripts test # lint
+uv run ruff check app cli.py test # lint
 uv run python -m compileall -q app cli.py main.py  # typecheck (compile check)
 ```
 

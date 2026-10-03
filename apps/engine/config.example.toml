@@ -96,7 +96,7 @@ coverr_api_keys = []
 #     search terms by relevance to your video subject, so the most on-topic
 #     B-roll is downloaded first when the timeline budget is tight.
 #   * Pegasus (video understanding) can QA / describe a clip from its URL.
-# Leave empty to keep MoneyPrinterTurbo's behavior completely unchanged.
+# Leave empty to keep the default behavior completely unchanged.
 # Configure a TwelveLabs API key from the TwelveLabs dashboard (https://twelvelabs.io) and install the
 # optional dependency with `uv sync --extra twelvelabs`.
 # Register at https://playground.twelvelabs.io to get your API key.

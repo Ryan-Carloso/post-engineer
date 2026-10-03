@@ -3,6 +3,6 @@ repos:
     hooks:
       - id: lint
         name: Ruff lint
-        entry: uv run ruff check app cli.py scripts test
+        entry: uv run ruff check app cli.py test
         language: system
         pass_filenames: false

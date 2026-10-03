@@ -716,9 +716,9 @@ def get_bgm_start_offset(
 ) -> float:
     """Pick a random bar-aligned start offset for the chosen BGM.
 
-    prep_songs.py stores rhythmic `start_points` per track in the catalog so
-    renders don't always begin at the same intro. Tracks without points (or a
-    missing catalog) keep the legacy behaviour and start at 0.
+    The BGM catalog stores rhythmic `start_points` per track so renders don't
+    always begin at the same intro. Tracks without points (or a missing
+    catalog) keep the legacy behaviour and start at 0.
     """
     resolved_catalog = catalog_file or config.bgm.get(
         "catalog_file", os.path.join(utils.root_dir(), "resource", "songs", "catalog.toml")
