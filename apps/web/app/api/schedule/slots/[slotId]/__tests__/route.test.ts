@@ -169,6 +169,26 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
     expect(client.calls.some((c) => c.op === 'delete')).toBe(false);
   });
 
+  it('returns 500 (not 404) and logs when the slot lookup hits a DB error', async () => {
+    const { logger } = await import('@/lib/logger');
+    const chain = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn(async () => ({ data: null, error: { code: 'XX000', message: 'connection reset' } })),
+    };
+    const client = { from: vi.fn(() => chain) };
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await deleteSlot('slot-1');
+
+    expect(response.status).toBe(500);
+    expect(logger.error).toHaveBeenCalledWith(
+      '[api/schedule/slots] slot lookup failed',
+      expect.objectContaining({ code: 'XX000' }),
+    );
+  });
+
   it('returns 409 for slots mid-flight (generating, ready, publishing)', async () => {
     for (const status of ['generating', 'ready', 'publishing']) {
       const client = mockSlotsClient({

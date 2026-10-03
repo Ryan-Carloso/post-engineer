@@ -41,15 +41,39 @@ async function loadOwnedSlot(
     .eq('id', slotId)
     .eq('user_id', userId)
     .single();
-  if (error || !slot) {
+  if (error) {
+    // PGRST116 (zero rows) is the only honest 404 — unknown id or another
+    // user's slot. Anything else is a DB failure: log loudly with the real
+    // error and return 500 so callers retry instead of giving up.
+    if ((error as { code?: string }).code === 'PGRST116') {
+      return { error: apiErrorResponse(404, 'Slot not found.', { route: 'SLOT_OPS /api/schedule/slots' }) };
+    }
+    logger.error('[api/schedule/slots] slot lookup failed', error);
+    return {
+      error: apiErrorResponse(500, 'Failed to load post.', {
+        route: 'SLOT_OPS /api/schedule/slots',
+        cause: error,
+      }),
+    };
+  }
+  if (!slot) {
     return { error: apiErrorResponse(404, 'Slot not found.', { route: 'SLOT_OPS /api/schedule/slots' }) };
   }
   const row = slot as SlotRow;
-  const { data: schedule } = await supabase
+  const { data: schedule, error: scheduleError } = await supabase
     .from('schedules')
     .select('id, user_id')
     .eq('id', row.schedule_id)
     .maybeSingle();
+  if (scheduleError) {
+    logger.error('[api/schedule/slots] schedule lookup failed', scheduleError);
+    return {
+      error: apiErrorResponse(500, 'Failed to load post.', {
+        route: 'SLOT_OPS /api/schedule/slots',
+        cause: scheduleError,
+      }),
+    };
+  }
   const scheduleRow = schedule as ScheduleRow | null;
   // Explicit ownership check: the service client bypasses RLS, so the
   // schedule row must belong to the caller.
