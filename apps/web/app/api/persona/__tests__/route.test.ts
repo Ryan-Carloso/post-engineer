@@ -131,9 +131,11 @@ describe('POST /api/persona — modo faceless (100% stock, sem avatar)', () => {
   });
 
   it('includes recent_image_ids in the insert (NOT NULL column without DB default)', async () => {
-    // Regression: the personas.recent_image_ids column is NOT NULL with no
-    // DEFAULT in the canonical schema, so omitting it from the insert makes
-    // PostgreSQL reject every persona creation with a 23502 violation (500).
+    // Regression: the personas.recent_image_ids column is NOT NULL, and DBs
+    // created from the pre-fix consolidated schema have no DEFAULT for it —
+    // omitting it from the insert makes PostgreSQL reject every persona
+    // creation with a 23502 violation (500). The insert supplies the column
+    // explicitly so creation works regardless of the DB default.
     const { inserted } = mockSupabase();
 
     const res = await POST(
@@ -143,6 +145,86 @@ describe('POST /api/persona — modo faceless (100% stock, sem avatar)', () => {
     expect(res.status).toBe(200);
     expect(inserted[0]).toHaveProperty('recent_image_ids');
     expect(inserted[0].recent_image_ids).toEqual([]);
+  });
+
+  it('persona insert payload stays in sync with public.personas (both directions)', async () => {
+    // Schema-sync test (mirrors the generate-and-schedule phantom-key pin):
+    // the supabase-js mock records any payload key, so a speculative key
+    // would sail through tests but be rejected by PostgREST in production
+    // (cf. PR #55's kind='batch'); conversely a NOT NULL-without-DEFAULT
+    // column missing from the payload 500s every call (this PR's 500). Assert
+    // both directions so the next column addition fails CI instead of
+    // production.
+    const { readFileSync } = await import('node:fs');
+    const { join, dirname } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const sqlPath = join(
+      dirname(fileURLToPath(import.meta.url)),
+      '..',
+      '..',
+      '..',
+      '..',
+      '..',
+      '..',
+      'supabase',
+      'schema.sql',
+    );
+    const sql = readFileSync(sqlPath, 'utf8');
+    const tableMatch = sql.match(
+      /create table if not exists public\.personas \(([\s\S]*?)\n\);/i,
+    );
+    expect(tableMatch).not.toBeNull();
+    const columnBlock = tableMatch?.[1] ?? '';
+    // Table-level constraints (e.g. `unique (user_id, persona_id),`) start
+    // with a keyword, not a column name — filter them so a future phantom
+    // key named like a SQL keyword can't false-pass.
+    const constraintKeywords = new Set([
+      'primary',
+      'unique',
+      'foreign',
+      'check',
+      'constraint',
+      'exclude',
+    ]);
+    // Column name -> true when the column is NOT NULL with no DEFAULT (the
+    // insert MUST supply it) — e.g. `user_id uuid not null` vs
+    // `created_at timestamptz not null default now()`.
+    const columns = new Map<string, boolean>();
+    for (const line of columnBlock.split('\n')) {
+      const trimmed = line.trim();
+      const name = trimmed.split(/\s+/)[0]?.replace(/["`,]/g, '');
+      if (!name || name.startsWith('--') || constraintKeywords.has(name)) {
+        continue;
+      }
+      columns.set(
+        name,
+        /not null/i.test(trimmed) && !/default/i.test(trimmed),
+      );
+    }
+    // Sentinels: guard against a degraded parse passing vacuously.
+    expect(columns.has('recent_image_ids')).toBe(true);
+    expect(columns.get('user_id')).toBe(true);
+    expect(columns.get('created_at')).toBe(false);
+
+    const { inserted } = mockSupabase();
+    const res = await POST(
+      formRequest({ name: 'Canal Ninja', personaMode: 'faceless', voiceId: 'voz-1' }),
+    );
+
+    expect(res.status).toBe(200);
+    const payload = inserted[0];
+    expect(payload).toBeDefined();
+
+    // Direction 1: every insert key is a real public.personas column.
+    for (const key of Object.keys(payload)) {
+      expect(columns.has(key)).toBe(true);
+    }
+    // Direction 2: every NOT NULL-without-DEFAULT column is supplied.
+    for (const [name, required] of columns) {
+      if (required) {
+        expect(payload).toHaveProperty(name);
+      }
+    }
   });
 
   it('rejeita foto enviada em modo faceless (evita reativar avatar no engine)', async () => {
