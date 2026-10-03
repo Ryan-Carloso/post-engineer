@@ -60,6 +60,11 @@ const MAX_TOPICS = 10;
 const MAX_TOPIC_CHARS = 300;
 const MAX_SCRIPT_PROMPT_CHARS = 2000;
 const SIGNED_URL_TTL_SECONDS = 3600;
+// A schedule row with zero slots that is older than this is a zombie from
+// an attempt that died between the schedule insert and the slot insert
+// (crash, timeout). It can be safely deleted: no live request can still be
+// working on it, and the ledger check prevents a second charge.
+const ZOMBIE_SCHEDULE_MAX_AGE_MS = 10 * 60 * 1000;
 
 //---------------
 // Request shape. Semantic checks (codes, fields) run after the shape parse
@@ -666,25 +671,69 @@ export async function POST(request: Request): Promise<NextResponse> {
   // 7. Idempotency: the schedule id is deterministic in (user, key), so a
   // retry addresses the same schedule row instead of creating a duplicate.
   const idem = resolveIdempotency(userId, idempotencyKey, request);
-  const { data: existingSchedule } = await supabase
+  const { data: existingSchedule, error: scheduleLookupError } = await supabase
     .from('schedules')
-    .select('id')
+    .select('id, created_at')
     .eq('id', idem.scheduleId)
     .eq('user_id', userId)
     .maybeSingle();
+  // Fail closed: a blind schedule lookup must never lead to a second charge.
+  if (scheduleLookupError) {
+    logger.error('[generate-and-schedule] idempotency schedule lookup failed', scheduleLookupError, {
+      scheduleId: idem.scheduleId,
+      userId,
+    });
+    return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
+  }
   if (existingSchedule) {
-    trackApiEvent('video_creation_replayed', { userId, scheduleId: idem.scheduleId });
-    const replayed = await fetchReplay(supabase, userId, idem.scheduleId);
-    if (replayed) return replayed;
+    // A schedule with zero slots is a zombie from an attempt that died
+    // between the schedule insert and the slot insert (crash, timeout):
+    // it can never complete. Delete it when it is old enough that no live
+    // request can still be working on it, then run the operation fresh;
+    // the ledger check below prevents a second charge for the same
+    // generation_id.
+    const { count: slotCount, error: slotCountError } = await supabase
+      .from('scheduled_posts')
+      .select('id', { count: 'exact', head: true })
+      .eq('schedule_id', idem.scheduleId)
+      .eq('user_id', userId);
+    if (slotCountError) {
+      logger.error('[generate-and-schedule] zombie schedule slot count failed', slotCountError, {
+        scheduleId: idem.scheduleId,
+        userId,
+      });
+      return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
+    }
+    const createdAt = (existingSchedule as { created_at?: string }).created_at;
+    const ageMs = createdAt ? Date.now() - new Date(createdAt).getTime() : Number.POSITIVE_INFINITY;
+    if ((slotCount ?? 0) === 0 && ageMs > ZOMBIE_SCHEDULE_MAX_AGE_MS) {
+      logger.warn('[generate-and-schedule] deleting zombie schedule with 0 slots', {
+        scheduleId: idem.scheduleId,
+        userId,
+      });
+      await supabase.from('schedules').delete().eq('id', idem.scheduleId).eq('user_id', userId);
+    } else {
+      trackApiEvent('video_creation_replayed', { userId, scheduleId: idem.scheduleId });
+      const replayed = await fetchReplay(supabase, userId, idem.scheduleId);
+      if (replayed) return replayed;
+    }
   }
   // Read-your-ledger: a previous attempt may have spent but died before the
   // schedule insert (no unique constraint on generation_id is assumed).
   // Residual race vs a concurrent duplicate is documented below at insert.
-  const { data: ledgerRows } = await supabase
+  const { data: ledgerRows, error: ledgerError } = await supabase
     .from('token_transactions')
     .select('id')
     .eq('generation_id', idem.generationId)
     .limit(1);
+  // Fail closed: charging blind after a failed ledger read risks a double spend.
+  if (ledgerError) {
+    logger.error('[generate-and-schedule] spend ledger lookup failed', ledgerError, {
+      generationId: idem.generationId,
+      userId,
+    });
+    return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
+  }
   const alreadySpent = (ledgerRows?.length ?? 0) > 0;
   if (alreadySpent) {
     logger.warn('[generate-and-schedule] spend ledger already has this generation_id; resuming without charging', {
@@ -773,13 +822,28 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (scheduleError) {
     if (isUniqueViolation(scheduleError)) {
       // Lost a PK race with a concurrent duplicate (or a replay slipped past
-      // the pre-check). Do NOT refund: the winner owns the spend under the
-      // same generation_id, and refunding could take back the winner's
-      // tokens. Surface the existing schedule instead.
-      logger.error('[generate-and-schedule] schedule PK race; replaying winner', scheduleError, {
-        scheduleId: idem.scheduleId,
-        userId,
-      });
+      // the pre-check). If we spent in this request, our spend is redundant:
+      // the winner's own spend under the same generation_id is the single
+      // charge, so undo ours. Without this, the missing unique constraint on
+      // token_transactions.generation_id lets both spends stand.
+      // When we skipped our spend (alreadySpent), there is nothing of ours
+      // to undo — refunding would steal the legitimate prior spend.
+      if (!alreadySpent) {
+        await supabase.rpc('refund_generation_tokens', {
+          p_user_id: userId,
+          p_generation_id: idem.generationId,
+          p_reason: 'PK race; refunded redundant spend',
+        });
+        logger.error('[generate-and-schedule] schedule PK race; refunded redundant spend, replaying winner', scheduleError, {
+          scheduleId: idem.scheduleId,
+          userId,
+        });
+      } else {
+        logger.error('[generate-and-schedule] schedule PK race; already spent, nothing to refund, replaying winner', scheduleError, {
+          scheduleId: idem.scheduleId,
+          userId,
+        });
+      }
       trackApiEvent('video_creation_failed', {
         userId,
         scheduleId: idem.scheduleId,

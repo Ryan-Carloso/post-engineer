@@ -81,8 +81,12 @@ interface DbConfig {
   personaErrorCode?: string;
   socialAccounts?: Array<{ provider: string; provider_account_id: string }>;
   existingScheduleId?: string | null;
+  existingScheduleCreatedAt?: string;
+  scheduleLookupError?: boolean;
   replaySlots?: Array<{ id: string; slot_at: string; topic: string; task_id: string | null; status: string }>;
+  slotCount?: number;
   ledgerIds?: string[];
+  ledgerError?: boolean;
   spend?: { spent: boolean; balance: number };
   spendErrorCode?: string;
   scheduleInsertErrorCode?: string;
@@ -110,15 +114,26 @@ function lisbonTimePlus(hoursAhead: number): string {
 
 function makeClient(cfg: DbConfig): unknown {
   const table = (name: string): unknown => {
+    let isCountQuery = false;
     const builder: Record<string, unknown> = {
-      select: () => builder,
+      select: (_cols?: string, opts?: { count?: string; head?: boolean }) => {
+        isCountQuery = opts?.count === 'exact' && opts?.head === true;
+        return builder;
+      },
       eq: () => builder,
       in: () => builder,
       limit: () => builder,
       order: () => builder,
       maybeSingle: async () => {
         if (name === 'schedules') {
-          return { data: cfg.existingScheduleId ? { id: cfg.existingScheduleId } : null, error: null };
+          if (cfg.scheduleLookupError) return { data: null, error: { code: 'XX000', message: 'db down' } };
+          if (cfg.existingScheduleId) {
+            return {
+              data: { id: cfg.existingScheduleId, created_at: cfg.existingScheduleCreatedAt ?? new Date().toISOString() },
+              error: null,
+            };
+          }
+          return { data: null, error: null };
         }
         return { data: null, error: null };
       },
@@ -141,6 +156,9 @@ function makeClient(cfg: DbConfig): unknown {
             return { data: { id: 'new-id' }, error: null };
           },
           then: (resolve: (v: unknown) => void, reject: (e: unknown) => void) => {
+            if (name === 'schedules' && cfg.scheduleInsertErrorCode) {
+              return Promise.resolve({ data: null, error: { code: cfg.scheduleInsertErrorCode, message: 'conflict' } }).then(resolve, reject);
+            }
             if (name === 'scheduled_posts') {
               if (cfg.slotInsertFails) {
                 return Promise.resolve({ data: null, error: { message: 'insert failed' } }).then(resolve, reject);
@@ -178,9 +196,16 @@ function makeClient(cfg: DbConfig): unknown {
           return Promise.resolve({ data: cfg.socialAccounts ?? [], error: null }).then(resolve, reject);
         }
         if (name === 'token_transactions') {
+          if (cfg.ledgerError) {
+            return Promise.resolve({ data: null, error: { code: 'XX000', message: 'db down' } }).then(resolve, reject);
+          }
           return Promise.resolve({ data: (cfg.ledgerIds ?? []).map((id) => ({ id })), error: null }).then(resolve, reject);
         }
         if (name === 'scheduled_posts') {
+          if (isCountQuery) {
+            const count = cfg.slotCount ?? (cfg.replaySlots ?? []).length;
+            return Promise.resolve({ data: [], count, error: null }).then(resolve, reject);
+          }
           return Promise.resolve({ data: cfg.replaySlots ?? [], error: null }).then(resolve, reject);
         }
         return Promise.resolve({ data: null, error: null }).then(resolve, reject);
@@ -640,15 +665,97 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(json.replayed).toBe(false);
     });
 
-    it('treats a schedule PK conflict as a replay, without refunding', async () => {
+    it('refunds our spend on a schedule PK conflict (we did not create the schedule)', async () => {
       const key = 'race-key-1';
-      setup({ ...DEFAULT_CFG, scheduleInsertErrorCode: '23505', existingScheduleId: deterministicUuid(IDEMPOTENCY_NAMESPACE, `${USER_ID}:${key}`), replaySlots: [] });
+      // Step 7 misses the schedule (race), we spend, then the insert hits
+      // the PK: our spend is redundant, refund it before replaying.
+      setup({ ...DEFAULT_CFG, scheduleInsertErrorCode: '23505', replaySlots: [] });
       const res = await post(baseBody({ idempotencyKey: key }));
       const json = await res.json();
       expect(res.status).toBe(200);
       expect(json.replayed).toBe(true);
-      // No refund: the winner owns the spend under the same generation_id.
-      expect(rpcCalls.filter((c) => c.name === 'refund_generation_tokens')).toHaveLength(0);
+      // Our spend did not create the schedule: undo it so the retry is not
+      // charged twice. The winner's own spend under the same generation_id
+      // is the single charge.
+      const refunds = rpcCalls.filter((c) => c.name === 'refund_generation_tokens');
+      expect(refunds).toHaveLength(1);
+      expect(refunds[0].args.p_reason).toMatch(/PK race/);
+    });
+
+    it('does not refund on a schedule PK conflict when we skipped our spend (already spent)', async () => {
+      const key = 'race-key-2';
+      // The ledger already holds this generation_id, so this request skips
+      // its spend. If the schedule insert then PK-conflicts with a concurrent
+      // winner, there is no redundant spend of ours to undo: refunding would
+      // steal the legitimate prior spend.
+      setup({ ...DEFAULT_CFG, ledgerIds: ['tx-old'], scheduleInsertErrorCode: '23505', replaySlots: [] });
+      const res = await post(baseBody({ idempotencyKey: key }));
+      const json = await res.json();
+      expect(res.status).toBe(200);
+      expect(json.replayed).toBe(true);
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+      const refunds = rpcCalls.filter((c) => c.name === 'refund_generation_tokens');
+      expect(refunds).toHaveLength(0);
+    });
+
+    it('deletes a zombie schedule (0 slots, old) and completes without charging twice', async () => {
+      const key = 'zombie-key-1';
+      const scheduleId = deterministicUuid(IDEMPOTENCY_NAMESPACE, `${USER_ID}:${key}`);
+      const hourAgo = new Date(Date.now() - 3600 * 1000).toISOString();
+      setup({
+        ...DEFAULT_CFG,
+        existingScheduleId: scheduleId,
+        existingScheduleCreatedAt: hourAgo,
+        replaySlots: [],
+        slotCount: 0,
+        // A previous attempt spent but died before creating slots.
+        ledgerIds: ['tx-old'],
+      });
+      const res = await post(baseBody({ idempotencyKey: key }));
+      const json = await res.json();
+      expect(res.status).toBe(200);
+      // Not a replay: the zombie was cleared and the operation ran fresh.
+      expect(json.replayed).toBe(false);
+      expect(json.slots).toHaveLength(2);
+      // The zombie schedule row was deleted.
+      expect(deletes).toContain('schedules');
+      // No second charge: the ledger already had this generation_id.
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it('replays (does not delete) a recent 0-slot schedule that may still be in flight', async () => {
+      const key = 'young-zombie-key-1';
+      const scheduleId = deterministicUuid(IDEMPOTENCY_NAMESPACE, `${USER_ID}:${key}`);
+      setup({
+        ...DEFAULT_CFG,
+        existingScheduleId: scheduleId,
+        existingScheduleCreatedAt: new Date().toISOString(),
+        replaySlots: [],
+        slotCount: 0,
+      });
+      const res = await post(baseBody({ idempotencyKey: key }));
+      const json = await res.json();
+      expect(res.status).toBe(200);
+      expect(json.replayed).toBe(true);
+      expect(json.slots).toHaveLength(0);
+      expect(deletes).not.toContain('schedules');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it('returns 500 without charging when the idempotency schedule lookup fails', async () => {
+      setup({ ...DEFAULT_CFG, scheduleLookupError: true });
+      const res = await post(baseBody({ idempotencyKey: 'lookup-err-key' }));
+      expect(res.status).toBe(500);
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+      expect(inserts['schedules']).toBeUndefined();
+    });
+
+    it('returns 500 without charging when the spend ledger lookup fails', async () => {
+      setup({ ...DEFAULT_CFG, ledgerError: true });
+      const res = await post(baseBody({ idempotencyKey: 'ledger-err-key' }));
+      expect(res.status).toBe(500);
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+      expect(inserts['schedules']).toBeUndefined();
     });
   });
 
