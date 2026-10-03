@@ -16,6 +16,7 @@ vi.mock('@/lib/api', () => ({
   useYouTubeAccountsQuery: vi.fn(),
   useInstagramAccountsQuery: vi.fn(),
   useLinkedinAccountsQuery: vi.fn(),
+  useBlueskyAccountsQuery: vi.fn(),
   useVideoGenerationsQuery: vi.fn(),
 }));
 
@@ -40,6 +41,7 @@ import {
   useYouTubeAccountsQuery,
   useInstagramAccountsQuery,
   useLinkedinAccountsQuery,
+  useBlueskyAccountsQuery,
   useVideoGenerationsQuery,
 } from '@/lib/api';
 
@@ -124,6 +126,9 @@ function mockQueries(overrides: {
     data: { authenticated: true, accounts: [{ igUserId: 'ig1', username: 'vivalave' }] },
   } as never);
   vi.mocked(useLinkedinAccountsQuery).mockReturnValue({
+    data: { authenticated: true, accounts: [] },
+  } as never);
+  vi.mocked(useBlueskyAccountsQuery).mockReturnValue({
     data: { authenticated: true, accounts: [] },
   } as never);
   vi.mocked(useVideoGenerationsQuery).mockReturnValue({

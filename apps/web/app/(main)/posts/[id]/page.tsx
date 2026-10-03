@@ -10,6 +10,7 @@ import {
   useYouTubeAccountsQuery,
   useInstagramAccountsQuery,
   useLinkedinAccountsQuery,
+  useBlueskyAccountsQuery,
   useUpdateSlotMutation,
   useDeleteSlotMutation,
   type ScheduledSlot,
@@ -113,6 +114,7 @@ export default function PostDetailPage() {
   const youtubeQuery = useYouTubeAccountsQuery();
   const instagramQuery = useInstagramAccountsQuery();
   const linkedinQuery = useLinkedinAccountsQuery();
+  const blueskyQuery = useBlueskyAccountsQuery();
 
   const accountOptions: AccountOption[] = useMemo(
     () => [
@@ -131,8 +133,13 @@ export default function PostDetailPage() {
         provider: 'linkedin' as const,
         label: account.accountName ?? account.providerAccountId,
       })),
+      ...(blueskyQuery.data?.accounts ?? []).map((account) => ({
+        id: account.did,
+        provider: 'bluesky' as const,
+        label: `@${account.handle}`,
+      })),
     ],
-    [youtubeQuery.data, instagramQuery.data, linkedinQuery.data],
+    [youtubeQuery.data, instagramQuery.data, linkedinQuery.data, blueskyQuery.data],
   );
 
   const slotDetail = slotQuery.data ?? null;

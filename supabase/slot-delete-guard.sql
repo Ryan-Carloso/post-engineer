@@ -16,7 +16,7 @@
 
 create or replace function public.delete_slot_if_not_last(
   p_slot_id uuid,
-  p_user_id text
+  p_user_id uuid
 )
 returns text
 language plpgsql

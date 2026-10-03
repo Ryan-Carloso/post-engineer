@@ -10,6 +10,7 @@ import {
   useYouTubeAccountsQuery,
   useInstagramAccountsQuery,
   useLinkedinAccountsQuery,
+  useBlueskyAccountsQuery,
   useVideoGenerationsQuery,
   type ScheduledSlot,
   type ScheduleConfig,
@@ -58,7 +59,7 @@ function resolveAccountFilter(
   return accountId;
 }
 
-const PROVIDER_FILTERS: ProviderFilter[] = ['all', 'youtube', 'instagram', 'linkedin'];
+const PROVIDER_FILTERS: ProviderFilter[] = ['all', 'youtube', 'instagram', 'linkedin', 'bluesky'];
 
 const STATUS_STYLE: Record<string, string> = {
   pending: 'bg-[#e8edf1] text-[#60758a]',
@@ -302,6 +303,7 @@ export default function PostsPage() {
   const youtubeQuery = useYouTubeAccountsQuery();
   const instagramQuery = useInstagramAccountsQuery();
   const linkedinQuery = useLinkedinAccountsQuery();
+  const blueskyQuery = useBlueskyAccountsQuery();
 
   const scheduleById = useMemo(
     () => new Map((schedulesQuery.data ?? []).map((schedule) => [schedule.id, schedule])),
@@ -329,8 +331,13 @@ export default function PostsPage() {
         provider: 'linkedin' as const,
         label: account.accountName ?? account.providerAccountId,
       })),
+      ...(blueskyQuery.data?.accounts ?? []).map((account) => ({
+        id: account.did,
+        provider: 'bluesky' as const,
+        label: `@${account.handle}`,
+      })),
     ],
-    [youtubeQuery.data, instagramQuery.data, linkedinQuery.data],
+    [youtubeQuery.data, instagramQuery.data, linkedinQuery.data, blueskyQuery.data],
   );
 
   const visibleAccounts = useMemo(
