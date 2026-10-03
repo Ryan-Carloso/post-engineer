@@ -142,10 +142,10 @@ export default function PostDetailPage() {
   const accounts: AccountOption[] = useMemo(() => {
     if (!slotDetail) return [];
     const ids = new Set([
-      ...slotDetail.schedule.youtubeAccountIds,
-      ...slotDetail.schedule.instagramAccountIds,
-      ...slotDetail.schedule.linkedinAccountIds,
-      ...slotDetail.schedule.blueskyAccountIds,
+      ...(slotDetail.schedule.youtubeAccountIds ?? []),
+      ...(slotDetail.schedule.instagramAccountIds ?? []),
+      ...(slotDetail.schedule.linkedinAccountIds ?? []),
+      ...(slotDetail.schedule.blueskyAccountIds ?? []),
     ]);
     return accountOptions.filter((account) => ids.has(account.id));
   }, [slotDetail, accountOptions]);

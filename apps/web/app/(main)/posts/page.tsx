@@ -173,10 +173,10 @@ function resolveSlotAccounts(
 ): AccountOption[] {
   if (!schedule) return [];
   const ids = new Set([
-    ...schedule.youtubeAccountIds,
-    ...schedule.instagramAccountIds,
-    ...schedule.linkedinAccountIds,
-    ...schedule.blueskyAccountIds,
+    ...(schedule.youtubeAccountIds ?? []),
+    ...(schedule.instagramAccountIds ?? []),
+    ...(schedule.linkedinAccountIds ?? []),
+    ...(schedule.blueskyAccountIds ?? []),
   ]);
   return accounts.filter((account) => ids.has(account.id));
 }
@@ -364,10 +364,10 @@ export default function PostsPage() {
       if (providerFilter !== 'all' && !schedule.providers.includes(providerFilter)) return false;
       if (effectiveAccountFilter !== 'all') {
         const ids = new Set([
-          ...schedule.youtubeAccountIds,
-          ...schedule.instagramAccountIds,
-          ...schedule.linkedinAccountIds,
-          ...schedule.blueskyAccountIds,
+          ...(schedule.youtubeAccountIds ?? []),
+          ...(schedule.instagramAccountIds ?? []),
+          ...(schedule.linkedinAccountIds ?? []),
+          ...(schedule.blueskyAccountIds ?? []),
         ]);
         if (!ids.has(effectiveAccountFilter)) return false;
       }
