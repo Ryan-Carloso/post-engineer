@@ -16,14 +16,18 @@ describe('LinkedIn — seção na página de contas', () => {
     }).as('getAccounts');
   });
 
-  it('exibe painel de conexão LinkedIn com botão OAuth', () => {
+  it('exibe seção LinkedIn com botão OAuth', () => {
     cy.visit('/accounts');
     cy.wait('@getAccounts');
 
-    cy.get('[data-testid="linkedin-connect-panel"]').scrollIntoView().should('be.visible');
-    cy.get('[data-testid="linkedin-connect-button"]').should('be.visible').and('not.be.disabled');
-    // texto do hint menciona páginas (perfil + company pages)
-    cy.contains('páginas').should('exist');
+    cy.contains('section', 'LinkedIn').within(() => {
+      // texto do hint menciona páginas (perfil + company pages)
+      cy.contains('páginas').should('exist');
+      cy.get('button[aria-label="Conectar uma conta"]')
+        .scrollIntoView()
+        .should('be.visible')
+        .and('not.be.disabled');
+    });
   });
 
   it('roda start OAuth: chama /api/linkedin-auth/start e abre popup com auth_url', () => {
@@ -38,11 +42,13 @@ describe('LinkedIn — seção na página de contas', () => {
     cy.visit('/accounts');
     cy.wait('@getAccounts');
 
-    cy.get('[data-testid="linkedin-connect-button"]').scrollIntoView().click();
+    cy.contains('section', 'LinkedIn').within(() => {
+      cy.get('button[aria-label="Conectar uma conta"]').scrollIntoView().click();
+    });
     cy.wait('@linkedinStart');
     // sem credenciais configuradas no ambiente de teste: erro exibido
-    cy.get('[data-testid="linkedin-connect-error"]')
-      .scrollIntoView()
-      .should('be.visible');
+    cy.contains('section', 'LinkedIn').within(() => {
+      cy.contains('LinkedIn credentials are not configured').should('be.visible');
+    });
   });
 });
