@@ -192,6 +192,14 @@ LLM_CLIENT_TIMEOUT_SECONDS = 60.0
 LLM_CLIENT_MAX_RETRIES = 1
 
 
+# The two OpenRouter tiers, ORDERED CHEAPEST FIRST. This single tuple is the
+# source of truth for both the fallback chain below and the "is this provider
+# already an OpenRouter tier" checks — a second list would drift from it.
+# Both tiers speak the same OpenAI-compatible protocol and share the
+# attribution headers, so the request path handles them together; only the
+# credential and the default model differ.
+OPENROUTER_PROVIDERS = ("openrouter_free", "openrouter")
+
 # Default model per provider, mirroring the provider branches in
 # _generate_response_inner below. _resolve_model_name prefers the explicit
 # config value; this dict only fills the gap when the branch applies a
@@ -208,6 +216,7 @@ _PROVIDER_DEFAULT_MODELS = {
     "volcengine": "doubao-seed-2-1-turbo-260628",
     "zai": "glm-5.3-flash",
     "openrouter": "openrouter/auto",
+    "openrouter_free": "openrouter/free",
     "gemini": _DEFAULT_GEMINI_MODEL,
     "pollinations": _DEFAULT_POLLINATIONS_MODEL,
 }
@@ -505,6 +514,21 @@ def _generate_response_inner(
                     base_url = "https://openrouter.ai/api/v1"
                 if not model_name:
                     model_name = "openrouter/auto"
+            elif llm_provider == "openrouter_free":
+                # The free tier of the same OpenRouter gateway, on its own key.
+                # A separate key isolates free-model rate limits (OpenRouter
+                # meters them per key) from the paid budget, and lets the
+                # fallback chain try free models before spending anything.
+                # The default model is the Free Router ("openrouter/free"),
+                # which routes server-side to zero-cost models only — so
+                # retiring a free model never needs a code change.
+                api_key = config.app.get("openrouter_free_api_key")
+                model_name = config.app.get("openrouter_free_model_name")
+                base_url = config.app.get("openrouter_base_url", "")
+                if not base_url:
+                    base_url = "https://openrouter.ai/api/v1"
+                if not model_name:
+                    model_name = "openrouter/free"
             elif llm_provider == "modelscope":
                 api_key = config.app.get("modelscope_api_key")
                 model_name = config.app.get("modelscope_model_name")
@@ -798,7 +822,7 @@ def _generate_response_inner(
                 else:
                     raise Exception(f"[{llm_provider}] returned an empty response")
 
-            elif llm_provider == "openrouter":
+            elif llm_provider in OPENROUTER_PROVIDERS:
                 # OpenRouter attribution headers are optional and only
                 # identify the app in the OpenRouter dashboard; without
                 # them the call is a plain OpenAI-compatible request.
@@ -872,6 +896,12 @@ def _generate_response_with_fallback(prompt: str) -> str:
     # already being the primary provider — repeating the same call
     # wouldn't fix the error and would just double cost and latency.
     #
+    # OpenRouter itself is tried in two tiers, cheapest first: the free
+    # router on its own key, and only then the paid key. Free models are
+    # rate-limited per key and frequently saturated, which is exactly the
+    # failure the paid tier absorbs — so the order is free, then paid.
+    # Tiers without a configured key are skipped instead of raising.
+    #
     # The provider is passed as an explicit argument on every call: mutating
     # config.app["llm_provider"] here would race between concurrent requests
     # (a parallel request would read "openrouter" as primary and lose its own
@@ -893,20 +923,47 @@ def _generate_response_with_fallback(prompt: str) -> str:
         except Exception as primary_error:
             primary_message = _sanitize_error_message(primary_error)
 
-            if primary_provider == "openrouter":
+            # An OpenRouter tier as primary must not retry the same gateway:
+            # repeating it wouldn't fix the error, it would only double cost
+            # and latency.
+            if primary_provider in OPENROUTER_PROVIDERS:
                 raise
 
-            openrouter_key = config.app.get("openrouter_api_key", "")
-            if not openrouter_key:
+            # Cheapest tier first. A tier with no key configured is skipped
+            # rather than raising, so a partially-configured install degrades
+            # to whatever it does have instead of failing outright.
+            fallback_chain = [
+                provider
+                for provider in OPENROUTER_PROVIDERS
+                if config.app.get(f"{provider}_api_key", "")
+            ]
+            if not fallback_chain:
                 raise
 
-            logger.warning(
-                f"primary llm provider '{primary_provider}' failed, "
-                f"falling back to openrouter: {primary_message}"
-            )
-            used_provider = "openrouter"
-            fallback_used = True
-            result, usage = _generate_response_inner(prompt, "openrouter")
+            last_error = primary_message
+            failed_provider = primary_provider
+            for provider in fallback_chain:
+                logger.warning(
+                    f"llm provider '{failed_provider}' failed, "
+                    f"falling back to {provider}: {last_error}"
+                )
+                # fallback_used means "a fallback tier was attempted", not
+                # "a fallback tier served the request" — a run that degraded
+                # and then failed is still a degradation, and reporting it as
+                # a plain primary failure would hide it from the funnel.
+                used_provider = provider
+                fallback_used = True
+                try:
+                    result, usage = _generate_response_inner(prompt, provider)
+                except Exception as fallback_error:
+                    last_error = _sanitize_error_message(fallback_error)
+                    failed_provider = provider
+                    continue
+                break
+            else:
+                # Every tier failed. Report the last one so the error names the
+                # provider the user must fix, not the primary.
+                error = last_error
     except Exception as e:
         error = _sanitize_error_message(e)
     _track_llm_request(
