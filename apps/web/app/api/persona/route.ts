@@ -182,6 +182,11 @@ export async function POST(request: Request): Promise<NextResponse> {
         body.values.faceMixPercent,
       ),
       face_quality: body.values.faceQuality,
+      // Supplied explicitly so creation works regardless of the DB default:
+      // fresh installs get `default '{}'` from the canonical schema, but DBs
+      // created from the pre-fix consolidated schema may have none — omitting
+      // it made PostgreSQL reject the insert (23502).
+      recent_image_ids: [],
     })
     .select('id')
     .single();

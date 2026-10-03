@@ -130,6 +130,155 @@ describe('POST /api/persona — modo faceless (100% stock, sem avatar)', () => {
     });
   });
 
+  it('includes recent_image_ids in the insert (supplies the NOT NULL column explicitly, independent of the DB default)', async () => {
+    // Regression: the personas.recent_image_ids column is NOT NULL, and DBs
+    // created from the pre-fix consolidated schema have no DEFAULT for it —
+    // omitting it from the insert makes PostgreSQL reject every persona
+    // creation with a 23502 violation (500). The insert supplies the column
+    // explicitly so creation works regardless of the DB default.
+    const { inserted } = mockSupabase();
+
+    const res = await POST(
+      formRequest({ name: 'Canal Ninja', personaMode: 'faceless', voiceId: 'voz-1' }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(inserted[0]).toHaveProperty('recent_image_ids');
+    expect(inserted[0].recent_image_ids).toEqual([]);
+  });
+
+  it('persona insert payload stays in sync with public.personas (both directions)', async () => {
+    // Schema-sync test (mirrors the generate-and-schedule phantom-key pin):
+    // the supabase-js mock records any payload key, so a speculative key
+    // would sail through tests but be rejected by PostgREST in production
+    // (cf. PR #55's kind='batch'); conversely a NOT NULL-without-DEFAULT
+    // column missing from the payload 500s every call (this PR's 500). Assert
+    // both directions so the next column addition fails CI instead of
+    // production.
+    const { readFileSync } = await import('node:fs');
+    const { join, dirname } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const sqlPath = join(
+      dirname(fileURLToPath(import.meta.url)),
+      '..',
+      '..',
+      '..',
+      '..',
+      '..',
+      '..',
+      'supabase',
+      'schema.sql',
+    );
+    const sql = readFileSync(sqlPath, 'utf8');
+    const tableMatch = sql.match(
+      /create table if not exists public\.personas \(([\s\S]*?)\n\);/i,
+    );
+    expect(tableMatch).not.toBeNull();
+    const columnBlock = tableMatch?.[1] ?? '';
+    // Table-level constraints (e.g. `unique (user_id, persona_id),`) start
+    // with a keyword, not a column name — filter them so a future phantom
+    // key named like a SQL keyword can't false-pass.
+    const constraintKeywords = new Set([
+      'primary',
+      'unique',
+      'foreign',
+      'check',
+      'constraint',
+      'exclude',
+    ]);
+    // Column name -> true when the column is NOT NULL with no DEFAULT (the
+    // insert MUST supply it) — e.g. `user_id uuid not null` vs
+    // `created_at timestamptz not null default now()`.
+    // Assumes one column per physical line: a wrapped definition (e.g. the
+    // `default` on its own continuation line) would misparse — fail-closed,
+    // but join continuation lines before changing the format.
+    const columns = new Map<string, boolean>();
+    for (const line of columnBlock.split('\n')) {
+      const trimmed = line.trim();
+      const name = trimmed.split(/\s+/)[0]?.replace(/["`,]/g, '');
+      if (!name || name.startsWith('--') || constraintKeywords.has(name)) {
+        continue;
+      }
+      // Match whole words on the comment-stripped definition: a bare
+      // substring match would silently drop a genuinely required column —
+      // e.g. `default_topic text not null` or a trailing comment mentioning
+      // "default" — and that is exactly the production-500 class this test
+      // exists to catch. Column-level PRIMARY KEY is implicitly NOT NULL in
+      // PostgreSQL, so it counts even without an explicit `not null`.
+      const definition = trimmed.replace(/--.*$/, '');
+      const notNull =
+        /\bnot null\b/i.test(definition) ||
+        /\bprimary key\b/i.test(definition);
+      columns.set(name, notNull && !/\bdefault\b/i.test(definition));
+    }
+    // Sentinels: guard against a degraded parse passing vacuously.
+    expect(columns.has('recent_image_ids')).toBe(true);
+    expect(columns.get('user_id')).toBe(true);
+    expect(columns.get('created_at')).toBe(false);
+    // Pins the DEFAULT this PR restores: dropping `default '{}'` from
+    // schema.sql must fail CI, not just leave the insert pin green.
+    expect(columns.get('recent_image_ids')).toBe(false);
+
+    const { inserted } = mockSupabase();
+    const res = await POST(
+      formRequest({ name: 'Canal Ninja', personaMode: 'faceless', voiceId: 'voz-1' }),
+    );
+
+    expect(res.status).toBe(200);
+    const payload = inserted[0];
+    expect(payload).toBeDefined();
+
+    // Direction 1: every insert key is a real public.personas column.
+    for (const key of Object.keys(payload)) {
+      expect(
+        columns.has(key),
+        `insert key "${key}" is not a public.personas column`,
+      ).toBe(true);
+    }
+    // Direction 2: every NOT NULL-without-DEFAULT column is supplied.
+    for (const [name, required] of columns) {
+      if (required) {
+        expect(payload).toHaveProperty(name);
+      }
+    }
+  });
+
+  it("keeps the recent_image_ids '{}' default literal in sync across SQL files", async () => {
+    // The restored default literal now lives in three SQL files; a value
+    // drift between them (e.g. a non-empty literal in one) would diverge
+    // the migration chain, the canonical schema, and the deployed-DB fix
+    // script silently. Static `includes` checks only — no dynamic RegExp
+    // (CodeQL rule).
+    const { readFileSync } = await import('node:fs');
+    const { join, dirname } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const supabaseDir = join(
+      dirname(fileURLToPath(import.meta.url)),
+      '..',
+      '..',
+      '..',
+      '..',
+      '..',
+      '..',
+      'supabase',
+    );
+    const expectations: Array<[string, string]> = [
+      ['schema.sql', `recent_image_ids uuid[] not null default '{}'`],
+      ['persona-images.sql', `recent_image_ids uuid[] not null default '{}'`],
+      [
+        'fix-recent-image-ids-default.sql',
+        `alter column recent_image_ids set default '{}'`,
+      ],
+    ];
+    for (const [file, literal] of expectations) {
+      const sql = readFileSync(join(supabaseDir, file), 'utf8');
+      expect(
+        sql.includes(literal),
+        `${file} drifted from the recent_image_ids '{}' default`,
+      ).toBe(true);
+    }
+  });
+
   it('rejeita foto enviada em modo faceless (evita reativar avatar no engine)', async () => {
     mockSupabase();
 
