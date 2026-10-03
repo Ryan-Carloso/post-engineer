@@ -134,9 +134,9 @@ twelvelabs_rerank_terms = false
 #   ernie       (文心一言)
 #   modelscope  (魔搭社区)
 #   litellm     (100+ providers via LiteLLM gateway)
-#   omniroute   (local OpenAI-compatible AI gateway, https://github.com/diegosouzapw/OmniRoute)
+#   groq        (Groq LPU inference API)
 #   openrouter  (unified gateway, https://openrouter.ai — automatic fallback)
-llm_provider = "omniroute"
+llm_provider = "groq"
 
 ########## Pollinations AI Settings
 # Visit https://pollinations.ai/ to learn more
@@ -156,24 +156,6 @@ pollinations_model_name = "openai-fast"
 ollama_base_url = ""
 # Check your available models at https://ollama.com/library
 ollama_model_name = ""
-
-########## OmniRoute Gateway Settings
-# Local AI gateway (OpenAI-compatible) that runs via Docker and routes across
-# 300+ providers behind one endpoint. Start it with:
-#   docker compose up -d omniroute
-# Then open http://localhost:20128 and login to connect your LLM providers.
-# https://github.com/diegosouzapw/OmniRoute
-# Base URL of the OmniRoute OpenAI-compatible endpoint.
-# When the engine itself runs inside docker compose, use
-# "http://omniroute:20128/v1" so the containers talk over the compose network.
-omniroute_base_url = "http://localhost:20128/v1"
-# "auto" routes across every provider connected in the OmniRoute dashboard.
-# Run `curl http://localhost:20128/v1/models` to list the available model IDs.
-omniroute_model_name = "auto/best-reasoning"
-# API key is optional: OmniRoute accepts keyless requests (the built-in "auto"
-# combo includes keyless free providers). Set one only if you enable key auth
-# on the gateway.
-omniroute_api_key = ""
 
 ########## OpenAI API Key
 # Get your API key at https://platform.openai.com/api-keys
@@ -246,7 +228,7 @@ grok_base_url = "https://api.x.ai/v1"
 # API documentation: https://console.groq.com/docs/api-reference
 # Available models: https://console.groq.com/docs/api-reference#models-list
 groq_api_key = ""
-groq_model_name = "llama-3.3-70b-versatile"
+groq_model_name = "qwen/qwen3.8-27b"
 groq_base_url = "https://api.groq.com/openai/v1"
 
 ########## Qwen API Key

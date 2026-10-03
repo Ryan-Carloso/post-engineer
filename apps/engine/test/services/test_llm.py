@@ -878,51 +878,6 @@ class TestLiteLLMProvider(unittest.TestCase):
         self.assertIn("Error:", result)
         self.assertIn("g4f package is not installed by default", result)
 
-    def test_omniroute_provider_uses_openai_compatible_client(self):
-        """
-        OmniRoute is a local OpenAI-compatible gateway (Docker, port 20128).
-        Without explicit config it must use the default endpoint, the "auto"
-        model, and a placeholder api_key, since the gateway accepts keyless
-        calls until the real providers are connected on the dashboard.
-        """
-        config.app["llm_provider"] = "omniroute"
-        config.app["omniroute_api_key"] = ""
-        config.app["omniroute_base_url"] = ""
-        config.app["omniroute_model_name"] = ""
-
-        class FakeCompletions:
-            def create(self, **kwargs):
-                self.kwargs = kwargs
-                message = types.SimpleNamespace(content="hello\nomniroute")
-                choice = types.SimpleNamespace(message=message)
-                return types.SimpleNamespace(choices=[choice])
-
-        fake_completions = FakeCompletions()
-        fake_client = types.SimpleNamespace(
-            chat=types.SimpleNamespace(completions=fake_completions)
-        )
-
-        with (
-            patch.object(llm, "OpenAI", return_value=fake_client) as openai_client,
-            patch.object(llm, "ChatCompletion", types.SimpleNamespace),
-        ):
-            result = llm._generate_response("Say hello")
-
-        openai_client.assert_called_once_with(
-            api_key="omniroute",
-            base_url="http://localhost:20128/v1",
-            timeout=llm.LLM_CLIENT_TIMEOUT_SECONDS,
-            max_retries=llm.LLM_CLIENT_MAX_RETRIES,
-        )
-        self.assertEqual(
-            fake_completions.kwargs,
-            {
-                "model": "auto",
-                "messages": [{"role": "user", "content": "Say hello"}],
-            },
-        )
-        self.assertEqual(result, "hello omniroute")
-
     def test_zai_provider_uses_openai_compatible_client(self):
         """
         Z.ai (Zhipu GLM) exposes an OpenAI-compatible endpoint. Without
@@ -1044,10 +999,10 @@ class TestLiteLLMProvider(unittest.TestCase):
             },
         )
 
-    def test_default_provider_is_omniroute(self):
+    def test_default_provider_is_groq(self):
         """
-        Without an explicit llm_provider, the engine defaults to the local
-        OmniRoute gateway (the primary), not OpenAI.
+        Without an explicit llm_provider, the engine defaults to Groq
+        (the primary), not OpenAI.
         """
         config.app.pop("llm_provider", None)
         config.app["openrouter_api_key"] = "or-key"
@@ -1057,10 +1012,10 @@ class TestLiteLLMProvider(unittest.TestCase):
         ) as generate:
             result = llm._generate_response_with_fallback("test")
 
-        generate.assert_called_once_with("test", "omniroute")
+        generate.assert_called_once_with("test", "groq")
         self.assertEqual(result, "ok")
 
-    def test_wrapper_default_provider_is_omniroute(self):
+    def test_wrapper_default_provider_is_groq(self):
         """
         The legacy _generate_response wrapper carries its own default for
         llm_provider; pin it too so a future revert of just one of the two
@@ -1073,7 +1028,7 @@ class TestLiteLLMProvider(unittest.TestCase):
         ) as generate:
             result = llm._generate_response("test")
 
-        generate.assert_called_once_with("test", "omniroute")
+        generate.assert_called_once_with("test", "groq")
         self.assertEqual(result, "ok")
 
     def test_fallback_to_openrouter_triggers_on_any_error(self):
@@ -1082,7 +1037,7 @@ class TestLiteLLMProvider(unittest.TestCase):
         including non-retryable errors like a 401 from an invalid key. The
         provider is passed as an explicit argument on every call.
         """
-        config.app["llm_provider"] = "omniroute"
+        config.app["llm_provider"] = "groq"
         config.app["openrouter_api_key"] = "or-key"
 
         with patch.object(
@@ -1094,9 +1049,9 @@ class TestLiteLLMProvider(unittest.TestCase):
 
         self.assertEqual(result, "script from openrouter")
         self.assertEqual(generate.call_count, 2)
-        generate.assert_any_call("test", "omniroute")
+        generate.assert_any_call("test", "groq")
         generate.assert_any_call("test", "openrouter")
-        self.assertEqual(config.app["llm_provider"], "omniroute")
+        self.assertEqual(config.app["llm_provider"], "groq")
 
     def test_fallback_does_not_mutate_global_provider_config(self):
         """
@@ -1105,7 +1060,7 @@ class TestLiteLLMProvider(unittest.TestCase):
         mutating global state — mutating would make a parallel request read
         "openrouter" as the primary provider and lose its own fallback.
         """
-        config.app["llm_provider"] = "omniroute"
+        config.app["llm_provider"] = "groq"
         config.app["openrouter_api_key"] = "or-key"
 
         with patch.object(
@@ -1118,9 +1073,9 @@ class TestLiteLLMProvider(unittest.TestCase):
         self.assertEqual(result, "recovered")
         self.assertEqual(
             generate.call_args_list,
-            [call("test", "omniroute"), call("test", "openrouter")],
+            [call("test", "groq"), call("test", "openrouter")],
         )
-        self.assertEqual(config.app["llm_provider"], "omniroute")
+        self.assertEqual(config.app["llm_provider"], "groq")
 
     def test_successful_response_with_error_prefix_is_not_retried(self):
         """
@@ -1128,7 +1083,7 @@ class TestLiteLLMProvider(unittest.TestCase):
         "Error: " is not a failure — it must not trigger the fallback nor
         be replaced by another generation.
         """
-        config.app["llm_provider"] = "omniroute"
+        config.app["llm_provider"] = "groq"
         config.app["openrouter_api_key"] = "or-key"
 
         with patch.object(
@@ -1140,7 +1095,7 @@ class TestLiteLLMProvider(unittest.TestCase):
 
         self.assertEqual(result, "Error: this is a legit model answer")
         self.assertEqual(generate.call_count, 1)
-        self.assertEqual(config.app["llm_provider"], "omniroute")
+        self.assertEqual(config.app["llm_provider"], "groq")
 
     def test_fallback_skipped_when_primary_provider_is_openrouter(self):
         """
@@ -1164,7 +1119,7 @@ class TestLiteLLMProvider(unittest.TestCase):
         self.assertEqual(config.app["llm_provider"], "openrouter")
 
     def test_fallback_skipped_without_openrouter_api_key(self):
-        config.app["llm_provider"] = "omniroute"
+        config.app["llm_provider"] = "groq"
         config.app["openrouter_api_key"] = ""
 
         with patch.object(
@@ -1176,15 +1131,15 @@ class TestLiteLLMProvider(unittest.TestCase):
 
         self.assertEqual(result, "Error: gateway unreachable")
         self.assertEqual(generate.call_count, 1)
-        generate.assert_called_once_with("test", "omniroute")
-        self.assertEqual(config.app["llm_provider"], "omniroute")
+        generate.assert_called_once_with("test", "groq")
+        self.assertEqual(config.app["llm_provider"], "groq")
 
     def test_fallback_returns_openrouter_error_when_both_fail(self):
         """
         If OpenRouter (the fallback) fails too, its error is returned — no
         loop, and no masking that the whole call failed.
         """
-        config.app["llm_provider"] = "omniroute"
+        config.app["llm_provider"] = "groq"
         config.app["openrouter_api_key"] = "or-key"
 
         with patch.object(
@@ -1196,7 +1151,7 @@ class TestLiteLLMProvider(unittest.TestCase):
 
         self.assertEqual(result, "Error: openrouter down")
         self.assertEqual(generate.call_count, 2)
-        self.assertEqual(config.app["llm_provider"], "omniroute")
+        self.assertEqual(config.app["llm_provider"], "groq")
 
 
 class TestAIRequestTracking(unittest.TestCase):
@@ -1218,8 +1173,8 @@ class TestAIRequestTracking(unittest.TestCase):
         A successful primary call emits one ai_request: backend=llm, the
         provider/model that served it, fallback_used=False.
         """
-        config.app["llm_provider"] = "omniroute"
-        config.app["omniroute_model_name"] = ""
+        config.app["llm_provider"] = "groq"
+        config.app["groq_model_name"] = ""
         config.app["openrouter_api_key"] = "or-key"
 
         with patch.object(
@@ -1229,9 +1184,9 @@ class TestAIRequestTracking(unittest.TestCase):
 
         self.assertEqual(result, "hello script")
         self.assertEqual(props["backend"], "llm")
-        self.assertEqual(props["provider"], "omniroute")
-        self.assertEqual(props["model"], "auto")
-        self.assertEqual(props["primary_provider"], "omniroute")
+        self.assertEqual(props["provider"], "groq")
+        self.assertEqual(props["model"], "qwen/qwen3.8-27b")
+        self.assertEqual(props["primary_provider"], "groq")
         self.assertFalse(props["fallback_used"])
         self.assertTrue(props["success"])
         self.assertEqual(props["error"], "")
@@ -1249,8 +1204,8 @@ class TestAIRequestTracking(unittest.TestCase):
         When the primary fails and OpenRouter serves the request, the event
         records provider=openrouter with fallback_used=True and the primary.
         """
-        config.app["llm_provider"] = "omniroute"
-        config.app["omniroute_model_name"] = ""
+        config.app["llm_provider"] = "groq"
+        config.app["groq_model_name"] = ""
         config.app["openrouter_api_key"] = "or-key"
         config.app["openrouter_model_name"] = ""
 
@@ -1276,7 +1231,7 @@ class TestAIRequestTracking(unittest.TestCase):
         self.assertEqual(props["provider"], "openrouter")
         self.assertEqual(props["model"], "openrouter/auto")
         self.assertTrue(props["fallback_used"])
-        self.assertEqual(props["primary_provider"], "omniroute")
+        self.assertEqual(props["primary_provider"], "groq")
         self.assertTrue(props["success"])
         self.assertEqual(props["error"], "")
         self.assertEqual(props["prompt_tokens"], 18)
@@ -1289,8 +1244,8 @@ class TestAIRequestTracking(unittest.TestCase):
         When both primary and fallback fail, the event carries success=False
         and the sanitized error of the last attempt.
         """
-        config.app["llm_provider"] = "omniroute"
-        config.app["omniroute_model_name"] = ""
+        config.app["llm_provider"] = "groq"
+        config.app["groq_model_name"] = ""
         config.app["openrouter_api_key"] = "or-key"
         config.app["openrouter_model_name"] = ""
 
@@ -1343,10 +1298,9 @@ class TestAIRequestTracking(unittest.TestCase):
             config.app[f"{provider}_model_name"] = ""
         expected = {
             "g4f": "gpt-3.5-turbo-16k-0613",
-            "omniroute": "auto",
             "aihubmix": "gpt-5.4-mini",
             "aimlapi": "openai/gpt-4o-mini",
-            "groq": "llama-3.3-70b-versatile",
+            "groq": "qwen/qwen3.8-27b",
             "evolink": "gpt-5.5",
             "mimo": "mimo-v2.5-pro",
             "volcengine": "doubao-seed-2-1-turbo-260628",
@@ -1392,8 +1346,8 @@ class TestAIRequestTracking(unittest.TestCase):
         event records the primary provider with fallback_used=False and
         the primary's error.
         """
-        config.app["llm_provider"] = "omniroute"
-        config.app["omniroute_model_name"] = ""
+        config.app["llm_provider"] = "groq"
+        config.app["groq_model_name"] = ""
         config.app["openrouter_api_key"] = ""
 
         with patch.object(
@@ -1402,8 +1356,8 @@ class TestAIRequestTracking(unittest.TestCase):
             result, props = self._tracked(llm._generate_response_with_fallback, "hi")
 
         self.assertTrue(result.startswith("Error:"))
-        self.assertEqual(props["provider"], "omniroute")
-        self.assertEqual(props["primary_provider"], "omniroute")
+        self.assertEqual(props["provider"], "groq")
+        self.assertEqual(props["primary_provider"], "groq")
         self.assertFalse(props["fallback_used"])
         self.assertFalse(props["success"])
         self.assertIn("primary down", props["error"])
@@ -1413,12 +1367,12 @@ class TestAIRequestTracking(unittest.TestCase):
         The error property is capped (symmetric with the Modal path): SDK
         exceptions can embed multi-KB context that must not ship whole.
         """
-        config.app["llm_provider"] = "omniroute"
-        config.app["omniroute_model_name"] = ""
+        config.app["llm_provider"] = "groq"
+        config.app["groq_model_name"] = ""
         with patch.object(llm, "track_ai_request") as track:
             llm._track_llm_request(
-                provider="omniroute",
-                primary_provider="omniroute",
+                provider="groq",
+                primary_provider="groq",
                 fallback_used=False,
                 duration_ms=1,
                 success=False,
@@ -1430,12 +1384,12 @@ class TestAIRequestTracking(unittest.TestCase):
     def test_track_llm_request_scrubs_credential_fragments(self):
         # response_preview ships truncated model output; credential-shaped
         # fragments echoed in it must be redacted before reaching PostHog.
-        config.app["llm_provider"] = "omniroute"
-        config.app["omniroute_model_name"] = ""
+        config.app["llm_provider"] = "groq"
+        config.app["groq_model_name"] = ""
         with patch.object(llm, "track_ai_request") as track:
             llm._track_llm_request(
-                provider="omniroute",
-                primary_provider="omniroute",
+                provider="groq",
+                primary_provider="groq",
                 fallback_used=False,
                 duration_ms=1,
                 success=False,
@@ -1452,12 +1406,12 @@ class TestAIRequestTracking(unittest.TestCase):
         # JSON/dict-shaped credentials echoed in model output or SDK errors
         # must be redacted before reaching PostHog — the bare-shape test
         # above does not cover these.
-        config.app["llm_provider"] = "omniroute"
-        config.app["omniroute_model_name"] = ""
+        config.app["llm_provider"] = "groq"
+        config.app["groq_model_name"] = ""
         with patch.object(llm, "track_ai_request") as track:
             llm._track_llm_request(
-                provider="omniroute",
-                primary_provider="omniroute",
+                provider="groq",
+                primary_provider="groq",
                 fallback_used=False,
                 duration_ms=1,
                 success=False,
@@ -1473,8 +1427,8 @@ class TestAIRequestTracking(unittest.TestCase):
         Long responses are truncated in the event preview while
         response_chars keeps the full length.
         """
-        config.app["llm_provider"] = "omniroute"
-        config.app["omniroute_model_name"] = ""
+        config.app["llm_provider"] = "groq"
+        config.app["groq_model_name"] = ""
         config.app["openrouter_api_key"] = "or-key"
         long_text = "x" * 2000
 

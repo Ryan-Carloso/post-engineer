@@ -11,7 +11,7 @@ storage/
 tasks/
 logs/
 cache_videos/
-omniroute-data/
+
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
