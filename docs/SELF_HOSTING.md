@@ -58,10 +58,11 @@ Provision the database schema in your Supabase project:
 3. `supabase/migrations/003_engine-task-state.sql` — engine task state
    (only needed when running the engine with `MPT_STATE_BACKEND=supabase`).
 4. `supabase/migrations/004_billing_reconcile.sql` — billing
-   reconciliation: the `refund_reviews` queue, zombie/stuck detectors,
-   and the daily pg_cron trigger (needs `CRON_SECRET` in the web env and
-   the `app.cron_base_url` / `app.cron_secret` database settings; without
-   them the schedule step no-ops with a NOTICE — see the file header).
+   reconciliation: zombie/stuck detectors and the daily pg_cron trigger
+   (needs `CRON_SECRET` in the web env and the `app.cron_base_url` /
+   `app.cron_secret` database settings; without them the schedule step
+   no-ops with a NOTICE — see the file header). The reconciliation is
+   fully automatic (engine-state-verified refunds, no human queue).
 
 Paste each file into the Supabase Dashboard > SQL Editor and run, in order
 (the `001_`, `002_`, `003_` prefixes encode the order — always apply the

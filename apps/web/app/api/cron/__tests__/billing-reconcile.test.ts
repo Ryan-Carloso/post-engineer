@@ -27,8 +27,8 @@ const REPORT = {
   zombiesAlreadySettled: [],
   stuckAutoRefunded: [],
   stuckSkippedValueDelivered: [],
-  queuedForReview: [],
-  queuedAlready: [],
+  stuckCompletedBackfilled: [],
+  stuckDeferred: [],
   errors: [],
 };
 

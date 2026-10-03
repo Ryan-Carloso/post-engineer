@@ -1,59 +1,34 @@
 -- 004_billing_reconcile.sql
 --
 -- Billing reconciliation: zombie schedule detectors + the stuck-generation
--- review queue.
+-- detector.
 --
 -- Adds (all idempotent, non-destructive):
---   1. public.refund_reviews — human review queue for ambiguous stuck
---      video generations. RLS enabled with no permissive policies: only
---      the service_role client (admin-verified routes) touches it.
---   2. public.find_zombie_schedule_candidates(p_cutoff) — detector for
+--   1. public.find_zombie_schedule_candidates(p_cutoff) — detector for
 --      schedules older than p_cutoff with zero scheduled_posts, zero
 --      video_generations, and a ledger spend under the batch:<schedule_id>
 --      generation id. A schedule matching this is provably worthless.
---   3. public.find_stuck_generations(p_cutoff) — detector for
+--   2. public.find_stuck_generations(p_cutoff) — detector for
 --      video_generations stuck in a non-terminal status past p_cutoff
 --      that were never refunded.
---   4. public.schedule_billing_reconcile() — wires the daily pg_cron job
+--   3. public.schedule_billing_reconcile() — wires the daily pg_cron job
 --      that POSTs the web cron endpoint. Runs only when pg_cron/pg_net
 --      are installed AND app.cron_base_url/app.cron_secret are set;
 --      otherwise it raises a NOTICE and the daily run stays unwired (the
 --      fallback is documented in the PR description).
+--
+-- The reconciliation itself is fully automatic: the web cron route
+-- verifies each stuck generation against the live engine task state
+-- (failed -> refund with the engine's reason, complete -> backfill,
+-- active/unreachable -> time-boxed auto-refund) and emits `refund_issued`
+-- per user as the audit trail. There is no human review queue.
 --
 -- One-time production setup (as the postgres role, after this migration):
 --   alter database postgres set app.cron_base_url = 'https://<web-host>';
 --   alter database postgres set app.cron_secret = '<CRON_SECRET>';
 --   select public.schedule_billing_reconcile();
 
--- 1. Review queue -------------------------------------------------------
-create table if not exists public.refund_reviews (
-  id uuid not null default gen_random_uuid() primary key,
-  user_id uuid not null,
-  kind text not null default 'stuck_generation',
-  ref_id text not null,
-  tokens numeric not null default 0,
-  evidence jsonb not null default '{}'::jsonb,
-  status text not null default 'pending'
-    check (status in ('pending', 'approved', 'rejected')),
-  note text,
-  created_at timestamptz not null default now(),
-  decided_at timestamptz
-);
-
--- One pending review per generation: concurrent reconcile runs can never
--- double-queue the same stuck job.
-create unique index if not exists refund_reviews_pending_unique
-  on public.refund_reviews (kind, ref_id)
-  where status = 'pending';
-
-create index if not exists refund_reviews_status_idx
-  on public.refund_reviews (status, created_at desc);
-
--- Locked down: no permissive policies, so only the service_role client
--- (used exclusively by admin-verified routes) can read/write.
-alter table public.refund_reviews enable row level security;
-
--- 2. Zombie schedule detector --------------------------------------------
+-- 1. Zombie schedule detector --------------------------------------------
 -- A zombie is a schedule that can never produce value: old enough that
 -- dispatch would long have happened, zero slots, zero video_generations
 -- rows, but a ledger spend under the unified flow's batch:<schedule_id>
@@ -101,11 +76,11 @@ as $$
     );
 $$;
 
--- 3. Stuck generation detector --------------------------------------------
+-- 2. Stuck generation detector --------------------------------------------
 -- video_generations rows stuck in a non-terminal status past the cutoff
 -- that were never refunded. The web cron route verifies each against the
--- live engine task before deciding: provably dead -> auto-refund,
--- anything ambiguous -> refund_reviews.
+-- live engine task state (failed -> auto-refund with the engine's reason,
+-- complete -> backfill, active/unreachable -> time-boxed auto-refund).
 create or replace function public.find_stuck_generations(p_cutoff timestamptz)
 returns table (
   generation_pk uuid,
@@ -146,7 +121,7 @@ begin
 end
 $$;
 
--- 4. Daily schedule --------------------------------------------------------
+-- 3. Daily schedule --------------------------------------------------------
 -- Wires (idempotently) the pg_cron job that triggers the web
 -- reconciliation endpoint. Safe to re-run: it unschedules first.
 create or replace function public.schedule_billing_reconcile()

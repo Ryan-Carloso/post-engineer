@@ -3,9 +3,12 @@
 //
 // Called by the pg_cron job (see supabase/migrations/004_billing_reconcile.sql)
 // with `Authorization: Bearer <CRON_SECRET>`. Runs zombie auto-refunds and
-// stuck-generation detection (ambiguous cases land in refund_reviews for a
-// human). Not user-facing: no rate limit, no session — the shared secret is
-// the only gate, compared timing-safely.
+// stuck-generation reconciliation (engine-state-verified: failed tasks
+// refund with the engine's reason, completed tasks backfill, active or
+// unreachable tasks auto-refund past the day limit). Fully automatic —
+// every refund emits `refund_issued` as the audit trail. Not user-facing:
+// no rate limit, no session — the shared secret is the only gate,
+// compared timing-safely.
 //
 // Service-role bypasses RLS: the reconcile store only touches
 // billing-owned tables and re-checks ownership on every query.
