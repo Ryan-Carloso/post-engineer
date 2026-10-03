@@ -156,12 +156,14 @@ export default function PostDetailPage() {
   if (isLoading) return <DetailSkeleton />;
 
   // Detail fetch failures carry the server's safe message; null results
-  // mean genuinely not found (404 from both endpoints).
+  // mean genuinely not found (404 from both endpoints). The raw server
+  // message is never rendered — pt-BR users get the localized copy, and
+  // the English original stays in the server logs for diagnostics.
   const loadError =
     (slotQuery.isError ? (slotQuery.error instanceof Error ? slotQuery.error.message : null) : null) ??
     (generationQuery.isError ? (generationQuery.error instanceof Error ? generationQuery.error.message : null) : null);
   if (loadError) {
-    return <DetailNotFound message={loadError} />;
+    return <DetailNotFound message={t('posts.detailLoadError')} />;
   }
   if (!slot && !generation) return <DetailNotFound />;
 

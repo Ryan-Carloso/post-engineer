@@ -79,6 +79,7 @@ export const enDictionary: Dictionary = {
     back: 'Back to posts',
     notFound: 'Post not found — it may have been deleted.',
     videoLoadError: 'The video could not be loaded.',
+    detailLoadError: 'Could not load this post. Please try again.',
   },
 
   publishing: {

@@ -78,6 +78,7 @@ export const ptDictionary = {
     back: 'Voltar para posts',
     notFound: 'Post não encontrado — pode ter sido apagado.',
     videoLoadError: 'Não foi possível carregar o vídeo.',
+    detailLoadError: 'Não foi possível carregar este post. Tente novamente.',
   },
 
   // Home / dashboard
