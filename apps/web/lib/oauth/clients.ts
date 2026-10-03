@@ -86,8 +86,9 @@ export interface CimdDocument {
 
 //---------------
 // SSRF guard for outbound fetches to attacker-controlled URLs (CodeQL #17).
-// The CIMD client_id comes from the unauthenticated authorize request, so
-// the document fetch must never reach non-public IPs: cloud metadata
+// Threat model: GET /oauth/authorize takes `client_id` from unauthenticated
+// query params and fetchCimdDocument retrieves it server-side, so the
+// document fetch must never reach non-public IPs: cloud metadata
 // (169.254.169.254), loopback, private ranges, or anything similar.
 //---------------
 
