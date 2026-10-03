@@ -125,6 +125,26 @@ notices.
   reviewer). Read reviewer feedback before requesting merge; address findings
   in focused follow-up commits.
 
+## Billing reconciliation (2026-10-03)
+
+- **Never treat engine HTTP 200 as "task alive".** The task endpoint
+  returns a numeric `state` (-1 failed, 1 complete, 3 queued, 4
+  processing) plus the failure reason — a 200 with `state: -1` is a
+  provably dead task, and treating it as alive silently routes
+  refundable failures into "ambiguous, wait for a human". Always parse
+  the body; only -1/1 are terminal, everything else is active, and a
+  200 without a readable state is unverifiable (not active).
+- **Time-boxed auto-refund beats a human queue for stuck jobs.** Past
+  N days (default 3) with no video and no provable delivery, refund:
+  a wrong refund costs ~$0.10 of GPU, charging a user for nothing is
+  the worse error. Every refund emits `refund_issued` as the audit
+  trail — the queue was process theater around a decision the data
+  already made.
+- **Backfill, don't fail, on proof of delivery.** A published slot
+  means the video shipped: mark the generation `completed`, not
+  `failed`. A `failed` row for a published video lies to every
+  consumer of the history.
+
 ## API naming lint (2026-10-03)
 
 - `.github/workflows/api-naming.yml` lints only NEW field/param names in the
@@ -2091,3 +2111,23 @@ Five MINORs on the merged funnel, fixed as a follow-up PR with one focused TDD c
 - **Make the DNS lookup injectable for tests:** `fetchCimdDocument(clientId, fetchImpl = fetch, lookupImpl = defaultLookup)` — unit tests inject a fake lookup, no network in tests.
 - **Decline reviewer suggestions that make failure modes worse.** OpenCode suggested `ipv4ToInt` throw instead of returning null — but the `addresses.some(...)` call site has no try/catch, so a throw would propagate uncaught to the authorize route (500). Null degrades safely (falls through to the IPv6 prefix checks, then allow). Verify where an exception would land before accepting a "throw instead of null" suggestion.
 - **Worktree without node_modules:** a fresh `git worktree add` has no node_modules; symlink `apps/web/node_modules` from the main checkout to run vitest/tsc/eslint, and DELETE the symlink before committing (it would otherwise be staged as a symlink).
+
+## Billing review learnings, PR #72 (2026-10-03, Avery's idempotent-replay overcharge)
+- **A replay must never charge: audit every path that returns `replayed: true`.** The schedule-PK-conflict path spent successfully and then replayed without refunding ("the winner owns the spend") — but `token_transactions.generation_id` has no unique constraint, so both spends stood. The code comment even said "no unique constraint on generation_id is assumed", contradicting the no-refund decision. When the spend is not idempotent at the DB level, the app must undo its own redundant spend.
+- **Fail closed on idempotency pre-checks.** The schedule-existence and ledger lookups destructured only `data`, swallowing DB errors — a failed SELECT looked like "not found" and the route proceeded to charge. Any lookup that gates a charge must 500 on error, never charge blind.
+- **Zombie schedules (0 slots) need an age-gated cleanup, not an empty replay.** A crash between schedule insert and slot insert leaves a schedule that can never complete; replaying it returns 0 slots for tokens already spent. Delete it only when old enough (>10 min) that no live request can be working on it; the ledger check then prevents a second charge when the operation runs fresh.
+- **A test that never reaches the code path it names is worse than no test.** The old "PK conflict without refunding" test set `existingScheduleId`, so step 7 replayed before the insert — the `scheduleInsertErrorCode` mock was dead config. When a test configures an error, assert the error path was actually taken.
+- **Verify "ignored key" claims against the code, not the reporter's mental model.** Avery claimed the explicit idempotencyKey is ignored (derived from params). Verified false: MCP `tools.ts` passes `args.idempotencyKey`, route `resolveIdempotency` prefers body key → header → randomUUID. His two schedule IDs (06b50605, 2dfec992) are UUIDv5 and DIFFER — proving different keys were used. His "attempts" were retries; the charges (11→10→9) happened in the originals that created the 0-slot zombies, not in the replays.
+
+## PR #72 babysit — OpenCode MINOR round (2026-10-03, review on c8e8089)
+- **Keep runtime ledger text free of documentation.** The PK-race refund's `p_reason` carried "Unified generate+schedule: schedule PK race; refunded redundant spend" while the code comment above already explained the mechanism — `p_reason` lands in the ledger and is caller-visible, so it now reads "PK race; refunded redundant spend". The existing test pins `/PK race/` (regex, not exact string), so the trim stayed green. When a reviewer flags doc-in-runtime-data, check whether the test pins the exact string before trimming.
+- **pnpm `.bin` shims break through a symlinked node_modules.** A top-level `node_modules` symlink makes `.bin/vitest`'s relative `../.pnpm/...` path resolve against the symlink location. Run vitest by its real path instead: `node $(readlink -f <main>/apps/web/node_modules/vitest/vitest.mjs) run <test>`. Delete the symlink before committing.
+
+## PR #72 babysit — OpenCode round 2 (2026-10-03, review on d9c74e4)
+- **Verify the reviewer's race scenario mechanically before accepting the severity.** The CRITICAL claimed a zombie-deletion race → double spend, but the scenario as stated was incoherent (slot count already precedes the delete; the >10min age gate makes "original slot insert eventually succeeds" impossible on Vercel). Tracing it by hand found the REAL adjacent bug instead: the PK-race refund fired unconditionally even when this request skipped its spend (`alreadySpent`), which could refund a legitimate prior/concurrent spend (revenue leak, not double spend). Fix: gate the refund on `!alreadySpent`; new test pins zero refunds when the spend was skipped (was red: refund fired once).
+- **OpenCode MINOR "dead test configuration" was stale.** It claimed the PK-conflict test still set `existingScheduleId` (line 106), but the test and `DEFAULT_CFG` no longer set it — fixed during the PR's own development per the earlier learning. Verified against the file; no action.
+- **OpenCode MINOR "runtime text contains documentation" was explicitly non-actionable** — the reviewer itself noted it was intentional. No action.
+
+## PR #75 babysit — OpenCode MINOR round (2026-10-03, review on 54b322e)
+- **supabase-js `rpc()` never throws on Postgres errors — it returns `{ data, error }`.** The PK-race refund did `await supabase.rpc('refund_generation_tokens', ...)` without destructuring, so a failed refund was silently swallowed while the log claimed "refunded redundant spend". The reviewer's line citation was hallucinated (route.ts:286-290 is validation code; the call is at :831), but the substance was real. Fixed TDD: destructure `{ error: refundError }`, log loudly on failure, and still replay the winner (the winner's schedule exists regardless — a refund failure is a billing discrepancy, not a request failure). Applied the same check to the sibling insert-failure path (same swallow pattern).
+- **Declined as stale (same review):** "engine API timeouts not handled" cited reconcile.ts:510-513 (actually `stuckAgeDays`) — `checkEngineTask` already has a 10s AbortController timeout and is no-throw by design (every failure → `{ kind: 'unknown' }`). "review-card.tsx:920-923" — the whole `/admin/refunds` surface was deleted in the deterministic redesign; the file doesn't exist.

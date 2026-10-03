@@ -6,6 +6,7 @@ import { recordGenerationUpdate } from '@/lib/generation/video-generation';
 import { categorizeGenerationError } from '@/lib/generation/generation-errors';
 import { apiErrorResponse } from '@/lib/api-error';
 import { rewriteVideoUrls, SAFE_TASK_ID } from '@/lib/video-urls';
+import { taskPayload, taskState, extractTaskError } from '@/lib/engine-task-state';
 import { logger } from '@/lib/logger';
 
 //---------------
@@ -118,32 +119,10 @@ export async function GET(
 }
 
 //---------------
-// Terminal-state detection — the engine wraps the task under `data` and
-// reports progress as a numeric `state` (-1 failed, 1 complete, 3 queued,
-// 4 processing), alongside a string `status` like "publishing". Some shapes
-// only carry a string status, so both are recognized. The numeric state
-// wins when present because the string status is not terminal-oriented.
+// Terminal-state detection — shared parsing lives in
+// lib/engine-task-state; the string-status fallback below stays here
+// because only this proxy honors non-numeric shapes.
 //---------------
-function taskPayload(value: unknown): Record<string, unknown> | null {
-  if (typeof value !== 'object' || value === null) return null;
-  const record = value as Record<string, unknown>;
-  const data = record.data;
-  if (typeof data === 'object' && data !== null) {
-    return data as Record<string, unknown>;
-  }
-  return record;
-}
-
-function taskState(task: Record<string, unknown>): number | null {
-  for (const candidate of [task.state, task.task_state]) {
-    if (typeof candidate === 'number' && Number.isInteger(candidate)) return candidate;
-    if (typeof candidate === 'string' && /^-?\d+$/.test(candidate.trim())) {
-      return parseInt(candidate.trim(), 10);
-    }
-  }
-  return null;
-}
-
 function hasStringState(task: Record<string, unknown>, values: string[]): boolean {
   return [task.status, task.task_status].some(
     (candidate) =>
@@ -165,18 +144,6 @@ function isCompletedVideoStatus(value: unknown): boolean {
   const state = taskState(task);
   if (state !== null) return state === 1;
   return hasStringState(task, ['completed', 'complete', 'done', 'success']);
-}
-
-//---------------
-// extractTaskError — the engine stores the failure reason in the task's
-// `error` field; the status proxy passes it through. Returns null when the
-// body carries no usable error text.
-//---------------
-function extractTaskError(value: unknown): string | null {
-  const task = taskPayload(value);
-  if (!task) return null;
-  const candidate = task.error;
-  return typeof candidate === 'string' && candidate.length > 0 ? candidate : null;
 }
 
 // (rewriteVideoUrls lives in lib/video-urls.ts — shared with delete-preview.)
