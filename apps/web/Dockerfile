@@ -17,6 +17,11 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/web/package.json apps/web/
 RUN pnpm install --frozen-lockfile
 
+# apps/web/tsconfig.json extends this root config, so it must exist before
+# `pnpm build` runs the Next.js type check. It lives next to the other root
+# files copied above so editing it does not invalidate the install layer.
+COPY tsconfig.base.json ./
+
 # Application code, VERSION (inlined as APP_VERSION) and build-time env.
 COPY VERSION ./
 COPY apps/web ./apps/web
