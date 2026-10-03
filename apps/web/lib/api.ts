@@ -958,6 +958,29 @@ export function useVideoGenerationsQuery(limit?: number) {
 }
 
 //---------------
+// parseJsonBody — reads a JSON response body, tolerating non-JSON error
+// pages (e.g. a Vercel 502 HTML body). Returns null instead of throwing
+// parse noise like "Unexpected token '<'".
+//---------------
+async function parseJsonBody<T>(response: Response): Promise<T | null> {
+  try {
+    return (await response.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+//---------------
+// throwForBadResponse — maps a non-OK response to a clean Error, preferring
+// the server's error message when the body is JSON.
+//---------------
+async function throwForBadResponse(response: Response, fallback: string): Promise<never> {
+  const data = await parseJsonBody<{ error?: string }>(response);
+  const message = typeof data?.error === 'string' && data.error.length > 0 ? data.error : fallback;
+  throw new Error(message);
+}
+
+//---------------
 // Per-slot operations (Posts page). Only slots not yet dispatched to the
 // engine can be edited/deleted — the API returns 409 otherwise and the
 // error message is surfaced to the user, never swallowed.
@@ -969,8 +992,9 @@ export async function updateSlotTopic(slotId: string, topic: string): Promise<st
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ topic }),
   });
-  const data: { success: boolean; topic?: string; error?: string } = await response.json();
-  if (!response.ok || !data.success) throw new Error(data.error ?? 'Failed to update slot');
+  if (!response.ok) await throwForBadResponse(response, 'Failed to update slot');
+  const data = await parseJsonBody<{ success: boolean; topic?: string; error?: string }>(response);
+  if (!data?.success) throw new Error(data?.error ?? 'Failed to update slot');
   return data.topic ?? topic;
 }
 
@@ -978,8 +1002,9 @@ export async function deleteSlot(slotId: string): Promise<void> {
   const response = await fetch(`/api/schedule/slots/${encodeURIComponent(slotId)}`, {
     method: 'DELETE',
   });
-  const data: { success: boolean; error?: string } = await response.json();
-  if (!response.ok || !data.success) throw new Error(data.error ?? 'Failed to delete slot');
+  if (!response.ok) await throwForBadResponse(response, 'Failed to delete slot');
+  const data = await parseJsonBody<{ success: boolean; error?: string }>(response);
+  if (!data?.success) throw new Error(data?.error ?? 'Failed to delete slot');
 }
 
 export function useUpdateSlotMutation() {
@@ -1075,8 +1100,9 @@ export async function fetchSlotDetail(slotId: string): Promise<SlotDetailPayload
     method: 'GET',
   });
   if (response.status === 404) return null;
-  const data: { success: boolean; slot?: Omit<SlotDetailPayload['slot'], 'publishLinks'> & { publishLinks?: unknown }; schedule?: SlotDetailPayload['schedule']; persona?: SlotDetailPayload['persona']; error?: string } = await response.json();
-  if (!response.ok || !data.success) throw new Error(data.error ?? 'Failed to load post.');
+  if (!response.ok) await throwForBadResponse(response, 'Failed to load post.');
+  const data = await parseJsonBody<{ success: boolean; slot?: Omit<SlotDetailPayload['slot'], 'publishLinks'> & { publishLinks?: unknown }; schedule?: SlotDetailPayload['schedule']; persona?: SlotDetailPayload['persona']; error?: string }>(response);
+  if (!data?.success) throw new Error(data?.error ?? 'Failed to load post.');
   if (!data.slot || !data.schedule) throw new Error('Failed to load post.');
   return {
     slot: { ...data.slot, publishLinks: narrowPublishLinks(data.slot.publishLinks) },
@@ -1090,8 +1116,9 @@ export async function fetchGenerationDetail(generationId: string): Promise<Video
     method: 'GET',
   });
   if (response.status === 404) return null;
-  const data: { success: boolean; generation?: VideoGeneration; error?: string } = await response.json();
-  if (!response.ok || !data.success) throw new Error(data.error ?? 'Failed to load post.');
+  if (!response.ok) await throwForBadResponse(response, 'Failed to load post.');
+  const data = await parseJsonBody<{ success: boolean; generation?: VideoGeneration; error?: string }>(response);
+  if (!data?.success) throw new Error(data?.error ?? 'Failed to load post.');
   if (!data.generation) throw new Error('Failed to load post.');
   return data.generation;
 }

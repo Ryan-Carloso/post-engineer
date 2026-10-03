@@ -455,6 +455,17 @@ describe('api', () => {
     await expect(updateSlotTopic('slot-1', 'x')).rejects.toThrow('Only a slot that has not started generating can be edited.');
   });
 
+  it('updateSlotTopic throws a clean error (not parse noise) on a non-JSON error body', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response('<html><body>Bad Gateway</body></html>', {
+        status: 502,
+        headers: { 'content-type': 'text/html' },
+      }),
+    );
+    const { updateSlotTopic } = await import('@/lib/api');
+    await expect(updateSlotTopic('slot-1', 'x')).rejects.toThrow('Failed to update slot');
+  });
+
   it('deleteSlot calls DELETE /api/schedule/slots/:id and throws on failure', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ success: true }));
     const { deleteSlot } = await import('@/lib/api');
