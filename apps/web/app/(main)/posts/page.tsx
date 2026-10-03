@@ -104,7 +104,7 @@ const GenerationCard = ({
   const videoUrl = videoUrlFor(generation.engineTaskId);
   const hasThumb = generation.status === 'completed' && videoUrl !== null;
   return (
-    <Link href={`/posts/${generation.id}`} className="block h-full">
+    <Link href={`/posts/${generation.generationId}`} className="block h-full">
       <Card className={`flex h-full flex-col gap-0 rounded-xl p-4 transition-colors ${CARD_BORDER}`}>
         <div className="flex items-center justify-between gap-2">
           <span role="img" aria-label="video" className="inline-flex text-muted-foreground">

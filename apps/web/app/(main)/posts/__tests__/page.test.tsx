@@ -493,7 +493,21 @@ describe('PostsPage card links', () => {
 
     expect(screen.getByRole('link', { name: /Past topic/ })).toHaveAttribute('href', '/posts/r1');
     expect(screen.getByRole('link', { name: /Failed topic/ })).toHaveAttribute('href', '/posts/r2');
-    expect(screen.getByRole('link', { name: /Launch recap/ })).toHaveAttribute('href', '/posts/g3');
+    // Generation cards link by generationId (the business id the detail
+    // endpoint resolves via .eq('generation_id', ...)), NOT the DB row PK.
+    expect(screen.getByRole('link', { name: /Launch recap/ })).toHaveAttribute('href', '/posts/gen-3');
+  });
+
+  it('links generation cards to the id the detail lookup resolves by', async () => {
+    // Fixture has DISTINCT id/generationId: the href must be the value the
+    // detail endpoint filters on, otherwise the card 404s on click.
+    const generation = { ...COMPLETED_GENERATION, id: 'row-uuid-9', generationId: 'gen-9' };
+    mockQueries({ generations: [generation] });
+    const user = userEvent.setup();
+    render(<PostsPage />);
+    await user.click(screen.getByRole('button', { name: /posts\.tabHistory/ }));
+
+    expect(screen.getByRole('link', { name: /Launch recap/ })).toHaveAttribute('href', '/posts/gen-9');
   });
 
   it('keeps showing the video thumbnail with the #t=0.1 frame in the card', async () => {
