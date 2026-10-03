@@ -8,10 +8,15 @@ vi.mock('@/lib/request-auth', () => ({
 vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(() => 'log-id'), warn: vi.fn(() => 'log-id'), info: vi.fn(() => 'log-id') },
 }));
+vi.mock('@/lib/rate-limit', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/rate-limit')>();
+  return { ...actual, applyRateLimit: vi.fn().mockResolvedValue(null) };
+});
 
 import { GET } from '../route';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { logger } from '@/lib/logger';
+import { NextResponse } from 'next/server';
 
 //---------------
 // GET /api/persona/video-download/:taskId/*path — the guessable file name
@@ -43,6 +48,19 @@ describe('GET /api/persona/video-download', () => {
     vi.unstubAllEnvs();
   });
 
+  it('returns 429 when the rate limiter rejects the request', async () => {
+    const { applyRateLimit } = await import('@/lib/rate-limit');
+    vi.mocked(applyRateLimit).mockResolvedValueOnce(
+      NextResponse.json({ success: false, error: 'Too many requests.' }, { status: 429 }),
+    );
+
+    const response = await GET(new Request('https://app.test/api/persona/video-download/task-1/final-1.mp4'), {
+      params: Promise.resolve({ taskId: 'task-1', path: ['final-1.mp4'] }),
+    });
+
+    expect(response.status).toBe(429);
+  });
+
   it('streams through when the requested file exists upstream', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('video-bytes', {
       status: 200,
@@ -53,8 +71,7 @@ describe('GET /api/persona/video-download', () => {
       params: Promise.resolve({ taskId: 'task-1', path: ['final-1.mp4'] }),
     });
 
-    expect(response.status).toBe(200);
-    expect(await response.text()).toBe('video-bytes');
+    expect(response.status).toBe(200);    expect(await response.text()).toBe('video-bytes');
     expect(response.headers.get('content-type')).toBe('video/mp4');
   });
 

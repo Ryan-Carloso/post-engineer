@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
 import { apiErrorResponse } from '@/lib/api-error';
+import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 import { SAFE_TASK_ID } from '@/lib/video-urls';
 
@@ -19,6 +20,10 @@ export async function GET(request: Request, context: DownloadContext): Promise<N
   // cookie session is checked, and API keys get a 401).
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
+
+  // The proxy streams arbitrary-size bodies — rate-limit the heavy surface.
+  const limited = await applyRateLimit(request, RATE_LIMITS.mediaUpload, auth.userId);
+  if (limited) return limited;
 
   const baseUrl = process.env.MONEYPRINT_API_URL?.replace(/\/+$/, '');
   if (!baseUrl) {

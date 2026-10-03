@@ -17,6 +17,10 @@ vi.mock('@/lib/supabase/server', () => ({
 vi.mock('@/lib/supabase/service', () => ({
   createSupabaseServiceClient: vi.fn(),
 }));
+vi.mock('@/lib/rate-limit', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/rate-limit')>();
+  return { ...actual, applyRateLimit: vi.fn().mockResolvedValue(null) };
+});
 
 import { DELETE, GET, PATCH } from '../route';
 import { requireSupabaseSession } from '@/lib/request-auth';
@@ -419,6 +423,20 @@ describe('GET /api/schedule/slots/[slotId]', () => {
     expect(response.status).toBe(200);
     expect(createSupabaseServiceClient).toHaveBeenCalled();
     expect(createSupabaseServerClient).not.toHaveBeenCalled();
+  });
+
+  it('returns 429 when the rate limiter rejects the request', async () => {
+    const { applyRateLimit } = await import('@/lib/rate-limit');
+    vi.mocked(applyRateLimit).mockResolvedValueOnce(
+      NextResponse.json({ success: false, error: 'Too many requests.' }, { status: 429 }),
+    );
+    mockAuth();
+
+    const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
+      params: Promise.resolve({ slotId: 'slot-1' }),
+    });
+
+    expect(response.status).toBe(429);
   });
 
   it('enriches a generating slot with live engine progress', async () => {

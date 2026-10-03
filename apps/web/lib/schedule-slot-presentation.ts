@@ -32,6 +32,7 @@ export async function enrichSlot(
   slot: { status?: unknown; task_id?: unknown; error?: unknown; schedule_id?: unknown; id?: unknown },
   userId: string,
   queuePositions: QueuePositions = new Map(),
+  options: { allowEngineLookup?: boolean } = {},
 ): Promise<SlotEnrichment> {
   const dbStatus = typeof slot.status === 'string' ? slot.status : 'pending';
   const enrichment: SlotEnrichment = {
@@ -54,7 +55,8 @@ export async function enrichSlot(
     case 'generating':
     case 'failed': {
       const taskId = typeof slot.task_id === 'string' ? slot.task_id : null;
-      if (taskId) {
+      // allowEngineLookup false degrades past the fan-out cap (progress 0).
+      if (taskId && options.allowEngineLookup !== false) {
         try {
           const task = await fetchEngineTaskProgress(taskId, userId);
           enrichment.progress = task.progress;

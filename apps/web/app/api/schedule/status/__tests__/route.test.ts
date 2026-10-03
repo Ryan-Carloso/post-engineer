@@ -375,6 +375,24 @@ describe('GET slot progress (0–100)', () => {
     expect(url).toContain('/api/v1/tasks/task-1');
   });
 
+  it('caps the engine fan-out and degrades past the cap to progress 0', async () => {
+    mockEngine({ data: { progress: 62, stage: 'lipsync' } });
+    const slots = Array.from({ length: 30 }, (_, i) => ({
+      id: `up-${i}`,
+      slot_at: '2026-09-24T10:00:00Z',
+      status: 'generating',
+      topic: `Topic ${i}`,
+      schedule_id: 's1',
+      task_id: `task-${i}`,
+    }));
+    const body = await getStatus(slots);
+
+    // Only ENGINE_LOOKUP_CAP (25) engine calls; the rest degrade to 0.
+    expect(vi.mocked(fetch).mock.calls.length).toBe(25);
+    expect(body.upcoming.slice(0, 25).every((s) => s.progress === 62)).toBe(true);
+    expect(body.upcoming.slice(25).every((s) => s.progress === 0)).toBe(true);
+  });
+
   it('generating sem task_id → 0 sem chamar o engine', async () => {
     mockEngine({ data: { progress: 45 } });
     const body = await getStatus([

@@ -3,6 +3,7 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { apiErrorResponse } from '@/lib/api-error';
+import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { enrichSlot } from '@/lib/schedule-slot-presentation';
 import { fetchEnginePublishResults } from '@/lib/engine-tasks';
 import { resolvePublishLinks, type PublishLink } from '@/lib/publish-links';
@@ -126,6 +127,10 @@ export async function GET(
 ): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
+  // The detail fans out to the engine (progress + publish results, 10s
+  // timeouts each) — rate-limit like the other expensive surfaces.
+  const limited = await applyRateLimit(request, RATE_LIMITS.deletePreview, auth.userId);
+  if (limited) return limited;
   const supabase =
     auth.isApiKey === true || auth.isOAuth === true
       ? createSupabaseServiceClient()

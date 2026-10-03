@@ -70,15 +70,26 @@ function buildQueuePositions(rows: unknown): QueuePositions {
 // (shared enrichSlot from lib/schedule-slot-presentation). Engine task
 // lookups run concurrently (Promise.all): sequential one-off generation
 // means at most one generating slot per schedule, but a caller may list
-// many schedules.
+// many schedules. The fan-out is capped (PR #41 rule): past the cap,
+// generating/failed slots degrade to progress 0 instead of firing
+// unbounded concurrent engine calls.
 //---------------
+const ENGINE_LOOKUP_CAP = 25;
+
 async function withSlotPresentation<T extends { status?: unknown; task_id?: unknown }>(
   slots: T[],
   userId: string,
   queuePositions: QueuePositions,
 ): Promise<(T & SlotEnrichment)[]> {
+  let remaining = ENGINE_LOOKUP_CAP;
   const enrichments = await Promise.all(
-    slots.map((slot) => enrichSlot(slot, userId, queuePositions)),
+    slots.map((slot) => {
+      const needsEngine =
+        (slot.status === 'generating' || slot.status === 'failed') &&
+        typeof slot.task_id === 'string';
+      const allowEngineLookup = !needsEngine || remaining-- > 0;
+      return enrichSlot(slot, userId, queuePositions, { allowEngineLookup });
+    }),
   );
   return slots.map((slot, index) => ({ ...slot, ...enrichments[index] }));
 }
