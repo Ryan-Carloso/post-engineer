@@ -1,5 +1,8 @@
 import 'server-only';
 
+import { lookup as dnsLookup } from 'node:dns/promises';
+import type { LookupAddress } from 'node:dns';
+
 import { isLocalHostname } from '@/lib/oauth-utils';
 
 //---------------
@@ -81,9 +84,71 @@ export interface CimdDocument {
   redirect_uris: string[];
 }
 
+//---------------
+// SSRF guard for outbound fetches to attacker-controlled URLs (CodeQL #17).
+// The CIMD client_id comes from the unauthenticated authorize request, so
+// the document fetch must never reach non-public IPs: cloud metadata
+// (169.254.169.254), loopback, private ranges, or anything similar.
+//---------------
+
+type DnsLookup = (hostname: string) => Promise<LookupAddress[]>;
+
+const defaultLookup: DnsLookup = (hostname) =>
+  dnsLookup(hostname, { all: true });
+
+// IPv4 networks that must never be fetched server-side, as [network, prefix].
+const BLOCKED_IPV4: Array<readonly [number, number]> = [
+  [0x00000000, 8], // 0.0.0.0/8 — this network
+  [0x0a000000, 8], // 10.0.0.0/8 — private
+  [0x64400000, 10], // 100.64.0.0/10 — CGNAT
+  [0x7f000000, 8], // 127.0.0.0/8 — loopback
+  [0xa9fe0000, 16], // 169.254.0.0/16 — link-local (cloud metadata)
+  [0xac100000, 12], // 172.16.0.0/12 — private
+  [0xc0000200, 24], // 192.0.2.0/24 — documentation (TEST-NET-1)
+  [0xc0a80000, 16], // 192.168.0.0/16 — private
+  [0xc6336400, 24], // 198.51.100.0/24 — documentation (TEST-NET-2)
+  [0xcb007100, 24], // 203.0.113.0/24 — documentation (TEST-NET-3)
+  [0xe0000000, 4], // 224.0.0.0/4 — multicast
+  [0xf0000000, 4], // 240.0.0.0/4 — reserved
+];
+
+function ipv4ToInt(ip: string): number | null {
+  const parts = ip.split('.');
+  if (parts.length !== 4) return null;
+  let n = 0;
+  for (const part of parts) {
+    if (!/^\d{1,3}$/.test(part)) return null;
+    const byte = Number(part);
+    if (byte > 255) return null;
+    n = n * 256 + byte;
+  }
+  return n;
+}
+
+/** True when the address is non-public and must never be fetched server-side. */
+export function isBlockedIpAddress(address: string): boolean {
+  // An IPv6 literal can embed an IPv4 address after the last colon
+  // (e.g. ::ffff:127.0.0.1) — check the embedded IPv4 in that case.
+  const lastColon = address.lastIndexOf(':');
+  const maybeV4 = lastColon >= 0 ? address.slice(lastColon + 1) : address;
+  const v4 = ipv4ToInt(maybeV4);
+  if (v4 !== null) {
+    return BLOCKED_IPV4.some(
+      ([network, prefix]) => v4 >>> (32 - prefix) === network >>> (32 - prefix),
+    );
+  }
+  const lower = address.toLowerCase();
+  if (lower === '::1' || lower === '::') return true; // loopback / unspecified
+  if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // fc00::/7 unique local
+  if (/^fe[89ab]/.test(lower)) return true; // fe80::/10 link-local
+  if (lower.startsWith('ff')) return true; // ff00::/8 multicast
+  return false;
+}
+
 export async function fetchCimdDocument(
   clientId: string,
   fetchImpl: typeof fetch = fetch,
+  lookupImpl: DnsLookup = defaultLookup,
 ): Promise<CimdDocument | null> {
   let parsed: URL;
   try {
@@ -93,10 +158,30 @@ export async function fetchCimdDocument(
   }
   if (parsed.protocol !== 'https:') return null;
 
+  // Resolve the host and refuse non-public IPs before fetching (fail closed
+  // when the host does not resolve). Residual risk: DNS rebinding between
+  // this check and the fetch — the no-redirect fetch below bounds the
+  // exposure to a single request against the checked hostname.
+  let addresses: LookupAddress[];
+  try {
+    addresses = await lookupImpl(parsed.hostname);
+  } catch {
+    return null;
+  }
+  if (
+    addresses.length === 0 ||
+    addresses.some((entry) => isBlockedIpAddress(entry.address))
+  ) {
+    return null;
+  }
+
   let response: Response;
   try {
     response = await fetchImpl(clientId, {
       headers: { Accept: 'application/json' },
+      // Never follow redirects: a 3xx to an internal URL would otherwise be
+      // fetched with the server's network privileges (SSRF).
+      redirect: 'error',
       signal: AbortSignal.timeout(8000),
     });
   } catch {
