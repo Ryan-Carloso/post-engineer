@@ -17,6 +17,7 @@ import type {
 } from '@/lib/types';
 import { logger } from '@/lib/logger';
 import type { PublishLink } from '@/lib/publish-links';
+import { isPublishProvider } from '@/lib/publish-links';
 
 //---------------
 // API — typed fetch clients
@@ -1087,11 +1088,13 @@ function narrowPublishLinks(value: unknown): PublishLink[] {
     const record = entry as Record<string, unknown>;
     const provider = record.provider;
     const url = record.url;
-    if (typeof provider !== 'string' || typeof url !== 'string') continue;
+    // Unknown providers are dropped, not cast: a provider the UI doesn't
+    // know would render its label map as literal "undefined".
+    if (!isPublishProvider(provider) || typeof url !== 'string') continue;
     // An href reaching the DOM must stay https — a "javascript:" value in
     // the payload is an injection surface, not a broken link.
     if (!url.startsWith('https://')) continue;
-    links.push({ provider: provider as PublishLink['provider'], url });
+    links.push({ provider, url });
   }
   return links;
 }

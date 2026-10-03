@@ -558,6 +558,29 @@ describe('api', () => {
     ]);
   });
 
+  it('fetchSlotDetail drops publish links with an unknown provider', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
+      success: true,
+      slot: {
+        id: 'slot-1',
+        status: 'published',
+        publishLinks: [
+          { provider: 'youtube', url: 'https://www.youtube.com/watch?v=abc' },
+          { provider: 'tiktok', url: 'https://www.tiktok.com/@x/video/123' },
+        ],
+      },
+      schedule: { id: 's1' },
+      persona: null,
+    }));
+    const { fetchSlotDetail } = await import('@/lib/api');
+    const detail = await fetchSlotDetail('slot-1');
+    // An unknown provider would render its label map as literal
+    // "undefined" — it is dropped, not cast.
+    expect(detail?.slot.publishLinks).toEqual([
+      { provider: 'youtube', url: 'https://www.youtube.com/watch?v=abc' },
+    ]);
+  });
+
   // The payload crosses a network boundary, so a slot that predates this
   // field (or a malformed one) must read as "no links" instead of handing
   // the UI an undefined it would have to guard at every render.

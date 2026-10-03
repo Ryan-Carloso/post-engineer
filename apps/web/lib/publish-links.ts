@@ -31,6 +31,15 @@ const PROVIDERS: ReadonlySet<string> = new Set<PublishProvider>([
 ]);
 
 //---------------
+// isPublishProvider — type guard for the known provider set. Unknown
+// providers (a future engine addition the UI doesn't know yet) are dropped
+// by narrowPublishLinks rather than rendered with an undefined label.
+//---------------
+export function isPublishProvider(value: unknown): value is PublishProvider {
+  return typeof value === 'string' && PROVIDERS.has(value);
+}
+
+//---------------
 // isHttpsUrl — a link rendered into an href is an injection surface, so
 // only absolute https URLs from a known provider may reach the DOM. This
 // is what keeps a "javascript:" or "http:" value in the payload from
