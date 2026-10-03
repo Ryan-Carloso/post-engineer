@@ -13,8 +13,12 @@ name: Deploy
 #   SUPABASE_ACCESS_TOKEN  - Supabase personal access token (for `supabase link`)
 #   SUPABASE_PROJECT_ID    - Supabase project ref (for `supabase link`)
 #   SUPABASE_DB_PASSWORD   - Database password (direct Postgres connection for `db push`)
-# One-time production bootstrap (run once, locally, before the first automated
-# run): see supabase/README.md ("Pipeline secrets").
+# One-time production bootstrap (run once LOCALLY, before the first automated
+# run — not in CI, not on the VPS): see supabase/README.md ("Pipeline
+# secrets"). It marks the dashboard-applied migrations as applied without
+# re-running their SQL:
+#   supabase migration repair --status applied 001 002 003 \
+#     --db-url "postgresql://postgres:<DB_PASSWORD>@db.<PROJECT_REF>.supabase.co:5432/postgres"
 
 on:
   workflow_run:
@@ -49,6 +53,7 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           set -euo pipefail
+          : "${SUPABASE_ACCESS_TOKEN:?SUPABASE_ACCESS_TOKEN secret is not set}"
           : "${SUPABASE_PROJECT_ID:?SUPABASE_PROJECT_ID secret is not set}"
           : "${SUPABASE_DB_PASSWORD:?SUPABASE_DB_PASSWORD secret is not set}"
           supabase link --project-ref "$SUPABASE_PROJECT_ID" --password "$SUPABASE_DB_PASSWORD"
