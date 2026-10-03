@@ -2026,8 +2026,8 @@ Five MINORs on the merged funnel, fixed as a follow-up PR with one focused TDD c
 - **One redaction shape per failure family.** requests serializes the URL differently per error family: HTTP errors embed the full absolute URL, connection-phase errors (DNS/refused/TLS/timeout) embed only the requoted path fragment. A credential redaction must cover every family the handler can see — pin each with a behavioral test, because the uncovered family stays green in CI. Derive encoded variants from the transport's own requote (`requests.utils.requote_uri`), not a hand-enumerated safe-set that can diverge.
 
 ## Faceless persona 500 — root cause (2026-10-03)
-- **The canonical `supabase/schema.sql` dropped a column DEFAULT during consolidation.** PR #52 copied `recent_image_ids uuid[] not null` from the `persona-images.sql` migration but lost its `default '{}'`. The web persona-creation insert never provided the column, so PostgreSQL rejected EVERY persona insert with a 23502 NOT NULL violation (500). Production had zero personas.
-- **Fix both sides:** include `recent_image_ids: []` in the insert (works regardless of DB default) AND restore `default '{}'` in schema.sql so fresh installs match the migration chain.
+- **The canonical `supabase/001_schema.sql` dropped a column DEFAULT during consolidation.** PR #52 copied `recent_image_ids uuid[] not null` from the `002_persona-images.sql` migration but lost its `default '{}'`. The web persona-creation insert never provided the column, so PostgreSQL rejected EVERY persona insert with a 23502 NOT NULL violation (500). Production had zero personas.
+- **Fix both sides:** include `recent_image_ids: []` in the insert (works regardless of DB default) AND restore `default '{}'` in `001_schema.sql` so fresh installs match the migration chain.
 - **Test pattern:** assert the insert payload contains every NOT NULL-without-default column — a focused regression test beats a generic schema-sync test for a single known column.
 
 ## Faceless persona 500 — OpenCode MINOR round (2026-10-03, review on e508785)
