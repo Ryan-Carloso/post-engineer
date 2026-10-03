@@ -248,12 +248,20 @@ _progress_milestones: dict[str, int] = {}
 
 
 def _task_tracking_context(task_id: str) -> dict[str, object]:
-    """task_id/user_id/flow/pipeline props shared by every lifecycle event."""
+    """task_id/user_id/flow/pipeline props shared by every lifecycle event,
+    plus optional identity props (persona_id/slot_id/schedule_id) when the
+    task row carries them.
+
+    Optional IDs are OMITTED when absent or blank — never the "unknown"
+    sentinel — so PostHog breakdowns don't fill with noise. Identity props
+    (user_id/flow/pipeline) keep the sentinel: a missing user must stay
+    distinguishable from "no user recorded".
+    """
     try:
         task = sm.state.get_task(task_id) or {}
     except Exception:  # noqa: BLE001 — tracking degrades, the pipeline continues
         task = {}
-    return {
+    context: dict[str, object] = {
         "task_id": task_id,
         # `or` (not a get-default): a row that stored an explicit None
         # must degrade to the sentinel too, never a null prop in PostHog.
@@ -261,6 +269,11 @@ def _task_tracking_context(task_id: str) -> dict[str, object]:
         "flow": task.get("flow") or "unknown",
         "pipeline": task.get("pipeline") or "unknown",
     }
+    for key in ("persona_id", "slot_id", "schedule_id"):
+        value = task.get(key)
+        if isinstance(value, str) and value:
+            context[key] = value
+    return context
 
 
 def track_generation_requested(

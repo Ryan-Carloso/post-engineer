@@ -31,7 +31,7 @@ class ScheduleStore:
 
     SLOT_SELECT = (
         "*,schedules!inner("
-        "id,user_id,providers,youtube_account_ids,"
+        "id,user_id,persona_id,providers,youtube_account_ids,"
         "instagram_account_ids,linkedin_account_ids,bluesky_account_ids,"
         "personas(name,niche,script_prompt,language,video_aspect,"
         "photo_path,avatar_url,voice_id,voice_audio_path,paragraph_number,face_mix_percent,face_quality)"
