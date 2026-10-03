@@ -53,6 +53,8 @@ function mockSlotsClient(options: {
   persona?: unknown;
   remaining?: unknown[];
   deleteError?: unknown;
+  rpcResult?: string;
+  rpcError?: unknown;
 }) {
   const calls: ChainCall[] = [];
   const makeChain = (table: string) => {
@@ -83,7 +85,11 @@ function mockSlotsClient(options: {
   const from = vi.fn((table: string) =>
     table === 'scheduled_posts' ? postsChain : table === 'schedules' ? schedulesChain : personasChain,
   );
-  return { from, postsChain, schedulesChain, personasChain, calls };
+  const rpc = vi.fn(async () => ({
+    data: options.rpcResult ?? 'deleted',
+    error: options.rpcError ?? null,
+  }));
+  return { from, rpc, postsChain, schedulesChain, personasChain, calls };
 }
 
 function mockAuth() {
@@ -115,7 +121,7 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
     const client = mockSlotsClient({
       slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', topic: 'T' },
       schedule: { id: 's1', user_id: USER_ID },
-      remaining: [{ id: 'slot-2' }],
+      rpcResult: 'deleted',
     });
     mockAuth();
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
@@ -124,16 +130,18 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
 
     expect(response.status).toBe(200);    const body = (await response.json()) as { success: boolean };
     expect(body.success).toBe(true);
-    // The delete must be scoped to the slot id AND the owner.
-    const deleteCall = client.calls.find((c) => c.op === 'delete');
-    expect(deleteCall?.table).toBe('scheduled_posts');
+    // The atomic RPC scopes the delete to the slot id AND the owner.
+    expect(client.rpc).toHaveBeenCalledWith('delete_slot_if_not_last', {
+      p_slot_id: 'slot-1',
+      p_user_id: USER_ID,
+    });
   });
 
   it('uses the service client for OAuth callers (no cookie session)', async () => {
     const client = mockSlotsClient({
       slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', topic: 'T' },
       schedule: { id: 's1', user_id: USER_ID },
-      remaining: [{ id: 'slot-2' }],
+      rpcResult: 'deleted',
     });
     mockOAuthAuth();
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
@@ -213,7 +221,7 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
     const client = mockSlotsClient({
       slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', topic: 'T' },
       schedule: { id: 's1', user_id: USER_ID },
-      remaining: [],
+      rpcResult: 'is_last_slot',
     });
     mockAuth();
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
@@ -221,7 +229,10 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
     const response = await deleteSlot('slot-1');
 
     expect(response.status).toBe(409);
-    expect(client.calls.some((c) => c.op === 'delete')).toBe(false);
+    expect(client.rpc).toHaveBeenCalledWith('delete_slot_if_not_last', {
+      p_slot_id: 'slot-1',
+      p_user_id: USER_ID,
+    });
   });
 
   it('returns 401 when authentication fails', async () => {

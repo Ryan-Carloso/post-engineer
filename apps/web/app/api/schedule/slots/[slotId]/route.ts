@@ -282,30 +282,38 @@ export async function DELETE(
 
   // The last remaining slot of a schedule cannot be deleted individually —
   // that would leave an active but empty schedule. Delete the whole
-  // schedule instead (DELETE /api/schedule?id=...).
-  const { data: remaining } = await supabase
-    .from('scheduled_posts')
-    .select('id')
-    .eq('schedule_id', slot.schedule_id)
-    .neq('id', slot.id)
-    .limit(1);
-  const remainingRows = Array.isArray(remaining) ? (remaining as { id: string }[]) : [];
-  if (remainingRows.length === 0) {
+  // schedule instead (DELETE /api/schedule?id=...). The check-and-delete is
+  // atomic via the delete_slot_if_not_last RPC (row lock + count + delete
+  // in one transaction); two concurrent deletes cannot both slip past the
+  // guard.
+  const { data: deleteResult, error: rpcError } = await supabase.rpc('delete_slot_if_not_last', {
+    p_slot_id: slot.id,
+    p_user_id: auth.userId,
+  });
+  if (rpcError) {
+    return apiErrorResponse(500, 'Failed to delete slot.', {
+      route: 'DELETE /api/schedule/slots',
+      cause: rpcError,
+    });
+  }
+  if (deleteResult === 'is_last_slot') {
     return apiErrorResponse(409, 'The schedule’s last slot cannot be deleted — delete the schedule instead.', {
       route: 'DELETE /api/schedule/slots',
     });
   }
-
-  const { error: deleteError } = await supabase
-    .from('scheduled_posts')
-    .delete()
-    .eq('id', slot.id)
-    .eq('user_id', auth.userId);
-  if (deleteError) {
-    return apiErrorResponse(500, 'Failed to delete slot.', {
-      route: 'DELETE /api/schedule/slots',
-      cause: deleteError,
-    });
+  if (deleteResult === 'not_found') {
+    return apiErrorResponse(404, 'Slot not found.', { route: 'DELETE /api/schedule/slots' });
+  }
+  if (deleteResult !== 'deleted') {
+    // 'not_deletable': the slot dispatched between the status check and the
+    // RPC — treat as a conflict so the caller retries the read.
+    return apiErrorResponse(
+      409,
+      slot.status === 'published'
+        ? 'A published post cannot be deleted.'
+        : `A slot with status "${slot.status}" cannot be deleted.`,
+      { route: 'DELETE /api/schedule/slots', metadata: { status: slot.status } },
+    );
   }
   return NextResponse.json({ success: true });
 }
