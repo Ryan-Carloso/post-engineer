@@ -298,6 +298,38 @@ class BatchScheduleTests(unittest.TestCase):
             persona_id="persona-3",
         )
 
+    def test_dispatch_generation_omits_blank_schedule_id_only(self):
+        # Second mixed permutation: blank schedule_id with a set slot_id
+        # and persona_id. Each identity prop is filtered independently, so
+        # only the blank one must be absent from the persisted row.
+        from app.models.schema import TaskVideoRequest
+
+        store = _FakeStore()
+        scheduler = self._scheduler(store)
+        request = TaskVideoRequest(video_subject="Batch topic one")
+
+        with (
+            patch("app.services.task.start"),
+            patch("app.services.fill_schedule.generate.threading.Thread"),
+        ):
+            scheduler.generator._dispatch_generation(
+                "task-4",
+                request,
+                "user-1",
+                slot_id="slot-4",
+                schedule_id="",
+                persona_id="persona-4",
+            )
+
+        scheduler.task_state.update_task.assert_called_once_with(
+            "task-4",
+            user_id="user-1",
+            flow="batch",
+            pipeline="video",
+            slot_id="slot-4",
+            persona_id="persona-4",
+        )
+
 
 
 
