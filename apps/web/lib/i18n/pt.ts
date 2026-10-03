@@ -87,6 +87,7 @@ export const ptDictionary = {
     subtitle: 'Gere os vídeos e agende a publicação de uma vez.',
     personaLabel: 'Persona',
     personaHint: 'A persona que gera o vídeo e a voz.',
+    personaNoNiche: 'Sem nicho definido',
     personaRequired: 'Escolha uma persona.',
     noPersonasTitle: 'Você ainda não tem personas.',
     noPersonasHint: 'Crie uma persona antes de agendar posts.',

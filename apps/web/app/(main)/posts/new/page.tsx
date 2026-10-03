@@ -31,6 +31,13 @@ import {
   INPUT_CLASS,
   SECTION_LABEL_CLASS,
 } from '@/lib/ui';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import AccountCard from '@/components/account-card';
+import PersonaAvatar from '@/components/persona-avatar';
+import { ProviderIcon } from '@/components/provider-icon';
 import { cn } from '@/lib/utils';
 import { distributeSlots, MAX_POST_TOPICS } from '@/lib/schedule/slot-distribution';
 import { parseZonedDateTime } from '@/lib/timezone';
@@ -326,6 +333,15 @@ const NewPostFeedback = () => {
 //---------------
 // Persona — obrigatória: é ela que renderiza o rosto e traz a voz, então um
 // post não existe sem uma.
+//
+// shadcn RadioGroup + Label em vez de <select>: a persona é o objeto mais
+// importante do formulário e precisa da foto (o mesmo avatar do card em
+// /personas) — um select nativo não mostra imagem.
+//
+// O RadioGroupItem do shadcn é um leaf (ele desenha o pontinho e descarta
+// children), então ele fica como o controle real, `sr-only` + `id`, e o card
+// é um Label apontando para ele: clique no card seleciona, o item continua
+// sendo o alvo de teclado e leitor de tela.
 //---------------
 const NewPostPersonaField = () => {
   const { t } = useI18n();
@@ -333,21 +349,54 @@ const NewPostPersonaField = () => {
   const personaId = useNewPostStore((s) => s.personaId);
   const setPersonaId = useNewPostStore((s) => s.setPersonaId);
   return (
-    <section className={CARD_CLASS}>
+    <section className={cn(CARD_CLASS, 'space-y-4')}>
       <SectionTitle icon={<FilmIcon />} label={t('newPost.personaLabel')} hint={t('newPost.personaHint')} />
-      <select
+      <RadioGroup
         value={personaId}
-        onChange={(event) => setPersonaId(event.target.value)}
+        onValueChange={setPersonaId}
         aria-label={t('newPost.personaLabel')}
-        className={cn(INPUT_CLASS, 'mt-4 cursor-pointer')}
+        className="grid gap-3"
       >
-        <option value="">{t('newPost.personaRequired')}</option>
-        {(personasQuery.data ?? []).map((persona) => (
-          <option key={persona.id} value={persona.id}>
-            {persona.name}
-          </option>
-        ))}
-      </select>
+        {(personasQuery.data ?? []).map((persona) => {
+          const itemId = `new-post-persona-${persona.id}`;
+          const selected = personaId === persona.id;
+          return (
+            <Label
+              key={persona.id}
+              htmlFor={itemId}
+              data-selected={selected ? 'true' : 'false'}
+              className={cn(
+                'flex cursor-pointer items-center gap-3 rounded-2xl border bg-white p-3 transition-colors',
+                // Foco no mesmo azul-marinho da seleção (o token `ring` é
+                // outro azul e brigaria com o anel de selecionado).
+                'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent/40 has-[:focus-visible]:ring-offset-2',
+                selected
+                  ? 'border-accent bg-accent/5 ring-1 ring-accent'
+                  : 'border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50',
+              )}
+            >
+              <RadioGroupItem value={persona.id} id={itemId} aria-label={persona.name} className="sr-only" />
+              <PersonaAvatar
+                avatarUrl={persona.avatarUrl}
+                photoUrl={persona.photoUrl}
+                name={persona.name}
+                size={44}
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold text-neutral-900">{persona.name}</span>
+                <span className="mt-0.5 block truncate text-xs text-neutral-500">
+                  {persona.niche ?? t('newPost.personaNoNiche')}
+                </span>
+              </span>
+              {selected ? (
+                <span className="shrink-0 text-accent">
+                  <CheckIcon />
+                </span>
+              ) : null}
+            </Label>
+          );
+        })}
+      </RadioGroup>
     </section>
   );
 };
@@ -405,8 +454,9 @@ const NewPostTopicsField = () => {
 };
 
 //---------------
-// Contas — um checkbox por conta conectada, agrupada por rede. A seleção é
-// estado global do app (useUploadStore), a mesma que a tela de contas
+// Contas — as Same cards da tela de contas (AccountCard: miniatura real da
+// conta + checkbox de seleção), agrupadas por rede com o glifo da rede. A
+// seleção é estado global do app (useUploadStore), a mesma que /accounts
 // escreve: quem marcou um canal lá encontra ele marcado aqui.
 //---------------
 const NewPostAccountsField = () => {
@@ -423,40 +473,64 @@ const NewPostAccountsField = () => {
       {
         provider: 'youtube' as const,
         label: 'YouTube',
-        accounts: (youtube.data?.accounts ?? []).map((account) => ({
-          id: account.channelId,
-          label: account.channelName,
-        })),
+        cards: (youtube.data?.accounts ?? []).map((account) => (
+          <AccountCard
+            key={`${account.provider}:${account.channelId}`}
+            type="youtube"
+            name={account.channelName}
+            email={account.email}
+            thumbnail={account.thumbnail}
+            selected={selected.youtube.includes(account.channelId)}
+            onSelect={() => toggle('youtube', account.channelId)}
+          />
+        )),
       },
       {
         provider: 'instagram' as const,
         label: 'Instagram',
-        accounts: (instagram.data?.accounts ?? []).map((account) => ({
-          id: account.igUserId,
-          label: `@${account.username}`,
-        })),
+        cards: (instagram.data?.accounts ?? []).map((account) => (
+          <AccountCard
+            key={`${account.provider}:${account.igUserId}`}
+            type="instagram"
+            name={`@${account.username}`}
+            thumbnail={account.profilePictureUrl}
+            selected={selected.instagram.includes(account.igUserId)}
+            onSelect={() => toggle('instagram', account.igUserId)}
+          />
+        )),
       },
       {
         provider: 'linkedin' as const,
         label: 'LinkedIn',
-        accounts: (linkedin.data?.accounts ?? []).map((account) => ({
-          id: account.providerAccountId,
-          label: account.accountName ?? account.providerAccountId,
-        })),
+        cards: (linkedin.data?.accounts ?? []).map((account) => (
+          <AccountCard
+            key={`${account.provider}:${account.providerAccountId}`}
+            type="linkedin"
+            name={account.accountName ?? account.providerAccountId}
+            selected={selected.linkedin.includes(account.providerAccountId)}
+            onSelect={() => toggle('linkedin', account.providerAccountId)}
+          />
+        )),
       },
       {
         provider: 'bluesky' as const,
         label: 'Bluesky',
-        accounts: (bluesky.data?.accounts ?? []).map((account) => ({
-          id: account.did,
-          label: `@${account.handle}`,
-        })),
+        cards: (bluesky.data?.accounts ?? []).map((account) => (
+          <AccountCard
+            key={`${account.provider}:${account.did}`}
+            type="bluesky"
+            name={account.handle}
+            handle={`@${account.handle}`}
+            selected={selected.bluesky.includes(account.did)}
+            onSelect={() => toggle('bluesky', account.did)}
+          />
+        )),
       },
     ],
-    [youtube.data, instagram.data, linkedin.data, bluesky.data],
+    [youtube.data, instagram.data, linkedin.data, bluesky.data, selected, toggle],
   );
 
-  const connectedCount = groups.reduce((total, group) => total + group.accounts.length, 0);
+  const connectedCount = groups.reduce((total, group) => total + group.cards.length, 0);
 
   return (
     <section className={cn(CARD_CLASS, 'space-y-4')}>
@@ -464,48 +538,34 @@ const NewPostAccountsField = () => {
       {connectedCount === 0 ? (
         <div className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50 px-4 py-8 text-center">
           <p className="text-sm text-neutral-600">{t('newPost.accountsNone', { provider: 'YouTube' })}</p>
-          <Link href="/accounts" className={cn(SECONDARY_BUTTON_CLASS, 'mt-4')}>
-            <PlusIcon />
-            {t('newPost.connectAccounts')}
-          </Link>
+          <Button variant="outline" className="mt-4 border-dashed" asChild>
+            <Link href="/accounts">
+              <PlusIcon />
+              {t('newPost.connectAccounts')}
+            </Link>
+          </Button>
         </div>
       ) : (
         <div className="space-y-5">
           {groups.map((group) => (
             <div key={group.provider}>
               <div className="flex items-center gap-2">
+                <ProviderIcon provider={group.provider} />
                 <p className="text-sm font-semibold text-neutral-900">{group.label}</p>
-                {group.accounts.length === 0 ? (
+                <Badge variant="secondary" className="text-[11px]">
+                  {group.cards.length}
+                </Badge>
+                {group.cards.length === 0 && (
                   <span className="text-xs text-neutral-400">
                     {t('newPost.accountsNone', { provider: group.label })}
                   </span>
-                ) : null}
+                )}
               </div>
-              {group.accounts.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {group.accounts.map((account) => {
-                    const checked = selected[group.provider].includes(account.id);
-                    return (
-                      <label
-                        key={`${group.provider}:${account.id}`}
-                        className={cn(
-                          'flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition-colors',
-                          checked
-                            ? 'border-accent/40 bg-accent/5 text-neutral-900'
-                            : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 hover:bg-neutral-50',
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggle(group.provider, account.id)}
-                          className="size-4 accent-accent"
-                        />
-                        {account.label}
-                      </label>
-                    );
-                  })}
-                </div>
+              {group.cards.length > 0 && (
+                // Uma coluna: o card da conta já tem avatar + nome + checkbox,
+                // e a coluna do formulário é estreita — duas colunas cortam
+                // o nome no meio.
+                <div className="mt-2 grid grid-cols-1 gap-3">{group.cards}</div>
               )}
             </div>
           ))}

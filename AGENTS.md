@@ -90,6 +90,36 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 - They may receive props, including data and callbacks; this is the preferred API for shared UI.
 - Keep fetching, OAuth, state management, and other screen-specific logic outside these components.
 
+### Reuse before you build (strict)
+
+Never hand-roll a control, an avatar, a card or an icon that this repo already
+has. Before writing any new UI, look — in this order:
+
+1. `apps/web/components/ui/` — the shadcn set (`components.json`: style
+   `default`, base `neutral`, lucide icons). Missing primitives are added with
+   `pnpm dlx shadcn@latest add <primitive>`, never hand-written.
+2. `apps/web/components/` — app-level shared pieces: `account-card.tsx`
+   (social account with thumbnail, checkbox **and** compact tile modes),
+   `provider-icon.tsx` (network glyphs), `ui/social-accounts-section.tsx`,
+   `ui/insufficient-tokens-dialog.tsx`, `ui/version-badge.tsx`, `ui/token-pack-cards.tsx`.
+3. `apps/web/lib/ui.tsx` — the icon set (`PlusIcon`, `TrashIcon`, `FilmIcon`,
+   `CalendarIcon`, `CoinsIcon`, `ComposeIcon`, `AccountsIcon`, `GlobeIcon`,
+   `CheckIcon`, `AlertIcon`, `SpinnerIcon`) plus `INPUT_CLASS` and
+   `SECTION_LABEL_CLASS`; compose with `cn()` from `lib/utils.ts` so the
+   caller's classes win.
+4. `apps/web/lib/ui.tsx` providers/registry and `lib/publish-links.ts` for the
+   exhaustive network maps (`satisfies Record<SocialProvider, ...>`).
+
+A second, differently-styled version of an existing component is a bug: it
+drifts, it drops the accessibility work (labels, roles, `aria-*`) and the
+thumbnail/fallback handling that component already does. Reuse it and pass
+`className`/`compact`/callbacks. Only add a component when nothing fits — and
+then say in the PR why.
+
+Visual verification is part of "done": a hand-rolled `<select>` for something
+the app already renders as persona cards (avatar + name + badges) is exactly the
+kind of regression the `preview-ui` skill exists to catch.
+
 ## "use server" Directive
 
 All server actions must use the "use server" directive:

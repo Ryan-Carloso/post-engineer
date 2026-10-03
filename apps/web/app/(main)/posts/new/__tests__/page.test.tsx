@@ -30,6 +30,11 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
 }));
 
+vi.mock('next/image', () => ({
+  // eslint-disable-next-line jsx-a11y/alt-text, @next/next/no-img-element
+  default: (props: React.ComponentProps<'img'>) => <img {...props} />,
+}));
+
 vi.mock('@/lib/ui', () => {
   // The real module exports the icon set plus the two shared class
   // constants the screen composes with `cn`; a partial mock would make the
@@ -41,6 +46,8 @@ vi.mock('@/lib/ui', () => {
     'ComposeIcon',
     'FilmIcon',
     'GlobeIcon',
+    // PersonaAvatar (components/persona-avatar) falls back to it.
+    'ImageIcon',
     'PlusIcon',
     'TrashIcon',
     'AlertIcon',
@@ -90,10 +97,15 @@ const PERSONA = {
   createdAt: '2026-01-01T00:00:00.000Z',
   faceMixPercent: 100,
   faceQuality: 'ok',
+  avatarUrl: 'https://example.test/avatar.png',
+  niche: 'Saúde',
 };
 
 // Mix 0 = faceless: computeVideoTokens prices it at 1 token per video.
 const FACELESS_PERSONA = { ...PERSONA, name: 'Faceless', faceMixPercent: 0 };
+
+// Second option in the picker: needs its own id, the first two share 'p1'.
+const SECOND_PERSONA = { ...PERSONA, id: 'p2', name: 'Resenha Fut', niche: 'Futebol' };
 
 // Inside the 3h-30d window relative to the frozen clock (2030-01-01).
 const START_AT = '2030-01-05T09:00';
@@ -153,7 +165,7 @@ describe('NewPostPage', () => {
   it('renders the create form', () => {
     render(<NewPostPage />);
 
-    expect(screen.getByRole('combobox', { name: /newPost.personaLabel/ })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Viva Leve' })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'newPost.topicsLabel 1' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'newPost.submit' })).toBeInTheDocument();
   });
@@ -298,6 +310,42 @@ describe('NewPostPage', () => {
     expect(alert).toHaveTextContent('newPost.errorGeneric');
     expect(alert).toHaveTextContent('newPost.successPartial');
     expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  //---------------
+  // The persona picker is a shadcn RadioGroup of persona cards, not a native
+  // <select>: the face is the whole point of the choice, so it must show.
+  //---------------
+  it('picks the persona from cards that carry the face, not from a dropdown', async () => {
+    mockQueries({ personas: [PERSONA, SECOND_PERSONA] });
+    render(<NewPostPage />);
+
+    expect(screen.getByRole('radiogroup', { name: 'newPost.personaLabel' })).toBeInTheDocument();
+    expect(screen.getByAltText('Viva Leve')).toHaveAttribute('src', 'https://example.test/avatar.png');
+    // Niche is the persona's second line, like the card in /personas.
+    expect(screen.getByText('Saúde')).toBeInTheDocument();
+
+    // Clicking the card (the label) selects it — the visible surface is not
+    // the control itself, the sr-only RadioGroupItem is.
+    await userEvent.click(screen.getByText('Resenha Fut'));
+
+    expect(useNewPostStore.getState().personaId).toBe('p2');
+    expect(screen.getByRole('radio', { name: 'Resenha Fut' })).toBeChecked();
+  });
+
+  it('falls back to initials when the persona has no avatar nor photo', () => {
+    mockQueries({ personas: [{ ...PERSONA, avatarUrl: undefined }] });
+    render(<NewPostPage />);
+
+    expect(screen.queryByAltText('Viva Leve')).not.toBeInTheDocument();
+    expect(screen.getByText('VL')).toBeInTheDocument();
+  });
+
+  it('says the niche is unset instead of rendering an empty line', () => {
+    mockQueries({ personas: [{ ...PERSONA, niche: undefined }] });
+    render(<NewPostPage />);
+
+    expect(screen.getByText('newPost.personaNoNiche')).toBeInTheDocument();
   });
 
   it('selects accounts through the shared selection the accounts screen writes', async () => {

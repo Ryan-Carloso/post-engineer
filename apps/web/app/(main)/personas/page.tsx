@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -9,10 +8,10 @@ import {
   type PersonaRecord,
 } from '@/lib/api';
 import { DeletePersonaModal } from './delete-persona-modal';
+import PersonaAvatar from '@/components/persona-avatar';
 import { useI18n } from '@/lib/i18n/provider';
 import {
   SparklesIcon,
-  ImageIcon,
   MicIcon,
   PlusIcon,
   GlobeIcon,
@@ -160,7 +159,6 @@ const PersonaCard = ({
   onDeleteRequest: (persona: PersonaRecord) => void;
 }) => {
   const { t } = useI18n();
-  const imageUrl = persona.avatarUrl ?? persona.photoUrl;
 
   return (
     <div className="group relative flex min-h-30 items-center gap-4 rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-neutral-300 hover:shadow-md">
@@ -169,20 +167,14 @@ const PersonaCard = ({
         aria-label={t('personas.details')}
         className="flex min-w-0 flex-1 items-center gap-4"
       >
-        {imageUrl ? (
-          <Image
-            src={imageUrl}
-            alt={persona.name}
-            width={56}
-            height={56}
-            unoptimized
-            className="size-14 shrink-0 rounded-full object-cover ring-2 ring-neutral-100"
-          />
-        ) : (
-          <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-neutral-100 to-neutral-200 text-neutral-400 ring-2 ring-neutral-100">
-            <ImageIcon />
-          </span>
-        )}
+        {/* Avatar compartilhado com o seletor de /posts/new (mesmo
+            fallback, mesmo anel) — duas cópias do bloco divergem. */}
+        <PersonaAvatar
+          avatarUrl={persona.avatarUrl}
+          photoUrl={persona.photoUrl}
+          name={persona.name}
+          size={56}
+        />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold text-neutral-900">{persona.name}</div>
           <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-600 [&_svg]:size-3.5">

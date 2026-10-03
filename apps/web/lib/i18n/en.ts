@@ -88,6 +88,7 @@ export const enDictionary: Dictionary = {
     subtitle: 'Generate the videos and schedule the publishing in one go.',
     personaLabel: 'Persona',
     personaHint: 'The persona that renders the video and provides the voice.',
+    personaNoNiche: 'No niche set',
     personaRequired: 'Choose a persona.',
     noPersonasTitle: 'You have no personas yet.',
     noPersonasHint: 'Create a persona before scheduling posts.',
