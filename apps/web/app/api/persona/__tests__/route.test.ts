@@ -199,10 +199,17 @@ describe('POST /api/persona — modo faceless (100% stock, sem avatar)', () => {
       if (!name || name.startsWith('--') || constraintKeywords.has(name)) {
         continue;
       }
-      columns.set(
-        name,
-        /not null/i.test(trimmed) && !/default/i.test(trimmed),
-      );
+      // Match whole words on the comment-stripped definition: a bare
+      // substring match would silently drop a genuinely required column —
+      // e.g. `default_topic text not null` or a trailing comment mentioning
+      // "default" — and that is exactly the production-500 class this test
+      // exists to catch. Column-level PRIMARY KEY is implicitly NOT NULL in
+      // PostgreSQL, so it counts even without an explicit `not null`.
+      const definition = trimmed.replace(/--.*$/, '');
+      const notNull =
+        /\bnot null\b/i.test(definition) ||
+        /\bprimary key\b/i.test(definition);
+      columns.set(name, notNull && !/\bdefault\b/i.test(definition));
     }
     // Sentinels: guard against a degraded parse passing vacuously.
     expect(columns.has('recent_image_ids')).toBe(true);
