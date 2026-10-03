@@ -52,20 +52,8 @@ describe('usePersonaStore', () => {
   });
 
   it('buildPersonaFormData no longer includes the schedule field (persona/schedule separation)', () => {
-    const state = usePersonaStore.getState();
-    state.setScheduleTimes(['09:00', '14:30']);
-
-    const formData = state.buildPersonaFormData();
+    const formData = usePersonaStore.getState().buildPersonaFormData();
     expect(formData.has('schedule')).toBe(false);
-  });
-
-  it('adds and removes times without duplicating', () => {
-    const state = usePersonaStore.getState();
-    state.addScheduleTime('12:15');
-    state.addScheduleTime('12:15');
-    state.removeScheduleTime('12:15');
-
-    expect(usePersonaStore.getState().scheduleTimes).toEqual(['09:00']);
   });
 
   it('buildPersonaFormData includes avatarUrl when no photo was uploaded', () => {
@@ -250,30 +238,21 @@ describe('usePersonaStore', () => {
   });
 
   //---------------
-  // Autopilot LinkedIn accounts — selection and schedule JSON.
+  // Scheduling has no screen of its own, so the persona store keeps no
+  // scheduling state. These keys are pinned so a future scheduling form
+  // does not silently reintroduce dead state nobody reads.
   //---------------
-
-  it('starts with no LinkedIn account selected', () => {
-    usePersonaStore.getState().resetForm();
-    expect(usePersonaStore.getState().linkedinSelectedIds).toEqual([]);
-  });
-
-  it('setLinkedInSelectedIds define e toggleLinkedInSelectedId alterna', () => {
-    const s = usePersonaStore.getState();
-    s.setLinkedInSelectedIds(['urn:li:person:1']);
-    expect(usePersonaStore.getState().linkedinSelectedIds).toEqual(['urn:li:person:1']);
-
-    s.toggleLinkedInSelectedId('urn:li:org:2');
-    expect(usePersonaStore.getState().linkedinSelectedIds).toEqual(['urn:li:person:1', 'urn:li:org:2']);
-
-    s.toggleLinkedInSelectedId('urn:li:person:1');
-    expect(usePersonaStore.getState().linkedinSelectedIds).toEqual(['urn:li:org:2']);
-  });
-
-  it('resetForm clears the selected LinkedIn accounts', () => {
-    const s = usePersonaStore.getState();
-    s.setLinkedInSelectedIds(['urn:li:person:1']);
-    usePersonaStore.getState().resetForm();
-    expect(usePersonaStore.getState().linkedinSelectedIds).toEqual([]);
+  it('holds no scheduling state', () => {
+    const state = usePersonaStore.getState() as unknown as Record<string, unknown>;
+    for (const key of [
+      'scheduleDays',
+      'scheduleTimes',
+      'timezone',
+      'youtubeSelectedIds',
+      'instagramSelectedIds',
+      'linkedinSelectedIds',
+    ]) {
+      expect(state).not.toHaveProperty(key);
+    }
   });
 });

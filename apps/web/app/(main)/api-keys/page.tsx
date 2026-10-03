@@ -57,7 +57,7 @@ function ApiKeysHero(): React.ReactElement {
         </span>
         <div className="min-w-0">
           <h2 className="text-base font-bold tracking-tight text-[#101728] lg:text-lg">{t('apiKeys.heroTitle')}</h2>
-          <p className="mt-1 text-sm leading-6 text-[#60758a]">{t('apiKeys.heroSubtitle')}</p>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">{t('apiKeys.heroSubtitle')}</p>
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2.5" aria-hidden="true">
@@ -77,7 +77,7 @@ function ApiKeysHero(): React.ReactElement {
       </div>
       <div className="shrink-0 lg:text-right">
         <p className="text-sm font-bold text-[#101728]">{t('apiKeys.heroTagline')}</p>
-        <p className="mt-0.5 text-sm text-[#60758a]">{t('apiKeys.heroTaglineSub')}</p>
+        <p className="mt-0.5 text-sm text-muted-foreground">{t('apiKeys.heroTaglineSub')}</p>
       </div>
     </div>
   );

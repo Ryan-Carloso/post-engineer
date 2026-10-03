@@ -30,11 +30,9 @@ vi.mock('@/lib/api', () => ({
 vi.mock('@/lib/ui', () => ({
   AccountsIcon: () => <span data-testid="icon-accounts" />,
   BoltIcon: () => <span data-testid="icon-bolt" />,
-  ComposeIcon: () => <span data-testid="icon-compose" />,
   KeyIcon: () => <span data-testid="icon-key" />,
   GlobeIcon: () => <span data-testid="icon-globe" />,
   CoinsIcon: () => <span data-testid="icon-coins" />,
-  HomeIcon: () => <span data-testid="icon-home" />,
   HistoryIcon: () => <span data-testid="icon-history" />,
   SparklesIcon: () => <span data-testid="icon-sparkles" />,
   MicIcon: () => <span data-testid="icon-mic" />,
@@ -168,12 +166,27 @@ describe('app/(main)/layout — MainLayout', () => {
 
   it('renders all navigation items', () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-    expect(screen.getAllByText('nav.home').length).toBeGreaterThan(0);
     expect(screen.getAllByText('nav.accounts').length).toBeGreaterThan(0);
     expect(screen.getAllByText('nav.persona').length).toBeGreaterThan(0);
     expect(screen.getAllByText('nav.billing').length).toBeGreaterThan(0);
     expect(screen.getAllByText('nav.apiKeys').length).toBeGreaterThan(0);
     expect(screen.getAllByText('nav.posts').length).toBeGreaterThan(0);
+  });
+
+  //---------------
+  // The home dashboard is gone; the posts list took its place as the first
+  // tab. "Início" must not come back under any label.
+  //---------------
+  it('has no home tab', () => {
+    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+    expect(screen.queryByText('nav.home')).toBeNull();
+  });
+
+  it('lists Posts as the first navigation tab', () => {
+    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+    const sidebar = screen.getByTestId('nav-brand').closest('aside');
+    const firstTab = within(sidebar as HTMLElement).getAllByRole('link')[0];
+    expect(firstTab).toHaveAttribute('title', 'nav.posts');
   });
 
   it('posts tab links to /posts', () => {
@@ -278,9 +291,12 @@ describe('app/(main)/layout — MainLayout', () => {
   });
 
   it('highlights active nav item for current path', () => {
+    vi.mocked(usePathname).mockReturnValue('/personas');
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-    const homeLink = screen.getAllByText('nav.home')[0].closest('a');
-    expect(homeLink?.className).toContain('bg-[#fff3f2]');
+    const personaLink = screen.getAllByText('nav.persona')[0].closest('a');
+    expect(personaLink?.className).toContain('bg-[#fff3f2]');
+    const accountsLink = screen.getAllByText('nav.accounts')[0].closest('a');
+    expect(accountsLink?.className).not.toContain('bg-[#fff3f2]');
   });
 
   it('switches locale when PT/EN buttons clicked', () => {
@@ -328,19 +344,18 @@ describe('app/(main)/layout — MainLayout', () => {
       expect(postsLink?.getAttribute('href')).toBe('/posts');
     });
 
-    it('renders tabs in order: Home, Personas, Posts, Accounts, API keys, Billing', () => {
+    it('renders tabs in order: Posts, Personas, Accounts, API keys, Billing', () => {
       render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
       const labels = within(getMobileNav())
         .getAllByRole('link')
         .map((link) => link.textContent);
-      expect(labels).toEqual(['nav.home', 'nav.persona', 'nav.posts', 'nav.accounts', 'nav.apiKeys', 'nav.billing']);
+      expect(labels).toEqual(['nav.posts', 'nav.persona', 'nav.accounts', 'nav.apiKeys', 'nav.billing']);
     });
 
     it('has no central create/+ button', () => {
       render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
       const nav = getMobileNav();
       expect(within(nav).queryByText('+')).toBeNull();
-      expect(within(nav).queryByLabelText('home.newAutomation')).toBeNull();
       expect(nav.querySelector('a.-mt-7')).toBeNull();
       expect(nav.querySelector('a.size-14')).toBeNull();
     });
@@ -348,7 +363,7 @@ describe('app/(main)/layout — MainLayout', () => {
     it('keeps tabs uniform: every tab has an icon and a text label', () => {
       render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
       const links = within(getMobileNav()).getAllByRole('link');
-      expect(links.length).toBe(6);
+      expect(links.length).toBe(5);
       for (const link of links) {
         expect(link.querySelector('[data-testid^="icon-"]')).not.toBeNull();
         expect(link.textContent?.trim().length).toBeGreaterThan(0);

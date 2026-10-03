@@ -20,29 +20,46 @@ describe('i18n — troca de idioma via UI', () => {
       body: { status: 'ok' },
     }).as('getHealth');
 
+    // "/" redirects to the posts list, which loads these on mount.
+    cy.intercept('GET', '/api/schedule', {
+      statusCode: 200,
+      body: { success: true, schedules: [] },
+    }).as('getSchedules');
+
+    cy.intercept('GET', '/api/schedule/status**', {
+      statusCode: 200,
+      body: { success: true, upcoming: [], recent: [] },
+    }).as('getScheduleStatus');
+
+    cy.intercept('GET', '/api/persona/video-generations**', {
+      statusCode: 200,
+      body: { success: true, generations: [] },
+    }).as('getGenerations');
+
     cy.visit('/');
     cy.wait('@getHealth');
   });
 
   it('troca labels da sidebar de PT para EN e volta', () => {
-    cy.contains('a', 'Início').should('be.visible');
+    // "Contas" translates to "Accounts" — assert on a label that actually
+    // differs, so the swap is proven rather than matching an identical word.
+    cy.contains('a', 'Contas').should('be.visible');
 
     // PT -> EN
     cy.contains('button', 'EN').click();
-    cy.contains('a', 'Home').should('be.visible');
     cy.contains('a', 'Accounts').should('be.visible');
     cy.contains('a', 'App API Key').should('be.visible');
     cy.contains('Operational').should('be.visible');
 
     // EN -> PT
     cy.contains('button', 'PT').click();
-    cy.contains('a', 'Início').should('be.visible');
+    cy.contains('a', 'Contas').should('be.visible');
     cy.contains('Operacional').should('be.visible');
   });
 
   it('persiste o idioma escolhido no localStorage entre visitas', () => {
     cy.contains('button', 'EN').click();
-    cy.contains('a', 'Home').should('be.visible');
+    cy.contains('a', 'Accounts').should('be.visible');
 
     cy.window().then((win) => {
       expect(win.localStorage.getItem('social-hub-locale')).to.eq('en');
@@ -50,7 +67,7 @@ describe('i18n — troca de idioma via UI', () => {
 
     cy.visit('/');
     cy.wait('@getHealth');
-    cy.contains('a', 'Home').should('be.visible');
+    cy.contains('a', 'Accounts').should('be.visible');
   });
 
   it('aplica o idioma salvo no localStorage em outras páginas', () => {
@@ -82,6 +99,6 @@ describe('i18n — troca de idioma via UI', () => {
     cy.visit('/');
     cy.wait('@getHealth');
 
-    cy.contains('a', 'Início').should('be.visible');
+    cy.contains('a', 'Contas').should('be.visible');
   });
 });

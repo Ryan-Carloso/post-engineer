@@ -16,6 +16,8 @@ import type {
   VoiceOption,
 } from '@/lib/types';
 import { logger } from '@/lib/logger';
+import type { PublishLink } from '@/lib/publish-links';
+import { isPublishProvider } from '@/lib/publish-links';
 
 //---------------
 // API — typed fetch clients
@@ -789,46 +791,11 @@ function mapSchedule(row: ScheduleRow): ScheduleConfig {
   };
 }
 
-interface ScheduleSlotInput {
-  personaId: string;
-  providers: string[];
-  youtubeAccountIds: string[];
-  instagramAccountIds: string[];
-  linkedinAccountIds: string[];
-  blueskyAccountIds: string[];
-  daysOfWeek: number[];
-  startHour: number;
-  endHour: number;
-  postsPerDay: number;
-  timezone: string;
-}
-
 async function fetchSchedules(): Promise<ScheduleConfig[]> {
   const response = await fetch('/api/schedule');
   const data: { success: boolean; schedules?: ScheduleRow[] } = await response.json();
   if (!response.ok || !data.success) throw new Error('Failed to fetch schedules');
   return (data.schedules ?? []).map(mapSchedule);
-}
-
-export async function updateSchedule(
-  id: string,
-  updates: Partial<
-    Pick<ScheduleSlotInput, 'daysOfWeek' | 'startHour' | 'endHour' | 'postsPerDay' | 'providers' | 'youtubeAccountIds' | 'instagramAccountIds' | 'linkedinAccountIds' | 'blueskyAccountIds' | 'timezone'>
-  > & { active?: boolean },
-): Promise<void> {
-  const response = await fetch('/api/schedule', {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id, ...updates }),
-  });
-  const data: { success: boolean; error?: string } = await response.json();
-  if (!response.ok || !data.success) throw new Error(data.error ?? 'Failed to update schedule');
-}
-
-async function deleteSchedule(id: string): Promise<void> {
-  const response = await fetch(`/api/schedule?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
-  const data: { success: boolean; error?: string } = await response.json();
-  if (!response.ok || !data.success) throw new Error(data.error ?? 'Failed to delete schedule');
 }
 
 interface ScheduleStatusPayload {
@@ -991,26 +958,190 @@ export function useVideoGenerationsQuery(limit?: number) {
   });
 }
 
-export function useUpdateScheduleMutation() {
+//---------------
+// parseJsonBody — reads a JSON response body, tolerating non-JSON error
+// pages (e.g. a Vercel 502 HTML body). Returns null instead of throwing
+// parse noise like "Unexpected token '<'".
+//---------------
+async function parseJsonBody<T>(response: Response): Promise<T | null> {
+  try {
+    return (await response.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+//---------------
+// throwForBadResponse — maps a non-OK response to a clean Error, preferring
+// the server's error message when the body is JSON.
+//---------------
+async function throwForBadResponse(response: Response, fallback: string): Promise<never> {
+  const data = await parseJsonBody<{ error?: string }>(response);
+  const message = typeof data?.error === 'string' && data.error.length > 0 ? data.error : fallback;
+  throw new Error(message);
+}
+
+//---------------
+// Per-slot operations (Posts page). Only slots not yet dispatched to the
+// engine can be edited/deleted — the API returns 409 otherwise and the
+// error message is surfaced to the user, never swallowed.
+//---------------
+
+export async function updateSlotTopic(slotId: string, topic: string): Promise<string> {
+  const response = await fetch(`/api/schedule/slots/${encodeURIComponent(slotId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ topic }),
+  });
+  if (!response.ok) await throwForBadResponse(response, 'Failed to update slot');
+  const data = await parseJsonBody<{ success: boolean; topic?: string; error?: string }>(response);
+  if (!data?.success) throw new Error(data?.error ?? 'Failed to update slot');
+  return data.topic ?? topic;
+}
+
+export async function deleteSlot(slotId: string): Promise<void> {
+  const response = await fetch(`/api/schedule/slots/${encodeURIComponent(slotId)}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) await throwForBadResponse(response, 'Failed to delete slot');
+  const data = await parseJsonBody<{ success: boolean; error?: string }>(response);
+  if (!data?.success) throw new Error(data?.error ?? 'Failed to delete slot');
+}
+
+export function useUpdateSlotMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...updates }: { id: string } & Parameters<typeof updateSchedule>[1]) =>
-      updateSchedule(id, updates),
+    mutationFn: ({ slotId, topic }: { slotId: string; topic: string }) =>
+      updateSlotTopic(slotId, topic),
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ['fill-schedule-status'] });
+      // The detail page reads ['schedule-slot', slotId] with a 30s staleTime;
+      // invalidate it too so the saved topic shows immediately.
+      void queryClient.invalidateQueries({ queryKey: ['schedule-slot', variables.slotId] });
+    },
+  });
+}
+
+export function useDeleteSlotMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteSlot,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['fill-schedules'] });
       void queryClient.invalidateQueries({ queryKey: ['fill-schedule-status'] });
     },
   });
 }
 
-export function useDeleteScheduleMutation() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: deleteSchedule,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['fill-schedules'] });
-      void queryClient.invalidateQueries({ queryKey: ['fill-schedule-status'] });
-    },
+//---------------
+// Detail endpoints — one post per request, so the Posts detail page never
+// needs to pull the whole history to find a single id. A 404 resolves to
+// null (not found — unknown id or another user's row); any other failure
+// throws and is surfaced by the page's error state.
+//---------------
+
+export interface SlotDetailPayload {
+  slot: {
+    id: string;
+    scheduleId: string;
+    slotAt: string;
+    status: ScheduledSlot['status'];
+    topic: string | null;
+    error: string | null;
+    publishedAt: string | null;
+    taskId: string | null;
+    progress: number;
+    stage: string | null;
+    retryable: boolean | null;
+    queuePosition: number | null;
+    queueTotal: number | null;
+    // Where the post went, one entry per provider. Empty until the slot is
+    // published (nothing exists to link to before that).
+    publishLinks: PublishLink[];
+  };
+  schedule: {
+    id: string;
+    personaId: string;
+    providers: string[];
+    youtubeAccountIds: string[];
+    instagramAccountIds: string[];
+    linkedinAccountIds: string[];
+    blueskyAccountIds: string[];
+  };
+  persona: { id: string; name: string } | null;
+}
+
+//---------------
+// narrowPublishLinks — the route has already derived and validated each
+// link, so this validates the FINAL shape ({ provider, url }) rather than
+// re-deriving it: resolvePublishLinks consumes the engine's raw shape
+// (videoUrl / permalink / postId) and would drop everything here.
+//
+// The payload still crosses a network boundary, so a slot row predating the
+// field — or a malformed entry — must read as "no links" instead of handing
+// the UI an undefined it would have to guard at every render.
+//---------------
+function narrowPublishLinks(value: unknown): PublishLink[] {
+  if (!Array.isArray(value)) return [];
+  const links: PublishLink[] = [];
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const record = entry as Record<string, unknown>;
+    const provider = record.provider;
+    const url = record.url;
+    // Unknown providers are dropped, not cast: a provider the UI doesn't
+    // know would render its label map as literal "undefined".
+    if (!isPublishProvider(provider) || typeof url !== 'string') continue;
+    // An href reaching the DOM must stay https — a "javascript:" value in
+    // the payload is an injection surface, not a broken link.
+    if (!url.startsWith('https://')) continue;
+    links.push({ provider, url });
+  }
+  return links;
+}
+
+export async function fetchSlotDetail(slotId: string): Promise<SlotDetailPayload | null> {
+  const response = await fetch(`/api/schedule/slots/${encodeURIComponent(slotId)}`, {
+    method: 'GET',
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) await throwForBadResponse(response, 'Failed to load post.');
+  const data = await parseJsonBody<{ success: boolean; slot?: Omit<SlotDetailPayload['slot'], 'publishLinks'> & { publishLinks?: unknown }; schedule?: SlotDetailPayload['schedule']; persona?: SlotDetailPayload['persona']; error?: string }>(response);
+  if (!data?.success) throw new Error(data?.error ?? 'Failed to load post.');
+  if (!data.slot || !data.schedule) throw new Error('Failed to load post.');
+  return {
+    slot: { ...data.slot, publishLinks: narrowPublishLinks(data.slot.publishLinks) },
+    schedule: data.schedule,
+    persona: data.persona ?? null,
+  };
+}
+
+export async function fetchGenerationDetail(generationId: string): Promise<VideoGeneration | null> {
+  const response = await fetch(`/api/persona/video-generations/${encodeURIComponent(generationId)}`, {
+    method: 'GET',
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) await throwForBadResponse(response, 'Failed to load post.');
+  const data = await parseJsonBody<{ success: boolean; generation?: VideoGeneration; error?: string }>(response);
+  if (!data?.success) throw new Error(data?.error ?? 'Failed to load post.');
+  if (!data.generation) throw new Error('Failed to load post.');
+  return data.generation;
+}
+
+export function useSlotDetailQuery(slotId: string) {
+  return useQuery<SlotDetailPayload | null>({
+    queryKey: ['schedule-slot', slotId],
+    queryFn: () => fetchSlotDetail(slotId),
+    enabled: slotId !== '',
+    staleTime: 30_000,
+  });
+}
+
+export function useGenerationDetailQuery(generationId: string) {
+  return useQuery<VideoGeneration | null>({
+    queryKey: ['video-generation', generationId],
+    queryFn: () => fetchGenerationDetail(generationId),
+    enabled: generationId !== '',
+    staleTime: 30_000,
   });
 }
 

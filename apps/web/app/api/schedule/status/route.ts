@@ -30,28 +30,11 @@ export function parseLimit(value: string | null): number {
   return Math.min(parsed, MAX_LIMIT);
 }
 
-import { fetchEngineTaskProgress } from '@/lib/engine-tasks';
-import { isRetryableGenerationError } from '@/lib/generation/generation-errors';
-
-//---------------
-// presentStatus — the DB and the engine keep the 'pending' string (no
-// migration); the API presents it as the friendlier 'awaiting'. Every
-// other state passes through unchanged.
-//---------------
-function presentStatus(dbStatus: string): string {
-  return dbStatus === 'pending' ? 'awaiting' : dbStatus;
-}
-
-interface SlotEnrichment {
-  status: string;
-  progress: number;
-  stage: string | null;
-  queuePosition: number | null;
-  queueTotal: number | null;
-  retryable: boolean | null;
-}
-
-type QueuePositions = Map<string, Map<string, { position: number; total: number }>>;
+import {
+  enrichSlot,
+  type QueuePositions,
+  type SlotEnrichment,
+} from '@/lib/schedule-slot-presentation';
 
 //---------------
 // buildQueuePositions — 1-based position of every awaiting+generating
@@ -83,83 +66,30 @@ function buildQueuePositions(rows: unknown): QueuePositions {
 }
 
 //---------------
-// enrichSlot — attach the presentation fields to a schedule slot row.
-//
-// progress/stage come from the live engine task for generating slots,
-// fetched read-only via the shared engine-tasks helper — which, unlike
-// the video-status route, performs NO refunds or history writes. A failed
-// lookup degrades that single slot (progress 0, stage null) instead of
-// failing the request. Failed slots report their last known engine
-// progress plus a retryable flag derived from the error category.
+// withSlotPresentation — attach the presentation fields to every slot
+// (shared enrichSlot from lib/schedule-slot-presentation). Engine task
+// lookups run concurrently (Promise.all): sequential one-off generation
+// means at most one generating slot per schedule, but a caller may list
+// many schedules. The fan-out is capped (PR #41 rule): past the cap,
+// generating/failed slots degrade to progress 0 instead of firing
+// unbounded concurrent engine calls.
 //---------------
-async function enrichSlot(
-  slot: { status?: unknown; task_id?: unknown; error?: unknown; schedule_id?: unknown; id?: unknown },
-  userId: string,
-  queuePositions: QueuePositions,
-): Promise<SlotEnrichment> {
-  const dbStatus = typeof slot.status === 'string' ? slot.status : 'pending';
-  const enrichment: SlotEnrichment = {
-    status: presentStatus(dbStatus),
-    progress: 0,
-    stage: null,
-    queuePosition: null,
-    queueTotal: null,
-    retryable: null,
-  };
-  switch (dbStatus) {
-    case 'pending': {
-      const scheduleId = typeof slot.schedule_id === 'string' ? slot.schedule_id : null;
-      const id = typeof slot.id === 'string' ? slot.id : null;
-      const queue = scheduleId && id ? queuePositions.get(scheduleId)?.get(id) : undefined;
-      enrichment.queuePosition = queue?.position ?? null;
-      enrichment.queueTotal = queue?.total ?? null;
-      return enrichment;
-    }
-    case 'generating':
-    case 'failed': {
-      const taskId = typeof slot.task_id === 'string' ? slot.task_id : null;
-      if (taskId) {
-        try {
-          const task = await fetchEngineTaskProgress(taskId, userId);
-          enrichment.progress = task.progress;
-          if (dbStatus === 'generating') enrichment.stage = task.stage;
-        } catch (error) {
-          logger.warn('[api/schedule/status] engine task progress unavailable', {
-            taskId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
-      if (dbStatus === 'failed') {
-        enrichment.retryable = isRetryableGenerationError(
-          typeof slot.error === 'string' ? slot.error : null,
-        );
-      }
-      return enrichment;
-    }
-    case 'ready':
-    case 'publishing':
-    case 'published':
-      enrichment.progress = 100;
-      enrichment.stage = 'done';
-      return enrichment;
-    default:
-      return enrichment;
-  }
-}
+const ENGINE_LOOKUP_CAP = 25;
 
-//---------------
-// withSlotPresentation — attach the presentation fields to every slot.
-// Engine task lookups run concurrently (Promise.all) since a caller may
-// list many schedules at once.
-//---------------
 async function withSlotPresentation<T extends { status?: unknown; task_id?: unknown }>(
   slots: T[],
   userId: string,
   queuePositions: QueuePositions,
 ): Promise<(T & SlotEnrichment)[]> {
+  let remaining = ENGINE_LOOKUP_CAP;
   const enrichments = await Promise.all(
-    slots.map((slot) => enrichSlot(slot, userId, queuePositions)),
+    slots.map((slot) => {
+      const needsEngine =
+        (slot.status === 'generating' || slot.status === 'failed') &&
+        typeof slot.task_id === 'string';
+      const allowEngineLookup = !needsEngine || remaining-- > 0;
+      return enrichSlot(slot, userId, queuePositions, { allowEngineLookup });
+    }),
   );
   return slots.map((slot, index) => ({ ...slot, ...enrichments[index] }));
 }

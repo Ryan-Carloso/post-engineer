@@ -14,6 +14,20 @@
   --color-foreground: var(--foreground);
   --color-accent: var(--ink-navy);
   --color-accent-hover: #234f70;
+  /* shadcn/ui token set, mapped to the app palette. */
+  --color-card: #ffffff;
+  --color-card-foreground: var(--foreground);
+  --color-primary: var(--ink-navy);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #f1f6fa;
+  --color-secondary-foreground: var(--foreground);
+  --color-muted: #eef3f7;
+  --color-muted-foreground: #60758a;
+  --color-destructive: #c2301e;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #d8e0e7;
+  --color-input: #d7e2ea;
+  --color-ring: #2e6bff;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }

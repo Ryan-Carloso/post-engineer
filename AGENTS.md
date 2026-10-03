@@ -1919,6 +1919,23 @@ Follow these so the same issues don't come back:
 
 ## PR #58 round-6 review learnings (2026-10-02, CI web failure)
 - **JWT tamper tests must flip a fully-significant base64url char.** `token.slice(0, -2) + "aa"` is a byte-level no-op ~1/256 of the time: an ES256 signature is 64 bytes = 86 base64url chars, and the last char carries only 2 data bits (low 4 are padding, ignored by decoders). When the 85th char is already `a` and the 86th's 2 significant bits match, the "tampered" token verifies fine — flaky CI failure. Fix: flip the FIRST signature char (fully significant). Proven with a 300-iteration loop asserting the signature bytes always change and verification always rejects.
+
+## Web review learnings, PR #59 (2026-10-03, OpenCode on 4df1880)
+
+- **Link cards by the lookup key, not the row PK.** Generation cards linked `/posts/${generation.id}` (DB row PK) while the detail endpoint filters `.eq('generation_id', ...)` — every manual generation 404'd. Lesson: the card href must use the same identifier the detail lookup resolves by; pin with DISTINCT id/generationId fixtures.
+- **OAuth callers need the service client too.** `auth.isApiKey === true ? serviceClient : serverClient` excludes OAuth (MCP) callers — no cookie session → RLS returns zero rows → 404 on owned data. Lesson: branch `isApiKey === true || isOAuth === true` (matches sibling routes); add OAuth-path tests.
+- **Distinguish DB-down from not-found at every .single().** `loadOwnedSlot` collapsed every error into 404 — a Supabase outage looked like "not found". Lesson: PGRST116 → 404, else logged 500 (mirrors the GET handler pattern in the same file).
+- **Invalidate the detail query on mutation success.** `useUpdateSlotMutation` invalidated only the list key while the detail page reads `['schedule-slot', slotId]` (30s staleTime) — topic save showed stale values. Lesson: invalidate every query key the mutation's data feeds.
+- **Cap engine fan-out on list endpoints.** `Promise.all(slots.map(enrichSlot))` with limit up to 500 = unbounded engine calls. Lesson: cap at 25 (ENGINE_LOOKUP_CAP) and degrade past the cap to progress 0.
+- **Rate-limit expensive GETs.** New GET surfaces (slot detail, video download) need `applyRateLimit` like the POSTs — a GET that fans out to the engine is not free.
+- **Check response.ok before response.json().** Vercel 502 HTML pages threw parse noise ("Unexpected token '<'") instead of the clean error. Lesson: guard the parse with a helper that returns null on non-JSON.
+- **Delete dead i18n keys.** `posts.close`, `posts.coverPending`, `posts.coverGenerating` had zero usages — dead keys are a smell.
+- **Include new providers end-to-end.** Bluesky account IDs were in the schema and the type but not in the slot detail API select/response or `resolveSlotAccounts` — Bluesky targets were silently dropped. Lesson: when adding a provider, grep every select, response shape, and account-resolution site.
+- **Atomic guards for check-then-act.** DELETE's last-slot check was SELECT-then-DELETE — concurrent deletes could both pass. Lesson: `delete_slot_if_not_last(p_slot_id, p_user_id)` RPC locks the row and does check+delete in one transaction (same class as the primary-swap RPC).
+- **Re-check status in the UPDATE predicate.** PATCH verified pending then UPDATE'd without the guard — a dispatch in between silently rewrote the topic. Lesson: `.eq('status', 'pending')` on the UPDATE; zero rows (PGRST116) → 409.
+- **Validate enums at the narrowing boundary.** `narrowPublishLinks` cast any string to the provider union — unknown providers rendered as literal "undefined". Lesson: `isPublishProvider` guard drops unknowns like malformed entries.
+- **Never render raw server English in localized UI.** The detail page passed `Error.message` straight to the UI — pt-BR users saw English. Lesson: map to i18n keys (`posts.detailLoadError`) with the English original staying in server logs.
+- **Guard spreads against missing fields.** Adding `blueskyAccountIds` to the spread crashed on fixtures (and any API lagging the type) — `...(arr ?? [])` is defense in depth.
 ## Engine review learnings, PR #53 round-13 (2026-10-02, OpenCode on 31a39fb)
 
 - **One redaction helper for every surface that sees the same secret.** `safe_reason` (Discord alerts, logs, client-visible task errors) had only a raw-substring webhook check while `_post` redacted four transport variants — the requoted/path-fragment forms this PR proved exist slipped into the key-anchored scrubber, which cannot match path-embedded tokens. Extracted `redact_known_url(message, url)` into `notify.py` and used it in both places.

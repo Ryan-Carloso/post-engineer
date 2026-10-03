@@ -16,6 +16,7 @@ vi.mock('@/lib/api', () => ({
   useYouTubeAccountsQuery: vi.fn(),
   useInstagramAccountsQuery: vi.fn(),
   useLinkedinAccountsQuery: vi.fn(),
+  useBlueskyAccountsQuery: vi.fn(),
   useVideoGenerationsQuery: vi.fn(),
 }));
 
@@ -40,6 +41,7 @@ import {
   useYouTubeAccountsQuery,
   useInstagramAccountsQuery,
   useLinkedinAccountsQuery,
+  useBlueskyAccountsQuery,
   useVideoGenerationsQuery,
 } from '@/lib/api';
 
@@ -62,7 +64,7 @@ const UPCOMING_SLOT = {
   id: 'u1',
   scheduleId: 's1',
   slotAt: '2030-06-01T10:00:00.000Z',
-  status: 'pending',
+  status: 'awaiting',
   topic: 'Upcoming topic',
   error: null,
   publishedAt: null,
@@ -76,6 +78,7 @@ const PUBLISHED_SLOT = {
   topic: 'Past topic',
   error: null,
   publishedAt: '2020-01-01T10:05:00.000Z',
+  taskId: 'task-9',
 };
 
 const FAILED_SLOT = {
@@ -125,6 +128,9 @@ function mockQueries(overrides: {
   vi.mocked(useLinkedinAccountsQuery).mockReturnValue({
     data: { authenticated: true, accounts: [] },
   } as never);
+  vi.mocked(useBlueskyAccountsQuery).mockReturnValue({
+    data: { authenticated: true, accounts: [] },
+  } as never);
   vi.mocked(useVideoGenerationsQuery).mockReturnValue({
     data: (overrides.generations ?? []) as never,
     isLoading: false,
@@ -139,17 +145,28 @@ beforeEach(() => {
 });
 
 describe('PostsPage', () => {
-  it('shows upcoming posts by default with persona, topic, status and account chips', () => {
+  it('shows upcoming posts by default with persona, topic, status and account avatars', () => {
     render(<PostsPage />);
 
     expect(screen.getByText('Upcoming topic')).toBeInTheDocument();
     expect(screen.getByText('Viva Leve')).toBeInTheDocument();
     expect(screen.getByText('posts.statusPending')).toBeInTheDocument();
-    // Account labels appear in the card chip and in the account filter options
-    expect(screen.getAllByText('Europa Na Estrada').length).toBeGreaterThanOrEqual(2);
-    expect(screen.getAllByText('@vivalave').length).toBeGreaterThanOrEqual(2);
+    // Account names appear only in the account filter now — the card
+    // footer shows compact initial avatars instead of full-name chips.
+    expect(screen.getAllByText('Europa Na Estrada').length).toBe(1);
+    expect(screen.getAllByText('@vivalave').length).toBe(1);
     // History items are hidden on the upcoming tab
     expect(screen.queryByText('Past topic')).not.toBeInTheDocument();
+  });
+
+  it('renders the network icon at the card top and initial avatars in the footer', () => {
+    render(<PostsPage />);
+
+    // Network icon (role img) labelled by the provider name.
+    expect(screen.getAllByRole('img', { name: 'youtube' }).length).toBeGreaterThanOrEqual(1);
+    // Avatar fallbacks use the accounts' initials.
+    expect(screen.getByText('EN')).toBeInTheDocument();
+    expect(screen.getByText('V')).toBeInTheDocument();
   });
 
   it('switches to the history tab showing published and failed posts', async () => {
@@ -411,6 +428,19 @@ const RUNNING_GENERATION = {
   completedAt: null,
 };
 
+const COMPLETED_GENERATION = {
+  id: 'g3',
+  generationId: 'gen-3',
+  engineTaskId: 'task-3',
+  personaName: 'Viva Leve',
+  videoSubject: 'Launch recap',
+  status: 'completed',
+  errorCode: null,
+  tokensRefunded: false,
+  createdAt: '2026-09-23T12:00:00.000Z',
+  completedAt: '2026-09-23T12:02:00.000Z',
+};
+
 describe('PostsPage generation history', () => {
   it('shows the generations section in the history tab with friendly errors and refund badges', async () => {
     const user = userEvent.setup();
@@ -445,5 +475,54 @@ describe('PostsPage generation history', () => {
     render(<PostsPage />);
 
     expect(screen.queryByText('posts.generationsTitle')).not.toBeInTheDocument();
+  });
+});
+
+//---------------
+// Detail navigation — cards are links to the full-page detail view
+// (/posts/[id]); the route param carries the id only.
+//---------------
+
+describe('PostsPage card links', () => {
+  it('links upcoming cards to their detail page', () => {
+    render(<PostsPage />);
+
+    expect(screen.getByRole('link', { name: /Upcoming topic/ })).toHaveAttribute('href', '/posts/u1');
+  });
+
+  it('links history cards and generation cards to their detail pages', async () => {
+    mockQueries({ generations: [COMPLETED_GENERATION] });
+    const user = userEvent.setup();
+    render(<PostsPage />);
+    await user.click(screen.getByRole('button', { name: /posts\.tabHistory/ }));
+
+    expect(screen.getByRole('link', { name: /Past topic/ })).toHaveAttribute('href', '/posts/r1');
+    expect(screen.getByRole('link', { name: /Failed topic/ })).toHaveAttribute('href', '/posts/r2');
+    // Generation cards link by generationId (the business id the detail
+    // endpoint resolves via .eq('generation_id', ...)), NOT the DB row PK.
+    expect(screen.getByRole('link', { name: /Launch recap/ })).toHaveAttribute('href', '/posts/gen-3');
+  });
+
+  it('links generation cards to the id the detail lookup resolves by', async () => {
+    // Fixture has DISTINCT id/generationId: the href must be the value the
+    // detail endpoint filters on, otherwise the card 404s on click.
+    const generation = { ...COMPLETED_GENERATION, id: 'row-uuid-9', generationId: 'gen-9' };
+    mockQueries({ generations: [generation] });
+    const user = userEvent.setup();
+    render(<PostsPage />);
+    await user.click(screen.getByRole('button', { name: /posts\.tabHistory/ }));
+
+    expect(screen.getByRole('link', { name: /Launch recap/ })).toHaveAttribute('href', '/posts/gen-9');
+  });
+
+  it('keeps showing the video thumbnail with the #t=0.1 frame in the card', async () => {
+    const user = userEvent.setup();
+    render(<PostsPage />);
+    await user.click(screen.getByRole('button', { name: /posts\.tabHistory/ }));
+
+    const cardVideo = document.querySelector('button video, a video');
+    expect(cardVideo).not.toBeNull();
+    expect(cardVideo?.getAttribute('src')).toBe('/api/persona/video-download/task-9/final-1.mp4#t=0.1');
+    expect(cardVideo?.getAttribute('controls')).toBeNull();
   });
 });

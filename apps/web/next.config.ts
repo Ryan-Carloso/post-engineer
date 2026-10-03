@@ -18,6 +18,9 @@ function readPlatformVersion(): string {
 
 const nextConfig: NextConfig = {
   /* config options here */
+  // Standalone output: the Docker image (apps/web/Dockerfile) copies only
+  // the traced server + node_modules, keeping the image small.
+  output: "standalone",
   env: {
     APP_VERSION: readPlatformVersion(),
   },

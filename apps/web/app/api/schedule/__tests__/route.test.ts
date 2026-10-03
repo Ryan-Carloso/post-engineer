@@ -23,7 +23,8 @@ vi.mock('@/lib/analytics', () => ({
   trackApiEvent: vi.fn(),
 }));
 
-import { GET, PATCH, DELETE } from '../route';
+import * as scheduleRoute from '../route';
+import { GET, DELETE } from '../route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
@@ -43,7 +44,7 @@ function mockSupabase(handlers: {
   // Filtered by the .eq('provider', ...) the route applies per network.
   accountsByProvider?: Record<string, unknown[]>;
   insert?: { data: unknown; error: unknown };
-  // Current schedule row (used by PATCH for the partial merge).
+  // Current schedule row (used by DELETE for the ownership lookup).
   current?: { data: unknown };
   update?: { error: unknown };
   remove?: { error: unknown };
@@ -185,9 +186,19 @@ function mockSupabase(handlers: {
   return Object.assign(client, { insertedRows, updatedRows, slotRows, sentSlotRows, slotSelectArgs, deleteCalls, rpcCalls, selectArgs });
 }
 
-function jsonRequest(body: unknown, method = 'PATCH'): Request {
-  return new Request('http://localhost/api/schedule', { method, body: JSON.stringify(body) });
-}
+//---------------
+// The route's HTTP surface is its contract, so it is pinned directly.
+// A schedule is created by POST /api/videos/generate-and-schedule and
+// cancelled by DELETE (the MCP cancel_schedule tool); there is no edit
+// verb. Adding a write path back here needs a deliberate decision, not
+// an accident, so this test fails if a PATCH handler reappears.
+//---------------
+describe('/api/schedule HTTP surface', () => {
+  it('handles GET, DELETE and nothing else', () => {
+    const handlers = Object.keys(scheduleRoute).filter((name) => /^(GET|POST|PUT|PATCH|DELETE)$/.test(name));
+    expect(handlers.sort()).toEqual(['DELETE', 'GET']);
+  });
+});
 
 //---------------
 // /api/schedule surface: GET (list), PATCH (update), DELETE (remove).
@@ -216,22 +227,7 @@ describe('/api/schedule', () => {
     expect(body.schedules).toHaveLength(1);
   });
 
-  it('PATCH updates times', async () => {
-    const db = mockSupabase({
-      list: { data: [], error: null },
-      current: { data: { posts_per_day: 2 } },
-      update: { error: null },
-    });
-    const res = await PATCH(jsonRequest({ id: 's-1', times: ['07:00'] }, 'PATCH'));
-    expect(res.status).toBe(200);
-    expect(db.updatedRows[0].times).toEqual(['07:00']);
-  });
 
-  it('PATCH rejects invalid times', async () => {
-    mockSupabase({ list: { data: [], error: null }, update: { error: null } });
-    const res = await PATCH(jsonRequest({ id: 's-1', times: ['bad'] }, 'PATCH'));
-    expect(res.status).toBe(400);
-  });
 
 
 
@@ -254,169 +250,15 @@ describe('/api/schedule', () => {
     expect(db.selectArgs.some((arg) => arg.includes('bluesky_account_ids'))).toBe(true);
   });
 
-  it('PATCH linkedinAccountIds updates the column and recalculates providers', async () => {
-    const db = mockSupabase({
-      current: {
-        data: { youtube_account_ids: ['yt-1'], instagram_account_ids: ['ig-1'], linkedin_account_ids: [] },
-      },
-      accountsByProvider: {
-        instagram: [{ provider_account_id: 'ig-1' }],
-        linkedin: [{ provider_account_id: 'urn:li:organization:9' }],
-      },
-      update: { error: null },
-    });
-    const res = await PATCH(jsonRequest({
-      id: 's-1',
-      youtubeAccountIds: [],
-      linkedinAccountIds: ['urn:li:organization:9'],
-    }, 'PATCH'));
-    expect(res.status).toBe(200);
-    expect(db.updatedRows[0]).toMatchObject({
-      youtube_account_ids: [],
-      instagram_account_ids: ['ig-1'],
-      linkedin_account_ids: ['urn:li:organization:9'],
-      providers: ['instagram', 'linkedin'],
-    });
-  });
-
-  it('PATCH blueskyAccountIds updates the column and recalculates providers', async () => {
-    const db = mockSupabase({
-      current: {
-        data: { youtube_account_ids: ['yt-1'], instagram_account_ids: [], linkedin_account_ids: [], bluesky_account_ids: [] },
-      },
-      accountsByProvider: {
-        bluesky: [{ provider_account_id: 'did:plc:abc' }],
-      },
-      update: { error: null },
-    });
-    const res = await PATCH(jsonRequest({
-      id: 's-1',
-      youtubeAccountIds: [],
-      blueskyAccountIds: ['did:plc:abc'],
-    }, 'PATCH'));
-    expect(res.status).toBe(200);
-    expect(db.updatedRows[0]).toMatchObject({
-      youtube_account_ids: [],
-      instagram_account_ids: [],
-      linkedin_account_ids: [],
-      bluesky_account_ids: ['did:plc:abc'],
-      providers: ['bluesky'],
-    });
-  });
-
-  it('PATCH partial preserves unsent bluesky accounts', async () => {
-    const db = mockSupabase({
-      current: {
-        data: { youtube_account_ids: ['yt-1'], instagram_account_ids: [], linkedin_account_ids: [], bluesky_account_ids: ['did:plc:abc'] },
-      },
-      accountsByProvider: {
-        youtube: [{ provider_account_id: 'yt-1' }],
-        linkedin: [{ provider_account_id: 'urn:li:organization:9' }],
-        bluesky: [{ provider_account_id: 'did:plc:abc' }],
-      },
-      update: { error: null },
-    });
-    const res = await PATCH(jsonRequest({
-      id: 's-1',
-      linkedinAccountIds: ['urn:li:organization:9'],
-    }, 'PATCH'));
-    expect(res.status).toBe(200);
-    expect(db.updatedRows[0]).toMatchObject({
-      youtube_account_ids: ['yt-1'],
-      bluesky_account_ids: ['did:plc:abc'],
-      linkedin_account_ids: ['urn:li:organization:9'],
-      providers: ['youtube', 'linkedin', 'bluesky'],
-    });
-  });
-  it('PATCH partial preserves unsent network accounts', async () => {
-    const db = mockSupabase({
-      current: {
-        data: { youtube_account_ids: ['yt-1'], instagram_account_ids: ['ig-1'], linkedin_account_ids: [] },
-      },
-      accountsByProvider: {
-        youtube: [{ provider_account_id: 'yt-1' }],
-        instagram: [{ provider_account_id: 'ig-1' }],
-        linkedin: [{ provider_account_id: 'urn:li:organization:9' }],
-      },
-      update: { error: null },
-    });
-    const res = await PATCH(jsonRequest({
-      id: 's-1',
-      linkedinAccountIds: ['urn:li:organization:9'],
-    }, 'PATCH'));
-    expect(res.status).toBe(200);
-    expect(db.updatedRows[0]).toMatchObject({
-      youtube_account_ids: ['yt-1'],
-      instagram_account_ids: ['ig-1'],
-      linkedin_account_ids: ['urn:li:organization:9'],
-      providers: ['youtube', 'instagram', 'linkedin'],
-    });
-  });
-
-  it('PATCH rejects another person\'s account (ownership validated on the final merge)', async () => {
-    mockSupabase({
-      current: {
-        data: { youtube_account_ids: ['yt-1'], instagram_account_ids: [], linkedin_account_ids: [], bluesky_account_ids: [] },
-      },
-      accountsByProvider: {
-        youtube: [{ provider_account_id: 'yt-1' }],
-        bluesky: [],
-      },
-      update: { error: null },
-    });
-    const res = await PATCH(jsonRequest({
-      id: 's-1',
-      blueskyAccountIds: ['did:plc:outro'],
-    }, 'PATCH'));
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toContain('Invalid bluesky account selection');
-    // The hint must name the right field: a recordId-shaped id is the classic
-    // mix-up with list_social_accounts (recordId vs did).
-    expect(body.error).toContain('did');
-    expect(body.error).toContain('recordId');
-  });
-
-  it('PATCH rejects a kept account that is no longer the user\'s', async () => {
-    // Kept (not sent) fields are re-checked against social_accounts whenever
-    // any account field is sent, so a revoked account cannot linger in the
-    // merged selection.
-    mockSupabase({
-      current: {
-        data: { youtube_account_ids: ['yt-1'], instagram_account_ids: [], linkedin_account_ids: [], bluesky_account_ids: [] },
-      },
-      accountsByProvider: {
-        youtube: [],
-      },
-      update: { error: null },
-    });
-    const res = await PATCH(jsonRequest({ id: 's-1', active: true, blueskyAccountIds: [] }, 'PATCH'));
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toContain('Invalid youtube account selection');
-    expect(body.error).toContain('channelId');
-    expect(body.error).toContain('recordId');
-  });
-
-  it('PATCH returns 404 when the schedule does not exist', async () => {
-    mockSupabase({});
-    const res = await PATCH(jsonRequest({ id: 's-404', linkedinAccountIds: ['x'] }, 'PATCH'));
-    expect(res.status).toBe(404);
-  });
 
 
 
-  it('PATCH with active=false pauses the schedule', async () => {
-    mockSupabase({ update: { error: null } });
-    const res = await PATCH(jsonRequest({ id: 's-1', active: false }, 'PATCH'));
-    expect(res.status).toBe(200);
-  });
 
-  it('PATCH with nothing to update returns 400', async () => {
-    mockSupabase({});
-    const res = await PATCH(jsonRequest({ id: 's-1' }, 'PATCH'));
-    expect(res.status).toBe(400);
-  });
+
+
+
+
+
 
   it('DELETE removes by id', async () => {
     mockSupabase({ remove: { error: null } });
@@ -479,32 +321,8 @@ describe('/api/schedule persona scoping (scoped API keys)', () => {
     expect(body.schedules.map((s) => s.id)).toEqual(['s-1', 's-2']);
   });
 
-  it('PATCH rejects an out-of-scope schedule with 403', async () => {
-    scopedSupabase({
-      current: { data: { persona_id: 'p-other' } },
-      update: { error: null },
-    });
-    const res = await PATCH(jsonRequest({ id: 's-2', active: false }, 'PATCH'));
-    expect(res.status).toBe(403);
-  });
 
-  it('PATCH updates an in-scope schedule', async () => {
-    scopedSupabase({
-      current: { data: { persona_id: 'p-allowed' } },
-      update: { error: null },
-    });
-    const res = await PATCH(jsonRequest({ id: 's-1', active: false }, 'PATCH'));
-    expect(res.status).toBe(200);
-  });
 
-  it('PATCH returns 404 for a missing schedule', async () => {
-    scopedSupabase({
-      current: { data: null },
-      update: { error: null },
-    });
-    const res = await PATCH(jsonRequest({ id: 's-missing', active: false }, 'PATCH'));
-    expect(res.status).toBe(404);
-  });
 
   it('DELETE rejects an out-of-scope schedule with 403', async () => {
     scopedSupabase({

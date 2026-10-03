@@ -23,7 +23,7 @@ export const LOCALES: ReadonlyArray<{ value: Locale; label: string }> = [
 
 //---------------
 // TranslationKey — union of all translation keys in dot-notation
-// Ex.: "nav.home" | "home.recentPosts" | "accounts.default" | ...
+// Ex.: "nav.posts" | "posts.statusPending" | "accounts.default" | ...
 //---------------
 export type TranslationKey = {
   [Section in keyof Dictionary]: {

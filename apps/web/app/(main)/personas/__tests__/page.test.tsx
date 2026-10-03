@@ -24,7 +24,6 @@ vi.mock('@/lib/ui', () => ({
   SparklesIcon: () => <span data-testid="icon-sparkles" />,
   ImageIcon: () => <span data-testid="icon-image" />,
   MicIcon: () => <span data-testid="icon-mic" />,
-  ComposeIcon: () => <span data-testid="icon-compose" />,
   PlusIcon: () => <span data-testid="icon-plus" />,
   GlobeIcon: () => <span data-testid="icon-globe" />,
   TrashIcon: () => <span data-testid="icon-trash" />,

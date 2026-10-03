@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useMemo, useState } from 'react';
+import { Play } from 'lucide-react';
 import {
   useScheduleStatusQuery,
   useSchedulesQuery,
@@ -9,15 +10,21 @@ import {
   useYouTubeAccountsQuery,
   useInstagramAccountsQuery,
   useLinkedinAccountsQuery,
+  useBlueskyAccountsQuery,
   useVideoGenerationsQuery,
   type ScheduledSlot,
   type ScheduleConfig,
   type VideoGeneration,
 } from '@/lib/api';
-import { GENERATION_ERROR_KEY } from '@/lib/generation/generation-errors';
+import { Card, CardFooter } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { AspectRatio } from '@/components/ui/aspect-ratio';
+import { ProviderIcon } from '@/components/provider-icon';
 import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
 import { SpinnerIcon } from '@/lib/ui';
+import { GENERATION_ERROR_KEY } from '@/lib/generation/generation-errors';
 
 //---------------
 // PostsPage — post history + upcoming posts on the same page, across all
@@ -27,7 +34,7 @@ import { SpinnerIcon } from '@/lib/ui';
 //---------------
 
 type Tab = 'upcoming' | 'history';
-type ProviderFilter = 'all' | 'youtube' | 'instagram' | 'linkedin';
+type ProviderFilter = 'all' | 'youtube' | 'instagram' | 'linkedin' | 'bluesky';
 
 interface AccountOption {
   id: string;
@@ -52,7 +59,7 @@ function resolveAccountFilter(
   return accountId;
 }
 
-const PROVIDER_FILTERS: ProviderFilter[] = ['all', 'youtube', 'instagram', 'linkedin'];
+const PROVIDER_FILTERS: ProviderFilter[] = ['all', 'youtube', 'instagram', 'linkedin', 'bluesky'];
 
 const STATUS_STYLE: Record<string, string> = {
   pending: 'bg-[#e8edf1] text-[#60758a]',
@@ -95,34 +102,49 @@ const GenerationCard = ({
   locale: 'pt' | 'en';
 }) => {
   const { t } = useI18n();
+  const videoUrl = videoUrlFor(generation.engineTaskId);
+  const hasThumb = generation.status === 'completed' && videoUrl !== null;
   return (
-    <article className="rounded-xl border border-[#d7e2ea] bg-white p-4 shadow-[0_5px_18px_rgba(13,43,69,0.045)]">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-[#0d2b45]">
-          {formatDateTime(generation.createdAt, locale)}
-        </p>
-        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_STYLE[generation.status] ?? STATUS_STYLE.pending}`}>
-          {t(GENERATION_STATUS_KEY[generation.status] ?? 'posts.statusPending')}
-        </span>
-      </div>
-      <p className="mt-2 text-sm text-[#0d2b45]">
-        <span className="font-semibold">{generation.personaName ?? t('posts.personaFallback')}</span>
-        {' — '}
-        <span className="text-[#60758a]">{generation.videoSubject ?? t('posts.unknownTopic')}</span>
-      </p>
-      {generation.status === 'failed' && (
-        <p className="mt-2 text-xs text-[#c2301e]">
-          {t(GENERATION_ERROR_KEY[generation.errorCode ?? 'unknown'] ?? 'posts.errorUnknown')}
-        </p>
-      )}
-      {generation.tokensRefunded && (
-        <p className="mt-2">
-          <span className="rounded-full bg-[#cff5df] px-2.5 py-1 text-xs font-semibold text-[#167246]">
-            {t('posts.refundedBadge')}
+    <Link href={`/posts/${generation.generationId}`} className="block h-full">
+      <Card className={`flex h-full flex-col gap-0 rounded-xl p-4 transition-colors ${CARD_BORDER}`}>
+        <div className="flex items-center justify-between gap-2">
+          <span role="img" aria-label="video" className="inline-flex text-muted-foreground">
+            <Play className="size-5" />
           </span>
-        </p>
-      )}
-    </article>
+          <p className="text-xs text-muted-foreground">
+            {formatDate(generation.createdAt, locale)} · {formatTime(generation.createdAt, locale)}
+          </p>
+        </div>
+        <div className="mt-3 flex gap-3">
+          <div className="flex-1">
+            <p className="line-clamp-3 text-sm leading-snug text-[#0d2b45]">
+              <span className="font-semibold">{generation.personaName ?? t('posts.personaFallback')}</span>
+              {' — '}
+              <span className="text-muted-foreground">{generation.videoSubject ?? t('posts.unknownTopic')}</span>
+            </p>
+            {generation.status === 'failed' && (
+              <p className="mt-2 line-clamp-2 text-xs text-destructive">
+                {t(GENERATION_ERROR_KEY[generation.errorCode ?? 'unknown'] ?? 'posts.errorUnknown')}
+              </p>
+            )}
+          </div>
+          <PostThumb src={hasThumb ? videoUrl : null} />
+        </div>
+        <CardFooter className="mt-auto items-center justify-between p-0 pt-4">
+          <span className="min-w-0 truncate text-xs text-muted-foreground">{generation.videoSubject ?? t('posts.unknownTopic')}</span>
+          <div className="flex shrink-0 items-center gap-2">
+            {generation.tokensRefunded && (
+              <Badge variant="outline" className="border-transparent bg-[#cff5df] text-[#167246]">
+                {t('posts.refundedBadge')}
+              </Badge>
+            )}
+            <Badge variant="outline" className={`border-transparent ${STATUS_STYLE[generation.status] ?? STATUS_STYLE.pending}`}>
+              {t(GENERATION_STATUS_KEY[generation.status] ?? 'posts.statusPending')}
+            </Badge>
+          </div>
+        </CardFooter>
+      </Card>
+    </Link>
   );
 };
 
@@ -130,9 +152,14 @@ const GenerationCard = ({
 // fewer to keep the render cheap. Exported for tests.
 export const POSTS_LIMIT = 200;
 
-function formatDateTime(value: string, locale: 'pt' | 'en'): string {
-  return new Date(value).toLocaleString(locale === 'pt' ? 'pt-BR' : 'en-US', {
+function formatDate(value: string, locale: 'pt' | 'en'): string {
+  return new Date(value).toLocaleDateString(locale === 'pt' ? 'pt-BR' : 'en-US', {
     dateStyle: 'medium',
+  });
+}
+
+function formatTime(value: string, locale: 'pt' | 'en'): string {
+  return new Date(value).toLocaleTimeString(locale === 'pt' ? 'pt-BR' : 'en-US', {
     timeStyle: 'short',
   });
 }
@@ -147,9 +174,10 @@ function resolveSlotAccounts(
 ): AccountOption[] {
   if (!schedule) return [];
   const ids = new Set([
-    ...schedule.youtubeAccountIds,
-    ...schedule.instagramAccountIds,
-    ...schedule.linkedinAccountIds,
+    ...(schedule.youtubeAccountIds ?? []),
+    ...(schedule.instagramAccountIds ?? []),
+    ...(schedule.linkedinAccountIds ?? []),
+    ...(schedule.blueskyAccountIds ?? []),
   ]);
   return accounts.filter((account) => ids.has(account.id));
 }
@@ -167,50 +195,107 @@ const PostCard = ({
 }) => {
   const { t } = useI18n();
   const isHistory = slot.status === 'published' || slot.status === 'failed';
+  const shownAt = isHistory && slot.publishedAt ? slot.publishedAt : slot.slotAt;
+  const videoUrl = videoUrlFor(slot.taskId);
+  const hasThumb = SLOT_VIDEO_STATUSES.has(slot.status) && videoUrl !== null;
+  const provider = accounts[0]?.provider;
   return (
-    <article className="rounded-xl border border-[#d7e2ea] bg-white p-4 shadow-[0_5px_18px_rgba(13,43,69,0.045)]">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-[#0d2b45]">
-          {formatDateTime(isHistory && slot.publishedAt ? slot.publishedAt : slot.slotAt, locale)}
-        </p>
-        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_STYLE[slot.status] ?? STATUS_STYLE.pending}`}>
-          {t(STATUS_KEY[slot.status] ?? 'posts.statusPending')}
-        </span>
-      </div>
-      <p className="mt-2 text-sm text-[#0d2b45]">
-        <span className="font-semibold">{personaName}</span>
-        {' — '}
-        <span className="text-[#60758a]">{slot.topic ?? t('posts.unknownTopic')}</span>
-      </p>
-      {accounts.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {accounts.map((account) => (
-            <span key={`${account.provider}:${account.id}`} className="inline-flex items-center gap-1.5 rounded-lg bg-[#f1f6fa] px-2.5 py-1.5 text-xs font-medium text-[#0d2b45]">
-              <ProviderDot provider={account.provider} />
-              {account.label}
-            </span>
-          ))}
+    <Link href={`/posts/${slot.id}`} className="block h-full">
+      <Card className={`flex h-full flex-col gap-0 rounded-xl p-4 transition-colors ${CARD_BORDER}`}>
+        <div className="flex items-center justify-between gap-2">
+          {provider ? <ProviderIcon provider={provider} /> : <span />}
+          <p className="text-xs text-muted-foreground">
+            {formatDate(shownAt, locale)} · {formatTime(shownAt, locale)}
+          </p>
         </div>
-      )}
+        <div className="mt-3 flex gap-3">
+          <p className="line-clamp-3 flex-1 text-sm leading-snug text-[#0d2b45]">
+            <span className="font-semibold">{personaName}</span>
+            {' — '}
+            <span className="text-muted-foreground">{slot.topic ?? t('posts.unknownTopic')}</span>
+          </p>
+          <PostThumb src={hasThumb ? videoUrl : null} />
+        </div>
+        <CardFooter className="mt-auto items-center justify-between p-0 pt-4">
+          <AccountAvatarGroup accounts={accounts} />
+          <Badge variant="outline" className={`border-transparent ${STATUS_STYLE[slot.status] ?? STATUS_STYLE.pending}`}>
+            {t(STATUS_KEY[slot.status] ?? 'posts.statusPending')}
+          </Badge>
+        </CardFooter>
+      </Card>
       {slot.status === 'failed' && slot.error && (
-        <p className="mt-2 text-xs text-[#c2301e]">{slot.error}</p>
+        <p className="sr-only">{slot.error}</p>
       )}
-    </article>
+    </Link>
   );
 };
 
-const ProviderDot = ({ provider }: { provider: Exclude<ProviderFilter, 'all'> }) => {
-  const color = provider === 'youtube' ? 'text-[#ff2d20]' : provider === 'instagram' ? 'text-[#e1306c]' : 'text-[#0a66c2]';
-  const glyph = provider === 'youtube' ? '▶' : provider === 'instagram' ? '◎' : 'in';
-  return <span className={`font-bold ${color}`}>{glyph}</span>;
+//---------------
+// accountInitials — compact circular avatars use the account label's
+// initials (first letters of up to two tokens, unicode-aware so non-Latin
+// accounts get real initials too).
+//---------------
+function accountInitials(label: string): string {
+  const tokens = label.replace(/^@/, '').match(/[\p{L}\p{N}]+/gu) ?? [];
+  return tokens.slice(0, 2).map((token) => token[0]?.toUpperCase() ?? '').join('');
+}
+
+const AccountAvatarGroup = ({ accounts }: { accounts: AccountOption[] }) => (
+  <div className="flex -space-x-1.5">
+    {accounts.slice(0, 4).map((account) => (
+      <Avatar key={`${account.provider}:${account.id}`} className="size-6 ring-2 ring-white">
+        <AvatarFallback className="bg-secondary text-[9px] font-semibold text-[#0d2b45]">
+          {accountInitials(account.label)}
+        </AvatarFallback>
+      </Avatar>
+    ))}
+  </div>
+);
+
+//---------------
+// PostThumb — the 72×72 thumbnail on the card body's right: the video
+// itself (metadata-only preload, muted, control-less — playback happens
+// in the detail modal) under a small play glyph. The src carries a
+// #t=0.1 media fragment so the browser seeks and paints that frame as
+// the thumbnail — preload="metadata" alone renders an empty box in
+// Chrome even when the video exists.
+//---------------
+const PostThumb = ({ src }: { src: string | null }) => {
+  const thumbSrc = src ? `${src}#t=0.1` : null;
+  return (
+    <div className="relative w-18 shrink-0">
+      <AspectRatio ratio={1} className="w-18 rounded-[9px] bg-[#e8edf1]">
+        {thumbSrc ? (
+          <video src={thumbSrc} preload="metadata" muted playsInline className="size-full object-cover" />
+        ) : null}
+      </AspectRatio>
+      {thumbSrc && (
+        <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <Play className="size-4 fill-white text-white drop-shadow" />
+        </span>
+      )}
+    </div>
+  );
 };
 
+const CARD_BORDER = 'border-[#e3ebf1] shadow-[0_1px_2px_rgba(13,43,69,0.05)] hover:border-[#c8d6e0]';
+
+//---------------
+// videoUrlFor — the engine download proxy serves the final render for a
+// task; only slots whose video was actually produced have one.
+//---------------
+function videoUrlFor(taskId: string | null | undefined): string | null {
+  return taskId ? `/api/persona/video-download/${encodeURIComponent(taskId)}/final-1.mp4` : null;
+}
+
+const SLOT_VIDEO_STATUSES = new Set<ScheduledSlot['status']>(['ready', 'publishing', 'published']);
+
+//---------------
 export default function PostsPage() {
   const { t, locale } = useI18n();
   const [tab, setTab] = useState<Tab>('upcoming');
   const [providerFilter, setProviderFilter] = useState<ProviderFilter>('all');
   const [accountFilter, setAccountFilter] = useState<string>('all');
-
   const statusQuery = useScheduleStatusQuery(POSTS_LIMIT);
   const schedulesQuery = useSchedulesQuery();
   const personasQuery = usePersonaListQuery();
@@ -218,6 +303,7 @@ export default function PostsPage() {
   const youtubeQuery = useYouTubeAccountsQuery();
   const instagramQuery = useInstagramAccountsQuery();
   const linkedinQuery = useLinkedinAccountsQuery();
+  const blueskyQuery = useBlueskyAccountsQuery();
 
   const scheduleById = useMemo(
     () => new Map((schedulesQuery.data ?? []).map((schedule) => [schedule.id, schedule])),
@@ -245,8 +331,13 @@ export default function PostsPage() {
         provider: 'linkedin' as const,
         label: account.accountName ?? account.providerAccountId,
       })),
+      ...(blueskyQuery.data?.accounts ?? []).map((account) => ({
+        id: account.did,
+        provider: 'bluesky' as const,
+        label: `@${account.handle}`,
+      })),
     ],
-    [youtubeQuery.data, instagramQuery.data, linkedinQuery.data],
+    [youtubeQuery.data, instagramQuery.data, linkedinQuery.data, blueskyQuery.data],
   );
 
   const visibleAccounts = useMemo(
@@ -280,9 +371,10 @@ export default function PostsPage() {
       if (providerFilter !== 'all' && !schedule.providers.includes(providerFilter)) return false;
       if (effectiveAccountFilter !== 'all') {
         const ids = new Set([
-          ...schedule.youtubeAccountIds,
-          ...schedule.instagramAccountIds,
-          ...schedule.linkedinAccountIds,
+          ...(schedule.youtubeAccountIds ?? []),
+          ...(schedule.instagramAccountIds ?? []),
+          ...(schedule.linkedinAccountIds ?? []),
+          ...(schedule.blueskyAccountIds ?? []),
         ]);
         if (!ids.has(effectiveAccountFilter)) return false;
       }
@@ -311,23 +403,23 @@ export default function PostsPage() {
   const isCapped = activeSlots.length >= POSTS_LIMIT;
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="mx-auto max-w-6xl">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-[-0.02em] text-[#0d2b45]">{t('posts.title')}</h1>
-          <p className="mt-1 text-sm text-[#60758a]">{t('posts.subtitle')}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{t('posts.subtitle')}</p>
         </div>
         <div className="flex gap-2">
           <button
             type="button"
             onClick={handleRetry}
             disabled={statusQuery.isFetching}
-            className="rounded-xl border border-[#d7e2ea] bg-white px-4 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb] disabled:opacity-50"
+            className="rounded-xl border border-input bg-white px-4 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb] disabled:opacity-50"
           >
             {t('posts.refresh')}
           </button>
-          <Link href="/schedule" className="rounded-xl bg-[#0d2b45] px-4 py-2 text-sm font-semibold text-white hover:bg-[#123a5e]">
-            {t('posts.newSchedule')}
+          <Link href="/personas" className="rounded-xl bg-[#0d2b45] px-4 py-2 text-sm font-semibold text-white hover:bg-[#123a5e]">
+            {t('posts.newPost')}
           </Link>
         </div>
       </div>
@@ -340,7 +432,7 @@ export default function PostsPage() {
             onClick={() => setTab(value)}
             aria-pressed={tab === value}
             className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
-              tab === value ? 'bg-white text-[#0d2b45] shadow-sm' : 'text-[#60758a] hover:text-[#0d2b45]'
+              tab === value ? 'bg-white text-[#0d2b45] shadow-sm' : 'text-muted-foreground hover:text-[#0d2b45]'
             }`}
           >
             {t(value === 'upcoming' ? 'posts.tabUpcoming' : 'posts.tabHistory')} ({value === 'upcoming' ? upcomingCount : historyCount})
@@ -349,11 +441,11 @@ export default function PostsPage() {
       </div>
 
       {isCapped && !isLoading && !isError && (
-        <p className="mt-3 text-xs text-[#60758a]">{t('posts.listCapped', { count: POSTS_LIMIT })}</p>
+        <p className="mt-3 text-xs text-muted-foreground">{t('posts.listCapped', { count: POSTS_LIMIT })}</p>
       )}
 
       <div className="mt-4 flex flex-wrap gap-3">
-        <label className="flex flex-col gap-1 text-xs font-semibold text-[#60758a]">
+        <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
           {t('posts.filterProvider')}
           <select
             value={providerFilter}
@@ -365,7 +457,7 @@ export default function PostsPage() {
               // switching back — reset it instead.
               setAccountFilter((current) => resolveAccountFilter(current, next, accountOptions));
             }}
-            className="rounded-xl border border-[#d7e2ea] bg-white px-3 py-2 text-sm font-medium text-[#0d2b45]"
+            className="rounded-xl border border-input bg-white px-3 py-2 text-sm font-medium text-[#0d2b45]"
           >
             <option value="all">{t('posts.allProviders')}</option>
             {PROVIDER_FILTERS.filter((provider) => provider !== 'all').map((provider) => (
@@ -375,12 +467,12 @@ export default function PostsPage() {
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-xs font-semibold text-[#60758a]">
+        <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
           {t('posts.filterAccount')}
           <select
             value={effectiveAccountFilter}
             onChange={(event) => setAccountFilter(event.target.value)}
-            className="rounded-xl border border-[#d7e2ea] bg-white px-3 py-2 text-sm font-medium text-[#0d2b45]"
+            className="rounded-xl border border-input bg-white px-3 py-2 text-sm font-medium text-[#0d2b45]"
           >
             <option value="all">{t('posts.allAccounts')}</option>
             {visibleAccounts.map((account) => (
@@ -394,11 +486,11 @@ export default function PostsPage() {
 
       <div className="mt-6">
         {isLoading ? (
-          <div className="flex items-center justify-center gap-2 py-16 text-sm text-[#60758a]">
+          <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
             <SpinnerIcon /> {t('posts.refresh')}…
           </div>
         ) : isError ? (
-          <div className="rounded-xl border border-[#d7e2ea] bg-white p-8 text-center">
+          <div className="rounded-xl border border-input bg-white p-8 text-center">
             <p className="text-sm font-semibold text-[#0d2b45]">{t('posts.loadError')}</p>
             <button
               type="button"
@@ -416,24 +508,28 @@ export default function PostsPage() {
                   {t('posts.generationsTitle')}
                 </h2>
                 {generations.length === 0 ? (
-                  <p className="mt-3 text-sm text-[#60758a]">{t('posts.generationsEmpty')}</p>
+                  <p className="mt-3 text-sm text-muted-foreground">{t('posts.generationsEmpty')}</p>
                 ) : (
-                  <div className="mt-3 flex flex-col gap-3">
+                  <div className="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                     {generations.map((generation) => (
-                      <GenerationCard key={generation.id} generation={generation} locale={locale} />
+                      <GenerationCard
+                        key={generation.id}
+                        generation={generation}
+                        locale={locale}
+                      />
                     ))}
                   </div>
                 )}
               </section>
             )}
             {filteredSlots.length === 0 ? (
-              <div className="rounded-xl border border-[#d7e2ea] bg-white p-8 text-center text-sm text-[#60758a]">
+              <div className="rounded-xl border border-input bg-white p-8 text-center text-sm text-muted-foreground">
                 {hasActiveFilter
                   ? t('posts.noResultsForFilter')
                   : t(tab === 'upcoming' ? 'posts.noUpcoming' : 'posts.noHistory')}
               </div>
             ) : (
-              <div className="flex flex-col gap-3">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {filteredSlots.map((slot) => (
                   <PostCard
                     key={slot.id}

@@ -20,7 +20,7 @@ import {
   AccountsIcon,
   ComposeIcon,
   HistoryIcon,
-  HomeIcon,
+  
   BoltIcon,
   KeyIcon,
   CoinsIcon,
@@ -83,7 +83,6 @@ describe('ui icons', () => {
     ['accounts', AccountsIcon],
     ['compose', ComposeIcon],
     ['history', HistoryIcon],
-    ['home', HomeIcon],
     ['bolt', BoltIcon],
     ['key', KeyIcon],
     ['coins', CoinsIcon],
