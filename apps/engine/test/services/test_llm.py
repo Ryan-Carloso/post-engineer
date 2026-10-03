@@ -1204,6 +1204,11 @@ class TestLiteLLMProvider(unittest.TestCase):
         config.app["openrouter_free_api_key"] = "free-key"
         config.app["openrouter_base_url"] = ""
         config.app["openrouter_free_model_name"] = ""
+        # Pin the attribution config: both are optional, so asserting
+        # default_headers=None only holds when they are unset. Inheriting a
+        # real config.toml made this pass locally and fail on CI.
+        config.app["openrouter_site_url"] = ""
+        config.app["openrouter_app_name"] = ""
 
         result, openai_client, fake_completions = self._run_openrouter()
 
