@@ -1,6 +1,6 @@
 {
   "name": "post-engineer-mcp",
-  "version": "1.21.4",
+  "version": "1.21.5",
   "engines": {
     "node": ">=20.10"
   },
