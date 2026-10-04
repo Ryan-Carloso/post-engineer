@@ -5,6 +5,13 @@
 
 describe('i18n — troca de idioma via UI', () => {
   beforeEach(() => {
+    // Real session cookie first: the middleware validates it server-side and
+    // bounces unauthenticated visitors to /landing, so without this the posts
+    // page never mounts and NO request ever fires (the wait below would time
+    // out with "No request ever occurred" regardless of which route it waits
+    // for). Every other app-page spec does the same.
+    cy.loginE2EUser();
+
     cy.intercept('GET', '/api/account', {
       statusCode: 200,
       body: { authenticated: true, accounts: [], message: 'ok' },
