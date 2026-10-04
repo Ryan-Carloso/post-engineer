@@ -112,4 +112,33 @@ describe('trackEvent', () => {
       expect.objectContaining({ host: 'https://eu.i.posthog.com' }),
     );
   });
+
+  it('shares one lazy client promise across concurrent trackEvent calls', async () => {
+    vi.stubEnv('POSTHOG_API_KEY', 'phc_test_key');
+    // Both calls happen before the dynamic import resolves: they must wait
+    // for the same in-flight promise instead of initializing twice.
+    trackEvent('mcp_tool_called', { toolName: 'a' });
+    trackEvent('mcp_tool_called', { toolName: 'b' });
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(mockPostHogCtor).toHaveBeenCalledTimes(1);
+    expect(mockCapture).toHaveBeenCalledTimes(2);
+  });
+
+  it('warns only once when POSTHOG_API_KEY is missing', async () => {
+    vi.stubEnv('POSTHOG_API_KEY', '');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      trackEvent('mcp_tool_called', { toolName: 'a' });
+      trackEvent('mcp_tool_called', { toolName: 'b' });
+      await new Promise((resolve) => setImmediate(resolve));
+      const disabledWarnings = warn.mock.calls.filter((args) =>
+        String(args[0]).includes('POSTHOG_API_KEY not set'),
+      );
+      expect(disabledWarnings).toHaveLength(1);
+      expect(mockPostHogCtor).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });

@@ -467,6 +467,16 @@ describe('persona image library tools', () => {
     expect(mockClient.updatePersonaImage).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['tag', { id: 'img-1', tag: 'portrait' }],
+    ['description', { id: 'img-1', description: 'Studio headshot' }],
+    ['isPrimary', { id: 'img-1', isPrimary: true }],
+  ])('update_persona_image accepts when only %s is set', (_field, args) => {
+    // Each || branch of the refine must independently accept: a mutant
+    // dropping any branch must be caught.
+    expect(() => UpdatePersonaImageSchema.parse(args)).not.toThrow();
+  });
+
   it('update_persona_image re-parses raw handler args with the refined schema', async () => {
     // The MCP SDK parses tool args against the raw UpdatePersonaImageShape,
     // so the .refine would never fire on the tool path. The handler
@@ -866,5 +876,125 @@ describe('generate_persona_videos tool', () => {
     expect(mockClient.generatePersonaVideos).toHaveBeenCalledWith(
       expect.objectContaining({ idempotencyKey: 'key-123' })
     );
+  });
+});
+
+describe('handleLibraryCall message contracts', () => {
+  // The error-verb and success-prefix strings are user-facing (surfaced to
+  // the AI agent calling the tool). Pin them so a reword or a dropped
+  // prefix breaks CI instead of silently changing the agent-visible
+  // contract — Stryker's StringLiteral mutants survived here.
+  const mockClient = {
+    createPersona: vi.fn(),
+    cancelSchedule: vi.fn(),
+    getTokenBalance: vi.fn(),
+  } as unknown as PostEngineerClient;
+
+  beforeEach(() => {
+    vi.mocked(mockClient.createPersona).mockReset();
+    vi.mocked(mockClient.cancelSchedule).mockReset();
+    vi.mocked(mockClient.getTokenBalance).mockReset();
+  });
+
+  it('handleCreatePersona prefixes failures with "Error creating persona:"', async () => {
+    vi.mocked(mockClient.createPersona).mockRejectedValue(new Error('boom'));
+    const response = await handleCreatePersona(
+      mockClient,
+      CreatePersonaSchema.parse({
+        name: 'Alex AI',
+        avatarUrl: 'https://example.com/alex.png',
+      })
+    );
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('Error creating persona: boom');
+  });
+
+  it('handleCreatePersona prefixes success with "Persona created successfully:"', async () => {
+    vi.mocked(mockClient.createPersona).mockResolvedValue({ personaId: 'p-1' });
+    const response = await handleCreatePersona(
+      mockClient,
+      CreatePersonaSchema.parse({
+        name: 'Alex AI',
+        avatarUrl: 'https://example.com/alex.png',
+      })
+    );
+    expect(response.isError).toBeUndefined();
+    expect(textOf(response).startsWith('Persona created successfully:')).toBe(true);
+  });
+
+  it('handleCancelSchedule prefixes failures with "Error cancelling schedule:"', async () => {
+    vi.mocked(mockClient.cancelSchedule).mockRejectedValue(new Error('gone'));
+    const response = await handleCancelSchedule(mockClient, { scheduleId: 's-1' });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('Error cancelling schedule: gone');
+  });
+
+  it('handleGetTokenBalance prefixes failures with "Error getting token balance:"', async () => {
+    vi.mocked(mockClient.getTokenBalance).mockRejectedValue(new Error('down'));
+    const response = await handleGetTokenBalance(mockClient);
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('Error getting token balance: down');
+  });
+});
+
+describe('narrowTaskProgress type narrowing', () => {
+  // narrowTaskProgress coerces every field to its declared type or null.
+  // Wrong-typed values must become null (not pass through), and a
+  // non-object payload must yield all nulls.
+  const mockClient = {
+    getVideoStatus: vi.fn(),
+  } as unknown as PostEngineerClient;
+
+  beforeEach(() => {
+    vi.mocked(mockClient.getVideoStatus).mockReset();
+  });
+
+  it('coerces wrong-typed fields to null instead of passing them through', async () => {
+    const { handleGetVideoTaskProgress } = await import('../tools.js');
+    vi.mocked(mockClient.getVideoStatus).mockResolvedValue({
+      data: {
+        task_id: 42,
+        state: 'generating',
+        progress: '60',
+        stage: 7,
+        error: { reason: 'x' },
+      },
+    });
+
+    const response = await handleGetVideoTaskProgress(mockClient, { taskId: 't-1' });
+    const text = textOf(response);
+    expect(text).toContain('"task_id": null');
+    expect(text).toContain('"state": null');
+    expect(text).toContain('"progress": null');
+    expect(text).toContain('"stage": null');
+    expect(text).toContain('"error": null');
+  });
+
+  it('reports all nulls when the payload is not an object', async () => {
+    const { handleGetVideoTaskProgress } = await import('../tools.js');
+    vi.mocked(mockClient.getVideoStatus).mockResolvedValue('not-an-object');
+
+    const response = await handleGetVideoTaskProgress(mockClient, { taskId: 't-1' });
+    const text = textOf(response);
+    expect(text).toContain('"task_id": null');
+    expect(text).toContain('"state": null');
+    expect(text).toContain('"progress": null');
+    expect(text).toContain('"stage": null');
+    expect(text).toContain('"error": null');
+  });
+
+  it('keeps well-typed fields and nulls only the missing ones', async () => {
+    const { handleGetVideoTaskProgress } = await import('../tools.js');
+    vi.mocked(mockClient.getVideoStatus).mockResolvedValue({
+      data: { task_id: 't-2', state: 1, progress: 60 },
+    });
+
+    const response = await handleGetVideoTaskProgress(mockClient, { taskId: 't-2' });
+    const text = textOf(response);
+    expect(text).toContain('"task_id": "t-2"');
+    expect(text).toContain('"state": 1');
+    expect(text).toContain('"progress": 60');
+    expect(text).toContain('"stage": null');
+    expect(text).toContain('"error": null');
   });
 });

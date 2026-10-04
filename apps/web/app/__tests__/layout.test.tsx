@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { findRepoRoot } from '@/test/repo-root';
 
 vi.mock('next/font/google', () => ({
   Geist: () => ({ variable: '--font-geist-sans', className: '' }),
@@ -87,14 +88,8 @@ describe('root layout metadata icons', () => {
   it('every declared icon resolves to a real file under apps/web/public/', async () => {
     const { metadata } = await import('../layout');
     const { existsSync } = await import('node:fs');
-    const { join, dirname } = await import('node:path');
-    const { fileURLToPath } = await import('node:url');
-    const publicDir = join(
-      dirname(fileURLToPath(import.meta.url)),
-      '..',
-      '..',
-      'public',
-    );
+    const { join } = await import('node:path');
+    const publicDir = join(findRepoRoot(import.meta.url), 'apps', 'web', 'public');
     const icons = metadata.icons as { icon: string; apple: string };
     for (const href of [icons.icon, icons.apple]) {
       expect(href.startsWith('/'), `${href} must be a public/ path`).toBe(true);

@@ -18,6 +18,7 @@
 //---------------
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { findRepoRoot } from '@/test/repo-root';
 
 vi.mock('@/lib/posthog-server', () => ({ getPostHogServer: vi.fn() }));
 
@@ -678,12 +679,10 @@ describe('hasPublishedSlotForGeneration — batch schedule mapping', () => {
 describe('supabase/migrations/004_billing_reconcile.sql literals', () => {
   async function readMigration(): Promise<string> {
     const { readFileSync } = await import('node:fs');
-    const { join, dirname } = await import('node:path');
-    const { fileURLToPath } = await import('node:url');
+    const { join } = await import('node:path');
     return readFileSync(
       join(
-        dirname(fileURLToPath(import.meta.url)),
-        '..', '..', '..', '..', '..',
+        findRepoRoot(import.meta.url),
         'supabase', 'migrations', '004_billing_reconcile.sql',
       ),
       'utf8',
