@@ -399,6 +399,7 @@ const SCHEDULE_ROW = {
   instagram_account_ids: ['ig1'],
   linkedin_account_ids: [],
   bluesky_account_ids: ['bsky1'],
+  timezone: 'Europe/Lisbon',
 };
 
 describe('GET /api/schedule/slots/[slotId]', () => {
@@ -443,6 +444,7 @@ describe('GET /api/schedule/slots/[slotId]', () => {
       youtubeAccountIds: ['ch1'],
       instagramAccountIds: ['ig1'],
       blueskyAccountIds: ['bsky1'],
+      timezone: 'Europe/Lisbon',
     });
     expect(body.persona).toEqual({ id: 'p1', name: 'Viva Leve' });
   });
