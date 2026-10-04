@@ -203,6 +203,19 @@ def create_audio(
     return create_task(request, body, stop_at="audio")
 
 
+def _persona_tracking_kwargs(
+    body: Union[TaskVideoRequest, SubtitleRequest, AudioRequest],
+) -> dict[str, str]:
+    """persona_id for the task row (read back by the PostHog tracking
+    context). Omitted when the request carries no persona, so the row —
+    and the events — stay free of blank props."""
+    persona = getattr(body, "persona", None)
+    persona_id = getattr(persona, "id", None)
+    if isinstance(persona_id, str) and persona_id:
+        return {"persona_id": persona_id}
+    return {}
+
+
 def create_task(
     request: Request,
     body: Union[TaskVideoRequest, SubtitleRequest, AudioRequest],
@@ -219,7 +232,11 @@ def create_task(
             "user_id": auth.user_id,
         }
         sm.state.update_task(
-            task_id, user_id=auth.user_id, flow="direct", pipeline=stop_at
+            task_id, user_id=auth.user_id, flow="direct", pipeline=stop_at,
+            # Identity for PostHog: the lifecycle events (started/progress/
+            # failed/generated) read persona_id from the task row, so the
+            # funnel can be broken down per persona instead of "unknown".
+            **_persona_tracking_kwargs(body),
         )
         # Funnel entry: requested fires from on_accepted once the task is
         # ACCEPTED into the queue — strictly before the worker thread

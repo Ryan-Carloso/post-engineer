@@ -120,7 +120,14 @@ class BatchGenerator:
                 persona_id=persona.get("id"),
             )
             try:
-                self._dispatch_generation(task_id, request, user_id)
+                self._dispatch_generation(
+                    task_id,
+                    request,
+                    user_id,
+                    slot_id=str(slot["id"]),
+                    schedule_id=str(schedule.get("id") or ""),
+                    persona_id=str(schedule.get("persona_id") or ""),
+                )
             except Exception:
                 # Refund just this video's prepaid cost; the id keeps the
                 # other videos' charges intact.
@@ -159,6 +166,12 @@ class BatchGenerator:
                 "flow": "batch",
                 "pipeline": "video",
                 "slotId": slot["id"],
+                # Identity for PostHog: the dispatch never created a task
+                # row, so these props are the only attribution the failed
+                # event gets. (slotId keeps its historic camelCase name;
+                # new props use snake_case.)
+                "schedule_id": schedule.get("id"),
+                "persona_id": schedule.get("persona_id"),
                 # Scrub the full message before truncating: a cut landing
                 # mid-key would leave a fragment the key-anchored pattern
                 # can no longer match, leaking the raw remainder into
@@ -190,7 +203,14 @@ class BatchGenerator:
             return None
 
     def _dispatch_generation(
-        self, task_id: str, request: TaskVideoRequest, user_id: str
+        self,
+        task_id: str,
+        request: TaskVideoRequest,
+        user_id: str,
+        *,
+        slot_id: str | None = None,
+        schedule_id: str | None = None,
+        persona_id: str | None = None,
     ) -> None:
         """Start the video pipeline immediately for a due slot.
 
@@ -198,9 +218,20 @@ class BatchGenerator:
         create the task state first (so the reconciler can observe it),
         then run the pipeline in a daemon thread so the tick never blocks
         on a long generation.
+
+        The slot/schedule/persona ids are persisted on the task row so the
+        PostHog tracking context can attribute every lifecycle event
+        (started/progress/failed/generated) instead of "unknown".
         """
+        tracking_ids: dict[str, str] = {}
+        if slot_id:
+            tracking_ids["slot_id"] = slot_id
+        if schedule_id:
+            tracking_ids["schedule_id"] = schedule_id
+        if persona_id:
+            tracking_ids["persona_id"] = persona_id
         self.task_state.update_task(
-            task_id, user_id=user_id, flow="batch", pipeline="video"
+            task_id, user_id=user_id, flow="batch", pipeline="video", **tracking_ids
         )
         thread = threading.Thread(
             target=tm.start,

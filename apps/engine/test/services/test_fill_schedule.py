@@ -219,10 +219,23 @@ class BatchScheduleTests(unittest.TestCase):
             patch("app.services.task.start") as mock_start,
             patch("app.services.fill_schedule.generate.threading.Thread") as mock_thread,
         ):
-            scheduler.generator._dispatch_generation("task-1", request, "user-1")
+            scheduler.generator._dispatch_generation(
+                "task-1",
+                request,
+                "user-1",
+                slot_id="slot-1",
+                schedule_id="sched-1",
+                persona_id="persona-1",
+            )
 
         scheduler.task_state.update_task.assert_called_once_with(
-            "task-1", user_id="user-1", flow="batch", pipeline="video"
+            "task-1",
+            user_id="user-1",
+            flow="batch",
+            pipeline="video",
+            slot_id="slot-1",
+            schedule_id="sched-1",
+            persona_id="persona-1",
         )
         mock_thread.assert_called_once()
         _, kwargs = mock_thread.call_args
@@ -231,6 +244,116 @@ class BatchScheduleTests(unittest.TestCase):
         kwargs["target"](**kwargs["kwargs"])
         mock_start.assert_called_once_with(
             task_id="task-1", params=request, stop_at="video"
+        )
+
+    def test_dispatch_generation_omits_blank_identity_ids(self):
+        # Identity props are optional: a dispatch without slot context
+        # must not store blank props on the task row.
+        from app.models.schema import TaskVideoRequest
+
+        store = _FakeStore()
+        scheduler = self._scheduler(store)
+        request = TaskVideoRequest(video_subject="Batch topic one")
+
+        with (
+            patch("app.services.task.start"),
+            patch("app.services.fill_schedule.generate.threading.Thread"),
+        ):
+            scheduler.generator._dispatch_generation("task-2", request, "user-1")
+
+        scheduler.task_state.update_task.assert_called_once_with(
+            "task-2", user_id="user-1", flow="batch", pipeline="video"
+        )
+
+    def test_dispatch_generation_omits_only_the_blank_identity_ids(self):
+        # Mixed context: a blank slot_id must be dropped while the set
+        # persona_id is persisted — PostHog breakdowns must not fill with
+        # empty-string noise for one prop while losing a real value in
+        # another.
+        from app.models.schema import TaskVideoRequest
+
+        store = _FakeStore()
+        scheduler = self._scheduler(store)
+        request = TaskVideoRequest(video_subject="Batch topic one")
+
+        with (
+            patch("app.services.task.start"),
+            patch("app.services.fill_schedule.generate.threading.Thread"),
+        ):
+            scheduler.generator._dispatch_generation(
+                "task-3",
+                request,
+                "user-1",
+                slot_id="",
+                schedule_id="sched-3",
+                persona_id="persona-3",
+            )
+
+        scheduler.task_state.update_task.assert_called_once_with(
+            "task-3",
+            user_id="user-1",
+            flow="batch",
+            pipeline="video",
+            schedule_id="sched-3",
+            persona_id="persona-3",
+        )
+
+    def test_dispatch_generation_omits_blank_schedule_id_only(self):
+        # Second mixed permutation: blank schedule_id with a set slot_id
+        # and persona_id. Each identity prop is filtered independently, so
+        # only the blank one must be absent from the persisted row.
+        from app.models.schema import TaskVideoRequest
+
+        store = _FakeStore()
+        scheduler = self._scheduler(store)
+        request = TaskVideoRequest(video_subject="Batch topic one")
+
+        with (
+            patch("app.services.task.start"),
+            patch("app.services.fill_schedule.generate.threading.Thread"),
+        ):
+            scheduler.generator._dispatch_generation(
+                "task-4",
+                request,
+                "user-1",
+                slot_id="slot-4",
+                schedule_id="",
+                persona_id="persona-4",
+            )
+
+        scheduler.task_state.update_task.assert_called_once_with(
+            "task-4",
+            user_id="user-1",
+            flow="batch",
+            pipeline="video",
+            slot_id="slot-4",
+            persona_id="persona-4",
+        )
+
+    def test_dispatch_generation_omits_all_explicitly_blank_identity_ids(self):
+        # Explicit empty strings (not just None defaults): all three blank
+        # must be omitted from the persisted row.
+        from app.models.schema import TaskVideoRequest
+
+        store = _FakeStore()
+        scheduler = self._scheduler(store)
+        request = TaskVideoRequest(video_subject="Batch topic one")
+
+        with (
+            patch("app.services.task.start"),
+            patch("app.services.fill_schedule.generate.threading.Thread"),
+        ):
+            scheduler.generator._dispatch_generation(
+                "task-5",
+                request,
+                "user-1",
+                slot_id="",
+                schedule_id="",
+                persona_id="",
+            )
+
+        scheduler.task_state.update_task.assert_called_once_with(
+            "task-5", user_id="user-1", flow="batch", pipeline="video"
         )
 
 

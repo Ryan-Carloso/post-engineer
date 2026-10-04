@@ -18,7 +18,33 @@ from app.services.fill_schedule.constants import (
 )
 from app.services.fill_schedule.metadata import metadata_for
 from app.services.fill_schedule.store import ScheduleStore
-from app.services.fill_schedule.support import notify_safe
+from app.services.fill_schedule.support import notify_safe, slot_user_id
+
+
+def _publish_tracking_context(
+    slot: dict[str, Any], schedule: dict[str, Any]
+) -> dict[str, object]:
+    """Identity props shared by the publish lifecycle events.
+
+    The publish stage runs without a task pipeline context, so these are
+    built from the slot/schedule rows directly: task_id, user_id,
+    schedule_id and persona_id let PostHog attribute every publish event
+    instead of leaving it "Anonymous". Blank values are omitted.
+    """
+    context: dict[str, object] = {"slotId": str(slot["id"])}
+    task_id = slot.get("task_id")
+    user_id = slot_user_id(slot)
+    schedule_id = schedule.get("id")
+    persona_id = schedule.get("persona_id")
+    if isinstance(task_id, str) and task_id:
+        context["task_id"] = task_id
+    if user_id:
+        context["user_id"] = user_id
+    if isinstance(schedule_id, str) and schedule_id:
+        context["schedule_id"] = schedule_id
+    if isinstance(persona_id, str) and persona_id:
+        context["persona_id"] = persona_id
+    return context
 
 
 class BatchPublisher:
@@ -62,7 +88,7 @@ class BatchPublisher:
             if not self.store.claim_ready_slot(str(slot["id"])):
                 # another tick/process already claimed (or published) this slot
                 continue
-            track_event("video_publish_started", {"slotId": str(slot["id"])})
+            track_event("video_publish_started", _publish_tracking_context(slot, schedule))
             task = self.task_state.get_task(str(slot["task_id"]))
             videos = (task or {}).get("videos") or []
             if not videos:
@@ -91,7 +117,7 @@ class BatchPublisher:
                 track_event(
                     "video_published",
                     {
-                        "slotId": str(slot["id"]),
+                        **_publish_tracking_context(slot, schedule),
                         "providers": [str(p) for p in schedule.get("providers", [])],
                     },
                 )
@@ -118,7 +144,7 @@ class BatchPublisher:
                 track_event(
                     "video_publish_failed",
                     {
-                        "slotId": str(slot["id"]),
+                        **_publish_tracking_context(slot, schedule),
                         # Scrub the full message before truncating: a cut
                         # landing mid-key would leave a fragment the
                         # key-anchored pattern can no longer match.
