@@ -65,7 +65,10 @@ describe('i18n — troca de idioma via UI', () => {
     // EN -> PT
     cy.contains('button', 'PT').click();
     cy.contains('a', 'Contas').should('be.visible');
-    cy.contains('Operacional').should('be.visible');
+    // 'Operacional' never existed as a label either — the PT sidebar
+    // renders 'Sair' for the sign-out button. Same below-the-fold note
+    // as above: assert existence, not visibility.
+    cy.contains('button', 'Sair').should('exist');
   });
 
   it('persiste o idioma escolhido no localStorage entre visitas', () => {
