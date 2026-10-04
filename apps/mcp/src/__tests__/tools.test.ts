@@ -467,6 +467,16 @@ describe('persona image library tools', () => {
     expect(mockClient.updatePersonaImage).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['tag', { id: 'img-1', tag: 'portrait' }],
+    ['description', { id: 'img-1', description: 'Studio headshot' }],
+    ['isPrimary', { id: 'img-1', isPrimary: true }],
+  ])('update_persona_image accepts when only %s is set', (_field, args) => {
+    // Each || branch of the refine must independently accept: a mutant
+    // dropping any branch must be caught.
+    expect(() => UpdatePersonaImageSchema.parse(args)).not.toThrow();
+  });
+
   it('update_persona_image re-parses raw handler args with the refined schema', async () => {
     // The MCP SDK parses tool args against the raw UpdatePersonaImageShape,
     // so the .refine would never fire on the tool path. The handler
