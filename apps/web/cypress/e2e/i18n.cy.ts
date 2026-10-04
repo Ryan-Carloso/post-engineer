@@ -65,7 +65,10 @@ describe('i18n — troca de idioma via UI', () => {
     // EN -> PT
     cy.contains('button', 'PT').click();
     cy.contains('a', 'Contas').should('be.visible');
-    cy.contains('Operacional').should('be.visible');
+    // Mirror of the EN assertion above: 'Sair' is the PT label for the same
+    // sign-out button ('Sign out' in EN). 'exist' rather than 'be.visible'
+    // for the same below-the-fold reason documented above.
+    cy.contains('button', 'Sair').should('exist');
   });
 
   it('persiste o idioma escolhido no localStorage entre visitas', () => {
