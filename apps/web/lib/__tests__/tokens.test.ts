@@ -2,10 +2,12 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 //---------------
 // Tests for the persona video token pricing model.
-//  - Faceless (no face)         = 0.5 token
-//  - Face ok (480p)             = 1 token
-//  - Face very good (720p)      = 2 tokens
-//  - Hybrid = weighted average by faceMixPercent (0–100%).
+//  - Faceless (no face, per post)         = 1 token
+//  - Face ok (480p)                       = 2 tokens
+//  - Face very good (720p)                = 3 tokens
+// No face MIX anymore: personas are always faced, so the price is a lookup on
+// (faceless, face quality). The engine mirrors this formula in
+// apps/engine .../fill_schedule/support.py token_cost.
 //---------------
 
 import {
@@ -21,7 +23,7 @@ describe('constant prices', () => {
     expect(FACELESS_PRICE).toBe(1);
   });
 
-  it('face ok custa 1 token e very_good custa 2', () => {
+  it('face ok custa 2 tokens e very_good custa 3', () => {
     expect(FACE_QUALITY_PRICES.ok).toBe(2);
     expect(FACE_QUALITY_PRICES.very_good).toBe(3);
   });
@@ -32,42 +34,30 @@ describe('constant prices', () => {
 });
 
 describe('computeVideoTokens', () => {
-  it('100% faceless custa 1 token, em qualquer qualidade', () => {
-    expect(computeVideoTokens(0, 'ok')).toBe(1);
-    expect(computeVideoTokens(0, 'very_good')).toBe(1);
+  it('faceless custa 1 token, em qualquer qualidade (não há rosto a resolver)', () => {
+    expect(computeVideoTokens(true, 'ok')).toBe(1);
+    expect(computeVideoTokens(true, 'very_good')).toBe(1);
   });
 
-  it('100% face ok custa 2 tokens', () => {
-    expect(computeVideoTokens(100, 'ok')).toBe(2);
+  it('com o rosto, ok custa 2 tokens', () => {
+    expect(computeVideoTokens(false, 'ok')).toBe(2);
   });
 
-  it('100% face very_good custa 3 tokens', () => {
-    expect(computeVideoTokens(100, 'very_good')).toBe(3);
+  it('com o rosto, very_good custa 3 tokens', () => {
+    expect(computeVideoTokens(false, 'very_good')).toBe(3);
   });
 
-  it('50% face ok rounds up to 2 tokens', () => {
-    expect(computeVideoTokens(50, 'ok')).toBe(2);
-  });
-
-  it('60% face ok rounds up to 2 tokens', () => {
-    expect(computeVideoTokens(60, 'ok')).toBe(2);
-  });
-
-  it('50% face very_good rounds up to 2 tokens', () => {
-    expect(computeVideoTokens(50, 'very_good')).toBe(2);
-  });
-
-  it('clamps percentages above 100 to 100', () => {
-    expect(computeVideoTokens(120, 'ok')).toBe(2);
-    expect(computeVideoTokens(150, 'very_good')).toBe(3);
-  });
-
-  it('clamps negative percentages to 0', () => {
-    expect(computeVideoTokens(-20, 'ok')).toBe(1);
-  });
-
-  it('rounds up so fractions are never charged', () => {
-    expect(computeVideoTokens(33, 'very_good')).toBe(2);
+  it('o preço nunca é zero nem fracionário', () => {
+    // The function returns a whole-token lookup; both branches are integers,
+    // so the previous "round up so fractions are never charged" rule is
+    // structural now, not arithmetic.
+    for (const faceless of [true, false]) {
+      for (const quality of ['ok', 'very_good'] as const) {
+        const cost = computeVideoTokens(faceless, quality);
+        expect(Number.isInteger(cost)).toBe(true);
+        expect(cost).toBeGreaterThanOrEqual(1);
+      }
+    }
   });
 });
 

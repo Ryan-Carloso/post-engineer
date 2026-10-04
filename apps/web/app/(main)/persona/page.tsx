@@ -81,7 +81,6 @@ const PersonaPageContent = () => {
   );
   const voicesQuery = useVoicesQuery();
   const sampleLanguagesQuery = useVoiceSampleLanguagesQuery();
-  const personaMode = usePersonaStore((s) => s.personaMode);
 
   // RHF: text fields validate onBlur with the SAME server zod schema
   // (lib/persona-schema.ts) and block submit. Zustand remains
@@ -136,30 +135,20 @@ const PersonaPageContent = () => {
         <PersonaHeader editing={Boolean(editId)} />
         <div className="space-y-5">
           <section className="space-y-6 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
-            <PersonaModeSelector />
             <PersonaNameField />
-            {personaMode === 'persona' ? <PersonaAvatarSection /> : null}
-            {/* The server decides facelessness from the stored face_mix_percent
-                (see POST /api/persona/images), not from the create-flow store:
-                an editing persona whose face_mix_percent is 0 must not show
-                the library, or every upload would be rejected. The persona
-                must also be loaded: while the list is fetching (or errored),
-                editingPersona is undefined and the section stays hidden
-                instead of flashing for a faceless persona. When editing, the
-                mode comes from the stored persona, not the zustand
-                create-flow store (which persists across navigation and would
-                hide the library for a persona-mode persona if the user last
-                used faceless mode). */}
-            {editingPersonaId &&
-              editingPersona !== undefined &&
-              // NULL means faceless too (the server rejects uploads for
-              // NULL face_mix_percent); default it to 0 so legacy personas
-              // don't see a library whose uploads always fail.
-              (editingPersona.faceMixPercent ?? 0) !== 0 ? (
+            <PersonaAvatarSection />
+            {/* Image library needs a PERSISTED persona, and the loaded data:
+                while the list is fetching (or errored) editingPersona is
+                undefined and the section stays hidden instead of flashing
+                for a persona that does not exist yet. Every persona is faced
+                (migration 007), so there is no faceless gate here anymore —
+                a legacy persona without a photo is exactly the case this
+                library exists to fix. */}
+            {editingPersonaId && editingPersona !== undefined ? (
                 <PersonaImageLibrarySection personaId={editingPersonaId} />
               ) : null}
-            {/* Faceless: no avatar — voice is still required, video is 100% stock. */}
-            {/* Mix + quality + cost: enabled in persona mode, locked at 0% in faceless. */}
+            {/* Face quality + estimated cost per video. The face itself is
+                always there; only the resolution is chosen here. */}
             <PersonaTokensSection />
           </section>
           <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
@@ -281,91 +270,10 @@ const PersonaHeader = ({ editing }: { editing: boolean }) => {
 };
 
 //---------------
-// PersonaModeSelector — choose between Consumer Persona (AI avatar + lipsync)
-// or Video Faceless (100% stock footage, no avatar, no face filter).
-// The voice can be chosen in both modes.
-//---------------
-const PersonaModeSelector = () => {
-  const personaMode = usePersonaStore((s) => s.personaMode);
-  const setPersonaMode = usePersonaStore((s) => s.setPersonaMode);
-  const { t } = useI18n();
-
-  return (
-    <section>
-      <SectionDivider label={t('persona.modeLabel')} />
-      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2" role="radiogroup" aria-label={t('persona.modeLabel')}>
-        <button
-          type="button"
-          role="radio"
-          aria-checked={personaMode === 'persona'}
-          onClick={() => setPersonaMode('persona')}
-          className={`flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-            personaMode === 'persona'
-              ? 'border-accent bg-red-50/50 ring-2 ring-accent/10'
-              : 'border-neutral-200 bg-white hover:border-neutral-400'
-          }`}
-        >
-          <span
-            className={`mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full ${
-              personaMode === 'persona' ? 'bg-accent text-white' : 'bg-neutral-100 text-neutral-500'
-            }`}
-          >
-            <SparklesIcon />
-          </span>
-          <span className="min-w-0 flex-1">
-            <strong className="block text-sm font-semibold text-neutral-900">
-              {t('persona.modePersona')}
-            </strong>
-            <span className="mt-1 block text-sm leading-5 text-neutral-500">
-              {t('persona.modePersonaHint')}
-            </span>
-          </span>
-          {personaMode === 'persona' ? (
-            <span className="mt-0.5 shrink-0 text-accent">
-              <CheckIcon />
-            </span>
-          ) : null}
-        </button>
-        <button
-          type="button"
-          role="radio"
-          aria-checked={personaMode === 'faceless'}
-          onClick={() => setPersonaMode('faceless')}
-          className={`flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-            personaMode === 'faceless'
-              ? 'border-accent bg-red-50/50 ring-2 ring-accent/10'
-              : 'border-neutral-200 bg-white hover:border-neutral-400'
-          }`}
-        >
-          <span
-            className={`mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full ${
-              personaMode === 'faceless' ? 'bg-accent text-white' : 'bg-neutral-100 text-neutral-500'
-            }`}
-          >
-            <FilmIcon />
-          </span>
-          <span className="min-w-0 flex-1">
-            <strong className="block text-sm font-semibold text-neutral-900">
-              {t('persona.modeFaceless')}
-            </strong>
-            <span className="mt-1 block text-sm leading-5 text-neutral-500">
-              {t('persona.modeFacelessHint')}
-            </span>
-          </span>
-          {personaMode === 'faceless' ? (
-            <span className="mt-0.5 shrink-0 text-accent">
-              <CheckIcon />
-            </span>
-          ) : null}
-        </button>
-      </div>
-    </section>
-  );
-};
-
-//---------------
 //---------------
 // PersonaAvatarSection — visual identity choice: AI-generated or photo upload
+// Every persona has a face, so this section is always rendered; "no face" is
+// a per-post choice (NewPostFaceField on /posts/new).
 //---------------
 const PersonaAvatarSection = () => {
   const [source, setSource] = useState<'characters' | 'upload'>('characters');
@@ -911,9 +819,9 @@ const PersonaSubmit = ({ editId }: { editId: string | null }) => {
         usePersonaStore.getState().setResult(result);
         if (result.success) {
           await queryClient.invalidateQueries({ queryKey: ['persona-list'] });
-          // Scheduling has no screen of its own; the posts list is where
-          // the user goes to see what came out of the new persona.
-          router.push('/posts');
+          // Creating a persona lands on the personas list, so the user
+          // immediately sees the persona they just created.
+          router.push('/personas');
         } else if (result.error === 'prompt_rejected') {
           scrollToErrorField('script');
         }

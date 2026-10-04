@@ -10,7 +10,6 @@ import {
   validateVisualCues,
   validateVoiceSource,
   photoExtensionOf,
-  resolveStoredFaceMixPercent,
   VALID_VIDEO_ASPECTS,
 } from '@/lib/persona-schema';
 import {
@@ -78,12 +77,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const hasPhoto = body.photo !== null;
   const hasAvatarUrl = body.values.avatarUrl !== null;
-  const visualError = validateVisualCues(
-    body.values.personaMode,
-    body.values.faceMixPercent,
-    hasPhoto,
-    hasAvatarUrl,
-  );
+  const visualError = validateVisualCues(hasPhoto, hasAvatarUrl);
   if (visualError) {
     return errorResponse(400, visualError, 'POST /api/persona');
   }
@@ -145,11 +139,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (primaryIndex !== null && primaryIndex >= libraryFiles.length) {
     return errorResponse(400, 'imagePrimaryIndex is out of range for the provided images.', 'POST /api/persona');
   }
-  const libraryValidation = await validateLibraryInputs(
-    body.values.personaMode,
-    body.values.faceMixPercent,
-    libraryInputs,
-  );
+  const libraryValidation = await validateLibraryInputs(libraryInputs);
   if ('error' in libraryValidation) {
     return errorResponse(400, libraryValidation.error, 'POST /api/persona');
   }
@@ -186,12 +176,9 @@ export async function POST(request: Request): Promise<NextResponse> {
       script_prompt: body.values.scriptPrompt,
       paragraph_number: body.values.paragraphNumber,
       niche: body.values.niche,
-      // Coerced via the shared helper (no nested ternary): no new row may
-      // store NULL — see resolveStoredFaceMixPercent.
-      face_mix_percent: resolveStoredFaceMixPercent(
-        body.values.personaMode,
-        body.values.faceMixPercent,
-      ),
+      // face_quality is the persona's only face-related choice: the face itself is
+      // always present (a video without one is a per-post choice,
+      // options.faceless).
       face_quality: body.values.faceQuality,
       // Supplied explicitly so creation works regardless of the DB default:
       // fresh installs get `default '{}'` from the canonical schema, but DBs
@@ -341,19 +328,14 @@ function parsePrimaryIndex(value: FormDataEntryValue | null): number | null {
 }
 
 //---------------
-// validateLibraryInputs — library rules at creation:
-// - faceless personas (or faceMixPercent 0) accept no images at all;
-// - at most MAX_PERSONA_IMAGES files, each a valid image.
+// validateLibraryInputs — library rules at creation: at most
+// MAX_PERSONA_IMAGES files, each a valid image. Every persona is faced, so
+// there is no faceless branch to exempt here.
 //---------------
 async function validateLibraryInputs(
-  personaMode: 'persona' | 'faceless',
-  faceMixPercent: number | null,
   inputs: LibraryImageInput[],
 ): Promise<{ inputs: LibraryImageInput[] } | { error: string }> {
   if (inputs.length === 0) return { inputs: [] };
-  if (personaMode === 'faceless' || faceMixPercent === 0) {
-    return { error: 'Faceless persona must not include library images.' };
-  }
   if (inputs.length > MAX_PERSONA_IMAGES) {
     return { error: `Image library accepts at most ${MAX_PERSONA_IMAGES} images.` };
   }

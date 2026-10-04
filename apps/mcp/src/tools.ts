@@ -26,36 +26,26 @@ const PersonaLibraryImageInputShape = z.object(LibraryImageFields);
 
 export const CreatePersonaShape = {
   name: z.string().min(1, 'Name is required').describe('Name of the persona'),
-  avatarUrl: z.string().url().optional().nullable().describe('Public URL to the persona avatar image (use list_faces for stock face URLs)'),
+  // REQUIRED: every persona has a face. A video without one is a per-video
+  // choice (generate_persona_videos options.faceless), never a persona one.
+  avatarUrl: z
+    .string()
+    .url()
+    .describe(
+      'REQUIRED. Public URL to the persona avatar image (use list_faces for stock face URLs). Every persona has a face; "no face" is chosen per video with generate_persona_videos options.faceless.',
+    ),
   voiceId: z.string().default('alloy').describe('Voice ID to use (e.g. alloy, echo)'),
   language: z.string().default('en-US').describe('Language code (e.g. pt-BR, en-US)'),
   videoAspect: z.enum(['9:16', '16:9']).default('9:16').describe('Video aspect ratio'),
   scriptPrompt: z.string().optional().default('').describe('System prompt instructions for video scripts'),
   paragraphNumber: z.number().int().min(1).max(10).default(1).describe('Number of paragraphs'),
   niche: z.string().optional().default('General').describe('Content niche topic'),
-  faceMixPercent: z.number().min(0).max(100).default(50),
-  faceQuality: z.enum(['ok', 'very_good']).default('very_good'),
-  images: z.array(PersonaLibraryImageInputShape).max(MAX_LIBRARY_IMAGES).optional().describe(`Up to ${MAX_LIBRARY_IMAGES} local image files of the same person for the persona image library. Each video deterministically picks the best-matching image by tag. Requires a non-faceless persona: avatarUrl must be set, because the server rejects library images for faceless personas.`),
+  faceQuality: z.enum(['ok', 'very_good']).default('very_good').describe('Face resolution of the rendered videos: ok (480p, 2 tokens/video) or very_good (720p, 3 tokens/video)'),
+  images: z.array(PersonaLibraryImageInputShape).max(MAX_LIBRARY_IMAGES).optional().describe(`Up to ${MAX_LIBRARY_IMAGES} local image files of the same person for the persona image library. Each video deterministically picks the best-matching image by tag.`),
   imagePrimaryIndex: z.number().int().min(0).max(MAX_LIBRARY_IMAGES - 1).optional().describe('Index into images[] marking the primary library image (no primary is set when omitted)'),
 };
 
-export const CreatePersonaSchema = z.object(CreatePersonaShape).superRefine((value, ctx) => {
-  // Domain rule encoded at parse time (the round-4 standing rule: encode
-  // domain rules in the zod schema): library images are rejected
-  // server-side for faceless personas, so require the avatar up front.
-  // The client keeps its own check as defense in depth.
-  const hasImages = (value.images?.length ?? 0) > 0;
-  const hasAvatar =
-    value.avatarUrl !== undefined && value.avatarUrl !== null && value.avatarUrl.length > 0;
-  if (hasImages && !hasAvatar) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['avatarUrl'],
-      message:
-        'avatarUrl is required when images are provided: library images need a persona avatar (faceless personas cannot have an image library).',
-    });
-  }
-});
+export const CreatePersonaSchema = z.object(CreatePersonaShape);
 
 export const ListPersonasShape = {};
 

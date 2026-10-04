@@ -6,13 +6,13 @@ export async function checkAndDeductTokens(
   supabase: SupabaseClient,
   userId: string,
   generationId: string,
-  faceMixPercent: number,
+  faceless: boolean,
   faceQuality: FaceQuality,
 ): Promise<
   | { ok: true; cost: number }
   | { ok: false; error: string; statusCode: number; freeExhausted: boolean }
 > {
-  const cost = computeVideoTokens(faceMixPercent, faceQuality);
+  const cost = computeVideoTokens(faceless, faceQuality);
 
   // Lazy one-time grant: every account gets 3 free tokens on first use.
   // Best-effort — if the RPC does not exist yet (pending migration), the flow continues.

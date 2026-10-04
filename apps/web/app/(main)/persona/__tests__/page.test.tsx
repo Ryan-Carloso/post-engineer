@@ -348,9 +348,9 @@ describe('app/(main)/persona/page — PersonaPage', () => {
     expect(formData.get('voiceId')).toBe('calm');
     expect(formData.get('videoAspect')).toBe('9:16');
     expect(await screen.findByText('persona.created')).toBeTruthy();
-    // The scheduling screen is gone; creating a persona lands on the posts
-    // list, where the user sees whatever was generated for it.
-    expect(navigation.push).toHaveBeenCalledWith('/posts');
+    // Creating a persona lands on the personas list, where the user sees
+    // the persona that was just created.
+    expect(navigation.push).toHaveBeenCalledWith('/personas');
   });
 
   it('mostra o aviso de sucesso parcial quando a criação retorna warnings', async () => {
@@ -493,7 +493,7 @@ describe('app/(main)/persona/page — persona enxuta (sem schedule)', () => {
     expect(formData.has('schedule')).toBe(false);
   });
 
-  it('sucesso na criação leva o usuário para a lista de posts', async () => {
+  it('sucesso na criação leva o usuário para a lista de personas', async () => {
     mockNoAccounts();
     const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });
@@ -501,7 +501,7 @@ describe('app/(main)/persona/page — persona enxuta (sem schedule)', () => {
     await preencherFormularioValido(user);
     await user.click(screen.getByText('persona.submit'));
 
-    await waitFor(() => expect(navigation.push).toHaveBeenCalledWith('/posts'));
+    await waitFor(() => expect(navigation.push).toHaveBeenCalledWith('/personas'));
   });
 
   it('não mostra erro de conta obrigatória nunca mais', async () => {
@@ -741,26 +741,28 @@ describe('app/(main)/persona/page — sample language', () => {
     vi.unstubAllGlobals();
   });
 
-  it('hides the image library when the edited persona is persisted as faceless', async () => {
-    // The library gate reads the persisted faceMixPercent, not the
-    // create-flow store: an editing persona with face_mix_percent 0 must not
-    // show the library, or every upload would be rejected by the server.
+  it('shows the image library for every edited persona, including a legacy one with no face', async () => {
+    // Every persona is faced now, so there is no faceless gate left: the
+    // library is exactly how a legacy persona (created without a photo or a
+    // character) gets the face it needs. It only needs the loaded data — see
+    // the loading test below.
     searchParams.value = new URLSearchParams('edit=p-1');
     vi.mocked(usePersonaListQuery).mockReturnValue({
-      data: [{ id: 'p-1', name: 'Faceless editor', faceMixPercent: 0 }],
+      data: [{ id: 'p-1', name: 'Legacy editor' }],
       isLoading: false,
     } as never);
 
     render(<PersonaPage />, { wrapper: createWrapper() });
 
     await waitFor(() => {
-      expect(screen.queryByText('persona.libraryLabel')).not.toBeInTheDocument();
+      expect(screen.getByText('persona.libraryLabel')).toBeInTheDocument();
     });
   });
 
   it('hides the image library while the persona list is still loading', async () => {
     // While editingPersona is undefined the gate must not flash the library:
-    // a faceless persona would render it for a frame before the data arrives.
+    // the section is edit-only, and rendering it for a persona that may not
+    // exist would offer an upload the server cannot accept.
     searchParams.value = new URLSearchParams('edit=p-1');
     vi.mocked(usePersonaListQuery).mockReturnValue({
       data: undefined,
@@ -774,17 +776,14 @@ describe('app/(main)/persona/page — sample language', () => {
     });
   });
 
-  it('shows the image library when the edited persona has a non-zero face mix', async () => {
-    searchParams.value = new URLSearchParams('edit=p-1');
-    vi.mocked(usePersonaListQuery).mockReturnValue({
-      data: [{ id: 'p-1', name: 'Persona editor', faceMixPercent: 50 }],
-      isLoading: false,
-    } as never);
-
+  it('never renders the legacy faceless creation mode or the face-mix slider', async () => {
     render(<PersonaPage />, { wrapper: createWrapper() });
 
     await waitFor(() => {
-      expect(screen.getByText('persona.libraryLabel')).toBeInTheDocument();
+      expect(screen.queryByRole('radiogroup', { name: 'persona.modeLabel' })).not.toBeInTheDocument();
     });
+    expect(screen.queryByTestId('face-mix-slider')).not.toBeInTheDocument();
+    // The face choice always exists: the avatar section is always rendered.
+    expect(screen.getByText('persona.photoLabel')).toBeInTheDocument();
   });
 });

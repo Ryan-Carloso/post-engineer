@@ -426,6 +426,52 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(vi.mocked(resolveVideoImage)).not.toHaveBeenCalled();
     });
 
+    it('stores the faceless choice on every slot (the engine prices a slot from it)', async () => {
+      // scheduled_posts.faceless is where the per-post choice lives: the
+      // engine's batch pipeline reads it when it refunds a failed slot. A
+      // slot created without it would be re-priced as a faced video.
+      const res = await post(baseBody({ options: { faceless: true } }));
+      expect(res.status).toBe(200);
+      const slotRows = inserts['scheduled_posts'] as Array<Record<string, unknown>>;
+      expect(slotRows).toHaveLength(2);
+      for (const row of slotRows) {
+        expect(row.faceless).toBe(true);
+      }
+    });
+
+    it('stores faceless: false for a post with the persona face', async () => {
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+      const slotRows = inserts['scheduled_posts'] as Array<Record<string, unknown>>;
+      for (const row of slotRows) {
+        expect(row.faceless).toBe(false);
+      }
+    });
+
+    it('sends lipsync: true and no face mix for a post with the persona face', async () => {
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+      expect(payload.lipsync_enabled).toBe(true);
+      expect(payload).not.toHaveProperty('face_mix_percent');
+      // The persona's face quality becomes the job resolution.
+      expect(payload.video_quality).toBe('ok');
+    });
+
+    it('sends lipsync: false and no persona quality for a faceless post', async () => {
+      const res = await post(baseBody({ options: { faceless: true } }));
+      expect(res.status).toBe(200);
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+      expect(payload.lipsync_enabled).toBe(false);
+      expect(payload).not.toHaveProperty('face_mix_percent');
+      // No face to resolve: the persona's face quality does not apply, and no
+      // image travels to the engine. Asserted on the serialized payload —
+      // that is what the engine receives (an undefined key is dropped).
+      expect(payload).not.toHaveProperty('video_quality');
+      const serialized = JSON.parse(JSON.stringify(payload)) as { persona: Record<string, unknown> };
+      expect(serialized.persona).not.toHaveProperty('photo_url');
+    });
+
     it('forwards webhook_url and per-topic script prompts to the engine payload', async () => {
       const res = await post(
         baseBody({ options: { webhookUrl: 'https://example.com/hook', scriptPrompts: ['First script', 'Second script'] } }),

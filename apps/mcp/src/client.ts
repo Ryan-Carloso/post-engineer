@@ -26,14 +26,14 @@ export interface PersonaLibraryImageInput {
 
 export interface CreatePersonaInput {
   name: string;
-  avatarUrl?: string | null;
+  /** REQUIRED — every persona has a face. */
+  avatarUrl: string;
   voiceId?: string;
   language?: string;
   videoAspect?: '9:16' | '16:9';
   scriptPrompt?: string;
   paragraphNumber?: number;
   niche?: string;
-  faceMixPercent?: number;
   faceQuality?: 'ok' | 'very_good';
   /** Up to 10 local images of the same person for the image library. */
   images?: PersonaLibraryImageInput[];
@@ -311,22 +311,24 @@ export class PostEngineerClient {
 
   async createPersona(input: CreatePersonaInput): Promise<unknown> {
     const formData = new FormData();
+    // Every persona has a face: the server requires exactly one visual
+    // identity (photo or avatarUrl), so a programmatic caller that omitted it
+    // fails here, before any bytes are uploaded.
     const hasAvatar = input.avatarUrl !== undefined && input.avatarUrl !== null && input.avatarUrl.length > 0;
+    if (!hasAvatar) {
+      throw new Error(
+        'avatarUrl is required: every persona has a face. Use list_faces for a stock face URL, and generate_persona_videos options.faceless for videos without a face.',
+      );
+    }
     formData.set('name', input.name);
-    formData.set('personaMode', hasAvatar ? 'persona' : 'faceless');
-    if (hasAvatar && input.avatarUrl) formData.set('avatarUrl', input.avatarUrl);
+    formData.set('avatarUrl', input.avatarUrl);
     formData.set('voiceId', input.voiceId ?? 'alloy');
     formData.set('language', input.language ?? 'en-US');
     formData.set('videoAspect', input.videoAspect ?? '9:16');
     if (input.scriptPrompt !== undefined) formData.set('scriptPrompt', input.scriptPrompt);
     formData.set('paragraphNumber', String(input.paragraphNumber ?? 1));
     formData.set('niche', input.niche ?? 'General');
-    // The effective mix is computed once: the server treats 0 as faceless
-    // and rejects library images for it, so the local guard below must see
-    // the same value the form sends.
-    const effectiveFaceMixPercent = hasAvatar ? input.faceMixPercent ?? 50 : 0;
-    formData.set('faceMixPercent', String(effectiveFaceMixPercent));
-    formData.set('faceQuality', hasAvatar ? input.faceQuality ?? 'very_good' : 'ok');
+    formData.set('faceQuality', input.faceQuality ?? 'very_good');
     const images = input.images ?? [];
     // An imagePrimaryIndex without images is a caller bug (typo'd `images`
     // or a lone index): fail fast instead of a silent successful creation
@@ -335,17 +337,6 @@ export class PostEngineerClient {
       throw new Error('imagePrimaryIndex requires images: provide at least one library image.');
     }
     if (images.length > 0) {
-      if (!hasAvatar) {
-        throw new Error('Library images require a persona avatar: provide avatarUrl together with images.');
-      }
-      // The server rejects library images when the stored face mix is 0
-      // (faceless), even with an avatarUrl. Fail fast here instead of
-      // uploading the bytes first.
-      if (effectiveFaceMixPercent === 0) {
-        throw new Error(
-          'Library images require a non-zero face mix: faceMixPercent must be greater than 0 when images are provided.',
-        );
-      }
       if (images.length > MAX_LIBRARY_IMAGES) {
         throw new Error(`At most ${MAX_LIBRARY_IMAGES} library images are allowed per persona.`);
       }

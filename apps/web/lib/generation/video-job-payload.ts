@@ -25,11 +25,9 @@ const PERSONA_PREFERENCE_FIELDS: ReadonlyArray<{
 // traveling verbatim: a mistyped engine field would otherwise surface as
 // the opaque 502, and guarding fields one by one is whack-a-mole.
 // personaId/lipsync are consumed by the route itself and never reach the
-// engine under their own names. face_mix_percent is deliberately absent:
-// the engine has no such field (its schema is extra="ignore"), and the
-// payload assembly unconditionally derives it from the persona — a
-// request-level value would be silently dropped or overridden. lipsync is
-// the supported request-level override for the face-mix behavior.
+// engine under their own names. The persona face MIX is gone entirely
+// (migration 007): `lipsync` is the one and only face-shaped switch, and the
+// route sets it from the per-post `faceless` choice.
 //---------------
 const REQUEST_FORWARD_FIELDS: ReadonlyArray<string> = [
   'video_subject',
@@ -54,7 +52,6 @@ export interface JobPersona {
   script_prompt?: string | null;
   paragraph_number?: number | null;
   niche?: string | null;
-  face_mix_percent?: number | null;
   face_quality?: string | null;
 }
 
@@ -101,27 +98,26 @@ export function buildJobPayload(
     personaRecord,
   );
 
-  // Faceless/face mix (hybrid). NULL = legacy persona → nothing new is injected.
-  // mix > 0 → derives video_quality from face_quality (kebab-case for the engine)
-  // when the request does not define it; mix 0 → 100% faceless (no face quality).
-  // lipsync follows the mix only when the request does not define it explicitly.
-  const faceMix = typeof persona.face_mix_percent === 'number' ? persona.face_mix_percent : null;
-  if (faceMix !== null) {
-    jobPayload.face_mix_percent = faceMix;
-    if (faceMix > 0) {
-      const hasQuality =
-        typeof jobPayload.video_quality === 'string' &&
-        (jobPayload.video_quality as string).trim().length > 0;
-      if (!hasQuality) {
-        jobPayload.video_quality =
-          persona.face_quality === 'very_good' ? 'very-good' : 'ok';
-      }
-    }
-    if (typeof request.lipsync !== 'boolean') {
-      jobPayload.lipsync_enabled = faceMix > 0;
+  // Face quality (the persona's own, kebab-cased for the engine) becomes the
+  // job's video_quality only when the job actually shows the face: a faceless
+  // video has no face to resolve, so its resolution is the engine's business,
+  // not the persona's.
+  const showsFace = request.lipsync !== false;
+  if (showsFace) {
+    const hasQuality =
+      typeof jobPayload.video_quality === 'string' &&
+      (jobPayload.video_quality as string).trim().length > 0;
+    if (!hasQuality) {
+      jobPayload.video_quality = persona.face_quality === 'very_good' ? 'very-good' : 'ok';
     }
   }
+  // Faceless: the persona's face quality does not apply. An explicit
+  // request-level video_quality already in the payload is left alone —
+  // explicit request beats the persona default.
 
+  // The per-post "no face" choice reaches the engine as lipsync_enabled: false.
+  // The route always sets it explicitly (it owns the faceless option), so an
+  // absent request flag stays absent rather than being invented here.
   if (typeof request.lipsync === 'boolean') {
     jobPayload.lipsync_enabled = request.lipsync;
   } else if (typeof persona.niche === 'string' && persona.niche.trim().length > 0) {

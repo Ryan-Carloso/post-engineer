@@ -35,7 +35,6 @@ vi.mock('@/lib/analytics', () => ({
 }));
 
 import { POST, PATCH, DELETE } from '../route';
-import { DEFAULT_FACE_MIX_PERCENT } from '@/lib/persona-schema';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
@@ -105,16 +104,20 @@ function formRequest(fields: Record<string, string>, files: File[] = []): Reques
 
 const photo = () => new File(['png'], 'foto.png', { type: 'image/png' });
 
-describe('POST /api/persona — modo faceless (100% stock, sem avatar)', () => {
+describe('POST /api/persona — toda persona tem rosto', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('cria persona faceless sem foto nem avatar (apenas voz da casa)', async () => {
+  it('cria persona com avatarUrl (sem foto) e a voz da casa', async () => {
     const { uploaded, inserted } = mockSupabase();
 
     const res = await POST(
-      formRequest({ name: 'Canal Ninja', personaMode: 'faceless', voiceId: 'voz-1' }),
+      formRequest({
+        name: 'Canal Ninja',
+        avatarUrl: 'data:image/png;base64,IA',
+        voiceId: 'voz-1',
+      }),
     );
     const body = (await res.json()) as { success: boolean; personaId?: string };
 
@@ -125,9 +128,60 @@ describe('POST /api/persona — modo faceless (100% stock, sem avatar)', () => {
       user_id: USER_ID,
       name: 'Canal Ninja',
       photo_path: null,
-      avatar_url: null,
+      avatar_url: 'data:image/png;base64,IA',
       voice_id: 'voz-1',
     });
+  });
+
+  it('never stores a face mix (the column was dropped in migration 007)', async () => {
+    // Regression guard: the insert must not carry face_mix_percent. A stray
+    // key is a phantom-column 400 from PostgREST on every persona creation.
+    const { inserted } = mockSupabase();
+
+    const res = await POST(
+      formRequest({
+        name: 'Canal Ninja',
+        avatarUrl: 'data:image/png;base64,IA',
+        voiceId: 'voz-1',
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(inserted[0]).not.toHaveProperty('face_mix_percent');
+  });
+
+  it('ignora a legacy personaMode/faceMixPercent: a faced persona is created', async () => {
+    // Both keys are gone from the schema, so a stale client (cached MCP build,
+    // direct API caller) sending personaMode=faceless with faceMixPercent=0
+    // still gets a faced persona — the only kind this product makes. The
+    // alternative (rejecting the payload) would break those callers for a
+    // choice that no longer exists.
+    const { inserted } = mockSupabase();
+
+    const res = await POST(
+      formRequest({
+        name: 'Canal Ninja',
+        avatarUrl: 'data:image/png;base64,IA',
+        voiceId: 'voz-1',
+        personaMode: 'faceless',
+        faceMixPercent: '0',
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(inserted[0]).not.toHaveProperty('face_mix_percent');
+    expect(inserted[0]).toMatchObject({ avatar_url: 'data:image/png;base64,IA' });
+  });
+
+  it('rejeita persona sem nenhuma identidade visual (foto ou avatarUrl)', async () => {
+    mockSupabase();
+
+    const res = await POST(formRequest({ name: 'Canal Ninja', voiceId: 'voz-1' }));
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { success: boolean; error: string };
+    expect(body.success).toBe(false);
+    expect(body.error).toContain('exactly one');
   });
 
   it('includes recent_image_ids in the insert (supplies the NOT NULL column explicitly, independent of the DB default)', async () => {
@@ -139,7 +193,11 @@ describe('POST /api/persona — modo faceless (100% stock, sem avatar)', () => {
     const { inserted } = mockSupabase();
 
     const res = await POST(
-      formRequest({ name: 'Canal Ninja', personaMode: 'faceless', voiceId: 'voz-1' }),
+      formRequest({
+        name: 'Canal Ninja',
+        avatarUrl: 'data:image/png;base64,IA',
+        voiceId: 'voz-1',
+      }),
     );
 
     expect(res.status).toBe(200);
@@ -222,7 +280,11 @@ describe('POST /api/persona — modo faceless (100% stock, sem avatar)', () => {
 
     const { inserted } = mockSupabase();
     const res = await POST(
-      formRequest({ name: 'Canal Ninja', personaMode: 'faceless', voiceId: 'voz-1' }),
+      formRequest({
+        name: 'Canal Ninja',
+        avatarUrl: 'data:image/png;base64,IA',
+        voiceId: 'voz-1',
+      }),
     );
 
     expect(res.status).toBe(200);
@@ -284,44 +346,20 @@ describe('POST /api/persona — modo faceless (100% stock, sem avatar)', () => {
     }
   });
 
-  it('rejeita foto enviada em modo faceless (evita reativar avatar no engine)', async () => {
-    mockSupabase();
-
-    const res = await POST(
-      formRequest({ name: 'Canal Ninja', personaMode: 'faceless', voiceId: 'voz-1' }, [photo()]),
-    );
-
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { success: boolean; error: string };
-    expect(body.success).toBe(false);
-    expect(body.error).toContain('Faceless');
-  });
-
-  it('rejeita avatarUrl enviada em modo faceless', async () => {
-    mockSupabase();
+  it('persists the face quality (the only face choice a persona has)', async () => {
+    const { inserted } = mockSupabase();
 
     const res = await POST(
       formRequest({
-        name: 'Canal Ninja',
-        personaMode: 'faceless',
+        name: 'Ana',
         avatarUrl: 'data:image/png;base64,IA',
         voiceId: 'voz-1',
+        faceQuality: 'very_good',
       }),
     );
 
-    expect(res.status).toBe(400);
-  });
-
-  it('rejects an invalid personaMode', async () => {
-    mockSupabase();
-
-    const res = await POST(
-      formRequest({ name: 'Canal Ninja', personaMode: 'holograma', voiceId: 'voz-1' }),
-    );
-
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { success: boolean; error: string };
-    expect(body.error).toContain('personaMode');
+    expect(res.status).toBe(200);
+    expect(inserted[0]).toMatchObject({ face_quality: 'very_good' });
   });
 });
 
@@ -585,12 +623,15 @@ describe('POST /api/persona', () => {
   });
 });
 
-describe('POST /api/persona — mix faceless/face (híbrido) e qualidade', () => {
+describe('POST /api/persona — qualidade da face (sem mix, sem modo)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('creates a hybrid persona: persists faceMixPercent and faceQuality', async () => {
+  it('ignora faceMixPercent: a persona é criada com o rosto, sem gravar o mix', async () => {
+    // The face mix no longer exists as a persona attribute. A stale client
+    // sending one (any value) must not decide anything — and must not make
+    // the insert carry the dropped column.
     const { inserted } = mockSupabase();
 
     const res = await POST(
@@ -603,63 +644,11 @@ describe('POST /api/persona — mix faceless/face (híbrido) e qualidade', () =>
     );
 
     expect(res.status).toBe(200);
-    expect(inserted[0]).toMatchObject({
-      face_mix_percent: 40,
-      face_quality: 'very_good',
-    });
+    expect(inserted[0]).toMatchObject({ face_quality: 'very_good' });
+    expect(inserted[0]).not.toHaveProperty('face_mix_percent');
   });
 
-  it('cria persona 100% faceless: mix 0, sem foto, qualidade ok', async () => {
-    const { inserted } = mockSupabase();
-
-    const res = await POST(
-      formRequest({
-        name: 'Ninja',
-        personaMode: 'faceless',
-        voiceId: 'voz-1',
-        faceMixPercent: '0',
-        faceQuality: 'ok',
-      }),
-    );
-
-    expect(res.status).toBe(200);
-    expect(inserted[0]).toMatchObject({
-      face_mix_percent: 0,
-      face_quality: 'ok',
-      photo_path: null,
-      avatar_url: null,
-    });
-  });
-
-  it('faceless sem faceMixPercent persiste 0 (sem backdoor do NULL)', async () => {
-    const { inserted } = mockSupabase();
-
-    const res = await POST(
-      formRequest({ name: 'Ninja', personaMode: 'faceless', voiceId: 'voz-1' }),
-    );
-
-    expect(res.status).toBe(200);
-    expect(inserted[0]).toMatchObject({ face_mix_percent: 0 });
-  });
-
-  it('rejects a photo when the mix is 0 (faceless)', async () => {
-    mockSupabase();
-
-    const res = await POST(
-      formRequest({
-        name: 'Ninja',
-        voiceId: 'voz-1',
-        faceMixPercent: '0',
-      }, [photo()]),
-    );
-
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { success: boolean; error: string };
-    expect(body.success).toBe(false);
-    expect(body.error).toContain('faceMixPercent');
-  });
-
-  it('retorna 400 com faceMixPercent fora de 0–100', async () => {
+  it('ignora an out-of-range faceMixPercent instead of rejecting the persona', async () => {
     mockSupabase();
 
     const res = await POST(
@@ -670,12 +659,10 @@ describe('POST /api/persona — mix faceless/face (híbrido) e qualidade', () =>
       }, [photo()]),
     );
 
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toContain('faceMixPercent');
+    expect(res.status).toBe(200);
   });
 
-  it('returns 400 with a non-numeric faceMixPercent', async () => {
+  it('ignora a non-numeric faceMixPercent instead of rejecting the persona', async () => {
     mockSupabase();
 
     const res = await POST(
@@ -686,7 +673,7 @@ describe('POST /api/persona — mix faceless/face (híbrido) e qualidade', () =>
       }, [photo()]),
     );
 
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(200);
   });
 
   it('returns 400 with an invalid faceQuality', async () => {
@@ -703,59 +690,6 @@ describe('POST /api/persona — mix faceless/face (híbrido) e qualidade', () =>
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
     expect(body.error).toContain('faceQuality');
-  });
-
-  it('persona without mix stores the shared default — no new row keeps NULL', async () => {
-    // A persona-mode creation that omitted faceMixPercent used to store
-    // NULL, which the images route treats as faceless — permanently
-    // write-locking the library for a persona the creation accepted as
-    // face-requiring. New rows are coerced to the UI store's default so
-    // NULL keeps meaning "legacy faceless-mode row" everywhere.
-    const { inserted } = mockSupabase();
-
-    const res = await POST(formRequest({ name: 'Ana', voiceId: 'voz-1' }, [photo()]));
-
-    expect(res.status).toBe(200);
-    expect(inserted[0]).toMatchObject({
-      face_mix_percent: DEFAULT_FACE_MIX_PERCENT,
-      face_quality: null,
-    });
-  });
-
-  it('faceless without explicit mix is stored as 0 so the library guard holds', async () => {
-    // A faceless creation with no explicit faceMixPercent used to store
-    // NULL, which passed the POST /api/persona/images `=== 0` faceless
-    // check — a backdoor for library uploads on faceless personas. New
-    // faceless rows are coerced to 0.
-    const { inserted } = mockSupabase();
-
-    const res = await POST(
-      formRequest({ name: 'Canal Ninja', personaMode: 'faceless', voiceId: 'voz-1' }),
-    );
-
-    expect(res.status).toBe(200);
-    expect(inserted[0]).toMatchObject({ face_mix_percent: 0, photo_path: null });
-  });
-
-  it('faceless with an explicit faceMixPercent is coerced to 0 (backdoor closed)', async () => {
-    // A direct API caller can send personaMode=faceless with an explicit
-    // faceMixPercent=80. Without coercion, 80 is stored and the images
-    // route (which treats the stored mix as the facelessness source)
-    // would accept library uploads — re-opening the backdoor. The
-    // faceless branch is unconditional at the write boundary.
-    const { inserted } = mockSupabase();
-
-    const res = await POST(
-      formRequest({
-        name: 'Canal Ninja',
-        personaMode: 'faceless',
-        faceMixPercent: '80',
-        voiceId: 'voz-1',
-      }),
-    );
-
-    expect(res.status).toBe(200);
-    expect(inserted[0]).toMatchObject({ face_mix_percent: 0 });
   });
 });
 

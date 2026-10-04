@@ -9,11 +9,23 @@ from loguru import logger
 from app.services.fill_schedule.store import ScheduleStore
 
 
-def token_cost(face_mix_percent: float, face_quality: str) -> int:
-    """Per-video token cost, reusing the scheduled-videos formula."""
-    mix = min(100.0, max(0.0, face_mix_percent)) / 100.0
-    quality_price = 3 if face_quality == "very_good" else 2
-    return max(1, int((mix * quality_price + (1 - mix)) + 0.999999))
+FACELESS_PRICE = 1
+FACE_QUALITY_PRICES = {"ok": 2, "very_good": 3}
+
+
+def token_cost(faceless: bool, face_quality: str) -> int:
+    """Per-video token cost.
+
+    Mirrors the web's ``computeVideoTokens`` (apps/web/lib/tokens.ts) — the two
+    MUST agree: the web pre-pays this amount and this function decides how
+    much to refund, so a drift between them silently over- or under-refunds a
+    failed slot. Personas are always faced (the face mix column is gone), so
+    the only inputs are the per-post "no face" choice and the persona's face
+    quality.
+    """
+    if faceless:
+        return FACELESS_PRICE
+    return FACE_QUALITY_PRICES["very_good" if face_quality == "very_good" else "ok"]
 
 
 def persona_for(schedule: dict[str, Any]) -> dict[str, Any]:
@@ -43,13 +55,36 @@ def notify_safe(notify: Any, message: str) -> None:
         logger.warning(f"fill_schedule: notify failed: {exc}")
 
 
-def build_persona_params(persona: dict[str, Any], store: ScheduleStore) -> dict[str, Any]:
-    """TaskVideoRequest persona params: avatar/voice resolution."""
+def slot_faceless(slot: dict[str, Any]) -> bool:
+    """True when this slot's post was created with "no face".
+
+    ``scheduled_posts.faceless`` is the per-post choice written by the web at
+    creation (the persona face mix column no longer exists). Anything that is
+    not the literal True is treated as "with the persona's face": a legacy row
+    (NULL, before the column existed) or a malformed value prices and renders
+    the expensive case, never the cheap one.
+    """
+    return slot.get("faceless") is True
+
+
+def build_persona_params(
+    persona: dict[str, Any],
+    store: ScheduleStore,
+    faceless: bool = False,
+) -> dict[str, Any]:
+    """TaskVideoRequest persona params: avatar/voice resolution.
+
+    A faceless post contributes ONLY the voice — no avatar, no photo — so the
+    engine renders stock footage (its ``persona_lipsync_active`` also returns
+    false without a visual identity). This keeps the batch pipeline in step
+    with the web's direct dispatch of the same slot.
+    """
     params: dict[str, Any] = {"name": persona.get("name") or "Persona"}
-    if persona.get("avatar_url"):
-        params["avatar_url"] = persona["avatar_url"]
-    elif persona.get("photo_path"):
-        params["photo_url"] = store.signed_url("personas", persona["photo_path"])
+    if not faceless:
+        if persona.get("avatar_url"):
+            params["avatar_url"] = persona["avatar_url"]
+        elif persona.get("photo_path"):
+            params["photo_url"] = store.signed_url("personas", persona["photo_path"])
     if persona.get("voice_id"):
         params["voice_id"] = persona["voice_id"]
     elif persona.get("voice_audio_path"):

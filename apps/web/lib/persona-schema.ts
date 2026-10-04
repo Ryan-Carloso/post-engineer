@@ -7,37 +7,7 @@ import { z } from 'zod';
 //---------------
 
 export const VALID_VIDEO_ASPECTS = ['9:16', '16:9', '1:1'] as const;
-export const PERSONA_MODES = ['persona', 'faceless'] as const;
 export const FACE_QUALITIES = ['ok', 'very_good'] as const;
-// Default face mix for persona-mode creations that omit the field (the UI
-// always sends it; raw API callers may not). Shared so the insert
-// coercion and the UI store can't drift apart: no new row may store NULL,
-// so NULL keeps meaning "legacy faceless-mode row" everywhere.
-export const DEFAULT_FACE_MIX_PERCENT = 100;
-
-/**
- * Coerces the face-mix value stored at creation. Faceless creations are
- * ALWAYS stored as 0 — even with an explicit mix (a direct API caller can
- * send personaMode=faceless&faceMixPercent=80; storing 80 would let the
- * images route treat the row as face-requiring and accept library
- * uploads, re-opening the backdoor). Persona-mode creations without an
- * explicit mix are coerced to the shared default for the same reason: a
- * stored NULL is treated as faceless by the images route and the page
- * gate, which would permanently write-lock the library for a persona the
- * creation accepted as face-requiring.
- */
-export function resolveStoredFaceMixPercent(
-  personaMode: 'persona' | 'faceless',
-  faceMixPercent: number | null | undefined,
-): number {
-  // The faceless branch is UNCONDITIONAL: a direct API caller can send
-  // personaMode=faceless with an explicit faceMixPercent (e.g. 80). If that
-  // were stored, the images route (which treats the stored mix as the
-  // facelessness source) would accept library uploads — re-opening the
-  // backdoor the NULL-coercion was meant to close.
-  if (personaMode === 'faceless') return 0;
-  return faceMixPercent ?? DEFAULT_FACE_MIX_PERCENT;
-}
 
 export const PHOTO_EXTENSIONS: Record<string, string> = {
   'image/png': 'png',
@@ -52,8 +22,16 @@ export const PHOTO_EXTENSIONS: Record<string, string> = {
 const optionalText = <T extends z.ZodType>(schema: T) =>
   z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? undefined : v), schema.optional());
 
+//---------------
+// personaFormSchema — non-strict on purpose: a persona used to accept a
+// faceless mode and a face-mix percentage, and both keys are now IGNORED
+// (zod strips unknown keys). Every persona is faced — creation requires
+// exactly one image source (validateVisualCues) — and "no face" is a per-post
+// choice (options.faceless), so there is nothing for a caller to configure
+// here. A stale client sending personaMode=faceless still gets a faced
+// persona, which is the only persona this product makes.
+//---------------
 export const personaFormSchema = z.object({
-  personaMode: optionalText(z.enum(PERSONA_MODES)),
   name: z.string().trim().min(1).optional(),
   avatarUrl: optionalText(z.string()),
   voiceId: optionalText(z.string()),
@@ -65,7 +43,6 @@ export const personaFormSchema = z.object({
   scriptPrompt: optionalText(z.string().max(2000)),
   niche: optionalText(z.string().max(300)),
   paragraphNumber: optionalText(z.coerce.number().int().min(1).max(10)),
-  faceMixPercent: optionalText(z.coerce.number().min(0).max(100)),
   faceQuality: optionalText(z.enum(FACE_QUALITIES)),
   // The JSON video-job flow caps video_subject at 300 (multi-megabyte
   // subjects would be fed into LLM prompts); the debug flow shares this
@@ -79,12 +56,10 @@ export const personaFormSchema = z.object({
 // from the routes (contract already consumed by tests/client).
 //---------------
 const FIELD_ERRORS: Record<string, (value: unknown) => string> = {
-  personaMode: () => 'Invalid personaMode: use "persona" or "faceless".',
   videoAspect: (value) => `Invalid videoAspect: ${String(value)}. Use one of ${VALID_VIDEO_ASPECTS.join(', ')}.`,
   niche: () => 'Invalid niche: use at most 300 characters.',
   scriptPrompt: () => 'Invalid scriptPrompt: use at most 2000 characters.',
   paragraphNumber: () => 'Invalid paragraphNumber: use an integer between 1 and 10.',
-  faceMixPercent: () => 'Invalid faceMixPercent: use a number between 0 and 100.',
   faceQuality: () => 'Invalid faceQuality: use "ok" or "very_good".',
   video_subject: () => 'Invalid video_subject: use at most 300 characters.',
   language: () => 'Invalid language: use at most 35 characters.',
@@ -107,7 +82,6 @@ export type PersonaFormMode = 'create' | 'debug';
 
 export type ParsedPersonaForm = {
   values: {
-    personaMode: (typeof PERSONA_MODES)[number];
     name: string | null;
     avatarUrl: string | null;
     voiceId: string | null;
@@ -116,7 +90,6 @@ export type ParsedPersonaForm = {
     scriptPrompt: string | null;
     paragraphNumber: number | null;
     niche: string | null;
-    faceMixPercent: number | null;
     faceQuality: (typeof FACE_QUALITIES)[number] | null;
     videoSubject: string | null;
   };
@@ -202,7 +175,6 @@ export function parsePersonaForm(formData: FormData, mode: PersonaFormMode): Par
     ok: true,
     value: {
       values: {
-        personaMode: values.personaMode ?? 'persona',
         name: values.name ?? null,
         avatarUrl: values.avatarUrl ?? null,
         voiceId: values.voiceId ?? null,
@@ -211,7 +183,6 @@ export function parsePersonaForm(formData: FormData, mode: PersonaFormMode): Par
         scriptPrompt: values.scriptPrompt ?? null,
         paragraphNumber: values.paragraphNumber ?? null,
         niche: values.niche ?? null,
-        faceMixPercent: values.faceMixPercent ?? null,
         faceQuality: values.faceQuality ?? null,
         videoSubject,
       },
@@ -222,29 +193,13 @@ export function parsePersonaForm(formData: FormData, mode: PersonaFormMode): Par
 }
 
 //---------------
-// validateVisualCues — persona visual-identity rule.
-// - Persona mode (default / backward-compat): requires EXACTLY one image
-//   source (photo file or avatarUrl).
-// - Faceless mode (100% stock footage, no avatar, no lipsync):
-//   no image is allowed — avoids persisting a photo that would reactivate
-//   the avatar path in the engine.
-// - Explicit mix 0 (100% faceless via hybrid): same rule as faceless.
+// validateVisualCues — persona visual-identity rule: every persona is faced,
+// so creation requires EXACTLY one image source (photo file or avatarUrl).
+// Both or neither is a 400 — the faceless exception (no image at all) is
+// gone; "no face" is chosen per video, at post creation.
 // Returns the error message, or null when valid.
 //---------------
-export function validateVisualCues(
-  personaMode: 'persona' | 'faceless',
-  faceMixPercent: number | null,
-  hasPhoto: boolean,
-  hasAvatarUrl: boolean,
-): string | null {
-  if (personaMode === 'faceless' || faceMixPercent === 0) {
-    if (hasPhoto || hasAvatarUrl) {
-      return faceMixPercent === 0
-        ? 'faceMixPercent 0 means 100% faceless: omit the photo and avatarUrl.'
-        : 'Faceless persona must not include a photo or avatarUrl.';
-    }
-    return null;
-  }
+export function validateVisualCues(hasPhoto: boolean, hasAvatarUrl: boolean): string | null {
   if (hasPhoto === hasAvatarUrl) {
     return 'Provide exactly one of: photo file or avatarUrl.';
   }

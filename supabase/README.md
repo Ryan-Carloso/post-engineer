@@ -11,6 +11,8 @@ the order — you never need to guess or read docs to know what comes next:
 | 003 | `migrations/003_engine-task-state.sql`      | Engine task state (only for `MPT_STATE_BACKEND=supabase`) |
 | 004 | `migrations/004_billing_reconcile.sql`        | Billing reconciliation: zombie/stuck detectors, daily pg_cron trigger (fully automatic, no review queue) |
 | 005 | `migrations/005_persona-visual-identity.sql` | CHECK: a persona never has both `photo_path` and `avatar_url` |
+| 006 | `migrations/006_test-deploy-supabase.sql`    | Test-deploy schema verification (CI/dev only)    |
+| 007 | `migrations/007_personas-drop-face-mix.sql`  | `scheduled_posts.faceless` (per-post "no face") + `drop column personas.face_mix_percent`: personas are always faced. **Destructive** — needs the `db:destructive-approved` PR label |
 
 ## How to apply
 

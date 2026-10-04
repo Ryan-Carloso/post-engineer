@@ -68,6 +68,14 @@ Provision the database schema in your Supabase project:
    chosen character/AI avatar (`avatar_url`). The web app swaps the two in a
    single update when you change a persona's face, so this is what keeps the
    face unambiguous.
+6. `supabase/migrations/007_personas-drop-face-mix.sql` — a persona is always
+   faced, so `face_mix_percent` is dropped and "no face" becomes a per-post
+   choice: the new `scheduled_posts.faceless` column (written by the web at
+   post creation, read by the engine's batch pipeline to price a slot).
+   This is the only migration with destructive DDL; a persona created without
+   a face before this migration needs a photo or a chosen avatar in the
+   persona editor before its posts can generate with the face on (until then
+   the slot fails and the tokens are refunded).
 
 Paste each file into the Supabase Dashboard > SQL Editor and run, in order
 (the numeric prefixes encode the order — always apply the

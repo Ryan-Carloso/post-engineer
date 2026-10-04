@@ -16,7 +16,8 @@ export interface GenerationGateInput {
   supabase: SupabaseClient;
   userId: string;
   generationId: string;
-  faceMixPercent: number;
+  /** Per-post "no face" choice — prices the video (faceless is the flat rate). */
+  faceless: boolean;
   faceQuality: FaceQuality;
 }
 
@@ -32,7 +33,7 @@ export async function gateGeneration(input: GenerationGateInput): Promise<Genera
     input.supabase,
     input.userId,
     input.generationId,
-    input.faceMixPercent,
+    input.faceless,
     input.faceQuality,
   );
   if (!tokenResult.ok) {

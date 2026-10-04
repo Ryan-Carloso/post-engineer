@@ -28,6 +28,7 @@ import {
   TrashIcon,
   AlertIcon,
   CheckIcon,
+  SparklesIcon,
   INPUT_CLASS,
   SECTION_LABEL_CLASS,
 } from '@/lib/ui';
@@ -154,6 +155,7 @@ export default function NewPostPage() {
       >
         <div className="space-y-6">
           <NewPostPersonaField />
+          <NewPostFaceField />
           <NewPostTopicsField />
           <NewPostAccountsField />
           <NewPostScheduleField />
@@ -225,6 +227,7 @@ async function handleSubmit(
       startAt: startInstant.toISOString(),
       times: filledTimes,
       timezone: store.timezone,
+      faceless: store.faceless,
     });
     // Projeta a resposta no que o banner lê: o texto de erro cru da API
     // nunca entra no store (a UI traduz pelo código).
@@ -390,6 +393,79 @@ const NewPostPersonaField = () => {
               </span>
               {selected ? (
                 <span className="shrink-0 text-accent">
+                  <CheckIcon />
+                </span>
+              ) : null}
+            </Label>
+          );
+        })}
+      </RadioGroup>
+    </section>
+  );
+};
+
+//---------------
+// Rosto do vídeo — a persona sempre tem rosto; "sem rosto" é escolhido aqui,
+// por post (100% stock footage, sem lipsync e sem imagem da biblioteca). A
+// persona continua obrigatória porque é dela que vem a voz, o nicho e o
+// roteiro. Mesmo padrão de cards do seletor de persona acima: RadioGroup do
+// shadcn como item sr-only + Label como card clicável.
+//---------------
+const NewPostFaceField = () => {
+  const { t } = useI18n();
+  const faceless = useNewPostStore((s) => s.faceless);
+  const setFaceless = useNewPostStore((s) => s.setFaceless);
+
+  const options = [
+    { value: 'face', faceless: false, label: t('newPost.faceWithAvatar'), hint: t('newPost.faceWithAvatarHint') },
+    { value: 'faceless', faceless: true, label: t('newPost.faceFaceless'), hint: t('newPost.faceFacelessHint') },
+  ] as const;
+
+  return (
+    <section className={cn(CARD_CLASS, 'space-y-4')}>
+      <SectionTitle icon={<SparklesIcon />} label={t('newPost.faceLabel')} hint={t('newPost.faceHint')} />
+      <RadioGroup
+        value={faceless ? 'faceless' : 'face'}
+        onValueChange={(value) => setFaceless(value === 'faceless')}
+        aria-label={t('newPost.faceLabel')}
+        className="grid gap-3"
+      >
+        {options.map((option) => {
+          const itemId = `new-post-face-${option.value}`;
+          const selected = faceless === option.faceless;
+          return (
+            <Label
+              key={option.value}
+              htmlFor={itemId}
+              data-selected={selected ? 'true' : 'false'}
+              className={cn(
+                'flex cursor-pointer items-start gap-3 rounded-2xl border bg-white p-3 transition-colors',
+                'has-focus-visible:ring-2 has-focus-visible:ring-accent/40 has-focus-visible:ring-offset-2',
+                selected
+                  ? 'border-accent bg-accent/5 ring-1 ring-accent'
+                  : 'border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50',
+              )}
+            >
+              <RadioGroupItem
+                value={option.value}
+                id={itemId}
+                aria-label={option.label}
+                className="sr-only"
+              />
+              <span
+                className={cn(
+                  'mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full',
+                  selected ? 'bg-accent text-white' : 'bg-neutral-100 text-neutral-500',
+                )}
+              >
+                {option.faceless ? <FilmIcon /> : <SparklesIcon />}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold text-neutral-900">{option.label}</span>
+                <span className="mt-0.5 block text-xs leading-5 text-neutral-500">{option.hint}</span>
+              </span>
+              {selected ? (
+                <span className="mt-0.5 shrink-0 text-accent">
                   <CheckIcon />
                 </span>
               ) : null}
@@ -758,18 +834,20 @@ const NewPostPreviewCard = () => {
 
 //---------------
 // Custo estimado — o mesmo preço por vídeo que a rota cobra
-// (computeVideoTokens sobre o mix de rosto + qualidade da persona), vezes o
-// número de temas. É uma estimativa; o servidor é a autoridade de cobrança.
+// (computeVideoTokens), vezes o número de temas. Sem rosto custa o preço
+// faceless; com o rosto, o preço da qualidade escolhida na persona. É uma
+// estimativa; o servidor é a autoridade de cobrança.
 //---------------
 const NewPostCostSummary = () => {
   const { t } = useI18n();
   const personaId = useNewPostStore((s) => s.personaId);
   const topics = useNewPostStore((s) => s.topics);
+  const faceless = useNewPostStore((s) => s.faceless);
   const personasQuery = usePersonaListQuery();
   const persona = (personasQuery.data ?? []).find((item) => item.id === personaId);
   const videoCount = topics.filter((topic) => topic.trim().length > 0).length;
   const perVideo = persona
-    ? computeVideoTokens(persona.faceMixPercent ?? 0, (persona.faceQuality as FaceQuality) ?? 'ok')
+    ? computeVideoTokens(faceless, (persona.faceQuality as FaceQuality) ?? 'ok')
     : 0;
   return (
     <section className={cn(CARD_CLASS, 'flex items-center justify-between gap-3')}>

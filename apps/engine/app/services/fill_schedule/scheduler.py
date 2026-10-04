@@ -79,9 +79,9 @@ class FillScheduleScheduler:
         return results
 
     @staticmethod
-    def _token_cost(face_mix_percent: float, face_quality: str) -> int:
+    def _token_cost(faceless: bool, face_quality: str) -> int:
         """Per-video token cost (also used by the batch billing flow)."""
-        return token_cost(face_mix_percent, face_quality)
+        return token_cost(faceless, face_quality)
 
 
 def start_fill_schedule_thread(scheduler: FillScheduleScheduler) -> threading.Thread:

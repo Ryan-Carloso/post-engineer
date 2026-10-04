@@ -15,6 +15,7 @@ from app.services.analytics import scrub_secret_values, track_event
 from app.services.fill_schedule.store import ScheduleStore
 from app.services.fill_schedule.support import (
     persona_for,
+    slot_faceless,
     slot_user_id,
     token_cost,
 )
@@ -84,7 +85,7 @@ class BatchReconciler:
                         )
                     else:
                         cost = token_cost(
-                            float(persona.get("face_mix_percent") or 0),
+                            slot_faceless(slot),
                             str(persona.get("face_quality") or "ok"),
                         )
                         batch_generation_id = f"batch:{schedule['id']}"

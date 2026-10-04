@@ -77,7 +77,6 @@ interface OwnedRow extends PersonaLibraryImage {
 
 interface OwnedPersona {
   id: string;
-  face_mix_percent: number | null;
 }
 
 /** Confirms the persona exists and belongs to the caller; returns the row. */
@@ -92,11 +91,9 @@ async function assertPersonaOwned(
       response: errorResponse(403, 'This API key does not have access to this persona.', `${method} /api/persona/images`),
     };
   }
-  // face_mix_percent rides along so POST can run its faceless check on the
-  // same row — one round-trip for ownership + facelessness.
   const { data, error } = await supabase
     .from('personas')
-    .select('id, face_mix_percent')
+    .select('id')
     .eq('id', personaId)
     .eq('user_id', auth.userId)
     .single();
@@ -322,17 +319,6 @@ export async function POST(request: Request): Promise<NextResponse> {
   const owned = await assertPersonaOwned(supabase, auth, personaId, 'POST');
   if ('response' in owned) return owned.response;
 
-  // Creation rejects library images for faceless personas; the same rule
-  // applies here so images cannot be added backdoor after creation. Stored
-  // facelessness is face_mix_percent = 0 (there is no persona_mode column).
-  // NULL is treated as faceless too: legacy rows created before the
-  // insert-time coercion can still carry NULL, and letting them attach
-  // library images would reintroduce the backdoor.
-  // The row rides along from assertPersonaOwned — no second personas query.
-  if (owned.persona.face_mix_percent === 0 || owned.persona.face_mix_percent === null) {
-    return errorResponse(400, 'Faceless persona must not include library images.', 'POST /api/persona/images');
-  }
-
   const file = formData.get('image');
   if (!isFileLike(file) || file.size === 0) {
     return errorResponse(400, 'An image file is required.', 'POST /api/persona/images');
@@ -418,11 +404,6 @@ export async function PATCH(request: Request): Promise<NextResponse> {
   const authed = await getAuth(request);
   if ('response' in authed) return authed.response;
   const { auth, supabase } = authed;
-
-  // Faceless personas may still carry library images from before they were
-  // switched to faceless — PATCH/DELETE stay available so those images can
-  // be edited or removed. Only POST (adding new images) is blocked for
-  // faceless personas.
 
   const body: unknown = await request.json().catch(() => null);
   const id =
@@ -537,9 +518,6 @@ export async function DELETE(request: Request): Promise<NextResponse> {
   const authed = await getAuth(request);
   if ('response' in authed) return authed.response;
   const { auth, supabase } = authed;
-
-  // Same faceless exemption as PATCH: images that predate the switch to
-  // faceless must remain deletable. Only POST is blocked for faceless.
 
   const id = new URL(request.url).searchParams.get('id');
   if (!id) return errorResponse(400, 'id is required.', 'DELETE /api/persona/images');
