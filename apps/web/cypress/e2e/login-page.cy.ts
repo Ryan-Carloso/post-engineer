@@ -8,9 +8,11 @@ describe('Login — UI', () => {
   it('renderiza título, subtítulo e botão de entrar com GitHub', () => {
     cy.visit('/login');
 
-    cy.contains('h1', 'Bem-vindo ao Post Engineer').should('be.visible');
-    cy.contains('Conecte suas contas do YouTube e Instagram').should('be.visible');
-    cy.contains('button', 'Entrar com GitHub').should('be.visible');
+    // The card title is an h2; the only h1 is the hero headline, which is
+    // hidden below the lg breakpoint.
+    cy.contains('h2', 'Bem-vindo de volta').should('be.visible');
+    cy.contains('Conecte suas contas e continue a criar').should('be.visible');
+    cy.contains('button', 'Continuar com GitHub').should('be.visible');
   });
 
   it('mostra redirecionamento e volta ao normal quando o OAuth falha', () => {
@@ -24,11 +26,11 @@ describe('Login — UI', () => {
 
     cy.visit('/login');
 
-    cy.contains('button', 'Entrar com GitHub').click();
+    cy.contains('button', 'Continuar com GitHub').click();
 
     // Após a falha e o retorno ao /login, o botão volta ao estado inicial.
     cy.url().should('match', /\/login$/);
-    cy.contains('button', 'Entrar com GitHub').should('be.visible');
-    cy.contains('button', 'Entrar com GitHub').should('not.be.disabled');
+    cy.contains('button', 'Continuar com GitHub').should('be.visible');
+    cy.contains('button', 'Continuar com GitHub').should('not.be.disabled');
   });
 });
