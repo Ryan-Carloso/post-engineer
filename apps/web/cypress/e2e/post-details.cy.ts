@@ -90,11 +90,16 @@ function stubClipboard(): void {
 }
 
 describe('Post details page', () => {
-  before(() => {
-    cy.loginE2EUser();
-  });
-
   beforeEach(() => {
+    // Real session cookie first: the middleware validates it server-side and
+    // bounces unauthenticated visitors to /landing. loginE2EUser writes a
+    // plain cookie (no cy.session), so with test isolation on it must run in
+    // beforeEach — a before() login only authenticates the first test and
+    // every later visit bounces to /landing, where no slot request ever
+    // fires and cy.wait('@slotDetail') times out with "No request ever
+    // occurred". Every other app-page spec does the same.
+    cy.loginE2EUser();
+
     cy.intercept('GET', '/api/persona/video-generations/*', {
       statusCode: 404,
       body: { success: false, error: 'Not found' },
