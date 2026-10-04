@@ -177,6 +177,18 @@ notices.
   line at a specific line number; grep showed the string nowhere in
   the file. Verify every cited line with grep before changing code.
 
+## Codecov PR comment (PR #90, 2026-10-04)
+
+- **The `header`/`flags` comment sections only render when the PR diff
+  touches coverable lines.** PRs #84, #88 and #90 all got Codecov's
+  condensed "All modified and coverable lines are covered by tests"
+  comment despite the `comment.layout: "header, diff, flags"` config —
+  none of them changed coverable source (config, specs and workflow
+  YAML only). A docs/config-only PR showing the short comment after
+  this merges is expected behavior, not a broken layout; the
+  percentage header and per-flag table appear on PRs that actually
+  change covered code.
+
 ## Billing reconciliation (2026-10-03)
 
 - **Never treat engine HTTP 200 as "task alive".** The task endpoint
