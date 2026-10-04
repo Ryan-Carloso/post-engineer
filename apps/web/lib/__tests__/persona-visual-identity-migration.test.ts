@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
+import { findRepoRoot } from '@/test/repo-root';
 
 //---------------
 // supabase/migrations/005_persona-visual-identity.sql — the invariant the app
@@ -18,20 +18,16 @@ import { fileURLToPath } from 'node:url';
 //---------------
 
 const migrationPath = join(
-  dirname(fileURLToPath(import.meta.url)),
-  '..',
-  '..',
-  '..',
-  '..',
+  findRepoRoot(import.meta.url),
   'supabase',
   'migrations',
   '005_persona-visual-identity.sql',
 );
 
 const routePath = join(
-  dirname(fileURLToPath(import.meta.url)),
-  '..',
-  '..',
+  findRepoRoot(import.meta.url),
+  'apps',
+  'web',
   'app',
   'api',
   'persona',

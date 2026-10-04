@@ -15,6 +15,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { findRepoRoot } from '@/test/repo-root';
 
 const ctorArgs: unknown[][] = [];
 
@@ -59,15 +60,8 @@ describe('DEFAULT_POSTHOG_HOST cross-app sync', () => {
     // assert your intended mapping instead of deleting it — a divergent
     // host should always be a conscious choice.
     const { readFileSync } = await import('node:fs');
-    const { join, dirname } = await import('node:path');
-    const { fileURLToPath } = await import('node:url');
-    const repoRoot = join(
-      dirname(fileURLToPath(import.meta.url)),
-      '..',
-      '..',
-      '..',
-      '..',
-    );
+    const { join } = await import('node:path');
+    const repoRoot = findRepoRoot(import.meta.url);
 
     const webSrc = readFileSync(
       join(repoRoot, 'apps', 'web', 'lib', 'posthog-config.ts'),

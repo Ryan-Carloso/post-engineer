@@ -2,8 +2,8 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import { readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
+import { findRepoRoot } from '@/test/repo-root';
 import {
   personaAssetPath,
   recordRecentImageId,
@@ -22,11 +22,7 @@ import {
 // its owner — and this test is what says so out loud.
 //---------------
 const STORAGE_DOC_PATH = join(
-  dirname(fileURLToPath(import.meta.url)),
-  '..',
-  '..',
-  '..',
-  '..',
+  findRepoRoot(import.meta.url),
   'supabase',
   'README.md',
 );
@@ -658,14 +654,9 @@ describe('supabase/migrations/002_persona-images.sql literals', () => {
     // database behavior. This test parses the SQL file and asserts the
     // literals match.
     const { readFileSync } = await import('node:fs');
-    const { join, dirname } = await import('node:path');
-    const { fileURLToPath } = await import('node:url');
+    const { join } = await import('node:path');
     const sqlPath = join(
-      dirname(fileURLToPath(import.meta.url)),
-      '..',
-      '..',
-      '..',
-      '..',
+      findRepoRoot(import.meta.url),
       'supabase',
       'migrations',
       '002_persona-images.sql',

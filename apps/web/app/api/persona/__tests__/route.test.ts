@@ -4,6 +4,7 @@
 import '@testing-library/jest-dom/vitest';
 import { NextResponse } from 'next/server';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { findRepoRoot } from '@/test/repo-root';
 
 //---------------
 // POST /api/persona tests (real contract).
@@ -195,16 +196,9 @@ describe('POST /api/persona — toda persona tem rosto', () => {
     // both directions so the next column addition fails CI instead of
     // production.
     const { readFileSync } = await import('node:fs');
-    const { join, dirname } = await import('node:path');
-    const { fileURLToPath } = await import('node:url');
+    const { join } = await import('node:path');
     const sqlPath = join(
-      dirname(fileURLToPath(import.meta.url)),
-      '..',
-      '..',
-      '..',
-      '..',
-      '..',
-      '..',
+      findRepoRoot(import.meta.url),
       'supabase',
       'migrations',
       '001_schema.sql',
@@ -295,18 +289,8 @@ describe('POST /api/persona — toda persona tem rosto', () => {
     // script silently. Static `includes` checks only — no dynamic RegExp
     // (CodeQL rule).
     const { readFileSync } = await import('node:fs');
-    const { join, dirname } = await import('node:path');
-    const { fileURLToPath } = await import('node:url');
-    const supabaseDir = join(
-      dirname(fileURLToPath(import.meta.url)),
-      '..',
-      '..',
-      '..',
-      '..',
-      '..',
-      '..',
-      'supabase',
-    );
+    const { join } = await import('node:path');
+    const supabaseDir = join(findRepoRoot(import.meta.url), 'supabase');
     const expectations: Array<[string, string]> = [
       [join('migrations', '001_schema.sql'), `recent_image_ids uuid[] not null default '{}'`],
       [

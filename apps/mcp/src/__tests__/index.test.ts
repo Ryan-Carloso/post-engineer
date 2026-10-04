@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
@@ -25,6 +25,11 @@ import {
   RemovePersonaImageShape,
 } from '../tools.js';
 import type { PostEngineerClient } from '../client.js';
+
+const mockTrackEvent = vi.fn();
+vi.mock('../analytics.js', () => ({
+  trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
+}));
 
 const EXPECTED_TOOLS = [
   'create_persona',
@@ -193,5 +198,58 @@ describe('registered tool schemas (single source of truth)', () => {
     const schemas = await listServerTools(createPostEngineerMcpServer(mockClient));
     const avatarUrl = schemas.get('update_persona')?.properties.avatarUrl;
     expect(avatarUrl?.anyOf).toBeUndefined();
+  });
+});
+
+describe('withTracking wrapper', () => {
+  // Every tool call must emit mcp_tool_called with the tool name AND still
+  // run the real handler. Pin both: dropping the trackEvent call or
+  // swallowing the handler result are the Stryker survivors here.
+  const mockClient = {
+    listVoices: vi.fn(),
+  } as unknown as PostEngineerClient;
+
+  beforeEach(() => {
+    mockTrackEvent.mockClear();
+    vi.mocked(mockClient.listVoices).mockReset();
+  });
+
+  it('tracks the tool call and returns the handler result', async () => {
+    vi.mocked(mockClient.listVoices).mockResolvedValue([{ id: 'alloy' }]);
+    const server = createPostEngineerMcpServer(mockClient);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'test-client', version: '0.0.0' });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const result = await client.callTool({ name: 'list_voices', arguments: {} });
+      expect(mockTrackEvent).toHaveBeenCalledWith(
+        'mcp_tool_called',
+        expect.objectContaining({ toolName: 'list_voices' })
+      );
+      expect(mockClient.listVoices).toHaveBeenCalled();
+      expect(result.isError).toBeFalsy();
+      const text = (result.content as Array<{ type: string; text: string }>)?.[0]?.text ?? '';
+      expect(text).toContain('alloy');
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('still tracks when the handler throws', async () => {
+    vi.mocked(mockClient.listVoices).mockRejectedValue(new Error('down'));
+    const server = createPostEngineerMcpServer(mockClient);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'test-client', version: '0.0.0' });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const result = await client.callTool({ name: 'list_voices', arguments: {} });
+      expect(mockTrackEvent).toHaveBeenCalledWith(
+        'mcp_tool_called',
+        expect.objectContaining({ toolName: 'list_voices' })
+      );
+      expect(result.isError).toBe(true);
+    } finally {
+      await client.close();
+    }
   });
 });

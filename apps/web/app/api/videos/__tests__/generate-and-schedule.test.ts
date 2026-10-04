@@ -8,6 +8,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextResponse } from 'next/server';
+import { findRepoRoot } from '@/test/repo-root';
 
 vi.mock('@/lib/request-auth', () => ({ requireSupabaseSession: vi.fn() }));
 
@@ -350,16 +351,9 @@ describe('POST /api/videos/generate-and-schedule', () => {
       // the canonical schema and assert every insert key is a real column,
       // so the next phantom key fails CI instead of production.
       const { readFileSync } = await import('node:fs');
-      const { join, dirname } = await import('node:path');
-      const { fileURLToPath } = await import('node:url');
+      const { join } = await import('node:path');
       const sqlPath = join(
-        dirname(fileURLToPath(import.meta.url)),
-        '..',
-        '..',
-        '..',
-        '..',
-        '..',
-        '..',
+        findRepoRoot(import.meta.url),
         'supabase',
         'migrations',
         '001_schema.sql',
