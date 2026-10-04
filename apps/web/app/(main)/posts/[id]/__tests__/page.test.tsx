@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 
@@ -505,6 +505,38 @@ describe('PostDetailPage — post identity', () => {
 
     expect(screen.getByText('posts.accountsLabel')).toBeInTheDocument();
     expect(screen.getByText('Europa Na Estrada')).toBeInTheDocument();
+  });
+
+  it('restarts the copied-indicator window on rapid clicks instead of extending it', () => {
+    vi.useFakeTimers();
+    try {
+      render(<DetailPage />);
+
+      const button = screen.getByRole('button', { name: 'posts.copyPostId' });
+      fireEvent.click(button);
+      expect(screen.getByText('posts.copied')).toBeInTheDocument();
+
+      // 2s into the 2.5s window, click again: the window restarts.
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+      fireEvent.click(button);
+
+      // 2s after the second click the indicator is still up (2s into the
+      // restarted window); without the reset it would have cleared 0.5s
+      // after the second click.
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+      expect(screen.getByText('posts.copied')).toBeInTheDocument();
+
+      act(() => {
+        vi.advanceTimersByTime(600);
+      });
+      expect(screen.queryByText('posts.copied')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('shows the post ID on the generation view too', () => {

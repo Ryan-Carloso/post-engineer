@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import {
   useSlotDetailQuery,
@@ -295,11 +295,22 @@ const DetailHeader = ({
 export const PostIdSection = ({ postId }: { postId: string }) => {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    // Never flip state after unmount when a reset timer is still pending.
+    return () => {
+      if (resetTimer.current !== null) clearTimeout(resetTimer.current);
+    };
+  }, []);
 
   const handleCopy = (): void => {
     void navigator.clipboard.writeText(postId);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+    // A rapid second click restarts the "Copied" window instead of
+    // stacking another timer that would extend it.
+    if (resetTimer.current !== null) clearTimeout(resetTimer.current);
+    resetTimer.current = setTimeout(() => setCopied(false), 2500);
   };
 
   return (
