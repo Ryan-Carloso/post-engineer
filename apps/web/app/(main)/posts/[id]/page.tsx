@@ -101,7 +101,9 @@ function formatDateTime(value: string, locale: 'pt' | 'en', timeZone?: string | 
       });
     } catch {
       // A schedule row with a garbage timezone must not blank the date —
-      // fall through to the viewer's zone below.
+      // fall through to the viewer's zone below. The warn keeps the bad
+      // value diagnosable (data issue, not a rendering one).
+      console.warn(`Ignoring invalid schedule timezone: ${timeZone}`);
     }
   }
   return new Date(value).toLocaleString(tag, {

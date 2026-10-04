@@ -479,6 +479,27 @@ describe('PostDetailPage — post identity', () => {
     expect(section).toHaveTextContent('(Europe/Lisbon)');
   });
 
+  it('falls back to the viewer timezone on a garbage schedule timezone and warns', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      mockQueries({
+        slot: {
+          ...slotPayload(),
+          schedule: { ...SLOT_SCHEDULE, timezone: 'Not/AZone' },
+        },
+      });
+      render(<DetailPage />);
+
+      // The date must not blank: it renders in the viewer's zone instead.
+      const section = screen.getByLabelText('posts.scheduleLabel');
+      expect(section).toHaveTextContent('posts.scheduledForLabel');
+      expect(section).toHaveTextContent('(Not/AZone)');
+      expect(warn).toHaveBeenCalledWith('Ignoring invalid schedule timezone: Not/AZone');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('lists the target accounts by name', () => {
     render(<DetailPage />);
 
