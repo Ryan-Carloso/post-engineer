@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
-  "_comment": "Nightly mutation testing for apps/mcp (vitest). See .github/workflows/mutation.yml.",
+  "_comment": "Per-PR mutation testing for apps/mcp (vitest); the mutation workflow passes the PR's changed files via --mutate. Manual 'workflow_dispatch' runs use this full scope: src/**.",
   "coverageAnalysis": "perTest",
   "ignorePatterns": [
     "node_modules",

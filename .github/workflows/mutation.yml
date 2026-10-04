@@ -1,27 +1,35 @@
 name: mutation
 
-# Nightly mutation testing (StrykerJS) over the vitest suites.
+# Mutation testing (StrykerJS) over the vitest suites.
 #
 # INFORMATIONAL ONLY — this workflow is deliberately NOT a required check and
-# must never be added to the branch ruleset: Stryker costs 10-100x a normal
-# test run, so it runs on a nightly schedule (plus manual dispatch), never
-# per PR.
+# must never be added to the branch ruleset: it runs `continue-on-error` and
+# must never block PRs or merges.
 #
-# Scope is intentionally narrow (see each app's stryker.config.json):
-#   apps/web -> lib/** only (pure business logic, fast unit tests)
-#   apps/mcp -> src/** (tiny package, cheap to cover fully)
-# Widen the `mutate` scope once the nightly baseline is stable.
+# Design (user decision, 2026-10-04): mutation runs ON EVERY PR, scoped to
+# that PR's changed files — a nightly score has no owning PR, so a big PR
+# tanking the score would need a whole new PR to fix it; per-PR keeps the
+# feedback loop tight. `workflow_dispatch` runs the full configured scope
+# (see each app's stryker.config.json) for manual baselines.
+#
+# Scope per PR: changed .ts/.tsx files under apps/web and apps/mcp,
+# excluding tests. If a PR touches no source files, the Stryker step is
+# skipped gracefully.
 # apps/engine (Python) is out of scope here — needs mutmut/Cosmic Ray in a
-# follow-up; see the tracking PR body.
+# follow-up.
 #
 # Results: the HTML report is uploaded as a per-app artifact and the
 # mutation score is printed in the job summary. The free Stryker dashboard
 # is intentionally NOT wired (needs an API key secret); artifacts suffice.
 
 on:
-  schedule:
-    # Nightly ~03:30 UTC. Approximate time is fine.
-    - cron: '30 3 * * *'
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'apps/web/**/*.ts'
+      - 'apps/web/**/*.tsx'
+      - 'apps/mcp/**/*.ts'
+      - '.github/workflows/mutation.yml'
   workflow_dispatch:
 
 jobs:
@@ -38,6 +46,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Full history: the changed-files diff needs origin/<base>.
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
@@ -52,17 +63,49 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Changed source files for this app, relative to the app dir
+      # (Stryker resolves --mutate against its working directory).
+      # Excludes tests and deleted files. Empty when the PR touches no
+      # source files in this app — or on manual dispatch (full scope).
+      - name: Compute changed files
+        id: changed
+        run: |
+          set -uo pipefail
+          files=""
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            files="$(git diff --name-only --diff-filter=ACMR \
+              "origin/${{ github.base_ref }}...HEAD" \
+              -- 'apps/${{ matrix.app }}/**/*.ts' 'apps/${{ matrix.app }}/**/*.tsx' \
+              | grep -v '/__tests__/' | grep -vE '\.test\.tsx?$' || true)"
+            # Strip the app prefix for Stryker's working directory.
+            files="$(echo "$files" | sed "s|^apps/${{ matrix.app }}/||" | paste -sd ',' -)"
+          fi
+          echo "files=$files" >> "$GITHUB_OUTPUT"
+          if [ -n "$files" ]; then
+            echo "Mutating changed files: $files"
+          else
+            echo "No changed source files for ${{ matrix.app }} (or manual dispatch: full config scope)."
+          fi
+
       - name: Run Stryker mutation testing
+        if: github.event_name == 'workflow_dispatch' || steps.changed.outputs.files != ''
         working-directory: apps/${{ matrix.app }}
-        run: pnpm exec stryker run
+        # Informational only: never fail the PR on mutation results.
+        continue-on-error: true
+        run: |
+          if [ -n "${{ steps.changed.outputs.files }}" ]; then
+            pnpm exec stryker run --mutate "${{ steps.changed.outputs.files }}"
+          else
+            pnpm exec stryker run
+          fi
 
       - name: Upload mutation HTML report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: mutation-report-${{ matrix.app }}
+          name: mutation-report-${{ matrix.app }}-${{ github.event.pull_request.number || 'manual' }}
           path: apps/${{ matrix.app }}/reports/mutation/
-          if-no-files-found: error
+          if-no-files-found: ignore
 
       - name: Mutation score summary
         if: always()
@@ -87,8 +130,8 @@ jobs:
               )"
               echo "**Mutation score: ${SCORE}%** (${KILLED} killed, ${SURVIVED} survived, ${TIMEOUT} timed out, ${TOTAL} mutants)"
             else
-              echo "No mutation report produced — the run may have failed or timed out."
+              echo "No mutation report produced — no source files changed, or the run failed."
             fi
             echo ""
-            echo "Full HTML report: download the \`mutation-report-${{ matrix.app }}\` artifact from this run."
+            echo "Full HTML report: download the \`mutation-report-${{ matrix.app }}-\` artifact from this run."
           } >> "$GITHUB_STEP_SUMMARY"
