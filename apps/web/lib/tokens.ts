@@ -6,7 +6,7 @@ import { create } from 'zustand';
 //  - With the persona's face "ok" (480p)    = 2 tokens
 //  - With the persona's face "very_good" (720p) = 3 tokens
 //
-// There is no face MIX anymore (migration 007 dropped personas.face_mix_percent):
+// There is no face MIX anymore (migration 007 dropped the persona column):
 // a persona always has a face, and "no face" is a boolean the user picks per
 // post — so the price is a straight lookup, not a weighted average.
 //---------------

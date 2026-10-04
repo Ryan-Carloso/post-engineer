@@ -570,11 +570,11 @@ describe('app/(main)/persona/page — modo edição (mesma página do create)', 
   });
 
   //---------------
-  // Persona com FOTO enviada pelo usuário (photo_path): não tem personagem
-  // escolhido. O editor usava `avatarUrl ?? photoUrl`, o que punha a signed
-  // URL (expira em 1h) no lugar de um personagem e a reenviava como avatarUrl
-  // em cada save — quebrava o check photo_path+avatar_url e, sem ele, trocava
-  // o rosto do usuário por uma face que ele não escolheu.
+  // Persona with a user-uploaded PHOTO (photo_path): no chosen character. The
+  // editor used `avatarUrl ?? photoUrl`, which put the signed URL (expires in
+  // 1h) where a character belongs and re-sent it as avatarUrl on every save —
+  // breaking the photo_path+avatar_url check and, without it, swapping the
+  // user's face for one they never picked.
   //---------------
   it('em edição, persona com foto não ganha avatarUrl a partir da photoUrl assinada', async () => {
     const mutateAsync = vi.fn().mockResolvedValue({ success: true });

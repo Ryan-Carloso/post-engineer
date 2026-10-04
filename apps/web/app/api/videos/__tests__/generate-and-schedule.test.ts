@@ -77,7 +77,6 @@ const PERSONA = {
   script_prompt: null,
   paragraph_number: 5,
   niche: 'fitness',
-  face_mix_percent: 100,
   face_quality: 'ok',
 };
 
@@ -448,12 +447,11 @@ describe('POST /api/videos/generate-and-schedule', () => {
       }
     });
 
-    it('sends lipsync: true and no face mix for a post with the persona face', async () => {
+    it('sends lipsync: true and the persona quality as the job resolution', async () => {
       const res = await post(baseBody());
       expect(res.status).toBe(200);
       const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
       expect(payload.lipsync_enabled).toBe(true);
-      expect(payload).not.toHaveProperty('face_mix_percent');
       // The persona's face quality becomes the job resolution.
       expect(payload.video_quality).toBe('ok');
     });
@@ -463,7 +461,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(200);
       const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
       expect(payload.lipsync_enabled).toBe(false);
-      expect(payload).not.toHaveProperty('face_mix_percent');
       // No face to resolve: the persona's face quality does not apply, and no
       // image travels to the engine. Asserted on the serialized payload —
       // that is what the engine receives (an undefined key is dropped).

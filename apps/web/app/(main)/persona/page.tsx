@@ -145,8 +145,8 @@ const PersonaPageContent = () => {
                 a legacy persona without a photo is exactly the case this
                 library exists to fix. */}
             {editingPersonaId && editingPersona !== undefined ? (
-                <PersonaImageLibrarySection personaId={editingPersonaId} />
-              ) : null}
+              <PersonaImageLibrarySection personaId={editingPersonaId} />
+            ) : null}
             {/* Face quality + estimated cost per video. The face itself is
                 always there; only the resolution is chosen here. */}
             <PersonaTokensSection />

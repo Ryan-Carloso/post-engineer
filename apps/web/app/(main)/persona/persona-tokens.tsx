@@ -5,10 +5,10 @@ import { usePersonaStore } from '@/lib/store';
 import { useI18n } from '@/lib/i18n/provider';
 
 //---------------
-// PersonaTokensSection — qualidade da face + custo estimado por vídeo.
-// A persona sempre tem rosto (o "sem rosto" é escolhido por post, em
-// /posts/new), então aqui não existe mais o mix 0–100%: o custo é sempre o
-// da face inteira, ponderado pela qualidade escolhida.
+// PersonaTokensSection — face quality + estimated cost per video.
+// Every persona has a face ("no face" is chosen per post, in /posts/new), so
+// there is no 0-100% mix here anymore: the cost is always the whole face,
+// weighted by the chosen quality.
 //---------------
 export function PersonaTokensSection() {
   const faceQuality = usePersonaStore((s) => s.faceQuality);
@@ -16,7 +16,7 @@ export function PersonaTokensSection() {
   const { t } = useI18n();
 
   // The persona always has a face, so this is the with-face price (faceless is
-// a per-post choice, priced on the post screen).
+  // a per-post choice, priced on the post screen).
   const cost = computeVideoTokens(false, faceQuality);
 
   return (

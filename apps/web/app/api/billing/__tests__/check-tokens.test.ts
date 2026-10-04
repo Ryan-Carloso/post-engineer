@@ -118,12 +118,12 @@ describe('POST /api/billing/check-tokens', () => {
     );
   });
 
-  it('trata qualquer valor não-booleano de faceless como "com rosto" (nunca cobra menos)', async () => {
-    // The face mix is gone, so a stale caller sending faceMixPercent must not
-    // silently price a faceless (cheaper) video.
+  it('trata qualquer valor não-true de faceless como "com rosto" (nunca cobra menos)', async () => {
+    // Only the literal true means faceless: a malformed value must fall back
+    // to the pricier faced case, never silently under-charge a generation.
     vi.mocked(checkAndDeductTokens).mockResolvedValue({ ok: true, cost: 2 });
 
-    await POST(makePostRequest({ userId: 'u1', faceMixPercent: 0 } as Record<string, unknown>));
+    await POST(makePostRequest({ userId: 'u1', faceless: 'yes' } as Record<string, unknown>));
 
     expect(checkAndDeductTokens).toHaveBeenCalledWith(
       expect.anything(),

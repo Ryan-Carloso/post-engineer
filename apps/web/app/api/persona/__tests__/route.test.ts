@@ -134,8 +134,12 @@ describe('POST /api/persona — toda persona tem rosto', () => {
   });
 
   it('never stores a face mix (the column was dropped in migration 007)', async () => {
-    // Regression guard: the insert must not carry face_mix_percent. A stray
-    // key is a phantom-column 400 from PostgREST on every persona creation.
+    // Regression guard on our own insert shape: a stray key is a
+    // phantom-column 400 from PostgREST on every persona creation. A stale
+    // client payload carrying the removed fields is a no-op by design (zod
+    // strips unknown keys), so it is not exercised here;
+    // lib/__tests__/face-mix-removed.test.ts pins the removal at the source
+    // level across the web app and the engine.
     const { inserted } = mockSupabase();
 
     const res = await POST(
@@ -150,30 +154,7 @@ describe('POST /api/persona — toda persona tem rosto', () => {
     expect(inserted[0]).not.toHaveProperty('face_mix_percent');
   });
 
-  it('ignora a legacy personaMode/faceMixPercent: a faced persona is created', async () => {
-    // Both keys are gone from the schema, so a stale client (cached MCP build,
-    // direct API caller) sending personaMode=faceless with faceMixPercent=0
-    // still gets a faced persona — the only kind this product makes. The
-    // alternative (rejecting the payload) would break those callers for a
-    // choice that no longer exists.
-    const { inserted } = mockSupabase();
-
-    const res = await POST(
-      formRequest({
-        name: 'Canal Ninja',
-        avatarUrl: 'data:image/png;base64,IA',
-        voiceId: 'voz-1',
-        personaMode: 'faceless',
-        faceMixPercent: '0',
-      }),
-    );
-
-    expect(res.status).toBe(200);
-    expect(inserted[0]).not.toHaveProperty('face_mix_percent');
-    expect(inserted[0]).toMatchObject({ avatar_url: 'data:image/png;base64,IA' });
-  });
-
-  it('rejeita persona sem nenhuma identidade visual (foto ou avatarUrl)', async () => {
+  it('rejects a persona with no visual identity (neither photo nor avatarUrl)', async () => {
     mockSupabase();
 
     const res = await POST(formRequest({ name: 'Canal Ninja', voiceId: 'voz-1' }));
@@ -346,7 +327,7 @@ describe('POST /api/persona — toda persona tem rosto', () => {
     }
   });
 
-  it('persists the face quality (the only face choice a persona has)', async () => {
+  it('persists the face quality on an avatar persona (no photo upload)', async () => {
     const { inserted } = mockSupabase();
 
     const res = await POST(
@@ -628,52 +609,19 @@ describe('POST /api/persona — qualidade da face (sem mix, sem modo)', () => {
     vi.clearAllMocks();
   });
 
-  it('ignora faceMixPercent: a persona é criada com o rosto, sem gravar o mix', async () => {
-    // The face mix no longer exists as a persona attribute. A stale client
-    // sending one (any value) must not decide anything — and must not make
-    // the insert carry the dropped column.
+  it('persists the face quality (the only face choice a persona has)', async () => {
     const { inserted } = mockSupabase();
 
     const res = await POST(
       formRequest({
-        name: 'Mix 40',
+        name: 'Ana',
         voiceId: 'voz-1',
-        faceMixPercent: '40',
         faceQuality: 'very_good',
       }, [photo()]),
     );
 
     expect(res.status).toBe(200);
     expect(inserted[0]).toMatchObject({ face_quality: 'very_good' });
-    expect(inserted[0]).not.toHaveProperty('face_mix_percent');
-  });
-
-  it('ignora an out-of-range faceMixPercent instead of rejecting the persona', async () => {
-    mockSupabase();
-
-    const res = await POST(
-      formRequest({
-        name: 'Ana',
-        voiceId: 'voz-1',
-        faceMixPercent: '150',
-      }, [photo()]),
-    );
-
-    expect(res.status).toBe(200);
-  });
-
-  it('ignora a non-numeric faceMixPercent instead of rejecting the persona', async () => {
-    mockSupabase();
-
-    const res = await POST(
-      formRequest({
-        name: 'Ana',
-        voiceId: 'voz-1',
-        faceMixPercent: 'muito',
-      }, [photo()]),
-    );
-
-    expect(res.status).toBe(200);
   });
 
   it('returns 400 with an invalid faceQuality', async () => {

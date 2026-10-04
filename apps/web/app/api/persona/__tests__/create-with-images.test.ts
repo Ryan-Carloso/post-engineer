@@ -238,29 +238,11 @@ describe('POST /api/persona with image library', () => {
     }
   });
 
-  it('ignores the legacy personaMode: library images need the persona face', async () => {
-    // A persona is always faced, so library images are always allowed — the
-    // "faceless personas cannot have an image library" rule is gone with the
-    // mode. The legacy personaMode key is ignored, not rejected.
+  it('accepts library images for any persona (every persona is faced)', async () => {
     const calls = mockClient();
-    const res = await POST(
-      createRequest({ ...BASE_FIELDS, personaMode: 'faceless' }, [png('a.png')]),
-    );
+    const res = await POST(createRequest({ ...BASE_FIELDS }, [png('a.png')]));
     expect(res.status).toBe(200);
     expect(calls.imageInserts).toHaveLength(1);
-  });
-
-  it('never writes the dropped face_mix_percent column, whatever the client sends', async () => {
-    const calls = mockClient();
-    const form = new FormData();
-    form.append('name', 'Ana');
-    form.append('voiceId', 'voice-1');
-    form.append('avatarUrl', 'data:image/png;base64,IA');
-    form.append('personaMode', 'faceless');
-    form.append('faceMixPercent', '80');
-    const res = await POST(new Request('http://localhost/api/persona', { method: 'POST', body: form }));
-    expect(res.status).toBe(200);
-    expect(calls.personaInsertValues).not.toHaveProperty('face_mix_percent');
   });
 
   it('still creates a persona without library images', async () => {

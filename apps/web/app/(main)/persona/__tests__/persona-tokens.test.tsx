@@ -3,10 +3,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 
 //---------------
-// Testes da seção de tokens na criação de persona: qualidade da face e custo
-// estimado por vídeo. Não existe mais slider de mix (a persona sempre tem
-// rosto; "sem rosto" é escolha do post, em /posts/new). O custo é derivado de
-// computeVideoTokens (preço real, o mesmo do servidor).
+// Tests for the persona screen's token section: face quality and the estimated
+// cost per video. There is no face-mix slider anymore (every persona has a
+// face; "no face" is a per-post choice in /posts/new). The cost comes from
+// computeVideoTokens (the real price, the same one the server charges).
 //---------------
 
 vi.mock('@/lib/i18n/provider', () => {

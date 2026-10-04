@@ -68,10 +68,10 @@ describe('usePersonaStore', () => {
   });
 
   //---------------
-// Personas are always faced: the store carries no faceless mode and no face
-// mix. "No face" is a per-post choice (NewPostState.faceless). The keys are
-// pinned absent so a future form cannot reintroduce dead state nobody reads.
-//---------------
+  // Personas are always faced: the store carries no faceless mode and no face
+  // mix. "No face" is a per-post choice (NewPostState.faceless). The keys are
+  // pinned absent so a future form cannot reintroduce dead state nobody reads.
+  //---------------
 
   it('holds no faceless mode and no face mix', () => {
     const state = usePersonaStore.getState() as unknown as Record<string, unknown>;

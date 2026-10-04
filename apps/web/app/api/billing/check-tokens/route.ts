@@ -15,10 +15,9 @@ import type { FaceQuality } from '@/lib/tokens';
 
 //---------------
 // Body contract: { userId, generationId?, faceless?, faceQuality? }.
-// `faceless` replaced the old `faceMixPercent` number when the persona face
-// mix was dropped (migration 007). A caller still sending `faceMixPercent`
-// gets it ignored and pays for the persona's face — the priced-with-face
-// case, never cheaper.
+// "No face" is a per-post boolean now that the persona face mix is gone
+// (migration 007). Anything that is not the literal true is priced as a faced
+// video — the expensive case, so a malformed field can never under-charge.
 //---------------
 
 function getEngineSecret(): string {
@@ -70,8 +69,8 @@ export async function POST(request: Request): Promise<NextResponse> {
     : randomUUID();
 
   // "No face" is a per-post boolean (personas are always faced). Anything that
-// is not the literal true is treated as "with the persona's face" — the
-// expensive case, so a malformed field can never under-charge a generation.
+  // is not the literal true is treated as "with the persona's face" — the
+  // expensive case, so a malformed field can never under-charge a generation.
   const faceless = body.faceless === true;
   const faceQuality: FaceQuality =
     body.faceQuality === 'very_good' ? 'very_good' : 'ok';
