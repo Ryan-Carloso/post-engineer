@@ -270,10 +270,10 @@ export async function handleCreatePersona(
   client: PostEngineerClient,
   args: z.infer<typeof CreatePersonaSchema>
 ): Promise<McpToolResponse> {
-  // Re-parse with the refined schema: the MCP SDK parses tool args from the
-  // raw shape only, so the superRefine cross-field rule would otherwise never
-  // fire on the tool path. A parse failure becomes a loud isError via
-  // handleLibraryCall, before any file is read.
+  // Re-parse with the full schema: the MCP SDK parses tool args from the
+  // raw shape only, so required-field failures (like a missing avatarUrl)
+  // would otherwise never fire on the tool path. A parse failure becomes a
+  // loud isError via handleLibraryCall, before any file is read.
   return handleLibraryCall(
     () => client.createPersona(CreatePersonaSchema.parse(args)),
     'creating persona',

@@ -102,7 +102,6 @@ class BatchScheduleTests(unittest.TestCase):
                     "voice_id": "calm",
                     "voice_audio_path": None,
                     "paragraph_number": 1,
-                    "face_mix_percent": 50,
                     "face_quality": "ok",
                 },
             },
@@ -419,7 +418,7 @@ class ReconcileTests(unittest.TestCase):
             "schedules": {
                 "id": "sched-1",
                                 "user_id": "user-1",
-                "personas": {"name": "Ana", "face_mix_percent": 0, "face_quality": "ok"},
+                "personas": {"name": "Ana", "face_quality": "ok"},
             },
         }
         store = _FakeStore()
@@ -449,7 +448,7 @@ class ReconcileTests(unittest.TestCase):
             "schedules": {
                 "id": "sched-1",
                                 "user_id": "user-1",
-                "personas": {"name": "Ana", "face_mix_percent": 0, "face_quality": "ok"},
+                "personas": {"name": "Ana", "face_quality": "ok"},
             },
         }
         store = _FakeStore()
@@ -489,7 +488,7 @@ class ReconcileTests(unittest.TestCase):
             "schedules": {
                 "id": "sched-1",
                                 "user_id": "user-1",
-                "personas": {"name": "Ana", "face_mix_percent": 0, "face_quality": "ok"},
+                "personas": {"name": "Ana", "face_quality": "ok"},
             },
         }
         store = _FakeStore()
@@ -536,14 +535,17 @@ class ReconcileTests(unittest.TestCase):
         # Batch slots are prepaid under `batch:{scheduleId}`; a failed task
         # must refund the per-slot cost via refund_batch_tokens (NOT the
         # recurring `scheduled:{slotId}` key, which has no charge row).
+        # Faceless is a per-post choice on the slot row now (not a persona
+        # mix), so this faceless slot refunds the 1-token faceless price.
         slot = {
             "id": "slot-b1",
             "user_id": "user-1",
             "task_id": "t-b1",
+            "faceless": True,
             "schedules": {
                 "id": "sched-b1",
                                 "user_id": "user-1",
-                "personas": {"face_mix_percent": 0, "face_quality": "ok"},
+                "personas": {"face_quality": "ok"},
             },
         }
         store = _FakeStore()
@@ -570,7 +572,7 @@ class ReconcileTests(unittest.TestCase):
             "task_id": "t-b2",
             "schedules": {
                 "id": "sched-b2",
-                                "personas": {"face_mix_percent": 0, "face_quality": "ok"},
+                                "personas": {"face_quality": "ok"},
             },
         }
         store = _FakeStore()
@@ -973,6 +975,49 @@ class CoverageGapTests(unittest.TestCase):
         self.assertEqual(params["photo_url"], "https://signed/u/f.png")
         self.assertEqual(params["voice_audio_url"], "https://signed/u/v.mp3")
 
+    def test_persona_params_faceless_drops_visual_identity(self):
+        # A faceless post contributes only the voice: no avatar_url and no
+        # photo_url even when the persona has both, so the engine renders
+        # stock footage. Voice resolution is unaffected.
+        store = MagicMock()
+        store.signed_url = MagicMock(side_effect=AssertionError("must not sign a photo for a faceless post"))
+        params = fs.build_persona_params(
+            {
+                "name": "Ana",
+                "avatar_url": "https://cdn/a.png",
+                "photo_path": "u/f.png",
+                "voice_id": "calm",
+            },
+            store=store,
+            faceless=True,
+        )
+        self.assertEqual(params["name"], "Ana")
+        self.assertEqual(params["voice_id"], "calm")
+        self.assertNotIn("avatar_url", params)
+        self.assertNotIn("photo_url", params)
+
+    # -- slot_faceless (per-post flag on scheduled_posts) ----------------------
+    def test_slot_faceless_requires_literal_true(self):
+        # Only the literal True counts as "no face": legacy rows (NULL, the
+        # column postdates them) and malformed values price and render the
+        # expensive with-face case, never the cheap one.
+        self.assertTrue(fs.slot_faceless({"faceless": True}))
+        self.assertFalse(fs.slot_faceless({"faceless": False}))
+        self.assertFalse(fs.slot_faceless({"faceless": None}))
+        self.assertFalse(fs.slot_faceless({}))
+        self.assertFalse(fs.slot_faceless({"faceless": 1}))
+        self.assertFalse(fs.slot_faceless({"faceless": "true"}))
+
+    # -- token_cost mirrors the web's computeVideoTokens -----------------------
+    def test_token_cost_faceless_is_flat_and_quality_prices_face(self):
+        self.assertEqual(fs.token_cost(True, "ok"), 1)
+        self.assertEqual(fs.token_cost(True, "very_good"), 1)
+        self.assertEqual(fs.token_cost(False, "ok"), 2)
+        self.assertEqual(fs.token_cost(False, "very_good"), 3)
+        # Unknown quality falls back to the cheaper "ok" tier, not the
+        # expensive one.
+        self.assertEqual(fs.token_cost(False, "bogus"), 2)
+
     # -- publish_due without env configured -------------------------------------
     def test_publish_due_skips_without_base_url(self):
         scheduler = self._scheduler(_FakeStore())
@@ -1313,7 +1358,6 @@ class BatchDispatchTests(unittest.TestCase):
                     "voice_id": "calm",
                     "voice_audio_path": None,
                     "paragraph_number": 1,
-                    "face_mix_percent": 50,
                     "face_quality": "ok",
                 },
             },

@@ -50,7 +50,7 @@ describe('PersonaTokensSection', () => {
     resetStore();
   });
 
-  it('não renderiza mais nenhum slider de mix de rosto', () => {
+  it('no longer renders any face-mix slider', () => {
     render(<PersonaTokensSection />);
     expect(screen.queryByTestId('face-mix-slider')).not.toBeInTheDocument();
     expect(screen.queryByRole('slider')).not.toBeInTheDocument();
@@ -62,7 +62,7 @@ describe('PersonaTokensSection', () => {
     expect(screen.getByTestId('face-quality-very_good')).toHaveAttribute('aria-checked', 'false');
   });
 
-  it('exibe o custo estimado do vídeo com o rosto (ok → 2 tokens)', () => {
+  it('shows the estimated video cost with the face (ok → 2 tokens)', () => {
     render(<PersonaTokensSection />);
     expect(screen.getByTestId('token-cost-preview')).toHaveTextContent('≈ 2 tokens');
   });

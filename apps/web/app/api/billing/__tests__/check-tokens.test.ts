@@ -104,7 +104,7 @@ describe('POST /api/billing/check-tokens', () => {
     );
   });
 
-  it('encaminha faceless: true quando o pedido é sem rosto', async () => {
+  it('forwards faceless: true when the request is faceless', async () => {
     vi.mocked(checkAndDeductTokens).mockResolvedValue({ ok: true, cost: 1 });
 
     await POST(makePostRequest({ userId: 'u1', faceless: true, faceQuality: 'ok' }));

@@ -29,7 +29,6 @@ import {
   SparklesIcon,
   ImageIcon,
   MicIcon,
-  FilmIcon,
   SECTION_LABEL_CLASS,
   SpinnerIcon,
   UploadIcon,

@@ -604,7 +604,7 @@ describe('POST /api/persona', () => {
   });
 });
 
-describe('POST /api/persona — qualidade da face (sem mix, sem modo)', () => {
+describe('POST /api/persona — face quality (no mix, no mode)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });

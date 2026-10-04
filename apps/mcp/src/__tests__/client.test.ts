@@ -54,26 +54,23 @@ describe('PostEngineerClient', () => {
     const formData = request?.body as FormData;
     expect(formData.get('name')).toBe('Tech Creator');
     expect(formData.get('avatarUrl')).toBe('https://example.com/avatar.png');
-    expect(formData.get('personaMode')).toBe('persona');
+    // Faceless is a per-video choice now, never a persona field: the persona
+    // payload carries no mode or mix fields at all.
+    expect(formData.get('personaMode')).toBeNull();
+    expect(formData.get('faceMixPercent')).toBeNull();
     expect(formData.get('faceQuality')).toBe('very_good');
     expect(new Headers(request?.headers).get('content-type')).toBeNull();
     expect(result).toEqual(mockResponse);
   });
 
-  it('creates a faceless persona when no avatar is provided', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify(({ success: true, personaId: 'persona-123' })),
-    });
-
-    await client.createPersona({ name: 'Faceless Creator' });
-
-    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
-    const formData = request?.body as FormData;
-    expect(formData.get('personaMode')).toBe('faceless');
-    expect(formData.get('faceMixPercent')).toBe('0');
-    expect(formData.get('avatarUrl')).toBeNull();
+  it('createPersona rejects a missing avatarUrl before any fetch', async () => {
+    // Every persona has a face: the client fails fast with an actionable
+    // error instead of uploading bytes the server would reject.
+    global.fetch = vi.fn();
+    await expect(client.createPersona({ name: 'No Face' } as never)).rejects.toThrow(
+      /avatarUrl is required/
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('lists personas successfully', async () => {
@@ -889,27 +886,6 @@ describe('PostEngineerClient persona image library', () => {
     await expect(
       client.createPersona({ name: 'X', avatarUrl: 'https://example.com/a.png', images })
     ).rejects.toThrow(/At most 10 library images/);
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('createPersona rejects library images without an avatar (persona mode required)', async () => {
-    await expect(
-      client.createPersona({ name: 'X', images: [{ path: '/tmp/img.jpg' }] })
-    ).rejects.toThrow(/require a persona avatar/);
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('createPersona rejects library images with avatarUrl but faceMixPercent 0 (server treats 0 as faceless)', async () => {
-    // The server 400s library images when the effective face mix is 0, so
-    // fail fast locally instead of uploading the image bytes first.
-    await expect(
-      client.createPersona({
-        name: 'X',
-        avatarUrl: 'https://example.com/a.png',
-        faceMixPercent: 0,
-        images: [{ path: '/tmp/img.jpg' }],
-      })
-    ).rejects.toThrow(/faceMixPercent must be greater than 0/);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
