@@ -1,0 +1,94 @@
+name: mutation
+
+# Nightly mutation testing (StrykerJS) over the vitest suites.
+#
+# INFORMATIONAL ONLY — this workflow is deliberately NOT a required check and
+# must never be added to the branch ruleset: Stryker costs 10-100x a normal
+# test run, so it runs on a nightly schedule (plus manual dispatch), never
+# per PR.
+#
+# Scope is intentionally narrow (see each app's stryker.config.json):
+#   apps/web -> lib/** only (pure business logic, fast unit tests)
+#   apps/mcp -> src/** (tiny package, cheap to cover fully)
+# Widen the `mutate` scope once the nightly baseline is stable.
+# apps/engine (Python) is out of scope here — needs mutmut/Cosmic Ray in a
+# follow-up; see the tracking PR body.
+#
+# Results: the HTML report is uploaded as a per-app artifact and the
+# mutation score is printed in the job summary. The free Stryker dashboard
+# is intentionally NOT wired (needs an API key secret); artifacts suffice.
+
+on:
+  schedule:
+    # Nightly ~03:30 UTC. Approximate time is fine.
+    - cron: '30 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  stryker:
+    name: mutation (${{ matrix.app }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [web, mcp]
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.22.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Stryker mutation testing
+        working-directory: apps/${{ matrix.app }}
+        run: pnpm exec stryker run
+
+      - name: Upload mutation HTML report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mutation-report-${{ matrix.app }}
+          path: apps/${{ matrix.app }}/reports/mutation/
+          if-no-files-found: error
+
+      - name: Mutation score summary
+        if: always()
+        run: |
+          set -uo pipefail
+          JSON="apps/${{ matrix.app }}/reports/mutation/mutation.json"
+          {
+            echo "## Mutation testing — ${{ matrix.app }}"
+            echo ""
+            if [ -f "$JSON" ]; then
+              read -r SCORE KILLED SURVIVED TIMEOUT TOTAL <<< "$(
+                jq -r '
+                  [.files[].mutants[]] as $m
+                  | ($m | length) as $total
+                  | ($m | map(select(.status == "Killed")) | length) as $killed
+                  | ($m | map(select(.status == "Survived")) | length) as $survived
+                  | ($m | map(select(.status == "Timeout")) | length) as $timeout
+                  | if $total == 0 then "n/a 0 0 0 0"
+                    else "\((($killed + $timeout) * 100 / $total) | floor) \($killed) \($survived) \($timeout) \($total)"
+                    end
+                ' "$JSON"
+              )"
+              echo "**Mutation score: ${SCORE}%** (${KILLED} killed, ${SURVIVED} survived, ${TIMEOUT} timed out, ${TOTAL} mutants)"
+            else
+              echo "No mutation report produced — the run may have failed or timed out."
+            fi
+            echo ""
+            echo "Full HTML report: download the \`mutation-report-${{ matrix.app }}\` artifact from this run."
+          } >> "$GITHUB_STEP_SUMMARY"

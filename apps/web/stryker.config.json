@@ -1,0 +1,29 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "_comment": "Nightly mutation testing for apps/web (vitest). See .github/workflows/mutation.yml. Scope is intentionally lib/** only: pure business logic with fast unit tests. Widen to app/api/** or components/** once the nightly baseline is stable.",
+  "coverageAnalysis": "perTest",
+  "ignorePatterns": [
+    "node_modules",
+    "cypress/**",
+    "coverage/**",
+    "coverage-unit/**",
+    ".stryker-tmp/**",
+    "reports/**"
+  ],
+  "mutate": [
+    "lib/**/*.{ts,tsx}",
+    "!lib/**/__tests__/**",
+    "!lib/**/*.test.{ts,tsx}"
+  ],
+  "packageManager": "pnpm",
+  "reporters": [
+    "html",
+    "clear-text",
+    "progress",
+    "json"
+  ],
+  "testRunner": "vitest",
+  "plugins": [
+    "./node_modules/@stryker-mutator/vitest-runner/dist/src/index.js"
+  ]
+}

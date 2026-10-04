@@ -1,0 +1,27 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "_comment": "Nightly mutation testing for apps/mcp (vitest). See .github/workflows/mutation.yml.",
+  "coverageAnalysis": "perTest",
+  "ignorePatterns": [
+    "node_modules",
+    "dist/**",
+    "coverage/**",
+    ".stryker-tmp/**"
+  ],
+  "mutate": [
+    "src/**/*.ts",
+    "!src/**/__tests__/**",
+    "!src/**/*.test.ts"
+  ],
+  "packageManager": "pnpm",
+  "reporters": [
+    "html",
+    "clear-text",
+    "progress",
+    "json"
+  ],
+  "testRunner": "vitest",
+  "plugins": [
+    "./node_modules/@stryker-mutator/vitest-runner/dist/src/index.js"
+  ]
+}

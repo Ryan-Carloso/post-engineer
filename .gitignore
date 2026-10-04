@@ -12,6 +12,11 @@ coverage/
 coverage-unit/
 coverage.xml
 cobertura-coverage.xml
+reports/
+# ...but not the Cypress backend-coverage API route
+!apps/web/app/api/coverage/
+# Stryker working directory (cleaned up after runs, but be safe)
+.stryker-tmp/
 .nyc_output/
 .npm/
 .pnpm-store/
