@@ -102,7 +102,11 @@ function formatDateTime(value: string, locale: 'pt' | 'en', timeZone?: string | 
     } catch {
       // A schedule row with a garbage timezone must not blank the date —
       // fall through to the viewer's zone below. The warn keeps the bad
-      // value diagnosable (data issue, not a rendering one).
+      // value diagnosable: the UI only ever sends IANA names, so reaching
+      // here signals drift or a direct API caller. Plain console.warn (not
+      // the central logger, which is server-only via posthog-server) —
+      // echoing the schedule's own timezone to the viewer's own console
+      // exfiltrates nothing.
       console.warn(`Ignoring invalid schedule timezone: ${timeZone}`);
     }
   }
