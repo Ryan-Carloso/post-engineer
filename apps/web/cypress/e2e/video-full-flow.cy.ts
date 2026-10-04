@@ -265,15 +265,31 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
     // Real UI: pick the persona card, type one topic, select the Bluesky
     // account, set the first publication for tomorrow 20:00.
     cy.contains('label', PERSONA.name).click();
+    // The click must actually select: assert the store-backed selected state
+    // instead of discovering a silent no-op at the submit wait.
+    cy.get('label[data-selected="true"]').should('contain', PERSONA.name);
     cy.get('input[aria-label="Temas 1"]').type(TOPIC);
     cy.contains('[data-testid="account-card"]', BLUESKY_ACCOUNT.handle).click();
     cy.get('[data-testid="account-card-select"]').should('be.checked');
     // A datetime-local input does not take .type() reliably (its segments
-    // are filled per keystroke), so set the value and fire change — still
-    // the real input and the real onChange handler.
-    cy.get('input[type="datetime-local"]')
-      .invoke('val', `${startAtDate}T20:00`)
-      .trigger('change');
+    // are filled per keystroke). Set the value through the native prototype
+    // setter and dispatch a native 'input' event: React's onChange listens
+    // to 'input' (not 'change'), and assigning .value directly trips React's
+    // value tracker, which then swallows the event and the store never
+    // updates — the submit validation rejects with no request fired.
+    cy.get('input[type="datetime-local"]').then(($input) => {
+      const el = $input[0] as HTMLInputElement;
+      const view = el.ownerDocument.defaultView;
+      if (!view) throw new Error('datetime input has no defaultView');
+      const setter = Object.getOwnPropertyDescriptor(view.HTMLInputElement.prototype, 'value')?.set;
+      if (!setter) throw new Error('native input value setter not found');
+      setter.call(el, `${startAtDate}T20:00`);
+      el.dispatchEvent(new view.Event('input', { bubbles: true }));
+    });
+    cy.get('input[type="datetime-local"]').should('have.value', `${startAtDate}T20:00`);
+    // The schedule preview renders only once persona, topics and date are
+    // all in the store — the honest gate before submitting.
+    cy.contains('Preencha persona, temas e data para ver a prévia.').should('not.exist');
 
     cy.contains('button', 'Agendar posts').click();
 

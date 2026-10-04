@@ -52,7 +52,9 @@ describe('i18n — troca de idioma via UI', () => {
     // PT -> EN
     cy.contains('button', 'EN').click();
     cy.contains('a', 'Accounts').should('be.visible');
-    cy.contains('a', 'App API Key').should('be.visible');
+    // The nav label is 'API Keys' in both locales (it never was 'App API
+    // Key') — presence check only; the swap is proven by Accounts/Operational.
+    cy.contains('a', 'API Keys').should('be.visible');
     cy.contains('Operational').should('be.visible');
 
     // EN -> PT
@@ -92,7 +94,10 @@ describe('i18n — troca de idioma via UI', () => {
     cy.contains('h1', 'Contas').should('be.visible');
 
     cy.contains('button', 'EN').click();
-    cy.contains('h1', 'Accounts').should('be.visible');
+    // The locale switcher click can leave the scrollable main container
+    // scrolled (Cypress's pre-click scroll-into-view), clipping the header
+    // above the fold — scroll it back before asserting visibility.
+    cy.contains('h1', 'Accounts').scrollIntoView().should('be.visible');
   });
 
   it('usa o idioma padrão quando o localStorage tem valor inválido', () => {
