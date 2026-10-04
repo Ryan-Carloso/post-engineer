@@ -2245,3 +2245,6 @@ Five MINORs on the merged funnel, fixed as a follow-up PR with one focused TDD c
 
 ## PR #86 babysit — stale e2e URL assertion (2026-10-04)
 - **When a PR changes a `router.push` target, grep the Cypress specs for the old URL.** The PR deliberately re-routed persona creation `/posts` → `/personas`; `video-full-flow.cy.ts:201` still asserted `/posts` and failed CI. The fix is a test-only update in the same PR — never "fix" it by reverting the product change. `grep -n "url().should" apps/web/cypress/e2e/*.cy.ts` after any navigation change.
+
+## PR #86 babysit — OpenCode calibration, rounds 3-4 (2026-10-04, reviews on 421c36b/e19552a/458cf77)
+- **Rounds 3-4: 0 actionable.** 421c36b was clean ("no CRITICAL or MAJOR"). e19552a's single MINOR misread the migration (007 HAS `default false`, pinned by face-mix-removed.test.ts). 458cf77: CRITICAL cited a nonexistent path (`supabase/001_schema.sql`) and its "fix" (edit 001) violates the append-only rule the PR's own test pins; MAJOR "lost superRefine" never existed in any commit of this PR (`grep -c` = 0 on f436cb34 and 2c7af015); MINOR "flag not asserted" is asserted at page.test.tsx:416/441; MINOR "stale NULL comment" doesn't exist in the file. Pattern: when a review's premises dissolve under grep, record the calibration and move on — don't write code to satisfy phantom findings.
