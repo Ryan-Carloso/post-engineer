@@ -120,7 +120,7 @@ describe('Posts video detail', () => {
     cy.intercept('GET', `/api/schedule/slots/${DETAIL_SLOT_ID}`, {
       statusCode: 200,
       body: detailSlotPayload(),
-    }).as('detailSlotPayload');
+    }).as('slotDetail');
     cy.intercept('GET', `/api/persona/video-generations/${DETAIL_SLOT_ID}`, {
       statusCode: 404,
       body: { success: false },
@@ -145,7 +145,7 @@ describe('Posts video detail', () => {
 
     // The detail page must resolve its entity by id, and neither the
     // detail fetch nor the video download may 404.
-    cy.wait('@detailSlotPayload').then((interception) => {
+    cy.wait('@slotDetail').then((interception) => {
       expect(interception.response?.statusCode, 'slot detail must not 404').to.not.eq(404);
     });
 
