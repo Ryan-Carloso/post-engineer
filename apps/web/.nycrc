@@ -16,7 +16,6 @@
     "**/__tests__/**",
     "**/*.test.{ts,tsx}",
     "**/*.cy.{ts,tsx}",
-    "app/api/**",
     "lib/rate-limit.ts",
     "lib/app-api-key-manager.ts",
     "lib/media/**",
