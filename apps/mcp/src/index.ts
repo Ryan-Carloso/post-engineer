@@ -80,7 +80,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
 
   server.tool(
     'create_persona',
-    'Create a new AI persona with avatar, voice, language, and niche prompt.',
+    'Create a new AI persona with avatar, voice, language, and niche prompt. avatarUrl is REQUIRED: every persona has a face. A video without a face is a per-video choice — set options.faceless on generate_persona_videos.',
     CreatePersonaShape,
     withTracking('create_persona', async (args) => {
       return handleCreatePersona(apiClient, args);
@@ -215,7 +215,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
 
   server.tool(
     'add_persona_image',
-    `Add an image to a persona image library from a local file path (JPG/JPEG, PNG, or WebP, max ${MAX_LIBRARY_IMAGE_MB}MB). Optional tag and description drive the deterministic per-video image selection. The server rejects faceless personas and full libraries (${MAX_LIBRARY_IMAGES} max).`,
+    `Add an image to a persona image library from a local file path (JPG/JPEG, PNG, or WebP, max ${MAX_LIBRARY_IMAGE_MB}MB). Optional tag and description drive the deterministic per-video image selection. The server rejects full libraries (${MAX_LIBRARY_IMAGES} max).`,
     AddPersonaImageShape,
     withTracking('add_persona_image', async (args) => {
       return handleAddPersonaImage(apiClient, args);

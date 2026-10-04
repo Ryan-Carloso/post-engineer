@@ -31,10 +31,10 @@ describe('token wallet operations', () => {
       grant_signup_bonus: { data: { granted: true, free_balance: 3 }, error: null },
       spend_tokens: { data: { spent: true, balance: 1, free_balance: 0 }, error: null },
     });
-    const result = await checkAndDeductTokens(mock.client, 'user-1', 'generation-1', 50, 'ok');
+    const result = await checkAndDeductTokens(mock.client, 'user-1', 'generation-1', false, 'ok');
 
     expect(result).toEqual({ ok: true, cost: 2 });
-    expect(computeVideoTokens).toHaveBeenCalledWith(50, 'ok');
+    expect(computeVideoTokens).toHaveBeenCalledWith(false, 'ok');
     expect(mock.rpc).toHaveBeenCalledWith('spend_tokens', expect.objectContaining({
       p_user_id: 'user-1',
       p_generation_id: 'generation-1',
@@ -47,7 +47,7 @@ describe('token wallet operations', () => {
       grant_signup_bonus: { data: { granted: true, free_balance: 3 }, error: null },
       spend_tokens: { data: { spent: false, balance: 1, free_balance: 1 }, error: null },
     });
-    const result = await checkAndDeductTokens(mock.client, 'user-1', 'generation-1', 0, 'ok');
+    const result = await checkAndDeductTokens(mock.client, 'user-1', 'generation-1', true, 'ok');
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -96,7 +96,7 @@ describe('free starter tokens', () => {
       spend_tokens: { data: { spent: true, balance: 1, free_balance: 1 }, error: null },
     });
 
-    await checkAndDeductTokens(mock.client, 'user-1', 'generation-1', 0, 'ok');
+    await checkAndDeductTokens(mock.client, 'user-1', 'generation-1', true, 'ok');
 
     expect(mock.rpc).toHaveBeenCalledWith('grant_signup_bonus', { p_user_id: 'user-1' });
     const [grantCall, spendCall] = mock.rpc.mock.calls.map((call) => call[0]);
@@ -110,7 +110,7 @@ describe('free starter tokens', () => {
       spend_tokens: { data: { spent: false, balance: 0, free_balance: 0 }, error: null },
     });
 
-    const result = await checkAndDeductTokens(mock.client, 'user-1', 'generation-1', 0, 'ok');
+    const result = await checkAndDeductTokens(mock.client, 'user-1', 'generation-1', true, 'ok');
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -126,7 +126,7 @@ describe('free starter tokens', () => {
       spend_tokens: { data: { spent: false, balance: 2, free_balance: 2 }, error: null },
     });
 
-    const result = await checkAndDeductTokens(mock.client, 'user-1', 'generation-1', 0, 'ok');
+    const result = await checkAndDeductTokens(mock.client, 'user-1', 'generation-1', true, 'ok');
 
     if (!result.ok) expect(result.freeExhausted).toBe(false);
   });
@@ -137,7 +137,7 @@ describe('free starter tokens', () => {
       spend_tokens: { data: { spent: false, balance: 0, free_balance: 0 }, error: null },
     });
 
-    const result = await checkAndDeductTokens(mock.client, 'user-1', 'generation-1', 0, 'ok');
+    const result = await checkAndDeductTokens(mock.client, 'user-1', 'generation-1', true, 'ok');
 
     if (!result.ok) expect(result.freeExhausted).toBe(false);
   });
@@ -154,7 +154,7 @@ describe('free starter tokens', () => {
     });
 
     await expect(
-      checkAndDeductTokens(mock.client, 'user-1', 'generation-1', 0, 'ok'),
+      checkAndDeductTokens(mock.client, 'user-1', 'generation-1', true, 'ok'),
     ).resolves.toEqual({ ok: true, cost: 2 });
   });
 
@@ -165,7 +165,7 @@ describe('free starter tokens', () => {
     });
 
     await expect(
-      checkAndDeductTokens(mock.client, 'user-1', 'generation-1', 0, 'ok'),
+      checkAndDeductTokens(mock.client, 'user-1', 'generation-1', true, 'ok'),
     ).resolves.toEqual({ ok: true, cost: 2 });
   });
 });

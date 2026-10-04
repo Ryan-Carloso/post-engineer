@@ -23,6 +23,7 @@ const INPUT: CreatePostInput = {
   startAt: '2030-06-01T10:00:00.000Z',
   times: ['09:00', '18:00'],
   timezone: 'Europe/Lisbon',
+  faceless: false,
 };
 
 const SUCCESS_BODY = {
@@ -89,6 +90,8 @@ describe('createPost', () => {
     expect(JSON.parse(String(init.body))).toEqual({
       personaId: 'p1',
       topics: ['Topic one', 'Topic two'],
+      // Explicit, never omitted: the server prices the two cases differently.
+      options: { faceless: false },
       publishing: {
         providers: ['youtube'],
         accounts: { youtube: ['ch1'] },
@@ -99,6 +102,16 @@ describe('createPost', () => {
         },
       },
     });
+  });
+
+  it('sends options.faceless true when the post asks for no face', async () => {
+    const fetchMock = stubFetch(jsonResponse({ ...SUCCESS_BODY, slots: [] }));
+
+    await createPost({ ...INPUT, faceless: true });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(init.body)) as { options: { faceless: boolean } };
+    expect(body.options.faceless).toBe(true);
   });
 
   it('returns the created schedule and slots', async () => {

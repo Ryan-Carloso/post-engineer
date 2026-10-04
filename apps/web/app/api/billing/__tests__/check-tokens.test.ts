@@ -62,7 +62,7 @@ describe('POST /api/billing/check-tokens', () => {
   });
 
   it('retorna 400 quando userId falta', async () => {
-    const res = await POST(makePostRequest({ faceMixPercent: 50 }));
+    const res = await POST(makePostRequest({ faceless: true }));
     expect(res.status).toBe(400);
     const body = await res.json() as { error: string };
     expect(body.error).toContain('userId');
@@ -76,44 +76,60 @@ describe('POST /api/billing/check-tokens', () => {
       freeExhausted: false,
     });
 
-    const res = await POST(makePostRequest({ userId: 'u1', faceMixPercent: 50, faceQuality: 'ok' }));
+    const res = await POST(makePostRequest({ userId: 'u1', faceless: false, faceQuality: 'ok' }));
     expect(res.status).toBe(402);
   });
 
   it('retorna 200 com cost quando tokens OK', async () => {
-    vi.mocked(checkAndDeductTokens).mockResolvedValue({ ok: true, cost: 1.5 });
+    vi.mocked(checkAndDeductTokens).mockResolvedValue({ ok: true, cost: 2 });
 
-    const res = await POST(makePostRequest({ userId: 'u1', faceMixPercent: 50, faceQuality: 'ok' }));
+    const res = await POST(makePostRequest({ userId: 'u1', faceless: false, faceQuality: 'ok' }));
     expect(res.status).toBe(200);
     const body = await res.json() as { success: boolean; cost: number };
     expect(body.success).toBe(true);
-    expect(body.cost).toBe(1.5);
+    expect(body.cost).toBe(2);
   });
 
   it('chama checkAndDeductTokens com parâmetros corretos', async () => {
-    vi.mocked(checkAndDeductTokens).mockResolvedValue({ ok: true, cost: 2 });
+    vi.mocked(checkAndDeductTokens).mockResolvedValue({ ok: true, cost: 3 });
 
-    await POST(makePostRequest({ userId: 'u1-abc', faceMixPercent: 75, faceQuality: 'very_good' }));
+    await POST(makePostRequest({ userId: 'u1-abc', faceless: false, faceQuality: 'very_good' }));
 
     expect(checkAndDeductTokens).toHaveBeenCalledWith(
       expect.anything(),
       'u1-abc',
       expect.any(String),
-      75,
+      false,
       'very_good',
     );
   });
 
-  it('usa faceMixPercent=0 e quality=ok como default', async () => {
-    vi.mocked(checkAndDeductTokens).mockResolvedValue({ ok: true, cost: 0.5 });
+  it('forwards faceless: true when the request is faceless', async () => {
+    vi.mocked(checkAndDeductTokens).mockResolvedValue({ ok: true, cost: 1 });
 
-    await POST(makePostRequest({ userId: 'u1' }));
+    await POST(makePostRequest({ userId: 'u1', faceless: true, faceQuality: 'ok' }));
 
     expect(checkAndDeductTokens).toHaveBeenCalledWith(
       expect.anything(),
       'u1',
       expect.any(String),
-      0,
+      true,
+      'ok',
+    );
+  });
+
+  it('trata qualquer valor não-true de faceless como "com rosto" (nunca cobra menos)', async () => {
+    // Only the literal true means faceless: a malformed value must fall back
+    // to the pricier faced case, never silently under-charge a generation.
+    vi.mocked(checkAndDeductTokens).mockResolvedValue({ ok: true, cost: 2 });
+
+    await POST(makePostRequest({ userId: 'u1', faceless: 'yes' } as Record<string, unknown>));
+
+    expect(checkAndDeductTokens).toHaveBeenCalledWith(
+      expect.anything(),
+      'u1',
+      expect.any(String),
+      false,
       'ok',
     );
   });

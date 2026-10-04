@@ -26,7 +26,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   let query = supabase
     .from('personas')
     .select(
-      'id, name, photo_path, avatar_url, voice_id, voice_audio_path, created_at, language, video_aspect, script_prompt, paragraph_number, niche, face_mix_percent, face_quality',
+      'id, name, photo_path, avatar_url, voice_id, voice_audio_path, created_at, language, video_aspect, script_prompt, paragraph_number, niche, face_quality',
     )
     .eq('user_id', auth.userId);
 
@@ -64,7 +64,6 @@ export async function GET(request: Request): Promise<NextResponse> {
       scriptPrompt: (record.script_prompt as string | null) ?? undefined,
       paragraphNumber: (record.paragraph_number as number | null) ?? undefined,
       niche: (record.niche as string | null) ?? undefined,
-      faceMixPercent: (record.face_mix_percent as number | null) ?? undefined,
       faceQuality: (record.face_quality as string | null) ?? undefined,
     })),
   );

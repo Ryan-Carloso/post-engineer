@@ -13,6 +13,13 @@ import type { FaceQuality } from '@/lib/tokens';
 // (compared in constant time — never a plain === on secrets).
 //---------------
 
+//---------------
+// Body contract: { userId, generationId?, faceless?, faceQuality? }.
+// "No face" is a per-post boolean now that the persona face mix is gone
+// (migration 007). Anything that is not the literal true is priced as a faced
+// video — the expensive case, so a malformed field can never under-charge.
+//---------------
+
 function getEngineSecret(): string {
   const secret = process.env.MONEYPRINT_API_SECRET;
   if (!secret) throw new Error('MONEYPRINT_API_SECRET is not defined');
@@ -40,7 +47,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
-  let body: { userId?: unknown; generationId?: unknown; faceMixPercent?: unknown; faceQuality?: unknown };
+  let body: { userId?: unknown; generationId?: unknown; faceless?: unknown; faceQuality?: unknown };
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -61,9 +68,10 @@ export async function POST(request: Request): Promise<NextResponse> {
     ? body.generationId
     : randomUUID();
 
-  const faceMixPercent = typeof body.faceMixPercent === 'number' && Number.isFinite(body.faceMixPercent)
-    ? body.faceMixPercent
-    : 0;
+  // "No face" is a per-post boolean (personas are always faced). Anything that
+  // is not the literal true is treated as "with the persona's face" — the
+  // expensive case, so a malformed field can never under-charge a generation.
+  const faceless = body.faceless === true;
   const faceQuality: FaceQuality =
     body.faceQuality === 'very_good' ? 'very_good' : 'ok';
 
@@ -73,7 +81,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     supabase,
     body.userId,
     generationId,
-    faceMixPercent,
+    faceless,
     faceQuality,
   );
 

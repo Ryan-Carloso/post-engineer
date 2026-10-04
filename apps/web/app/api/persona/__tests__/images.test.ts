@@ -49,7 +49,7 @@ const IMAGE_ROW = {
 };
 
 interface DbState {
-  persona: { id: string; face_mix_percent?: number } | null;
+  persona: { id: string } | null;
   imageCount: number;
   imageRow: typeof IMAGE_ROW | null;
   listRows: unknown[];
@@ -485,17 +485,15 @@ describe('POST /api/persona/images', () => {
     expect(body.error).toContain('isPrimary');
   });
 
-  it('rejects library images for a faceless persona', async () => {
+  it('adds a library image with a single personas query (ownership only)', async () => {
+    // The faceless guard is gone with the mode, so POST's only personas read
+    // is the ownership check — one round-trip, no second fetch.
     mockAuth({ userId: USER_ID });
-    const { client } = mockClient({ persona: { id: PERSONA_ID, face_mix_percent: 0 } });
+    const { client } = mockClient({ persona: { id: PERSONA_ID }, insertedRow: IMAGE_ROW });
     const res = await POST(
       postForm({ personaId: PERSONA_ID, image: imageFile() }),
     );
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toContain('Faceless');
-    // Ownership and the faceless check share one personas query — the owned
-    // row from assertPersonaOwned carries face_mix_percent, no second fetch.
+    expect(res.status).toBe(201);
     const personaQueries = client.from.mock.calls.filter(
       ([table]) => table === 'personas',
     );

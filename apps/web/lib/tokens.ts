@@ -2,10 +2,13 @@ import { create } from 'zustand';
 
 //---------------
 // Token pricing model for the persona video.
-//  - Faceless (no face)         = 1 token
-//  - Face "ok" (480p)           = 2 tokens
-//  - Face "very_good" (720p)    = 3 tokens
-// Hybrid = weighted average, rounded up to whole tokens.
+//  - Faceless (no face, 100% stock)   = 1 token
+//  - With the persona's face "ok" (480p)    = 2 tokens
+//  - With the persona's face "very_good" (720p) = 3 tokens
+//
+// There is no face MIX anymore (migration 007 dropped the persona column):
+// a persona always has a face, and "no face" is a boolean the user picks per
+// post — so the price is a straight lookup, not a weighted average.
 //---------------
 
 export const FACELESS_PRICE = 1;
@@ -18,10 +21,6 @@ export const FACE_QUALITY_PRICES = {
 export type FaceQuality = keyof typeof FACE_QUALITY_PRICES;
 
 export const DEFAULT_TOKEN_BALANCE = 100;
-
-function clampMix(percent: number): number {
-  return Math.min(100, Math.max(0, percent));
-}
 
 //---------------
 // toFiniteNumber — safe coercion of values coming from the API/Supabase.
@@ -43,11 +42,14 @@ export function computeTokenPercentage(balance: unknown, maxTokens: unknown): nu
   return Math.min(100, Math.max(0, (safeBalance / safeMax) * 100));
 }
 
-// Estimated cost of a video with faceMixPercent% face at the given quality.
-export function computeVideoTokens(faceMixPercent: number, faceQuality: FaceQuality): number {
-  const mix = clampMix(faceMixPercent) / 100;
-  const price = mix * FACE_QUALITY_PRICES[faceQuality] + (1 - mix) * FACELESS_PRICE;
-  return Math.max(1, Math.ceil(price));
+//---------------
+// computeVideoTokens — cost of ONE video: the faceless price when the post
+// asked for no face, otherwise the persona's face quality. The server calls
+// the same formula (apps/engine .../fill_schedule/support.py token_cost), so
+// an estimate that disagrees with the charge is a bug in one of the two.
+//---------------
+export function computeVideoTokens(faceless: boolean, faceQuality: FaceQuality): number {
+  return faceless ? FACELESS_PRICE : FACE_QUALITY_PRICES[faceQuality];
 }
 
 //---------------

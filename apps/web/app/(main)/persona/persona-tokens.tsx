@@ -5,71 +5,47 @@ import { usePersonaStore } from '@/lib/store';
 import { useI18n } from '@/lib/i18n/provider';
 
 //---------------
-// PersonaTokensSection — mix faceless/face + qualidade da face + custo
-// estimado por vídeo (mock de preço, sem backend de cobrança ainda).
-// No modo persona o mix é livre (0–100%) e o custo é ponderado pelo mix;
-// no faceless os controles ficam travados em 0% → 0.5 token sempre.
+// PersonaTokensSection — face quality + estimated cost per video.
+// Every persona has a face ("no face" is chosen per post, in /posts/new), so
+// there is no 0-100% mix here anymore: the cost is always the whole face,
+// weighted by the chosen quality.
 //---------------
 export function PersonaTokensSection() {
-  const personaMode = usePersonaStore((s) => s.personaMode);
-  const faceMixPercent = usePersonaStore((s) => s.faceMixPercent);
   const faceQuality = usePersonaStore((s) => s.faceQuality);
-  const setFaceMixPercent = usePersonaStore((s) => s.setFaceMixPercent);
   const setFaceQuality = usePersonaStore((s) => s.setFaceQuality);
   const { t } = useI18n();
 
-  const disabled = personaMode === 'faceless';
-  const effectiveMix = disabled ? 0 : faceMixPercent;
-  const cost = computeVideoTokens(effectiveMix, faceQuality);
+  // The persona always has a face, so this is the with-face price (faceless is
+  // a per-post choice, priced on the post screen).
+  const cost = computeVideoTokens(false, faceQuality);
 
   return (
     <section>
       <div className="flex items-center gap-3">
-        <span className="text-sm font-semibold text-neutral-900">{t('tokens.mixLabel')}</span>
+        <span className="text-sm font-semibold text-neutral-900">{t('tokens.qualityLabel')}</span>
         <span className="h-px flex-1 bg-neutral-200" />
       </div>
 
       <div className="mt-4 space-y-4">
-        <div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-neutral-700">{t('tokens.mixHint')}</span>
-            <span className="shrink-0 text-sm font-medium text-neutral-900">{effectiveMix}%</span>
+        <fieldset>
+          <legend className="text-sm font-medium text-neutral-900">
+            {t('tokens.qualityLabel')}
+          </legend>
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <QualityOption
+              quality="ok"
+              active={faceQuality === 'ok'}
+              onSelect={setFaceQuality}
+              label={t('tokens.qualityOk')}
+            />
+            <QualityOption
+              quality="very_good"
+              active={faceQuality === 'very_good'}
+              onSelect={setFaceQuality}
+              label={t('tokens.qualityVeryGood')}
+            />
           </div>
-          <input
-            type="range"
-            data-testid="face-mix-slider"
-            aria-label={t('tokens.mixLabel')}
-            min={0}
-            max={100}
-            step={1}
-            value={effectiveMix}
-            disabled={disabled}
-            onChange={(event) => setFaceMixPercent(Number(event.target.value))}
-            className="mt-2 block w-full accent-[#ff5a4e]"
-          />
-        </div>
-
-        {!disabled ? (
-          <fieldset>
-            <legend className="text-sm font-medium text-neutral-900">
-              {t('tokens.qualityLabel')}
-            </legend>
-            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <QualityOption
-                quality="ok"
-                active={faceQuality === 'ok'}
-                onSelect={setFaceQuality}
-                label={t('tokens.qualityOk')}
-              />
-              <QualityOption
-                quality="very_good"
-                active={faceQuality === 'very_good'}
-                onSelect={setFaceQuality}
-                label={t('tokens.qualityVeryGood')}
-              />
-            </div>
-          </fieldset>
-        ) : null}
+        </fieldset>
 
         <div className="flex items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3">
           <span className="text-sm text-neutral-700">{t('tokens.costLabel')}</span>

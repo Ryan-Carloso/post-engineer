@@ -18,7 +18,6 @@ import {
   handleConnectAccount,
   ListPostsSchema,
   CreatePersonaSchema,
-  CreatePersonaShape,
   UpdatePersonaSchema,
   GeneratePersonaVideosSchema,
   ListPersonaImagesSchema,
@@ -297,6 +296,7 @@ describe('schema bounds', () => {
   it('CreatePersonaSchema accepts paragraphNumber up to 10 (matches the API)', () => {
     const result = CreatePersonaSchema.safeParse({
       name: 'x',
+      avatarUrl: 'https://example.com/a.png',
       paragraphNumber: 10,
     });
     expect(result.success).toBe(true);
@@ -359,17 +359,18 @@ describe('persona image library tools', () => {
     ).toThrow();
   });
 
-  it('CreatePersonaSchema rejects images without avatarUrl at parse time', () => {
-    // The images-require-avatarUrl domain rule is encoded in the schema
-    // (superRefine), not just in the client guard: library images are
-    // rejected server-side for faceless personas, so fail at parse time
-    // with an actionable message.
+  it('CreatePersonaSchema rejects a missing avatarUrl at parse time', () => {
+    // avatarUrl is always required: every persona has a face, and "no face"
+    // is a per-video choice (generate_persona_videos options.faceless),
+    // never a persona one. There is no images-specific rule anymore — the
+    // missing required field fails the parse on its own.
     expect(() =>
       CreatePersonaSchema.parse({ name: 'X', images: [{ path: '/tmp/a.jpg' }] })
-    ).toThrow(/avatarUrl is required when images are provided/);
+    ).toThrow(/Required/);
+    expect(() => CreatePersonaSchema.parse({ name: 'X' })).toThrow(/Required/);
   });
 
-  it('CreatePersonaSchema accepts images with avatarUrl, and faceless personas without images', () => {
+  it('CreatePersonaSchema accepts images with avatarUrl', () => {
     expect(() =>
       CreatePersonaSchema.parse({
         name: 'X',
@@ -377,24 +378,28 @@ describe('persona image library tools', () => {
         images: [{ path: '/tmp/a.jpg' }],
       })
     ).not.toThrow();
-    expect(() => CreatePersonaSchema.parse({ name: 'X' })).not.toThrow();
-    expect(() => CreatePersonaSchema.parse({ name: 'X', images: [] })).not.toThrow();
+    expect(() =>
+      CreatePersonaSchema.parse({
+        name: 'X',
+        avatarUrl: 'https://example.com/a.png',
+        images: [],
+      })
+    ).not.toThrow();
   });
 
-  it('create_persona handler enforces images-require-avatarUrl before the client call', async () => {
-    // Simulates what the MCP SDK hands the handler: args parsed from the raw
-    // shape (no cross-field rule) — the handler re-parses with the refined
-    // schema so the rule bites on the tool path too, not just in direct
-    // schema parses.
+  it('create_persona handler fails on a missing avatarUrl before the client call', async () => {
+    // Simulates args that bypassed the SDK's raw-shape validation: the
+    // handler re-parses with the full schema, so the required avatarUrl
+    // becomes a loud isError — no file is read, no fetch happens.
     vi.clearAllMocks();
     vi.mocked(mockClient.createPersona).mockResolvedValue({ success: true });
-    const sdkArgs = z.object(CreatePersonaShape).parse({
+    const sdkArgs = {
       name: 'X',
       images: [{ path: '/tmp/a.jpg' }],
-    });
+    } as unknown as z.infer<typeof CreatePersonaSchema>;
     const response = await handleCreatePersona(mockClient, sdkArgs);
     expect(response.isError).toBe(true);
-    expect(textOf(response)).toMatch(/avatarUrl is required when images are provided/);
+    expect(textOf(response)).toMatch(/avatarUrl/);
     expect(mockClient.createPersona).not.toHaveBeenCalled();
   });
 

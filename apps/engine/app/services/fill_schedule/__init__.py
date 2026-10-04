@@ -14,7 +14,7 @@ Components:
 - scheduler: FillScheduleScheduler — orchestrates the three stages, one tick
   at a time; start_fill_schedule_thread runs the tick loop.
 - support: shared helpers (token_cost, persona_for, slot_user_id,
-  notify_safe, build_persona_params).
+  slot_faceless, notify_safe, build_persona_params).
 - metadata: provider metadata mapping + publish-plan validation.
 - constants: shared constants.
 """
@@ -43,6 +43,7 @@ from app.services.fill_schedule.support import (
     build_persona_params,
     notify_safe,
     persona_for,
+    slot_faceless,
     slot_user_id,
     token_cost,
 )
@@ -68,6 +69,7 @@ __all__ = [
     "new_task_id",
     "notify_safe",
     "persona_for",
+    "slot_faceless",
     "slot_user_id",
     "start_fill_schedule_thread",
     "token_cost",

@@ -197,8 +197,9 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
     cy.contains('button', 'Criar persona').click();
     cy.wait('@createPersona');
 
-    // Success routes to /posts, the app's home for what came out of the persona.
-    cy.url().should('match', /\/posts$/);
+    // Success lands on the personas list, where the user sees the persona
+    // they just created.
+    cy.url().should('match', /\/personas$/);
   });
 
   it('2 — conecta o Bluesky (mockado, sem OAuth)', () => {

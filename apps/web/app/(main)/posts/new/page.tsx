@@ -28,6 +28,7 @@ import {
   TrashIcon,
   AlertIcon,
   CheckIcon,
+  SparklesIcon,
   INPUT_CLASS,
   SECTION_LABEL_CLASS,
 } from '@/lib/ui';
@@ -49,18 +50,18 @@ import {
 import { computeVideoTokens, type FaceQuality } from '@/lib/tokens';
 
 //---------------
-// NewPostPage — cria um post: escolhe a persona, de 1 a 10 temas, as contas
-// onde publicar e os horários, e envia UMA requisição de generate-and-schedule
-// (o vídeo e o slot de publicação nascem juntos).
+// NewPostPage — creates a post: pick the persona, 1-10 topics, the accounts
+// to publish on and the times, then send ONE generate-and-schedule request
+// (the video and its publish slot are born together).
 //
-// O rascunho vive no zustand store (lib/store.ts) e os dados de leitura vêm
-// do React Query, então cada componente local abaixo lê direto da fonte em
-// vez de receber props.
+// The draft lives in the zustand store (lib/store.ts) and the read data comes
+// from React Query, so every local component below reads straight from the
+// source instead of receiving props.
 //---------------
 
-// Lista curta de fusos; o fuso do navegador entra primeiro, então o caso
-// comum não exige rolagem. O servidor valida o fuso (isValidTimezone) e
-// rejeita qualquer zona desconhecida.
+// Short timezone list; the browser timezone goes first, so the common case
+// needs no scrolling. The server validates the zone (isValidTimezone) and
+// rejects anything unknown.
 const COMMON_TIMEZONES = [
   'UTC',
   'America/Sao_Paulo',
@@ -74,7 +75,7 @@ const COMMON_TIMEZONES = [
   'Australia/Sydney',
 ];
 
-// Cartão de formulário: a mesma casca das telas de persona/personas.
+// Form card: the same shell as the persona/personas screens.
 const CARD_CLASS = 'rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6';
 const PRIMARY_BUTTON_CLASS =
   'inline-flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-accent-hover hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60 [&_svg]:size-4';
@@ -84,9 +85,9 @@ const ICON_BUTTON_CLASS =
   'flex size-10 shrink-0 items-center justify-center rounded-xl border border-neutral-200 bg-white text-neutral-400 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30 [&_svg]:size-4';
 
 //---------------
-// ERROR_KEY_BY_CODE — código de falha do servidor (lib/error-codes.ts) para
-// texto traduzido. Códigos desconhecidos caem na mensagem genérica: o texto
-// cru do servidor é em inglês e nunca pode aparecer numa tela localizada.
+// ERROR_KEY_BY_CODE — server failure code (lib/error-codes.ts) to translated
+// text. Unknown codes fall back to the generic message: the raw server text is
+// English and must never appear on a localized screen.
 //---------------
 const ERROR_KEY_BY_CODE: Record<string, TranslationKey> = {
   PERSONA_NOT_FOUND: 'newPost.errorPersonaNotFound',
@@ -112,10 +113,10 @@ export default function NewPostPage() {
   const personas = personasQuery.data ?? [];
 
   //---------------
-  // O resultado vive no store (para os componentes locais renderizarem sem
-  // props), então ele sobrevive à navegação: descarta o resultado da visita
-  // anterior ao montar, senão voltar para cá reaplicaria o redirect e o
-  // banner de sucesso. O rascunho digitado é preservado.
+  // The result lives in the store (so the local components render it without
+  // props), which means it survives navigation: drop the previous visit's
+  // result on mount, otherwise coming back here would replay the redirect and
+  // the success banner. The typed draft is preserved.
   //---------------
   useEffect(() => {
     useNewPostStore.getState().setResult(null);
@@ -123,18 +124,18 @@ export default function NewPostPage() {
   }, []);
 
   //---------------
-  // No sucesso o agendamento existe: volta para a lista de posts, que já foi
-  // refetchada (a mutation invalidou os caches) e mostra os novos slots. Uma
-  // falha parcial mantém o usuário aqui para o erro ficar visível.
+  // On success the schedule exists: go back to the posts list, which was
+  // already refetched (the mutation invalidated the caches) and shows the new
+  // slots. A partial failure keeps the user here so the error stays visible.
   //
-  // Lemos o valor vivo do store, não o `result` deste render: o efeito de
-  // montagem acima limpa um resultado antigo no mesmo commit, e o valor do
-  // render ainda seria o sucesso da visita anterior.
+  // We read the live store value, not this render's `result`: the mount effect
+  // above clears an old result in the same commit, so the render's value would
+  // still be the previous visit's success.
   //---------------
   useEffect(() => {
     const current = useNewPostStore.getState().result;
     if (current !== null && current.success) router.push('/posts');
-    // `result` é o gatilho: a escrita no store re-renderiza esta tela.
+    // `result` is the trigger: the store write re-renders this screen.
   }, [result, router]);
 
   if (personasQuery.isLoading) return <NewPostPageSkeleton />;
@@ -154,6 +155,7 @@ export default function NewPostPage() {
       >
         <div className="space-y-6">
           <NewPostPersonaField />
+          <NewPostFaceField />
           <NewPostTopicsField />
           <NewPostAccountsField />
           <NewPostScheduleField />
@@ -169,11 +171,10 @@ export default function NewPostPage() {
 }
 
 //---------------
-// handleSubmit — monta a requisição a partir do rascunho no store, chama a
-// única operação generate-and-schedule e guarda o resultado para o banner.
-// As guardas locais rejeitam com chave traduzida e não enviam nada: a API
-// cobra tokens, então um pedido que não pode dar certo não deve sair do
-// navegador.
+// handleSubmit — builds the request from the store draft, calls the single
+// generate-and-schedule operation and keeps the result for the banner. The
+// local guards reject with a translated key and send nothing: the API charges
+// tokens, so a request that cannot succeed must never leave the browser.
 //---------------
 async function handleSubmit(
   mutateAsync: (input: CreatePostInput) => Promise<CreatePostResult>,
@@ -210,8 +211,8 @@ async function handleSubmit(
     store.setResult(null);
     return;
   }
-  // startInstant é não-nulo após a guarda acima; o ramo null mantém os tipos
-  // honestos sem asserção.
+  // startInstant is non-null after the guard above; the null branch keeps the
+  // types honest without an assertion.
   if (startInstant === null) return;
 
   store.setValidationKey(null);
@@ -225,9 +226,10 @@ async function handleSubmit(
       startAt: startInstant.toISOString(),
       times: filledTimes,
       timezone: store.timezone,
+      faceless: store.faceless,
     });
-    // Projeta a resposta no que o banner lê: o texto de erro cru da API
-    // nunca entra no store (a UI traduz pelo código).
+    // Projects the response onto what the banner reads: the raw API error text
+    // never enters the store (the UI translates by code).
     const outcome: NewPostOutcome = {
       success: response.success,
       scheduleId: response.scheduleId,
@@ -247,7 +249,7 @@ async function handleSubmit(
 ------------------ */
 
 //---------------
-// Cabeçalho: voltar para os posts + identidade da tela.
+// Header: back to the posts + screen identity.
 //---------------
 const NewPostHeader = () => {
   const { t } = useI18n();
@@ -273,8 +275,8 @@ const NewPostHeader = () => {
 };
 
 //---------------
-// Banner de retorno: rejeição local, código de falha do servidor ou o estado
-// de sucesso (a tela redireciona logo em seguida).
+// Feedback banner: local rejection, server failure code, or the success
+// state (the screen redirects right after).
 //---------------
 const NewPostFeedback = () => {
   const { t } = useI18n();
@@ -331,17 +333,17 @@ const NewPostFeedback = () => {
 };
 
 //---------------
-// Persona — obrigatória: é ela que renderiza o rosto e traz a voz, então um
-// post não existe sem uma.
+// Persona — required: it renders the face and brings the voice, so a post
+// does not exist without one.
 //
-// shadcn RadioGroup + Label em vez de <select>: a persona é o objeto mais
-// importante do formulário e precisa da foto (o mesmo avatar do card em
-// /personas) — um select nativo não mostra imagem.
+// shadcn RadioGroup + Label instead of <select>: the persona is the most
+// important object in the form and needs the photo (the same avatar as the
+// card in /personas) — a native select shows no image.
 //
-// O RadioGroupItem do shadcn é um leaf (ele desenha o pontinho e descarta
-// children), então ele fica como o controle real, `sr-only` + `id`, e o card
-// é um Label apontando para ele: clique no card seleciona, o item continua
-// sendo o alvo de teclado e leitor de tela.
+// shadcn's RadioGroupItem is a leaf (it draws the dot and discards children),
+// so it stays the real control, `sr-only` + `id`, and the card is a Label
+// pointing at it: clicking the card selects, and the item remains the keyboard
+// and screen-reader target.
 //---------------
 const NewPostPersonaField = () => {
   const { t } = useI18n();
@@ -367,8 +369,8 @@ const NewPostPersonaField = () => {
               data-selected={selected ? 'true' : 'false'}
               className={cn(
                 'flex cursor-pointer items-center gap-3 rounded-2xl border bg-white p-3 transition-colors',
-                // Foco no mesmo azul-marinho da seleção (o token `ring` é
-                // outro azul e brigaria com o anel de selecionado).
+                // Focus uses the same navy as the selection (the `ring` token is
+                // a different blue and would fight the selected ring).
                 'has-focus-visible:ring-2 has-focus-visible:ring-accent/40 has-focus-visible:ring-offset-2',
                 selected
                   ? 'border-accent bg-accent/5 ring-1 ring-accent'
@@ -402,8 +404,81 @@ const NewPostPersonaField = () => {
 };
 
 //---------------
-// Temas — um vídeo por linha. "Adicionar tema" para no limite compartilhado
-// (MAX_POST_TOPICS), o mesmo número que a API aplica.
+// Video face — every persona has a face; "no face" is chosen here, per
+// post (100% stock footage, no lipsync, no library image). The persona is
+// still required: it supplies the voice, the niche and the script. Same card
+// pattern as the persona picker above: shadcn RadioGroup as the sr-only item
+// + Label as the clickable card.
+//---------------
+const NewPostFaceField = () => {
+  const { t } = useI18n();
+  const faceless = useNewPostStore((s) => s.faceless);
+  const setFaceless = useNewPostStore((s) => s.setFaceless);
+
+  const options = [
+    { value: 'face', faceless: false, label: t('newPost.faceWithAvatar'), hint: t('newPost.faceWithAvatarHint') },
+    { value: 'faceless', faceless: true, label: t('newPost.faceFaceless'), hint: t('newPost.faceFacelessHint') },
+  ] as const;
+
+  return (
+    <section className={cn(CARD_CLASS, 'space-y-4')}>
+      <SectionTitle icon={<SparklesIcon />} label={t('newPost.faceLabel')} hint={t('newPost.faceHint')} />
+      <RadioGroup
+        value={faceless ? 'faceless' : 'face'}
+        onValueChange={(value) => setFaceless(value === 'faceless')}
+        aria-label={t('newPost.faceLabel')}
+        className="grid gap-3"
+      >
+        {options.map((option) => {
+          const itemId = `new-post-face-${option.value}`;
+          const selected = faceless === option.faceless;
+          return (
+            <Label
+              key={option.value}
+              htmlFor={itemId}
+              data-selected={selected ? 'true' : 'false'}
+              className={cn(
+                'flex cursor-pointer items-start gap-3 rounded-2xl border bg-white p-3 transition-colors',
+                'has-focus-visible:ring-2 has-focus-visible:ring-accent/40 has-focus-visible:ring-offset-2',
+                selected
+                  ? 'border-accent bg-accent/5 ring-1 ring-accent'
+                  : 'border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50',
+              )}
+            >
+              <RadioGroupItem
+                value={option.value}
+                id={itemId}
+                aria-label={option.label}
+                className="sr-only"
+              />
+              <span
+                className={cn(
+                  'mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full',
+                  selected ? 'bg-accent text-white' : 'bg-neutral-100 text-neutral-500',
+                )}
+              >
+                {option.faceless ? <FilmIcon /> : <SparklesIcon />}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold text-neutral-900">{option.label}</span>
+                <span className="mt-0.5 block text-xs leading-5 text-neutral-500">{option.hint}</span>
+              </span>
+              {selected ? (
+                <span className="mt-0.5 shrink-0 text-accent">
+                  <CheckIcon />
+                </span>
+              ) : null}
+            </Label>
+          );
+        })}
+      </RadioGroup>
+    </section>
+  );
+};
+
+//---------------
+// Topics — one video per row. "Add topic" stops at the shared limit
+// (MAX_POST_TOPICS), the same number the API enforces.
 //---------------
 const NewPostTopicsField = () => {
   const { t } = useI18n();
@@ -454,10 +529,10 @@ const NewPostTopicsField = () => {
 };
 
 //---------------
-// Contas — as Same cards da tela de contas (AccountCard: miniatura real da
-// conta + checkbox de seleção), agrupadas por rede com o glifo da rede. A
-// seleção é estado global do app (useUploadStore), a mesma que /accounts
-// escreve: quem marcou um canal lá encontra ele marcado aqui.
+// Accounts — the same cards as the accounts screen (AccountCard: real
+// account thumbnail + selection checkbox), grouped by network with the
+// network glyph. The selection is app-wide state (useUploadStore), the same
+// one /accounts writes: a channel checked there is checked here too.
 //---------------
 const NewPostAccountsField = () => {
   const { t } = useI18n();
@@ -562,9 +637,9 @@ const NewPostAccountsField = () => {
                 )}
               </div>
               {group.cards.length > 0 && (
-                // Uma coluna: o card da conta já tem avatar + nome + checkbox,
-                // e a coluna do formulário é estreita — duas colunas cortam
-                // o nome no meio.
+                // One column: the account card already has avatar + name +
+                // checkbox, and the form column is narrow — two columns cut
+                // the name in half.
                 <div className="mt-2 grid grid-cols-1 gap-3">{group.cards}</div>
               )}
             </div>
@@ -576,8 +651,8 @@ const NewPostAccountsField = () => {
 };
 
 //---------------
-// Plano de publicação — primeira publicação (hora wall clock + fuso) e os
-// horários diários.
+// Publishing plan — the first publish (wall-clock time + timezone) and the
+// daily times.
 //---------------
 const NewPostScheduleField = () => {
   const { t } = useI18n();
@@ -665,9 +740,9 @@ const NewPostScheduleField = () => {
 };
 
 //---------------
-// Prévia da agenda — calculada pelo MESMO distributeSlots que a API chama,
-// então o que o usuário vê é o que será criado, com aviso quando algum slot
-// cai fora da janela de 3h–30d.
+// Schedule preview — computed by the SAME distributeSlots the API calls, so
+// what the user sees is what will be created, with a warning when a slot falls
+// outside the 3h-30d window.
 //---------------
 const NewPostPreviewCard = () => {
   const { t, locale } = useI18n();
@@ -757,19 +832,21 @@ const NewPostPreviewCard = () => {
 };
 
 //---------------
-// Custo estimado — o mesmo preço por vídeo que a rota cobra
-// (computeVideoTokens sobre o mix de rosto + qualidade da persona), vezes o
-// número de temas. É uma estimativa; o servidor é a autoridade de cobrança.
+// Estimated cost — the same per-video price the route charges
+// (computeVideoTokens), times the number of topics. No face costs the
+// faceless price; with the face, the persona's chosen quality price. It is an
+// estimate; the server is the billing authority.
 //---------------
 const NewPostCostSummary = () => {
   const { t } = useI18n();
   const personaId = useNewPostStore((s) => s.personaId);
   const topics = useNewPostStore((s) => s.topics);
+  const faceless = useNewPostStore((s) => s.faceless);
   const personasQuery = usePersonaListQuery();
   const persona = (personasQuery.data ?? []).find((item) => item.id === personaId);
   const videoCount = topics.filter((topic) => topic.trim().length > 0).length;
   const perVideo = persona
-    ? computeVideoTokens(persona.faceMixPercent ?? 0, (persona.faceQuality as FaceQuality) ?? 'ok')
+    ? computeVideoTokens(faceless, (persona.faceQuality as FaceQuality) ?? 'ok')
     : 0;
   return (
     <section className={cn(CARD_CLASS, 'flex items-center justify-between gap-3')}>
@@ -792,8 +869,8 @@ const NewPostCostSummary = () => {
 };
 
 //---------------
-// Botão de envio — desabilitado durante o envio para que um clique duplo não
-// enfileire um segundo agendamento (cada requisição cobra tokens).
+// Submit button — disabled while submitting so a double click cannot queue a
+// second schedule (every request charges tokens).
 //---------------
 const NewPostSubmitRow = () => {
   const { t } = useI18n();
@@ -816,8 +893,7 @@ const NewPostSubmitRow = () => {
 };
 
 //---------------
-// Estado vazio — um post precisa de uma persona, então o próximo passo é
-// criar uma.
+// Empty state — a post needs a persona, so the next step is creating one.
 //---------------
 const NewPostNoPersonas = () => {
   const { t } = useI18n();
@@ -847,9 +923,8 @@ const NewPostNoPersonas = () => {
 };
 
 //---------------
-// Falha na lista de personas: nada nesta tela funciona sem ela, então é um
-// estado bloqueante que aponta de volta para os posts, não um formulário
-// vazio.
+// Persona list failure: nothing on this screen works without it, so it is a
+// blocking state that points back to the posts, not an empty form.
 //---------------
 const NewPostLoadError = () => {
   const { t } = useI18n();
@@ -880,8 +955,8 @@ function pluralKey(count: number, one: TranslationKey, many: TranslationKey): Tr
 }
 
 //---------------
-// SectionTitle — rótulo de seção no mesmo padrão de persona/personas: ícone
-// + label em caixa alta + dica curta.
+// SectionTitle — section label in the same persona/personas pattern: icon
+// + uppercase label + short hint.
 //---------------
 const SectionTitle = ({ icon, label, hint }: { icon: React.ReactNode; label: string; hint?: string }) => (
   <div className="flex items-start gap-2.5">
@@ -896,7 +971,7 @@ const SectionTitle = ({ icon, label, hint }: { icon: React.ReactNode; label: str
 );
 
 //---------------
-// Skeleton — apenas placeholders de UI: sem hooks, sem store, sem queries.
+// Skeleton — UI placeholders only: no hooks, no store, no queries.
 //---------------
 const NewPostPageSkeleton = () => (
   <div className="space-y-6">

@@ -228,7 +228,7 @@ describe('POST /api/persona with image library', () => {
     };
     try {
       const res = await POST(
-        createRequest({ ...BASE_FIELDS, personaMode: 'persona' }, [png('a.png')]),
+        createRequest({ ...BASE_FIELDS }, [png('a.png')]),
       );
       expect(res.status).toBe(200);
       expect(calls.personaInserts).toBe(1);
@@ -238,54 +238,11 @@ describe('POST /api/persona with image library', () => {
     }
   });
 
-  it('rejects library images in faceless mode', async () => {
-    mockClient();
-    const res = await POST(
-      createRequest({ ...BASE_FIELDS, personaMode: 'faceless' }, [png('a.png')]),
-    );
-    expect(res.status).toBe(400);
-  });
-
-  it('coerces a faceless creation to face_mix_percent 0 so the library guard holds', async () => {
-    // A persona created with personaMode 'faceless' and no explicit
-    // faceMixPercent would be stored with face_mix_percent NULL, passing
-    // the POST /api/persona/images `=== 0` faceless check — a backdoor for
-    // library images on faceless personas. Coercing to 0 on insert keeps
-    // the stored state consistent with the creation-time rule.
+  it('accepts library images for any persona (every persona is faced)', async () => {
     const calls = mockClient();
-    const form = new FormData();
-    form.append('name', 'Ana');
-    form.append('voiceId', 'voice-1');
-    form.append('personaMode', 'faceless');
-    const res = await POST(new Request('http://localhost/api/persona', { method: 'POST', body: form }));
+    const res = await POST(createRequest({ ...BASE_FIELDS }, [png('a.png')]));
     expect(res.status).toBe(200);
-    expect(calls.personaInsertValues?.face_mix_percent).toBe(0);
-  });
-
-  it('coerces an explicit faceMixPercent to 0 for faceless creations (backdoor closed)', async () => {
-    // A direct API caller can send personaMode=faceless with an explicit
-    // faceMixPercent=80. Without coercion, 80 is stored and the images
-    // route (which treats stored mix as the facelessness source) would
-    // accept library uploads — re-opening the backdoor. The faceless
-    // branch is unconditional at the write boundary.
-    const calls = mockClient();
-    const form = new FormData();
-    form.append('name', 'Ana');
-    form.append('voiceId', 'voice-1');
-    form.append('personaMode', 'faceless');
-    form.append('faceMixPercent', '80');
-    const res = await POST(new Request('http://localhost/api/persona', { method: 'POST', body: form }));
-    expect(res.status).toBe(200);
-    expect(calls.personaInsertValues?.face_mix_percent).toBe(0);
-  });
-
-  it('does not coerce face_mix_percent for persona-mode creations', async () => {
-    const calls = mockClient();
-    const res = await POST(
-      createRequest({ ...BASE_FIELDS, personaMode: 'persona', faceMixPercent: '50' }),
-    );
-    expect(res.status).toBe(200);
-    expect(calls.personaInsertValues?.face_mix_percent).toBe(50);
+    expect(calls.imageInserts).toHaveLength(1);
   });
 
   it('still creates a persona without library images', async () => {

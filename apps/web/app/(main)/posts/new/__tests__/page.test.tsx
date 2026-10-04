@@ -52,6 +52,7 @@ vi.mock('@/lib/ui', () => {
     'TrashIcon',
     'AlertIcon',
     'CheckIcon',
+    'SparklesIcon',
   ];
   return {
     SpinnerIcon: () => <span data-testid="icon-spinner" />,
@@ -95,14 +96,10 @@ const PERSONA = {
   id: 'p1',
   name: 'Viva Leve',
   createdAt: '2026-01-01T00:00:00.000Z',
-  faceMixPercent: 100,
   faceQuality: 'ok',
   avatarUrl: 'https://example.test/avatar.png',
   niche: 'Saúde',
 };
-
-// Mix 0 = faceless: computeVideoTokens prices it at 1 token per video.
-const FACELESS_PERSONA = { ...PERSONA, name: 'Faceless', faceMixPercent: 0 };
 
 // Second option in the picker: needs its own id, the first two share 'p1'.
 const SECOND_PERSONA = { ...PERSONA, id: 'p2', name: 'Resenha Fut', niche: 'Futebol' };
@@ -246,6 +243,7 @@ describe('NewPostPage', () => {
       startAt: START_INSTANT,
       times: ['09:00'],
       timezone: 'UTC',
+      faceless: false,
     });
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/posts'));
   });
@@ -391,12 +389,78 @@ describe('NewPostPage', () => {
   });
 
   //---------------
-  // Count copy: "1 token / 1 video" vs "2 tokens / 2 videos" — a localized
-  // screen must not render "(s)" nor "1 tokens".
+  // "No face" is a per-post choice (personas are always faced): it flips the
+  // priced case and travels as options.faceless.
   //---------------
-  it('uses the singular cost copy for one one-token video', () => {
-    mockQueries({ personas: [FACELESS_PERSONA] });
+  it('prices a faceless post at 1 token and sends the flag', async () => {
+    mockMutateAsync.mockResolvedValue({
+      success: true,
+      scheduleId: 's1',
+      slots: [],
+      replayed: false,
+      error: null,
+      code: null,
+      need: null,
+      have: null,
+    });
     fillValidDraft();
+    useNewPostStore.getState().setFaceless(true);
+    render(<NewPostPage />);
+
+    // 1 token = the faceless price; the persona's face quality is irrelevant.
+    expect(screen.getByText('newPost.costValueOne:cost=1')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'newPost.submit' }));
+
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    expect(mockMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ faceless: true }));
+  });
+
+  it('sends faceless: false by default (the persona shows its face)', async () => {
+    mockMutateAsync.mockResolvedValue({
+      success: true,
+      scheduleId: 's1',
+      slots: [],
+      replayed: false,
+      error: null,
+      code: null,
+      need: null,
+      have: null,
+    });
+    fillValidDraft();
+    render(<NewPostPage />);
+
+    expect(screen.getByRole('radio', { name: 'newPost.faceWithAvatar' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'newPost.submit' }));
+
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    expect(mockMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ faceless: false }));
+  });
+
+  it('switches the face choice from the form and reprices the batch', async () => {
+    fillValidDraft();
+    render(<NewPostPage />);
+
+    // With the persona's face (quality ok): 2 tokens.
+    expect(screen.getByText('newPost.costValue:cost=2')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('radio', { name: 'newPost.faceFaceless' }));
+
+    expect(screen.getByRole('radio', { name: 'newPost.faceFaceless' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    expect(screen.getByText('newPost.costValueOne:cost=1')).toBeInTheDocument();
+    expect(useNewPostStore.getState().faceless).toBe(true);
+  });
+
+  it('uses the singular cost copy for one one-token video', () => {
+    fillValidDraft();
+    useNewPostStore.getState().setFaceless(true);
     render(<NewPostPage />);
 
     expect(screen.getByText('newPost.costValueOne:cost=1')).toBeInTheDocument();
@@ -404,8 +468,8 @@ describe('NewPostPage', () => {
   });
 
   it('switches to the plural copy once there is more than one', () => {
-    mockQueries({ personas: [FACELESS_PERSONA] });
     fillValidDraft();
+    useNewPostStore.getState().setFaceless(true);
     useNewPostStore.getState().addTopic();
     useNewPostStore.getState().setTopic(1, 'Another topic');
     render(<NewPostPage />);

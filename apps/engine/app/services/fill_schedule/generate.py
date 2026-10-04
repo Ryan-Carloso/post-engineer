@@ -23,6 +23,7 @@ from app.services.fill_schedule.support import (
     build_persona_params,
     notify_safe,
     persona_for,
+    slot_faceless,
     slot_user_id,
     token_cost,
 )
@@ -88,9 +89,10 @@ class BatchGenerator:
             if not topic:
                 raise RuntimeError("Batch slot has no topic")
             validate_publish_plan(schedule, topic)
+            faceless = slot_faceless(slot)
             request = TaskVideoRequest(
                 video_subject=topic,
-                persona=build_persona_params(persona, self.store),
+                persona=build_persona_params(persona, self.store, faceless),
                 video_aspect=persona.get("video_aspect") or "9:16",
                 video_script_prompt=persona.get("script_prompt") or "",
                 paragraph_number=(
@@ -102,9 +104,8 @@ class BatchGenerator:
             user_id = slot_user_id(slot)
             if user_id is None:
                 raise RuntimeError("Scheduled slot has no user_id")
-            face_mix_percent = float(persona.get("face_mix_percent") or 0)
             face_quality = str(persona.get("face_quality") or "ok")
-            cost = token_cost(face_mix_percent, face_quality)
+            cost = token_cost(faceless, face_quality)
             # Prepaid at request time under this id: no spend here, only a
             # refund if dispatch itself fails.
             generation_id = f"batch:{schedule['id']}"

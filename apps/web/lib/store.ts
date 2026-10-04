@@ -9,7 +9,6 @@ import type {
 } from '@/lib/types';
 import { SOCIAL_PROVIDERS } from '@/lib/types';
 import type { FaceQuality } from '@/lib/tokens';
-import { DEFAULT_FACE_MIX_PERCENT } from '@/lib/persona-schema';
 import { MAX_POST_TOPICS } from '@/lib/schedule/slot-distribution';
 import type { TranslationKey } from '@/lib/i18n';
 
@@ -194,14 +193,12 @@ export function resolveScriptLanguage(locale: string): ScriptLanguage {
 
 //---------------
 // PersonaFormState — persona creation screen state
-// (persona mode with AI avatar / photo OR 100% stock faceless,
-// name, house voice)
+// (always faced: an uploaded photo OR a chosen character/AI avatar,
+// name, house voice). A video without a face is a per-post choice
+// (NewPostState.faceless), not a persona attribute.
 //---------------
 
-type PersonaMode = 'persona' | 'faceless';
-
 interface PersonaFormState {
-  personaMode: PersonaMode;
   name: string;
   photo: File | null;
   prompt: string;
@@ -215,12 +212,10 @@ interface PersonaFormState {
   scriptPrompt: string;
   niche: string;
   result: CreatePersonaResult | null;
-  // Faceless/face mix (hybrid) — % of face in the video and avatar quality.
-  // 0% = faceless (cheap, 0.5 token); 100% ok (480p) = 1 token;
-  // 100% very_good (720p) = 2 tokens. Cost is weighted by the mix.
-  faceMixPercent: number;
+  /** Avatar resolution: 'ok' (480p, 1 token/video) or 'very_good' (720p,
+      2 tokens/video). The face is always present, so this is the only
+      face-related choice on this screen. */
   faceQuality: FaceQuality;
-  setPersonaMode: (mode: PersonaMode) => void;
   setName: (value: string) => void;
   setPhoto: (file: File | null) => void;
   setPrompt: (value: string) => void;
@@ -231,16 +226,12 @@ interface PersonaFormState {
   setScriptPrompt: (value: string) => void;
   setNiche: (value: string) => void;
   setResult: (result: CreatePersonaResult | null) => void;
-  // Mix/quality — setFaceMixPercent clamps on change and derives the mode
-  // (0 → faceless, > 0 → persona). setFaceQuality only changes the quality.
-  setFaceMixPercent: (value: number) => void;
   setFaceQuality: (quality: FaceQuality) => void;
   resetForm: () => void;
   buildPersonaFormData: (language?: string) => FormData;
 }
 
 const initialPersonaState = {
-  personaMode: 'persona' as PersonaMode,
   name: '',
   photo: null,
   prompt: '',
@@ -251,16 +242,12 @@ const initialPersonaState = {
   scriptPrompt: '',
   niche: '',
   result: null,
-  // Legacy mode default: 100% face, ok quality (1 token). Shared with the
-  // creation route's insert coercion so the two can't drift apart.
-  faceMixPercent: DEFAULT_FACE_MIX_PERCENT,
   faceQuality: 'ok' as FaceQuality,
 };
 
 export const usePersonaStore = create<PersonaFormState>()(
   (set, get) => ({
     ...initialPersonaState,
-    setPersonaMode: (personaMode) => set({ personaMode }),
     setName: (name) => set({ name }),
     setPhoto: (photo) => set({ photo }),
     setPrompt: (prompt) => set({ prompt }),
@@ -271,28 +258,19 @@ export const usePersonaStore = create<PersonaFormState>()(
     setScriptPrompt: (scriptPrompt) => set({ scriptPrompt }),
     setNiche: (niche) => set({ niche }),
     setResult: (result) => set({ result }),
-    setFaceMixPercent: (value) =>
-      set(() => {
-        const faceMixPercent = Math.min(100, Math.max(0, Math.round(value)));
-        return { faceMixPercent, personaMode: faceMixPercent === 0 ? 'faceless' : 'persona' };
-      }),
     setFaceQuality: (faceQuality) => set({ faceQuality }),
     resetForm: () => set({ ...initialPersonaState }),
     buildPersonaFormData: (language?: string) => {
       const s = get();
       const formData = new FormData();
-      formData.append('personaMode', s.personaMode);
       formData.append('name', s.name.trim());
-      // Effective mix: faceless mode (or mix 0) → no face at all.
-      const effectiveMix = s.personaMode === 'faceless' ? 0 : s.faceMixPercent;
-      formData.append('faceMixPercent', String(effectiveMix));
       formData.append('faceQuality', s.faceQuality);
-      if (effectiveMix > 0) {
-        if (s.photo) {
-          formData.append('photo', s.photo);
-        } else if (s.avatarUrl) {
-          formData.append('avatarUrl', s.avatarUrl);
-        }
+      // Exactly one visual identity per persona. The photo wins when both
+      // are staged (the server enforces the same rule).
+      if (s.photo) {
+        formData.append('photo', s.photo);
+      } else if (s.avatarUrl) {
+        formData.append('avatarUrl', s.avatarUrl);
       }
       if (s.voiceId) {
         formData.append('voiceId', s.voiceId);
@@ -324,6 +302,13 @@ export interface NewPostState {
   /** Daily publish times as "HH:MM". */
   times: string[];
   timezone: string;
+  /**
+   * Generate this batch WITHOUT a face: 100% stock footage, no lipsync, and
+   * no persona image in the library (the persona still supplies the voice,
+   * niche and script prompt — and is still required). Personas are always
+   * faced; this is the only place "no face" lives now.
+   */
+  faceless: boolean;
   /** Last create outcome, so every local component can render it without
       props. A projection of api.ts' CreatePostResult (only the fields the UI
       reads) — declared here so lib/store.ts never imports lib/api.ts, which
@@ -342,6 +327,7 @@ export interface NewPostState {
   addTime: () => void;
   removeTime: (index: number) => void;
   setTimezone: (value: string) => void;
+  setFaceless: (faceless: boolean) => void;
   setResult: (result: NewPostOutcome | null) => void;
   setValidationKey: (key: TranslationKey | null) => void;
   setPending: (pending: boolean) => void;
@@ -371,6 +357,8 @@ const initialNewPostState = {
   startAt: '',
   times: ['18:00'],
   timezone: 'UTC',
+  // Default is WITH the persona's face; "no face" is the opt-in.
+  faceless: false,
   result: null as NewPostOutcome | null,
   validationKey: null as TranslationKey | null,
   pending: false,
@@ -408,6 +396,7 @@ export const useNewPostStore = create<NewPostState>()(
         return { times: state.times.filter((_, i) => i !== index) };
       }),
     setTimezone: (timezone) => set({ timezone }),
+    setFaceless: (faceless) => set({ faceless }),
     setResult: (result) => set({ result }),
     setValidationKey: (validationKey) => set({ validationKey }),
     setPending: (pending) => set({ pending }),

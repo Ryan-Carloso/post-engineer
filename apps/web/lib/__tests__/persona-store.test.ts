@@ -19,6 +19,7 @@ describe('usePersonaStore', () => {
     expect(state.avatarUrl).toBeNull();
     expect(state.voiceId).toBeNull();
     expect(state.result).toBeNull();
+    expect(state.faceQuality).toBe('ok');
   });
 
   it('setters atualizam os campos da persona', () => {
@@ -66,52 +67,50 @@ describe('usePersonaStore', () => {
     expect(formData.has('photo')).toBe(false);
   });
 
-  it('starts in persona mode (default)', () => {
-    expect(usePersonaStore.getState().personaMode).toBe('persona');
+  //---------------
+  // Personas are always faced: the store carries no faceless mode and no face
+  // mix. "No face" is a per-post choice (NewPostState.faceless). The keys are
+  // pinned absent so a future form cannot reintroduce dead state nobody reads.
+  //---------------
+
+  it('holds no faceless mode and no face mix', () => {
+    const state = usePersonaStore.getState() as unknown as Record<string, unknown>;
+    for (const key of [
+      'personaMode',
+      'setPersonaMode',
+      'faceMixPercent',
+      'setFaceMixPercent',
+    ]) {
+      expect(state).not.toHaveProperty(key);
+    }
   });
 
-  it('buildPersonaFormData no modo faceless omite foto e avatar', () => {
-    const photo = new File(['img'], 'foto.png', { type: 'image/png' });
+  it('buildPersonaFormData sends no persona mode and no face mix', () => {
     const s = usePersonaStore.getState();
-    s.setPersonaMode('faceless');
-    s.setName('Canal Ninja');
-    s.setPhoto(photo);
+    s.setName('Zé Persona');
     s.setAvatarUrl('data:image/png;base64,IA');
     s.setVoiceId('calm');
 
     const formData = usePersonaStore.getState().buildPersonaFormData();
-    expect(formData.get('personaMode')).toBe('faceless');
-    expect(formData.has('photo')).toBe(false);
-    expect(formData.has('avatarUrl')).toBe(false);
+    expect(formData.has('personaMode')).toBe(false);
+    expect(formData.has('faceMixPercent')).toBe(false);
+    expect(formData.get('avatarUrl')).toBe('data:image/png;base64,IA');
     expect(formData.get('voiceId')).toBe('calm');
   });
 
-  it('buildPersonaFormData in persona mode sends photo and personaMode', () => {
+  it('buildPersonaFormData sends the photo when one is staged', () => {
     const photo = new File(['img'], 'foto.png', { type: 'image/png' });
     const s = usePersonaStore.getState();
-    s.setPersonaMode('persona');
     s.setName('Zé Persona');
     s.setPhoto(photo);
+    s.setAvatarUrl('data:image/png;base64,IA');
     s.setVoiceId('calm');
 
+    // Exactly one visual identity: the staged photo wins over a character the
+    // user may have picked earlier (same rule the server enforces).
     const formData = usePersonaStore.getState().buildPersonaFormData();
-    expect(formData.get('personaMode')).toBe('persona');
     expect(formData.get('photo')).toBe(photo);
-  });
-
-  it('setPersonaMode alterna entre persona e faceless', () => {
-    const s = usePersonaStore.getState();
-    s.setPersonaMode('faceless');
-    expect(usePersonaStore.getState().personaMode).toBe('faceless');
-    s.setPersonaMode('persona');
-    expect(usePersonaStore.getState().personaMode).toBe('persona');
-  });
-
-  it('resetForm volta ao modo persona (default)', () => {
-    const s = usePersonaStore.getState();
-    s.setPersonaMode('faceless');
-    usePersonaStore.getState().resetForm();
-    expect(usePersonaStore.getState().personaMode).toBe('persona');
+    expect(formData.has('avatarUrl')).toBe(false);
   });
 
   it('resetForm returns to the initial state', () => {
@@ -127,36 +126,12 @@ describe('usePersonaStore', () => {
   });
 
   //---------------
-  // Faceless/face mix (hybrid) + face quality — token prices.
+  // Face quality — the persona's only face-related choice (the face itself is
+  // always there). Token prices live in lib/tokens (computeVideoTokens).
   //---------------
 
-  it('starts with 100% face (default mix) and ok quality', () => {
-    const state = usePersonaStore.getState();
-    expect(state.faceMixPercent).toBe(100);
-    expect(state.faceQuality).toBe('ok');
-  });
-
-  it('setFaceMixPercent atualiza o mix e deriva o modo', () => {
-    const s = usePersonaStore.getState();
-    s.setFaceMixPercent(0);
-    let state = usePersonaStore.getState();
-    expect(state.faceMixPercent).toBe(0);
-    expect(state.personaMode).toBe('faceless');
-
-    s.setFaceMixPercent(40);
-    state = usePersonaStore.getState();
-    expect(state.faceMixPercent).toBe(40);
-    expect(state.personaMode).toBe('persona');
-
-    s.setFaceMixPercent(100);
-    expect(usePersonaStore.getState().personaMode).toBe('persona');
-  });
-
-  it('setFaceMixPercent clampa valores fora de 0–100', () => {
-    usePersonaStore.getState().setFaceMixPercent(-10);
-    expect(usePersonaStore.getState().faceMixPercent).toBe(0);
-    usePersonaStore.getState().setFaceMixPercent(150);
-    expect(usePersonaStore.getState().faceMixPercent).toBe(100);
+  it('starts with ok quality', () => {
+    expect(usePersonaStore.getState().faceQuality).toBe('ok');
   });
 
   it('setFaceQuality altera a qualidade da face', () => {
@@ -165,54 +140,23 @@ describe('usePersonaStore', () => {
     expect(usePersonaStore.getState().faceQuality).toBe('very_good');
   });
 
-  it('buildPersonaFormData sends faceMixPercent and faceQuality', () => {
+  it('buildPersonaFormData sends faceQuality', () => {
     const s = usePersonaStore.getState();
-    s.setName('Mix');
-    s.setFaceMixPercent(75);
+    s.setName('Zé Persona');
     s.setFaceQuality('very_good');
-    s.setPhoto(new File(['png'], 'foto.png', { type: 'image/png' }));
-    s.setVoiceId('calm');
-
-    const formData = usePersonaStore.getState().buildPersonaFormData();
-    expect(formData.get('faceMixPercent')).toBe('75');
-    expect(formData.get('faceQuality')).toBe('very_good');
-  });
-
-  it('buildPersonaFormData derives the mix from the mode: faceless sends 0', () => {
-    const s = usePersonaStore.getState();
-    s.setName('Mix');
-    s.setVoiceId('calm');
-    s.setPersonaMode('faceless');
-
-    const formData = usePersonaStore.getState().buildPersonaFormData();
-    expect(formData.get('personaMode')).toBe('faceless');
-    expect(formData.get('faceMixPercent')).toBe('0');
-  });
-
-  it('buildPersonaFormData with mix 0 omits photo and avatar', () => {
-    const s = usePersonaStore.getState();
-    s.setName('Mix');
-    s.setFaceMixPercent(0);
-    s.setPhoto(new File(['png'], 'foto.png', { type: 'image/png' }));
     s.setAvatarUrl('data:image/png;base64,IA');
     s.setVoiceId('calm');
 
     const formData = usePersonaStore.getState().buildPersonaFormData();
-    expect(formData.get('personaMode')).toBe('faceless');
-    expect(formData.has('photo')).toBe(false);
-    expect(formData.has('avatarUrl')).toBe(false);
+    expect(formData.get('faceQuality')).toBe('very_good');
   });
 
-  it('resetForm volta ao mix 100% face e qualidade ok', () => {
+  it('resetForm volta à qualidade ok', () => {
     const s = usePersonaStore.getState();
-    s.setFaceMixPercent(0);
     s.setFaceQuality('very_good');
     usePersonaStore.getState().resetForm();
 
-    const state = usePersonaStore.getState();
-    expect(state.faceMixPercent).toBe(100);
-    expect(state.faceQuality).toBe('ok');
-    expect(state.personaMode).toBe('persona');
+    expect(usePersonaStore.getState().faceQuality).toBe('ok');
   });
 
   it('buildPersonaFormData sends the niche when set and omits it when empty', () => {

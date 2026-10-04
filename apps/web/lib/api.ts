@@ -164,8 +164,8 @@ export interface PersonaRecord {
   scriptPrompt?: string;
   paragraphNumber?: number;
   niche?: string;
-  // Billing inputs for per-video token cost estimates.
-  faceMixPercent?: number;
+  // Billing input for the per-video token cost estimate (the persona's face
+  // quality; "no face" is a per-post choice, not a persona attribute).
   faceQuality?: string;
 }
 
@@ -1152,6 +1152,10 @@ export interface CreatePostInput {
   /** Daily publish times as "HH:MM", wall clock in `timezone`. */
   times: string[];
   timezone: string;
+  /** Generate without a face (100% stock, no lipsync). Personas are always
+      faced; this is the per-post choice. Sent explicitly — the server is the
+      billing authority and prices the two cases differently. */
+  faceless: boolean;
 }
 
 export interface CreatedSlot {
@@ -1208,6 +1212,7 @@ export async function createPost(input: CreatePostInput): Promise<CreatePostResu
     body: JSON.stringify({
       personaId: input.personaId,
       topics: input.topics,
+      options: { faceless: input.faceless },
       publishing: {
         providers: input.providers,
         accounts: input.accounts,

@@ -417,7 +417,8 @@ async function validateAccounts(
 
 interface PersonaPrep {
   personaName: string;
-  effectiveMix: number;
+  /** Per-post "no face" choice (options.faceless). */
+  faceless: boolean;
   faceQuality: FaceQuality;
   voiceAudioUrl?: string;
   voiceIdValue?: string;
@@ -445,7 +446,7 @@ async function preparePersona(
   const { data: persona, error: personaError } = await supabase
     .from('personas')
     .select(
-      'id, name, photo_path, avatar_url, voice_id, voice_audio_path, language, video_aspect, script_prompt, paragraph_number, niche, face_mix_percent, face_quality',
+      'id, name, photo_path, avatar_url, voice_id, voice_audio_path, language, video_aspect, script_prompt, paragraph_number, niche, face_quality',
     )
     .eq('id', personaId)
     .eq('user_id', userId)
@@ -478,11 +479,6 @@ async function preparePersona(
   ) {
     return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'Persona paragraph_number must be an integer between 1 and 10: update the persona.', 'personaId');
   }
-  const storedMix = (persona.face_mix_percent as number | null) ?? null;
-  if (storedMix !== null && (!Number.isFinite(storedMix) || storedMix < 0 || storedMix > 100)) {
-    return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'Persona face_mix_percent must be a number between 0 and 100: update the persona.', 'personaId');
-  }
-
   // Voice: custom per-request audio wins; otherwise the persona voice.
   // The engine requires exactly one of voice_id / voice_audio_url.
   const voiceAudioUrl = opts.audioUrl ?? (await signedUrl(supabase, (persona.voice_audio_path as string | null) ?? null));
@@ -501,7 +497,10 @@ async function preparePersona(
   const faceQuality: FaceQuality = persona.face_quality === 'very_good' ? 'very_good' : 'ok';
   return {
     personaName: (persona.name as string) ?? 'Persona',
-    effectiveMix: opts.faceless ? 0 : (storedMix ?? 0),
+    // The per-post choice, carried through to pricing, the engine payload and
+    // the slot row (the engine's batch pipeline reads it from there). There
+    // is no persona-level mix anymore: a persona is always faced.
+    faceless: opts.faceless,
     faceQuality,
     voiceAudioUrl,
     voiceIdValue,
@@ -512,9 +511,9 @@ async function preparePersona(
     language,
     videoAspect: (persona.video_aspect as string | null) ?? null,
     paragraphNumber,
-    // A face-requiring persona (mix > 0, or legacy NULL mix) must resolve a
-    // photo; only a genuinely faceless request may proceed without one.
-    photoRequired: !opts.faceless && (storedMix === null || storedMix > 0),
+    // Every persona is faced, so a post WITH the face must resolve one; only a
+    // faceless post may proceed without any image.
+    photoRequired: !opts.faceless,
   };
 }
 
@@ -653,7 +652,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   // 6. Cost for the whole operation, computed BEFORE the charge.
-  const perVideoCost = computeVideoTokens(prep.effectiveMix, prep.faceQuality);
+  const perVideoCost = computeVideoTokens(prep.faceless, prep.faceQuality);
   const totalCost = perVideoCost * topics.length;
   trackApiEvent('video_creation_validated', {
     userId,
@@ -897,6 +896,9 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   // 10. Insert the slots (pending). The id is database-generated; the
   // returned rows carry it for the per-slot dispatch below.
+  // `faceless` is stored ON the slot, not derived from the persona at read
+  // time: it is a per-post choice, and the engine's batch pipeline (which
+  // prices a slot when it refunds a failure) reads it from this row.
   const { data: slotRows, error: slotsError } = await supabase
     .from('scheduled_posts')
     .insert(
@@ -906,6 +908,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         slot_at: slot.slotAtISO,
         status: 'pending',
         topic: topics[i],
+        faceless: prep.faceless,
       })),
     )
     .select('id, slot_at, topic');
@@ -979,13 +982,16 @@ export async function POST(request: Request): Promise<NextResponse> {
         script_prompt: prep.scriptPrompt,
         paragraph_number: prep.paragraphNumber,
         niche: prep.niche,
-        face_mix_percent: prep.effectiveMix,
         face_quality: prep.faceQuality,
       };
       const payload = buildJobPayload(jobPersona, {
         video_subject: topic,
         video_script_prompt: validatedOptions.scriptPrompts?.[i] ?? validatedOptions.scriptPrompt,
         webhook_url: validatedOptions.webhookUrl,
+        // The per-post "no face" choice reaches the engine as lipsync: the
+        // engine's persona_lipsync_active also returns false when no visual is
+        // attached, and a faceless job carries no photo_url.
+        lipsync: !prep.faceless,
       });
       if (!hasNonEmptyString(payload.video_subject)) {
         throw new SlotDispatchError('empty_subject', 'Video subject is empty.');

@@ -63,13 +63,18 @@ describe('POST /api/persona insert failure', () => {
   });
 
   it('logs the database error to PostHog and returns a sanitized 500', async () => {
-    // The faceless mode needs no photo/avatar, so the request reaches the
-    // personas insert with a minimal mock.
+    // An avatarUrl (no upload) keeps the mock minimal while satisfying the
+    // "exactly one visual identity" rule, so the request reaches the personas
+    // insert.
     const dbError = { message: 'duplicate key value violates unique constraint', code: '23505' };
     mockSupabase({ data: null, error: dbError });
 
     const res = await POST(
-      formRequest({ name: 'Canal Teste', personaMode: 'faceless', voiceId: 'voz-1' }),
+      formRequest({
+        name: 'Canal Teste',
+        avatarUrl: 'data:image/png;base64,IA',
+        voiceId: 'voz-1',
+      }),
     );
 
     expect(res.status).toBe(500);
