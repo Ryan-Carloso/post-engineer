@@ -248,10 +248,15 @@ jobs:
   # what cannot run in CI (social OAuth, engine task polling).
   #
   # Required repository secrets (Settings > Secrets > Actions):
-  #   CYPRESS_SUPABASE_URL      — Supabase project URL (public value)
-  #   CYPRESS_SUPABASE_ANON_KEY — Supabase anon key (public value)
-  #   CYPRESS_E2E_TEST_EMAIL    — login of the dedicated E2E test user
-  #   CYPRESS_E2E_TEST_PASSWORD — password of the dedicated E2E test user
+  #   NEXT_PUBLIC_SUPABASE_URL      — Supabase project URL (public value)
+  #   NEXT_PUBLIC_SUPABASE_ANON_KEY — Supabase anon key (public value)
+  #   CYPRESS_E2E_TEST_EMAIL        — login of the dedicated E2E test user
+  #   CYPRESS_E2E_TEST_PASSWORD     — password of the dedicated E2E test user
+  # The Supabase pair is named after the app variables it feeds (the gate
+  # below checks those names, so a CYPRESS_-prefixed secret would report as
+  # an empty NEXT_PUBLIC_* var). The credentials keep the CYPRESS_ prefix and
+  # are re-exported below as E2E_TEST_* because that is what
+  # cypress.config.ts reads via loadEnvConfig — the CI runner has no .env.
   # The E2E user must exist in the Supabase project; specs must mock every
   # mutating API call (cy.intercept) so CI never writes production data.
   cypress:
@@ -260,8 +265,10 @@ jobs:
     permissions:
       contents: read
     env:
-      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.CYPRESS_SUPABASE_URL }}
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.CYPRESS_SUPABASE_ANON_KEY }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      E2E_TEST_EMAIL: ${{ secrets.CYPRESS_E2E_TEST_EMAIL }}
+      E2E_TEST_PASSWORD: ${{ secrets.CYPRESS_E2E_TEST_PASSWORD }}
       NEXT_PUBLIC_APP_URL: http://localhost:3434
       NEXT_PUBLIC_POSTHOG_HOST: https://example.posthog.com
       NEXT_PUBLIC_POSTHOG_KEY: dummy-posthog-key
@@ -283,16 +290,13 @@ jobs:
               missing=1
             fi
           done
-          for var in CYPRESS_E2E_TEST_EMAIL CYPRESS_E2E_TEST_PASSWORD; do
+          for var in E2E_TEST_EMAIL E2E_TEST_PASSWORD; do
             if [ -z "${!var:-}" ]; then
-              echo "::error::Repository secret $var is not set (Settings > Secrets > Actions). The Cypress job needs it."
+              echo "::error::$var is not set — is the repository secret CYPRESS_${var#E2E_TEST_} configured (Settings > Secrets > Actions)? The Cypress job needs it."
               missing=1
             fi
           done
           exit $missing
-        env:
-          CYPRESS_E2E_TEST_EMAIL: ${{ secrets.CYPRESS_E2E_TEST_EMAIL }}
-          CYPRESS_E2E_TEST_PASSWORD: ${{ secrets.CYPRESS_E2E_TEST_PASSWORD }}
 
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
@@ -326,7 +330,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          (pnpm start -- -p 3434 > /tmp/next-start.log 2>&1 &)
+          # pnpm 10 forwards a literal `--` to the script, so `pnpm start -- -p 3434`
+          # reaches Next as `next start -- -p 3434` and it reads `-p` as a project
+          # directory. Invoke the binary directly.
+          (pnpm exec next start -p 3434 > /tmp/next-start.log 2>&1 &)
           for i in $(seq 1 60); do
             if curl -fsS -o /dev/null http://localhost:3434/; then
               echo "server up after ${i}x5s"
@@ -338,10 +345,9 @@ jobs:
           tail -50 /tmp/next-start.log || true
           exit 1
 
+      # Credentials come from the job-level env (E2E_TEST_*, the names
+      # cypress.config.ts reads), so no step-level env is needed here.
       - name: Run Cypress E2E suite
-        env:
-          CYPRESS_E2E_TEST_EMAIL: ${{ secrets.CYPRESS_E2E_TEST_EMAIL }}
-          CYPRESS_E2E_TEST_PASSWORD: ${{ secrets.CYPRESS_E2E_TEST_PASSWORD }}
         run: pnpm exec cypress run
 
       - name: Upload failure screenshots
