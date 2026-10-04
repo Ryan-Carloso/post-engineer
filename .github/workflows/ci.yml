@@ -78,7 +78,6 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
-      code-quality: write
     defaults:
       run:
         working-directory: apps/web
@@ -126,23 +125,24 @@ jobs:
           NEXT_PUBLIC_WHATSAPP_NUMBER: "000000000000"
         run: pnpm build
 
-      # Best-effort until GitHub Code Quality is enabled on the repo: with
-      # fail-on-error 'false' a missing Code Quality setup warns instead of
-      # failing CI. Flip to 'true' once the coverage gate is enforced.
-      - name: Upload coverage to GitHub
-        uses: actions/upload-code-coverage@d8e329117199404bba6fc81efe8093dc7c015e34 # v1.4.2
+      # Codecov is the coverage gate (GitHub's native coverage needs a paid
+      # plan): fail the job if the upload fails so a silent miss can never
+      # bypass the codecov/project and codecov/patch status checks.
+      # Tokenless upload works because the repo is public; a CODECOV_TOKEN
+      # secret can be added later for higher rate limits.
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
         with:
-          file: apps/web/coverage-unit/cobertura-coverage.xml
-          language: TypeScript
-          label: code-coverage/web
-          fail-on-error: 'false'
+          files: apps/web/coverage-unit/cobertura-coverage.xml
+          flags: web
+          fail_ci_if_error: true
+          verbose: true
 
   mcp:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: read
-      code-quality: write
     defaults:
       run:
         shell: bash
@@ -178,23 +178,22 @@ jobs:
         # silently skip coverage generation (no report files written).
         run: pnpm exec vitest run --coverage --coverage.reporter=text --coverage.reporter=cobertura
 
-      # Best-effort until GitHub Code Quality is enabled on the repo: with
-      # fail-on-error 'false' a missing Code Quality setup warns instead of
-      # failing CI. Flip to 'true' once the coverage gate is enforced.
-      - name: Upload coverage to GitHub
-        uses: actions/upload-code-coverage@d8e329117199404bba6fc81efe8093dc7c015e34 # v1.4.2
+      # Codecov is the coverage gate (GitHub's native coverage needs a paid
+      # plan): fail the job if the upload fails so a silent miss can never
+      # bypass the codecov/project and codecov/patch status checks.
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
         with:
-          file: apps/mcp/coverage/cobertura-coverage.xml
-          language: TypeScript
-          label: code-coverage/mcp
-          fail-on-error: 'false'
+          files: apps/mcp/coverage/cobertura-coverage.xml
+          flags: mcp
+          fail_ci_if_error: true
+          verbose: true
 
   engine:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: read
-      code-quality: write
     defaults:
       run:
         working-directory: apps/engine
@@ -231,16 +230,16 @@ jobs:
       - name: Tests
         run: uv run coverage run -m pytest -q && uv run coverage xml -o coverage.xml
 
-      # Best-effort until GitHub Code Quality is enabled on the repo: with
-      # fail-on-error 'false' a missing Code Quality setup warns instead of
-      # failing CI. Flip to 'true' once the coverage gate is enforced.
-      - name: Upload coverage to GitHub
-        uses: actions/upload-code-coverage@d8e329117199404bba6fc81efe8093dc7c015e34 # v1.4.2
+      # Codecov is the coverage gate (GitHub's native coverage needs a paid
+      # plan): fail the job if the upload fails so a silent miss can never
+      # bypass the codecov/project and codecov/patch status checks.
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
         with:
-          file: apps/engine/coverage.xml
-          language: Python
-          label: code-coverage/engine
-          fail-on-error: 'false'
+          files: apps/engine/coverage.xml
+          flags: engine
+          fail_ci_if_error: true
+          verbose: true
 
   # Full Cypress E2E suite (cypress/e2e/**): real Next.js server, real
   # Supabase session (the middleware validates the cookie server-side, so

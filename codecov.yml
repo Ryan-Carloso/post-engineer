@@ -1,0 +1,22 @@
+# Codecov coverage gates (free for public repos). These drive the
+# codecov/project and codecov/patch status checks, which are required
+# in the main branch ruleset. GitHub's native "Restrict code coverage"
+# rule is NOT used: it requires a paid GitHub Team/Enterprise plan.
+codecov:
+  require_ci_to_pass: true
+
+coverage:
+  status:
+    project:
+      default:
+        # Never let total coverage slide: fail if it drops more than
+        # 2 points vs the base commit. `auto` tracks the base branch,
+        # so there is no absolute number to maintain as coverage grows.
+        target: auto
+        threshold: 2%
+        informational: false
+    patch:
+      default:
+        # New/changed lines must be tested.
+        target: 70%
+        informational: false
