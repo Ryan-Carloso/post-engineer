@@ -134,7 +134,7 @@ describe('Accounts — UI', () => {
     cy.get('[role=dialog]').should('not.exist');
   });
 
-  it('seleciona e desmarca uma conta clicando no card (checkbox)', () => {
+  it('lista a conta conectada e oferece apenas a ação de desconectar', () => {
     const accounts = [
       {
         recordId: 'acc-yt-1',
@@ -156,15 +156,13 @@ describe('Accounts — UI', () => {
     cy.wait('@getAccounts');
 
     cy.get('[data-testid=account-card]').should('have.length', 1);
-    cy.get('[data-testid=account-card-select]').should('not.be.checked');
+    cy.contains('Canal Alpha').should('be.visible');
 
-    // Seleciona
-    cy.get('[data-testid=account-card]').click();
-    cy.get('[data-testid=account-card-select]').should('be.checked');
-
-    // Desmarca
-    cy.get('[data-testid=account-card]').click();
-    cy.get('[data-testid=account-card-select]').should('not.be.checked');
+    // A seleção de contas para publicação vive em /posts/new; em /accounts o
+    // card é somente leitura e o checkbox não é renderizado
+    // (account-card.tsx só o exibe sem `showDisconnect`).
+    cy.get('[data-testid=account-card-select]').should('not.exist');
+    cy.get('[data-testid=youtube-disconnect-button]').should('be.visible');
   });
 
   it('mostra as contas sem uma ação de remoção que só recarrega a lista', () => {
