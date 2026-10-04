@@ -30,7 +30,7 @@ MATERIAL_COLORS = {
     "green": "0x00FF00",
     "blue": "0x0000FF",
 }
-# The script the mocked LLM returns: two paragraphs, matching what the
+# The script the mocked LLM returns: two sentences, matching what the
 # real prompt asks for. The pipeline builds the real prompt and calls the
 # real llm.generate_script seam — only the response text is canned.
 MOCKED_SCRIPT = (
