@@ -11,11 +11,6 @@ describe('Accounts — UI', () => {
       statusCode: 200,
       body: { id: 'user-1', user_metadata: { name: 'Cypress', avatar_url: '' } },
     }).as('getSession');
-
-    cy.intercept('GET', '/api/health', {
-      statusCode: 200,
-      body: { status: 'ok' },
-    }).as('getHealth');
   });
 
   it('renderiza o mesmo slot de conexão para todas as redes', () => {

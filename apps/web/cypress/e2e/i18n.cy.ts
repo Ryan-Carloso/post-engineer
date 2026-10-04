@@ -15,12 +15,9 @@ describe('i18n — troca de idioma via UI', () => {
       body: { id: 'user-1', user_metadata: { name: 'Cypress', avatar_url: '' } },
     }).as('getSession');
 
-    cy.intercept('GET', '/api/health', {
-      statusCode: 200,
-      body: { status: 'ok' },
-    }).as('getHealth');
-
-    // "/" redirects to the posts list, which loads these on mount.
+    // "/" redirects to the posts list, which loads the schedule on mount
+    // via useSchedulesQuery. No client code calls /api/health, so waiting
+    // for it would time out — wait for the request the page actually makes.
     cy.intercept('GET', '/api/schedule', {
       statusCode: 200,
       body: { success: true, schedules: [] },
@@ -37,7 +34,7 @@ describe('i18n — troca de idioma via UI', () => {
     }).as('getGenerations');
 
     cy.visit('/');
-    cy.wait('@getHealth');
+    cy.wait('@getSchedules');
   });
 
   it('troca labels da sidebar de PT para EN e volta', () => {
@@ -66,7 +63,7 @@ describe('i18n — troca de idioma via UI', () => {
     });
 
     cy.visit('/');
-    cy.wait('@getHealth');
+    cy.wait('@getSchedules');
     cy.contains('a', 'Accounts').should('be.visible');
   });
 
@@ -97,7 +94,7 @@ describe('i18n — troca de idioma via UI', () => {
     });
 
     cy.visit('/');
-    cy.wait('@getHealth');
+    cy.wait('@getSchedules');
 
     cy.contains('a', 'Contas').should('be.visible');
   });
