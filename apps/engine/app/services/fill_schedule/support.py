@@ -60,9 +60,10 @@ def slot_faceless(slot: dict[str, Any]) -> bool:
 
     ``scheduled_posts.faceless`` is the per-post choice written by the web at
     creation (the persona face mix column no longer exists). Anything that is
-    not the literal True is treated as "with the persona's face": a legacy row
-    (NULL, before the column existed) or a malformed value prices and renders
-    the expensive case, never the cheap one.
+    not the literal True is treated as "with the persona's face": a slot dict
+    without the field (rows selected before migration 007, partial API
+    projections) or a malformed value prices and renders the expensive case,
+    never the cheap one.
     """
     return slot.get("faceless") is True
 

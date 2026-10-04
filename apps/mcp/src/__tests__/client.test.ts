@@ -63,15 +63,18 @@ describe('PostEngineerClient', () => {
     expect(result).toEqual(mockResponse);
   });
 
-  it('createPersona rejects a missing avatarUrl before any fetch', async () => {
-    // Every persona has a face: the client fails fast with an actionable
-    // error instead of uploading bytes the server would reject.
-    global.fetch = vi.fn();
-    await expect(client.createPersona({ name: 'No Face' } as never)).rejects.toThrow(
-      /avatarUrl is required/
-    );
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
+  it.each([undefined, null, ''])(
+    'createPersona rejects %p avatarUrl before any fetch',
+    async (avatarUrl) => {
+      // Every persona has a face: the client fails fast with an actionable
+      // error instead of uploading bytes the server would reject.
+      global.fetch = vi.fn();
+      await expect(
+        client.createPersona({ name: 'No Face', avatarUrl } as never),
+      ).rejects.toThrow(/avatarUrl is required/);
+      expect(global.fetch).not.toHaveBeenCalled();
+    },
+  );
 
   it('lists personas successfully', async () => {
     const mockList = {
