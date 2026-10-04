@@ -16,8 +16,7 @@ import {
   type ScheduledSlot,
 } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { ProviderIcon } from '@/components/provider-icon';
+import AccountCard from '@/components/account-card';
 import { ExternalLinkIcon } from '@/lib/ui';
 import type { PublishLink } from '@/lib/publish-links';
 import { useI18n } from '@/lib/i18n/provider';
@@ -33,10 +32,13 @@ import type { TranslationKey } from '@/lib/i18n';
 // matter how deep it sits in the history.
 //---------------
 
-interface AccountOption {
+interface AccountCardData {
   id: string;
-  provider: 'youtube' | 'instagram' | 'linkedin' | 'bluesky';
-  label: string;
+  type: 'youtube' | 'instagram' | 'linkedin' | 'bluesky';
+  name: string;
+  email?: string;
+  thumbnail?: string;
+  handle?: string;
 }
 
 const STATUS_STYLE: Record<string, string> = {
@@ -88,16 +90,24 @@ const PUBLISH_LINK_LABEL: Record<PublishLink['provider'], string> = {
   linkedin: 'LinkedIn',
 };
 
-function formatDateTime(value: string, locale: 'pt' | 'en'): string {
-  return new Date(value).toLocaleString(locale === 'pt' ? 'pt-BR' : 'en-US', {
+function formatDateTime(value: string, locale: 'pt' | 'en', timeZone?: string | null): string {
+  const tag = locale === 'pt' ? 'pt-BR' : 'en-US';
+  if (timeZone) {
+    try {
+      return new Date(value).toLocaleString(tag, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+        timeZone,
+      });
+    } catch {
+      // A schedule row with a garbage timezone must not blank the date —
+      // fall through to the viewer's zone below.
+    }
+  }
+  return new Date(value).toLocaleString(tag, {
     dateStyle: 'medium',
     timeStyle: 'short',
   });
-}
-
-function accountInitials(label: string): string {
-  const tokens = label.replace(/^@/, '').match(/[\p{L}\p{N}]+/gu) ?? [];
-  return tokens.slice(0, 2).map((token) => token[0]?.toUpperCase() ?? '').join('');
 }
 
 export default function PostDetailPage() {
@@ -116,27 +126,34 @@ export default function PostDetailPage() {
   const linkedinQuery = useLinkedinAccountsQuery();
   const blueskyQuery = useBlueskyAccountsQuery();
 
-  const accountOptions: AccountOption[] = useMemo(
+  // Target accounts resolved from the same account queries the new-post
+  // page uses, mapped to the shared AccountCard props (real thumbnails and
+  // names — see posts/new for the canonical mapping).
+  const accountOptions: AccountCardData[] = useMemo(
     () => [
       ...(youtubeQuery.data?.accounts ?? []).map((account) => ({
         id: account.channelId,
-        provider: 'youtube' as const,
-        label: account.channelName,
+        type: 'youtube' as const,
+        name: account.channelName,
+        email: account.email,
+        thumbnail: account.thumbnail,
       })),
       ...(instagramQuery.data?.accounts ?? []).map((account) => ({
         id: account.igUserId,
-        provider: 'instagram' as const,
-        label: `@${account.username}`,
+        type: 'instagram' as const,
+        name: `@${account.username}`,
+        thumbnail: account.profilePictureUrl,
       })),
       ...(linkedinQuery.data?.accounts ?? []).map((account) => ({
         id: account.providerAccountId,
-        provider: 'linkedin' as const,
-        label: account.accountName ?? account.providerAccountId,
+        type: 'linkedin' as const,
+        name: account.accountName ?? account.providerAccountId,
       })),
       ...(blueskyQuery.data?.accounts ?? []).map((account) => ({
         id: account.did,
-        provider: 'bluesky' as const,
-        label: `@${account.handle}`,
+        type: 'bluesky' as const,
+        name: account.handle,
+        handle: `@${account.handle}`,
       })),
     ],
     [youtubeQuery.data, instagramQuery.data, linkedinQuery.data, blueskyQuery.data],
@@ -146,7 +163,7 @@ export default function PostDetailPage() {
   const generation = generationQuery.data ?? null;
   const isLoading = slotQuery.isLoading || generationQuery.isLoading;
 
-  const accounts: AccountOption[] = useMemo(() => {
+  const accounts: AccountCardData[] = useMemo(() => {
     if (!slotDetail) return [];
     const ids = new Set([
       ...(slotDetail.schedule.youtubeAccountIds ?? []),
@@ -183,6 +200,7 @@ export default function PostDetailPage() {
           statusLabel={t(STATUS_KEY[generation.status] ?? 'posts.statusPending')}
           statusStyle={STATUS_STYLE[generation.status] ?? STATUS_STYLE.pending}
         />
+        <PostIdSection postId={generation.generationId} />
         <section aria-label={t('posts.detailsTitle')} className="mt-6">
           <p className="text-sm text-muted-foreground">
             {formatDateTime(generation.createdAt, locale)} · {generation.videoSubject ?? t('posts.unknownTopic')}
@@ -213,12 +231,13 @@ export default function PostDetailPage() {
         statusLabel={t(STATUS_KEY[slot?.status ?? 'pending'] ?? 'posts.statusPending')}
         statusStyle={STATUS_STYLE[slot?.status ?? 'pending'] ?? STATUS_STYLE.pending}
       />
-      {slot && (
+      {slot && slotDetail && (
         <SlotDetail
           slot={slot}
           accounts={accounts}
           locale={locale}
-          publishLinks={slotDetail?.slot.publishLinks ?? []}
+          timezone={slotDetail.schedule.timezone}
+          publishLinks={slotDetail.slot.publishLinks ?? []}
         />
       )}
     </div>
@@ -259,6 +278,71 @@ const DetailHeader = ({
         {statusLabel}
       </Badge>
     </div>
+  );
+};
+
+//---------------
+// PostIdSection — the post's own id with a copy button. The id is the
+// handle support and debugging use to locate the post; the copy follows
+// the same clipboard pattern as the API keys section.
+//---------------
+export const PostIdSection = ({ postId }: { postId: string }) => {
+  const { t } = useI18n();
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = (): void => {
+    void navigator.clipboard.writeText(postId);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
+  return (
+    <section aria-label={t('posts.postIdLabel')} className="mt-6">
+      <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{t('posts.postIdLabel')}</p>
+      <div className="mt-2 flex items-center gap-2">
+        <code className="min-w-0 flex-1 truncate rounded-xl border border-input bg-secondary px-3 py-2 font-mono text-sm text-[#0d2b45]">
+          {postId}
+        </code>
+        <button
+          type="button"
+          onClick={handleCopy}
+          aria-label={t('posts.copyPostId')}
+          className="shrink-0 rounded-xl border border-input bg-white px-3 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb]"
+        >
+          {copied ? t('posts.copied') : t('posts.copy')}
+        </button>
+      </div>
+    </section>
+  );
+};
+
+//---------------
+// ScheduleSection — when the post goes out (or went out): the slot time
+// rendered in the schedule's own timezone, with the IANA name beside it,
+// so "10:00" is never ambiguous about whose 10:00 it is.
+//---------------
+export const ScheduleSection = ({
+  slot,
+  timezone,
+  locale,
+}: {
+  slot: ScheduledSlot;
+  timezone: string;
+  locale: 'pt' | 'en';
+}) => {
+  const { t } = useI18n();
+  const publishedAt = slot.status === 'published' ? slot.publishedAt : null;
+  const shownAt = publishedAt ?? slot.slotAt;
+  return (
+    <section aria-label={t('posts.scheduleLabel')} className="mt-6">
+      <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+        {publishedAt ? t('posts.publishedOnLabel') : t('posts.scheduledForLabel')}
+      </p>
+      <p className="mt-1 text-sm font-semibold text-[#0d2b45]">
+        {formatDateTime(shownAt, locale, timezone)}{' '}
+        <span className="font-normal text-muted-foreground">({timezone})</span>
+      </p>
+    </section>
   );
 };
 
@@ -377,15 +461,17 @@ const PublishLinks = ({ links }: { links: PublishLink[] }) => {
 // per-status actions. Delete redirects back to /posts on success;
 // mutation errors render inline and never navigate away.
 //---------------
-const SlotDetail = ({
+export const SlotDetail = ({
   slot,
   accounts,
   locale,
+  timezone,
   publishLinks,
 }: {
   slot: ScheduledSlot;
-  accounts: AccountOption[];
+  accounts: AccountCardData[];
   locale: 'pt' | 'en';
+  timezone: string;
   publishLinks: PublishLink[];
 }) => {
   const { t } = useI18n();
@@ -420,14 +506,8 @@ const SlotDetail = ({
     deleteSlot.mutate(slot.id, { onSuccess: () => router.push('/posts') });
   };
 
-  const provider = accounts[0]?.provider;
-
   return (
     <section aria-label={t('posts.detailsTitle')} className="mt-6">
-      <p className="text-sm text-muted-foreground">
-        {formatDateTime(slot.status === 'published' && slot.publishedAt ? slot.publishedAt : slot.slotAt, locale)}
-      </p>
-
       {canWatch && videoUrl ? (
         <DetailPlayer src={videoUrl} placeholder="" />
       ) : slot.status === 'generating' ? (
@@ -455,10 +535,10 @@ const SlotDetail = ({
       )}
 
       <div className="mt-6">
-        <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{t('posts.topicLabel')}</p>
+        <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{t('posts.captionLabel')}</p>
         {editing ? (
           <div className="mt-2">
-            <label className="sr-only" htmlFor="slot-topic">{t('posts.topicLabel')}</label>
+            <label className="sr-only" htmlFor="slot-topic">{t('posts.captionLabel')}</label>
             <textarea
               id="slot-topic"
               value={topicDraft}
@@ -489,23 +569,34 @@ const SlotDetail = ({
             </div>
           </div>
         ) : (
-          <p className="mt-1 text-sm text-[#0d2b45]">{slot.topic ?? t('posts.unknownTopic')}</p>
+          <p className="mt-2 rounded-xl border border-input bg-secondary px-3 py-2 text-sm text-[#0d2b45]">
+            {slot.topic ?? t('posts.unknownCaption')}
+          </p>
         )}
       </div>
 
+      <PostIdSection postId={slot.id} />
+
+      <ScheduleSection slot={slot} timezone={timezone} locale={locale} />
+
       {accounts.length > 0 && (
-        <div className="mt-6 flex items-center gap-2">
-          {provider && <ProviderIcon provider={provider} />}
-          <div className="flex -space-x-1.5">
+        <section aria-label={t('posts.accountsLabel')} className="mt-6">
+          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+            {t('posts.accountsLabel')}
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
             {accounts.map((account) => (
-              <Avatar key={`${account.provider}:${account.id}`} className="size-7 ring-2 ring-white">
-                <AvatarFallback className="bg-secondary text-[10px] font-semibold text-[#0d2b45]">
-                  {accountInitials(account.label)}
-                </AvatarFallback>
-              </Avatar>
+              <AccountCard
+                key={`${account.type}:${account.id}`}
+                type={account.type}
+                name={account.name}
+                email={account.email}
+                thumbnail={account.thumbnail}
+                handle={account.handle}
+              />
             ))}
           </div>
-        </div>
+        </section>
       )}
 
       {slot.status === 'failed' && slot.error && (
@@ -529,7 +620,7 @@ const SlotDetail = ({
               disabled={deleteSlot.isPending}
               className="rounded-xl border border-input px-4 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb]"
             >
-              {t('posts.edit')}
+              {t('posts.editCaption')}
             </button>
           )}
           {canDelete && (

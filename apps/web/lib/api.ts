@@ -1066,6 +1066,9 @@ export interface SlotDetailPayload {
     instagramAccountIds: string[];
     linkedinAccountIds: string[];
     blueskyAccountIds: string[];
+    // The schedule's IANA timezone — the detail page renders the slot time
+    // in this zone so "10:00" is never ambiguous about whose 10:00 it is.
+    timezone: string;
   };
   persona: { id: string; name: string } | null;
 }

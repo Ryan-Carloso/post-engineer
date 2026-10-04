@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 
@@ -12,6 +12,11 @@ import type { ReactNode } from 'react';
 //---------------
 
 const pushMock = vi.fn();
+
+vi.mock('next/image', () => ({
+  // eslint-disable-next-line jsx-a11y/alt-text, @next/next/no-img-element
+  default: (props: React.ComponentProps<'img'>) => <img {...props} />,
+}));
 
 vi.mock('next/navigation', () => ({
   useParams: vi.fn(() => ({ id: 'u1' })),
@@ -63,6 +68,7 @@ const SLOT_SCHEDULE = {
   youtubeAccountIds: ['ch1'],
   instagramAccountIds: [],
   linkedinAccountIds: [],
+  timezone: 'Europe/Lisbon',
 };
 
 function slotPayload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -200,24 +206,24 @@ beforeEach(() => {
 });
 
 describe('PostDetailPage', () => {
-  it('shows the awaiting slot with its topic and the edit/delete actions', async () => {
+  it('shows the awaiting slot with its caption and the edit/delete actions', async () => {
     const user = userEvent.setup();
     render(<DetailPage />);
 
     expect(screen.getByText('Upcoming topic')).toBeInTheDocument();
     expect(screen.getByText('Viva Leve')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'posts.edit' }));
-    expect(screen.getByLabelText('posts.topicLabel')).toHaveValue('Upcoming topic');
+    await user.click(screen.getByRole('button', { name: 'posts.editCaption' }));
+    expect(screen.getByLabelText('posts.captionLabel')).toHaveValue('Upcoming topic');
     expect(screen.getByRole('button', { name: 'posts.delete' })).toBeInTheDocument();
   });
 
-  it('saves an edited topic through the mutation', async () => {
+  it('saves an edited caption through the mutation', async () => {
     const user = userEvent.setup();
     render(<DetailPage />);
 
-    await user.click(screen.getByRole('button', { name: 'posts.edit' }));
-    const textarea = screen.getByLabelText('posts.topicLabel');
+    await user.click(screen.getByRole('button', { name: 'posts.editCaption' }));
+    const textarea = screen.getByLabelText('posts.captionLabel');
     await user.clear(textarea);
     await user.type(textarea, 'New topic');
     await user.click(screen.getByRole('button', { name: 'posts.save' }));
@@ -301,7 +307,7 @@ describe('PostDetailPage', () => {
     // them into a black rectangle.
     expect(video?.className).toContain('h-auto');
     expect(video?.className).not.toContain('aspect-video');
-    expect(screen.queryByRole('button', { name: 'posts.edit' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'posts.editCaption' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'posts.delete' })).not.toBeInTheDocument();
   });
 
@@ -383,7 +389,7 @@ describe('PostDetailPage', () => {
     const user = userEvent.setup();
     render(<DetailPage />);
 
-    await user.click(screen.getByRole('button', { name: 'posts.edit' }));
+    await user.click(screen.getByRole('button', { name: 'posts.editCaption' }));
     await user.click(screen.getByRole('button', { name: 'posts.save' }));
 
     expect(await screen.findByText('Only a slot that has not started generating can be edited.')).toBeInTheDocument();
@@ -415,5 +421,77 @@ describe('PostDetailPage', () => {
     render(<DetailPage />);
 
     expect(screen.getByTestId('detail-skeleton')).toBeInTheDocument();
+  });
+});
+
+//---------------
+// Post identity — the redesigned detail page surfaces the post's own
+// identity: its id with a copy button, the scheduled (or published) date
+// rendered in the schedule's timezone, and the target accounts by name.
+//---------------
+describe('PostDetailPage — post identity', () => {
+  const writeText = vi.fn();
+
+  beforeEach(() => {
+    writeText.mockResolvedValue(undefined);
+    // jsdom ships no clipboard — the page calls it on copy.
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
+  });
+
+  it('shows the post ID with a copy button that writes it to the clipboard', async () => {
+    render(<DetailPage />);
+
+    expect(screen.getByText('posts.postIdLabel')).toBeInTheDocument();
+    expect(screen.getByText('u1')).toBeInTheDocument();
+
+    // fireEvent, not user.click: this matches the clipboard-copy tests in
+    // api-keys-section/mcp-docs-section — user-event's pointer sequence
+    // does not reach the handler under jsdom here.
+    fireEvent.click(screen.getByRole('button', { name: 'posts.copyPostId' }));
+    expect(writeText).toHaveBeenCalledWith('u1');
+    expect(await screen.findByText('posts.copied')).toBeInTheDocument();
+  });
+
+  it('shows the scheduled date in the schedule timezone', () => {
+    render(<DetailPage />);
+
+    // 2030-06-01T10:00:00Z is 11:00 in Europe/Lisbon (UTC+1 in June) —
+    // asserting the converted hour proves the zone is applied, not just
+    // printed next to the viewer's local time.
+    const section = screen.getByLabelText('posts.scheduleLabel');
+    expect(section).toHaveTextContent('posts.scheduledForLabel');
+    expect(section).toHaveTextContent('11:00');
+    expect(section).toHaveTextContent('(Europe/Lisbon)');
+  });
+
+  it('shows the published date in the schedule timezone for published posts', () => {
+    mockQueries({ slot: PUBLISHED_PAYLOAD });
+    vi.mocked(useParams).mockReturnValue({ id: 'r1' });
+    render(<DetailPage />);
+
+    // 2020-01-01T10:05:00Z is 10:05 in Europe/Lisbon (UTC+0 in January).
+    const section = screen.getByLabelText('posts.scheduleLabel');
+    expect(section).toHaveTextContent('posts.publishedOnLabel');
+    expect(section).toHaveTextContent('10:05');
+    expect(section).toHaveTextContent('(Europe/Lisbon)');
+  });
+
+  it('lists the target accounts by name', () => {
+    render(<DetailPage />);
+
+    expect(screen.getByText('posts.accountsLabel')).toBeInTheDocument();
+    expect(screen.getByText('Europa Na Estrada')).toBeInTheDocument();
+  });
+
+  it('shows the post ID on the generation view too', () => {
+    mockQueries({ slot: null, generation: COMPLETED_GENERATION });
+    vi.mocked(useParams).mockReturnValue({ id: 'gen-3' });
+    render(<DetailPage />);
+
+    expect(screen.getByText('gen-3')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'posts.copyPostId' })).toBeInTheDocument();
   });
 });
