@@ -126,15 +126,17 @@ describe('Post details page', () => {
   it('shows the scheduled date in the schedule timezone', () => {
     // 2030-06-01T10:00:00Z is 11:00 in Europe/Lisbon (UTC+1 in June) —
     // the converted hour proves the zone is applied, not just printed.
-    cy.contains(/Agendado para|Scheduled for/).should('be.visible');
-    cy.contains('11:00').should('be.visible');
-    cy.contains('(Europe/Lisbon)').should('be.visible');
+    // The schedule section sits below the fold of the scrollable main
+    // column, so scroll each target into view before asserting visibility.
+    cy.contains(/Agendado para|Scheduled for/).scrollIntoView().should('be.visible');
+    cy.contains('11:00').scrollIntoView().should('be.visible');
+    cy.contains('(Europe/Lisbon)').scrollIntoView().should('be.visible');
   });
 
   it('lists the target accounts by name', () => {
-    cy.contains(/Contas|Accounts/).should('be.visible');
-    cy.contains('E2E Channel').should('be.visible');
-    cy.contains('@e2e.insta').should('be.visible');
+    cy.contains(/Contas|Accounts/).scrollIntoView().should('be.visible');
+    cy.contains('E2E Channel').scrollIntoView().should('be.visible');
+    cy.contains('@e2e.insta').scrollIntoView().should('be.visible');
   });
 
   it('shows the caption and saves an edited caption', () => {
