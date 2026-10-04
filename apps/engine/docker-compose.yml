@@ -20,7 +20,7 @@ services:
     env_file:
       - .env
     environment:
-      MPT_STATE_BACKEND: memory
+      MPT_STATE_BACKEND: supabase
       MPT_STORAGE_DIR: /app/storage
       TZ: UTC
     extra_hosts:
