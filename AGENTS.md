@@ -161,6 +161,22 @@ notices.
   reviewer). Read reviewer feedback before requesting merge; address findings
   in focused follow-up commits.
 
+## Reviewer calibration (OpenCode, PR #88, 2026-10-04)
+
+- **The reviewer analyzes the accumulated PR diff, including superseded
+  commits.** On PR #88 it filed 7 findings against the `next dev`
+  coverage-server approach from an earlier commit after the head had
+  already replaced it with `next build` + `next start` — always check
+  whether the flagged code still exists on the current head first.
+- **GitHub-hosted jobs do not share a runner.** "Port contention" /
+  "lingering background process" findings across jobs are false by
+  construction: each job gets a fresh VM that is discarded when the
+  job ends. The same-runner premise only holds for self-hosted
+  runners — verify the runner type before acting.
+- **Quoted lines may not exist.** One finding cited a `DEV_PID=$!`
+  line at a specific line number; grep showed the string nowhere in
+  the file. Verify every cited line with grep before changing code.
+
 ## Billing reconciliation (2026-10-03)
 
 - **Never treat engine HTTP 200 as "task alive".** The task endpoint
