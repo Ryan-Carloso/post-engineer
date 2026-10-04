@@ -31,6 +31,7 @@ test_*.py
 !test/test_modal_cpu_app.py
 !test/test_mypy_config.py
 !test/test_asgi_posthog_sink.py
+!test/test_video_pipeline_e2e.py
 streamlit.log
 /docs/superpowers
 .understand-anything

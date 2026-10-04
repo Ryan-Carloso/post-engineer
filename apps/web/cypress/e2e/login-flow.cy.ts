@@ -7,14 +7,16 @@
 describe('Login (UI)', () => {
   it('renderiza título, subtítulo e botão de login GitHub', () => {
     cy.visit('/login');
-    cy.contains('h1', 'Bem-vindo ao Post Engineer').should('be.visible');
-    cy.contains('p', 'Conecte suas contas do YouTube e Instagram').should('be.visible');
-    cy.contains('button', 'Entrar com GitHub').should('be.visible');
+    // The card title is an h2; the only h1 is the hero headline, which is
+    // hidden below the lg breakpoint.
+    cy.contains('h2', 'Bem-vindo de volta').should('be.visible');
+    cy.contains('p', 'Conecte suas contas e continue a criar').should('be.visible');
+    cy.contains('button', 'Continuar com GitHub').should('be.visible');
   });
 
   it('aplicação de login é responsiva (layout centrado)', () => {
     cy.viewport(375, 667); // mobile
     cy.visit('/login');
-    cy.contains('button', 'Entrar com GitHub').should('be.visible');
+    cy.contains('button', 'Continuar com GitHub').should('be.visible');
   });
 });

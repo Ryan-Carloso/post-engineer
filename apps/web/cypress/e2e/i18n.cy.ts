@@ -5,6 +5,13 @@
 
 describe('i18n — troca de idioma via UI', () => {
   beforeEach(() => {
+    // Real session cookie first: the middleware validates it server-side and
+    // bounces unauthenticated visitors to /landing, so without this the posts
+    // page never mounts and NO request ever fires (the wait below would time
+    // out with "No request ever occurred" regardless of which route it waits
+    // for). Every other app-page spec does the same.
+    cy.loginE2EUser();
+
     cy.intercept('GET', '/api/account', {
       statusCode: 200,
       body: { authenticated: true, accounts: [], message: 'ok' },
@@ -15,12 +22,9 @@ describe('i18n — troca de idioma via UI', () => {
       body: { id: 'user-1', user_metadata: { name: 'Cypress', avatar_url: '' } },
     }).as('getSession');
 
-    cy.intercept('GET', '/api/health', {
-      statusCode: 200,
-      body: { status: 'ok' },
-    }).as('getHealth');
-
-    // "/" redirects to the posts list, which loads these on mount.
+    // "/" redirects to the posts list, which loads the schedule on mount
+    // via useSchedulesQuery. No client code calls /api/health, so waiting
+    // for it would time out — wait for the request the page actually makes.
     cy.intercept('GET', '/api/schedule', {
       statusCode: 200,
       body: { success: true, schedules: [] },
@@ -37,7 +41,7 @@ describe('i18n — troca de idioma via UI', () => {
     }).as('getGenerations');
 
     cy.visit('/');
-    cy.wait('@getHealth');
+    cy.wait('@getSchedules');
   });
 
   it('troca labels da sidebar de PT para EN e volta', () => {
@@ -47,9 +51,16 @@ describe('i18n — troca de idioma via UI', () => {
 
     // PT -> EN
     cy.contains('button', 'EN').click();
+    // The only sidebar labels that differ between locales are Accounts
+    // (Contas→Accounts) and Sign out (Sair→Sign out); API Keys is
+    // identical in both — its check just proves the nav rendered.
     cy.contains('a', 'Accounts').should('be.visible');
-    cy.contains('a', 'App API Key').should('be.visible');
-    cy.contains('Operational').should('be.visible');
+    cy.contains('a', 'API Keys').should('be.visible');
+    // The sign-out button sits at the bottom of the sticky (non-scrolling)
+    // sidebar and falls below the fold at short viewport heights — assert
+    // the translated label exists rather than its visibility. Finding
+    // 'Sign out' (not 'Sair') is itself the proof the locale switched.
+    cy.contains('button', 'Sign out').should('exist');
 
     // EN -> PT
     cy.contains('button', 'PT').click();
@@ -66,7 +77,7 @@ describe('i18n — troca de idioma via UI', () => {
     });
 
     cy.visit('/');
-    cy.wait('@getHealth');
+    cy.wait('@getSchedules');
     cy.contains('a', 'Accounts').should('be.visible');
   });
 
@@ -88,7 +99,10 @@ describe('i18n — troca de idioma via UI', () => {
     cy.contains('h1', 'Contas').should('be.visible');
 
     cy.contains('button', 'EN').click();
-    cy.contains('h1', 'Accounts').should('be.visible');
+    // The locale switcher click can leave the scrollable main container
+    // scrolled (Cypress's pre-click scroll-into-view), clipping the header
+    // above the fold — scroll it back before asserting visibility.
+    cy.contains('h1', 'Accounts').scrollIntoView().should('be.visible');
   });
 
   it('usa o idioma padrão quando o localStorage tem valor inválido', () => {
@@ -97,7 +111,7 @@ describe('i18n — troca de idioma via UI', () => {
     });
 
     cy.visit('/');
-    cy.wait('@getHealth');
+    cy.wait('@getSchedules');
 
     cy.contains('a', 'Contas').should('be.visible');
   });

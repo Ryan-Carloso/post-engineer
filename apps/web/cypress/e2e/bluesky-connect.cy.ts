@@ -15,12 +15,26 @@ describe('Bluesky — conectar conta na página de contas', () => {
     }).as('getAccounts');
   });
 
-  it('exibe painel de conexão Bluesky com formulário quando não há contas', () => {
+  //---------------
+  // openConnectDialog — o formulário de conexão vive num dialog agora
+  // (BlueskyConnectDialog), aberto pelo botão da seção Bluesky.
+  //---------------
+  // The connect button reads "Conectar uma conta" while the section is empty
+  // and "+ Conectar outra conta" once an account exists (accounts/page.tsx
+  // picks the label from the account count).
+  function openConnectDialog(accountsConnected = false): void {
+    const label = accountsConnected ? '+ Conectar outra conta' : 'Conectar uma conta';
     cy.visit('/accounts');
-    cy.wait('@getAccounts');
+    cy.wait(accountsConnected ? '@getAccountsBluesky' : '@getAccounts');
+    cy.contains('section', 'Bluesky').within(() => {
+      cy.contains('button', label).click();
+    });
+    cy.get('[role="dialog"]').should('be.visible');
+  }
 
-    // O painel fica abaixo da dobra (layout principal tem overflow hidden)
-    cy.get('[data-testid="bluesky-connect-panel"]').scrollIntoView().should('be.visible');
+  it('exibe dialog de conexão Bluesky com formulário quando não há contas', () => {
+    openConnectDialog();
+
     cy.get('[data-testid="bluesky-handle-input"]').should('be.visible');
     cy.get('[data-testid="bluesky-password-input"]').should('be.visible');
     cy.get('[data-testid="bluesky-connect-button"]').should('be.visible');
@@ -29,8 +43,7 @@ describe('Bluesky — conectar conta na página de contas', () => {
   });
 
   it('botão fica desabilitado sem handle ou sem password', () => {
-    cy.visit('/accounts');
-    cy.wait('@getAccounts');
+    openConnectDialog();
 
     cy.get('[data-testid="bluesky-connect-button"]').should('be.disabled');
     cy.get('[data-testid="bluesky-handle-input"]').type('eu.bsky.social');
@@ -63,8 +76,7 @@ describe('Bluesky — conectar conta na página de contas', () => {
       },
     }).as('getAccountsBluesky');
 
-    cy.visit('/accounts');
-    cy.wait('@getAccountsBluesky');
+    openConnectDialog(true);
 
     cy.get('[data-testid="bluesky-handle-input"]').type('eu.bsky.social');
     cy.get('[data-testid="bluesky-password-input"]').type('app-pass-1');
@@ -82,6 +94,11 @@ describe('Bluesky — conectar conta na página de contas', () => {
 
     cy.visit('/accounts');
     cy.wait('@getAccounts');
+
+    cy.contains('section', 'Bluesky').within(() => {
+      cy.contains('button', 'Conectar uma conta').click();
+    });
+    cy.get('[role="dialog"]').should('be.visible');
 
     cy.get('[data-testid="bluesky-handle-input"]').type('errado.bsky.social');
     cy.get('[data-testid="bluesky-password-input"]').type('senha-errada');

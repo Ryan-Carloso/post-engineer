@@ -1,4 +1,5 @@
 import asyncio
+import subprocess
 import base64
 import os
 import unittest
@@ -1005,3 +1006,34 @@ class TestVoicePitch(unittest.TestCase):
         self.assertEqual(recorded["pitch"], "-25Hz")
         self.assertIsNotNone(sub_maker)
         self.assertGreater(os.path.getsize(voice_file), 0)
+
+
+class TestGetAudioDuration(unittest.TestCase):
+    """get_audio_duration must accept any audio file, not just .mp3.
+
+    Regression: a custom_audio_file ending in .wav hit the "Invalid target
+    type" branch and failed the whole task (caught by
+    test_video_pipeline_e2e).
+    """
+
+    def _make_audio(self, path: Path, ext: str) -> Path:
+        out = path / f"dur-test.{ext}"
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-v", "error",
+                "-f", "lavfi", "-i", "sine=frequency=440:duration=3",
+                str(out),
+            ],
+            check=True, capture_output=True,
+        )
+        return out
+
+    def test_wav_file_returns_duration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            wav = self._make_audio(Path(tmp), "wav")
+            self.assertGreater(vs.get_audio_duration(str(wav)), 0)
+
+    def test_mp3_file_still_returns_duration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            mp3 = self._make_audio(Path(tmp), "mp3")
+            self.assertGreater(vs.get_audio_duration(str(mp3)), 0)

@@ -18,11 +18,14 @@ describe('API Keys tab — UI & E2E', () => {
     cy.wait('@getApiKeys');
 
     cy.contains('h1', 'API Keys').should('be.visible');
-    cy.contains('Nenhuma chave de API gerada ainda.').scrollIntoView().should('be.visible');
+    cy.get('[data-testid="api-keys-empty-state"]')
+      .scrollIntoView()
+      .should('be.visible')
+      .and('contain', 'Nenhuma API key ainda');
     cy.get('[data-testid="generate-api-key-btn"]').scrollIntoView().should('be.visible');
 
     // MCP docs section with copy install prompt
-    cy.contains('Conecte o Post Engineer ao seu agente de IA (MCP)')
+    cy.contains('h2', 'Conecte ao seu agente de IA (MCP)')
       .scrollIntoView()
       .should('be.visible');
     cy.get('[data-testid="copy-mcp-prompt-btn"]').scrollIntoView().should('be.visible');

@@ -1787,32 +1787,35 @@ def _get_audio_duration_from_submaker(sub_maker: SubMaker):
         return 0.0
     return legacy_offsets[-1][1] / 10000000
 
-def _get_audio_duration_from_mp3(mp3_file: str) -> float:
-    """
-    获取MP3音频时长
-    """
-    if not os.path.exists(mp3_file):
-        logger.error(f"MP3 file does not exist: {mp3_file}")
+def _get_audio_duration_from_file(audio_file: str) -> float:
+    """Get the duration of an audio file via moviepy (any ffmpeg-readable format)."""
+    if not os.path.exists(audio_file):
+        logger.error(f"Audio file does not exist: {audio_file}")
         return 0.0
 
     try:
-        # Use moviepy to get the duration of the MP3 file
-        with AudioFileClip(mp3_file) as audio:
+        with AudioFileClip(audio_file) as audio:
             return audio.duration  # Duration in seconds
     except Exception as e:
-        logger.error(f"Failed to get audio duration from MP3: {str(e)}")
+        logger.error(f"Failed to get audio duration from {audio_file}: {str(e)}")
         return 0.0
 
+
+# Back-compat alias: the reader never was MP3-specific.
+_get_audio_duration_from_mp3 = _get_audio_duration_from_file
+
+
 def get_audio_duration(target: Union[str, SubMaker]) -> float:
-    """
-    获取音频时长
-    如果是SubMaker对象，则从SubMaker中获取时长
-    如果是MP3文件，则从MP3文件中获取时长
+    """Get audio duration.
+
+    Accepts a SubMaker or a path to any ffmpeg-readable audio file
+    (mp3, wav, m4a, ...). Custom audio uploads are not MP3-only, so the
+    extension must not gate the reader.
     """
     if isinstance(target, SubMaker):
         return _get_audio_duration_from_submaker(target)
-    elif isinstance(target, str) and target.endswith(".mp3"):
-        return _get_audio_duration_from_mp3(target)
+    elif isinstance(target, str):
+        return _get_audio_duration_from_file(target)
     else:
         logger.error(f"Invalid target type: {type(target)}")
         return 0.0

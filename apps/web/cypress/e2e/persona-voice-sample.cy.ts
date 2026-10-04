@@ -41,6 +41,10 @@ const stubAudio = (win: Cypress.AUTWindow): void => {
 
 describe('Persona — sample de voz ao clicar no card', () => {
   beforeEach(() => {
+    // Sessão REAL: o middleware rejeita visits sem cookie e devolve
+    // /landing, onde a query de vozes nunca dispara.
+    cy.loginE2EUser();
+
     cy.intercept('GET', '/api/persona/voices', {
       statusCode: 200,
       body: { voices: VOICES },
@@ -50,6 +54,11 @@ describe('Persona — sample de voz ao clicar no card', () => {
       statusCode: 200,
       body: { languages: SAMPLE_LANGUAGES },
     }).as('getSampleLanguages');
+
+    cy.intercept('GET', '/api/persona/list', {
+      statusCode: 200,
+      body: { personas: [] },
+    }).as('getPersonas');
 
     cy.visit('/persona', { onBeforeLoad: stubAudio });
     cy.wait('@getVoices');
@@ -61,7 +70,8 @@ describe('Persona — sample de voz ao clicar no card', () => {
     cy.window().then((win) => {
       const audios = (win as unknown as { __fakeAudios: FakeAudioRecord[] }).__fakeAudios;
       expect(audios).to.have.length(1);
-      expect(audios[0].url).to.equal('/voice-samples/calmo-pt-br.mp3');
+      // Sample files are named after the voice id (public/voice-samples/calm-pt-br.mp3).
+    expect(audios[0].url).to.equal('/voice-samples/calm-pt-br.mp3');
       expect(audios[0].playCalled).to.be.true;
     });
   });
@@ -74,7 +84,7 @@ describe('Persona — sample de voz ao clicar no card', () => {
       const audios = (win as unknown as { __fakeAudios: FakeAudioRecord[] }).__fakeAudios;
       expect(audios).to.have.length(2);
       expect(audios[1].url).to.equal(
-        '/voice-samples/energetico-pt-br.mp3',
+        '/voice-samples/energetic-pt-br.mp3',
       );
       expect(audios[1].playCalled).to.be.true;
     });
@@ -89,7 +99,7 @@ describe('Persona — sample de voz ao clicar no card', () => {
     cy.window().then((win) => {
       const audios = (win as unknown as { __fakeAudios: FakeAudioRecord[] }).__fakeAudios;
       expect(audios).to.have.length(1);
-      expect(audios[0].url).to.equal('/voice-samples/calmo-en-uk.mp3');
+      expect(audios[0].url).to.equal('/voice-samples/calm-en-uk.mp3');
       expect(audios[0].playCalled).to.be.true;
     });
   });
