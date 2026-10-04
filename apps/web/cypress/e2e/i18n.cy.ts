@@ -56,9 +56,11 @@ describe('i18n — troca de idioma via UI', () => {
     // identical in both — its check just proves the nav rendered.
     cy.contains('a', 'Accounts').should('be.visible');
     cy.contains('a', 'API Keys').should('be.visible');
-    // The sign-out button sits at the bottom of the sidebar and can be
-    // below the fold — scroll it into view before asserting visibility.
-    cy.contains('button', 'Sign out').scrollIntoView().should('be.visible');
+    // The sign-out button sits at the bottom of the sticky (non-scrolling)
+    // sidebar and falls below the fold at short viewport heights — assert
+    // the translated label exists rather than its visibility. Finding
+    // 'Sign out' (not 'Sair') is itself the proof the locale switched.
+    cy.contains('button', 'Sign out').should('exist');
 
     // EN -> PT
     cy.contains('button', 'PT').click();
