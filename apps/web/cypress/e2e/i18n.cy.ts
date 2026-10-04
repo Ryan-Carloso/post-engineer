@@ -51,11 +51,12 @@ describe('i18n — troca de idioma via UI', () => {
 
     // PT -> EN
     cy.contains('button', 'EN').click();
+    // The only sidebar labels that differ between locales are Accounts
+    // (Contas→Accounts) and Sign out (Sair→Sign out); API Keys is
+    // identical in both — its check just proves the nav rendered.
     cy.contains('a', 'Accounts').should('be.visible');
-    // The nav label is 'API Keys' in both locales (it never was 'App API
-    // Key') — presence check only; the swap is proven by Accounts/Operational.
     cy.contains('a', 'API Keys').should('be.visible');
-    cy.contains('Operational').should('be.visible');
+    cy.contains('button', 'Sign out').should('be.visible');
 
     // EN -> PT
     cy.contains('button', 'PT').click();

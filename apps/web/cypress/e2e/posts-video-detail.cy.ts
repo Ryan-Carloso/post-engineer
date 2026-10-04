@@ -126,9 +126,15 @@ describe('Posts video detail', () => {
       body: { success: false },
     });
 
-    // The finished render, served through the download proxy path.
+    // The finished render, served through the download proxy path. The
+    // ',null' encoding suffix is load-bearing: .mp4 is not in Cypress's
+    // binary fixture extension list, so without it the file is read as
+    // UTF-8 and the bytes are corrupted — the player then fails with
+    // MEDIA_ERR_SRC_NOT_SUPPORTED even though the file is valid. 'null'
+    // makes the server return a Buffer, which streams byte-identical
+    // (the same path .png/.jpg/.zip fixtures take).
     cy.intercept('GET', `/api/persona/video-download/${DETAIL_TASK_ID}/final-1.mp4`, {
-      fixture: 'e2e-generated.mp4',
+      fixture: 'e2e-generated.mp4,null',
     }).as('videoDownload');
   });
 
