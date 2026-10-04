@@ -358,17 +358,30 @@ jobs:
           if-no-files-found: ignore
 
   # Cypress E2E coverage: the same suite as `cypress`, but against an
-  # instrumented dev server instead of the production build. With
+  # instrumented production build instead of the plain one. With
   # CYPRESS_COVERAGE=1, Next.js switches from SWC to Babel +
   # babel-plugin-istanbul (see the font fallback in
   # apps/web/app/layout.tsx), which is what exposes window.__coverage__
-  # for @cypress/code-coverage to collect. The .babelrc below is written
-  # ephemerally on this runner only, so production builds keep using
-  # SWC. The lcov report is uploaded to Codecov with the `cypress` flag
+  # for @cypress/code-coverage to collect.
+  #
+  # Why a production build and not `next dev`: compiling every page
+  # through Babel + istanbul makes `next dev` unusably slow (a single
+  # page took ~50s to compile and the dev process died mid-suite in CI,
+  # failing all 12 specs). Building once and serving with `next start`
+  # keeps page loads fast while the client bundles stay instrumented.
+  #
+  # The .babelrc below is written ephemerally on this runner only, so
+  # production builds keep using SWC. Its preset-env `exclude` works
+  # around a Babel crash ("TypeError: e.charCodeAt is not a function")
+  # in the unicode-regex transforms on patterns like /[\p{L}\p{N}]+/gu
+  # (\p{...} inside a character class). The coverage build runs on
+  # modern Chrome, which supports unicode property escapes natively,
+  # so skipping the transpilation changes nothing at runtime.
+  # The lcov report is uploaded to Codecov with the `cypress` flag
   # and merged with the unit-test reports.
   cypress-coverage:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: read
     env:
@@ -434,21 +447,34 @@ jobs:
 
       # Ephemeral: written on this runner only and discarded with it.
       # A committed .babelrc would disable SWC for every build, so it
-      # must never land in the repo.
+      # must never land in the repo. The preset-env excludes dodge a
+      # Babel crash on unicode property escapes inside character
+      # classes (see the job comment above); transform-typeof-symbol is
+      # next/babel's own default exclusion, kept as-is.
       - name: Enable coverage instrumentation
         run: |
           cat > .babelrc <<'EOF'
           {
-            "presets": ["next/babel"],
+            "presets": [
+              ["next/babel", {"preset-env": {"exclude": ["transform-typeof-symbol", "transform-unicode-regex", "transform-unicode-property-regex"]}}]
+            ],
             "plugins": ["istanbul"]
           }
           EOF
 
-      - name: Start instrumented dev server
+      # CYPRESS_COVERAGE=1 comes from the job-level env: the build must
+      # be instrumented (and use the layout.tsx font fallback).
+      - name: Instrumented production build
+        run: pnpm build
+
+      - name: Start instrumented app server
         shell: bash
         run: |
           set -euo pipefail
-          (pnpm exec next dev -p 3434 > /tmp/next-dev.log 2>&1 &)
+          # pnpm 10 forwards a literal `--` to the script, so `pnpm start -- -p 3434`
+          # reaches Next as `next start -- -p 3434` and it reads `-p` as a project
+          # directory. Invoke the binary directly.
+          (pnpm exec next start -p 3434 > /tmp/next-start.log 2>&1 &)
           for i in $(seq 1 60); do
             if curl -fsS -o /dev/null http://localhost:3434/; then
               echo "server up after ${i}x5s"
@@ -456,12 +482,20 @@ jobs:
             fi
             sleep 5
           done
-          echo "::error::Instrumented Next.js dev server did not start on :3434"
-          tail -50 /tmp/next-dev.log || true
+          echo "::error::Instrumented Next.js server did not start on :3434"
+          tail -50 /tmp/next-start.log || true
           exit 1
 
       - name: Run Cypress E2E suite (coverage)
         run: pnpm exec cypress run
+
+      - name: Upload failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 pinned 2026-10-03
+        with:
+          name: cypress-coverage-screenshots
+          path: apps/web/cypress/screenshots
+          if-no-files-found: ignore
 
       # The @cypress/code-coverage plugin writes coverage/lcov.info
       # (reporters configured in apps/web/.nycrc).
