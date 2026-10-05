@@ -178,18 +178,25 @@ class TestPersonaHookBoundary:
         completed = type("Completed", (), {"returncode": 0, "stderr": "", "stdout": ""})()
         with patch.object(video_service, "_open_video_clip_quietly", return_value=SourceClip()):
             with patch.object(video_service.subprocess, "run", return_value=completed) as run:
-                result = video_service.replace_video_intro_with_lipsync(
-                    "background.mp4",
-                    "lipsync.mp4",
-                    "output.mp4",
-                    duration=5.6,
-                )
+                with patch.object(
+                    video_service, "_get_effective_video_codec", return_value="libx264"
+                ):
+                    result = video_service.replace_video_intro_with_lipsync(
+                        "background.mp4",
+                        "lipsync.mp4",
+                        "output.mp4",
+                        duration=5.6,
+                    )
 
-        command = run.call_args.args[0]
-        filter_graph = command[command.index("-filter_complex") + 1]
+        commands = [call.args[0] for call in run.call_args_list]
         assert result == "output.mp4"
-        assert "trim=duration=5.6" in filter_graph
-        assert "[0:v]trim=start=5.6" in filter_graph
+        # The hook boundary now drives two separate ffmpeg passes instead of
+        # one filter_complex concat: the intro is trimmed to the exact hook
+        # length, and the tail starts at that same boundary.
+        intro = next(c for c in commands if "-vf" in c)
+        tail = next(c for c in commands if "-ss" in c)
+        assert intro[commands.index(intro) + intro.index("-t") + 1] == "5.6"
+        assert tail[tail.index("-ss") + 1] == "5.6"
 
 
 
