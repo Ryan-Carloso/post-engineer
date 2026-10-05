@@ -8,6 +8,7 @@ import { resolveOAuthCallbackAuth } from '@/lib/oauth-connect';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@/lib/logger';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // getSessionUserId — session user_id or null
@@ -27,7 +28,7 @@ async function getSessionUserId(): Promise<string | null> {
 // GET /api/google-oauth/callback — exchanges code for tokens, encrypts
 // and persists in Supabase (owner: session user_id).
 //---------------
-export async function GET(request: NextRequest) {
+async function getHandler(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
   const error = searchParams.get('error');
@@ -143,3 +144,8 @@ export async function GET(request: NextRequest) {
     return oauthPopupResponse('youtube-oauth-error', { error: errorMessage });
   }
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const GET = withApiErrorReporting('GET /api/google-oauth/callback', getHandler);

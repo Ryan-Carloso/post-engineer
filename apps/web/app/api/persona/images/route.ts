@@ -20,6 +20,7 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@/lib/logger';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // /api/persona/images — persona image library.
@@ -241,7 +242,7 @@ async function signImageUrl(
   }
 }
 
-export async function GET(request: Request): Promise<NextResponse> {
+async function getHandler(request: Request): Promise<NextResponse> {
   const authed = await getAuth(request);
   if ('response' in authed) return authed.response;
   const { auth, supabase } = authed;
@@ -295,7 +296,7 @@ function withoutImagePath(row: Record<string, unknown> | PersonaLibraryImage): R
   return safe;
 }
 
-export async function POST(request: Request): Promise<NextResponse> {
+async function postHandler(request: Request): Promise<NextResponse> {
   // Gate the expensive upload surface (storage write + magic-byte read +
   // row insert per request), mirroring upload-content and video-job.
   const limited = await applyRateLimit(request, RATE_LIMITS.mediaUpload);
@@ -400,7 +401,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   );
 }
 
-export async function PATCH(request: Request): Promise<NextResponse> {
+async function patchHandler(request: Request): Promise<NextResponse> {
   const authed = await getAuth(request);
   if ('response' in authed) return authed.response;
   const { auth, supabase } = authed;
@@ -514,7 +515,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
   return NextResponse.json({ success: true, image: withoutImagePath(updated) });
 }
 
-export async function DELETE(request: Request): Promise<NextResponse> {
+async function deleteHandler(request: Request): Promise<NextResponse> {
   const authed = await getAuth(request);
   if ('response' in authed) return authed.response;
   const { auth, supabase } = authed;
@@ -554,3 +555,11 @@ export async function DELETE(request: Request): Promise<NextResponse> {
   }
   return NextResponse.json({ success: true });
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const GET = withApiErrorReporting('GET /api/persona/images', getHandler);
+export const POST = withApiErrorReporting('POST /api/persona/images', postHandler);
+export const DELETE = withApiErrorReporting('DELETE /api/persona/images', deleteHandler);
+export const PATCH = withApiErrorReporting('PATCH /api/persona/images', patchHandler);

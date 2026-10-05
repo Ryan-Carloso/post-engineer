@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
 import { logger } from '@/lib/logger';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // GET /api/persona/voices — proxy do catálogo de vozes da casa para o
@@ -17,7 +18,7 @@ function moneyPrintBaseUrl(): string {
   return url.replace(/\/+$/, '');
 }
 
-export async function GET(request?: Request): Promise<NextResponse> {
+async function getHandler(request?: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
 
@@ -74,3 +75,8 @@ export async function GET(request?: Request): Promise<NextResponse> {
     );
   }
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const GET = withApiErrorReporting('GET /api/persona/voices', getHandler);

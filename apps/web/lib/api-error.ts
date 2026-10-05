@@ -20,6 +20,7 @@
 import { NextResponse } from 'next/server';
 import { logger } from './logger';
 import { scrubSecrets, redactCredentialFragments } from './scrub';
+import { markApiErrorReported } from './api-error-reporting';
 
 export interface ApiErrorOptions {
   // Route identifier for debugging, e.g. 'POST /api/schedule'.
@@ -125,5 +126,9 @@ export function apiErrorResponse(
     errorId = fallbackErrorId();
   }
 
-  return NextResponse.json({ success: false, error, errorId, ...extra }, { status });
+  const response = NextResponse.json({ success: false, error, errorId, ...extra }, { status });
+  // logger.error above already reports 5xx to PostHog: mark the response so
+  // withApiErrorReporting skips it instead of emitting a second $exception.
+  if (status >= 500) markApiErrorReported(response);
+  return response;
 }

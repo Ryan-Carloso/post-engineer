@@ -12,6 +12,7 @@ import { apiErrorResponse } from '@/lib/api-error';
 import { rewriteVideoUrls, SAFE_TASK_ID } from '@/lib/video-urls';
 import { taskPayload, taskState, extractTaskError } from '@/lib/engine-task-state';
 import { logger } from '@/lib/logger';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // GET /api/persona/video-status/:taskId — engine status proxy.
@@ -24,7 +25,7 @@ import { logger } from '@/lib/logger';
 // 410 Gone so it stops polling instead of 404ing forever.
 //---------------
 
-export async function GET(
+async function getHandler(
   request: Request,
   context: { params: Promise<{ taskId: string }> },
 ): Promise<NextResponse> {
@@ -244,3 +245,8 @@ async function recordTerminalFailure(input: {
 }
 
 // (rewriteVideoUrls lives in lib/video-urls.ts — shared with delete-preview.)
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const GET = withApiErrorReporting('GET /api/persona/video-status/[taskId]', getHandler);

@@ -12,6 +12,7 @@ import {
   oauthStateRef,
   type OAuthConnectProvider,
 } from '@/lib/oauth-connect';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // POST /api/account/connect-url — generates the OAuth auth URL to connect
@@ -61,7 +62,7 @@ const REDIRECT_ENV: Record<OAuthConnectProvider, [string, string]> = {
   linkedin: ['LINKEDIN_REDIRECT_URI_LOCAL', 'LINKEDIN_REDIRECT_URI'],
 };
 
-export async function POST(request: NextRequest): Promise<NextResponse> {
+async function postHandler(request: NextRequest): Promise<NextResponse> {
   const limited = await applyRateLimit(request, RATE_LIMITS.connectUrl);
   if (limited) return limited;
 
@@ -139,3 +140,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return errorResponse(500, CONNECT_URL_ERRORS.INTERNAL_ERROR, 'POST /api/account/connect-url', cause);
   }
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const POST = withApiErrorReporting('POST /api/account/connect-url', postHandler);

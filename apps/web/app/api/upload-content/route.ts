@@ -12,6 +12,7 @@ import {
   buildUploadErrorResponse,
 } from '@/lib/upload/handlers';
 import { SOCIAL_PROVIDERS, isSocialProvider } from '@/lib/providers/registry';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // Unified content upload — POST /api/upload-content
@@ -57,7 +58,7 @@ async function resolveUploadUserId(
   };
 }
 
-export async function POST(request: NextRequest) {
+async function postHandler(request: NextRequest) {
   const logId = logger.generateLogId();
   const startTime = Date.now();
 
@@ -127,3 +128,8 @@ export async function POST(request: NextRequest) {
     return buildUploadErrorResponse(error, logId, startTime);
   }
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const POST = withApiErrorReporting('POST /api/upload-content', postHandler);

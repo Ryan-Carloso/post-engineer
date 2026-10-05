@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // POST /api/persona/avatar — MOCK do gerador de imagem por IA.
@@ -16,7 +17,7 @@ const MOCK_AVATAR_URL =
       '</svg>',
   );
 
-export async function POST(request: Request): Promise<NextResponse> {
+async function postHandler(request: Request): Promise<NextResponse> {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -48,3 +49,8 @@ export async function POST(request: Request): Promise<NextResponse> {
     imageUrl: MOCK_AVATAR_URL,
   });
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const POST = withApiErrorReporting('POST /api/persona/avatar', postHandler);

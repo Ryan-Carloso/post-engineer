@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@/lib/logger';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // Health Check — only verifies that Supabase is reachable.
@@ -10,7 +11,7 @@ import { logger } from '@/lib/logger';
 
 const START_TIME = Date.now();
 
-export async function GET() {
+async function getHandler() {
   const { auth, error: authError } = await requireSupabaseSession();
   if (authError || !auth) return authError;
 
@@ -29,3 +30,8 @@ export async function GET() {
     return NextResponse.json({ status: 'error' }, { status: 500 });
   }
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const GET = withApiErrorReporting('GET /api/health', getHandler);

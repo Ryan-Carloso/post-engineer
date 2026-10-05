@@ -4,6 +4,7 @@ import { resolveOAuthCallbackAuth } from '@/lib/oauth-connect';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@/lib/logger';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // getSessionUserId — session user_id or null
@@ -26,7 +27,7 @@ async function getSessionUserId(): Promise<string | null> {
 // member and organizations separate — each is its own posting target).
 // ALWAYS returns the popup HTML (oauthPopupResponse).
 //---------------
-export async function GET(request: NextRequest) {
+async function getHandler(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
   const error = searchParams.get('error');
@@ -165,3 +166,8 @@ export async function GET(request: NextRequest) {
     },
   });
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const GET = withApiErrorReporting('GET /api/linkedin-auth/callback', getHandler);

@@ -4,6 +4,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { generateRawApiKey, hashApiKey, extractKeyPrefix } from '@/lib/api-keys';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 interface CreateKeyBody {
   name?: unknown;
@@ -25,7 +26,7 @@ function parsePersonaScope(value: unknown): { ok: true; personaIds: string[] | n
   return { ok: true, personaIds: ids };
 }
 
-export async function GET(request: Request): Promise<NextResponse> {
+async function getHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
 
@@ -58,7 +59,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   });
 }
 
-export async function POST(request: Request): Promise<NextResponse> {
+async function postHandler(request: Request): Promise<NextResponse> {
   const limited = await applyRateLimit(request, RATE_LIMITS.apiKeyManage);
   if (limited) return limited;
 
@@ -150,3 +151,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     { status: 201 },
   );
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const GET = withApiErrorReporting('GET /api/api-keys', getHandler);
+export const POST = withApiErrorReporting('POST /api/api-keys', postHandler);

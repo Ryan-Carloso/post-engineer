@@ -35,6 +35,7 @@ import {
   type QueuePositions,
   type SlotEnrichment,
 } from '@/lib/schedule-slot-presentation';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // buildQueuePositions — 1-based position of every awaiting+generating
@@ -94,7 +95,7 @@ async function withSlotPresentation<T extends { status?: unknown; task_id?: unkn
   return slots.map((slot, index) => ({ ...slot, ...enrichments[index] }));
 }
 
-export async function GET(request?: Request): Promise<NextResponse> {
+async function getHandler(request?: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
   // API-key/OAuth callers have no cookie session, so the service client
@@ -197,3 +198,8 @@ export async function GET(request?: Request): Promise<NextResponse> {
     recent: await withSlotPresentation(recent.data ?? [], userId, queuePositions),
   });
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const GET = withApiErrorReporting('GET /api/schedule/status', getHandler);

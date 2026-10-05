@@ -19,6 +19,7 @@ import { NextResponse } from 'next/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { createReconcileStore, runBillingReconciliation } from '@/lib/billing/reconcile';
 import { logger } from '@/lib/logger';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 function secretsEqual(provided: string, expected: string): boolean {
   // Hash both sides first so timingSafeEqual never leaks the expected
@@ -28,7 +29,7 @@ function secretsEqual(provided: string, expected: string): boolean {
   return timingSafeEqual(a, b);
 }
 
-export async function POST(request: Request): Promise<NextResponse> {
+async function postHandler(request: Request): Promise<NextResponse> {
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
     logger.error('[cron/billing-reconcile] CRON_SECRET is not configured; refusing to run', null, {});
@@ -52,3 +53,8 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
   return NextResponse.json({ success: true, report });
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const POST = withApiErrorReporting('POST /api/cron/billing-reconcile', postHandler);

@@ -8,6 +8,7 @@ import { resolveOAuthCallbackAuth, oauthStateRef } from '@/lib/oauth-connect';
 import { logger } from '@/lib/logger';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // getSessionUserId — session user_id or null
@@ -31,7 +32,7 @@ async function getSessionUserId(): Promise<string | null> {
 // anything else (JSON, default Next.js error), the popup never receives
 // postMessage and gets stuck.
 //---------------
-export async function GET(request: NextRequest) {
+async function getHandler(request: NextRequest) {
   const logId = logger.generateLogId();
   const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
@@ -259,3 +260,8 @@ export async function GET(request: NextRequest) {
     },
   });
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const GET = withApiErrorReporting('GET /api/instagram-auth/callback', getHandler);
