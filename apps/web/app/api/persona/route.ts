@@ -31,6 +31,7 @@ import { ERROR_CODES } from '@/lib/error-codes';
 import { trackApiEvent } from '@/lib/analytics';
 import { SAFE_TASK_ID } from '@/lib/video-urls';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 // Aggregate budget for the post-delete engine task cleanup (see DELETE):
 // after() has no deadline of its own, so the loop must bound itself.
@@ -52,7 +53,7 @@ function errorResponse(
   return apiErrorResponse(status, error, { route, ...options });
 }
 
-export async function POST(request: Request): Promise<NextResponse> {
+async function postHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
   if (isScopedApiKey(auth)) {
@@ -376,7 +377,7 @@ function withImageContext(error: string, index: number, fileName: string): strin
   return `${error} (image ${index + 1}${name})`;
 }
 
-export async function PATCH(request: Request): Promise<NextResponse> {
+async function patchHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
   const user = { id: auth.userId };
@@ -545,7 +546,7 @@ async function parsePatchBody(request: Request): Promise<ParsePatchResult> {
   };
 }
 
-export async function DELETE(request: Request): Promise<NextResponse> {
+async function deleteHandler(request: Request): Promise<NextResponse> {
   const ROUTE = 'DELETE /api/persona';
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
@@ -868,3 +869,10 @@ export async function uploadFile(
   }
   return path;
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const POST = withApiErrorReporting('POST /api/persona', postHandler);
+export const DELETE = withApiErrorReporting('DELETE /api/persona', deleteHandler);
+export const PATCH = withApiErrorReporting('PATCH /api/persona', patchHandler);

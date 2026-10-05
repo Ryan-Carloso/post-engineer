@@ -4,6 +4,7 @@ import { apiErrorResponse } from '@/lib/api-error';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 import { SAFE_TASK_ID } from '@/lib/video-urls';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 type DownloadContext = {
   params: Promise<{ taskId: string; path: string[] }>;
@@ -15,7 +16,7 @@ const FORWARDED_RESPONSE_HEADERS = ['content-type', 'content-length', 'content-r
 // GET /api/persona/video-download/:taskId/*path — authenticated binary proxy.
 // The upstream host remains server-side.
 //---------------
-export async function GET(request: Request, context: DownloadContext): Promise<NextResponse> {
+async function getHandler(request: Request, context: DownloadContext): Promise<NextResponse> {
   // Pass the request so API-key callers authenticate (without it only the
   // cookie session is checked, and API keys get a 401).
   const { auth, error: authError } = await requireSupabaseSession(request);
@@ -144,3 +145,8 @@ function isSafePath(taskId: string, path: string[]): boolean {
     && path.every((segment) => SAFE_TASK_ID.test(segment) && segment !== '.' && segment !== '..')
     && /\.[A-Za-z0-9]{1,8}$/.test(path[path.length - 1] ?? '');
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const GET = withApiErrorReporting('GET /api/persona/video-download/[taskId]/[...path]', getHandler);

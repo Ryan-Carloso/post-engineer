@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
 import { apiErrorResponse } from '@/lib/api-error';
 import { SAFE_TASK_ID } from '@/lib/video-urls';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // DELETE /api/persona/video-task/:taskId — cancela/remove task no motor.
 // Disponível para cleanup do produto.
 //---------------
 
-export async function DELETE(
+async function deleteHandler(
   request: NextRequest,
   context: { params: Promise<{ taskId: string }> },
 ): Promise<NextResponse> {
@@ -39,3 +40,8 @@ export async function DELETE(
     });
   }
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const DELETE = withApiErrorReporting('DELETE /api/persona/video-task/[taskId]', deleteHandler);

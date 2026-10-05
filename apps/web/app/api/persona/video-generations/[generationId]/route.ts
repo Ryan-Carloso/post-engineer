@@ -4,6 +4,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { apiErrorResponse } from '@/lib/api-error';
 import { logger } from '@/lib/logger';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // GET /api/persona/video-generations/[generationId] — one generation's
@@ -25,7 +26,7 @@ interface GenerationRow {
   completed_at: string | null;
 }
 
-export async function GET(
+async function getHandler(
   request: Request,
   context: { params: Promise<{ generationId: string }> },
 ): Promise<NextResponse> {
@@ -82,3 +83,8 @@ export async function GET(
     },
   });
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const GET = withApiErrorReporting('GET /api/persona/video-generations/[generationId]', getHandler);

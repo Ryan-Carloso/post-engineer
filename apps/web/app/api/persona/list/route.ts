@@ -4,6 +4,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { isScopedApiKey } from '@/lib/api-keys';
 import { logger } from '@/lib/logger';
 import { describeImageSource, toSameOriginAssetPath } from '@/lib/image-source';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // GET /api/persona/list — the logged-in user's personas.
@@ -13,7 +14,7 @@ import { describeImageSource, toSameOriginAssetPath } from '@/lib/image-source';
 
 const SIGNED_URL_EXPIRES_SECONDS = 60 * 60; // 1h
 
-export async function GET(request: Request): Promise<NextResponse> {
+async function getHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) {
     return NextResponse.json(
@@ -111,3 +112,8 @@ async function signedUrl(
     .createSignedUrl(path, SIGNED_URL_EXPIRES_SECONDS);
   return data?.signedUrl;
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const GET = withApiErrorReporting('GET /api/persona/list', getHandler);

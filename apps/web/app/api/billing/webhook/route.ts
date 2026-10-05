@@ -3,6 +3,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { getStripePriceId, isTokenPackId, TOKEN_PACKS, type TokenPackId } from '@/lib/billing';
 import { logger } from '@/lib/logger';
 import { apiErrorResponse } from '@/lib/api-error';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY;
@@ -10,7 +11,7 @@ function getStripe() {
   return import('stripe').then((mod) => new mod.default(key));
 }
 
-export async function POST(request: Request): Promise<NextResponse> {
+async function postHandler(request: Request): Promise<NextResponse> {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!webhookSecret) {
     return apiErrorResponse(500, 'Webhook not configured.', {
@@ -140,3 +141,8 @@ async function fulfillCheckout(
     throw error;
   }
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const POST = withApiErrorReporting('POST /api/billing/webhook', postHandler);

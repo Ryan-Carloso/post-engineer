@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
 import { logger } from '@/lib/logger';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // GET /api/persona/voice-sample-languages — proxy da lista de idiomas
@@ -15,7 +16,7 @@ function moneyPrintBaseUrl(): string {
   return url.replace(/\/+$/, '');
 }
 
-export async function GET(): Promise<NextResponse> {
+async function getHandler(): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession();
   if (authError || !auth) return authError;
 
@@ -73,3 +74,8 @@ export async function GET(): Promise<NextResponse> {
     );
   }
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const GET = withApiErrorReporting('GET /api/persona/voice-sample-languages', getHandler);

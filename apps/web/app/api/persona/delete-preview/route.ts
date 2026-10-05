@@ -8,6 +8,7 @@ import { apiErrorResponse } from '@/lib/api-error';
 import { ERROR_CODES } from '@/lib/error-codes';
 import { logger } from '@/lib/logger';
 import { firstDownloadUrl, rewriteVideoUrls, SAFE_TASK_ID } from '@/lib/video-urls';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // GET /api/persona/delete-preview?personaId= — what deleting the persona
@@ -125,7 +126,7 @@ async function resolveDownloadUrl(
   }
 }
 
-export async function GET(request: Request): Promise<NextResponse> {
+async function getHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
   const limited = await applyRateLimit(request, RATE_LIMITS.deletePreview, auth.userId);
@@ -326,3 +327,8 @@ export async function GET(request: Request): Promise<NextResponse> {
     linksIncomplete,
   });
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const GET = withApiErrorReporting('GET /api/persona/delete-preview', getHandler);

@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { logger } from '@/lib/logger';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // GET /api/persona/video-generations — the user's video generation history
@@ -38,7 +39,7 @@ export interface VideoGenerationRow {
   completedAt: string | null;
 }
 
-export async function GET(request: Request): Promise<NextResponse> {
+async function getHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
   // API-key/OAuth callers have no cookie session, so the service client
@@ -82,3 +83,8 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   return NextResponse.json({ success: true, generations });
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const GET = withApiErrorReporting('GET /api/persona/video-generations', getHandler);

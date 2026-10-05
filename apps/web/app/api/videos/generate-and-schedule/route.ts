@@ -55,6 +55,7 @@ import { resolveIdempotency } from '@/lib/idempotency';
 import { VALID_SCHEDULE_PROVIDERS } from '@/app/api/schedule/route';
 import { trackApiEvent } from '@/lib/analytics';
 import { logger } from '@/lib/logger';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 const ROUTE = 'POST /api/videos/generate-and-schedule';
 // Shared with the /posts/new form so the UI cap and the API cap can't drift.
@@ -549,7 +550,7 @@ async function fetchReplay(
   });
 }
 
-export async function POST(request: Request): Promise<NextResponse> {
+async function postHandler(request: Request): Promise<NextResponse> {
   const startedAt = Date.now();
 
   // 1. Validate input shape + semantics (no DB, no charge).
@@ -1139,3 +1140,15 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   return NextResponse.json({ success: true, ...envelope });
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+// The user id is resolved lazily, only when a 5xx is actually reported,
+// so the happy path pays nothing.
+//---------------
+export const POST = withApiErrorReporting(ROUTE, postHandler, {
+  getUserId: async (request) => {
+    const { auth } = await requireSupabaseSession(request);
+    return auth?.userId;
+  },
+});

@@ -8,6 +8,7 @@ import { enrichSlot } from '@/lib/schedule-slot-presentation';
 import { fetchEnginePublishResults } from '@/lib/engine-tasks';
 import { resolvePublishLinks, type PublishLink } from '@/lib/publish-links';
 import { logger } from '@/lib/logger';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // /api/schedule/slots/:slotId — per-slot operations on scheduled posts.
@@ -121,7 +122,7 @@ async function resolveSlotPublishLinks(
 // enrichSlot helper). Unknown id or another user's slot → 404, never the
 // row.
 //---------------
-export async function GET(
+async function getHandler(
   request: Request,
   context: { params: Promise<{ slotId: string }> },
 ): Promise<NextResponse> {
@@ -252,7 +253,7 @@ export async function GET(
   });
 }
 
-export async function DELETE(
+async function deleteHandler(
   request: Request,
   context: { params: Promise<{ slotId: string }> },
 ): Promise<NextResponse> {
@@ -329,7 +330,7 @@ export async function DELETE(
 // Only { topic: string } is accepted; the topic is trimmed and must be
 // non-empty (same contract as the creation route's parseTopics).
 //---------------
-export async function PATCH(
+async function patchHandler(
   request: Request,
   context: { params: Promise<{ slotId: string }> },
 ): Promise<NextResponse> {
@@ -395,3 +396,10 @@ export async function PATCH(
   }
   return NextResponse.json({ success: true, topic });
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const GET = withApiErrorReporting('GET /api/schedule/slots/[slotId]', getHandler);
+export const DELETE = withApiErrorReporting('DELETE /api/schedule/slots/[slotId]', deleteHandler);
+export const PATCH = withApiErrorReporting('PATCH /api/schedule/slots/[slotId]', patchHandler);

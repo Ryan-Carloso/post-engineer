@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger';
 import { createOAuthState, resolveOAuthRedirectUri, setOAuthNonceCookie } from '@/lib/oauth-utils';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // getSessionUserId — returns the session's user_id (null when not logged in)
@@ -22,7 +23,7 @@ async function getSessionUserId(): Promise<string | null> {
 // GET /api/instagram-auth/start — generates the authorization URL (Instagram Login)
 // Requires an authenticated user (Supabase session).
 //---------------
-export async function GET(request: NextRequest = new NextRequest('https://post-engineer.com/api/instagram-auth/start')) {
+async function getHandler(request: NextRequest = new NextRequest('https://post-engineer.com/api/instagram-auth/start')) {
   const limited = await applyRateLimit(request, RATE_LIMITS.oauthStart);
   if (limited) return limited;
 
@@ -76,3 +77,8 @@ export async function GET(request: NextRequest = new NextRequest('https://post-e
     );
   }
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const GET = withApiErrorReporting('GET /api/instagram-auth/start', getHandler);

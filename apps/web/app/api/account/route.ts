@@ -7,6 +7,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { InstagramService } from '@/lib/instagram';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // instagramPictureUrlExpired — as URLs de mídia do Instagram CDN são assinadas
@@ -83,7 +84,7 @@ async function refreshInstagramAccountPicture(
 // desconhecido é descartado com log no servidor (só a linha ruim some, não a lista).
 // Auth = sessão Supabase (cookie) OU API key pessoal (Bearer/x-api-key, MCP).
 //---------------
-export async function GET(request?: Request) {
+async function getHandler(request?: Request) {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) {
     return NextResponse.json(
@@ -138,7 +139,7 @@ export async function GET(request?: Request) {
 // igual ao GET.
 //---------------
 
-export async function DELETE(request: Request): Promise<NextResponse> {
+async function deleteHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) {
     return NextResponse.json(
@@ -179,3 +180,9 @@ export async function DELETE(request: Request): Promise<NextResponse> {
     );
   }
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const GET = withApiErrorReporting('GET /api/account', getHandler);
+export const DELETE = withApiErrorReporting('DELETE /api/account', deleteHandler);

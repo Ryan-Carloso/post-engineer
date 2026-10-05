@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { toFiniteNumber } from '@/lib/tokens';
 import { logger } from '@/lib/logger';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // GET /api/billing/tokens — authoritative prepaid wallet balance.
@@ -12,7 +13,7 @@ import { logger } from '@/lib/logger';
 // Auth = sessão Supabase (cookie) OU API key pessoal (Bearer/x-api-key, MCP).
 //---------------
 
-export async function GET(request?: Request): Promise<NextResponse> {
+async function getHandler(request?: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) {
     return NextResponse.json(
@@ -55,3 +56,8 @@ export async function GET(request?: Request): Promise<NextResponse> {
     free,
   });
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const GET = withApiErrorReporting('GET /api/billing/tokens', getHandler);

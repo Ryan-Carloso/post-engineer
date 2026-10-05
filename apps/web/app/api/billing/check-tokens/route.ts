@@ -5,6 +5,7 @@ import { checkAndDeductTokens } from '@/lib/billing/token-check';
 import { secretsMatch } from '@/lib/secrets';
 import { logger } from '@/lib/logger';
 import type { FaceQuality } from '@/lib/tokens';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // POST /api/billing/check-tokens — checks and deducts tokens.
@@ -26,7 +27,7 @@ function getEngineSecret(): string {
   return secret;
 }
 
-export async function POST(request: Request): Promise<NextResponse> {
+async function postHandler(request: Request): Promise<NextResponse> {
   // Authentication via the engine shared secret
   let engineSecret: string;
   try {
@@ -94,3 +95,8 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   return NextResponse.json({ success: true, cost: result.cost, generationId });
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const POST = withApiErrorReporting('POST /api/billing/check-tokens', postHandler);

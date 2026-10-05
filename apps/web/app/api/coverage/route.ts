@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // Cypress backend coverage endpoint.
@@ -29,10 +30,15 @@ declare global {
   var __coverage__: ServerCoverageMap | undefined;
 }
 
-export async function GET() {
+async function getHandler() {
   const coverage = globalThis.__coverage__;
   if (!coverage) {
     return new NextResponse(null, { status: 204 });
   }
   return NextResponse.json({ coverage });
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const GET = withApiErrorReporting('GET /api/coverage', getHandler);

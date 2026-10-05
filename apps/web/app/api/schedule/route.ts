@@ -5,6 +5,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { isPersonaAllowed } from '@/lib/api-keys';
 import { apiErrorResponse } from '@/lib/api-error';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // /api/schedule — read and cancel the automatic fill-schedule timetables.
@@ -63,7 +64,7 @@ async function assertScheduleScope(
   return null;
 }
 
-export async function GET(request?: Request): Promise<NextResponse> {
+async function getHandler(request?: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
   const user = { id: auth.userId };
@@ -93,7 +94,7 @@ export async function GET(request?: Request): Promise<NextResponse> {
   return NextResponse.json({ success: true, schedules });
 }
 
-export async function DELETE(request: Request): Promise<NextResponse> {
+async function deleteHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
   const user = { id: auth.userId };
@@ -124,3 +125,9 @@ export async function DELETE(request: Request): Promise<NextResponse> {
   }
   return NextResponse.json({ success: true });
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const GET = withApiErrorReporting('GET /api/schedule', getHandler);
+export const DELETE = withApiErrorReporting('DELETE /api/schedule', deleteHandler);

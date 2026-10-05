@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // POST /api/logout — ends the user's Supabase session.
@@ -8,7 +9,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 // (social_accounts); this endpoint only disconnects the current session.
 //---------------
 
-export async function POST() {
+async function postHandler() {
   const logId = logger.generateLogId();
 
   try {
@@ -66,3 +67,8 @@ export async function POST() {
     );
   }
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const POST = withApiErrorReporting('POST /api/logout', postHandler);

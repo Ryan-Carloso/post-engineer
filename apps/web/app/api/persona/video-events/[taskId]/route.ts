@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
 import { apiErrorResponse } from '@/lib/api-error';
 import { SAFE_TASK_ID } from '@/lib/video-urls';
+import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // GET /api/persona/video-events/:taskId — SSE progress proxy.
@@ -14,7 +15,7 @@ import { SAFE_TASK_ID } from '@/lib/video-urls';
 // a terminal snapshot.
 //---------------
 
-export async function GET(
+async function getHandler(
   request: Request,
   context: { params: Promise<{ taskId: string }> },
 ): Promise<Response> {
@@ -58,3 +59,8 @@ export async function GET(
     });
   }
 }
+
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
+export const GET = withApiErrorReporting('GET /api/persona/video-events/[taskId]', getHandler);
