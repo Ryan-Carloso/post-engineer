@@ -184,13 +184,13 @@ export async function uploadEngineTempAsset(
 
 //---------------
 // extractTaskId — the money-print response follows the
-// { status, data: { task_id } } shape; tolerant extraction.
+// { status, body: { task_id } } shape; tolerant extraction.
 //---------------
 function extractTaskId(body: unknown): string | undefined {
   if (typeof body !== 'object' || body === null) return undefined;
-  const data = (body as { data?: unknown }).data;
-  if (typeof data !== 'object' || data === null) return undefined;
-  const taskId = (data as { task_id?: unknown }).task_id;
+  const payload = (body as { body?: unknown }).body;
+  if (typeof payload !== 'object' || payload === null) return undefined;
+  const taskId = (payload as { task_id?: unknown }).task_id;
   return typeof taskId === 'string' ? taskId : undefined;
 }
 

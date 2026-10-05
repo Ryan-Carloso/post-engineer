@@ -6,7 +6,6 @@ const CONFIG = {
   apiPaths: [],
   denylist: {},
   allowlist: [],
-  exceptions: [],
   llm: {
     enabled: true,
     baseUrl: 'https://llm.example.test/v1',

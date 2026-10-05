@@ -556,11 +556,11 @@ function narrowTaskProgress(result: unknown): {
   stage: string | null;
   error: string | null;
 } {
-  const data =
-    typeof result === 'object' && result !== null && 'data' in result
-      ? (result as { data?: unknown }).data
+  const payload =
+    typeof result === 'object' && result !== null && 'body' in result
+      ? (result as { body?: unknown }).body
       : undefined;
-  const record = typeof data === 'object' && data !== null ? data : {};
+  const record = typeof payload === 'object' && payload !== null ? payload : {};
   const get = (key: string): unknown =>
     key in record ? (record as Record<string, unknown>)[key] : undefined;
   const taskId = get('task_id');

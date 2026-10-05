@@ -3,9 +3,14 @@
 # Only names ADDED in a PR diff are checked; existing names are grandfathered
 # (the lint never asks you to rename an existing field).
 #
+# There is deliberately NO exceptions mechanism: a vague name is either
+# renamed or it fails the lint. If a name seems clear enough to keep, it
+# does not belong on the denylist — remove it there instead of excepting it.
+#
 # The parser supports a restricted YAML subset: top-level scalar keys,
 # lists of scalars, lists of one-level maps, and one level of nested maps.
 # Keep values simple (no anchors, no multiline strings).
+# Unknown top-level keys are rejected: the config surface is closed.
 
 # Contract surface: files whose ADDED field/param names are linted.
 # Glob syntax: `*` matches within a path segment, `**` crosses segments.
@@ -51,16 +56,6 @@ denylist:
 # Names that are always allowed, even if they resemble a denylisted word.
 allowlist:
   - "id"
-
-# Targeted exceptions: [path glob, name] pairs that skip the lint.
-# Use for established project conventions, not to silence new ambiguity.
-exceptions:
-  - path: "apps/engine/app/models/schema.py"
-    names: ["data"]
-    reason: "Legacy BaseResponse envelope convention; new engine response models follow it."
-  - path: "apps/engine/app/models/exception.py"
-    names: ["data"]
-    reason: "Pre-existing HttpException constructor param; flagged only because a reformat moved it onto an added diff line."
 
 # LLM review layer (second pass over names that clear the denylist).
 llm:

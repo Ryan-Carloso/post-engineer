@@ -1,5 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, parseYamlSubset } from './config.mjs';
@@ -33,16 +35,28 @@ nested:
     assert.deepEqual(cfg, { key: 'value' });
   });
 
-  it('parses a list of maps (exceptions)', () => {
-    const cfg = parseYamlSubset(`
-exceptions:
-  - path: "apps/x/route.ts"
-    names: ["data"]
-    reason: "legacy"
-`);
-    assert.deepEqual(cfg.exceptions, [
-      { path: 'apps/x/route.ts', names: ['data'], reason: 'legacy' },
-    ]);
+  it('rejects unknown top-level keys: exceptions cannot be reintroduced', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'api-naming-test-'));
+    const file = path.join(dir, 'api-naming.yml');
+    fs.writeFileSync(
+      file,
+      [
+        'api_paths:',
+        '  - "apps/web/app/api/**/route.ts"',
+        'denylist:',
+        '  data:',
+        '    severity: error',
+        '    reason: "vague"',
+        'exceptions:',
+        '  - path: "apps/engine/app/models/schema.py"',
+        '    names: ["data"]',
+        '    reason: "legacy"',
+        '',
+      ].join('\n'),
+    );
+    assert.throws(() => loadConfig(file), /unknown top-level key "exceptions"/);
+    assert.throws(() => loadConfig(file), /rename the identifier instead/);
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 });
 
@@ -74,14 +88,10 @@ describe('loadConfig (real .github/api-naming.yml)', () => {
     }
   });
 
-  it('loads allowlist, exceptions and llm settings', () => {
+  it('loads allowlist and llm settings (no exceptions mechanism)', () => {
     const cfg = loadConfig(REPO_CONFIG);
     assert.ok(cfg.allowlist.includes('id'));
-    assert.ok(
-      cfg.exceptions.some(
-        (e) => e.path === 'apps/engine/app/models/schema.py' && e.names.includes('data'),
-      ),
-    );
+    assert.ok(!('exceptions' in cfg), 'config must not expose exceptions');
     assert.equal(cfg.llm.enabled, true);
     assert.ok(cfg.llm.model.length > 0);
     assert.ok(cfg.llm.baseUrl.startsWith('https://'));

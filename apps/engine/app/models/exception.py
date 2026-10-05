@@ -10,13 +10,11 @@ class HttpException(Exception):
         task_id: str,
         status_code: int,
         message: str = "",
-        data: Any = None,
         generation_id: str | None = None,
     ):
         self.task_id = task_id
         self.status_code = status_code
         self.message = message
-        self.data = data
         self.generation_id = generation_id
         # Retrieve the exception stack trace information.
         tb_str = traceback.format_exc().strip()

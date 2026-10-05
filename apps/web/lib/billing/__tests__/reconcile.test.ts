@@ -214,7 +214,7 @@ describe('checkEngineTask', () => {
 
   it('returns failed with the engine error on state -1', async () => {
     engineUp();
-    mockFetch(200, { data: { state: -1, error: 'GPU ran out of memory' } });
+    mockFetch(200, { body: { state: -1, error: 'GPU ran out of memory' } });
     await expect(checkEngineTask(TASK, USER)).resolves.toEqual({
       kind: 'failed',
       error: 'GPU ran out of memory',
@@ -223,7 +223,7 @@ describe('checkEngineTask', () => {
 
   it('returns failed with a null error when the body carries none', async () => {
     engineUp();
-    mockFetch(200, { data: { state: -1 } });
+    mockFetch(200, { body: { state: -1 } });
     await expect(checkEngineTask(TASK, USER)).resolves.toEqual({ kind: 'failed', error: null });
   });
 
@@ -238,15 +238,15 @@ describe('checkEngineTask', () => {
 
   it('returns complete on state 1', async () => {
     engineUp();
-    mockFetch(200, { data: { state: 1, progress: 100 } });
+    mockFetch(200, { body: { state: 1, progress: 100 } });
     await expect(checkEngineTask(TASK, USER)).resolves.toEqual({ kind: 'complete' });
   });
 
   it('returns active on queued/processing states', async () => {
     engineUp();
-    mockFetch(200, { data: { state: 3 } });
+    mockFetch(200, { body: { state: 3 } });
     await expect(checkEngineTask(TASK, USER)).resolves.toEqual({ kind: 'active' });
-    mockFetch(200, { data: { state: 4, progress: 42 } });
+    mockFetch(200, { body: { state: 4, progress: 42 } });
     await expect(checkEngineTask(TASK, USER)).resolves.toEqual({ kind: 'active' });
   });
 
@@ -270,7 +270,7 @@ describe('checkEngineTask', () => {
 
   it('returns unknown when the body carries no readable state', async () => {
     engineUp();
-    mockFetch(200, { data: { progress: 10 } });
+    mockFetch(200, { body: { progress: 10 } });
     await expect(checkEngineTask(TASK, USER)).resolves.toEqual({ kind: 'unknown' });
   });
 
@@ -427,7 +427,7 @@ describe('runBillingReconciliation — stuck generations', () => {
   });
 
   it('auto-refunds with the categorized engine reason when the task failed', async () => {
-    engineBody({ data: { state: -1, error: 'engine restart during render' } });
+    engineBody({ body: { state: -1, error: 'engine restart during render' } });
     const s = stuck();
     const store = fakeStore({ findStuckGenerations: async () => [s] });
 
@@ -453,7 +453,7 @@ describe('runBillingReconciliation — stuck generations', () => {
   });
 
   it('categorizes an unrecognized engine error as unknown', async () => {
-    engineBody({ data: { state: -1, error: 'GPU exploded mysteriously' } });
+    engineBody({ body: { state: -1, error: 'GPU exploded mysteriously' } });
     const s = stuck();
     const store = fakeStore({ findStuckGenerations: async () => [s] });
 
@@ -466,7 +466,7 @@ describe('runBillingReconciliation — stuck generations', () => {
   });
 
   it('backfills completed without refund when the engine finished the task', async () => {
-    engineBody({ data: { state: 1, progress: 100 } });
+    engineBody({ body: { state: 1, progress: 100 } });
     const s = stuck();
     const store = fakeStore({ findStuckGenerations: async () => [s] });
 
@@ -481,7 +481,7 @@ describe('runBillingReconciliation — stuck generations', () => {
   });
 
   it('defers (no refund, no settle) an active task inside the day limit', async () => {
-    engineBody({ data: { state: 3 } });
+    engineBody({ body: { state: 3 } });
     const s = stuck(); // 12h old — past the 6h stuck bar, inside the 3-day box
     const store = fakeStore({ findStuckGenerations: async () => [s] });
 
@@ -494,7 +494,7 @@ describe('runBillingReconciliation — stuck generations', () => {
   });
 
   it('auto-refunds an active task past the day limit', async () => {
-    engineBody({ data: { state: 4, progress: 61 } });
+    engineBody({ body: { state: 4, progress: 61 } });
     const s = stuckDaysAgo(4);
     const store = fakeStore({ findStuckGenerations: async () => [s] });
 

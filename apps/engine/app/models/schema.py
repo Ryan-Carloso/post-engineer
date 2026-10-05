@@ -258,7 +258,7 @@ class VideoSocialMetadataParams:
 class BaseResponse(BaseModel):
     status: int = 200
     message: Optional[str] = "success"
-    data: Any = None
+    body: Any = None
 
 
 def _validate_webhook_url(value: Optional[str]) -> Optional[str]:
@@ -321,17 +321,17 @@ class VideoSocialMetadataRequest(VideoSocialMetadataParams, BaseModel):
 ######################################################################################################
 ######################################################################################################
 class TaskResponse(BaseResponse):
-    class TaskResponseData(BaseModel):
+    class TaskResponseBody(BaseModel):
         task_id: str
 
-    data: TaskResponseData
+    body: TaskResponseBody
 
     class Config:
         json_schema_extra = {
             "example": {
                 "status": 200,
                 "message": "success",
-                "data": {"task_id": "6c85c8cc-a77a-42b9-bc30-947815aa0558"},
+                "body": {"task_id": "6c85c8cc-a77a-42b9-bc30-947815aa0558"},
             },
         }
 
@@ -342,7 +342,7 @@ class TaskQueryResponse(BaseResponse):
             "example": {
                 "status": 200,
                 "message": "success",
-                "data": {
+                "body": {
                     "state": 1,
                     "progress": 100,
                     "videos": [
@@ -362,7 +362,7 @@ class TaskDeletionResponse(BaseResponse):
             "example": {
                 "status": 200,
                 "message": "success",
-                "data": {
+                "body": {
                     "state": 1,
                     "progress": 100,
                     "videos": [
@@ -382,7 +382,7 @@ class VideoScriptResponse(BaseResponse):
             "example": {
                 "status": 200,
                 "message": "success",
-                "data": {
+                "body": {
                     "video_script": "春天的花海，是大自然的一幅美丽画卷。在这个季节里，大地复苏，万物生长，花朵争相绽放，形成了一片五彩斑斓的花海..."
                 },
             },
@@ -395,7 +395,7 @@ class VideoTermsResponse(BaseResponse):
             "example": {
                 "status": 200,
                 "message": "success",
-                "data": {"video_terms": ["sky", "tree"]},
+                "body": {"video_terms": ["sky", "tree"]},
             },
         }
 
@@ -406,7 +406,7 @@ class VideoSocialMetadataResponse(BaseResponse):
             "example": {
                 "status": 200,
                 "message": "success",
-                "data": {
+                "body": {
                     "title": "A Day in Shanghai You Should Not Miss",
                     "caption": "Save this quick Shanghai inspiration and follow for more short travel ideas.",
                     "hashtags": ["#shorts", "#travel", "#shanghai", "#viral", "#fyp"],
@@ -421,7 +421,7 @@ class BgmRetrieveResponse(BaseResponse):
             "example": {
                 "status": 200,
                 "message": "success",
-                "data": {
+                "body": {
                     "files": [
                         {
                             "name": "output013.mp3",
@@ -440,7 +440,7 @@ class BgmUploadResponse(BaseResponse):
             "example": {
                 "status": 200,
                 "message": "success",
-                "data": {"file": "/post-engineer/resource/songs/example.mp3"},
+                "body": {"file": "/post-engineer/resource/songs/example.mp3"},
             },
         }
 
@@ -450,7 +450,7 @@ class VideoMaterialRetrieveResponse(BaseResponse):
             "example": {
                 "status": 200,
                 "message": "success",
-                "data": {
+                "body": {
                     "files": [
                         {
                             "name": "example.mp4",
@@ -468,7 +468,7 @@ class VideoMaterialUploadResponse(BaseResponse):
             "example": {
                 "status": 200,
                 "message": "success",
-                "data": {
+                "body": {
                     "file": "/post-engineer/resource/videos/example.mp4",
                 },
             },

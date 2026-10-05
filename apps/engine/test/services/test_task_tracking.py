@@ -440,7 +440,7 @@ class CreateTaskControllerTests(unittest.TestCase):
 
             add_task.side_effect = fake_add_task
             resp = video_controller.create_task(MagicMock(), body, stop_at="video")
-            task_id = resp["data"]["task_id"]
+            task_id = resp["body"]["task_id"]
             # Requested fires from the on_accepted callback: after the task
             # is accepted, strictly before the worker thread starts, and
             # never on a 429 queue-full rejection.

@@ -35,16 +35,16 @@ export interface EngineTaskProgress {
 }
 
 //---------------
-// taskPayload — the engine wraps the task record under `data`; some
+// taskPayload — the engine wraps the task record under `body`; some
 // shapes return it unwrapped. Mirrors the video-status route's parsing
 // (read-only subset: no terminal-state detection here).
 //---------------
 function taskPayload(value: unknown): Record<string, unknown> | null {
   if (typeof value !== 'object' || value === null) return null;
   const record = value as Record<string, unknown>;
-  const data = record.data;
-  if (typeof data === 'object' && data !== null) {
-    return data as Record<string, unknown>;
+  const body = record.body;
+  if (typeof body === 'object' && body !== null) {
+    return body as Record<string, unknown>;
   }
   return record;
 }

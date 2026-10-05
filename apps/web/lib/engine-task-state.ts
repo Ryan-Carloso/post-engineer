@@ -14,9 +14,9 @@
 export function taskPayload(value: unknown): Record<string, unknown> | null {
   if (typeof value !== 'object' || value === null) return null;
   const record = value as Record<string, unknown>;
-  const data = record.data;
-  if (typeof data === 'object' && data !== null) {
-    return data as Record<string, unknown>;
+  const body = record.body;
+  if (typeof body === 'object' && body !== null) {
+    return body as Record<string, unknown>;
   }
   return record;
 }

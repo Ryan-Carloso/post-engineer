@@ -151,12 +151,14 @@ function isRecord(v) {
 
 /**
  * Load and validate the versioned api-naming.yml config.
+ *
+ * The config surface is closed: unknown top-level keys are rejected so the
+ * exceptions mechanism cannot be reintroduced through the config file.
  * @param {string} filePath
  * @returns {{
  *   apiPaths: string[],
  *   denylist: Record<string, { severity: 'error' | 'warn', reason: string }>,
  *   allowlist: string[],
- *   exceptions: Array<{ path: string, names: string[], reason: string }>,
  *   llm: { enabled: boolean, baseUrl: string, model: string, maxNames: number, timeoutMs: number },
  * }}
  */
@@ -169,6 +171,16 @@ export function loadConfig(filePath) {
   }
   const raw = parseYamlSubset(text);
   if (!isRecord(raw)) throw new Error(`Invalid API naming config: top level must be a map (${filePath})`);
+
+  const KNOWN_KEYS = new Set(['api_paths', 'denylist', 'allowlist', 'llm']);
+  for (const key of Object.keys(raw)) {
+    if (!KNOWN_KEYS.has(key)) {
+      throw new Error(
+        `Invalid API naming config: unknown top-level key "${key}" (${filePath}). ` +
+          `Exceptions are not supported — rename the identifier instead of excepting it.`,
+      );
+    }
+  }
 
   const apiPaths = raw.api_paths;
   if (!Array.isArray(apiPaths) || apiPaths.length === 0 || !apiPaths.every((p) => typeof p === 'string')) {
@@ -190,14 +202,6 @@ export function loadConfig(filePath) {
   }
 
   const allowlist = Array.isArray(raw.allowlist) ? raw.allowlist.map(String) : [];
-  const exceptions = Array.isArray(raw.exceptions)
-    ? raw.exceptions.map((e) => {
-        if (!isRecord(e) || typeof e.path !== 'string' || !Array.isArray(e.names)) {
-          throw new Error('Invalid exception entry: needs {path, names[], reason}');
-        }
-        return { path: e.path, names: e.names.map(String), reason: String(e.reason ?? '') };
-      })
-    : [];
 
   const llmRaw = isRecord(raw.llm) ? raw.llm : {};
   const llm = {
@@ -208,5 +212,5 @@ export function loadConfig(filePath) {
     timeoutMs: Number(llmRaw.timeout_ms ?? 30000),
   };
 
-  return { apiPaths, denylist, allowlist, exceptions, llm };
+  return { apiPaths, denylist, allowlist, llm };
 }

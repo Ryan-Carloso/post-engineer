@@ -101,7 +101,7 @@ describe('GET /api/persona/video-status/:taskId', () => {
 
   it('reescrita das URLs relativas de download/stream para o proxy autenticado do Next', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(JSON.stringify({ data: { videos: ['/api/v1/download/task-1/final.mp4', '/api/v1/stream/task-1/final.mp4'] } }), { status: 200 }),
+      new Response(JSON.stringify({ body: { videos: ['/api/v1/download/task-1/final.mp4', '/api/v1/stream/task-1/final.mp4'] } }), { status: 200 }),
     );
     vi.stubGlobal('fetch', fetchMock);
 
@@ -110,8 +110,8 @@ describe('GET /api/persona/video-status/:taskId', () => {
       { params: Promise.resolve({ taskId: 'task-1' }) },
     );
 
-    const body = await response.json() as { data: { videos: string[] } };
-    expect(body.data.videos).toEqual([
+    const body = await response.json() as { body: { videos: string[] } };
+    expect(body.body.videos).toEqual([
       '/api/persona/video-download/task-1/final.mp4',
       '/api/persona/video-download/task-1/final.mp4?source=stream',
     ]);
@@ -201,12 +201,12 @@ describe('GET /api/persona/video-status/:taskId', () => {
     }
 
     it('records a failed generation with the engine error and refunds on numeric state -1', async () => {
-      // Real engine shape: the task sits under `data` and `state` is numeric
+      // Real engine shape: the task sits under `body` and `state` is numeric
       // (-1 failed, 1 complete, 3 queued, 4 processing).
       mockTaskBody({
         status: 200,
         message: 'success',
-        data: { task_id: 'task-1', state: -1, error: 'custom audio file is invalid: boom' },
+        body: { task_id: 'task-1', state: -1, error: 'custom audio file is invalid: boom' },
       });
       const serviceClient = mockServiceClient('gen-1');
       // The refund RPC succeeded, so the flag is written and the next poll
@@ -242,7 +242,7 @@ describe('GET /api/persona/video-status/:taskId', () => {
       mockTaskBody({
         status: 200,
         message: 'success',
-        data: { task_id: 'task-1', state: -1, error: 'boom' },
+        body: { task_id: 'task-1', state: -1, error: 'boom' },
       });
       mockServiceClient('gen-1');
       vi.mocked(refundTokens).mockResolvedValue(false);
@@ -268,7 +268,7 @@ describe('GET /api/persona/video-status/:taskId', () => {
       mockTaskBody({
         status: 200,
         message: 'success',
-        data: { task_id: 'task-1', state: 1, progress: 100 },
+        body: { task_id: 'task-1', state: 1, progress: 100 },
       });
       mockServiceClient('gen-1');
       const updateSpy = vi
@@ -294,7 +294,7 @@ describe('GET /api/persona/video-status/:taskId', () => {
       mockTaskBody({
         status: 200,
         message: 'success',
-        data: { task_id: 'task-1', state: 4, progress: 42 },
+        body: { task_id: 'task-1', state: 4, progress: 42 },
       });
       mockServiceClient('gen-1');
       const updateSpy = vi
@@ -334,7 +334,7 @@ describe('GET /api/persona/video-status/:taskId', () => {
       mockTaskBody({
         status: 200,
         message: 'success',
-        data: { task_id: 'task-1', state: '-1', error: 'boom' },
+        body: { task_id: 'task-1', state: '-1', error: 'boom' },
       });
       mockServiceClient('gen-1');
       const updateSpy = vi
@@ -360,7 +360,7 @@ describe('GET /api/persona/video-status/:taskId', () => {
       mockTaskBody({
         status: 200,
         message: 'success',
-        data: { task_id: 'task-1', state: -1, error: 'boom' },
+        body: { task_id: 'task-1', state: -1, error: 'boom' },
       });
       mockServiceClient('gen-1', { status: 'failed', tokens_refunded: true });
       const updateSpy = vi
@@ -380,7 +380,7 @@ describe('GET /api/persona/video-status/:taskId', () => {
       mockTaskBody({
         status: 200,
         message: 'success',
-        data: { task_id: 'task-1', state: 1, progress: 100 },
+        body: { task_id: 'task-1', state: 1, progress: 100 },
       });
       mockServiceClient('gen-1', { status: 'completed', tokens_refunded: false });
       const updateSpy = vi
@@ -402,7 +402,7 @@ describe('GET /api/persona/video-status/:taskId', () => {
       mockTaskBody({
         status: 200,
         message: 'success',
-        data: { task_id: 'task-1', state: -1, error: 'boom' },
+        body: { task_id: 'task-1', state: -1, error: 'boom' },
       });
       const serviceClient = mockServiceClient('gen-1', { status: 'failed', tokens_refunded: false });
       // The retry lands, so the flag is written this time.
@@ -435,7 +435,7 @@ describe('GET /api/persona/video-status/:taskId', () => {
       mockTaskBody({
         status: 200,
         message: 'success',
-        data: { task_id: 'task-1', state: -1, error: 'boom' },
+        body: { task_id: 'task-1', state: -1, error: 'boom' },
       });
       mockServiceClient('gen-1', { status: 1, tokens_refunded: 'yes' });
       const updateSpy = vi
@@ -456,7 +456,7 @@ describe('GET /api/persona/video-status/:taskId', () => {
     it('skips history recording when no charge row links the task', async () => {
       mockTaskBody({
         status: 200,
-        data: { task_id: 'task-1', state: -1, error: 'boom' },
+        body: { task_id: 'task-1', state: -1, error: 'boom' },
       });
       mockServiceClient(null);
       const updateSpy = vi
@@ -483,7 +483,7 @@ describe('GET /api/persona/video-status/:taskId', () => {
       // engine's own failure refund for those legacy batch tasks.
       mockTaskBody({
         status: 200,
-        data: { task_id: 'task-1', state: -1, error: 'boom' },
+        body: { task_id: 'task-1', state: -1, error: 'boom' },
       });
       mockServiceClient(null);
       const updateSpy = vi

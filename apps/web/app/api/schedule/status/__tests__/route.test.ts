@@ -357,7 +357,7 @@ describe('GET slot progress (0–100)', () => {
   }
 
   it('pending → 0 sem chamar o engine', async () => {
-    mockEngine({ data: { progress: 99 } });
+    mockEngine({ body: { progress: 99 } });
     const body = await getStatus([
       { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'pending', topic: 'Next', schedule_id: 's1' },
     ]);
@@ -366,7 +366,7 @@ describe('GET slot progress (0–100)', () => {
   });
 
   it('generating → progresso live do engine via task_id', async () => {
-    mockEngine({ data: { progress: 45, state: 4 } });
+    mockEngine({ body: { progress: 45, state: 4 } });
     const body = await getStatus([
       { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'generating', topic: 'Next', schedule_id: 's1', task_id: 'task-1' },
     ]);
@@ -376,7 +376,7 @@ describe('GET slot progress (0–100)', () => {
   });
 
   it('caps the engine fan-out and degrades past the cap to progress 0', async () => {
-    mockEngine({ data: { progress: 62, stage: 'lipsync' } });
+    mockEngine({ body: { progress: 62, stage: 'lipsync' } });
     const slots = Array.from({ length: 30 }, (_, i) => ({
       id: `up-${i}`,
       slot_at: '2026-09-24T10:00:00Z',
@@ -394,7 +394,7 @@ describe('GET slot progress (0–100)', () => {
   });
 
   it('generating sem task_id → 0 sem chamar o engine', async () => {
-    mockEngine({ data: { progress: 45 } });
+    mockEngine({ body: { progress: 45 } });
     const body = await getStatus([
       { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'generating', topic: 'Next', schedule_id: 's1' },
     ]);
@@ -403,7 +403,7 @@ describe('GET slot progress (0–100)', () => {
   });
 
   it('ready/publishing/published → 100', async () => {
-    mockEngine({ data: { progress: 10 } });
+    mockEngine({ body: { progress: 10 } });
     const body = await getStatus(
       [
         { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'ready', topic: 'A', schedule_id: 's1' },
@@ -426,7 +426,7 @@ describe('GET slot progress (0–100)', () => {
         maxInFlight = Math.max(maxInFlight, inFlight);
         await new Promise((r) => setTimeout(r, 10));
         inFlight--;
-        return { ok: true, status: 200, json: async () => ({ data: { progress: 50 } }) };
+        return { ok: true, status: 200, json: async () => ({ body: { progress: 50 } }) };
       }),
     );
     const upcoming = [1, 2, 3, 4].map((i) => ({
@@ -439,7 +439,7 @@ describe('GET slot progress (0–100)', () => {
   });
 
   it('mapeia pending do banco para "awaiting" com posição na fila', async () => {
-    mockEngine({ data: { progress: 99 } });
+    mockEngine({ body: { progress: 99 } });
     const queue = [
       { id: 'up-1', schedule_id: 's1', slot_at: '2026-09-24T10:00:00Z' },
       { id: 'up-2', schedule_id: 's1', slot_at: '2026-09-24T11:00:00Z' },
@@ -463,7 +463,7 @@ describe('GET slot progress (0–100)', () => {
   });
 
   it('generating repassa o stage do engine e não expõe posição de fila', async () => {
-    mockEngine({ data: { progress: 45, stage: 'lipsync' } });
+    mockEngine({ body: { progress: 45, stage: 'lipsync' } });
     const queue = [
       { id: 'gen-1', schedule_id: 's1', slot_at: '2026-09-24T10:00:00Z' },
       { id: 'up-1', schedule_id: 's1', slot_at: '2026-09-24T11:00:00Z' },
@@ -497,7 +497,7 @@ describe('GET slot progress (0–100)', () => {
   });
 
   it('failed mantém error, último progresso e retryable pela categoria', async () => {
-    mockEngine({ data: { progress: 80, state: -1 } });
+    mockEngine({ body: { progress: 80, state: -1 } });
     const body = await getStatus(
       [],
       [

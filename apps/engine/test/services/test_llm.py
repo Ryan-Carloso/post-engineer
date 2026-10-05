@@ -1901,7 +1901,7 @@ class TestSocialMetadata(unittest.TestCase):
             {
                 "status": 200,
                 "message": "success",
-                "data": {
+                "body": {
                     "title": "3 Quiet Tokyo Coffee Shops",
                     "caption": "Save these spots for your next Tokyo morning.",
                     "hashtags": ["#Tokyo", "#Coffee", "#Shorts"],

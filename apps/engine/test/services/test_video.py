@@ -121,7 +121,7 @@ class TestSecurityControls(unittest.TestCase):
 
             response = video_controller.get_task(_FakeRequest(), task_id=task_id)
 
-            self.assertEqual(response["data"]["videos"], [f"/api/v1/download/{task_id}/final-1.mp4"])
+            self.assertEqual(response["body"]["videos"], [f"/api/v1/download/{task_id}/final-1.mp4"])
             self.assertEqual(sm.state.get_task(task_id)["videos"], [video_path])
         finally:
             sm.state.delete_task(task_id)
