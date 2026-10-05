@@ -199,6 +199,13 @@ const PostCard = ({
   const videoUrl = videoUrlFor(slot.taskId);
   const hasThumb = SLOT_VIDEO_STATUSES.has(slot.status) && videoUrl !== null;
   const provider = accounts[0]?.provider;
+  // Progress is live data on the list card too: a freshly created post lands
+  // here at 0% and the minute poll fills in the engine's number.
+  const showProgress =
+    slot.status === 'awaiting' ||
+    slot.status === 'generating' ||
+    slot.status === 'ready' ||
+    slot.status === 'publishing';
   return (
     <Link href={`/posts/${slot.id}`} className="block h-full">
       <Card className={`flex h-full flex-col gap-0 rounded-xl p-4 transition-colors ${CARD_BORDER}`}>
@@ -216,6 +223,26 @@ const PostCard = ({
           </p>
           <PostThumb src={hasThumb ? videoUrl : null} />
         </div>
+        {showProgress && (
+          <div className="mt-3 flex items-center gap-2">
+            <div
+              role="progressbar"
+              aria-label={t('posts.progressLabel')}
+              aria-valuenow={slot.progress}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#dce6ee]"
+            >
+              <div
+                className="h-full rounded-full bg-[#0d2b45] transition-all"
+                style={{ width: `${slot.progress}%` }}
+              />
+            </div>
+            <span className="shrink-0 text-[11px] font-semibold text-[#0d2b45] tabular-nums">
+              {slot.progress}%
+            </span>
+          </div>
+        )}
         <CardFooter className="mt-auto items-center justify-between p-0 pt-4">
           <AccountAvatarGroup accounts={accounts} />
           <Badge variant="outline" className={`border-transparent ${STATUS_STYLE[slot.status] ?? STATUS_STYLE.pending}`}>
