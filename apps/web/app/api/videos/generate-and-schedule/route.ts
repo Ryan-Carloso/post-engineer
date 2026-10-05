@@ -63,11 +63,6 @@ const MAX_TOPICS = MAX_POST_TOPICS;
 const MAX_TOPIC_CHARS = 300;
 const MAX_SCRIPT_PROMPT_CHARS = 2000;
 const SIGNED_URL_TTL_SECONDS = 3600;
-// A schedule row with zero slots that is older than this is a zombie from
-// an attempt that died between the schedule insert and the slot insert
-// (crash, timeout). It can be safely deleted: no live request can still be
-// working on it, and the ledger check prevents a second charge.
-const ZOMBIE_SCHEDULE_MAX_AGE_MS = 10 * 60 * 1000;
 
 //---------------
 // Request shape. Semantic checks (codes, fields) run after the shape parse
@@ -672,10 +667,12 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   // 7. Idempotency: the schedule id is deterministic in (user, key), so a
   // retry addresses the same schedule row instead of creating a duplicate.
+  // A 0-slot row is a zombie and is deleted below so the operation runs
+  // fresh instead of being replayed empty.
   const idem = resolveIdempotency(userId, idempotencyKey, request);
   const { data: existingSchedule, error: scheduleLookupError } = await supabase
     .from('schedules')
-    .select('id, created_at')
+    .select('id')
     .eq('id', idem.scheduleId)
     .eq('user_id', userId)
     .maybeSingle();
@@ -689,10 +686,14 @@ async function postHandler(request: Request): Promise<NextResponse> {
   }
   if (existingSchedule) {
     // A schedule with zero slots is a zombie from an attempt that died
-    // between the schedule insert and the slot insert (crash, timeout):
-    // it can never complete. Delete it when it is old enough that no live
-    // request can still be working on it, then run the operation fresh;
-    // the ledger check below prevents a second charge for the same
+    // between the schedule insert and the slot insert (crash, timeout): it
+    // can never produce videos, so for replay purposes it is treated as
+    // non-existent at ANY age — delete it and run the operation fresh. This
+    // is safe because no live request can be stalled "between" the two
+    // inserts: only the synchronous trackApiEvent call sits there, with no
+    // await, so a 0-slot row is never being worked on. (An age TTL here
+    // used to let a fresh zombie get replayed empty: "0 publish slot(s)".)
+    // The ledger check below prevents a second charge for the same
     // generation_id.
     const { count: slotCount, error: slotCountError } = await supabase
       .from('scheduled_posts')
@@ -706,9 +707,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       });
       return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
     }
-    const createdAt = (existingSchedule as { created_at?: string }).created_at;
-    const ageMs = createdAt ? Date.now() - new Date(createdAt).getTime() : Number.POSITIVE_INFINITY;
-    if ((slotCount ?? 0) === 0 && ageMs > ZOMBIE_SCHEDULE_MAX_AGE_MS) {
+    if ((slotCount ?? 0) === 0) {
       logger.warn('[generate-and-schedule] deleting zombie schedule with 0 slots', {
         scheduleId: idem.scheduleId,
         userId,
