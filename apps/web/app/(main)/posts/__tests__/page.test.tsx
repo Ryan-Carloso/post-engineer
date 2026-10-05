@@ -534,3 +534,61 @@ describe('PostsPage card links', () => {
     expect(cardVideo?.getAttribute('controls')).toBeNull();
   });
 });
+
+describe('PostsPage card progress', () => {
+  const GENERATING_SLOT = {
+    id: 'g1',
+    scheduleId: 's1',
+    slotAt: '2030-06-01T10:00:00.000Z',
+    status: 'generating',
+    topic: 'Generating topic',
+    error: null,
+    publishedAt: null,
+    taskId: 'task-42',
+    progress: 42,
+    stage: 'lipsync',
+  };
+
+  const AWAITING_SLOT = {
+    id: 'a1',
+    scheduleId: 's1',
+    slotAt: '2030-06-02T10:00:00.000Z',
+    status: 'awaiting',
+    topic: 'Awaiting topic',
+    error: null,
+    publishedAt: null,
+    taskId: null,
+    progress: 0,
+    stage: null,
+  };
+
+  it('shows the live progress percent on a generating card', () => {
+    mockQueries({ upcoming: [GENERATING_SLOT] });
+    render(<PostsPage />);
+
+    expect(screen.getByText('42%')).toBeInTheDocument();
+    const bar = screen.getByRole('progressbar', { name: 'posts.progressLabel' });
+    expect(bar).toHaveAttribute('aria-valuenow', '42');
+    expect(bar).toHaveAttribute('aria-valuemin', '0');
+    expect(bar).toHaveAttribute('aria-valuemax', '100');
+  });
+
+  it('shows 0% on an awaiting card — a freshly created post is visible with its progress from the first paint', () => {
+    mockQueries({ upcoming: [AWAITING_SLOT] });
+    render(<PostsPage />);
+
+    expect(screen.getByText('0%')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'posts.progressLabel' })).toHaveAttribute(
+      'aria-valuenow',
+      '0',
+    );
+  });
+
+  it('shows no progress bar on terminal cards', async () => {
+    const user = userEvent.setup();
+    render(<PostsPage />);
+    await user.click(screen.getByRole('button', { name: /posts\.tabHistory/ }));
+
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+  });
+});
