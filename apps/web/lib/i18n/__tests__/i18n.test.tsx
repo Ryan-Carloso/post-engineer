@@ -42,18 +42,24 @@ describe('i18n dictionaries', () => {
   });
 
   //---------------
-  // The home dashboard and the scheduling screen are gone. Their copy must
-  // go with them: an orphaned key is dead weight that will drift, and a
-  // resurrected key is a hint that the old screens are creeping back.
+  // The scheduling screen is gone: its copy must go with it. The home tab
+  // was deliberately restored (user decision — the removal made no sense),
+  // so nav.home/nav.homeHint are live keys again.
   //---------------
-  it('carries no home or scheduling copy', () => {
-    expect(ptDictionary).not.toHaveProperty('home');
-    for (const key of ['home', 'homeHint', 'schedule', 'scheduleHint'] as const) {
+  it('carries no scheduling copy', () => {
+    for (const key of ['schedule', 'scheduleHint'] as const) {
       expect(ptDictionary.nav).not.toHaveProperty(key);
       expect(enDictionary.nav).not.toHaveProperty(key);
     }
     expect(ptDictionary).not.toHaveProperty('fillSchedule');
     expect(enDictionary).not.toHaveProperty('fillSchedule');
+  });
+
+  it('restores the home tab copy', () => {
+    expect(ptDictionary.nav.home).toBe('Início');
+    expect(ptDictionary.nav.homeHint).toBe('Visão geral');
+    expect(enDictionary.nav.home).toBe('Home');
+    expect(enDictionary.nav.homeHint).toBe('Overview');
   });
 });
 

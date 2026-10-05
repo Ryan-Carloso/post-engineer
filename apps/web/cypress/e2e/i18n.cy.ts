@@ -53,9 +53,10 @@ describe('i18n — troca de idioma via UI', () => {
     cy.contains('button', 'EN').click();
     // The only sidebar labels that differ between locales are Accounts
     // (Contas→Accounts) and Sign out (Sair→Sign out); API Keys is
-    // identical in both — its check just proves the nav rendered.
+    // identical in both — its check just proves the localized footer link
+    // (profile area) rendered.
     cy.contains('a', 'Accounts').should('be.visible');
-    cy.contains('a', 'API Keys').should('be.visible');
+    cy.get('[data-testid=profile-api-keys-link]').should('exist');
     // The sign-out button sits at the bottom of the sticky (non-scrolling)
     // sidebar and falls below the fold at short viewport heights — assert
     // the translated label exists rather than its visibility. Finding

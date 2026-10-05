@@ -33,6 +33,8 @@ vi.mock('@/lib/ui', () => ({
   KeyIcon: () => <span data-testid="icon-key" />,
   GlobeIcon: () => <span data-testid="icon-globe" />,
   CoinsIcon: () => <span data-testid="icon-coins" />,
+  HomeIcon: () => <span data-testid="icon-home" />,
+  ProfileIcon: () => <span data-testid="icon-profile" />,
   HistoryIcon: () => <span data-testid="icon-history" />,
   SparklesIcon: () => <span data-testid="icon-sparkles" />,
   MicIcon: () => <span data-testid="icon-mic" />,
@@ -164,29 +166,36 @@ describe('app/(main)/layout — MainLayout', () => {
     }
   });
 
-  it('renders all navigation items', () => {
+  it('renders the sidebar tabs in order: Home, Accounts, Personas, Posts, Tokens', () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-    expect(screen.getAllByText('nav.accounts').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('nav.persona').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('nav.billing').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('nav.apiKeys').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('nav.posts').length).toBeGreaterThan(0);
+    const sidebar = screen.getByTestId('nav-brand').closest('aside');
+    const nav = within(sidebar as HTMLElement).getByRole('navigation');
+    const titles = within(nav)
+      .getAllByRole('link')
+      .map((link) => link.getAttribute('title'));
+    expect(titles).toEqual(['nav.home', 'nav.accounts', 'nav.persona', 'nav.posts', 'nav.billing']);
   });
 
-  //---------------
-  // The home dashboard is gone; the posts list took its place as the first
-  // tab. "Início" must not come back under any label.
-  //---------------
-  it('has no home tab', () => {
+  it('home tab links to /', () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-    expect(screen.queryByText('nav.home')).toBeNull();
+    const sidebar = screen.getByTestId('nav-brand').closest('aside');
+    const nav = within(sidebar as HTMLElement).getByRole('navigation');
+    const homeLink = within(nav).getByTitle('nav.home').closest('a');
+    expect(homeLink?.getAttribute('href')).toBe('/');
   });
 
-  it('lists Posts as the first navigation tab', () => {
+  it('lists Home as the first navigation tab', () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     const sidebar = screen.getByTestId('nav-brand').closest('aside');
     const firstTab = within(sidebar as HTMLElement).getAllByRole('link')[0];
-    expect(firstTab).toHaveAttribute('title', 'nav.posts');
+    expect(firstTab).toHaveAttribute('title', 'nav.home');
+  });
+
+  it('does not render an API Keys tab in the sidebar nav (moved to the profile area)', () => {
+    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+    const sidebar = screen.getByTestId('nav-brand').closest('aside');
+    const nav = within(sidebar as HTMLElement).getByRole('navigation');
+    expect(within(nav).queryByText('nav.apiKeys')).toBeNull();
   });
 
   it('posts tab links to /posts', () => {
@@ -201,19 +210,19 @@ describe('app/(main)/layout — MainLayout', () => {
     expect(billingLink?.getAttribute('href')).toBe('/billing');
   });
 
-  it('api-keys tab links to /api-keys', () => {
+  it('api keys are reachable from the profile panel, not from a tab', () => {
+    vi.mocked(useSessionQuery).mockReturnValue({
+      data: {
+        id: 'u1',
+        email: 'test@example.com',
+        user_metadata: { name: 'User' },
+      },
+      isLoading: false,
+    } as never);
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-    const apiKeysLink = screen.getAllByText('nav.apiKeys')[0].closest('a');
-    expect(apiKeysLink?.getAttribute('href')).toBe('/api-keys');
-  });
-
-  it('billing and api-keys tabs use distinct icons', () => {
-    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-    const billingLink = screen.getAllByText('nav.billing')[0].closest('a');
-    const apiKeysLink = screen.getAllByText('nav.apiKeys')[0].closest('a');
-    expect(billingLink?.querySelector('[data-testid="icon-coins"]')).not.toBeNull();
-    expect(billingLink?.querySelector('[data-testid="icon-key"]')).toBeNull();
-    expect(apiKeysLink?.querySelector('[data-testid="icon-key"]')).not.toBeNull();
+    const panelLink = screen.getByTestId('profile-api-keys-link');
+    expect(panelLink).toHaveAttribute('href', '/api-keys');
+    expect(panelLink).toHaveTextContent('nav.apiKeys');
   });
 
   it('renders locale switcher', () => {
@@ -269,8 +278,11 @@ describe('app/(main)/layout — MainLayout', () => {
       isLoading: false,
     } as never);
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-    const img = screen.getByRole('img', { name: 'A' });
-    expect(img).toHaveAttribute('src', 'https://example.com/avatar.png');
+    // The avatar shows in the sidebar user block and in the mobile header link.
+    const sidebarImg = within(screen.getByTestId('profile-user-link')).getByRole('img', { name: 'A' });
+    expect(sidebarImg).toHaveAttribute('src', 'https://example.com/avatar.png');
+    const headerImg = within(screen.getByTestId('mobile-profile-link')).getByRole('img', { name: 'A' });
+    expect(headerImg).toHaveAttribute('src', 'https://example.com/avatar.png');
   });
 
   it('sign out button calls signOut and navigates to /login', async () => {
@@ -344,12 +356,17 @@ describe('app/(main)/layout — MainLayout', () => {
       expect(postsLink?.getAttribute('href')).toBe('/posts');
     });
 
-    it('renders tabs in order: Posts, Personas, Accounts, API keys, Billing', () => {
+    it('renders tabs in order: Home, Posts, Personas, Accounts, Billing', () => {
       render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
       const labels = within(getMobileNav())
         .getAllByRole('link')
         .map((link) => link.textContent);
-      expect(labels).toEqual(['nav.posts', 'nav.persona', 'nav.accounts', 'nav.apiKeys', 'nav.billing']);
+      expect(labels).toEqual(['nav.home', 'nav.posts', 'nav.persona', 'nav.accounts', 'nav.billing']);
+    });
+
+    it('has no API Keys tab in the mobile nav (moved to the profile area)', () => {
+      render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+      expect(within(getMobileNav()).queryByText('nav.apiKeys')).toBeNull();
     });
 
     it('has no central create/+ button', () => {
@@ -390,5 +407,70 @@ describe('app/(main)/layout — MainLayout', () => {
       expect(screen.queryByRole('button', { name: /menu/i })).toBeNull();
       expect(screen.queryByLabelText('Abrir menu')).toBeNull();
     });
+  });
+});
+
+describe('mobile header profile area', () => {
+  const getMobileHeader = () => screen.getByTestId('mobile-header');
+
+  const mockSessionUser = (user: unknown) => {
+    vi.mocked(useSessionQuery).mockReturnValue({
+      data: user,
+      isLoading: false,
+    } as never);
+  };
+
+  it('shows the version badge next to the brand', () => {
+    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+    const header = getMobileHeader();
+    expect(within(header).getByTestId('version-badge')).toHaveTextContent('BETA');
+  });
+
+  it('shows a profile link to /account in the mobile header', () => {
+    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+    const link = within(getMobileHeader()).getByTestId('mobile-profile-link');
+    expect(link).toHaveAttribute('href', '/account');
+    expect(link).toHaveAttribute('aria-label', 'nav.profile');
+  });
+
+  it('profile link shows the avatar image when the session has one', () => {
+    mockSessionUser({
+      id: 'user-1',
+      user_metadata: { avatar_url: 'https://example.com/avatar.png', name: 'Header User' },
+    });
+    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+    const link = within(getMobileHeader()).getByTestId('mobile-profile-link');
+    expect(within(link).getByAltText('Header User')).toHaveAttribute(
+      'src',
+      'https://example.com/avatar.png',
+    );
+  });
+
+  it('profile link falls back to the initial-letter circle without an avatar', () => {
+    mockSessionUser({
+      id: 'user-1',
+      user_metadata: { name: 'Header User' },
+    });
+    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+    const link = within(getMobileHeader()).getByTestId('mobile-profile-link');
+    expect(within(link).queryByRole('img')).toBeNull();
+    expect(within(link).getByText('H')).toBeInTheDocument();
+  });
+
+  it('sidebar user block links to /account', () => {
+    mockSessionUser({
+      id: 'user-1',
+      user_metadata: { name: 'Sidebar User' },
+    });
+    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+    expect(screen.getByTestId('profile-user-link')).toHaveAttribute('href', '/account');
+  });
+
+  it('mobile bottom navigation still has exactly five tabs (no profile tab, no api-keys tab)', () => {
+    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+    const nav = screen.getByRole('navigation', { name: 'nav.primaryNavigation' });
+    const links = within(nav).getAllByRole('link');
+    expect(links).toHaveLength(5);
+    expect(links[0]).toHaveTextContent('nav.home');
   });
 });

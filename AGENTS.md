@@ -2261,3 +2261,13 @@ Five MINORs on the merged funnel, fixed as a follow-up PR with one focused TDD c
 
 ## PR #86 babysit — OpenCode calibration, rounds 3-4 (2026-10-04, reviews on 421c36b/e19552a/458cf77)
 - **Rounds 3-4: 0 actionable.** 421c36b was clean ("no CRITICAL or MAJOR"). e19552a's single MINOR misread the migration (007 HAS `default false`, pinned by face-mix-removed.test.ts). 458cf77: CRITICAL cited a nonexistent path (`supabase/001_schema.sql`) and its "fix" (edit 001) violates the append-only rule the PR's own test pins; MAJOR "lost superRefine" never existed in any commit of this PR (`grep -c` = 0 on f436cb34 and 2c7af015); MINOR "flag not asserted" is asserted at page.test.tsx:416/441; MINOR "stale NULL comment" doesn't exist in the file. Pattern: when a review's premises dissolve under grep, record the calibration and move on — don't write code to satisfy phantom findings.
+
+## Stryker sandbox cwd (2026-10-05, PR #102/#103)
+- **Stryker runs the dry run from `apps/web/.stryker-tmp`, not `apps/web`.** A test that reads a file outside the web app via `process.cwd()` (the engine error-code contract read `../engine/app/services/state.py`) dies with ENOENT in the dry run — and since `mutation (web)` is a required check that fails on execution errors, it blocks the PR. Any PR touching a file the contract test imports (here: the i18n dictionaries) trips it.
+- **Never assume `../engine` relative to cwd in web tests.** Resolve the repo root from the test file's own location: `findRepoRoot(import.meta.url)` in `apps/web/test/repo-root.ts` walks up to the `pnpm-workspace.yaml` marker (works from Stryker's `.stryker-tmp/sandbox-*` copies too); pinned by its own tests. Canonical fix landed as PR #103.
+
+## Cypress spec module scope (2026-10-05, PR #102)
+- **New spec files under cypress/e2e must be modules (`export {};` at the end).** Top-level helpers in a spec file are globals: a second spec declaring `authCookieName`/`seedUserMetadata`/`interceptShellData` fails tsc with TS2393 Duplicate function implementation. The existing `support/commands.ts` already uses the `export {};` pattern.
+
+## Cypress: hidden responsive twins in the DOM (2026-10-05, PR #102)
+- **The AppShell renders BOTH the desktop sidebar and the mobile header in the DOM** (`hidden md:flex` / `md:hidden` only hide via CSS). E2E selectors like `button[title="Sair"]` match the hidden twin too: `scrollIntoView()` errors on 2 elements and `should('be.visible')` fails on the hidden one. Scope page assertions to a visible container (`[data-testid=account-page] [data-testid=...]`, `cy.get('@page').find(...)`), and prefer exact-href selectors (`a[href="/account"]`).

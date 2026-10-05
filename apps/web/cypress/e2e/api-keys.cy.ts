@@ -1,4 +1,4 @@
-describe('API Keys tab — UI & E2E', () => {
+describe('API Keys — UI & E2E', () => {
   beforeEach(() => {
     cy.loginE2EUser();
 
@@ -13,7 +13,7 @@ describe('API Keys tab — UI & E2E', () => {
     }).as('getApiKeys');
   });
 
-  it('renders the dedicated /api-keys tab with keys section and MCP docs', () => {
+  it('renders the dedicated /api-keys page with keys section and MCP docs', () => {
     cy.visit('/api-keys');
     cy.wait('@getApiKeys');
 
@@ -31,9 +31,13 @@ describe('API Keys tab — UI & E2E', () => {
     cy.get('[data-testid="copy-mcp-prompt-btn"]').scrollIntoView().should('be.visible');
   });
 
-  it('navigates to /api-keys from the sidebar tab', () => {
-    cy.visit('/');
-    cy.get('a[href="/api-keys"]').first().click();
+  it('navigates to /api-keys from the profile area', () => {
+    cy.visit('/account');
+    // The desktop sidebar footer renders the same AccountPanel, so scope
+    // to the page container (same duplicate-DOM reason as account-profile.cy.ts).
+    cy.get('[data-testid=account-page] [data-testid=profile-api-keys-link]')
+      .scrollIntoView()
+      .click();
     cy.url().should('include', '/api-keys');
     cy.wait('@getApiKeys');
     cy.contains('h1', 'API Keys').should('be.visible');

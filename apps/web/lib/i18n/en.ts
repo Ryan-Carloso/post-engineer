@@ -9,6 +9,8 @@ export const enDictionary: Dictionary = {
   nav: {
     brand: 'Post Engineer',
     brandSubtitle: 'YouTube · Instagram',
+    home: 'Home',
+    homeHint: 'Overview',
     accounts: 'Accounts',
     accountsHint: 'Connect and manage',
     create: 'Create post',
@@ -25,6 +27,14 @@ export const enDictionary: Dictionary = {
     posts: 'Posts',
     postsHint: 'History and schedule',
     primaryNavigation: 'Primary navigation',
+    profile: 'Profile',
+  },
+
+  // Account area — Profile page (mobile header avatar + /account route)
+  account: {
+    title: 'Profile',
+    subtitle: 'Your info, tokens and preferences.',
+    version: 'Version',
   },
 
   // Posts page — history + upcoming posts from all accounts

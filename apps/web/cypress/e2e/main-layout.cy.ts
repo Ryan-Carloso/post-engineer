@@ -83,11 +83,12 @@ function seedUserMetadata(userMetadata: Record<string, unknown>): void {
 
 //---------------
 // The shell is `h-dvh overflow-hidden` with a `h-screen` sidebar, so on a
-// short viewport the footer (locale, tokens, user) is clipped off-screen.
-// Cypress reports the clipped name as not visible, so these specs use a
-// viewport tall enough for the whole sidebar.
+// short viewport the footer (locale, tokens, user, api keys, sign out) is
+// clipped off-screen. Cypress reports the clipped elements as not visible
+// and cannot click them, so these specs use a viewport tall enough for the
+// whole sidebar.
 //---------------
-const TALL_VIEWPORT: [number, number] = [1280, 1000];
+const TALL_VIEWPORT: [number, number] = [1280, 1100];
 
 describe('Main Layout — Sidebar', () => {
   beforeEach(() => {
@@ -103,11 +104,14 @@ describe('Main Layout — Sidebar', () => {
     cy.contains('Post Engineer').should('be.visible');
     cy.contains('YouTube · Instagram').should('be.visible');
 
+    cy.contains('a', 'Início').should('be.visible');
     cy.contains('a', 'Posts').should('be.visible');
     cy.contains('a', 'Contas').should('be.visible');
     cy.contains('a', 'Personas').should('be.visible');
     cy.contains('a', 'Tokens').should('be.visible');
-    cy.contains('a', 'API Keys').should('be.visible');
+    // API Keys is no longer a nav tab — it lives in the profile area
+    // (sidebar footer), reachable from every page.
+    cy.get('[data-testid=profile-api-keys-link]').should('be.visible');
   });
 
   it('navega entre as páginas clicando nas abas da sidebar', () => {
