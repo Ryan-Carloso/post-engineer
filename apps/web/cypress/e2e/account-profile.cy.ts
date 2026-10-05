@@ -86,7 +86,7 @@ const MOBILE_VIEWPORT: [number, number] = [390, 844];
 // The desktop sidebar is h-screen; on a short viewport the footer (user
 // block) is clipped off-screen, so the desktop spec uses a tall viewport.
 //---------------
-const TALL_DESKTOP_VIEWPORT: [number, number] = [1280, 1000];
+const TALL_DESKTOP_VIEWPORT: [number, number] = [1280, 1100];
 
 describe('Account area — mobile header (390px)', () => {
   beforeEach(() => {

@@ -83,11 +83,12 @@ function seedUserMetadata(userMetadata: Record<string, unknown>): void {
 
 //---------------
 // The shell is `h-dvh overflow-hidden` with a `h-screen` sidebar, so on a
-// short viewport the footer (locale, tokens, user) is clipped off-screen.
-// Cypress reports the clipped name as not visible, so these specs use a
-// viewport tall enough for the whole sidebar.
+// short viewport the footer (locale, tokens, user, api keys, sign out) is
+// clipped off-screen. Cypress reports the clipped elements as not visible
+// and cannot click them, so these specs use a viewport tall enough for the
+// whole sidebar.
 //---------------
-const TALL_VIEWPORT: [number, number] = [1280, 1000];
+const TALL_VIEWPORT: [number, number] = [1280, 1100];
 
 describe('Main Layout — Sidebar', () => {
   beforeEach(() => {
