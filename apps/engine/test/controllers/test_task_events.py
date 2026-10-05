@@ -219,3 +219,22 @@ class GenerationIdLookupTests(unittest.TestCase):
         ), patch("requests.get", return_value=self._ok_response([])):
             result = video_controller._generation_id_for_task("task-1")
         self.assertIsNone(result)
+
+    def test_returns_none_on_malformed_row(self):
+        with patch.dict(
+            "os.environ",
+            {"SUPABASE_URL": "https://x.supabase.co", "SUPABASE_SERVICE_ROLE_KEY": "k"},
+        ), patch("requests.get", return_value=self._ok_response([{"invalid": "structure"}])):
+            result = video_controller._generation_id_for_task("task-1")
+        self.assertIsNone(result)
+
+    def test_returns_none_on_malformed_json_body(self):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.side_effect = ValueError("not json")
+        with patch.dict(
+            "os.environ",
+            {"SUPABASE_URL": "https://x.supabase.co", "SUPABASE_SERVICE_ROLE_KEY": "k"},
+        ), patch("requests.get", return_value=resp):
+            result = video_controller._generation_id_for_task("task-1")
+        self.assertIsNone(result)
