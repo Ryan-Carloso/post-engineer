@@ -484,7 +484,7 @@ describe('GET /api/schedule/slots/[slotId]', () => {
   it('enriches a generating slot with live engine progress', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ data: { progress: 62, stage: 'lipsync' } }) })),
+      vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ body: { progress: 62, stage: 'lipsync' } }) })),
     );
     const client = mockSlotsClient({
       slot: { ...SLOT_DETAIL_ROW, status: 'generating', task_id: 'task-1' },
@@ -562,7 +562,7 @@ describe('GET /api/schedule/slots/[slotId] published links', () => {
       vi.fn(async () => ({
         ok: true,
         status: 200,
-        json: async () => ({ data: { state: 2, progress: 100, publish_results: publishResults } }),
+        json: async () => ({ body: { state: 2, progress: 100, publish_results: publishResults } }),
       })),
     );
     const client = mockSlotsClient({
