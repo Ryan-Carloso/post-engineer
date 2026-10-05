@@ -151,8 +151,8 @@ const MobileNavigation = () => {
     isActive: boolean;
   }> = [
     { href: '/', labelKey: 'nav.home', icon: HomeIcon, isActive: pathname === '/' },
-    { href: '/personas', labelKey: 'nav.persona', icon: SparklesIcon, isActive: pathname.startsWith('/persona') },
     { href: '/posts', labelKey: 'nav.posts', icon: HistoryIcon, isActive: pathname.startsWith('/posts') },
+    { href: '/personas', labelKey: 'nav.persona', icon: SparklesIcon, isActive: pathname.startsWith('/persona') },
     { href: '/accounts', labelKey: 'nav.accounts', icon: AccountsIcon, isActive: pathname.startsWith('/accounts') },
     { href: '/billing', labelKey: 'nav.billing', icon: CoinsIcon, isActive: pathname.startsWith('/billing') },
   ];

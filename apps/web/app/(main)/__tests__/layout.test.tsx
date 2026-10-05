@@ -356,12 +356,12 @@ describe('app/(main)/layout — MainLayout', () => {
       expect(postsLink?.getAttribute('href')).toBe('/posts');
     });
 
-    it('renders tabs in order: Home, Personas, Posts, Accounts, Billing', () => {
+    it('renders tabs in order: Home, Posts, Personas, Accounts, Billing', () => {
       render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
       const labels = within(getMobileNav())
         .getAllByRole('link')
         .map((link) => link.textContent);
-      expect(labels).toEqual(['nav.home', 'nav.persona', 'nav.posts', 'nav.accounts', 'nav.billing']);
+      expect(labels).toEqual(['nav.home', 'nav.posts', 'nav.persona', 'nav.accounts', 'nav.billing']);
     });
 
     it('has no API Keys tab in the mobile nav (moved to the profile area)', () => {
