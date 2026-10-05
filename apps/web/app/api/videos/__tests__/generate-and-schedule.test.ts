@@ -91,7 +91,7 @@ interface DbConfig {
   existingScheduleId?: string | null;
   scheduleLookupError?: boolean;
   replaySlots?: Array<{ id: string; slot_at: string; topic: string; task_id: string | null; status: string }>;
-  slotCount?: number;
+  slotCount?: number | null;
   ledgerIds?: string[];
   ledgerError?: boolean;
   spend?: { spent: boolean; balance: number };
@@ -211,7 +211,9 @@ function makeClient(cfg: DbConfig): unknown {
         }
         if (name === 'scheduled_posts') {
           if (isCountQuery) {
-            const count = cfg.slotCount ?? (cfg.replaySlots ?? []).length;
+            // An explicit null pins the DB returning a null count without
+            // an error (undefined falls back to the replay fixture length).
+            const count = cfg.slotCount === undefined ? (cfg.replaySlots ?? []).length : cfg.slotCount;
             return Promise.resolve({ data: [], count, error: null }).then(resolve, reject);
           }
           return Promise.resolve({ data: cfg.replaySlots ?? [], error: null }).then(resolve, reject);
@@ -854,6 +856,33 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const spends = rpcCalls.filter((c) => c.name === 'spend_tokens');
       expect(spends).toHaveLength(1);
       expect(spends[0].args.p_amount).toBe(4);
+    });
+
+    it('treats a null slot count as a 0-slot zombie and runs fresh', async () => {
+      // The count query can return a null count without an error; the route
+      // coerces null to 0 so a count-less schedule is treated as a zombie
+      // and deleted instead of being replayed empty.
+      const key = 'null-count-zombie-key';
+      const scheduleId = deterministicUuid(IDEMPOTENCY_NAMESPACE, `${USER_ID}:${key}`);
+      setup({
+        ...DEFAULT_CFG,
+        existingScheduleId: scheduleId,
+        replaySlots: [],
+        slotCount: null,
+        // A previous attempt spent but died before creating slots.
+        ledgerIds: ['tx-old'],
+      });
+      const res = await post(baseBody({ idempotencyKey: key }));
+      const json = await res.json();
+      expect(res.status).toBe(200);
+      // Not a replay: the zombie was cleared and the operation ran fresh.
+      expect(json.replayed).toBe(false);
+      expect(json.schedule.id).toBe(scheduleId);
+      expect(json.slots).toHaveLength(2);
+      // The zombie schedule row was deleted.
+      expect(deletes).toContain('schedules');
+      // No second charge: the ledger already had this generation_id.
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
     });
 
     it('returns 500 without charging when the idempotency schedule lookup fails', async () => {
