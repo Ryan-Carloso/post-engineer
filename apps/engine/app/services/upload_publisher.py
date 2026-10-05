@@ -1,8 +1,5 @@
 """Publish finished videos through the internal upload API.
 
-CI validation note: this comment line exists to exercise the
-`mutation (engine)` per-PR path; it carries no behavior change.
-
 Contract target: ``POST https://post-engineer.com/api/upload-content``
 (Next.js route ``apps/web/app/api/upload-content/route.ts``).
 

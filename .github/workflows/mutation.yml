@@ -218,6 +218,13 @@ jobs:
         if: github.event_name == 'workflow_dispatch' || steps.changed.outputs.files != ''
         run: uv run mutmut run
 
+      - name: Export CI/CD stats
+        if: always()
+        run: |
+          if [ -d mutants ]; then
+            uv run mutmut export-cicd-stats
+          fi
+
       - name: Upload mutmut report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -233,12 +240,12 @@ jobs:
           {
             echo "## Mutation testing — engine"
             echo ""
-            if [ -d mutants ]; then
-              uv run mutmut export-cicd-stats
+            STATS="mutants/mutmut-cicd-stats.json"
+            if [ -f "$STATS" ]; then
               read -r SCORE KILLED SURVIVED TIMEOUT TOTAL <<< "$(
                 uv run python -c "
           import json
-          d = json.load(open('mutants/mutmut-cicd-stats.json'))
+          d = json.load(open('$STATS'))
           total = d['total']
           killed = d['killed']
           survived = d['survived']
