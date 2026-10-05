@@ -269,7 +269,7 @@ def _task_tracking_context(task_id: str) -> dict[str, object]:
         "flow": task.get("flow") or "unknown",
         "pipeline": task.get("pipeline") or "unknown",
     }
-    for key in ("persona_id", "slot_id", "schedule_id"):
+    for key in ("persona_id", "slot_id", "schedule_id", "generation_id"):
         value = task.get(key)
         if isinstance(value, str) and value:
             context[key] = value

@@ -12,6 +12,7 @@ import json
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -167,3 +168,54 @@ class TaskEventsTests(unittest.TestCase):
             self.assertEqual(ctx.exception.status_code, 404)
         finally:
             sm.state.delete_task("other-task")
+
+
+class GenerationIdLookupTests(unittest.TestCase):
+    """Best-effort generation_id resolution on the 404 path.
+
+    When a task row is gone the row-based tracking context can't help;
+    _generation_id_for_task resolves the web generation_id from
+    video_generations so the 404 $exception stays correlatable.
+    It must never raise: missing credentials or any failure degrades to
+    None and the 404 still goes out.
+    """
+
+    def _ok_response(self, rows):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = rows
+        return resp
+
+    def test_returns_generation_id_on_success(self):
+        with patch.dict(
+            "os.environ",
+            {"SUPABASE_URL": "https://x.supabase.co", "SUPABASE_SERVICE_ROLE_KEY": "k"},
+        ), patch("requests.get", return_value=self._ok_response(
+            [{"generation_id": "gen-abc-123"}]
+        )) as get:
+            result = video_controller._generation_id_for_task("task-1")
+        self.assertEqual(result, "gen-abc-123")
+        _, kwargs = get.call_args
+        self.assertIn("video_generations", get.call_args[0][0])
+        self.assertEqual(kwargs["params"]["engine_task_id"], "eq.task-1")
+
+    def test_returns_none_without_credentials(self):
+        with patch.dict("os.environ", {}, clear=True):
+            result = video_controller._generation_id_for_task("task-1")
+        self.assertIsNone(result)
+
+    def test_returns_none_on_request_failure(self):
+        with patch.dict(
+            "os.environ",
+            {"SUPABASE_URL": "https://x.supabase.co", "SUPABASE_SERVICE_ROLE_KEY": "k"},
+        ), patch("requests.get", side_effect=Exception("boom")):
+            result = video_controller._generation_id_for_task("task-1")
+        self.assertIsNone(result)
+
+    def test_returns_none_on_empty_rows(self):
+        with patch.dict(
+            "os.environ",
+            {"SUPABASE_URL": "https://x.supabase.co", "SUPABASE_SERVICE_ROLE_KEY": "k"},
+        ), patch("requests.get", return_value=self._ok_response([])):
+            result = video_controller._generation_id_for_task("task-1")
+        self.assertIsNone(result)
