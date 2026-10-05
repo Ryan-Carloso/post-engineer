@@ -2,8 +2,11 @@
 // withApiErrorReporting — unit tests.
 //
 // Next.js's onRequestError (instrumentation.ts) only fires for unhandled
-// (thrown) errors. This wrapper closes the gap for handled 5xx: routes
-// that catch a failure and return a 500 response.
+// (thrown) errors. This wrapper closes the gap for handled responses:
+// 5xx go to PostHog error tracking ($exception), other 4xx go as warnings
+// (server_warning), 2xx go as plain success events (server_success).
+// 401/403 stay console-only — unauthenticated scanner traffic must not
+// become billable analytics volume.
 //---------------
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -47,7 +50,7 @@ afterEach(() => {
 });
 
 describe('withApiErrorReporting', () => {
-  it('passes a 2xx response through unchanged and reports nothing', async () => {
+  it('reports a 2xx as a server_success event (never an $exception)', async () => {
     const handler = vi.fn(async (_req: NextRequest) => NextResponse.json({ ok: true }));
     const wrapped = withApiErrorReporting('GET /api/test', handler);
 
@@ -57,11 +60,95 @@ describe('withApiErrorReporting', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
     expect(handler).toHaveBeenCalledWith(req);
+    await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
+    const [event, properties] = client.capture.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(event).toBe('server_success');
+    expect(properties).toMatchObject({ route: 'GET /api/test', status: 200 });
     expect(client.captureException).not.toHaveBeenCalled();
   });
 
-  it.each([400, 401, 403, 404, 422, 429])(
-    'does not report a %i response',
+  it.each([201, 204])('reports a %i as a server_success event', async (status) => {
+    const wrapped = withApiErrorReporting(
+      'GET /api/test',
+      async () => new NextResponse(null, { status }) as NextResponse,
+    );
+
+    const res = await wrapped(getRequest());
+
+    expect(res.status).toBe(status);
+    await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
+    const [event, properties] = client.capture.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(event).toBe('server_success');
+    expect(properties).toMatchObject({ route: 'GET /api/test', status });
+    expect(client.captureException).not.toHaveBeenCalled();
+  });
+
+  it.each([301, 304])('does not report a %i redirect', async (status) => {
+    const wrapped = withApiErrorReporting(
+      'GET /api/test',
+      async () => new NextResponse(null, { status }) as NextResponse,
+    );
+
+    const res = await wrapped(getRequest());
+
+    expect(res.status).toBe(status);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(client.capture).not.toHaveBeenCalled();
+    expect(client.captureException).not.toHaveBeenCalled();
+  });
+
+  it('does not report a 2xx outside production', async () => {
+    vi.stubEnv('NODE_ENV', 'test');
+    const wrapped = withApiErrorReporting(
+      'GET /api/test',
+      async () => NextResponse.json({ ok: true }),
+    );
+
+    const res = await wrapped(getRequest());
+
+    expect(res.status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(client.capture).not.toHaveBeenCalled();
+    expect(client.captureException).not.toHaveBeenCalled();
+  });
+
+  it.each([400, 402, 404, 422, 429])(
+    'reports a %i response as a server_warning (never an $exception)',
+    async (status) => {
+      const wrapped = withApiErrorReporting(
+        'GET /api/test',
+        async () =>
+          NextResponse.json({ error: 'nope', code: 'BAD_INPUT' }, { status }),
+      );
+
+      const res = await wrapped(getRequest());
+
+      expect(res.status).toBe(status);
+      await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
+      const [event, properties] = client.capture.mock.calls[0] as [
+        string,
+        Record<string, unknown>,
+      ];
+      expect(event).toBe('server_warning');
+      expect(properties).toMatchObject({
+        route: 'GET /api/test',
+        status,
+        code: 'BAD_INPUT',
+      });
+      expect(client.captureException).not.toHaveBeenCalled();
+      // The client-visible response is never mutated by reporting.
+      expect(await res.json()).toMatchObject({ code: 'BAD_INPUT' });
+    },
+  );
+
+  it.each([401, 403])(
+    'leaves a %i auth failure console-only (no PostHog at all)',
     async (status) => {
       const wrapped = withApiErrorReporting(
         'GET /api/test',
@@ -71,6 +158,9 @@ describe('withApiErrorReporting', () => {
       const res = await wrapped(getRequest());
 
       expect(res.status).toBe(status);
+      // Give the fire-and-forget path a chance to (incorrectly) run.
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(client.capture).not.toHaveBeenCalled();
       expect(client.captureException).not.toHaveBeenCalled();
     },
   );
@@ -211,7 +301,23 @@ describe('withApiErrorReporting', () => {
     expect(client.captureException).not.toHaveBeenCalled();
   });
 
-  it('does not report outside production (dev/test noise stays out of PostHog)', async () => {
+  it('skips a 4xx already reported by apiErrorResponse (no double server_warning)', async () => {
+    const alreadyReported = NextResponse.json(
+      { success: false, error: 'x', code: 'BAD_INPUT' },
+      { status: 422 },
+    );
+    markApiErrorReported(alreadyReported);
+    const wrapped = withApiErrorReporting('GET /api/test', async () => alreadyReported);
+
+    const res = await wrapped(getRequest());
+
+    expect(res.status).toBe(422);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(client.capture).not.toHaveBeenCalled();
+    expect(client.captureException).not.toHaveBeenCalled();
+  });
+
+  it('does not report a 5xx outside production (dev/test noise stays out of PostHog)', async () => {
     vi.stubEnv('NODE_ENV', 'test');
     const wrapped = withApiErrorReporting(
       'GET /api/test',
@@ -223,6 +329,57 @@ describe('withApiErrorReporting', () => {
     expect(res.status).toBe(500);
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(client.captureException).not.toHaveBeenCalled();
+  });
+
+  it('does not warn on a 4xx outside production (dev/test noise stays out of PostHog)', async () => {
+    vi.stubEnv('NODE_ENV', 'test');
+    const wrapped = withApiErrorReporting(
+      'GET /api/test',
+      async () => NextResponse.json({ error: 'x' }, { status: 404 }),
+    );
+
+    const res = await wrapped(getRequest());
+
+    expect(res.status).toBe(404);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(client.capture).not.toHaveBeenCalled();
+    expect(client.captureException).not.toHaveBeenCalled();
+  });
+
+  it('includes the user id in a 4xx warning when getUserId resolves', async () => {
+    const wrapped = withApiErrorReporting(
+      'GET /api/test',
+      async () => NextResponse.json({ error: 'x' }, { status: 404 }),
+      { getUserId: async () => 'user-123' },
+    );
+
+    await wrapped(getRequest());
+
+    await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
+    const [event, properties] = client.capture.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(event).toBe('server_warning');
+    expect(properties).toMatchObject({ userId: 'user-123', status: 404 });
+  });
+
+  it('includes the errorId from a 4xx body for correlation', async () => {
+    const wrapped = withApiErrorReporting(
+      'GET /api/test',
+      async () =>
+        NextResponse.json({ success: false, error: 'x', errorId: 'log-456' }, { status: 400 }),
+    );
+
+    await wrapped(getRequest());
+
+    await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
+    const [event, properties] = client.capture.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(event).toBe('server_warning');
+    expect(properties).toMatchObject({ errorId: 'log-456' });
   });
 
   it('returns the response untouched when PostHog is unconfigured (null client)', async () => {

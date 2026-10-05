@@ -127,8 +127,10 @@ export function apiErrorResponse(
   }
 
   const response = NextResponse.json({ success: false, error, errorId, ...extra }, { status });
-  // logger.error above already reports 5xx to PostHog: mark the response so
-  // withApiErrorReporting skips it instead of emitting a second $exception.
-  if (status >= 500) markApiErrorReported(response);
+  // logger.error (5xx) and logger.warn (other 4xx) above already reported to
+  // PostHog: mark the response so withApiErrorReporting skips it instead of
+  // emitting a duplicate. 401/403 are console-only (unreported) — leave
+  // them unmarked; the wrapper stays silent for them on its own.
+  if (status >= 400 && status !== 401 && status !== 403) markApiErrorReported(response);
   return response;
 }
