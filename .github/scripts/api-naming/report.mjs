@@ -69,6 +69,6 @@ export function buildCommentBody(findings, warnings, meta) {
     parts.push('');
   }
   parts.push('_Only newly added contract names are linted; existing names are grandfathered._');
-  parts.push('_See `docs/API_NAMING_LINT.md` for the denylist, exceptions, and how to read this._');
+  parts.push('_See `docs/API_NAMING_LINT.md` for the denylist and how to read this._');
   return parts.join('\n');
 }

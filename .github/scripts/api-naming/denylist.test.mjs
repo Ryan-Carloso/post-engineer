@@ -11,7 +11,6 @@ const BASE_CONFIG = {
     info: { severity: 'warn', reason: 'Vague.' },
   },
   allowlist: ['id'],
-  exceptions: [{ path: 'apps/engine/app/models/schema.py', names: ['data'], reason: 'legacy envelope' }],
   llm: { enabled: true, baseUrl: '', model: '', maxNames: 20, timeoutMs: 30000 },
 };
 
@@ -46,12 +45,13 @@ describe('checkDenylist', () => {
     assert.equal(findings[0].severity, 'warn');
   });
 
-  it('skips configured exceptions (legacy data envelope in engine schema)', () => {
+  it('has no exceptions mechanism: denylisted names fail in every path', () => {
     const findings = checkDenylist(
       [candidate('data', 'apps/engine/app/models/schema.py', 320)],
       BASE_CONFIG,
     );
-    assert.deepEqual(findings, []);
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0].severity, 'error');
   });
 
   it('still flags denylisted names outside the exception path', () => {
@@ -82,7 +82,7 @@ describe('checkDenylist', () => {
   });
 });
 
-describe('matchesGlob (used by exceptions)', () => {
+describe('matchesGlob (glob matching for apiPaths)', () => {
   it('matches exception paths with **', () => {
     assert.ok(matchesGlob('apps/engine/app/models/schema.py', 'apps/engine/app/models/schema.py'));
     assert.ok(!matchesGlob('apps/engine/app/models/other.py', 'apps/engine/app/models/schema.py'));

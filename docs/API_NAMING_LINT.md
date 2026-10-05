@@ -45,8 +45,10 @@ Problem: Unclear from the JSON alone: replaying data, rerunning a job, or retryi
 ```
 
 Fix: rename the field to something self-explanatory (`retryCount`,
-`attemptCount`, …). If you believe the name is actually clear, see
-exceptions below — but the bar is "understandable from the JSON alone".
+`attemptCount`, …). The bar is "understandable from the JSON alone" —
+there is no exceptions mechanism; a denylisted name is either renamed or
+it fails the lint. If a name on the denylist is actually clear in every
+context, remove it from the denylist instead.
 
 ## Adding a banned name
 
@@ -61,21 +63,6 @@ denylist:
 
 Severity `error` fails CI; `warn` only annotates. Keep the reason factual —
 it is shown verbatim in the PR comment.
-
-## Adding an exception
-
-For established project conventions only (not to silence new ambiguity):
-
-```yaml
-exceptions:
-  - path: "apps/engine/app/models/schema.py"
-    names: ["data"]
-    reason: "Legacy BaseResponse envelope convention."
-```
-
-`path` is a glob (`*` within a segment, `**` across segments), `names`
-match case-insensitively. There is also a top-level `allowlist` for names
-that are always fine.
 
 ## Setting the LLM key (GitHub Secrets)
 
