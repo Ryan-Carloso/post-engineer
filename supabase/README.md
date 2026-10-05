@@ -13,6 +13,7 @@ the order — you never need to guess or read docs to know what comes next:
 | 005 | `migrations/005_persona-visual-identity.sql` | CHECK: a persona never has both `photo_path` and `avatar_url` |
 | 006 | `migrations/006_test-deploy-supabase.sql`    | Test-deploy schema verification (CI/dev only)    |
 | 007 | `migrations/007_personas-drop-face-mix.sql`  | `scheduled_posts.faceless` (per-post "no face") + `drop column personas.face_mix_percent`: personas are always faced. **Destructive** — needs the `db:destructive-approved` PR label |
+| 008 | `migrations/008_video-generations-engine-task-id-idx.sql` | Index `video_generations.engine_task_id`: generation_id ↔ task_id correlation for debugging. No FK (engine_task_state is ephemeral) |
 
 ## How to apply
 

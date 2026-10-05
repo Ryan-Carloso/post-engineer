@@ -281,6 +281,7 @@ def track_generation_requested(
     user_id: str,
     flow: str,
     pipeline: str = "video",
+    generation_id: str | None = None,
     **extra: object,
 ) -> None:
     """Report a generation request BEFORE the pipeline starts.
@@ -293,19 +294,25 @@ def track_generation_requested(
     Emission is deduped per task id (bounded check-and-record): batch ids
     are deterministic, so a crash re-dispatch must not double-count one
     logical generation.
+
+    ``generation_id`` is the caller's own correlation id (the web's
+    video_generations row id). It is stamped as an explicit parameter —
+    not just read back from the task row — because requested fires from
+    the acceptance callback while the row write may still be racing in
+    another thread; the event must not lose the correlation id.
     """
     if not _should_emit_requested_event(task_id):
         return
-    track_event(
-        "video_generation_requested",
-        {
-            "task_id": task_id,
-            "user_id": user_id,
-            "flow": flow,
-            "pipeline": pipeline,
-            **extra,
-        },
-    )
+    properties: dict[str, object] = {
+        "task_id": task_id,
+        "user_id": user_id,
+        "flow": flow,
+        "pipeline": pipeline,
+        **extra,
+    }
+    if isinstance(generation_id, str) and generation_id:
+        properties["generation_id"] = generation_id
+    track_event("video_generation_requested", properties)
 
 
 def track_generation_started(task_id: str) -> None:
