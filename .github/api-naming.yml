@@ -58,6 +58,9 @@ exceptions:
   - path: "apps/engine/app/models/schema.py"
     names: ["data"]
     reason: "Legacy BaseResponse envelope convention; new engine response models follow it."
+  - path: "apps/engine/app/models/exception.py"
+    names: ["data"]
+    reason: "Pre-existing HttpException constructor param; flagged only because a reformat moved it onto an added diff line."
 
 # LLM review layer (second pass over names that clear the denylist).
 llm:

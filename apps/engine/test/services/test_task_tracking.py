@@ -44,6 +44,18 @@ class RequestedTests(unittest.TestCase):
             },
         )
 
+    def test_track_generation_requested_carries_generation_id(self):
+        with patch.object(tm, "track_event") as track:
+            tm.track_generation_requested(
+                "task-1",
+                user_id="user-1",
+                flow="direct",
+                pipeline="video",
+                generation_id="gen-abc-123",
+            )
+        _, props = track.call_args[0]
+        self.assertEqual(props["generation_id"], "gen-abc-123")
+
     def test_track_generation_requested_carries_extra_context(self):
         with patch.object(tm, "track_event") as track:
             tm.track_generation_requested(
@@ -861,12 +873,31 @@ class TestDispatchFailedGuardLockFallback(unittest.TestCase):
 class TrackingContextIdentityTests(unittest.TestCase):
     """Optional identity props on the shared tracking context.
 
-    persona_id/slot_id/schedule_id ride along when the task row carries
-    them, so every lifecycle event (started/progress/failed/generated)
-    can be broken down per persona and per schedule in PostHog. They are
-    OMITTED when absent — never the "unknown" sentinel — so breakdowns
-    don't fill with noise.
+    persona_id/slot_id/schedule_id/generation_id ride along when the task
+    row carries them, so every lifecycle event
+    (started/progress/failed/generated) can be broken down per persona, per
+    schedule and per web generation in PostHog. They are OMITTED when
+    absent — never the "unknown" sentinel — so breakdowns don't fill with
+    noise.
     """
+
+    def test_tracking_context_includes_generation_id_from_task_row(self):
+        sm.state.update_task(
+            "ctx-task-gen",
+            user_id="user-1",
+            flow="direct",
+            pipeline="video",
+            generation_id="gen-abc-123",
+        )
+        try:
+            context = tm._task_tracking_context("ctx-task-gen")
+        finally:
+            sm.state.delete_task("ctx-task-gen")
+        self.assertEqual(context["generation_id"], "gen-abc-123")
+
+    def test_tracking_context_omits_generation_id_when_task_row_lacks_it(self):
+        context = tm._task_tracking_context("ghost-task-xyz")
+        self.assertNotIn("generation_id", context)
 
     def test_tracking_context_includes_identity_ids_from_task_row(self):
         sm.state.update_task(

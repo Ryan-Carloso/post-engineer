@@ -40,6 +40,10 @@ const REQUEST_FORWARD_FIELDS: ReadonlyArray<string> = [
   // as http(s)); it must survive the allowlist so per-request callbacks
   // (MCP webhookUrl) reach the engine's terminal dispatch.
   'webhook_url',
+  // generation_id is a first-class engine field (TaskVideoRequest carries
+  // it as the web-side correlation id); it must survive the allowlist so
+  // the engine can tag its PostHog events with it.
+  'generation_id',
 ];
 
 export interface JobPersona {

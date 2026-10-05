@@ -19,6 +19,25 @@ class HttpExceptionLoggingTests(unittest.TestCase):
             task_id="task-1", http_status_code=404
         )
 
+    def test_binds_generation_id_when_provided(self):
+        with patch("app.models.exception.logger") as mock_logger:
+            HttpException(
+                task_id="task-1",
+                status_code=404,
+                message="nope",
+                generation_id="gen-abc-123",
+            )
+        mock_logger.bind.assert_called_once_with(
+            task_id="task-1", http_status_code=404, generation_id="gen-abc-123"
+        )
+
+    def test_omits_generation_id_when_not_provided(self):
+        with patch("app.models.exception.logger") as mock_logger:
+            HttpException(task_id="task-1", status_code=404, message="nope")
+        mock_logger.bind.assert_called_once_with(
+            task_id="task-1", http_status_code=404
+        )
+
     def test_non_400_logs_at_error_level(self):
         with patch("app.models.exception.logger") as mock_logger:
             HttpException(task_id="task-1", status_code=404, message="nope")

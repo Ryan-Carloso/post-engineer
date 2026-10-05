@@ -60,7 +60,7 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { isPersonaAllowed } from '@/lib/api-keys';
-import { startEngineVideoTask } from '@/lib/generation/video-generation';
+import { startEngineVideoTask, recordGenerationStart } from '@/lib/generation/video-generation';
 import { checkCustomAudioUrl } from '@/lib/generation/custom-audio';
 import { resolveVideoImage } from '@/lib/persona-images';
 import { IDEMPOTENCY_NAMESPACE, deterministicUuid } from '@/lib/idempotency';
@@ -451,6 +451,19 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(payload.lipsync_enabled).toBe(true);
       // The persona's face quality becomes the job resolution.
       expect(payload.video_quality).toBe('ok');
+    });
+
+    it('sends generation_id to the engine so PostHog events stay correlatable', async () => {
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+      // recordGenerationStart is mocked, but its recorded input carries the
+      // generation_id the route computed for the video_generations row.
+      const genInput = vi.mocked(recordGenerationStart).mock.calls[0][0] as { generationId: string };
+      // The engine payload carries the same generation_id: the engine tags
+      // its PostHog events with it.
+      expect(payload.generation_id).toBe(genInput.generationId);
+      expect(typeof payload.generation_id).toBe('string');
     });
 
     it('sends lipsync: false and no persona quality for a faceless post', async () => {

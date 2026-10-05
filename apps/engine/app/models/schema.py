@@ -276,6 +276,11 @@ class TaskVideoRequest(VideoParams, BaseModel):
     # Optional callback fired once when the task reaches a terminal state
     # (completed/failed). Must be http(s); delivery is fire-and-forget.
     webhook_url: Optional[str] = None
+    # Web-side correlation id (video_generations.generation_id). Carried
+    # through the task row into PostHog events so a generation can be
+    # traced end-to-end without a database lookup. Never used as the task
+    # id itself — the engine keeps minting its own task ids.
+    generation_id: Optional[str] = None
 
     @field_validator("webhook_url")
     @classmethod

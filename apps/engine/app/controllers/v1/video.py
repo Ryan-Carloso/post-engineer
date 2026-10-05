@@ -216,6 +216,55 @@ def _persona_tracking_kwargs(
     return {}
 
 
+def _generation_tracking_kwargs(
+    body: Union[TaskVideoRequest, SubtitleRequest, AudioRequest],
+) -> dict[str, str]:
+    """generation_id for the task row (read back by the PostHog tracking
+    context). Only TaskVideoRequest carries one; omitted when absent so
+    the row — and the events — stay free of blank props."""
+    generation_id = getattr(body, "generation_id", None)
+    if isinstance(generation_id, str) and generation_id:
+        return {"generation_id": generation_id}
+    return {}
+
+
+def _generation_id_for_task(task_id: str) -> str | None:
+    """Best-effort: resolve the web generation_id for an engine task id.
+
+    Used on the 404 path, where the task row is gone and the row-based
+    tracking context can't help. A lost task is exceptional (not hot),
+    so one indexed Supabase lookup is acceptable. Never raises: without
+    Supabase credentials (or on any failure) the 404 still goes out,
+    just without the generation_id property.
+    """
+    try:
+        import requests
+
+        base_url = os.getenv("SUPABASE_URL")
+        key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        if not base_url or not key:
+            return None
+        resp = requests.get(
+            f"{base_url.rstrip('/')}/rest/v1/video_generations",
+            params={
+                "select": "generation_id",
+                "engine_task_id": f"eq.{task_id}",
+                "limit": "1",
+            },
+            headers={"apikey": key, "Authorization": f"Bearer {key}"},
+            timeout=5,
+        )
+        if resp.status_code != 200:
+            return None
+        rows = resp.json()
+        if rows and isinstance(rows[0], dict):
+            value = rows[0].get("generation_id")
+            return value if isinstance(value, str) and value else None
+        return None
+    except Exception:  # noqa: BLE001 — telemetry degrades, the 404 still goes out
+        return None
+
+
 def create_task(
     request: Request,
     body: Union[TaskVideoRequest, SubtitleRequest, AudioRequest],
@@ -237,6 +286,7 @@ def create_task(
             # failed/generated) read persona_id from the task row, so the
             # funnel can be broken down per persona instead of "unknown".
             **_persona_tracking_kwargs(body),
+            **_generation_tracking_kwargs(body),
         )
         # Funnel entry: requested fires from on_accepted once the task is
         # ACCEPTED into the queue — strictly before the worker thread
@@ -248,7 +298,8 @@ def create_task(
             params=body,
             stop_at=stop_at,
             on_accepted=lambda: tm.track_generation_requested(
-                task_id, user_id=auth.user_id, flow="direct", pipeline=stop_at
+                task_id, user_id=auth.user_id, flow="direct", pipeline=stop_at,
+                **_generation_tracking_kwargs(body),
             ),
         )
         logger.success(f"Task created: task_id={task_id}")
@@ -311,7 +362,10 @@ def get_task(
         return utils.get_response(200, response_task)
 
     raise HttpException(
-        task_id=task_id, status_code=404, message=f"{request_id}: task not found"
+        task_id=task_id,
+        status_code=404,
+        message=f"{request_id}: task not found",
+        generation_id=_generation_id_for_task(task_id),
     )
 
 
@@ -328,7 +382,10 @@ async def task_events(
     task = sm.state.get_task(task_id, user_id=auth.user_id)
     if not task:
         raise HttpException(
-            task_id=task_id, status_code=404, message=f"{request_id}: task not found"
+            task_id=task_id,
+            status_code=404,
+            message=f"{request_id}: task not found",
+            generation_id=_generation_id_for_task(task_id),
         )
     return StreamingResponse(
         _task_event_stream(task_id, auth.user_id, request.is_disconnected),
@@ -401,7 +458,10 @@ def delete_video(request: Request, task_id: str = Path(..., description="Task ID
         return utils.get_response(200)
 
     raise HttpException(
-        task_id=task_id, status_code=404, message=f"{request_id}: task not found"
+        task_id=task_id,
+        status_code=404,
+        message=f"{request_id}: task not found",
+        generation_id=_generation_id_for_task(task_id),
     )
 
 
