@@ -137,12 +137,35 @@ testpaths = ["test"]
 norecursedirs = ["mutants"]
 
 [tool.mutmut]
+# Python mutation testing for the engine (mutmut 3.x), wired into
+# .github/workflows/mutation.yml as the `mutation (engine)` check.
+#
+# source_paths covers the whole app package so mutmut's mutants/ working
+# copy is a complete, importable tree. Per-PR scoping is applied in CI by
+# overwriting only_mutate with the PR's changed files; a manual
+# workflow_dispatch run keeps only_mutate empty for the full scope.
 source_paths = [
-    "app/services/upload_publisher.py",
-    "app/models/publish.py",
+    "app/",
+]
+only_mutate = []
+# Files the test run needs inside mutants/, beyond mutmut's defaults
+# (test/, pyproject.toml, uv.lock, ...).
+also_copy = [
+    "config.example.toml",
+    "cli.py",
+    "main.py",
+]
+# Test exclusions for mutmut runs (these still run in the main engine CI job):
+# - test_mypy_config.py pins the CI workflow file layout (.github/workflows/),
+#   which does not exist inside mutmut's mutants/ working copy. It exercises
+#   no app code, so it carries zero mutation signal.
+# - test/services/test_cli.py has a pre-existing order-dependent isolation flaw
+#   (loguru file sink closed by earlier tests; passes under pytest-randomly in
+#   normal CI, fails under mutmut's deterministic subset ordering).
+pytest_add_cli_args = [
+    "--ignore=test/test_mypy_config.py",
+    "--ignore=test/services/test_cli.py",
 ]
 pytest_add_cli_args_test_selection = [
-    "test/services/test_upload_publisher_contract.py",
-    "test/services/test_upload_publisher_client.py",
-    "test/models/test_publish_params.py",
+    "test/",
 ]

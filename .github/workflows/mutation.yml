@@ -1,35 +1,32 @@
 name: mutation
 
-# Mutation testing (StrykerJS) over the vitest suites.
+# Mutation testing per PR: StrykerJS over the vitest suites (web, mcp) and
+# mutmut over the engine's pytest suite.
 #
-# INFORMATIONAL ONLY — this workflow is deliberately NOT a required check and
-# must never be added to the branch ruleset: it runs `continue-on-error` and
-# must never block PRs or merges.
+# REQUIRED CHECKS — `mutation (web)`, `mutation (mcp)` and `mutation (engine)`
+# are required checks in the "main" branch ruleset (user decision,
+# 2026-10-05). They fail ONLY on execution errors (the tool crashed, the
+# baseline suite failed, ...). There are intentionally NO score thresholds:
+# a low mutation score is a signal for the PR author, not a merge blocker.
 #
 # Design (user decision, 2026-10-04): mutation runs ON EVERY PR, scoped to
 # that PR's changed files — a nightly score has no owning PR, so a big PR
 # tanking the score would need a whole new PR to fix it; per-PR keeps the
 # feedback loop tight. `workflow_dispatch` runs the full configured scope
-# (see each app's stryker.config.json) for manual baselines.
+# (see each app's stryker.config.json / the engine's [tool.mutmut]) for
+# manual baselines.
 #
-# Scope per PR: changed .ts/.tsx files under apps/web and apps/mcp,
-# excluding tests. If a PR touches no source files, the Stryker step is
-# skipped gracefully.
-# apps/engine (Python) is out of scope here — needs mutmut/Cosmic Ray in a
-# follow-up.
+# Scope per PR: changed source files (web/mcp: .ts/.tsx excluding tests;
+# engine: app/**/*.py). If a PR touches no source files for an app, that
+# app's mutation step is skipped gracefully and the check still succeeds.
 #
-# Results: the HTML report is uploaded as a per-app artifact and the
-# mutation score is printed in the job summary. The free Stryker dashboard
-# is intentionally NOT wired (needs an API key secret); artifacts suffice.
+# Results: per-app artifacts (Stryker HTML report / mutmut stats dir) and
+# the mutation score in the job summary. The free Stryker dashboard is
+# intentionally NOT wired (needs an API key secret); artifacts suffice.
 
 on:
   pull_request:
     types: [opened, synchronize]
-    paths:
-      - 'apps/web/**/*.ts'
-      - 'apps/web/**/*.tsx'
-      - 'apps/mcp/**/*.ts'
-      - '.github/workflows/mutation.yml'
   workflow_dispatch:
 
 jobs:
@@ -90,8 +87,6 @@ jobs:
       - name: Run Stryker mutation testing
         if: github.event_name == 'workflow_dispatch' || steps.changed.outputs.files != ''
         working-directory: apps/${{ matrix.app }}
-        # Informational only: never fail the PR on mutation results.
-        continue-on-error: true
         run: |
           if [ -n "${{ steps.changed.outputs.files }}" ]; then
             pnpm exec stryker run --mutate "${{ steps.changed.outputs.files }}"
@@ -134,4 +129,125 @@ jobs:
             fi
             echo ""
             echo "Full HTML report: download the \`mutation-report-${{ matrix.app }}-\` artifact from this run."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Python mutation testing for the engine (mutmut 3.x over pytest).
+  # Separate job (not matrix): the toolchain (uv, system deps) is entirely
+  # different from the Node/pnpm Stryker jobs above.
+  mutation-engine:
+    name: mutation (engine)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: apps/engine
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Full history: the changed-files diff needs origin/<base>.
+          fetch-depth: 0
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg imagemagick
+
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4
+        with:
+          version: latest
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      # Changed engine source files, relative to apps/engine (mutmut's
+      # working directory). Excludes deleted files. Empty when the PR
+      # touches no engine source — or on manual dispatch (full app/ scope).
+      - name: Compute changed files
+        id: changed
+        run: |
+          set -uo pipefail
+          files=""
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            files="$(git diff --name-only --diff-filter=ACMR \
+              "origin/${{ github.base_ref }}...HEAD" \
+              -- 'apps/engine/app/**/*.py' \
+              | sed 's|^apps/engine/||' | paste -sd ',' -)"
+          fi
+          echo "files=$files" >> "$GITHUB_OUTPUT"
+          if [ -n "$files" ]; then
+            echo "Mutating changed files: $files"
+          else
+            echo "No changed engine source files (or manual dispatch: full app/ scope)."
+          fi
+
+      # mutmut 3.x reads its config only from pyproject.toml — there is no
+      # CLI flag to override the mutated file set. Patch only_mutate in
+      # place on the ephemeral runner (never committed).
+      - name: Scope mutmut to changed files
+        if: steps.changed.outputs.files != ''
+        env:
+          CHANGED_FILES: ${{ steps.changed.outputs.files }}
+        run: |
+          uv run python - <<'EOF'
+          import os
+          import re
+
+          files = os.environ["CHANGED_FILES"].split(",")
+          p = "pyproject.toml"
+          s = open(p).read()
+          idx = s.index("[tool.mutmut]")
+          head, tail = s[:idx], s[idx:]
+          body = "\n".join(f'    "{f}",' for f in files)
+          tail = re.sub(
+              r"only_mutate = \[[^\]]*\]",
+              f"only_mutate = [\n{body}\n]",
+              tail,
+              count=1,
+          )
+          open(p, "w").write(head + tail)
+          print(f"only_mutate set to {len(files)} file(s)")
+          EOF
+
+      - name: Run mutmut mutation testing
+        if: github.event_name == 'workflow_dispatch' || steps.changed.outputs.files != ''
+        run: uv run mutmut run
+
+      - name: Upload mutmut report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mutation-report-engine-${{ github.event.pull_request.number || 'manual' }}
+          path: apps/engine/mutants/
+          if-no-files-found: ignore
+
+      - name: Mutation score summary
+        if: always()
+        run: |
+          set -uo pipefail
+          {
+            echo "## Mutation testing — engine"
+            echo ""
+            if [ -d mutants ]; then
+              uv run mutmut export-cicd-stats
+              read -r SCORE KILLED SURVIVED TIMEOUT TOTAL <<< "$(
+                uv run python -c "
+          import json
+          d = json.load(open('mutants/mutmut-cicd-stats.json'))
+          total = d['total']
+          killed = d['killed']
+          survived = d['survived']
+          timeout = d.get('timeout', 0)
+          score = (killed + timeout) * 100 // total if total else 'n/a'
+          print(score, killed, survived, timeout, total)
+          "
+              )"
+              echo "**Mutation score: ${SCORE}%** (${KILLED} killed, ${SURVIVED} survived, ${TIMEOUT} timed out, ${TOTAL} mutants)"
+            else
+              echo "No mutation report produced — no engine source files changed, or the run failed."
+            fi
+            echo ""
+            echo "Full report: download the \`mutation-report-engine-\` artifact from this run."
           } >> "$GITHUB_STEP_SUMMARY"
