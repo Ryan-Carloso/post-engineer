@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import {
   categorizeGenerationError,
   GENERATION_ERROR_CODES,
@@ -9,6 +10,59 @@ import {
 } from '../generation-errors';
 import { enDictionary } from '@/lib/i18n/en';
 import { ptDictionary } from '@/lib/i18n/pt';
+import { findRepoRoot } from '@/test/repo-root';
+
+//---------------
+// resolveEngineStatePath — locates the engine's state.py for the
+// cross-app error-code contract below. The engine source lives outside
+// the web app, so the repo root is resolved from this test file's own
+// location (import.meta.url) up to the pnpm-workspace.yaml marker —
+// never from process.cwd(), which runners like Stryker's sandbox
+// (apps/web/.stryker-tmp/...) change.
+//---------------
+function resolveEngineStatePath(): string {
+  return join(
+    findRepoRoot(import.meta.url),
+    'apps',
+    'engine',
+    'app',
+    'services',
+    'state.py',
+  );
+}
+
+describe('resolveEngineStatePath', () => {
+  it('finds the engine state.py outside any sandbox directory', () => {
+    const resolved = resolveEngineStatePath();
+    expect(resolved.endsWith(join('apps', 'engine', 'app', 'services', 'state.py'))).toBe(true);
+    expect(resolved).not.toContain('.stryker-tmp');
+    expect(existsSync(resolved)).toBe(true);
+  });
+
+  it('resolves the real repo root from a synthetic Stryker sandbox path', () => {
+    // Regression: Stryker copies the test file into
+    // apps/web/.stryker-tmp/sandbox-<n>/... and runs vitest with cwd set
+    // there. The old cwd-relative resolution produced
+    // apps/web/.stryker-tmp/engine/app/services/state.py (ENOENT, dry run
+    // failed). Walking up from the test file's own URL must skip the
+    // sandbox and land on the real repo root.
+    const repoRoot = findRepoRoot(import.meta.url);
+    const sandboxUrl = pathToFileURL(
+      join(
+        repoRoot,
+        'apps',
+        'web',
+        '.stryker-tmp',
+        'sandbox-1',
+        'lib',
+        'generation',
+        '__tests__',
+        'generation-errors.test.ts',
+      ),
+    ).href;
+    expect(findRepoRoot(sandboxUrl)).toBe(repoRoot);
+  });
+});
 
 describe('categorizeGenerationError', () => {
   it('maps custom audio failures (including the new detailed reason)', () => {
@@ -74,10 +128,7 @@ describe('engine error-code contract', () => {
     // Cross-app contract: the engine writes error_code literals in
     // apps/engine/app/services/state.py; each must be a member of the
     // web union or the UI falls back to the generic errorUnknown copy.
-    const engineState = readFileSync(
-      join(process.cwd(), '..', 'engine', 'app', 'services', 'state.py'),
-      'utf8',
-    );
+    const engineState = readFileSync(resolveEngineStatePath(), 'utf8');
     const written = [
       ...engineState.matchAll(/"error_code":\s*"([a-z_]+)"/g),
     ].map((m) => m[1]);
@@ -116,10 +167,7 @@ describe('engine error-code contract', () => {
     // web's video-status poll re-categorizes when the refund backstop runs.
     // Without this rule the stored engine_restart code would be downgraded
     // to unknown (generic copy, not retryable).
-    const engineState = readFileSync(
-      join(process.cwd(), '..', 'engine', 'app', 'services', 'state.py'),
-      'utf8',
-    );
+    const engineState = readFileSync(resolveEngineStatePath(), 'utf8');
     const match = engineState.match(/^_ORPHAN_ERROR_MESSAGE\s*=\s*"([^"]+)"/m);
     expect(match, 'engine _ORPHAN_ERROR_MESSAGE not found').not.toBeNull();
     const message = match![1];
