@@ -23,6 +23,8 @@ vi.mock('@/lib/rate-limit', async (importOriginal) => {
 
 vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn() }));
 
+vi.mock('@/lib/posthog-server', () => ({ getPostHogServer: vi.fn() }));
+
 vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
@@ -53,6 +55,7 @@ vi.mock('@/lib/persona-images', async (importOriginal) => {
 });
 
 import { POST } from '../generate-and-schedule/route';
+import { getPostHogServer } from '@/lib/posthog-server';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { applyRateLimit } from '@/lib/rate-limit';
@@ -856,6 +859,35 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(json.code).toBe('ENGINE_UNAVAILABLE');
       expect(json.slots).toHaveLength(2);
       expect(rpcCalls.filter((c) => c.name === 'refund_batch_tokens')).toHaveLength(2);
+    });
+
+    it('reports the 502 to PostHog with route, code and user id', async () => {
+      vi.stubEnv('NODE_ENV', 'production');
+      const captureException = vi.fn();
+      vi.mocked(getPostHogServer).mockReturnValue({
+        capture: vi.fn(),
+        captureAs: vi.fn(),
+        captureException,
+      } as never);
+      try {
+        setup({ ...DEFAULT_CFG, engineFailSubjects: ['Idea 1', 'Idea 2'] });
+        const res = await post(baseBody());
+        expect(res.status).toBe(502);
+        await vi.waitFor(() => expect(captureException).toHaveBeenCalledTimes(1));
+        const [error, properties] = captureException.mock.calls[0] as [
+          Error,
+          Record<string, unknown>,
+        ];
+        expect(error).toBeInstanceOf(Error);
+        expect(properties).toMatchObject({
+          route: 'POST /api/videos/generate-and-schedule',
+          status: 502,
+          code: 'ENGINE_UNAVAILABLE',
+          userId: USER_ID,
+        });
+      } finally {
+        vi.unstubAllEnvs();
+      }
     });
   });
 });

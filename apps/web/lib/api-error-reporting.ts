@@ -54,8 +54,13 @@ interface ErrorBody {
 async function readErrorDetails(response: Response): Promise<ErrorBody> {
   try {
     // Clone before reading: the original body must stay intact for the client.
-    const body = (await response.clone().json()) as ErrorBody | null;
-    return body ?? {};
+    const body: unknown = await response.clone().json();
+    // Structural guard: only plain objects carry code/errorId. (Property
+    // access on primitives would not throw, but the guard keeps the cast
+    // below honest for future edits.)
+    if (body === null || typeof body !== 'object' || Array.isArray(body)) return {};
+    const { code, errorId } = body as ErrorBody;
+    return { code, errorId };
   } catch {
     // Non-JSON body — report without code/errorId.
     return {};

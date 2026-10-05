@@ -144,6 +144,31 @@ describe('withApiErrorReporting', () => {
     expect(properties).not.toHaveProperty('code');
   });
 
+  it.each(['"just a string"', '[1,2]', 'null'])(
+    'reports a 500 with a JSON non-object body %s (no code extracted)',
+    async (jsonBody) => {
+      const wrapped = withApiErrorReporting(
+        'GET /api/test',
+        async () =>
+          new NextResponse(jsonBody, {
+            status: 500,
+            headers: { 'content-type': 'application/json' },
+          }) as NextResponse,
+      );
+
+      const res = await wrapped(getRequest());
+
+      expect(res.status).toBe(500);
+      await vi.waitFor(() => expect(client.captureException).toHaveBeenCalledTimes(1));
+      const [, properties] = client.captureException.mock.calls[0] as [
+        Error,
+        Record<string, unknown>,
+      ];
+      expect(properties).toMatchObject({ route: 'GET /api/test', status: 500 });
+      expect(properties).not.toHaveProperty('code');
+    },
+  );
+
   it('lets a thrown handler error propagate without reporting (onRequestError owns those)', async () => {
     const boom = new Error('boom');
     const wrapped = withApiErrorReporting('GET /api/test', async () => {
