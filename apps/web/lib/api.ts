@@ -1300,6 +1300,8 @@ export function seedCreatedPostCaches(
     taskId: slot.taskId,
     progress: 0,
     stage: null,
+    // Queue position is local to this created batch (ordered by slot time);
+    // the next poll overwrites it with the true engine queue position.
     queuePosition: index + 1,
     queueTotal: ordered.length,
     retryable: null,
