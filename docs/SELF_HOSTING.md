@@ -76,6 +76,11 @@ Provision the database schema in your Supabase project:
    a face before this migration needs a photo or a chosen avatar in the
    persona editor before its posts can generate with the face on (until then
    the slot fails and the tokens are refunded).
+7. `supabase/migrations/008_video-generations-engine-task-id-idx.sql` —
+   index on `video_generations.engine_task_id` so a task_id (from engine
+   logs, PostHog, or status polls) resolves to the web's generation record
+   without a full table scan. Index only — no foreign key to
+   `engine_task_state`, which is ephemeral.
 
 Paste each file into the Supabase Dashboard > SQL Editor and run, in order
 (the numeric prefixes encode the order — always apply the

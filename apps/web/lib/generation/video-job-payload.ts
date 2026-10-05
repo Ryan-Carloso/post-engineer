@@ -40,6 +40,10 @@ const REQUEST_FORWARD_FIELDS: ReadonlyArray<string> = [
   // as http(s)); it must survive the allowlist so per-request callbacks
   // (MCP webhookUrl) reach the engine's terminal dispatch.
   'webhook_url',
+  // generation_id is the video_generations row id for this job: the engine
+  // stamps it on the task row and on every PostHog lifecycle event, so
+  // generation_id x task_id join in PostHog without a Supabase lookup.
+  'generation_id',
 ];
 
 export interface JobPersona {

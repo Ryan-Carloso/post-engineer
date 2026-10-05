@@ -216,6 +216,38 @@ def _persona_tracking_kwargs(
     return {}
 
 
+def _generation_tracking_kwargs(
+    body: Union[TaskVideoRequest, SubtitleRequest, AudioRequest],
+) -> dict[str, str]:
+    """generation_id for the task row (read back by the PostHog tracking
+    context). Omitted when the request carries none, so the row — and the
+    events — stay free of blank props. Only TaskVideoRequest carries the
+    field (subtitle/audio are not web-backed generations)."""
+    generation_id = getattr(body, "generation_id", None)
+    if isinstance(generation_id, str) and generation_id:
+        return {"generation_id": generation_id}
+    return {}
+
+
+def _task_generation_id(task_id: str) -> Optional[str]:
+    """Recover a task row's generation_id with an UNSCOPED state lookup, for
+    $exception telemetry only.
+
+    Used on the 404 "task not found" path: the user-scoped lookup already
+    failed, but the row may still exist (e.g. owned by another user context
+    or deleted only in the caller's view). The value never leaves the
+    server — it only lands on the internal PostHog $exception event, where
+    it joins the failed poll back to the caller's generation record. Never
+    used to authorize anything.
+    """
+    try:
+        task = sm.state.get_task(task_id)
+    except Exception:  # noqa: BLE001 — tracking degrades, the request continues
+        return None
+    generation_id = (task or {}).get("generation_id")
+    return generation_id if isinstance(generation_id, str) and generation_id else None
+
+
 def create_task(
     request: Request,
     body: Union[TaskVideoRequest, SubtitleRequest, AudioRequest],
@@ -237,6 +269,10 @@ def create_task(
             # failed/generated) read persona_id from the task row, so the
             # funnel can be broken down per persona instead of "unknown".
             **_persona_tracking_kwargs(body),
+            # Correlation for PostHog: generation_id is the caller's
+            # (web) video_generations row id for this task. Row-stored so
+            # every lifecycle event reads it back via the tracking context.
+            **_generation_tracking_kwargs(body),
         )
         # Funnel entry: requested fires from on_accepted once the task is
         # ACCEPTED into the queue — strictly before the worker thread
@@ -248,7 +284,11 @@ def create_task(
             params=body,
             stop_at=stop_at,
             on_accepted=lambda: tm.track_generation_requested(
-                task_id, user_id=auth.user_id, flow="direct", pipeline=stop_at
+                task_id, user_id=auth.user_id, flow="direct", pipeline=stop_at,
+                # Passed explicitly (not read back from the row): the row
+                # write may still be racing in another thread when the
+                # acceptance callback fires.
+                **_generation_tracking_kwargs(body),
             ),
         )
         logger.success(f"Task created: task_id={task_id}")
@@ -311,7 +351,13 @@ def get_task(
         return utils.get_response(200, response_task)
 
     raise HttpException(
-        task_id=task_id, status_code=404, message=f"{request_id}: task not found"
+        task_id=task_id,
+        status_code=404,
+        message=f"{request_id}: task not found",
+        # Telemetry-only recovery: the scoped lookup already failed, but
+        # the row may still be known to state — stamp its generation_id so
+        # the $exception joins back to the caller's generation record.
+        generation_id=_task_generation_id(task_id),
     )
 
 
@@ -328,7 +374,11 @@ async def task_events(
     task = sm.state.get_task(task_id, user_id=auth.user_id)
     if not task:
         raise HttpException(
-            task_id=task_id, status_code=404, message=f"{request_id}: task not found"
+            task_id=task_id,
+            status_code=404,
+            message=f"{request_id}: task not found",
+            # Telemetry-only recovery (see get_task above).
+            generation_id=_task_generation_id(task_id),
         )
     return StreamingResponse(
         _task_event_stream(task_id, auth.user_id, request.is_disconnected),
@@ -401,7 +451,11 @@ def delete_video(request: Request, task_id: str = Path(..., description="Task ID
         return utils.get_response(200)
 
     raise HttpException(
-        task_id=task_id, status_code=404, message=f"{request_id}: task not found"
+        task_id=task_id,
+        status_code=404,
+        message=f"{request_id}: task not found",
+        # Telemetry-only recovery (see get_task above).
+        generation_id=_task_generation_id(task_id),
     )
 
 

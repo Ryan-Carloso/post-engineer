@@ -60,7 +60,7 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { isPersonaAllowed } from '@/lib/api-keys';
-import { startEngineVideoTask } from '@/lib/generation/video-generation';
+import { startEngineVideoTask, recordGenerationStart } from '@/lib/generation/video-generation';
 import { checkCustomAudioUrl } from '@/lib/generation/custom-audio';
 import { resolveVideoImage } from '@/lib/persona-images';
 import { IDEMPOTENCY_NAMESPACE, deterministicUuid } from '@/lib/idempotency';
@@ -476,6 +476,21 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect((calls[0][1] as Record<string, unknown>).webhook_url).toBe('https://example.com/hook');
       expect((calls[0][1] as Record<string, unknown>).video_subject).toBe('Idea 1');
       expect((calls[1][1] as Record<string, unknown>).video_script_prompt).toBe('Second script');
+    });
+
+    it('sends generation_id matching the video_generations row to the engine payload', async () => {
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+      const calls = vi.mocked(startEngineVideoTask).mock.calls;
+      expect(calls.length).toBeGreaterThan(0);
+      const recorded = vi.mocked(recordGenerationStart).mock.calls;
+      expect(recorded.length).toBe(calls.length);
+      // The engine receives the video_generations row id as generation_id,
+      // so its PostHog events (keyed by task_id) join back to the web's row.
+      calls.forEach((call, i) => {
+        const payload = call[1] as Record<string, unknown>;
+        expect(payload.generation_id).toBe(recorded[i][0].generationId);
+      });
     });
 
     it('forwards the persona language, video_aspect and paragraph_number to the engine payload', async () => {
