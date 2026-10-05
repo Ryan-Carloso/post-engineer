@@ -9,6 +9,8 @@ export const enDictionary: Dictionary = {
   nav: {
     brand: 'Post Engineer',
     brandSubtitle: 'YouTube · Instagram',
+    home: 'Home',
+    homeHint: 'Overview',
     accounts: 'Accounts',
     accountsHint: 'Connect and manage',
     create: 'Create post',

@@ -11,8 +11,8 @@ import {
   AccountsIcon,
   CoinsIcon,
   HistoryIcon,
+  HomeIcon,
   SparklesIcon,
-  KeyIcon,
 } from '@/lib/ui';
 
 //---------------
@@ -20,8 +20,8 @@ import {
 //---------------
 interface NavItem {
   href: string;
-  labelKey: 'nav.accounts' | 'nav.persona' | 'nav.posts' | 'nav.billing' | 'nav.apiKeys' | 'nav.debug';
-  hintKey: 'nav.accountsHint' | 'nav.personaHint' | 'nav.postsHint' | 'nav.billingHint' | 'nav.apiKeysHint' | 'nav.debugHint';
+  labelKey: 'nav.home' | 'nav.accounts' | 'nav.persona' | 'nav.posts' | 'nav.billing' | 'nav.debug';
+  hintKey: 'nav.homeHint' | 'nav.accountsHint' | 'nav.personaHint' | 'nav.postsHint' | 'nav.billingHint' | 'nav.debugHint';
   icon: () => React.JSX.Element;
 }
 
@@ -55,11 +55,11 @@ const MainSidebar = () => {
   const { t } = useI18n();
 
   const navItems: Array<NavItem> = [
-    { href: '/posts', labelKey: 'nav.posts', hintKey: 'nav.postsHint', icon: HistoryIcon },
+    { href: '/', labelKey: 'nav.home', hintKey: 'nav.homeHint', icon: HomeIcon },
     { href: '/accounts', labelKey: 'nav.accounts', hintKey: 'nav.accountsHint', icon: AccountsIcon },
     { href: '/personas', labelKey: 'nav.persona', hintKey: 'nav.personaHint', icon: SparklesIcon },
+    { href: '/posts', labelKey: 'nav.posts', hintKey: 'nav.postsHint', icon: HistoryIcon },
     { href: '/billing', labelKey: 'nav.billing', hintKey: 'nav.billingHint', icon: CoinsIcon },
-    { href: '/api-keys', labelKey: 'nav.apiKeys', hintKey: 'nav.apiKeysHint', icon: KeyIcon },
   ];
 
   return (
@@ -150,10 +150,10 @@ const MobileNavigation = () => {
     icon: () => React.JSX.Element;
     isActive: boolean;
   }> = [
-    { href: '/posts', labelKey: 'nav.posts', icon: HistoryIcon, isActive: pathname.startsWith('/posts') },
+    { href: '/', labelKey: 'nav.home', icon: HomeIcon, isActive: pathname === '/' },
     { href: '/personas', labelKey: 'nav.persona', icon: SparklesIcon, isActive: pathname.startsWith('/persona') },
+    { href: '/posts', labelKey: 'nav.posts', icon: HistoryIcon, isActive: pathname.startsWith('/posts') },
     { href: '/accounts', labelKey: 'nav.accounts', icon: AccountsIcon, isActive: pathname.startsWith('/accounts') },
-    { href: '/api-keys', labelKey: 'nav.apiKeys', icon: KeyIcon, isActive: pathname.startsWith('/api-keys') },
     { href: '/billing', labelKey: 'nav.billing', icon: CoinsIcon, isActive: pathname.startsWith('/billing') },
   ];
 

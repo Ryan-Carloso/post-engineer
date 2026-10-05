@@ -8,7 +8,7 @@ import { useI18n } from '@/lib/i18n/provider';
 import { LOCALES } from '@/lib/i18n';
 import { TokenBalance } from '@/app/(main)/token-balance';
 import VersionBadge from '@/components/ui/version-badge';
-import { ProfileIcon } from '@/lib/ui';
+import { KeyIcon, ProfileIcon } from '@/lib/ui';
 
 //---------------
 // AccountPanel — shared account area content ("Perfil"/"Profile").
@@ -202,9 +202,31 @@ export function AccountPanel({ showVersionBadge = false }: { showVersionBadge?: 
               </p>
             </div>
           </Link>
+          <ApiKeysRow />
           <SignOutButton />
         </div>
       )}
     </div>
+  );
+}
+
+//---------------
+// ApiKeysRow — link to /api-keys inside the profile area. The API Keys
+// tab was removed from the navs to curb tab sprawl; the route itself
+// is unchanged.
+//---------------
+export function ApiKeysRow() {
+  const { t } = useI18n();
+  return (
+    <Link
+      href="/api-keys"
+      data-testid="profile-api-keys-link"
+      className="flex w-full items-center gap-3.5 rounded-[18px] bg-[#f8fafc] px-4 py-3 text-left text-[15px] text-[#718096] transition-colors hover:bg-[#f1f4f7] hover:text-[#101728] lg:gap-5 lg:rounded-[22px] lg:px-8 lg:py-4 lg:text-[18px]"
+    >
+      <span className="[&>svg]:size-5 lg:[&>svg]:size-7">
+        <KeyIcon />
+      </span>
+      {t('nav.apiKeys')}
+    </Link>
   );
 }

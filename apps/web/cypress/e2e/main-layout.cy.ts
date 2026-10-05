@@ -103,11 +103,14 @@ describe('Main Layout — Sidebar', () => {
     cy.contains('Post Engineer').should('be.visible');
     cy.contains('YouTube · Instagram').should('be.visible');
 
+    cy.contains('a', 'Início').should('be.visible');
     cy.contains('a', 'Posts').should('be.visible');
     cy.contains('a', 'Contas').should('be.visible');
     cy.contains('a', 'Personas').should('be.visible');
     cy.contains('a', 'Tokens').should('be.visible');
-    cy.contains('a', 'API Keys').should('be.visible');
+    // API Keys is no longer a nav tab — it lives in the profile area
+    // (sidebar footer), reachable from every page.
+    cy.get('[data-testid=profile-api-keys-link]').should('be.visible');
   });
 
   it('navega entre as páginas clicando nas abas da sidebar', () => {

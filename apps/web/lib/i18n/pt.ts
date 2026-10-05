@@ -8,6 +8,8 @@ export const ptDictionary = {
   nav: {
     brand: 'Post Engineer',
     brandSubtitle: 'YouTube · Instagram',
+    home: 'Início',
+    homeHint: 'Visão geral',
     accounts: 'Contas',
     accountsHint: 'Conectar e gerenciar',
     create: 'Criar post',

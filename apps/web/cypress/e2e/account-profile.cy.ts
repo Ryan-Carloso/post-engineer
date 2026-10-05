@@ -117,6 +117,20 @@ describe('Account area — mobile header (390px)', () => {
     cy.url().should('include', '/account');
     cy.contains('h1', 'Perfil').should('be.visible');
   });
+
+  it('keeps Home as the first bottom tab and has no API Keys tab', () => {
+    cy.visit('/');
+
+    // The bottom nav is the fixed nav; the translated aria-label depends on
+    // the locale, so select by layout classes instead.
+    cy.get('nav.fixed.bottom-0').as('bottomNav');
+    cy.get('@bottomNav')
+      .find('a')
+      .should('have.length', 5)
+      .first()
+      .should('have.attr', 'href', '/');
+    cy.get('@bottomNav').contains('a', 'API Keys').should('not.exist');
+  });
 });
 
 describe('Account area — /account page', () => {
@@ -155,6 +169,20 @@ describe('Account area — /account page', () => {
     cy.get('@page').contains('button', 'EN').should('be.visible');
 
     cy.get('@page').find('button[title="Sair"]').should('be.visible');
+
+    cy.get('@page')
+      .find('[data-testid=profile-api-keys-link]')
+      .should('be.visible')
+      .and('have.attr', 'href', '/api-keys');
+  });
+
+  it('navigates to /api-keys from the profile API Keys row', () => {
+    cy.visit('/account');
+
+    cy.get('[data-testid=account-page]')
+      .find('[data-testid=profile-api-keys-link]')
+      .click();
+    cy.url().should('include', '/api-keys');
   });
 
   it('signs out and lands on /login', () => {
@@ -171,6 +199,19 @@ describe('Account area — desktop sidebar footer', () => {
     cy.loginE2EUser();
     seedUserMetadata({ name: 'Cypress' });
     interceptShellData();
+  });
+
+  it('sidebar keeps Home first and has no API Keys tab', () => {
+    cy.visit('/');
+
+    // Sidebar nav: Home first, API Keys moved to the profile area.
+    cy.get('aside nav')
+      .first()
+      .find('a')
+      .should('have.length', 5)
+      .first()
+      .should('have.attr', 'href', '/');
+    cy.get('aside nav').first().contains('a', 'API Keys').should('not.exist');
   });
 
   it('user block links to /account', () => {

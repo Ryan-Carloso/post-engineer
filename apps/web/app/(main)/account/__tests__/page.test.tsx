@@ -37,6 +37,7 @@ vi.mock('@/lib/supabase/client', () => ({
 
 vi.mock('@/lib/ui', () => ({
   ProfileIcon: () => <span data-testid="icon-profile" />,
+  KeyIcon: () => <span data-testid="icon-key" />,
 }));
 
 vi.mock('@/lib/i18n/provider', () => {
@@ -102,5 +103,7 @@ describe('app/(main)/account — AccountPage', () => {
     expect(screen.getByTestId('version-badge')).toHaveTextContent('BETA');
     expect(screen.getByRole('button', { name: 'PT' })).toBeInTheDocument();
     expect(screen.getByTitle('nav.signOut')).toBeInTheDocument();
+    const apiKeysLink = screen.getByTestId('profile-api-keys-link');
+    expect(apiKeysLink).toHaveAttribute('href', '/api-keys');
   });
 });

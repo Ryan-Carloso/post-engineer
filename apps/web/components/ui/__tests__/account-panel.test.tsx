@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
@@ -43,6 +43,7 @@ vi.mock('@/lib/supabase/client', () => ({
 
 vi.mock('@/lib/ui', () => ({
   ProfileIcon: () => <span data-testid="icon-profile" />,
+  KeyIcon: () => <span data-testid="icon-key" />,
 }));
 
 vi.mock('@/lib/i18n/provider', () => {
@@ -153,6 +154,14 @@ describe('AccountPanel', () => {
     render(<AccountPanel />, { wrapper: createWrapper() });
     expect(screen.getByRole('button', { name: 'PT' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'EN' })).toBeInTheDocument();
+  });
+
+  it('renders the API Keys row linking to /api-keys', () => {
+    render(<AccountPanel />, { wrapper: createWrapper() });
+    const link = screen.getByTestId('profile-api-keys-link');
+    expect(link).toHaveAttribute('href', '/api-keys');
+    expect(link).toHaveTextContent('nav.apiKeys');
+    expect(within(link).getByTestId('icon-key')).toBeInTheDocument();
   });
 
   it('signs out and routes to /login when the sign-out button is clicked', async () => {
