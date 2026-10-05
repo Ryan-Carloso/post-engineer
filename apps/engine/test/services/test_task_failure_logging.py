@@ -7,6 +7,7 @@ the reason is visible per step in PostHog.
 """
 
 import ast
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -115,28 +116,94 @@ class FailTaskLoggingTests(unittest.TestCase):
         # Pin: TASK_STATE_FAILED must only ever be written by _fail_task
         # (reads, e.g. _task_already_failed, are fine).
         src = Path(task_service.__file__).read_text()
-        tree = ast.parse(src)
-        offenders = []
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.FunctionDef) or node.name == "_fail_task":
+        self.assertEqual(_direct_failed_write_offenders(src), [])
+
+
+# mutmut 3.x rewrites every mutated module into a single file
+# (mutants/<module>.py): the original function is kept as
+# x__<name>__mutmut_orig plus one x__<name>__mutmut_<N> copy per mutant
+# (mangle_function_name: "x_" + name + "__mutmut"; the working <name>
+# becomes a trampoline dispatching to the active copy). Structural pins that
+# read task_service.__file__ therefore see _fail_task's body under mangled
+# names — treat those copies as _fail_task itself, or every legitimate write
+# inside its body is reported once per copy (184 false offenders broke the
+# mutation (engine) CI job on PR #97).
+_MUTMUT_FAIL_TASK_RE = re.compile(r"^x__fail_task__mutmut_(?:orig|\d+)$")
+
+
+def _is_fail_task_def(name: str) -> bool:
+    return name == "_fail_task" or _MUTMUT_FAIL_TASK_RE.match(name) is not None
+
+
+def _direct_failed_write_offenders(source: str) -> list[str]:
+    tree = ast.parse(source)
+    offenders = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        if _is_fail_task_def(node.name):
+            continue
+        for child in ast.walk(node):
+            if not isinstance(child, ast.Call):
                 continue
-            for child in ast.walk(node):
-                if not isinstance(child, ast.Call):
-                    continue
-                func = child.func
-                is_update_task = (
-                    isinstance(func, ast.Attribute)
-                    and func.attr in ("update_task", "persist_state_update")
-                )
-                if not is_update_task:
-                    continue
-                for arg in list(child.args) + [kw.value for kw in child.keywords]:
-                    if (
-                        isinstance(arg, ast.Attribute)
-                        and arg.attr == "TASK_STATE_FAILED"
-                    ):
-                        offenders.append(f"{node.name}:{child.lineno}")
-        self.assertEqual(offenders, [])
+            func = child.func
+            is_update_task = (
+                isinstance(func, ast.Attribute)
+                and func.attr in ("update_task", "persist_state_update")
+            )
+            if not is_update_task:
+                continue
+            for arg in list(child.args) + [kw.value for kw in child.keywords]:
+                if isinstance(arg, ast.Attribute) and arg.attr == "TASK_STATE_FAILED":
+                    offenders.append(f"{node.name}:{child.lineno}")
+    return offenders
+
+
+class MutmutSourceScanTests(unittest.TestCase):
+    # Regression tests for the mutation (engine) CI failure on PR #97:
+    # mutmut 3.x runs the suite against mutants/<module>.py, where _fail_task
+    # exists under mangled names. The structural pin must see through the
+    # mangling instead of reporting 184 false offenders.
+
+    _WRITE = (
+        "    sm.persist_state_update(sm.state, task_id,"
+        " state=const.TASK_STATE_FAILED)\n"
+    )
+
+    def _mutmut_style_source(self):
+        # Names exactly as mutmut 3.x mangles them: "x_" + name + "__mutmut"
+        # with _orig / _<N> suffixes (see mangle_function_name).
+        parts = ["def _fail_task(task_id):\n" + self._WRITE]
+        parts.append("def x__fail_task__mutmut_orig(task_id):\n" + self._WRITE)
+        for n in (1, 2):
+            parts.append(f"def x__fail_task__mutmut_{n}(task_id):\n" + self._WRITE)
+        parts.append("def unrelated(task_id):\n    return task_id\n")
+        return "\n".join(parts)
+
+    def test_mutmut_mangled_fail_task_variants_are_ignored(self):
+        self.assertEqual(_direct_failed_write_offenders(self._mutmut_style_source()), [])
+
+    def test_direct_failed_write_in_other_function_still_flagged(self):
+        src = "def other(task_id):\n" + self._WRITE
+        offenders = _direct_failed_write_offenders(src)
+        self.assertEqual(len(offenders), 1)
+        self.assertTrue(offenders[0].startswith("other:"), offenders)
+
+    def test_mutmut_variant_of_other_function_still_flagged(self):
+        # A mangled copy of a NON-_fail_task function must still be
+        # inspected — a mutant adding a direct failed write there is a
+        # real offender (reported under its mangled name).
+        src = "def x__other__mutmut_3(task_id):\n" + self._WRITE
+        offenders = _direct_failed_write_offenders(src)
+        self.assertEqual(len(offenders), 1)
+        self.assertTrue(offenders[0].startswith("x__other__mutmut_3:"), offenders)
+
+    def test_is_fail_task_def(self):
+        self.assertTrue(_is_fail_task_def("_fail_task"))
+        self.assertTrue(_is_fail_task_def("x__fail_task__mutmut_orig"))
+        self.assertTrue(_is_fail_task_def("x__fail_task__mutmut_12"))
+        self.assertFalse(_is_fail_task_def("other"))
+        self.assertFalse(_is_fail_task_def("x__other__mutmut_3"))
 
 
 class TerminalWriteWiringTests(unittest.TestCase):
@@ -191,7 +258,7 @@ class StartCrashStageTests(unittest.TestCase):
             _LogCapture() as capture,
         ):
             if fail_in == "generate_script":
-                task_service.start(task_id, params, stop_at="video")
+                task_service.start(task_id, params, stop_at="script")
             else:
                 # script succeeds, terms crashes
                 task_service.start(task_id, params, stop_at="video")
