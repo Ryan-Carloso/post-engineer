@@ -19,6 +19,13 @@ import { SAFE_TASK_ID } from './video-urls';
 export const ENGINE_TASK_PROGRESS_TIMEOUT_MS = 10_000;
 
 //---------------
+// TASK_STATE_FAILED — the engine's numeric failed state (const.py). A gone
+// task is reported with it so every consumer can treat "engine forgot the
+// task" and "engine says the task failed" through one terminal branch.
+//---------------
+export const TASK_STATE_FAILED = -1;
+
+//---------------
 // clampProgress — engine progress is documented 0–100 (state.py clamps on
 // write); clamp again defensively and coerce non-numeric payloads to 0 so
 // a malformed engine response can never surface as 137% or NaN.
@@ -32,6 +39,15 @@ export interface EngineTaskProgress {
   progress: number;
   stage: string | null;
   state: number | null;
+  //---------------
+  // gone — the engine answered 404: it no longer knows this task (an engine
+  // restart dropped it, or the state backend lost it). This is TERMINAL,
+  // unlike every other lookup failure: polling again can only 404 forever.
+  // The caller must stop polling AND settle the generation row, or the
+  // history shows a task that will never finish. A 5xx/abort/network error
+  // stays a throw — that one is transient and must be retried.
+  //---------------
+  gone: boolean;
 }
 
 //---------------
@@ -98,6 +114,12 @@ export async function fetchEngineTaskProgress(
         signal: controller.signal,
       },
     );
+    // A 404 is a terminal answer, not a transport failure: the engine
+    // forgot the task. Report it as gone (state -1) so callers stop
+    // polling instead of retrying a resource that can never come back.
+    if (response.status === 404) {
+      return { progress: 0, stage: null, state: TASK_STATE_FAILED, gone: true };
+    }
     if (!response.ok) {
       throw new Error(`Engine task lookup failed with status ${response.status}`);
     }
@@ -107,6 +129,7 @@ export async function fetchEngineTaskProgress(
       progress: task ? clampProgress(task.progress) : 0,
       stage: task ? taskStage(task.stage) : null,
       state: task ? taskState(task) : null,
+      gone: false,
     };
   } finally {
     clearTimeout(timeout);

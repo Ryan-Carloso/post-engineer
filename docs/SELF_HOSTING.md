@@ -82,6 +82,15 @@ Provision the database schema in your Supabase project:
    without a full table scan. Index only — no foreign key to
    `engine_task_state`, which is ephemeral.
 
+8. `supabase/migrations/009_batch-charge-task-correlation.sql` — backfills
+   `token_transactions.engine_task_id` for **single-slot** batch charges.
+   A scheduled post is charged once up front under `batch:<schedule_id>` with
+   no task id, while its slot dispatches its own task; without this
+   correlation a scheduled post whose engine task is lost stays `running`
+   in the history table forever. Multi-slot batches are left alone on
+   purpose — one charge covers several videos. Also adds the two indexes
+   the gone-task reconciliation looks up.
+
 Paste each file into the Supabase Dashboard > SQL Editor and run, in order
 (the numeric prefixes encode the order — always apply the
 lowest number first), or apply them with the Supabase CLI from the repo
