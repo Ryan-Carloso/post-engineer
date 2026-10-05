@@ -33,7 +33,11 @@ describe('API Keys — UI & E2E', () => {
 
   it('navigates to /api-keys from the profile area', () => {
     cy.visit('/account');
-    cy.get('[data-testid=profile-api-keys-link]').scrollIntoView().click();
+    // The desktop sidebar footer renders the same AccountPanel, so scope
+    // to the page container (same duplicate-DOM reason as account-profile.cy.ts).
+    cy.get('[data-testid=account-page] [data-testid=profile-api-keys-link]')
+      .scrollIntoView()
+      .click();
     cy.url().should('include', '/api-keys');
     cy.wait('@getApiKeys');
     cy.contains('h1', 'API Keys').should('be.visible');
