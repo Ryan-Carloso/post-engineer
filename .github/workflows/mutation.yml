@@ -165,8 +165,11 @@ jobs:
       # Changed engine source files, relative to apps/engine (mutmut's
       # working directory). Excludes deleted files. Empty when the PR
       # touches no engine source — or on manual dispatch (full app/ scope).
+      # NOTE: this step runs at the workspace root — the job's default
+      # working-directory (apps/engine) would break the repo-root pathspec.
       - name: Compute changed files
         id: changed
+        working-directory: ${{ github.workspace }}
         run: |
           set -uo pipefail
           files=""
