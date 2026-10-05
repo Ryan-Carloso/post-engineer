@@ -532,7 +532,7 @@ describe('video task progress tools', () => {
     vi.mocked(mockClient.getVideoStatus).mockResolvedValue({
       status: 200,
       message: 'success',
-      data: { task_id: 'task-1', state: 4, progress: 42, stage: 'audio' },
+      body: { task_id: 'task-1', state: 4, progress: 42, stage: 'audio' },
     });
 
     const response = await handleGetVideoTaskProgress(mockClient, { taskId: 'task-1' });
@@ -550,7 +550,7 @@ describe('video task progress tools', () => {
     vi.mocked(mockClient.getVideoStatus).mockResolvedValue({
       status: 200,
       message: 'success',
-      data: {
+      body: {
         task_id: 'task-1',
         state: -1,
         progress: 75,
@@ -570,7 +570,7 @@ describe('video task progress tools', () => {
     vi.mocked(mockClient.getVideoStatus).mockResolvedValue({
       status: 200,
       message: 'success',
-      data: {
+      body: {
         task_id: 'task-1',
         state: -1,
         progress: 75,
@@ -599,7 +599,7 @@ describe('video task progress tools', () => {
     vi.mocked(mockClient.getVideoStatus).mockResolvedValue({
       status: 200,
       message: 'success',
-      data: {
+      body: {
         task_id: 'task-1',
         state: -1,
         progress: 10,
@@ -952,7 +952,7 @@ describe('narrowTaskProgress type narrowing', () => {
   it('coerces wrong-typed fields to null instead of passing them through', async () => {
     const { handleGetVideoTaskProgress } = await import('../tools.js');
     vi.mocked(mockClient.getVideoStatus).mockResolvedValue({
-      data: {
+      body: {
         task_id: 42,
         state: 'generating',
         progress: '60',
@@ -986,7 +986,7 @@ describe('narrowTaskProgress type narrowing', () => {
   it('keeps well-typed fields and nulls only the missing ones', async () => {
     const { handleGetVideoTaskProgress } = await import('../tools.js');
     vi.mocked(mockClient.getVideoStatus).mockResolvedValue({
-      data: { task_id: 't-2', state: 1, progress: 60 },
+      body: { task_id: 't-2', state: 1, progress: 60 },
     });
 
     const response = await handleGetVideoTaskProgress(mockClient, { taskId: 't-2' });

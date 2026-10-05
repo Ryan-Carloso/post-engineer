@@ -14,12 +14,12 @@ from loguru import logger
 from app.models import const
 
 
-def get_response(status: int, data: Any = None, message: str = ""):
+def get_response(status: int, body: Any = None, message: str = ""):
     obj = {
         "status": status,
     }
-    if data:
-        obj["data"] = data
+    if body:
+        obj["body"] = body
     if message:
         obj["message"] = message
     return obj

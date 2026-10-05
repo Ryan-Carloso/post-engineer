@@ -46,14 +46,14 @@ def validate_persona_endpoint(request: PersonaRequest):
             status_code=400,
             content=utils.get_response(status=400, message=str(e)),
         )
-    return BaseResponse(data=normalized)
+    return BaseResponse(body=normalized)
 
 
 @persona_router.get(
     "/personas/voices", response_model=BaseResponse, summary="House voice catalog"
 )
 def list_house_voices_endpoint():
-    return BaseResponse(data=persona_service.get_house_voices())
+    return BaseResponse(body=persona_service.get_house_voices())
 
 
 @persona_router.get(
@@ -62,7 +62,7 @@ def list_house_voices_endpoint():
     summary="Languages available for voice samples",
 )
 def list_sample_languages_endpoint():
-    return BaseResponse(data=persona_service.get_sample_languages())
+    return BaseResponse(body=persona_service.get_sample_languages())
 
 
 @persona_router.get(

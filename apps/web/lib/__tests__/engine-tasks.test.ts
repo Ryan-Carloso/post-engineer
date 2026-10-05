@@ -68,7 +68,7 @@ describe('fetchEngineTaskProgress', () => {
   });
 
   it('reads progress from the data-wrapped task payload', async () => {
-    mockEngine({ data: { progress: 45, state: 4 } });
+    mockEngine({ body: { progress: 45, state: 4 } });
     const result = await fetchEngineTaskProgress(TASK_ID, 'user-1');
     expect(result.progress).toBe(45);
     const url = vi.mocked(fetch).mock.calls[0][0] as string;
@@ -82,19 +82,19 @@ describe('fetchEngineTaskProgress', () => {
   });
 
   it('clamps the engine progress defensively', async () => {
-    mockEngine({ data: { progress: 250 } });
+    mockEngine({ body: { progress: 250 } });
     const result = await fetchEngineTaskProgress(TASK_ID, 'user-1');
     expect(result.progress).toBe(100);
   });
 
   it('returns 0 when the payload carries no progress', async () => {
-    mockEngine({ data: { state: 4 } });
+    mockEngine({ body: { state: 4 } });
     const result = await fetchEngineTaskProgress(TASK_ID, 'user-1');
     expect(result.progress).toBe(0);
   });
 
   it('sends the engine auth headers for the user', async () => {
-    mockEngine({ data: { progress: 10 } });
+    mockEngine({ body: { progress: 10 } });
     await fetchEngineTaskProgress(TASK_ID, 'user-1');
     const headers = vi.mocked(fetch).mock.calls[0][1]?.headers as Record<string, string>;
     expect(headers.Authorization).toBe('Bearer secret');
@@ -127,19 +127,19 @@ describe('fetchEngineTaskProgress', () => {
   });
 
   it('repasses the engine stage as-is', async () => {
-    mockEngine({ data: { progress: 45, stage: 'lipsync' } });
+    mockEngine({ body: { progress: 45, stage: 'lipsync' } });
     const result = await fetchEngineTaskProgress(TASK_ID, 'user-1');
     expect(result.stage).toBe('lipsync');
   });
 
   it('returns null stage when the payload carries none', async () => {
-    mockEngine({ data: { progress: 45 } });
+    mockEngine({ body: { progress: 45 } });
     const result = await fetchEngineTaskProgress(TASK_ID, 'user-1');
     expect(result.stage).toBeNull();
   });
 
   it('returns null stage for non-string stage values', async () => {
-    mockEngine({ data: { progress: 45, stage: 42 } });
+    mockEngine({ body: { progress: 45, stage: 42 } });
     const result = await fetchEngineTaskProgress(TASK_ID, 'user-1');
     expect(result.stage).toBeNull();
   });
