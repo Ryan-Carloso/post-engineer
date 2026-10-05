@@ -116,5 +116,24 @@ unavailable, so this is safe on any host.
   `uv run coverage run --source=app,cli -m pytest -q && uv run coverage report -m`
   and treat any result below 60% as a failure.
 
+### Structural source-scan tests must be mutmut-aware
+
+- mutmut 3.x runs the suite against a single transformed file
+  (`mutants/<module>.py`): every function exists as `x__<name>__mutmut_orig`
+  plus one `x__<name>__mutmut_<N>` copy per mutant (`mangle_function_name`
+  is `"x_" + name + "__mutmut"`; the working `<name>` becomes a trampoline).
+- A test that reads `some_module.__file__` and reasons about function names
+  (AST pins like `test_no_direct_failed_writes_outside_fail_task`) sees the
+  MANGLED names under mutmut. Exempting only the literal name reports every
+  copy of the pinned function's own body as an offender (184 false
+  positives broke the `mutation (engine)` CI job on PR #97).
+- Recognize mutmut's mangled copies of the pinned function
+  (`^x__<name>__mutmut_(?:orig|\d+)$`); keep inspecting mangled copies of
+  other functions so real mutant-introduced violations are still caught.
+  Pin the mangling with regression tests (`MutmutSourceScanTests`).
+- Verify against a real mutmut transform, not a hand-rolled one: use
+  mutmut's own `mutate_file_contents` on the module, or the `mutants/`
+  artifact from a failed CI run.
+
 ---
 
