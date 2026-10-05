@@ -2252,3 +2252,6 @@ Five MINORs on the merged funnel, fixed as a follow-up PR with one focused TDD c
 ## Stryker sandbox cwd (2026-10-05, PR #102/#103)
 - **Stryker runs the dry run from `apps/web/.stryker-tmp`, not `apps/web`.** A test that reads a file outside the web app via `process.cwd()` (the engine error-code contract read `../engine/app/services/state.py`) dies with ENOENT in the dry run — and since `mutation (web)` is a required check that fails on execution errors, it blocks the PR. Any PR touching a file the contract test imports (here: the i18n dictionaries) trips it.
 - **Never assume `../engine` relative to cwd in web tests.** Resolve the repo root from the test file's own location: `findRepoRoot(import.meta.url)` in `apps/web/test/repo-root.ts` walks up to the `pnpm-workspace.yaml` marker (works from Stryker's `.stryker-tmp/sandbox-*` copies too); pinned by its own tests. Canonical fix landed as PR #103.
+
+## Cypress spec module scope (2026-10-05, PR #102)
+- **New spec files under cypress/e2e must be modules (`export {};` at the end).** Top-level helpers in a spec file are globals: a second spec declaring `authCookieName`/`seedUserMetadata`/`interceptShellData` fails tsc with TS2393 Duplicate function implementation. The existing `support/commands.ts` already uses the `export {};` pattern.
