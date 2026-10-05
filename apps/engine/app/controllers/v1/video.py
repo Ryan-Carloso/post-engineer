@@ -282,6 +282,11 @@ def create_task(
         }
         sm.state.update_task(
             task_id, user_id=auth.user_id, flow="direct", pipeline=stop_at,
+            # New tasks start at explicit 0/PROCESSING: update_task() only
+            # overwrites state/progress when they are passed, so the initial
+            # values are set here rather than relying on defaults.
+            state=const.TASK_STATE_PROCESSING,
+            progress=0,
             # Identity for PostHog: the lifecycle events (started/progress/
             # failed/generated) read persona_id from the task row, so the
             # funnel can be broken down per persona instead of "unknown".

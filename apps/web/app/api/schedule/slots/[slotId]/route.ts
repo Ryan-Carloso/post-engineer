@@ -219,6 +219,29 @@ async function getHandler(
   const enrichment = await enrichSlot(row, auth.userId);
   const publishLinks = await resolveSlotPublishLinks(row, auth.userId);
 
+  // Progress history: every observed (progress, stage) transition recorded
+  // by GET /api/schedule/status while the post was live. A failed lookup
+  // degrades to an empty list — the detail still resolves.
+  const { data: historyRows, error: historyError } = await supabase
+    .from('scheduled_post_progress_history')
+    .select('progress, stage, recorded_at')
+    .eq('post_id', slotId)
+    .eq('user_id', auth.userId)
+    .order('recorded_at', { ascending: true });
+  if (historyError) {
+    logger.warn('[api/schedule/slots] progress history lookup failed', {
+      slotId,
+      error: historyError,
+    });
+  }
+  const progressHistory = (Array.isArray(historyRows) ? historyRows : []).map(
+    (historyRow: { progress: number; stage: string | null; recorded_at: string }) => ({
+      progress: historyRow.progress,
+      stage: historyRow.stage,
+      recordedAt: historyRow.recorded_at,
+    }),
+  );
+
   return NextResponse.json({
     success: true,
     slot: {
@@ -234,6 +257,7 @@ async function getHandler(
       stage: enrichment.stage,
       retryable: enrichment.retryable,
       publishLinks,
+      progressHistory,
       // Queue position is a list concept (position among the schedule's
       // pending slots); the detail view doesn't render it.
       queuePosition: null,

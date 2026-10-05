@@ -135,6 +135,41 @@ class SupabaseStateUpdateTests(unittest.TestCase):
         stamped = datetime.fromisoformat(payload["updated_at"])
         self.assertGreaterEqual(stamped, before)
 
+    def test_kwargs_only_update_omits_state_and_progress(self):
+        # Regression: a kwargs-only update (e.g. music_mood mid-pipeline)
+        # must not clobber progress/state with defaults — the upsert omits
+        # them so merge-duplicates keeps the stored values.
+        existing = {
+            "task_id": "t-1",
+            "user_id": "u-1",
+            "state": const.TASK_STATE_PROCESSING,
+            "progress": 40,
+            "data": {"stage": "subtitle"},
+        }
+        self.requests.request.side_effect = [
+            _response(json_data=[existing]),  # SELECT existing
+            _response(json_data=[{}]),  # POST upsert
+        ]
+        self.backend.update_task("t-1", music_mood="chill")
+
+        payload = self.requests.request.call_args_list[1][1]["json"]
+        self.assertNotIn("state", payload)
+        self.assertNotIn("progress", payload)
+        self.assertEqual(payload["data"]["music_mood"], "chill")
+        # Pre-existing data is preserved.
+        self.assertEqual(payload["data"]["stage"], "subtitle")
+
+    def test_explicit_state_without_progress_omits_only_progress(self):
+        self.requests.request.side_effect = [
+            _response(json_data=[]),
+            _response(json_data=[{}]),
+        ]
+        self.backend.update_task("t-1", state=const.TASK_STATE_FAILED)
+
+        payload = self.requests.request.call_args_list[1][1]["json"]
+        self.assertEqual(payload["state"], const.TASK_STATE_FAILED)
+        self.assertNotIn("progress", payload)
+
 
 class SupabaseStateReadTests(unittest.TestCase):
     def setUp(self):

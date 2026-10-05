@@ -11,11 +11,15 @@ vi.mock('@/lib/supabase/server', () => ({
 vi.mock('@/lib/supabase/service', () => ({
   createSupabaseServiceClient: vi.fn(),
 }));
+vi.mock('@/lib/schedule-progress-history', () => ({
+  recordProgressHistory: vi.fn(async () => undefined),
+}));
 
 import { parseLimit, GET } from '../route';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
+import { recordProgressHistory } from '@/lib/schedule-progress-history';
 
 //---------------
 // Unit tests for the ?limit= query param of GET /api/schedule/status.
@@ -524,5 +528,71 @@ describe('GET slot progress (0–100)', () => {
     expect(body.upcoming[0].stage).toBeNull();
     expect(body.recent[0].progress).toBe(0);
     expect(body.recent[0].retryable).toBe(false);
+  });
+});
+
+//---------------
+// Progress history recording — every status poll records observed
+// (progress, stage) transitions for live (generating) and dead (failed)
+// slots, so a regression like 40% -> 0% stays visible after the fact.
+//---------------
+describe('GET progress history recording', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
+    vi.stubEnv('MONEYPRINT_API_SECRET', 'secret');
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  function mockEngine(body: unknown) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, status: 200, json: async () => body })),
+    );
+  }
+
+  async function getStatusWithClient(upcoming: unknown[], recent: unknown[] = []) {
+    const client = mockPostsClient(upcoming, recent);
+    mockAuthSession({ userId: USER_ID, accessToken: 'pe_test_key', isApiKey: true }, null);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    const response = await GET(new Request('https://example.com/api/schedule/status'));
+    expect(response.status).toBe(200);
+    return client;
+  }
+
+  it('records observed progress for generating slots with a task id', async () => {
+    mockEngine({ body: { progress: 40, stage: 'subtitle' } });
+    const client = await getStatusWithClient([
+      { id: 'gen-1', slot_at: '2026-10-07T18:00:00Z', status: 'generating', topic: 'T', schedule_id: 's1', task_id: 'task-1' },
+    ]);
+
+    expect(recordProgressHistory).toHaveBeenCalledOnce();
+    expect(vi.mocked(recordProgressHistory)).toHaveBeenCalledWith(client, USER_ID, [
+      { postId: 'gen-1', progress: 40, stage: 'subtitle' },
+    ]);
+  });
+
+  it('records last-known progress for failed slots with a task id', async () => {
+    mockEngine({ body: { progress: 80, state: -1 } });
+    await getStatusWithClient([], [
+      { id: 'fail-1', slot_at: '2026-10-06T18:00:00Z', status: 'failed', topic: 'T', schedule_id: 's1', task_id: 'task-9', error: 'boom' },
+    ]);
+
+    expect(vi.mocked(recordProgressHistory)).toHaveBeenCalledWith(expect.anything(), USER_ID, [
+      { postId: 'fail-1', progress: 80, stage: null },
+    ]);
+  });
+
+  it('records nothing when no live slot carries a task id', async () => {
+    mockEngine({ body: { progress: 40 } });
+    await getStatusWithClient([
+      { id: 'up-1', slot_at: '2026-10-07T18:00:00Z', status: 'pending', topic: 'T', schedule_id: 's1' },
+    ]);
+
+    expect(vi.mocked(recordProgressHistory)).toHaveBeenCalledWith(expect.anything(), USER_ID, []);
   });
 });

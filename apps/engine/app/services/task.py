@@ -1177,17 +1177,11 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         _phase_start = now
         _last_phase = phase
         # Persist the last completed phase so the progress (SSE) endpoint
-        # and failure logs can report which stage the task is in.
-        # update_task() overwrites state/progress with its defaults, so
-        # re-assert the current values to avoid clobbering them.
+        # and failure logs can report which stage the task is in. A
+        # stage-only update_task() preserves state/progress by contract, so
+        # no read-modify-write is needed here.
         try:
-            current = sm.state.get_task(task_id) or {}
-            sm.state.update_task(
-                task_id,
-                state=current.get("state", const.TASK_STATE_PROCESSING),
-                progress=current.get("progress", 0),
-                stage=phase,
-            )
+            sm.state.update_task(task_id, stage=phase)
         except Exception:  # noqa: BLE001 — stage tracking must not break the pipeline
             logger.warning(f"could not persist stage for task {task_id}")
 
