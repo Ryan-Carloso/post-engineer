@@ -1,12 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
-import { usePathname, useRouter } from 'next/navigation';
-import { useSessionQuery } from '@/lib/api';
+import { usePathname } from 'next/navigation';
 import { useI18n } from '@/lib/i18n/provider';
-import { LOCALES } from '@/lib/i18n';
-import { TokenBalance } from '@/app/(main)/token-balance';
+import { AccountPanel, MobileProfileLink } from '@/components/ui/account-panel';
 import { InsufficientTokensDialog } from '@/components/ui/insufficient-tokens-dialog';
 import VersionBadge from '@/components/ui/version-badge';
 import AppLogo from '@/components/ui/app-logo';
@@ -55,7 +52,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 //---------------
 const MainSidebar = () => {
   const pathname = usePathname();
-  const { t, locale, setLocale } = useI18n();
+  const { t } = useI18n();
 
   const navItems: Array<NavItem> = [
     { href: '/posts', labelKey: 'nav.posts', hintKey: 'nav.postsHint', icon: HistoryIcon },
@@ -91,9 +88,7 @@ const MainSidebar = () => {
       </nav>
 
       <div className="space-y-3 border-t border-[#edf0f4] bg-white p-4 lg:p-6">
-        <LocaleSwitcher locale={locale} setLocale={setLocale} />
-        <TokenBalance />
-        <SidebarUser />
+        <AccountPanel />
         <SidebarLegalLinks />
       </div>
     </aside>
@@ -125,16 +120,19 @@ const SidebarTab = ({ item, isActive }: { item: NavItem; isActive: boolean }) =>
 };
 
 //---------------
-// MobileHeader — compact brand for small screens.
+// MobileHeader — compact brand for small screens, with the version badge
+// and the profile avatar linking to /account.
 //---------------
 const MobileHeader = () => {
   const { t } = useI18n();
   return (
-    <header className="flex items-center border-b border-[#d8e4ec] bg-white/90 px-5 py-4 shadow-[0_2px_12px_rgba(13,43,69,0.04)] backdrop-blur md:hidden">
+    <header data-testid="mobile-header" className="flex items-center border-b border-[#d8e4ec] bg-white/90 px-5 py-4 shadow-[0_2px_12px_rgba(13,43,69,0.04)] backdrop-blur md:hidden">
       <div className="flex min-w-0 items-center gap-2.5">
         <AppLogo size={28} className="rounded-lg" />
         <span className="truncate text-sm font-bold text-[#0d2b45]">{t('nav.brand')}</span>
+        <VersionBadge />
       </div>
+      <MobileProfileLink />
     </header>
   );
 };
@@ -180,38 +178,6 @@ const MobileNavigation = () => {
 };
 
 //---------------
-// LocaleSwitcher — PT/EN language switcher in the sidebar footer.
-//---------------
-const LocaleSwitcher = ({
-  locale,
-  setLocale,
-}: {
-  locale: string;
-  setLocale: (locale: 'pt' | 'en') => void;
-}) => (
-  <div className="flex items-center justify-center gap-1 rounded-xl border border-[#edf0f4] bg-[#f8fafc] p-1 md:justify-start">
-    {LOCALES.map((option) => {
-      const isActive = option.value === locale;
-      return (
-        <button
-          key={option.value}
-          type="button"
-          onClick={() => setLocale(option.value)}
-          aria-pressed={isActive}
-          className={`flex-1 rounded-lg px-2 py-1 text-[11px] font-semibold transition-colors md:flex-none md:px-3 ${
-            isActive
-              ? 'bg-white text-[#101728] shadow-sm'
-              : 'text-[#718096] hover:bg-white hover:text-[#101728]'
-          }`}
-        >
-          {option.label}
-        </button>
-      );
-    })}
-  </div>
-);
-
-//---------------
 // SidebarLegalLinks — privacy, terms and support links in the sidebar footer
 //---------------
 const SidebarLegalLinks = () => {
@@ -221,79 +187,6 @@ const SidebarLegalLinks = () => {
       <Link href="/privacy" className="hover:text-[#101728]">{t('footer.privacy')}</Link>
       <Link href="/terms" className="hover:text-[#101728]">{t('footer.terms')}</Link>
       <a href="mailto:madebyryandev@gmail.com" className="hover:text-[#101728]">{t('footer.support')}</a>
-    </div>
-  );
-};
-
-//---------------
-// SidebarUser — logged-in user with avatar and sign out
-//---------------
-const SidebarUser = () => {
-  const sessionQuery = useSessionQuery();
-  const router = useRouter();
-  const { t } = useI18n();
-
-  const user = sessionQuery.data;
-
-  if (!user) {
-    return null;
-  }
-
-  // Type guards to extract avatar and name from user_metadata
-  const metadata = user.user_metadata;
-  const avatarUrl =
-    typeof metadata?.avatar_url === 'string' ? metadata.avatar_url : undefined;
-  const userName =
-    typeof metadata?.name === 'string'
-      ? metadata.name
-      : typeof metadata?.user_name === 'string'
-        ? metadata.user_name
-        : typeof metadata?.provider_id === 'string'
-          ? metadata.provider_id
-          : undefined;
-
-  const handleSignOut = async () => {
-    const { createSupabaseClient } = await import('@/lib/supabase/client');
-    const supabase = createSupabaseClient();
-    await supabase.auth.signOut();
-    router.push('/login');
-  };
-
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center gap-3 border-t border-[#edf0f4] px-1 pt-4 lg:gap-3 lg:pt-5">
-        {avatarUrl ? (
-          <div className="relative size-10 shrink-0 overflow-hidden rounded-full bg-[#e8edf2] ring-2 ring-white lg:size-12">
-            <Image
-              src={avatarUrl}
-              alt={userName || 'User'}
-              fill
-              sizes="32px"
-              className="object-cover"
-            />
-          </div>
-        ) : (
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#e8edf2] text-sm font-semibold text-[#657184] ring-2 ring-white lg:size-12">
-            {userName?.charAt(0).toUpperCase() || 'U'}
-          </div>
-        )}
-        <div className="min-w-0 flex-1">
-          <p className="text-[15px] leading-tight font-semibold tracking-[-0.02em] text-[#101728] lg:text-[18px]">
-            {userName || 'GitHub User'}
-          </p>
-        </div>
-      </div>
-      <button
-        type="button"
-        onClick={handleSignOut}
-        title={t('nav.signOut')}
-        className="flex w-full items-center gap-3.5 rounded-[18px] bg-[#f8fafc] px-4 py-3 text-left text-[15px] text-[#718096] transition-colors hover:bg-[#f1f4f7] hover:text-[#101728] lg:gap-5 lg:rounded-[22px] lg:px-8 lg:py-4 lg:text-[18px]"
-      >
-        <svg className="size-5 lg:size-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7} aria-hidden="true">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0-4-4m4 4H7m6 4v1a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3h4a3 3 0 0 1 3 3v1" />
-        </svg>
-        {t('nav.signOut')}
-      </button>
     </div>
   );
 };

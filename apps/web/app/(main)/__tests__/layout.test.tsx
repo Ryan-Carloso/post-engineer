@@ -33,6 +33,7 @@ vi.mock('@/lib/ui', () => ({
   KeyIcon: () => <span data-testid="icon-key" />,
   GlobeIcon: () => <span data-testid="icon-globe" />,
   CoinsIcon: () => <span data-testid="icon-coins" />,
+  ProfileIcon: () => <span data-testid="icon-profile" />,
   HistoryIcon: () => <span data-testid="icon-history" />,
   SparklesIcon: () => <span data-testid="icon-sparkles" />,
   MicIcon: () => <span data-testid="icon-mic" />,
@@ -269,8 +270,11 @@ describe('app/(main)/layout — MainLayout', () => {
       isLoading: false,
     } as never);
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-    const img = screen.getByRole('img', { name: 'A' });
-    expect(img).toHaveAttribute('src', 'https://example.com/avatar.png');
+    // The avatar shows in the sidebar user block and in the mobile header link.
+    const sidebarImg = within(screen.getByTestId('profile-user-link')).getByRole('img', { name: 'A' });
+    expect(sidebarImg).toHaveAttribute('src', 'https://example.com/avatar.png');
+    const headerImg = within(screen.getByTestId('mobile-profile-link')).getByRole('img', { name: 'A' });
+    expect(headerImg).toHaveAttribute('src', 'https://example.com/avatar.png');
   });
 
   it('sign out button calls signOut and navigates to /login', async () => {
@@ -390,5 +394,68 @@ describe('app/(main)/layout — MainLayout', () => {
       expect(screen.queryByRole('button', { name: /menu/i })).toBeNull();
       expect(screen.queryByLabelText('Abrir menu')).toBeNull();
     });
+  });
+});
+
+describe('mobile header profile area', () => {
+  const getMobileHeader = () => screen.getByTestId('mobile-header');
+
+  const mockSessionUser = (user: unknown) => {
+    vi.mocked(useSessionQuery).mockReturnValue({
+      data: user,
+      isLoading: false,
+    } as never);
+  };
+
+  it('shows the version badge next to the brand', () => {
+    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+    const header = getMobileHeader();
+    expect(within(header).getByTestId('version-badge')).toHaveTextContent('BETA');
+  });
+
+  it('shows a profile link to /account in the mobile header', () => {
+    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+    const link = within(getMobileHeader()).getByTestId('mobile-profile-link');
+    expect(link).toHaveAttribute('href', '/account');
+    expect(link).toHaveAttribute('aria-label', 'nav.profile');
+  });
+
+  it('profile link shows the avatar image when the session has one', () => {
+    mockSessionUser({
+      id: 'user-1',
+      user_metadata: { avatar_url: 'https://example.com/avatar.png', name: 'Header User' },
+    });
+    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+    const link = within(getMobileHeader()).getByTestId('mobile-profile-link');
+    expect(within(link).getByAltText('Header User')).toHaveAttribute(
+      'src',
+      'https://example.com/avatar.png',
+    );
+  });
+
+  it('profile link falls back to the initial-letter circle without an avatar', () => {
+    mockSessionUser({
+      id: 'user-1',
+      user_metadata: { name: 'Header User' },
+    });
+    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+    const link = within(getMobileHeader()).getByTestId('mobile-profile-link');
+    expect(within(link).queryByRole('img')).toBeNull();
+    expect(within(link).getByText('H')).toBeInTheDocument();
+  });
+
+  it('sidebar user block links to /account', () => {
+    mockSessionUser({
+      id: 'user-1',
+      user_metadata: { name: 'Sidebar User' },
+    });
+    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+    expect(screen.getByTestId('profile-user-link')).toHaveAttribute('href', '/account');
+  });
+
+  it('mobile bottom navigation still has exactly five tabs (no profile tab)', () => {
+    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+    const nav = screen.getByRole('navigation', { name: 'nav.primaryNavigation' });
+    expect(within(nav).getAllByRole('link')).toHaveLength(5);
   });
 });

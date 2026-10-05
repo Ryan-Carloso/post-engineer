@@ -24,6 +24,14 @@ export const ptDictionary = {
     posts: 'Posts',
     postsHint: 'Histórico e agenda',
     primaryNavigation: 'Navegação principal',
+    profile: 'Perfil',
+  },
+
+  // Account area — Perfil page (mobile header avatar + /account route)
+  account: {
+    title: 'Perfil',
+    subtitle: 'Suas informações, tokens e preferências.',
+    version: 'Versão',
   },
 
   // Posts page — history + upcoming posts from all accounts
