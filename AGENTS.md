@@ -177,6 +177,19 @@ notices.
   line at a specific line number; grep showed the string nowhere in
   the file. Verify every cited line with grep before changing code.
 
+## Reviewer calibration (OpenCode, PR #104, 2026-10-05)
+
+- **Cross-job "race conditions" on runner-local files are false.** The
+  MAJOR finding claimed concurrent jobs could corrupt the `pyproject.toml`
+  patched by the mutmut scope step — but `mutation-engine` is a single job
+  and every GitHub-hosted job gets a fresh VM; nothing is shared. Same
+  class as the PR #88 same-runner false premise: verify the sharing
+  premise before acting.
+- **`glob.glob` never raises on a bad pattern.** The MINOR finding asked
+  for try/except around the scope expansion; an invalid glob just matches
+  nothing, and the `matched=false` path already skips the job with a clear
+  log line. No handling needed.
+
 ## Codecov PR comment (PR #90, 2026-10-04)
 
 - **The `header`/`flags` comment sections only render when the PR diff
