@@ -16,6 +16,7 @@
 // without measurement there is no proof the threshold holds.
 //---------------
 import fs from 'node:fs';
+import path from 'node:path';
 import { normalizeWebPath, parseCobertura, parseLcov, aggregateCoverage } from './coverage.mjs';
 import { inCypressScope } from './cypress-scope.mjs';
 import { mutationScore } from './mutation.mjs';
@@ -52,6 +53,7 @@ function main() {
     findings.vitest = { status: 'na', reason: 'no UI files changed' };
     findings.cypress = { status: 'na', reason: 'no UI files changed' };
     findings.mutation = { status: 'na', reason: 'no UI files changed' };
+    fs.mkdirSync(path.dirname(out), { recursive: true });
     fs.writeFileSync(out, JSON.stringify(findings, null, 2));
     console.log('No UI files changed — gates not applicable.');
     process.exit(0);
@@ -61,7 +63,14 @@ function main() {
   findings.cypress = evaluateCypress(arg('--lcov'), arg('--cobertura'), uiFiles);
   findings.mutation = evaluateMutation(arg('--mutation'), uiFiles);
 
-  findings.pass = [findings.vitest, findings.cypress, findings.mutation].every((g) => g.status !== 'fail');
+  // Fail closed: 'missing' (and any non-na non-pass status) fails the
+  // overall verdict. Only an explicit pass or n/a is acceptable.
+  findings.pass = [findings.vitest, findings.cypress, findings.mutation].every(
+    (g) => g.status === 'pass' || g.status === 'na',
+  );
+  // The output directory may not exist (e.g. the artifact-download step is
+  // skipped when no UI files changed); create it.
+  fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, JSON.stringify(findings, null, 2));
 
   for (const [name, gate] of [['vitest', findings.vitest], ['cypress', findings.cypress], ['mutation', findings.mutation]]) {

@@ -768,7 +768,7 @@ jobs:
           echo "gates_exit=$code" >> "$GITHUB_OUTPUT"
           if [ "$code" != "0" ]; then
             echo "::error::UI coverage gates failed (see the PR comment and the findings below)."
-            cat /tmp/ui-gates/findings.json
+            cat /tmp/ui-gates/findings.json || true
           fi
 
       - name: Post/update PR comment
