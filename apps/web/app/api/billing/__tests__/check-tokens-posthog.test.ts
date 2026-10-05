@@ -1,7 +1,7 @@
 //---------------
 // Route-level proof: handled 5xx responses from a real API route reach
-// PostHog via withApiErrorReporting ($exception), while the 401 stays
-// console-only (no PostHog event at all).
+// PostHog via withApiErrorReporting ($exception), and the 401 arrives as
+// a server_warning (never an $exception).
 // Uses POST /api/billing/check-tokens because its 500 path (missing
 // MONEYPRINT_API_SECRET) is deterministic without touching a database.
 //---------------
@@ -83,12 +83,20 @@ describe('POST /api/billing/check-tokens (PostHog 5xx reporting)', () => {
     });
   });
 
-  it('does not report the 401 to PostHog (auth failures stay console-only)', async () => {
+  it('reports the 401 as a server_warning (never an $exception)', async () => {
     const res = await POST(postRequest({ 'x-engine-secret': 'wrong' }));
 
     expect(res.status).toBe(401);
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
+    const [event, properties] = capture.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(event).toBe('server_warning');
+    expect(properties).toMatchObject({
+      route: 'POST /api/billing/check-tokens',
+      status: 401,
+    });
     expect(captureException).not.toHaveBeenCalled();
-    expect(capture).not.toHaveBeenCalled();
   });
 });

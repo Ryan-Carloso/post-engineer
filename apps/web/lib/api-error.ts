@@ -106,9 +106,10 @@ export function apiErrorResponse(
     if (status >= 500) {
       errorId = logger.error(message, options?.cause, metadata);
     } else if (status === 401 || status === 403) {
-      // Auth failures are console-only (no PostHog): unauthenticated scanner
-      // traffic would otherwise become billable analytics volume. The
-      // errorId is still returned so clients get a consistent shape.
+      // Auth failures log console-only here (no logger.warn): the
+      // withApiErrorReporting wrapper reports them to PostHog as
+      // server_warning instead, so there is still exactly one event.
+      // The errorId is still returned so clients get a consistent shape.
       // Use %s format to avoid CodeQL format-string warning on the
       // interpolated route/status/message.
       console.warn('%s', `[${route}] ${status} ${logMessage}`, metadata);
@@ -129,8 +130,8 @@ export function apiErrorResponse(
   const response = NextResponse.json({ success: false, error, errorId, ...extra }, { status });
   // logger.error (5xx) and logger.warn (other 4xx) above already reported to
   // PostHog: mark the response so withApiErrorReporting skips it instead of
-  // emitting a duplicate. 401/403 are console-only (unreported) — leave
-  // them unmarked; the wrapper stays silent for them on its own.
+  // emitting a duplicate. 401/403 are console-only here — leave them
+  // unmarked so the wrapper reports them as server_warning.
   if (status >= 400 && status !== 401 && status !== 403) markApiErrorReported(response);
   return response;
 }

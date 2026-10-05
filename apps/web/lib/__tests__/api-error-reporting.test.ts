@@ -3,10 +3,9 @@
 //
 // Next.js's onRequestError (instrumentation.ts) only fires for unhandled
 // (thrown) errors. This wrapper closes the gap for handled responses:
-// 5xx go to PostHog error tracking ($exception), other 4xx go as warnings
-// (server_warning), 2xx go as plain success events (server_success).
-// 401/403 stay console-only — unauthenticated scanner traffic must not
-// become billable analytics volume.
+// 5xx go to PostHog error tracking ($exception), 4xx (including 401/403)
+// go as warnings (server_warning), 2xx go as plain success events
+// (server_success) with the user id when the route opted in via getUserId.
 //---------------
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -89,6 +88,42 @@ describe('withApiErrorReporting', () => {
     expect(client.captureException).not.toHaveBeenCalled();
   });
 
+  it('includes the user id in a 2xx success event when getUserId resolves', async () => {
+    const wrapped = withApiErrorReporting(
+      'GET /api/test',
+      async () => NextResponse.json({ ok: true }),
+      { getUserId: async () => 'user-123' },
+    );
+
+    await wrapped(getRequest());
+
+    await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
+    const [event, properties] = client.capture.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(event).toBe('server_success');
+    expect(properties).toMatchObject({ userId: 'user-123', status: 200 });
+    expect(client.captureException).not.toHaveBeenCalled();
+  });
+
+  it('omits the user id from a 2xx when the route did not opt in via getUserId', async () => {
+    const wrapped = withApiErrorReporting(
+      'GET /api/test',
+      async () => NextResponse.json({ ok: true }),
+    );
+
+    await wrapped(getRequest());
+
+    await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
+    const [event, properties] = client.capture.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(event).toBe('server_success');
+    expect(properties).not.toHaveProperty('userId');
+  });
+
   it.each([301, 304])('does not report a %i redirect', async (status) => {
     const wrapped = withApiErrorReporting(
       'GET /api/test',
@@ -148,19 +183,27 @@ describe('withApiErrorReporting', () => {
   );
 
   it.each([401, 403])(
-    'leaves a %i auth failure console-only (no PostHog at all)',
+    'reports a %i auth failure as a server_warning (never an $exception)',
     async (status) => {
       const wrapped = withApiErrorReporting(
         'GET /api/test',
-        async () => NextResponse.json({ error: 'nope' }, { status }),
+        async () => NextResponse.json({ error: 'nope', code: 'UNAUTHORIZED' }, { status }),
       );
 
       const res = await wrapped(getRequest());
 
       expect(res.status).toBe(status);
-      // Give the fire-and-forget path a chance to (incorrectly) run.
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      expect(client.capture).not.toHaveBeenCalled();
+      await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
+      const [event, properties] = client.capture.mock.calls[0] as [
+        string,
+        Record<string, unknown>,
+      ];
+      expect(event).toBe('server_warning');
+      expect(properties).toMatchObject({
+        route: 'GET /api/test',
+        status,
+        code: 'UNAUTHORIZED',
+      });
       expect(client.captureException).not.toHaveBeenCalled();
     },
   );

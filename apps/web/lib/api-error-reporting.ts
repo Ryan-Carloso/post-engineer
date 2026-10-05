@@ -10,11 +10,10 @@
 //   structured error code (when the JSON body carries one), the
 //   client-facing errorId (for correlation with user reports), and the
 //   user id when the caller provides one via options.getUserId.
-// - 4xx -> a server_warning event (same split apiErrorResponse uses).
-// - 2xx -> a server_success event (plain event, never an $exception).
-//
-// 401/403 stay console-only: unauthenticated scanner traffic must not
-// become billable analytics volume (same policy as apiErrorResponse).
+// - 4xx (including 401/403) -> a server_warning event (same split
+//   apiErrorResponse uses).
+// - 2xx -> a server_success event (plain event, never an $exception),
+//   with the user id when the route opted in via options.getUserId.
 //
 // Reporting is fire-and-forget: it never throws and never mutates the
 // response the client receives. Thrown handler errors are deliberately
@@ -31,9 +30,10 @@ import { getPostHogServer } from './posthog-server';
 import { scrubSecrets } from './scrub';
 
 export interface ApiErrorReportingOptions {
-  // Resolve the affected user id for the request. Called lazily, only when
-  // a 4xx/5xx is actually reported, so the happy path pays nothing.
-  // Best-effort: a throw or an undefined result just omits the user id.
+  // Resolve the affected user id for the request. Called lazily, only for
+  // responses that are actually reported, and only on routes that opt in —
+  // routes without getUserId pay nothing. Best-effort: a throw or an
+  // undefined result just omits the user id.
   getUserId?: (request: Request) => string | undefined | Promise<string | undefined>;
 }
 
@@ -79,6 +79,20 @@ function asNonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+// Best-effort user id resolution. Only called on routes that opted in via
+// options.getUserId; a throw or an undefined result just omits the user id.
+async function resolveUserId(
+  request: Request | undefined,
+  getUserId?: ApiErrorReportingOptions['getUserId'],
+): Promise<string | undefined> {
+  if (getUserId === undefined || request === undefined) return undefined;
+  try {
+    return asNonEmptyString(await getUserId(request));
+  } catch {
+    return undefined;
+  }
+}
+
 async function reportApiIssue(
   route: string,
   status: number,
@@ -93,14 +107,7 @@ async function reportApiIssue(
     if (!client) return;
 
     const { code, errorId } = await readErrorDetails(response);
-    let userId: string | undefined;
-    if (getUserId !== undefined && request !== undefined) {
-      try {
-        userId = asNonEmptyString(await getUserId(request));
-      } catch {
-        userId = undefined;
-      }
-    }
+    const userId = await resolveUserId(request, getUserId);
 
     const codeStr = asNonEmptyString(code);
     const errorIdStr = asNonEmptyString(errorId);
@@ -124,15 +131,23 @@ async function reportApiIssue(
   }
 }
 
-function reportApiSuccess(route: string, status: number): void {
+async function reportApiSuccess(
+  route: string,
+  status: number,
+  request: Request | undefined,
+  getUserId?: ApiErrorReportingOptions['getUserId'],
+): Promise<void> {
   try {
     // Keep dev/test noise out of PostHog (same convention as logger.ts).
     if (!isProduction()) return;
     const client = getPostHogServer();
     if (!client) return;
-    // Plain event, never an $exception. No user id and no body read — the
-    // happy path pays nothing beyond the event itself.
-    client.capture('server_success', { route, status });
+    const userId = await resolveUserId(request, getUserId);
+    const properties: Record<string, unknown> = { route, status };
+    if (userId !== undefined) properties.userId = userId;
+    // Plain event, never an $exception. No body read — success bodies are
+    // large and varied; route+status is the signal.
+    client.capture('server_success', properties);
   } catch {
     // Telemetry must never break the request path.
   }
@@ -140,14 +155,15 @@ function reportApiSuccess(route: string, status: number): void {
 
 /**
  * Wrap a Next.js App Router route handler so every API response is visible
- * in PostHog: 5xx via error tracking ($exception), other 4xx as warnings
- * (server_warning), 2xx as plain success events (server_success).
- * 401/403 stay console-only. The wrapped handler keeps the original call
- * shape — the request stays optional when the handler declares it optional
- * (or takes none at all), plain Request and NextRequest both typecheck,
- * and extra args such as the route-params context pass through. The
- * handler's response is returned untouched, and handler errors rethrow
- * for onRequestError to report.
+ * in PostHog: 5xx via error tracking ($exception), 4xx (including 401/403)
+ * as warnings (server_warning), 2xx as plain success events
+ * (server_success, with the user id when the route opted in via
+ * options.getUserId). The wrapped handler keeps the original call shape —
+ * the request stays optional when the handler declares it optional (or
+ * takes none at all), plain Request and NextRequest both typecheck, and
+ * extra args such as the route-params context pass through. The handler's
+ * response is returned untouched, and handler errors rethrow for
+ * onRequestError to report.
  */
 export function withApiErrorReporting<TReq extends Request | undefined, TArgs extends unknown[]>(
   route: string,
@@ -166,16 +182,11 @@ export function withApiErrorReporting(
     const response = await handler(request, ...args);
     const status = (response as { status?: unknown } | null | undefined)?.status;
     if (typeof status !== 'number' || reportedResponses.has(response)) return response;
-    if (status >= 500) {
-      // Fire-and-forget: never awaited, never throws, never mutates the response.
-      void reportApiIssue(route, status, response, request, options?.getUserId);
-    } else if (status >= 400) {
-      // 401/403 stay console-only: unauthenticated scanner traffic must not
-      // become billable analytics volume (same policy as apiErrorResponse).
-      if (status === 401 || status === 403) return response;
+    // Fire-and-forget: never awaited, never throws, never mutates the response.
+    if (status >= 400) {
       void reportApiIssue(route, status, response, request, options?.getUserId);
     } else if (status >= 200 && status < 300) {
-      reportApiSuccess(route, status);
+      void reportApiSuccess(route, status, request, options?.getUserId);
     }
     return response;
   };
