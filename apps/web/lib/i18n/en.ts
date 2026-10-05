@@ -86,7 +86,6 @@ export const enDictionary: Dictionary = {
     publishedOnLabel: 'Published on',
     accountsLabel: 'Accounts',
     publishedLinksTitle: 'Published to',
-    progressHistoryTitle: 'Progress history',
     captionLabel: 'Caption',
     editCaption: 'Edit caption',
     save: 'Save',
