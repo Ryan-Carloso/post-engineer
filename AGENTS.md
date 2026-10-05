@@ -2255,3 +2255,6 @@ Five MINORs on the merged funnel, fixed as a follow-up PR with one focused TDD c
 
 ## Cypress spec module scope (2026-10-05, PR #102)
 - **New spec files under cypress/e2e must be modules (`export {};` at the end).** Top-level helpers in a spec file are globals: a second spec declaring `authCookieName`/`seedUserMetadata`/`interceptShellData` fails tsc with TS2393 Duplicate function implementation. The existing `support/commands.ts` already uses the `export {};` pattern.
+
+## Cypress: hidden responsive twins in the DOM (2026-10-05, PR #102)
+- **The AppShell renders BOTH the desktop sidebar and the mobile header in the DOM** (`hidden md:flex` / `md:hidden` only hide via CSS). E2E selectors like `button[title="Sair"]` match the hidden twin too: `scrollIntoView()` errors on 2 elements and `should('be.visible')` fails on the hidden one. Scope page assertions to a visible container (`[data-testid=account-page] [data-testid=...]`, `cy.get('@page').find(...)`), and prefer exact-href selectors (`a[href="/account"]`).

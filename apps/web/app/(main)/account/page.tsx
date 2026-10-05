@@ -13,7 +13,7 @@ export default function AccountPage() {
   const { t } = useI18n();
 
   return (
-    <div className="mx-auto w-full max-w-2xl">
+    <div data-testid="account-page" className="mx-auto w-full max-w-2xl">
       <div className="mb-6">
         <h1 className="text-2xl font-bold tracking-[-0.02em] text-[#101728]">{t('account.title')}</h1>
         <p className="mt-1 text-[15px] text-[#718096]">{t('account.subtitle')}</p>

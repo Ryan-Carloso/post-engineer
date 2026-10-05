@@ -90,6 +90,7 @@ beforeEach(() => {
 describe('app/(main)/account — AccountPage', () => {
   it('renders the profile heading', () => {
     render(<AccountPage />, { wrapper: createWrapper() });
+    expect(screen.getByTestId('account-page')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'account.title' })).toBeInTheDocument();
     expect(screen.getByText('account.subtitle')).toBeInTheDocument();
   });

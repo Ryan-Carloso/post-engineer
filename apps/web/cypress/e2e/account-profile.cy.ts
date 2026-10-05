@@ -130,34 +130,37 @@ describe('Account area — /account page', () => {
   it('renders user, token balance, version, locale switcher and sign out', () => {
     cy.visit('/account');
 
-    cy.contains('h1', 'Perfil').should('be.visible');
+    // All assertions are scoped to the page container: the desktop sidebar
+    // (hidden on mobile via CSS) renders a second AccountPanel in the DOM.
+    cy.get('[data-testid=account-page]').as('page');
 
-    cy.get('[data-testid=profile-user-link]')
+    cy.get('@page').contains('h1', 'Perfil').should('be.visible');
+
+    cy.get('@page')
+      .find('[data-testid=profile-user-link]')
       .should('be.visible')
       .and('have.attr', 'href', '/account')
       .and('contain', 'Cypress');
 
     // The client really fires /api/billing/tokens on mount (TokenBalance).
     cy.wait('@getTokens');
-    cy.get('[data-testid=token-balance]').should('contain', '100');
+    cy.get('@page').find('[data-testid=token-balance]').should('contain', '100');
 
-    // Every rendered version badge shows the BETA build tag.
-    cy.get('[data-testid=version-badge]')
-      .should('have.length.greaterThan', 0)
-      .each(($badge) => {
-        expect($badge.text()).to.contain('BETA');
-      });
+    cy.get('@page')
+      .find('[data-testid=version-badge]')
+      .should('have.length', 1)
+      .and('contain', 'BETA');
 
-    cy.contains('button', 'PT').should('be.visible');
-    cy.contains('button', 'EN').should('be.visible');
+    cy.get('@page').contains('button', 'PT').should('be.visible');
+    cy.get('@page').contains('button', 'EN').should('be.visible');
 
-    cy.get('button[title="Sair"]').should('be.visible');
+    cy.get('@page').find('button[title="Sair"]').should('be.visible');
   });
 
   it('signs out and lands on /login', () => {
     cy.visit('/account');
 
-    cy.get('button[title="Sair"]').scrollIntoView().click();
+    cy.get('[data-testid=account-page]').find('button[title="Sair"]').scrollIntoView().click();
     cy.url().should('match', /\/login$/);
   });
 });
