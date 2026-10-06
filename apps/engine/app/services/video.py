@@ -120,6 +120,16 @@ fps = 30
 _VIDEO_DURATION_SAFETY_MARGIN = 0.1
 _BGM_EXTENSIONS = (".mp3",)
 _DEFAULT_VIDEO_CODEC = "libx264"
+
+# How long the one-frame encoder probe may run. It only starts ffmpeg and
+# encodes a single 64x64 frame, so anything slower means the encoder is not
+# usable and the probe should not block a task.
+_ENCODER_PROBE_TIMEOUT_SECONDS = 20
+
+# Upper bound for the local lip-sync concat. Generous for a CPU-only host
+# (the observed worst case was ~13 min for a full re-encode) but finite, so
+# a wedged ffmpeg fails the task instead of leaving it `running` forever.
+_LIPSYNC_CONCAT_TIMEOUT_SECONDS = 30 * 60
 _SUPPORTED_VIDEO_CODECS = (
     "libx264",
     "h264_nvenc",
@@ -224,13 +234,98 @@ def _get_configured_video_codec() -> str:
     return configured_codec
 
 
+_SUPPORTED_VIDEO_PRESETS = {
+    "ultrafast",
+    "superfast",
+    "veryfast",
+    "faster",
+    "fast",
+    "medium",
+    "slow",
+}
+
+# The preset used when config.toml does not name one. veryfast because this
+# project runs on CPU-only hosts (no GPU in most self-host deployments),
+# where libx264's medium preset dominated the wall-clock cost of every
+# encode — a ~13 min lip-sync splice was observed in production.
+_DEFAULT_VIDEO_PRESET = "veryfast"
+
+
 def _get_configured_video_preset() -> str:
-    """Return a safe ffmpeg preset shared by CPU and hardware encoders."""
-    preset = str(config.app.get("video_preset", "medium") or "medium").strip()
-    if preset not in {"ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow"}:
-        logger.warning("unsupported video preset configured: %s, fallback to medium", preset)
-        return "medium"
+    """
+    Return a safe ffmpeg preset shared by CPU and hardware encoders.
+
+    Self-hosters who want the quality/size trade can set `video_preset` in
+    config.toml; the shipped default favours speed because the common
+    deployment has no GPU.
+    """
+    preset = str(
+        config.app.get("video_preset", _DEFAULT_VIDEO_PRESET) or _DEFAULT_VIDEO_PRESET
+    ).strip()
+    if preset not in _SUPPORTED_VIDEO_PRESETS:
+        logger.warning(
+            "unsupported video preset configured: %s, fallback to %s",
+            preset,
+            _DEFAULT_VIDEO_PRESET,
+        )
+        return _DEFAULT_VIDEO_PRESET
     return preset
+
+
+@lru_cache(maxsize=16)
+def _encoder_actually_usable(codec: str) -> bool:
+    """
+    Check whether the given encoder can really encode a frame on this host.
+
+    The encoder LIST is not evidence: an ffmpeg built with GPU support lists
+    h264_nvenc / h264_qsv / h264_vaapi on a machine with no GPU at all. That
+    made _get_effective_video_codec accept a hardware encoder it could never
+    use, so every clip's real encode failed and fell back — one identical
+    warning per clip (18 in a single 36s task) before any useful work.
+
+    So encode ONE frame with the encoder and look at the exit code. This is
+    the check that cannot be fooled by a compiled-but-absent device.
+
+    Fails CLOSED: an unreadable or failed probe returns False, because
+    libx264 is slower but always works, while proceeding on an unverified
+    hardware encoder fails the whole generation.
+
+    Cached per codec: the answer is a property of the host, not of the task,
+    so an 18-clip task probes once instead of 18 times.
+    """
+    ffmpeg_binary = utils.get_ffmpeg_binary()
+    probe_cmd = [
+        ffmpeg_binary,
+        "-hide_banner",
+        "-loglevel", "error",
+        "-f", "lavfi",
+        "-i", "color=c=black:s=64x64:d=0.1",
+        "-frames:v", "1",
+        "-c:v", codec,
+        "-f", "null",
+        "-",
+    ]
+    try:
+        result = subprocess.run(
+            probe_cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=_ENCODER_PROBE_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        logger.warning(
+            f"could not probe encoder {codec}, fallback to {_DEFAULT_VIDEO_CODEC}: {str(exc)}"
+        )
+        return False
+    if result.returncode != 0:
+        logger.warning(
+            f"encoder {codec} is compiled in but cannot encode on this host, "
+            f"fallback to {_DEFAULT_VIDEO_CODEC}: "
+            f"{(result.stderr or result.stdout or '').strip()}"
+        )
+        return False
+    return True
 
 
 @lru_cache(maxsize=16)
@@ -239,8 +334,9 @@ def _ffmpeg_encoder_exists(ffmpeg_binary: str, codec: str) -> bool:
     Check whether the current FFmpeg build advertises the given encoder.
 
     This only proves the encoder was compiled in — not that the current
-    machine's hardware and drivers can actually use it. Real encode failures
-    still fall back to libx264.
+    machine's hardware and drivers can actually use it; that second question
+    is answered by _encoder_actually_usable, which _get_effective_video_codec
+    asks as well.
     """
     try:
         result = subprocess.run(
@@ -289,6 +385,16 @@ def _get_effective_video_codec(preferred_codec: str | None = None) -> str:
     if not _ffmpeg_encoder_exists(ffmpeg_binary, selected_codec):
         logger.warning(
             f"ffmpeg encoder {selected_codec} is not available, "
+            f"fallback to {_DEFAULT_VIDEO_CODEC}"
+        )
+        return _DEFAULT_VIDEO_CODEC
+
+    # Compiled in is not the same as usable. Probing once here means a
+    # hardware encoder this host cannot run falls back BEFORE the task starts,
+    # instead of once per clip after a real encode failure.
+    if not _encoder_actually_usable(selected_codec):
+        logger.warning(
+            f"ffmpeg encoder {selected_codec} cannot encode on this host, "
             f"fallback to {_DEFAULT_VIDEO_CODEC}"
         )
         return _DEFAULT_VIDEO_CODEC
@@ -445,6 +551,30 @@ def concat_video_clips_with_ffmpeg(
         delete_files(concat_list_file)
 
 
+def _run_ffmpeg_bounded(
+    command: list[str], timeout: int, failure_message: str
+) -> subprocess.CompletedProcess:
+    """
+    Run one ffmpeg command with a hard timeout and a loud failure.
+
+    Every local encode needs a deadline: a wedged ffmpeg otherwise leaves the
+    task `running` forever, because the InfiniteTalk timeout only bounds the
+    REMOTE job, not this process. The timeout raises TimeoutExpired for the
+    caller to classify; a non-zero exit becomes a RuntimeError carrying
+    ffmpeg's own stderr, which is the only useful diagnostic here.
+    """
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=timeout,
+    )
+    if result.returncode != 0:
+        raise RuntimeError((result.stderr or result.stdout or failure_message).strip())
+    return result
+
+
 def replace_video_intro_with_lipsync(
     background_video: str,
     lipsync_video: str,
@@ -455,22 +585,85 @@ def replace_video_intro_with_lipsync(
     source = _open_video_clip_quietly(background_video)
     width, height = source.w, source.h
     source.close()
-    filter_graph = (
-        f"[1:v]scale={width}:{height}:force_original_aspect_ratio=decrease,"
-        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1,"
-        f"trim=duration={duration},setpts=PTS-STARTPTS[intro];"
-        f"[0:v]trim=start={duration},setpts=PTS-STARTPTS[tail];"
-        "[intro][tail]concat=n=2:v=1:a=0[outv]"
-    )
-    command = [
-        utils.get_ffmpeg_binary(), "-y", "-i", background_video,
-        "-i", lipsync_video, "-filter_complex", filter_graph,
-        "-map", "[outv]", "-an", "-c:v", _get_effective_video_codec(),
-        "-pix_fmt", "yuv420p", output_file,
+    # Encode ONLY the intro. The tail is already H.264 at the right
+    # dimensions from combine_videos, so re-encoding all ~32s of it (what
+    # this did before) was the dominant cost of the splice — ~13 minutes on
+    # a CPU-only host, with no log output while it ran.
+    #
+    # Two steps rather than one filter_complex concat: the concat FILTER
+    # forces every input frame through the encoder, which is exactly the
+    # cost being removed. Encoding the intro alone and then joining the two
+    # files with the concat DEMUXER lets the tail be stream-copied.
+    intro_file = f"{os.path.splitext(output_file)[0]}-intro-encoded.mp4"
+    intro_command = [
+        utils.get_ffmpeg_binary(), "-y", "-i", lipsync_video,
+        "-t", str(duration),
+        "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
+               f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1",
+        "-an", "-c:v", _get_effective_video_codec(),
+        "-preset", _get_configured_video_preset(),
+        "-pix_fmt", "yuv420p", intro_file,
     ]
-    result = subprocess.run(command, capture_output=True, text=True, check=False)
-    if result.returncode != 0:
-        raise RuntimeError((result.stderr or result.stdout or "lip-sync concat failed").strip())
+    logger.info(
+        f"splicing {duration}s lip-sync intro onto {os.path.basename(background_video)}"
+    )
+    try:
+        _run_ffmpeg_bounded(
+            intro_command,
+            timeout=_LIPSYNC_CONCAT_TIMEOUT_SECONDS,
+            failure_message="lip-sync intro encode failed",
+        )
+
+        # Join with the concat DEMUXER: both files are H.264 at the same
+        # resolution, so `-c:v copy` remuxes without re-encoding a frame.
+        tail_file = f"{os.path.splitext(output_file)[0]}-tail.mp4"
+        try:
+            # -ss MUST precede -i here. With -c:v copy there is no decoding,
+            # so a post-input -ss (which seeks by discarding decoded frames)
+            # cannot work and ffmpeg writes an empty file — verified: the
+            # output probed as duration N/A.
+            tail_command = [
+                utils.get_ffmpeg_binary(), "-y",
+                "-ss", str(duration),
+                "-i", background_video,
+                "-c:v", "copy", "-an", tail_file,
+            ]
+            _run_ffmpeg_bounded(
+                tail_command,
+                timeout=_LIPSYNC_CONCAT_TIMEOUT_SECONDS,
+                failure_message="lip-sync tail extraction failed",
+            )
+            concat_list_file = f"{os.path.splitext(output_file)[0]}-concat.txt"
+            with open(concat_list_file, "w", encoding="utf-8") as fp:
+                for part in (intro_file, tail_file):
+                    fp.write(f"file '{_format_ffmpeg_concat_path(part)}'\n")
+            try:
+                join_command = [
+                    utils.get_ffmpeg_binary(), "-y",
+                    "-f", "concat", "-safe", "0",
+                    "-i", concat_list_file,
+                    "-c:v", "copy",
+                    output_file,
+                ]
+                _run_ffmpeg_bounded(
+                    join_command,
+                    timeout=_LIPSYNC_CONCAT_TIMEOUT_SECONDS,
+                    failure_message="lip-sync concat failed",
+                )
+            finally:
+                delete_files(concat_list_file)
+        finally:
+            delete_files([intro_file, tail_file])
+    except subprocess.TimeoutExpired as exc:
+        # Without this the task stayed `running` forever on a wedged ffmpeg:
+        # the InfiniteTalk timeout only covers the remote job, not this local
+        # encode. Same class as _fail_task's other loud, bounded waits.
+        raise RuntimeError(
+            f"lip-sync concat timed out after {_LIPSYNC_CONCAT_TIMEOUT_SECONDS}s"
+        ) from exc
+    logger.info(
+        f"lip-sync concat completed: {os.path.basename(output_file)}"
+    )
     return output_file
 
 
