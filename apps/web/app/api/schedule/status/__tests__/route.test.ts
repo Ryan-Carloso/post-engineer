@@ -14,12 +14,16 @@ vi.mock('@/lib/supabase/service', () => ({
 vi.mock('@/lib/schedule-progress-history', () => ({
   recordProgressHistory: vi.fn(async () => undefined),
 }));
+vi.mock('@/lib/logger', () => ({
+  logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
+}));
 
 import { parseLimit, GET } from '../route';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { recordProgressHistory } from '@/lib/schedule-progress-history';
+import { logger } from '@/lib/logger';
 
 //---------------
 // Unit tests for the ?limit= query param of GET /api/schedule/status.
@@ -529,6 +533,74 @@ describe('GET slot progress (0–100)', () => {
     expect(body.recent[0].progress).toBe(0);
     expect(body.recent[0].retryable).toBe(false);
   });
+
+  //---------------
+  // Engine lookup cap — only slots that actually need a live lookup
+  // (generating/failed WITH a task id) consume the ENGINE_LOOKUP_CAP
+  // budget. Anything else reaching past the cap degrades to progress 0
+  // instead of firing unbounded concurrent engine calls.
+  //---------------
+  it('does not spend the engine cap on pending slots', async () => {
+    mockEngine({ body: { progress: 62, stage: 'lipsync' } });
+    const pending = Array.from({ length: 25 }, (_, i) => ({
+      id: `pend-${i}`, slot_at: '2026-09-24T10:00:00Z', status: 'pending',
+      topic: `Topic ${i}`, schedule_id: 's1',
+    }));
+    const live = Array.from({ length: 5 }, (_, i) => ({
+      id: `gen-${i}`, slot_at: '2026-09-24T10:00:00Z', status: 'generating',
+      topic: `Live ${i}`, schedule_id: 's1', task_id: `task-${i}`,
+    }));
+    const body = await getStatus([...pending, ...live]);
+
+    expect(vi.mocked(fetch).mock.calls.length).toBe(5);
+    expect(body.upcoming.slice(25).every((s) => s.progress === 62)).toBe(true);
+  });
+
+  it('does not spend the engine cap on generating slots without a task id', async () => {
+    mockEngine({ body: { progress: 62, stage: 'lipsync' } });
+    const withoutTask = Array.from({ length: 25 }, (_, i) => ({
+      id: `notask-${i}`, slot_at: '2026-09-24T10:00:00Z', status: 'generating',
+      topic: `Topic ${i}`, schedule_id: 's1',
+    }));
+    const live = Array.from({ length: 5 }, (_, i) => ({
+      id: `gen-${i}`, slot_at: '2026-09-24T10:00:00Z', status: 'generating',
+      topic: `Live ${i}`, schedule_id: 's1', task_id: `task-${i}`,
+    }));
+    const body = await getStatus([...withoutTask, ...live]);
+
+    expect(vi.mocked(fetch).mock.calls.length).toBe(5);
+    expect(body.upcoming.slice(0, 25).every((s) => s.progress === 0)).toBe(true);
+    expect(body.upcoming.slice(25).every((s) => s.progress === 62)).toBe(true);
+  });
+
+  it('does not spend the engine cap on non-live slots that carry a task id', async () => {
+    mockEngine({ body: { progress: 62, stage: 'lipsync' } });
+    const pending = Array.from({ length: 25 }, (_, i) => ({
+      id: `pend-${i}`, slot_at: '2026-09-24T10:00:00Z', status: 'pending',
+      topic: `Topic ${i}`, schedule_id: 's1', task_id: `stale-task-${i}`,
+    }));
+    const live = Array.from({ length: 5 }, (_, i) => ({
+      id: `gen-${i}`, slot_at: '2026-09-24T10:00:00Z', status: 'generating',
+      topic: `Live ${i}`, schedule_id: 's1', task_id: `task-${i}`,
+    }));
+    const body = await getStatus([...pending, ...live]);
+
+    expect(vi.mocked(fetch).mock.calls.length).toBe(5);
+    expect(body.upcoming.slice(25).every((s) => s.progress === 62)).toBe(true);
+  });
+
+  it('caps the engine fan-out for failed slots too', async () => {
+    mockEngine({ body: { progress: 80, state: -1 } });
+    const failed = Array.from({ length: 30 }, (_, i) => ({
+      id: `fail-${i}`, slot_at: '2026-09-24T10:00:00Z', status: 'failed',
+      topic: `Topic ${i}`, schedule_id: 's1', task_id: `task-${i}`, error: 'boom',
+    }));
+    const body = await getStatus([], failed);
+
+    expect(vi.mocked(fetch).mock.calls.length).toBe(25);
+    expect(body.recent.slice(0, 25).every((s) => s.progress === 80)).toBe(true);
+    expect(body.recent.slice(25).every((s) => s.progress === 0)).toBe(true);
+  });
 });
 
 //---------------
@@ -594,5 +666,381 @@ describe('GET progress history recording', () => {
     ]);
 
     expect(vi.mocked(recordProgressHistory)).toHaveBeenCalledWith(expect.anything(), USER_ID, []);
+  });
+
+  it('ignores pending slots even when they carry a task id', async () => {
+    mockEngine({ body: { progress: 40, stage: 'subtitle' } });
+    await getStatusWithClient([
+      { id: 'up-1', slot_at: '2026-10-07T18:00:00Z', status: 'pending', topic: 'T', schedule_id: 's1', task_id: 'stale-task-1' },
+    ]);
+
+    // Only generating/failed observations are history-worthy; a stale
+    // task id on a pending slot must not create a sample.
+    expect(vi.mocked(recordProgressHistory)).toHaveBeenCalledWith(expect.anything(), USER_ID, []);
+  });
+
+  it('ignores live slots with a non-string id', async () => {
+    mockEngine({ body: { progress: 40, stage: 'subtitle' } });
+    await getStatusWithClient([
+      { id: 42, slot_at: '2026-10-07T18:00:00Z', status: 'generating', topic: 'T', schedule_id: 's1', task_id: 'task-1' },
+    ]);
+
+    expect(vi.mocked(recordProgressHistory)).toHaveBeenCalledWith(expect.anything(), USER_ID, []);
+  });
+
+  it('ignores live slots with a non-string task id', async () => {
+    mockEngine({ body: { progress: 40, stage: 'subtitle' } });
+    await getStatusWithClient([
+      { id: 'gen-1', slot_at: '2026-10-07T18:00:00Z', status: 'generating', topic: 'T', schedule_id: 's1', task_id: 42 },
+    ]);
+
+    expect(vi.mocked(recordProgressHistory)).toHaveBeenCalledWith(expect.anything(), USER_ID, []);
+  });
+});
+
+//---------------
+// Query contracts — the exact Supabase query shape is part of the
+// route's contract: the queried tables, status filters, sort direction
+// and the applied limit. These assertions pin the literals mutation
+// testing flips (array, string and boolean mutants).
+//---------------
+describe('GET query contracts', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  async function getWithLimit(limitParam: string | null) {
+    const upcoming = [
+      { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'pending', topic: 'Next', schedule_id: 's1' },
+    ];
+    const client = mockPostsClient(upcoming, []);
+    mockAuthSession({ userId: USER_ID, accessToken: 'pe_test_key', isApiKey: true }, null);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    const url =
+      limitParam === null
+        ? 'https://example.com/api/schedule/status'
+        : `https://example.com/api/schedule/status?limit=${limitParam}`;
+    const response = await GET(new Request(url));
+    expect(response.status).toBe(200);
+    return client;
+  }
+
+  function scheduleIdFilters(chain: { in: { mock: { calls: unknown[][] } } }) {
+    const calls: unknown[][] = chain.in.mock.calls;
+    return calls.filter(([column]) => column === 'schedule_id');
+  }
+
+  it('queries scheduled_posts three times, each scoped by the caller user id', async () => {
+    const client = await getWithLimit(null);
+    const fromCalls: unknown[][] = client.from.mock.calls;
+    expect(fromCalls).toHaveLength(3);
+    expect(fromCalls.every(([table]) => table === 'scheduled_posts')).toBe(true);
+    // Every query (upcoming, recent, queue) scopes by user id — a single
+    // mutated .eq must not hide behind the other two queries' calls.
+    const eqCalls: unknown[][] = client.chain.eq.mock.calls;
+    expect(eqCalls).toHaveLength(3);
+    expect(eqCalls.every(([column, value]) => column === 'user_id' && value === USER_ID)).toBe(true);
+  });
+
+  it('filters upcoming, recent and queue queries by status', async () => {
+    const client = await getWithLimit(null);
+    const inCalls = client.chain.in.mock.calls;
+    expect(inCalls).toContainEqual(['status', ['pending', 'generating', 'ready']]);
+    expect(inCalls).toContainEqual(['status', ['published', 'failed']]);
+    expect(inCalls).toContainEqual(['status', ['pending', 'generating']]);
+  });
+
+  it('selects the documented columns on every query', async () => {
+    const client = await getWithLimit(null);
+    expect(client.chain.select).toHaveBeenCalledWith(
+      'id, slot_at, status, topic, schedule_id, task_id',
+    );
+    expect(client.chain.select).toHaveBeenCalledWith(
+      'id, slot_at, status, topic, error, published_at, schedule_id, task_id',
+    );
+    expect(client.chain.select).toHaveBeenCalledWith('id, schedule_id, slot_at');
+  });
+
+  it('orders upcoming ascending and recent descending by slot_at', async () => {
+    const client = await getWithLimit(null);
+    const orderCalls: unknown[][] = client.chain.order.mock.calls;
+    const ascending = orderCalls.filter(
+      ([column, options]) =>
+        column === 'slot_at' && (options as { ascending?: boolean } | null)?.ascending === true,
+    );
+    const descending = orderCalls.filter(
+      ([column, options]) =>
+        column === 'slot_at' && (options as { ascending?: boolean } | null)?.ascending === false,
+    );
+    // Upcoming and the queue-positions query sort ascending; recent sorts
+    // descending. Counting (not just "contains") pins each query's
+    // direction — a flipped boolean on one query must not hide behind the
+    // other queries' calls.
+    expect(ascending).toHaveLength(2);
+    expect(descending).toHaveLength(1);
+  });
+
+  it('only fetches upcoming slots at or after now', async () => {
+    const client = await getWithLimit(null);
+    expect(client.chain.gte).toHaveBeenCalledWith('slot_at', expect.any(String));
+  });
+
+  it('applies the parsed limit to both paginated queries', async () => {
+    const client = await getWithLimit('5');
+    expect(client.chain.limit).toHaveBeenCalledTimes(2);
+    expect(client.chain.limit).toHaveBeenNthCalledWith(1, 5);
+    expect(client.chain.limit).toHaveBeenNthCalledWith(2, 5);
+  });
+
+  it('does not filter by schedule id for unscoped callers', async () => {
+    const client = await getWithLimit(null);
+    expect(scheduleIdFilters(client.chain)).toHaveLength(0);
+  });
+
+  it('restricts every scoped post query to the allowed schedule ids', async () => {
+    const client = mockScopedPostsClient(['s1'], [], []);
+    mockAuthSession(
+      { userId: USER_ID, accessToken: 'pe_live_scoped', isApiKey: true, keyId: 'key-1', personaIds: ['p1'] },
+      null,
+    );
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    const response = await GET(new Request('https://example.com/api/schedule/status'));
+    expect(response.status).toBe(200);
+    // Upcoming, recent AND the queue-positions query carry the filter.
+    expect(scheduleIdFilters(client.postsChain)).toHaveLength(3);
+    expect(client.schedulesChain.select).toHaveBeenCalledWith('id');
+  });
+});
+
+//---------------
+// Failure handling — a failed upcoming/recent query is an honest 500;
+// a failed queue lookup degrades queue positions to null (and warns)
+// without failing the request; a failed scope lookup is a 500 before
+// any post query runs. Malformed queue payloads never fail the request.
+//---------------
+function mockFailingPostsClient(options: {
+  upcoming?: unknown[];
+  upcomingError?: unknown;
+  recentError?: unknown;
+  queueError?: unknown;
+  queue?: unknown;
+}) {
+  let limitCalls = 0;
+  const chain = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
+    gte: vi.fn().mockReturnThis(),
+    order: vi.fn().mockReturnThis(),
+    limit: vi.fn(async () => {
+      const isUpcoming = limitCalls++ === 0;
+      return {
+        data: isUpcoming ? (options.upcoming ?? []) : [],
+        error: isUpcoming ? (options.upcomingError ?? null) : (options.recentError ?? null),
+      };
+    }),
+    // The queue-positions query is awaited without .limit() (the real
+    // Supabase chain is thenable); it resolves the queue fixture as-is so
+    // malformed payloads reach buildQueuePositions unchanged.
+    then: (resolve: (value: unknown) => void) =>
+      resolve({
+        data: options.queue !== undefined ? options.queue : [],
+        error: options.queueError ?? null,
+      }),
+  };
+  const from = vi.fn(() => chain);
+  return { from, chain };
+}
+
+function mockScopedScheduleClient(scheduleResult: { data: unknown; error: unknown }) {
+  const schedulesChain = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    in: vi.fn(async () => scheduleResult),
+  };
+  const from = vi.fn(() => schedulesChain);
+  return { from, schedulesChain };
+}
+
+describe('GET failure handling', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  async function getWithFailures(options: {
+    upcoming?: unknown[];
+    upcomingError?: unknown;
+    recentError?: unknown;
+    queueError?: unknown;
+    queue?: unknown;
+  }) {
+    const client = mockFailingPostsClient(options);
+    mockAuthSession({ userId: USER_ID, accessToken: 'pe_test_key', isApiKey: true }, null);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    const response = await GET(new Request('https://example.com/api/schedule/status'));
+    return { response, client };
+  }
+
+  function getScopedWithScheduleResult(scheduleResult: { data: unknown; error: unknown }) {
+    const client = mockScopedScheduleClient(scheduleResult);
+    mockAuthSession(
+      { userId: USER_ID, accessToken: 'pe_live_scoped', isApiKey: true, keyId: 'key-1', personaIds: ['p1'] },
+      null,
+    );
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    return GET(new Request('https://example.com/api/schedule/status')).then((response) => ({
+      response,
+      client,
+    }));
+  }
+
+  it('returns 500 when the upcoming query fails', async () => {
+    const { response } = await getWithFailures({ upcomingError: { message: 'db down' } });
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body).toEqual({ success: false, error: 'Failed to load schedule status.' });
+  });
+
+  it('returns 500 when the recent query fails', async () => {
+    const { response } = await getWithFailures({ recentError: { message: 'db down' } });
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body).toEqual({ success: false, error: 'Failed to load schedule status.' });
+  });
+
+  it('warns and degrades to null queue positions when the queue lookup fails', async () => {
+    const upcoming = [
+      { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'pending', topic: 'Next', schedule_id: 's1' },
+      { id: 'up-2', slot_at: '2026-09-24T11:00:00Z', status: 'pending', topic: 'After', schedule_id: 's1' },
+    ];
+    const queue = [
+      { id: 'up-1', schedule_id: 's1', slot_at: '2026-09-24T10:00:00Z' },
+      { id: 'up-2', schedule_id: 's1', slot_at: '2026-09-24T11:00:00Z' },
+    ];
+    const { response } = await getWithFailures({ upcoming, queue, queueError: { message: 'db down' } });
+    expect(response.status).toBe(200);
+    expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
+      '[api/schedule/status] queue lookup failed',
+      expect.objectContaining({ error: { message: 'db down' } }),
+    );
+    const body = (await response.json()) as {
+      upcoming: { queuePosition: number | null; queueTotal: number | null }[];
+    };
+    expect(body.upcoming).toHaveLength(2);
+    expect(body.upcoming[0].queuePosition).toBeNull();
+    expect(body.upcoming[0].queueTotal).toBeNull();
+    expect(body.upcoming[1].queuePosition).toBeNull();
+    expect(body.upcoming[1].queueTotal).toBeNull();
+  });
+
+  it('does not warn when the queue lookup succeeds', async () => {
+    const upcoming = [
+      { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'pending', topic: 'Next', schedule_id: 's1' },
+    ];
+    const queue = [{ id: 'up-1', schedule_id: 's1', slot_at: '2026-09-24T10:00:00Z' }];
+    const { response } = await getWithFailures({ upcoming, queue });
+    expect(response.status).toBe(200);
+    expect(vi.mocked(logger.warn)).not.toHaveBeenCalled();
+  });
+
+  it('ignores malformed queue rows instead of failing the request', async () => {
+    const upcoming = [
+      { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'pending', topic: 'Next', schedule_id: 's1' },
+      { id: 'up-2', slot_at: '2026-09-24T11:00:00Z', status: 'pending', topic: 'After', schedule_id: 's1' },
+      { id: 'up-3', slot_at: '2026-09-24T12:00:00Z', status: 'pending', topic: 'Later', schedule_id: 's1' },
+    ];
+    const queue = [
+      { id: 'up-1', schedule_id: 's1', slot_at: '2026-09-24T10:00:00Z' },
+      null,
+      'not-an-object',
+      { id: 'up-2' },
+      { id: 42, schedule_id: 's1' },
+      { id: 'up-3', schedule_id: 's1', slot_at: '2026-09-24T12:00:00Z' },
+    ];
+    const { response } = await getWithFailures({ upcoming, queue });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      upcoming: { queuePosition: number | null; queueTotal: number | null }[];
+    };
+    // Only the two well-formed rows count: up-1 is 1/2, up-3 is 2/2, and
+    // up-2 (no well-formed queue row) degrades to nulls.
+    expect(body.upcoming[0].queuePosition).toBe(1);
+    expect(body.upcoming[0].queueTotal).toBe(2);
+    expect(body.upcoming[1].queuePosition).toBeNull();
+    expect(body.upcoming[1].queueTotal).toBeNull();
+    expect(body.upcoming[2].queuePosition).toBe(2);
+    expect(body.upcoming[2].queueTotal).toBe(2);
+  });
+
+  it('treats a non-array queue payload as an empty queue', async () => {
+    const upcoming = [
+      { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'pending', topic: 'Next', schedule_id: 's1' },
+    ];
+    const { response } = await getWithFailures({ upcoming, queue: { unexpected: 'shape' } });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      upcoming: { queuePosition: number | null; queueTotal: number | null }[];
+    };
+    expect(body.upcoming[0].queuePosition).toBeNull();
+    expect(body.upcoming[0].queueTotal).toBeNull();
+  });
+
+  it('returns 500 when the scoped schedule lookup fails', async () => {
+    const { response, client } = await getScopedWithScheduleResult({
+      data: null,
+      error: { message: 'db down' },
+    });
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body).toEqual({ success: false, error: 'Failed to load schedule status.' });
+    expect(client.from).not.toHaveBeenCalledWith('scheduled_posts');
+  });
+
+  it('treats a null scope lookup result as no allowed schedules', async () => {
+    const { response, client } = await getScopedWithScheduleResult({ data: null, error: null });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toEqual({ success: true, upcoming: [], recent: [] });
+    expect(client.from).not.toHaveBeenCalledWith('scheduled_posts');
+  });
+
+  it('treats null query data as empty lists', async () => {
+    const chain = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      in: vi.fn().mockReturnThis(),
+      gte: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      limit: vi.fn(async () => ({ data: null, error: null })),
+      then: (resolve: (value: unknown) => void) => resolve({ data: null, error: null }),
+    };
+    const client = { from: vi.fn(() => chain) };
+    mockAuthSession({ userId: USER_ID, accessToken: 'pe_test_key', isApiKey: true }, null);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/status'));
+
+    // Null data degrades to empty lists — never a crash, never garbage rows.
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toEqual({ success: true, upcoming: [], recent: [] });
+  });
+
+  it('treats a scoped key with no personas as no allowed schedules', async () => {
+    const client = mockScopedScheduleClient({ data: [], error: null });
+    mockAuthSession(
+      { userId: USER_ID, accessToken: 'pe_live_scoped', isApiKey: true, keyId: 'key-1', personaIds: [] },
+      null,
+    );
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/status'));
+
+    expect(response.status).toBe(200);
+    // An empty scope list must reach the query verbatim — no silent widening.
+    expect(client.schedulesChain.in).toHaveBeenCalledWith('persona_id', []);
+    const body = await response.json();
+    expect(body).toEqual({ success: true, upcoming: [], recent: [] });
+    expect(client.from).not.toHaveBeenCalledWith('scheduled_posts');
   });
 });
