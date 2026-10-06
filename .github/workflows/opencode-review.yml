@@ -9,21 +9,27 @@ name: opencode-review
 #   no third-party GitHub Action wrapper, no floating install script.
 #   (Verified against the installed CLI: there is no --standalone flag;
 #   `run` is already the non-interactive command for scripts/CI.)
-# - Tries the z.ai GLM Coding Plan first, then falls back to z.ai's standard
-#   API endpoint with the permanently-free Flash models (newest first) if a
-#   review fails. All attempts use the same ZAI_API_KEY secret.
+# - Review chain, first success wins:
+#     1. z.ai GLM Coding Plan (best quality, quota-limited)
+#     2. z.ai standard API with the permanently-free glm-4.7-flash
+#     3. OpenRouter free router (openrouter/free)
+#     4. OpenRouter auto router (openrouter/auto)
+#   glm-4.5-flash was dropped from the chain — its review quality was too
+#   poor. The OpenRouter tiers use the special router ids (no hardcoded
+#   model list to rot — same convention as the engine's _PROVIDER_DEFAULT_MODELS
+#   in apps/engine/app/services/llm.py); one OPENROUTER_API_KEY secret serves
+#   both tiers (free models cost $0 even on a paid key).
+# - The job runs if EITHER ZAI_API_KEY or OPENROUTER_API_KEY is configured;
+#   each tier is skipped when its key is missing, so a repo with only one
+#   key still gets reviews through that provider's tiers.
 # - Posts the review as a new PR comment on every push (the header carries
 #   the head SHA), so each review round stays visible instead of overwriting
 #   the previous one.
 #
 # Setup:
-# 1. Add the `ZAI_API_KEY` secret (usable with both z.ai API endpoints).
-#    Until the secret exists, the review steps are skipped.
+# 1. Add the `ZAI_API_KEY` and/or `OPENROUTER_API_KEY` secret (repo settings).
+#    Until at least one exists, the review steps are skipped.
 # 2. If your Coding Plan uses a different model id, change OPENCODE_MODEL below.
-# 3. ZAI_FREE_MODEL / ZAI_FREE_MODEL_FALLBACK are the fallbacks on the
-#    standard API, tried in order: keep both permanently-free Flash models
-#    (e.g. glm-4.7-flash, glm-4.5-flash) so reviews keep running when the
-#    Coding Plan quota is exhausted or one model is throttled.
 
 on:
   pull_request:
@@ -36,14 +42,19 @@ concurrency:
 
 env:
   # Review models in try order. OPENCODE_MODEL is provider/model form;
-  # ZAI_FREE_MODEL is a bare id resolved against the zai-standard provider
-  # configured in the review step.
+  # ZAI_FREE_MODEL is a bare id resolved against the zai-standard provider,
+  # OPENROUTER_FREE_MODEL / OPENROUTER_MODEL are router ids resolved
+  # against the openrouter provider (all configured in the review step).
   OPENCODE_MODEL: zai-coding-plan/glm-5.3-flash
-  # Permanently-free fallbacks so reviews survive Coding Plan quota
-  # exhaustion. Tried in order; both are free Flash models on the same
-  # tier, so a per-model throttle on one need not block the other.
+  # Permanently-free fallback on the z.ai standard API so reviews survive
+  # Coding Plan quota exhaustion. Kept to glm-4.7-flash only — glm-4.5-flash
+  # was removed for poor review quality.
   ZAI_FREE_MODEL: glm-4.7-flash
-  ZAI_FREE_MODEL_FALLBACK: glm-4.5-flash
+  # OpenRouter fallbacks after z.ai. Special router ids, not concrete models:
+  # /free resolves to the best free model, /auto to the best paid model for
+  # the task. One OPENROUTER_API_KEY serves both tiers.
+  OPENROUTER_FREE_MODEL: openrouter/free
+  OPENROUTER_MODEL: openrouter/auto
 
 jobs:
   review:
@@ -58,15 +69,29 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Check for z.ai API key
+      - name: Check for review API keys
         id: check
         env:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           set -euo pipefail
+          # has_key is the single gate for the whole job: the review runs if
+          # EITHER provider key is configured. Per-tier outputs let the
+          # review step skip the tiers whose key is missing.
           if [ -z "${ZAI_API_KEY:-}" ]; then
+            echo "has_zai_key=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_zai_key=true" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -z "${OPENROUTER_API_KEY:-}" ]; then
+            echo "has_openrouter_key=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_openrouter_key=true" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -z "${ZAI_API_KEY:-}" ] && [ -z "${OPENROUTER_API_KEY:-}" ]; then
             echo "has_key=false" >> "$GITHUB_OUTPUT"
-            echo "ZAI_API_KEY secret is not set — skipping OpenCode review."
+            echo "Neither ZAI_API_KEY nor OPENROUTER_API_KEY is set — skipping OpenCode review."
           else
             echo "has_key=true" >> "$GITHUB_OUTPUT"
           fi
@@ -95,31 +120,63 @@ jobs:
         if: steps.check.outputs.has_key == 'true'
         run: opencode --version
 
-      - name: Configure z.ai Coding Plan provider
+      - name: Configure review providers
         if: steps.check.outputs.has_key == 'true'
+        env:
+          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           set -euo pipefail
-          MODEL_ID="${OPENCODE_MODEL#*/}"
-          python3 - "$MODEL_ID" <<'EOF'
-          import json, sys
-          model_id = sys.argv[1]
+          # Registers every provider whose API key is configured. opencode.json
+          # is fully rewritten here; the review step only switches --model.
+          python3 <<'EOF'
+          import json, os
+
+          providers = {}
+          if os.environ.get("ZAI_API_KEY"):
+              coding_model = os.environ["OPENCODE_MODEL"].split("/", 1)[1]
+              providers["zai-coding-plan"] = {
+                  "npm": "@ai-sdk/openai-compatible",
+                  "name": "Z.AI GLM Coding Plan",
+                  "options": {
+                      "baseURL": "https://api.z.ai/api/coding/paas/v4",
+                      "apiKey": "{env:ZAI_API_KEY}",
+                  },
+                  "models": {coding_model: {"name": coding_model}},
+              }
+              providers["zai-standard"] = {
+                  "npm": "@ai-sdk/openai-compatible",
+                  "name": "Z.AI Standard API",
+                  "options": {
+                      "baseURL": "https://api.z.ai/api/paas/v4",
+                      "apiKey": "{env:ZAI_API_KEY}",
+                  },
+                  "models": {
+                      os.environ["ZAI_FREE_MODEL"]: {"name": os.environ["ZAI_FREE_MODEL"]}
+                  },
+              }
+          if os.environ.get("OPENROUTER_API_KEY"):
+              free_model = os.environ["OPENROUTER_FREE_MODEL"]
+              paid_model = os.environ["OPENROUTER_MODEL"]
+              providers["openrouter"] = {
+                  "npm": "@ai-sdk/openai-compatible",
+                  "name": "OpenRouter",
+                  "options": {
+                      "baseURL": "https://openrouter.ai/api/v1",
+                      "apiKey": "{env:OPENROUTER_API_KEY}",
+                  },
+                  "models": {
+                      free_model: {"name": free_model},
+                      paid_model: {"name": paid_model},
+                  },
+              }
           config = {
               "$schema": "https://opencode.ai/config.json",
-              "provider": {
-                  "zai-coding-plan": {
-                      "npm": "@ai-sdk/openai-compatible",
-                      "name": "Z.AI GLM Coding Plan",
-                      "options": {
-                          "baseURL": "https://api.z.ai/api/coding/paas/v4",
-                          "apiKey": "{env:ZAI_API_KEY}",
-                      },
-                      "models": {model_id: {"name": model_id}},
-                  }
-              },
+              "provider": providers,
           }
           with open("opencode.json", "w") as f:
               json.dump(config, f, indent=2)
-          print("wrote opencode.json for model", model_id)
+          print("wrote opencode.json with providers:", ", ".join(providers))
           EOF
 
       - name: Collect PR diff
@@ -145,10 +202,11 @@ jobs:
           fi
           wc -c pr.diff
 
-      - name: Run OpenCode review with Coding Plan, then free-model fallbacks
+      - name: Run OpenCode review with fallbacks
         if: steps.check.outputs.has_key == 'true'
         env:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
@@ -182,47 +240,30 @@ jobs:
               "$(cat prompt.md)" > review.md
             [ -s review.md ]
           }
-          # Attempt 1: z.ai Coding Plan (best quality, quota-limited).
-          if review_with_model "$OPENCODE_MODEL"; then
-            echo "Review completed with z.ai Coding Plan ($OPENCODE_MODEL)."
-          else
-            echo "Coding Plan review failed; retrying with z.ai standard API."
-            # Register both free Flash models in one provider config so each
-            # fallback attempt only switches the --model flag.
-            python3 <<'EOF'
-          import json, os
-          model_ids = [os.environ["ZAI_FREE_MODEL"], os.environ["ZAI_FREE_MODEL_FALLBACK"]]
-          config = {
-              "$schema": "https://opencode.ai/config.json",
-              "provider": {
-                  "zai-standard": {
-                      "npm": "@ai-sdk/openai-compatible",
-                      "name": "Z.AI Standard API",
-                      "options": {
-                          "baseURL": "https://api.z.ai/api/paas/v4",
-                          "apiKey": "{env:ZAI_API_KEY}",
-                      },
-                      "models": {model_id: {"name": model_id} for model_id in model_ids},
-                  }
-              },
-          }
-          with open("opencode.json", "w") as f:
-              json.dump(config, f, indent=2)
-          print("wrote opencode.json for z.ai standard models:", ", ".join(model_ids))
-          EOF
-            # Attempt 2: standard API with the newest free Flash model.
-            if review_with_model "zai-standard/$ZAI_FREE_MODEL"; then
-              echo "Review completed with z.ai standard API ($ZAI_FREE_MODEL)."
-            else
-              # Attempt 3: standard API with the older free Flash model.
-              echo "Standard API review with $ZAI_FREE_MODEL failed; retrying with $ZAI_FREE_MODEL_FALLBACK."
-              if review_with_model "zai-standard/$ZAI_FREE_MODEL_FALLBACK"; then
-                echo "Review completed with z.ai standard API ($ZAI_FREE_MODEL_FALLBACK)."
-              else
-                echo "OpenCode produced no output from any endpoint" >&2
-                exit 1
-              fi
+          # Attempt order (first success wins): z.ai Coding Plan ->
+          # z.ai standard (glm-4.7-flash) -> OpenRouter free router ->
+          # OpenRouter auto router. Each tier is tried only when its API key
+          # is configured, so the review still runs with just one key set.
+          attempts=()
+          if [ -n "${ZAI_API_KEY:-}" ]; then
+            attempts+=("$OPENCODE_MODEL" "zai-standard/$ZAI_FREE_MODEL")
+          fi
+          if [ -n "${OPENROUTER_API_KEY:-}" ]; then
+            attempts+=("openrouter/$OPENROUTER_FREE_MODEL" "openrouter/$OPENROUTER_MODEL")
+          fi
+          success=false
+          for attempt in "${attempts[@]}"; do
+            echo "Attempting review with $attempt ..."
+            if review_with_model "$attempt"; then
+              echo "Review completed with $attempt."
+              success=true
+              break
             fi
+            echo "Review with $attempt failed; trying the next fallback."
+          done
+          if [ "$success" != "true" ]; then
+            echo "OpenCode produced no output from any endpoint" >&2
+            exit 1
           fi
           wc -c review.md
 
@@ -230,21 +271,28 @@ jobs:
         if: steps.check.outputs.has_key == 'true'
         env:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           set -euo pipefail
           # Prompt-injection guard: the review is LLM output over
-          # attacker-controlled PR title/diff. Mask the key in all subsequent
-          # logs, then scrub any occurrence of the key value from review.md
-          # before it becomes a permanent public PR comment.
+          # attacker-controlled PR title/diff. Mask both keys in all
+          # subsequent logs, then scrub any occurrence of either key value
+          # from review.md before it becomes a permanent public PR comment.
           echo "::add-mask::${ZAI_API_KEY}"
+          echo "::add-mask::${OPENROUTER_API_KEY}"
           python3 - <<'EOF'
           import os
-          key = os.environ.get("ZAI_API_KEY", "")
           path = "review.md"
           text = open(path, encoding="utf-8").read()
-          if key and key in text:
-              open(path, "w", encoding="utf-8").write(text.replace(key, "***REDACTED***"))
-              print("scrubbed ZAI_API_KEY occurrence from review.md")
+          scrubbed = False
+          for var in ("ZAI_API_KEY", "OPENROUTER_API_KEY"):
+              key = os.environ.get(var, "")
+              if key and key in text:
+                  text = text.replace(key, "***REDACTED***")
+                  scrubbed = True
+          if scrubbed:
+              open(path, "w", encoding="utf-8").write(text)
+              print("scrubbed secret occurrence from review.md")
           else:
               print("no secret material found in review.md")
           EOF
@@ -264,7 +312,7 @@ jobs:
           # so it is clear which push the review covers.
           {
             echo "$MARKER"
-            echo "## OpenCode review (z.ai) — ${HEAD_SHORT}"
+            echo "## OpenCode review — ${HEAD_SHORT}"
             echo ""
             cat review.md
           } > comment.md

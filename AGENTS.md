@@ -1218,15 +1218,18 @@ Follow these so the same issues don't come back:
   Declined without code change. Pattern: the reviewer invents a "contract"
   (e.g. "5-tuple contract", "should be Optional[...]") that the code never
   declares; check whether the alleged contract exists before touching anything.
-- **OCR fallback chain mirrors opencode-review (2026-09-29):** ocr-review now
-  retries 5.3-flash -> 4.7-flash -> 4.5-flash, same as opencode-review's
-  ZAI_FREE_MODEL -> ZAI_FREE_MODEL_FALLBACK. Invariants the validator pins:
-  all invocations share one action pin (max 3), every fallback carries the
-  fail-closed gates (key-check + env-guard) plus the previous-attempts-failed
-  conditions, non-final attempts have `continue-on-error: true` (otherwise a
-  mid-chain failure ends the job before the next fallback runs) and
-  `upload_artifacts: 'false'` (only the LAST attempt uploads — fixed per-run
-  artifact name would 409-conflict otherwise).
+- **opencode-review fallback chain (2026-10-06):** `zai-coding-plan/glm-5.3-flash`
+  -> `zai-standard/glm-4.7-flash` -> `openrouter/openrouter/free` ->
+  `openrouter/openrouter/auto` (first success wins). glm-4.5-flash was
+  dropped — its review quality was too poor. The OpenRouter tiers use the
+  special router ids `openrouter/free` / `openrouter/auto` (same convention
+  as the engine's `_PROVIDER_DEFAULT_MODELS`, no hardcoded model list to
+  rot), configured in opencode.json with `@ai-sdk/openai-compatible` against
+  `https://openrouter.ai/api/v1` and apiKey `{env:OPENROUTER_API_KEY}`. One
+  `OPENROUTER_API_KEY` secret serves both tiers (free models cost $0 even
+  on a paid key). The job runs if EITHER key is set; each tier is skipped
+  when its key is missing. The old "OCR fallback chain mirrors
+  opencode-review" note is dead — the ocr-review workflow no longer exists.
 
 ## Test quirks (vitest 4.1)
 
