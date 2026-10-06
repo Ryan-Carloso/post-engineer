@@ -8,7 +8,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "moneyprinterturbo"
-version = "1.26.0"
+version = "1.26.1"
 description = "Generate short videos from prompts, local assets, subtitles, and TTS."
 readme = "README-en.md"
 requires-python = ">=3.11,<3.13"
