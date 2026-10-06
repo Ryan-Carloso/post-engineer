@@ -6,8 +6,8 @@ case "$branch" in main|master|prod)
   exit 1 ;;
 esac
 
-export PATH="$HOME/.local/bin:$PATH"
-pnpm lint:fix
-lint_status=$?
-
-exit $lint_status
+# NOTE (2026-10-06): the old `pnpm lint:fix` step was removed — the full-repo
+# eslint --fix + typecheck across all apps OOMs on smaller machines and CI
+# already runs the complete lint/typecheck suite on every PR. Run lint and
+# typecheck for your changed files before committing instead.
+exit 0

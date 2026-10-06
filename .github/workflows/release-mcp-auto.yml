@@ -5,10 +5,10 @@ name: Release MCP (auto)
 # existing release-mcp.yml workflow picks up the tag and publishes via
 # trusted publishing (GitHub OIDC, no token).
 #
-# Versioning note: the MCP package shares the unified platform version —
-# every PR bumps VERSION through the version-check gate — so no separate
-# bump is needed here. This workflow only creates the tag, and only when
-# the merge actually touched apps/mcp/.
+# Versioning note: the MCP package version is maintained by hand in
+# apps/mcp/package.json (bumped only when cutting an MCP release — there is
+# no automatic per-PR bump). This workflow only creates the tag, and only
+# when the merge actually touched apps/mcp/.
 
 on:
   workflow_run:
@@ -32,8 +32,10 @@ jobs:
       - name: Tag MCP release when apps/mcp changed
         run: |
           set -euo pipefail
-          # NOTE: apps/mcp/package.json is excluded — every merge bumps it via
-          # the unified platform version, so it alone must not trigger a release.
+          # NOTE: apps/mcp/package.json is excluded — a version bump alone
+          # must not trigger a release. Cut releases by pushing an mcp-v*
+          # tag (manually, or automatically when code under apps/mcp/
+          # changed).
           if ! git diff --name-only HEAD~1 HEAD -- apps/mcp/ | grep -v '^apps/mcp/package.json$' | grep -q .; then
             echo "apps/mcp/ unchanged in this merge (besides the version bump) — nothing to release."
             exit 0
