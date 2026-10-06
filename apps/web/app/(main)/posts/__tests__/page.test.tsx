@@ -592,3 +592,180 @@ describe('PostsPage card progress', () => {
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
   });
 });
+
+//---------------
+// Mutation hardening — fallback branches and statuses the 58%
+// ui-coverage-gates Stryker run flagged as surviving (threshold 60%).
+// Each test pins one fallback so the gate stays green.
+//---------------
+
+describe('PostsPage fallbacks', () => {
+  it('retry refetches the generations query as well', async () => {
+    const generationsRefetch = vi.fn();
+    vi.mocked(useScheduleStatusQuery).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isFetching: false,
+      isError: true,
+      refetch: vi.fn(),
+    } as never);
+    vi.mocked(useVideoGenerationsQuery).mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: true,
+      refetch: generationsRefetch,
+    } as never);
+    const user = userEvent.setup();
+    render(<PostsPage />);
+
+    // The generations query feeds the history tab count — dropping its
+    // refetch would leave a failed generations fetch stuck forever.
+    const errorPanel = screen.getByText('posts.loadError').closest('div');
+    if (!errorPanel) throw new Error('error panel not rendered');
+    await user.click(within(errorPanel).getByRole('button', { name: 'posts.refresh' }));
+    expect(generationsRefetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to the generic error copy for an unmapped generation error code', async () => {
+    const user = userEvent.setup();
+    mockQueries({ generations: [{ ...FAILED_GENERATION, errorCode: 'future_code_123' }] });
+    render(<PostsPage />);
+
+    await user.click(screen.getByRole('button', { name: /posts\.tabHistory/ }));
+    expect(screen.getByText('posts.errorUnknown')).toBeInTheDocument();
+  });
+
+  it('falls back to placeholders when a generation has no persona or subject', async () => {
+    const user = userEvent.setup();
+    mockQueries({
+      generations: [{ ...FAILED_GENERATION, personaName: null, videoSubject: null }],
+    });
+    render(<PostsPage />);
+
+    await user.click(screen.getByRole('button', { name: /posts\.tabHistory/ }));
+    expect(screen.getByText('posts.personaFallback')).toBeInTheDocument();
+    expect(screen.getAllByText('posts.unknownTopic').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('prefers publishedAt for history slots but falls back to slotAt', async () => {
+    const user = userEvent.setup();
+    const withPublishedAt = {
+      ...PUBLISHED_SLOT,
+      id: 'r3',
+      slotAt: '2020-03-10T10:00:00.000Z',
+      publishedAt: '2020-05-20T10:00:00.000Z',
+      topic: 'Dated topic',
+    };
+    const withoutPublishedAt = {
+      ...PUBLISHED_SLOT,
+      id: 'r4',
+      slotAt: '2020-03-10T10:00:00.000Z',
+      publishedAt: null,
+      topic: 'Undated topic',
+    };
+    mockQueries({ upcoming: [], recent: [withPublishedAt, withoutPublishedAt] });
+    render(<PostsPage />);
+    await user.click(screen.getByRole('button', { name: /posts\.tabHistory/ }));
+
+    const may20 = new Date('2020-05-20T10:00:00.000Z').toLocaleDateString('en-US', {
+      dateStyle: 'medium',
+    });
+    const mar10 = new Date('2020-03-10T10:00:00.000Z').toLocaleDateString('en-US', {
+      dateStyle: 'medium',
+    });
+    const datedCard = screen.getByText('Dated topic').closest('a');
+    const undatedCard = screen.getByText('Undated topic').closest('a');
+    expect(datedCard?.textContent).toContain(may20);
+    expect(undatedCard?.textContent).toContain(mar10);
+  });
+
+  it('renders the pending badge style for an unknown slot status', () => {
+    mockQueries({
+      upcoming: [{ ...UPCOMING_SLOT, id: 'u9', status: 'weird_status', topic: 'Weird topic' }],
+    });
+    render(<PostsPage />);
+
+    // Unknown statuses degrade to the pending look, never an unstyled badge.
+    const badge = screen.getByText('posts.statusPending');
+    expect(badge.className).toContain('bg-[#e8edf1]');
+  });
+
+  it('shows progress bars on ready and publishing cards', () => {
+    const readySlot = {
+      ...UPCOMING_SLOT,
+      id: 'u7',
+      status: 'ready',
+      topic: 'Ready topic',
+      progress: 71,
+      taskId: 'task-7',
+    };
+    const publishingSlot = {
+      ...UPCOMING_SLOT,
+      id: 'u8',
+      status: 'publishing',
+      topic: 'Publishing topic',
+      progress: 88,
+      taskId: 'task-8',
+    };
+    mockQueries({ upcoming: [readySlot, publishingSlot] });
+    render(<PostsPage />);
+
+    expect(screen.getByText('71%')).toBeInTheDocument();
+    expect(screen.getByText('88%')).toBeInTheDocument();
+    expect(screen.getAllByRole('progressbar', { name: 'posts.progressLabel' })).toHaveLength(2);
+  });
+
+  it('falls back to the persona placeholder for slots whose persona is gone', () => {
+    mockQueries({ schedules: [{ ...SCHEDULE, personaId: 'p-gone' }] });
+    render(<PostsPage />);
+
+    expect(screen.getByText('posts.personaFallback')).toBeInTheDocument();
+  });
+
+  it('renders at most four account avatars per card', () => {
+    mockQueries();
+    const accounts = ['Alpha One', 'Beta Two', 'Gamma Three', 'Delta Four', 'Epsilon Five'].map(
+      (name, i) => ({ channelId: `ch${i}`, channelName: name }),
+    );
+    vi.mocked(useYouTubeAccountsQuery).mockReturnValue({
+      data: { authenticated: true, accounts },
+    } as never);
+    vi.mocked(useSchedulesQuery).mockReturnValue({
+      data: [{ ...SCHEDULE, youtubeAccountIds: accounts.map((a) => a.channelId) }] as never,
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as never);
+    render(<PostsPage />);
+
+    // Initials of the first four accounts render; the fifth is sliced off.
+    expect(screen.getByText('AO')).toBeInTheDocument();
+    expect(screen.getByText('BT')).toBeInTheDocument();
+    expect(screen.getByText('GT')).toBeInTheDocument();
+    expect(screen.getByText('DF')).toBeInTheDocument();
+    expect(screen.queryByText('EF')).not.toBeInTheDocument();
+  });
+
+  it('labels every provider filter option with its own network name', () => {
+    render(<PostsPage />);
+
+    const providerSelect = screen.getByLabelText('posts.filterProvider');
+    const options = within(providerSelect)
+      .getAllByRole('option')
+      .map((option) => option.textContent);
+    expect(options).toEqual(['posts.allProviders', 'YouTube', 'Instagram', 'LinkedIn', 'Bluesky']);
+  });
+
+  it('disables the refresh button while a refetch is in flight', () => {
+    vi.mocked(useScheduleStatusQuery).mockReturnValue({
+      data: { upcoming: [UPCOMING_SLOT], recent: [] },
+      isLoading: false,
+      isFetching: true,
+      isError: false,
+      refetch: vi.fn(),
+    } as never);
+    render(<PostsPage />);
+
+    expect(screen.getByRole('button', { name: 'posts.refresh' })).toBeDisabled();
+  });
+});
