@@ -1,15 +1,16 @@
 //---------------
-// Creating a post — after a successful create the user lands back on /posts
-// and the new post is already there WITH its progress %, without waiting
-// for a refetch: the mutation seeds the list caches from its own response
-// (slots + schedule) before invalidating. The status/schedules stubs below
-// are delayed on purpose: the seeded cards are provably the render source,
-// because the stubbed responses have not arrived yet when the assertions
-// run. Every app-page spec logs in for real (the middleware bounces
-// unauthenticated visits to /landing).
+// Creating a post — the form takes ONE topic and, after a successful
+// create, opens that post's own detail page (/posts/<slotId>) where the
+// video and its progress live. The list caches are still seeded from the
+// mutation response (the user navigates back to /posts without a flash of
+// empty), and the status/schedules stubs below are delayed on purpose: the
+// assertions must pass on the seeded cache alone, because the stubbed
+// responses have not arrived yet when they run. Every app-page spec logs in
+// for real (the middleware bounces unauthenticated visits to /landing).
 //---------------
 
 const NEW_POST_SCHEDULE_ID = 'sched-e2e-new';
+const NEW_POST_SLOT_ID = 'slot-e2e-new';
 
 function personasPayload() {
   return {
@@ -44,6 +45,9 @@ function postAccountsPayload() {
   };
 }
 
+//---------------
+// createPostPayload — one slot, because the form now creates one video.
+//---------------
 function createPostPayload() {
   return {
     success: true,
@@ -51,20 +55,51 @@ function createPostPayload() {
     schedule: { id: NEW_POST_SCHEDULE_ID },
     slots: [
       {
-        slotId: 'slot-e2e-a',
+        slotId: NEW_POST_SLOT_ID,
         slotAt: '2030-06-01T09:00:00.000Z',
         topic: 'E2E topic one',
         taskId: null,
         status: 'pending',
       },
-      {
-        slotId: 'slot-e2e-b',
-        slotAt: '2030-06-02T09:00:00.000Z',
-        topic: 'E2E topic two',
-        taskId: null,
-        status: 'pending',
-      },
     ],
+  };
+}
+
+//---------------
+// newPostSlotDetailPayload — what the detail page fetches for the slot the
+// create response pointed at. The status is `awaiting` (nothing generated
+// yet), so the page shows a 0% progress bar.
+//---------------
+function newPostSlotDetailPayload() {
+  return {
+    success: true,
+    slot: {
+      id: NEW_POST_SLOT_ID,
+      scheduleId: NEW_POST_SCHEDULE_ID,
+      slotAt: '2030-06-01T09:00:00.000Z',
+      status: 'awaiting',
+      topic: 'E2E topic one',
+      error: null,
+      publishedAt: null,
+      taskId: null,
+      progress: 0,
+      stage: null,
+      retryable: null,
+      publishLinks: [],
+      queuePosition: 1,
+      queueTotal: 1,
+    },
+    schedule: {
+      id: NEW_POST_SCHEDULE_ID,
+      personaId: 'persona-e2e-1',
+      providers: ['youtube'],
+      youtubeAccountIds: ['ch-e2e-1'],
+      instagramAccountIds: [],
+      linkedinAccountIds: [],
+      blueskyAccountIds: [],
+      timezone: 'UTC',
+    },
+    persona: { id: 'persona-e2e-1', name: 'E2E Persona' },
   };
 }
 
@@ -92,6 +127,13 @@ describe('Creating a post', () => {
       success: true,
       generations: [],
     }).as('generations');
+    // The detail page also probes the generation history for this id; a
+    // scheduled post that has not generated has none, so 404 is the truth
+    // (the page treats it as "not a generation", not as a failure).
+    cy.intercept('GET', '/api/persona/video-generations/*', {
+      statusCode: 404,
+      body: { success: false, error: 'Not found' },
+    }).as('generationDetail');
     // Delayed: the assertions below must pass on the seeded cache alone.
     cy.intercept('GET', '/api/schedule/status*', {
       delay: 8000,
@@ -102,9 +144,12 @@ describe('Creating a post', () => {
       body: { success: true, schedules: [] },
     }).as('schedules');
     cy.intercept('POST', '/api/videos/generate-and-schedule', createPostPayload()).as('createPost');
+    // The detail page the create response points at. Defined last so it wins
+    // over the catch-all generations intercept for that id.
+    cy.intercept('GET', `/api/schedule/slots/${NEW_POST_SLOT_ID}`, newPostSlotDetailPayload()).as('slotDetail');
   });
 
-  it('lands back on /posts with the new post already visible and its 0% progress', () => {
+  it('opens the new post detail page with its 0% progress', () => {
     // The real journey starts on /posts — the list caches are warm, exactly
     // like the user's session when they tap "New post". The navigation must
     // stay client-side (a cy.visit would wipe the React Query cache, which
@@ -129,8 +174,8 @@ describe('Creating a post', () => {
 
     // Persona (required) — the radio card is a label wrapping the text.
     cy.contains('E2E Persona').click();
-    // One topic (the store starts with a single empty row).
-    cy.get('input[type="text"]').first().type('E2E topic one');
+    // The single topic field.
+    cy.get('[aria-label="Topic"]').type('E2E topic one');
     // First publish — must parse in the selected timezone.
     setDateTimeValue('input[type="datetime-local"]', '2030-06-01T09:00');
     // At least one publishing account.
@@ -143,15 +188,23 @@ describe('Creating a post', () => {
       topics: ['E2E topic one'],
     });
 
-    // Success redirects to the list…
-    cy.location('pathname').should('eq', '/posts');
-    // …where the new post is already rendered from the seeded cache — the
-    // delayed status/schedules stubs have not responded yet, so nothing
-    // else could have painted these cards.
+    // Success opens THAT post's page, not the list: the video and its live
+    // progress are what the user came for.
+    cy.location('pathname').should('eq', `/posts/${NEW_POST_SLOT_ID}`);
+    cy.wait('@slotDetail');
     cy.contains('E2E topic one').should('be.visible');
     // Freshly created: 0% with a progress bar, like the detail page shows.
     cy.contains('0%').should('be.visible');
     cy.get('[role="progressbar"]').should('have.attr', 'aria-valuenow', '0');
+  });
+
+  it('offers a single topic field with no add/remove controls', () => {
+    cy.visit('/posts/new');
+    cy.wait('@personas');
+
+    cy.get('[aria-label="Topic"]').should('have.length', 1);
+    // A second topic is a second post: the batch form is gone from /posts/new.
+    cy.contains('button', /Adicionar tema|Add topic/).should('not.exist');
   });
 });
 

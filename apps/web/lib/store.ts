@@ -9,7 +9,6 @@ import type {
 } from '@/lib/types';
 import { SOCIAL_PROVIDERS } from '@/lib/types';
 import type { FaceQuality } from '@/lib/tokens';
-import { MAX_POST_TOPICS } from '@/lib/schedule/slot-distribution';
 import type { TranslationKey } from '@/lib/i18n';
 
 //---------------
@@ -296,7 +295,14 @@ export const usePersonaStore = create<PersonaFormState>()(
 
 export interface NewPostState {
   personaId: string;
-  topics: string[];
+  /**
+   * The single video topic. One post mints one video and one publish slot,
+   * so the draft is a string, not a list: a second topic would mean a second
+   * video at another time, which is a second post. The API still takes an
+   * array (`topics: [topic]`) because the MCP tool schedules up to 10 per
+   * call — the form simply does not offer the range.
+   */
+  topic: string;
   /** Naive "YYYY-MM-DDTHH:mm" wall clock, resolved against `timezone`. */
   startAt: string;
   /** Daily publish times as "HH:MM". */
@@ -319,9 +325,7 @@ export interface NewPostState {
   /** True while the create request is in flight. */
   pending: boolean;
   setPersonaId: (personaId: string) => void;
-  setTopic: (index: number, value: string) => void;
-  addTopic: () => void;
-  removeTopic: (index: number) => void;
+  setTopic: (value: string) => void;
   setStartAt: (value: string) => void;
   setTime: (index: number, value: string) => void;
   addTime: () => void;
@@ -339,6 +343,12 @@ export interface NewPostOutcome {
   success: boolean;
   /** Null when the request failed before a schedule existed. */
   scheduleId: string | null;
+  /**
+   * The created slot the screen navigates to (`/posts/[slotId]`). Null only
+   * on a failure that produced no slot; the form never mints an empty
+   * successful batch, so a successful outcome always carries one.
+   */
+  slotId: string | null;
   /** Number of slots the server created (drives the success copy). */
   slotCount: number;
   code: string | null;
@@ -346,14 +356,9 @@ export interface NewPostOutcome {
   have: number | null;
 }
 
-/** A topic list always has at least one editable row, same for times. */
-function emptyList(): string[] {
-  return [''];
-}
-
 const initialNewPostState = {
   personaId: '',
-  topics: emptyList(),
+  topic: '',
   startAt: '',
   times: ['18:00'],
   timezone: 'UTC',
@@ -375,18 +380,7 @@ export const useNewPostStore = create<NewPostState>()(
   (set) => ({
     ...initialNewPostState,
     setPersonaId: (personaId) => set({ personaId }),
-    setTopic: (index, value) => set((state) => ({ topics: replaceAt(state.topics, index, value) })),
-    // The cap lives in lib/schedule/slot-distribution (the API enforces the
-    // same number), so the button can't offer a topic the API would reject.
-    addTopic: () =>
-      set((state) =>
-        state.topics.length >= MAX_POST_TOPICS ? state : { topics: [...state.topics, ''] },
-      ),
-    removeTopic: (index) =>
-      set((state) => {
-        if (state.topics.length <= 1) return state;
-        return { topics: state.topics.filter((_, i) => i !== index) };
-      }),
+    setTopic: (topic) => set({ topic }),
     setStartAt: (startAt) => set({ startAt }),
     setTime: (index, value) => set((state) => ({ times: replaceAt(state.times, index, value) })),
     addTime: () => set((state) => ({ times: [...state.times, ''] })),
@@ -400,6 +394,6 @@ export const useNewPostStore = create<NewPostState>()(
     setResult: (result) => set({ result }),
     setValidationKey: (validationKey) => set({ validationKey }),
     setPending: (pending) => set({ pending }),
-    reset: () => set({ ...initialNewPostState, topics: emptyList(), times: ['18:00'] }),
+    reset: () => set({ ...initialNewPostState, times: ['18:00'] }),
   }),
 );
