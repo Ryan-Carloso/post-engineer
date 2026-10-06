@@ -61,6 +61,15 @@ function resolveAccountFilter(
 
 const PROVIDER_FILTERS: ProviderFilter[] = ['all', 'youtube', 'instagram', 'linkedin', 'bluesky'];
 
+// Display names for the provider filter options. A record (not a ternary
+// chain) so every network — including bluesky — gets its own label.
+const PROVIDER_LABELS: Record<Exclude<ProviderFilter, 'all'>, string> = {
+  youtube: 'YouTube',
+  instagram: 'Instagram',
+  linkedin: 'LinkedIn',
+  bluesky: 'Bluesky',
+};
+
 const STATUS_STYLE: Record<string, string> = {
   pending: 'bg-[#e8edf1] text-[#60758a]',
   generating: 'bg-[#e3f0ff] text-[#1d5bbf]',
@@ -487,9 +496,11 @@ export default function PostsPage() {
             className="rounded-xl border border-input bg-white px-3 py-2 text-sm font-medium text-[#0d2b45]"
           >
             <option value="all">{t('posts.allProviders')}</option>
-            {PROVIDER_FILTERS.filter((provider) => provider !== 'all').map((provider) => (
+            {PROVIDER_FILTERS.filter(
+              (provider): provider is Exclude<ProviderFilter, 'all'> => provider !== 'all',
+            ).map((provider) => (
               <option key={provider} value={provider}>
-                {provider === 'youtube' ? 'YouTube' : provider === 'instagram' ? 'Instagram' : 'LinkedIn'}
+                {PROVIDER_LABELS[provider]}
               </option>
             ))}
           </select>
