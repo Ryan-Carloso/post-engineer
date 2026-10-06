@@ -9,11 +9,11 @@ name: opencode-review
 #   no third-party GitHub Action wrapper, no floating install script.
 #   (Verified against the installed CLI: there is no --standalone flag;
 #   `run` is already the non-interactive command for scripts/CI.)
-# - Review chain, first success wins:
-#     1. z.ai GLM Coding Plan (best quality, quota-limited)
+# - Review chain, first success wins (free-first, paid as last resort):
+#     1. OpenRouter free router (openrouter/free) — $0 models first
 #     2. z.ai standard API with the permanently-free glm-4.7-flash
-#     3. OpenRouter free router (openrouter/free)
-#     4. OpenRouter auto router (openrouter/auto)
+#     3. z.ai GLM Coding Plan (best quality, quota-limited)
+#     4. OpenRouter auto router (openrouter/auto) — paid, last resort
 #   glm-4.5-flash was dropped from the chain — its review quality was too
 #   poor. The OpenRouter tiers use the special router ids (no hardcoded
 #   model list to rot — same convention as the engine's _PROVIDER_DEFAULT_MODELS
@@ -41,10 +41,12 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Review models in try order. OPENCODE_MODEL is provider/model form;
+  # Review models. OPENCODE_MODEL is provider/model form;
   # ZAI_FREE_MODEL is a bare id resolved against the zai-standard provider,
   # OPENROUTER_FREE_MODEL / OPENROUTER_MODEL are router ids resolved
   # against the openrouter provider (all configured in the review step).
+  # Try order is free-first: OPENROUTER_FREE_MODEL, ZAI_FREE_MODEL,
+  # OPENCODE_MODEL, then OPENROUTER_MODEL (paid, last resort).
   OPENCODE_MODEL: zai-coding-plan/glm-5.3-flash
   # Permanently-free fallback on the z.ai standard API so reviews survive
   # Coding Plan quota exhaustion. Kept to glm-4.7-flash only — glm-4.5-flash
@@ -240,16 +242,19 @@ jobs:
               "$(cat prompt.md)" > review.md
             [ -s review.md ]
           }
-          # Attempt order (first success wins): z.ai Coding Plan ->
-          # z.ai standard (glm-4.7-flash) -> OpenRouter free router ->
+          # Attempt order (first success wins): OpenRouter free router ->
+          # z.ai standard (glm-4.7-flash) -> z.ai Coding Plan ->
           # OpenRouter auto router. Each tier is tried only when its API key
           # is configured, so the review still runs with just one key set.
           attempts=()
+          if [ -n "${OPENROUTER_API_KEY:-}" ]; then
+            attempts+=("openrouter/$OPENROUTER_FREE_MODEL")
+          fi
           if [ -n "${ZAI_API_KEY:-}" ]; then
-            attempts+=("$OPENCODE_MODEL" "zai-standard/$ZAI_FREE_MODEL")
+            attempts+=("zai-standard/$ZAI_FREE_MODEL" "$OPENCODE_MODEL")
           fi
           if [ -n "${OPENROUTER_API_KEY:-}" ]; then
-            attempts+=("openrouter/$OPENROUTER_FREE_MODEL" "openrouter/$OPENROUTER_MODEL")
+            attempts+=("openrouter/$OPENROUTER_MODEL")
           fi
           success=false
           for attempt in "${attempts[@]}"; do

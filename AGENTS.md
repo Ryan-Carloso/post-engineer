@@ -1218,10 +1218,11 @@ Follow these so the same issues don't come back:
   Declined without code change. Pattern: the reviewer invents a "contract"
   (e.g. "5-tuple contract", "should be Optional[...]") that the code never
   declares; check whether the alleged contract exists before touching anything.
-- **opencode-review fallback chain (2026-10-06):** `zai-coding-plan/glm-5.3-flash`
-  -> `zai-standard/glm-4.7-flash` -> `openrouter/openrouter/free` ->
-  `openrouter/openrouter/auto` (first success wins). glm-4.5-flash was
-  dropped — its review quality was too poor. The OpenRouter tiers use the
+- **opencode-review fallback chain (2026-10-06, free-first):**
+  `openrouter/openrouter/free` -> `zai-standard/glm-4.7-flash` ->
+  `zai-coding-plan/glm-5.3-flash` -> `openrouter/openrouter/auto`
+  (first success wins; paid auto router is the last resort).
+  glm-4.5-flash was dropped — its review quality was too poor. The OpenRouter tiers use the
   special router ids `openrouter/free` / `openrouter/auto` (same convention
   as the engine's `_PROVIDER_DEFAULT_MODELS`, no hardcoded model list to
   rot), configured in opencode.json with `@ai-sdk/openai-compatible` against

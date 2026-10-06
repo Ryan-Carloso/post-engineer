@@ -6,9 +6,10 @@ Run: python3 .github/scripts/validate-opencode-review.py
 Guards the design decisions of the OpenCode review workflow:
 - direct `opencode run` (verified against the installed CLI: there is no
   --standalone flag), no third-party wrapper
-- review chain: z.ai Coding Plan -> z.ai standard (glm-4.7-flash) ->
-  OpenRouter free router (openrouter/free) -> OpenRouter auto router
-  (openrouter/auto); glm-4.5-flash was dropped from the chain
+- review chain (free-first, paid last resort): OpenRouter free router
+  (openrouter/free) -> z.ai standard (glm-4.7-flash) -> z.ai Coding Plan ->
+  OpenRouter auto router (openrouter/auto); glm-4.5-flash was dropped
+  from the chain
 - OpenRouter tiers use the special router ids (no hardcoded model list to
   rot — same convention as the engine's _PROVIDER_DEFAULT_MODELS), one
   OPENROUTER_API_KEY serving both tiers
@@ -138,12 +139,12 @@ def main() -> int:
         "the openrouter provider must use the same npm package as z.ai",
     )
     check(
-        "attempt order documented: coding plan -> 4.7 -> openrouter free -> openrouter paid",
+        "attempt order documented: openrouter free -> 4.7 -> coding plan -> openrouter paid",
         all(
             marker in text
             for marker in (
-                "z.ai Coding Plan ->",
-                "z.ai standard (glm-4.7-flash) -> OpenRouter free router ->",
+                "OpenRouter free router ->",
+                "z.ai standard (glm-4.7-flash) -> z.ai Coding Plan ->",
                 "OpenRouter auto router",
             )
         ),
