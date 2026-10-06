@@ -85,6 +85,7 @@ export const ptDictionary = {
     publishedOnLabel: 'Publicado em',
     accountsLabel: 'Contas',
     publishedLinksTitle: 'Publicado em',
+    progressHistoryTitle: 'Histórico de progresso',
     captionLabel: 'Legenda',
     editCaption: 'Editar legenda',
     save: 'Salvar',

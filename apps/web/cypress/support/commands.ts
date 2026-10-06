@@ -12,6 +12,11 @@ declare global {
 }
 
 Cypress.Commands.add('loginE2EUser', () => {
+  // NOTE: call this AFTER the first cy.visit(). cy.setCookie() before any
+  // visit does not attach the cookie to the AUT domain properly — the page
+  // shell renders but every API route returns 401. Visiting any page first
+  // (even /landing) makes the cookie stick and API calls authenticate.
+  // Existing specs never noticed because they stub every API response.
   const supabaseUrl = requiredCypressEnv('supabaseUrl', 'CYPRESS_SUPABASE_URL');
   const anonKey = requiredCypressEnv('supabaseAnonKey', 'CYPRESS_SUPABASE_ANON_KEY');
   const email = requiredCypressEnv('e2eTestEmail', 'CYPRESS_E2E_TEST_EMAIL');

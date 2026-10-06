@@ -29,7 +29,18 @@ class _FakeRedis:
         return next_cursor, self.batches[batch_index]
 
     def hgetall(self, key):
-        return self.data[key]
+        if isinstance(key, str):
+            key = key.encode("utf-8")
+        return self.data.get(key, {})
+
+    def hset(self, key, field, value):
+        if isinstance(key, str):
+            key = key.encode("utf-8")
+        if isinstance(field, str):
+            field = field.encode("utf-8")
+        if isinstance(value, str):
+            value = value.encode("utf-8")
+        self.data.setdefault(key, {})[field] = value
 
 
 class TestMemoryState(unittest.TestCase):
@@ -71,6 +82,40 @@ class TestMemoryState(unittest.TestCase):
 
         self.assertEqual(total, 1)
         self.assertEqual(state.get_task("task-1")["videos"], ["first.mp4"])
+
+    def test_kwargs_only_update_preserves_state_and_progress(self):
+        # Regression: a kwargs-only update_task() call (e.g. setting
+        # music_mood mid-pipeline) must not reset progress to 0 — the web
+        # once showed 40% (subtitle) dropping to 0% (music_mood) because of it.
+        state = MemoryState()
+        state.update_task(
+            "task-1", state=const.TASK_STATE_PROCESSING, progress=40
+        )
+        state.update_task("task-1", music_mood="chill")
+
+        task = state.get_task("task-1")
+        self.assertEqual(task["progress"], 40)
+        self.assertEqual(task["state"], const.TASK_STATE_PROCESSING)
+        self.assertEqual(task["music_mood"], "chill")
+
+    def test_explicit_progress_zero_still_resets(self):
+        state = MemoryState()
+        state.update_task("task-1", progress=40)
+        state.update_task("task-1", progress=0)
+
+        self.assertEqual(state.get_task("task-1")["progress"], 0)
+
+    def test_stage_only_update_preserves_state_and_progress(self):
+        state = MemoryState()
+        state.update_task(
+            "task-1", state=const.TASK_STATE_PROCESSING, progress=50
+        )
+        state.update_task("task-1", stage="music_mood")
+
+        task = state.get_task("task-1")
+        self.assertEqual(task["progress"], 50)
+        self.assertEqual(task["state"], const.TASK_STATE_PROCESSING)
+        self.assertEqual(task["stage"], "music_mood")
 
     def test_concurrent_memory_updates_are_preserved(self):
         state = MemoryState()
@@ -138,6 +183,18 @@ class TestRedisState(unittest.TestCase):
             [task["task_id"] for task in second_page],
             [f"task:{i}" for i in range(10, 18)],
         )
+
+    def test_kwargs_only_update_preserves_state_and_progress(self):
+        # Same regression as the MemoryState case: setting music_mood must
+        # not reset progress to 0.
+        state = self._build_state([1])
+        state.update_task("task:0", state=const.TASK_STATE_PROCESSING, progress=40)
+        state.update_task("task:0", music_mood="chill")
+
+        task = state.get_task("task:0")
+        self.assertEqual(task["progress"], 40)
+        self.assertEqual(task["state"], const.TASK_STATE_PROCESSING)
+        self.assertEqual(task["music_mood"], "chill")
 
     def test_convert_values_preserves_literals_and_converts_numbers(self):
         self.assertEqual(RedisState._convert_to_original_type(b"['clip.mp4']"), ["clip.mp4"])

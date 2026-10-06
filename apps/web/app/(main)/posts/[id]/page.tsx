@@ -14,6 +14,8 @@ import {
   useUpdateSlotMutation,
   useDeleteSlotMutation,
   type ScheduledSlot,
+  type SlotDetailPayload,
+  type ProgressHistoryEntry,
 } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import AccountCard from '@/components/account-card';
@@ -485,7 +487,7 @@ export const SlotDetail = ({
   timezone,
   publishLinks,
 }: {
-  slot: ScheduledSlot;
+  slot: SlotDetailPayload['slot'];
   accounts: AccountCardData[];
   locale: 'pt' | 'en';
   timezone: string;
@@ -622,6 +624,8 @@ export const SlotDetail = ({
 
       <PublishLinks links={publishLinks} />
 
+      <ProgressHistory history={slot.progressHistory ?? []} />
+
       {mutationError && (
         <p className="mt-6 rounded-xl bg-[#ffe1de] p-3 text-sm text-destructive" role="alert">
           {mutationError}
@@ -657,6 +661,53 @@ export const SlotDetail = ({
           )}
         </div>
       )}
+    </section>
+  );
+};
+
+//---------------
+// ProgressHistory — the observed (progress, stage) transitions of this
+// post, oldest first. A row whose progress dropped since the previous
+// observation is tinted amber: that is the visible trace of regressions
+// like the 40% -> 0% reset. The stage renders in mono as technical
+// context (an engine pipeline name), never as UI copy. Renders nothing
+// when the post never started generating (or predates the history).
+//---------------
+export const ProgressHistory = ({ history }: { history: ProgressHistoryEntry[] }) => {
+  const { t, locale } = useI18n();
+  if (history.length === 0) return null;
+  return (
+    <section aria-label={t('posts.progressHistoryTitle')} className="mt-6">
+      <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+        {t('posts.progressHistoryTitle')}
+      </p>
+      <ol className="mt-3 space-y-2">
+        {history.map((entry, index) => {
+          const regressed = index > 0 && entry.progress < history[index - 1].progress;
+          return (
+            <li
+              key={`${entry.recordedAt}-${index}`}
+              data-testid="progress-history-row"
+              data-regressed={regressed ? 'true' : undefined}
+              className={`flex items-baseline justify-between gap-3 rounded-xl border px-3 py-2 text-sm ${
+                regressed ? 'border-[#f0d48a] bg-[#fff8e6]' : 'border-input bg-white'
+              }`}
+            >
+              <span className="flex min-w-0 items-baseline gap-2">
+                <span className={`font-semibold ${regressed ? 'text-[#9a6b00]' : 'text-[#0d2b45]'}`}>
+                  {entry.progress}%
+                </span>
+                {entry.stage && (
+                  <span className="truncate font-mono text-xs text-muted-foreground">{entry.stage}</span>
+                )}
+              </span>
+              <time className="shrink-0 text-xs text-muted-foreground">
+                {formatDateTime(entry.recordedAt, locale)}
+              </time>
+            </li>
+          );
+        })}
+      </ol>
     </section>
   );
 };

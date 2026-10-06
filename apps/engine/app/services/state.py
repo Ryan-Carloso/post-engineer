@@ -16,8 +16,19 @@ from app.models import const
 # Base class for state management
 class BaseState(ABC):
     @abstractmethod
-    def update_task(self, task_id: str, state: int, progress: int = 0, **kwargs: object) -> None:
-        pass
+    def update_task(
+        self,
+        task_id: str,
+        state: int | None = None,
+        progress: int | None = None,
+        **kwargs: object,
+    ) -> None:
+        """Merge ``kwargs`` into the task row.
+
+        ``state``/``progress`` are only overwritten when explicitly passed:
+        a kwargs-only call (e.g. recording ``music_mood`` mid-pipeline) must
+        never reset progress to 0. Pass ``progress=0`` explicitly to reset.
+        """
 
     @abstractmethod
     def get_task(self, task_id: str, user_id: str | None = None) -> dict[str, object] | None:
@@ -45,20 +56,23 @@ class MemoryState(BaseState):
     def update_task(
         self,
         task_id: str,
-        state: int = const.TASK_STATE_PROCESSING,
-        progress: int = 0,
+        state: int | None = None,
+        progress: int | None = None,
         **kwargs,
     ):
-        progress = int(progress)
-        if progress > 100:
-            progress = 100
+        update: dict[str, object] = {"task_id": task_id}
+        if state is not None:
+            update["state"] = state
+        if progress is not None:
+            clamped = int(progress)
+            if clamped > 100:
+                clamped = 100
+            update["progress"] = clamped
 
         with self._lock:
             self._tasks[task_id] = {
                 **self._tasks.get(task_id, {}),
-                "task_id": task_id,
-                "state": state,
-                "progress": progress,
+                **update,
                 **kwargs,
             }
 
@@ -116,20 +130,19 @@ class RedisState(BaseState):
     def update_task(
         self,
         task_id: str,
-        state: int = const.TASK_STATE_PROCESSING,
-        progress: int = 0,
+        state: int | None = None,
+        progress: int | None = None,
         **kwargs,
     ):
-        progress = int(progress)
-        if progress > 100:
-            progress = 100
-
-        fields = {
-            "task_id": task_id,
-            "state": state,
-            "progress": progress,
-            **kwargs,
-        }
+        fields: dict[str, object] = {"task_id": task_id}
+        if state is not None:
+            fields["state"] = state
+        if progress is not None:
+            clamped = int(progress)
+            if clamped > 100:
+                clamped = 100
+            fields["progress"] = clamped
+        fields.update(kwargs)
 
         for field, value in fields.items():
             self._redis.hset(task_id, field, str(value))
@@ -353,13 +366,15 @@ class SupabaseTaskState(BaseState):
     def update_task(
         self,
         task_id: str,
-        state: int = const.TASK_STATE_PROCESSING,
-        progress: int = 0,
+        state: int | None = None,
+        progress: int | None = None,
         **kwargs: object,
     ) -> None:
-        progress = int(progress)
-        if progress > 100:
-            progress = 100
+        clamped_progress: int | None = None
+        if progress is not None:
+            clamped_progress = int(progress)
+            if clamped_progress > 100:
+                clamped_progress = 100
         # The SELECT→POST below is a read-modify-write: hold the lock for
         # the whole sequence so concurrent writers cannot read the same
         # base row and silently drop each other's kwargs (last POST wins).
@@ -370,18 +385,25 @@ class SupabaseTaskState(BaseState):
             )
             data.update(kwargs)
             user_id = kwargs.get("user_id", existing.get("user_id") if existing else None)
+            # state/progress are only sent when explicitly passed: a
+            # kwargs-only call must not clobber them with defaults, and the
+            # merge-duplicates upsert then keeps the stored values. A brand
+            # new row falls back to the table defaults (0/0).
+            payload: dict[str, Any] = {
+                "task_id": task_id,
+                "user_id": user_id,
+                "data": data,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            if state is not None:
+                payload["state"] = state
+            if clamped_progress is not None:
+                payload["progress"] = clamped_progress
             self._request(
                 "POST",
                 "",
                 headers={**self._headers, "Prefer": "resolution=merge-duplicates"},
-                json={
-                    "task_id": task_id,
-                    "user_id": user_id,
-                    "state": state,
-                    "progress": progress,
-                    "data": data,
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                },
+                json=payload,
             )
 
     def get_task(self, task_id: str, user_id: str | None = None) -> dict[str, object] | None:

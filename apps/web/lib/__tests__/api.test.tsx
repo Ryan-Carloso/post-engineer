@@ -605,6 +605,45 @@ describe('api', () => {
     expect(second?.slot.publishLinks).toEqual([]);
   });
 
+  it('fetchSlotDetail carries the progress history through and narrows malformed entries', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
+      success: true,
+      slot: {
+        id: 'slot-1',
+        status: 'generating',
+        progressHistory: [
+          { progress: 40, stage: 'subtitle', recordedAt: '2026-10-05T22:10:00.000Z' },
+          { progress: 0, stage: 'music_mood', recordedAt: '2026-10-05T22:12:00.000Z' },
+          // Malformed entries are dropped, not cast.
+          { progress: 'lots', stage: 'x', recordedAt: '2026-10-05T22:13:00.000Z' },
+          { progress: 50, recordedAt: '2026-10-05T22:14:00.000Z' },
+          null,
+        ],
+      },
+      schedule: { id: 's1' },
+      persona: null,
+    }));
+    const { fetchSlotDetail } = await import('@/lib/api');
+    const detail = await fetchSlotDetail('slot-1');
+    expect(detail?.slot.progressHistory).toEqual([
+      { progress: 40, stage: 'subtitle', recordedAt: '2026-10-05T22:10:00.000Z' },
+      { progress: 0, stage: 'music_mood', recordedAt: '2026-10-05T22:12:00.000Z' },
+      { progress: 50, stage: null, recordedAt: '2026-10-05T22:14:00.000Z' },
+    ]);
+  });
+
+  it('fetchSlotDetail defaults a missing progressHistory to an empty list', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
+      success: true,
+      slot: { id: 'slot-1', status: 'awaiting' },
+      schedule: { id: 's1' },
+      persona: null,
+    }));
+    const { fetchSlotDetail } = await import('@/lib/api');
+    const detail = await fetchSlotDetail('slot-1');
+    expect(detail?.slot.progressHistory).toEqual([]);
+  });
+
   it('fetchGenerationDetail GETs /api/persona/video-generations/:id, null on 404', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
       success: true,

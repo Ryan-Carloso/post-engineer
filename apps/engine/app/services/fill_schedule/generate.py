@@ -10,6 +10,7 @@ from typing import Any
 from loguru import logger
 
 from app.models.schema import TaskVideoRequest
+from app.models import const as model_const
 from app.services import notify as notify_module
 from app.services import task as tm
 from app.services.analytics import scrub_secret_values, track_event
@@ -232,7 +233,16 @@ class BatchGenerator:
         if persona_id:
             tracking_ids["persona_id"] = persona_id
         self.task_state.update_task(
-            task_id, user_id=user_id, flow="batch", pipeline="video", **tracking_ids
+            task_id,
+            user_id=user_id,
+            flow="batch",
+            pipeline="video",
+            # New tasks start at explicit 0/PROCESSING: update_task() only
+            # overwrites state/progress when they are passed, so the initial
+            # values are set here rather than relying on defaults.
+            state=model_const.TASK_STATE_PROCESSING,
+            progress=0,
+            **tracking_ids,
         )
         thread = threading.Thread(
             target=tm.start,

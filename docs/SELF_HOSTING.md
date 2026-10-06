@@ -81,7 +81,6 @@ Provision the database schema in your Supabase project:
    logs, PostHog, or status polls) resolves to the web's generation record
    without a full table scan. Index only — no foreign key to
    `engine_task_state`, which is ephemeral.
-
 8. `supabase/migrations/009_batch-charge-task-correlation.sql` — backfills
    `token_transactions.engine_task_id` for **single-slot** batch charges.
    A scheduled post is charged once up front under `batch:<schedule_id>` with
@@ -90,6 +89,13 @@ Provision the database schema in your Supabase project:
    in the history table forever. Multi-slot batches are left alone on
    purpose — one charge covers several videos. Also adds the two indexes
    the gone-task reconciliation looks up.
+
+9. `supabase/migrations/010_scheduled-post-progress-history.sql` —
+   `scheduled_post_progress_history` records every observed
+   (progress, stage) transition of a scheduled post (written change-only by
+   `GET /api/schedule/status`), so a progress regression like 40% → 0%
+   stays visible on the post detail page after the fact. Rows
+   cascade-delete with their post.
 
 Paste each file into the Supabase Dashboard > SQL Editor and run, in order
 (the numeric prefixes encode the order — always apply the

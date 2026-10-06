@@ -1039,6 +1039,18 @@ export function useDeleteSlotMutation() {
 // throws and is surfaced by the page's error state.
 //---------------
 
+//---------------
+// ProgressHistoryEntry — one observed (progress, stage) transition of a
+// scheduled post, oldest first. Recorded change-only by GET
+// /api/schedule/status while the post was live, so regressions (e.g.
+// 40% -> 0%) stay visible after the fact.
+//---------------
+export interface ProgressHistoryEntry {
+  progress: number;
+  stage: string | null;
+  recordedAt: string;
+}
+
 export interface SlotDetailPayload {
   slot: {
     id: string;
@@ -1057,6 +1069,9 @@ export interface SlotDetailPayload {
     // Where the post went, one entry per provider. Empty until the slot is
     // published (nothing exists to link to before that).
     publishLinks: PublishLink[];
+    // Observed generation progress transitions, oldest first. Empty for
+    // posts that never started generating (or predate the history table).
+    progressHistory: ProgressHistoryEntry[];
   };
   schedule: {
     id: string;
@@ -1102,17 +1117,44 @@ function narrowPublishLinks(value: unknown): PublishLink[] {
   return links;
 }
 
+//---------------
+// narrowProgressHistory — same defensive pattern as narrowPublishLinks:
+// the payload crosses a network boundary, so a slot row predating the
+// field — or a malformed entry — reads as "no history" instead of handing
+// the UI an undefined it would have to guard at every render.
+//---------------
+function narrowProgressHistory(value: unknown): ProgressHistoryEntry[] {
+  if (!Array.isArray(value)) return [];
+  const entries: ProgressHistoryEntry[] = [];
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const record = entry as Record<string, unknown>;
+    if (typeof record.progress !== 'number' || !Number.isFinite(record.progress)) continue;
+    if (typeof record.recordedAt !== 'string') continue;
+    entries.push({
+      progress: record.progress,
+      stage: typeof record.stage === 'string' ? record.stage : null,
+      recordedAt: record.recordedAt,
+    });
+  }
+  return entries;
+}
+
 export async function fetchSlotDetail(slotId: string): Promise<SlotDetailPayload | null> {
   const response = await fetch(`/api/schedule/slots/${encodeURIComponent(slotId)}`, {
     method: 'GET',
   });
   if (response.status === 404) return null;
   if (!response.ok) await throwForBadResponse(response, 'Failed to load post.');
-  const data = await parseJsonBody<{ success: boolean; slot?: Omit<SlotDetailPayload['slot'], 'publishLinks'> & { publishLinks?: unknown }; schedule?: SlotDetailPayload['schedule']; persona?: SlotDetailPayload['persona']; error?: string }>(response);
+  const data = await parseJsonBody<{ success: boolean; slot?: Omit<SlotDetailPayload['slot'], 'publishLinks' | 'progressHistory'> & { publishLinks?: unknown; progressHistory?: unknown }; schedule?: SlotDetailPayload['schedule']; persona?: SlotDetailPayload['persona']; error?: string }>(response);
   if (!data?.success) throw new Error(data?.error ?? 'Failed to load post.');
   if (!data.slot || !data.schedule) throw new Error('Failed to load post.');
   return {
-    slot: { ...data.slot, publishLinks: narrowPublishLinks(data.slot.publishLinks) },
+    slot: {
+      ...data.slot,
+      publishLinks: narrowPublishLinks(data.slot.publishLinks),
+      progressHistory: narrowProgressHistory(data.slot.progressHistory),
+    },
     schedule: data.schedule,
     persona: data.persona ?? null,
   };
