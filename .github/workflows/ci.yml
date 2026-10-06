@@ -90,6 +90,18 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
+      # Build metadata: VERSION from the repo-root VERSION file (manual
+      # SemVer), BUILD from the CI run number (unique per run, never
+      # random), COMMIT from the short SHA. Exported to every later step;
+      # next.config.ts inlines them into the bundle at `pnpm build`.
+      # Nothing version-related is committed to git — parallel PRs never
+      # conflict on version files; each CI run generates its own build.
+      - name: Set build metadata
+        run: |
+          echo "VERSION=$(tr -d '[:space:]' < "$GITHUB_WORKSPACE/VERSION")" >> "$GITHUB_ENV"
+          echo "BUILD=${{ github.run_number }}" >> "$GITHUB_ENV"
+          echo "COMMIT=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 10.22.0
@@ -206,6 +218,15 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
+      # Build metadata (same contract as the web job): exported so the
+      # engine test suite exercises the injected-VERSION/BUILD/COMMIT path
+      # that /version and /health report in production.
+      - name: Set build metadata
+        run: |
+          echo "VERSION=$(tr -d '[:space:]' < "$GITHUB_WORKSPACE/VERSION")" >> "$GITHUB_ENV"
+          echo "BUILD=${{ github.run_number }}" >> "$GITHUB_ENV"
+          echo "COMMIT=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -283,6 +304,15 @@ jobs:
         working-directory: apps/web
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      # Build metadata (same contract as the web job): the Cypress
+      # production build inlines the same VERSION/BUILD/COMMIT the unit
+      # job verified.
+      - name: Set build metadata
+        run: |
+          echo "VERSION=$(tr -d '[:space:]' < "$GITHUB_WORKSPACE/VERSION")" >> "$GITHUB_ENV"
+          echo "BUILD=${{ github.run_number }}" >> "$GITHUB_ENV"
+          echo "COMMIT=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
 
       - name: Check E2E secrets are configured
         shell: bash
@@ -406,6 +436,14 @@ jobs:
         working-directory: apps/web
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      # Build metadata (same contract as the web job): the instrumented
+      # production build inlines the same VERSION/BUILD/COMMIT.
+      - name: Set build metadata
+        run: |
+          echo "VERSION=$(tr -d '[:space:]' < "$GITHUB_WORKSPACE/VERSION")" >> "$GITHUB_ENV"
+          echo "BUILD=${{ github.run_number }}" >> "$GITHUB_ENV"
+          echo "COMMIT=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
 
       - name: Check E2E secrets are configured
         shell: bash

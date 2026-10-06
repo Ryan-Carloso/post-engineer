@@ -18,15 +18,18 @@
   dev server at `http://localhost:3434` — screenshots, both locales (PT is the
   default), and the console. Never schedule a real post or spend tokens to take
   a picture.
-- **Every PR bumps the repo-root `VERSION` file** (minor for features,
-  patch for fixes) via `scripts/bump-version.sh [patch|minor|major]` — it
-  updates `VERSION`, the repo-root `package.json`, `apps/mcp/package.json`,
-  `apps/web/package.json`, `apps/engine/pyproject.toml` and
-  `apps/engine/uv.lock` in one go. CI (`version-check` workflow)
-  fails the PR if the locations diverge or if `VERSION` was not bumped —
-  this is the enforcement, not agent memory. The MCP already advertises
-  its package.json version in the protocol handshake, so it stays unified
-  automatically.
+- **Versioning is manual; build metadata comes from CI.** The repo-root
+  `VERSION` file is the single source of truth for the platform SemVer
+  (e.g. `1.8.0`) and is edited by hand only when cutting a release —
+  never per PR, never by CI. There is no bump script and no sync across
+  `package.json` / `pyproject.toml` / `uv.lock`: those version fields are
+  maintained by hand and CI never rewrites them. The `version-check`
+  workflow only validates that `VERSION` is valid SemVer `x.y.z`.
+  Build metadata is NOT stored in git: CI injects `VERSION` / `BUILD`
+  (the CI run number — unique per run, never random) / `COMMIT` (short
+  SHA) as env vars at build/deploy time, and the engine reports them via
+  `GET /version` and `/health`. Parallel PRs never conflict on version
+  files because each CI run generates its own build number.
 
 # Env Files Policy (NEVER commit real secrets)
 
@@ -1483,12 +1486,6 @@ Follow these so the same issues don't come back:
   subsequently-run test file in that worker — on a self-hoster's machine,
   where the var may genuinely be set, that's a leak. `stubEnv` with
   `undefined` deletes the var and restores the original on unstub.
-- **Align the semver bump with the PR title.** Repo rule is minor-for-feat,
-  patch-for-fix: a `feat:`-titled PR that bumps patch is the misnomer (or
-  vice versa). When a PR mixes feat and fix commits, pick one and align the
-  other — here the title stayed `feat(posthog)` so the bump went
-  1.8.1 → 1.9.0. CI `version-check` only enforces sync, not the level, so
-  this is on the author/reviewer, not automation.
 - **The user merges mid-babysit — the pre-push `gh pr view` check keeps
   paying off.** Round 2 ended the same way as #34: the user merged at
   12:13:10Z while a fix commit was in flight; the check caught it before
@@ -1505,9 +1502,7 @@ Follow these so the same issues don't come back:
   package.json manifests (JSON.parse keeps the last, so version-check stayed
   green while the files were malformed). After any version-file conflict
   resolution, run `grep -c '"version"'` on each package.json in addition to
-  the marker grep and `bump-version.sh check`. Note: the duplication came
-  from manual conflict resolution, not from `bump-version.sh` — its
-  `re.subn(..., count=1)` is idempotent-safe.
+  the marker grep — the duplication came from manual conflict resolution.
 - **Pin a default literal in every code path that carries it.** This PR
   changed the default provider in two places — the legacy `_generate_response`
   wrapper and `_generate_response_with_fallback` — but only the fallback had
@@ -2061,7 +2056,6 @@ Follow these so the same issues don't come back:
 - **Fix the trap on every surface that teaches it, not just the reported one.** Pinning `@latest` in `apps/mcp/README.md` while the root READMEs (EN + PT, the primary copy-paste snippets) still taught the bare `npx` command made the docs self-contradictory. When a fix addresses a user-facing trap, grep every advertised surface for the old pattern before calling it done.
 - **Cross-app copy needs a sync test in the same PR — including install commands.** The 3h-window precedent (`docs-sync.test.ts`) now covers the npx command too: a file-parsing block asserts `post-engineer-mcp@latest` on all four surfaces (mcp README, web install prompt, both root READMEs), so a one-sided future edit can't silently reintroduce the stale-cache trap.
 - **EN/PT parity tests must cover every pinned line, not just the headline one.** The parity test pinned the 3h window in both locales but not the `@latest` command line — extended it to find the `"command":` line per locale and assert the pin.
-- **Every PR bumps VERSION — CI enforces it, not memory.** The `version-check` workflow fails any PR whose diff doesn't touch `VERSION`; a docs-only PR still needs `scripts/bump-version.sh patch`. (This PR initially shipped without the bump and had to add it after the failure.)
 - **Two agents, one branch: a rebase can silently drop your commit.** The parent rebased the branch onto an earlier commit while this babysit had a version-bump commit pushed; the bump vanished from the branch and `version-check` failed again. Re-verify `git log origin/<branch>` after any concurrent work before assuming your commits are still there.
 
 ## Web review learnings, PR #55 (2026-10-02, production 500)

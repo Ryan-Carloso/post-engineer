@@ -1,4 +1,4 @@
-import { getDeployedVersion } from "./lib/version";
+import { formatBuildInfo, getBuildInfo } from "./lib/version";
 import { flushPostHog, getPostHogServer } from "./lib/posthog-server";
 
 //---------------
@@ -12,7 +12,9 @@ import { flushPostHog, getPostHogServer } from "./lib/posthog-server";
 
 export async function register() {
   // Always first: identifies the live build in every log stream.
-  console.log(`[web] starting version ${getDeployedVersion()}`);
+  const build = getBuildInfo();
+  const commitSuffix = build.commit ? ` ${build.commit}` : '';
+  console.log(`[web] starting version ${formatBuildInfo(build)}${commitSuffix}`);
 
   // Loud startup signal: if PostHog is unconfigured in production, say so
   // clearly. Telemetry is optional, but a silent misconfiguration (typo'd
