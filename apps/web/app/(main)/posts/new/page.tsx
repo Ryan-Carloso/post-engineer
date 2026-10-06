@@ -50,9 +50,10 @@ import {
 import { computeVideoTokens, type FaceQuality } from '@/lib/tokens';
 
 //---------------
-// NewPostPage — creates a post: pick the persona, 1-10 topics, the accounts
-// to publish on and the times, then send ONE generate-and-schedule request
-// (the video and its publish slot are born together).
+// NewPostPage — creates a post: pick the persona, the topic, the accounts to
+// publish on and the times, then send ONE generate-and-schedule request (the
+// video and its publish slot are born together). On success it opens the new
+// post's own page, where the video and its live progress are.
 //
 // The draft lives in the zustand store (lib/store.ts) and the read data comes
 // from React Query, so every local component below reads straight from the
@@ -124,9 +125,10 @@ export default function NewPostPage() {
   }, []);
 
   //---------------
-  // On success the schedule exists: go back to the posts list, which was
-  // already refetched (the mutation invalidated the caches) and shows the new
-  // slots. A partial failure keeps the user here so the error stays visible.
+  // On success the slot exists: go straight to ITS detail page, which shows
+  // the video and the live progress while the engine works. The posts list
+  // would only make the user hunt for the row we just created. A partial
+  // failure keeps the user here so the error stays visible.
   //
   // We read the live store value, not this render's `result`: the mount effect
   // above clears an old result in the same commit, so the render's value would
@@ -134,7 +136,11 @@ export default function NewPostPage() {
   //---------------
   useEffect(() => {
     const current = useNewPostStore.getState().result;
-    if (current !== null && current.success) router.push('/posts');
+    // A success without a slot id cannot be opened — stay put rather than
+    // navigating to a URL that would 404.
+    if (current !== null && current.success && current.slotId !== null) {
+      router.push(`/posts/${current.slotId}`);
+    }
     // `result` is the trigger: the store write re-renders this screen.
   }, [result, router]);
 
@@ -181,7 +187,7 @@ async function handleSubmit(
 ): Promise<void> {
   const store = useNewPostStore.getState();
   const { selectedAccountIds } = useUploadStore.getState();
-  const filledTopics = store.topics.map((topic) => topic.trim()).filter((topic) => topic.length > 0);
+  const filledTopic = store.topic.trim();
   const filledTimes = store.times.map((time) => time.trim()).filter((time) => time.length > 0);
   const startInstant = parseZonedDateTime(store.startAt, store.timezone);
 
@@ -196,7 +202,7 @@ async function handleSubmit(
   const rejection: TranslationKey | null =
     store.personaId.trim().length === 0
       ? 'newPost.personaRequired'
-      : filledTopics.length === 0
+      : filledTopic.length === 0
         ? 'newPost.errorTopicsRequired'
         : filledTimes.length === 0
           ? 'newPost.errorInvalidScheduleTime'
@@ -220,7 +226,9 @@ async function handleSubmit(
   try {
     const response = await mutateAsync({
       personaId: store.personaId.trim(),
-      topics: filledTopics,
+      // The API takes one topic per video, so the single-field draft becomes
+      // a one-element array here.
+      topics: [filledTopic],
       providers,
       accounts,
       startAt: startInstant.toISOString(),
@@ -233,6 +241,10 @@ async function handleSubmit(
     const outcome: NewPostOutcome = {
       success: response.success,
       scheduleId: response.scheduleId,
+      // One post is one video, so the first slot is the post the screen
+      // opens. A malformed payload narrows to no slots and lands on null,
+      // which keeps the form here instead of navigating nowhere.
+      slotId: response.slots[0]?.slotId ?? null,
       slotCount: response.slots.length,
       code: response.code,
       need: response.need,
@@ -477,53 +489,25 @@ const NewPostFaceField = () => {
 };
 
 //---------------
-// Topics — one video per row. "Add topic" stops at the shared limit
-// (MAX_POST_TOPICS), the same number the API enforces.
+// Topic — one field, one video. The API still accepts up to 10 topics per
+// call (the MCP tool schedules a batch in one request); the form does not
+// offer the range, because a second topic is a second post.
 //---------------
 const NewPostTopicsField = () => {
   const { t } = useI18n();
-  const topics = useNewPostStore((s) => s.topics);
+  const topic = useNewPostStore((s) => s.topic);
   const setTopic = useNewPostStore((s) => s.setTopic);
-  const addTopic = useNewPostStore((s) => s.addTopic);
-  const removeTopic = useNewPostStore((s) => s.removeTopic);
-  const atCap = topics.length >= MAX_POST_TOPICS;
   return (
     <section className={cn(CARD_CLASS, 'space-y-4')}>
-      <SectionTitle
-        icon={<FilmIcon />}
-        label={t('newPost.topicsLabel')}
-        hint={t('newPost.topicsHint', { max: MAX_POST_TOPICS })}
+      <SectionTitle icon={<FilmIcon />} label={t('newPost.topicLabel')} hint={t('newPost.topicHint')} />
+      <input
+        type="text"
+        value={topic}
+        placeholder={t('newPost.topicPlaceholder')}
+        aria-label={t('newPost.topicLabel')}
+        onChange={(event) => setTopic(event.target.value)}
+        className={INPUT_CLASS}
       />
-      <div className="space-y-2">
-        {topics.map((topic, index) => (
-          <div key={index} className="flex items-center gap-2">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-xs font-semibold text-neutral-500">
-              {index + 1}
-            </span>
-            <input
-              type="text"
-              value={topic}
-              placeholder={t('newPost.topicPlaceholder')}
-              aria-label={`${t('newPost.topicsLabel')} ${index + 1}`}
-              onChange={(event) => setTopic(index, event.target.value)}
-              className={cn(INPUT_CLASS, 'mt-0')}
-            />
-            <button
-              type="button"
-              onClick={() => removeTopic(index)}
-              disabled={topics.length <= 1}
-              aria-label={`${t('newPost.removeTopic')} ${index + 1}`}
-              className={ICON_BUTTON_CLASS}
-            >
-              <TrashIcon />
-            </button>
-          </div>
-        ))}
-      </div>
-      <button type="button" onClick={addTopic} disabled={atCap} className={SECONDARY_BUTTON_CLASS}>
-        <PlusIcon />
-        {t('newPost.addTopic')}
-      </button>
     </section>
   );
 };
@@ -749,19 +733,16 @@ const NewPostPreviewCard = () => {
   const startAt = useNewPostStore((s) => s.startAt);
   const times = useNewPostStore((s) => s.times);
   const timezone = useNewPostStore((s) => s.timezone);
-  const topics = useNewPostStore((s) => s.topics);
+  const topic = useNewPostStore((s) => s.topic);
 
-  const filledTopics = useMemo(
-    () => topics.map((topic) => topic.trim()).filter((topic) => topic.length > 0),
-    [topics],
-  );
+  const filledTopic = useMemo(() => topic.trim(), [topic]);
   const filledTimes = useMemo(
     () => times.map((time) => time.trim()).filter((time) => time.length > 0),
     [times],
   );
 
   const preview = useMemo(() => {
-    if (startAt.trim().length === 0 || filledTopics.length === 0 || filledTimes.length === 0) return null;
+    if (startAt.trim().length === 0 || filledTopic.length === 0 || filledTimes.length === 0) return null;
     const startInstant = parseZonedDateTime(startAt, timezone);
     if (startInstant === null) return null;
     try {
@@ -769,12 +750,12 @@ const NewPostPreviewCard = () => {
         startAtISO: startInstant.toISOString(),
         times: filledTimes,
         timezone,
-        count: filledTopics.length,
+        count: 1,
       });
     } catch {
       return null;
     }
-  }, [startAt, timezone, filledTopics, filledTimes]);
+  }, [startAt, timezone, filledTopic, filledTimes]);
 
   const outOfWindow =
     preview !== null && preview.some((slot) => !validateScheduleWindow(new Date(slot.slotAtISO)).ok);
@@ -811,7 +792,7 @@ const NewPostPreviewCard = () => {
                       <span className="mx-1.5 text-neutral-300">·</span>
                       {timeFormatter.format(instant)}
                     </p>
-                    <p className="mt-0.5 line-clamp-2 text-xs text-neutral-500">{filledTopics[index]}</p>
+                    <p className="mt-0.5 line-clamp-2 text-xs text-neutral-500">{filledTopic}</p>
                   </div>
                 </li>
               );
@@ -840,11 +821,13 @@ const NewPostPreviewCard = () => {
 const NewPostCostSummary = () => {
   const { t } = useI18n();
   const personaId = useNewPostStore((s) => s.personaId);
-  const topics = useNewPostStore((s) => s.topics);
+  const topic = useNewPostStore((s) => s.topic);
   const faceless = useNewPostStore((s) => s.faceless);
   const personasQuery = usePersonaListQuery();
   const persona = (personasQuery.data ?? []).find((item) => item.id === personaId);
-  const videoCount = topics.filter((topic) => topic.trim().length > 0).length;
+  // One topic = one video; an empty topic prices 0 videos, and the plural
+  // copy ("0 videos") is then the honest one.
+  const videoCount = topic.trim().length > 0 ? 1 : 0;
   const perVideo = persona
     ? computeVideoTokens(faceless, (persona.faceQuality as FaceQuality) ?? 'ok')
     : 0;

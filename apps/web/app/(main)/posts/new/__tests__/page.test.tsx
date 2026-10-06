@@ -90,7 +90,6 @@ import {
   useCreatePostMutation,
 } from '@/lib/api';
 import { useNewPostStore, useUploadStore } from '@/lib/store';
-import { MAX_POST_TOPICS } from '@/lib/schedule/slot-distribution';
 
 const PERSONA = {
   id: 'p1',
@@ -136,7 +135,7 @@ function mockQueries(overrides: { personas?: unknown[]; isLoading?: boolean; isE
 /** Fills the mandatory fields so each test only has to break one thing. */
 function fillValidDraft(): void {
   useNewPostStore.getState().setPersonaId('p1');
-  useNewPostStore.getState().setTopic(0, 'How to grow on YouTube');
+  useNewPostStore.getState().setTopic('How to grow on YouTube');
   useNewPostStore.getState().setStartAt(START_AT);
   useNewPostStore.getState().setTimezone('UTC');
   useNewPostStore.getState().setTime(0, '09:00');
@@ -163,7 +162,7 @@ describe('NewPostPage', () => {
     render(<NewPostPage />);
 
     expect(screen.getByRole('radio', { name: 'Viva Leve' })).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'newPost.topicsLabel 1' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'newPost.topicLabel' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'newPost.submit' })).toBeInTheDocument();
   });
 
@@ -183,7 +182,7 @@ describe('NewPostPage', () => {
   });
 
   it('blocks submit and sends nothing when no persona is selected', async () => {
-    useNewPostStore.getState().setTopic(0, 'A topic');
+    useNewPostStore.getState().setTopic('A topic');
     useNewPostStore.getState().setStartAt(START_AT);
     useUploadStore.getState().toggleSelectedAccount('youtube', 'ch1');
     render(<NewPostPage />);
@@ -196,7 +195,7 @@ describe('NewPostPage', () => {
 
   it('blocks submit and sends nothing when no account is selected', async () => {
     useNewPostStore.getState().setPersonaId('p1');
-    useNewPostStore.getState().setTopic(0, 'A topic');
+    useNewPostStore.getState().setTopic('A topic');
     useNewPostStore.getState().setStartAt(START_AT);
     render(<NewPostPage />);
 
@@ -218,7 +217,7 @@ describe('NewPostPage', () => {
     expect(mockMutateAsync).not.toHaveBeenCalled();
   });
 
-  it('sends the generate-and-schedule payload and redirects to the posts list', async () => {
+  it('sends the generate-and-schedule payload and opens the new post detail page', async () => {
     mockMutateAsync.mockResolvedValue({
       success: true,
       scheduleId: 's1',
@@ -245,7 +244,30 @@ describe('NewPostPage', () => {
       timezone: 'UTC',
       faceless: false,
     });
-    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/posts'));
+    // The created slot's own page, not the list: it is where the video and
+    // its live progress are.
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/posts/slot-1'));
+  });
+
+  it('stays on the form when a successful response carries no slot to open', async () => {
+    mockMutateAsync.mockResolvedValue({
+      success: true,
+      scheduleId: 's1',
+      slots: [],
+      replayed: false,
+      error: null,
+      code: null,
+      need: null,
+      have: null,
+    });
+    fillValidDraft();
+    render(<NewPostPage />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'newPost.submit' }));
+
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    // Navigating to /posts/null would 404; the outcome stays readable here.
+    expect(mockPush).not.toHaveBeenCalled();
   });
 
   it('maps INSUFFICIENT_TOKENS to localized copy with the server numbers and stays on the screen', async () => {
@@ -467,15 +489,13 @@ describe('NewPostPage', () => {
     expect(screen.getByText('newPost.costHintOne:videos=1')).toBeInTheDocument();
   });
 
-  it('switches to the plural copy once there is more than one', () => {
-    fillValidDraft();
-    useNewPostStore.getState().setFaceless(true);
-    useNewPostStore.getState().addTopic();
-    useNewPostStore.getState().setTopic(1, 'Another topic');
+  it('prices zero videos while the topic is still blank', () => {
+    useNewPostStore.getState().setPersonaId('p1');
+    useNewPostStore.getState().setStartAt(START_AT);
     render(<NewPostPage />);
 
-    expect(screen.getByText('newPost.costValue:cost=2')).toBeInTheDocument();
-    expect(screen.getByText('newPost.costHint:videos=2')).toBeInTheDocument();
+    expect(screen.getByText('newPost.costValue:cost=0')).toBeInTheDocument();
+    expect(screen.getByText('newPost.costHint:videos=0')).toBeInTheDocument();
   });
 
   it('pluralizes the token price too (a face video costs 2 tokens)', () => {
@@ -507,23 +527,19 @@ describe('NewPostPage', () => {
     ).toBeInTheDocument();
   });
 
-  it('never lets the form grow past the API topic limit', async () => {
+  it('offers a single topic field with no add/remove controls', () => {
     render(<NewPostPage />);
 
-    const add = screen.getByRole('button', { name: 'newPost.addTopic' });
-    for (let i = 0; i < MAX_POST_TOPICS + 5; i += 1) {
-      if (!(add as HTMLButtonElement).disabled) await userEvent.click(add);
-    }
-
-    expect(useNewPostStore.getState().topics).toHaveLength(MAX_POST_TOPICS);
-    expect(add).toBeDisabled();
+    expect(screen.getAllByRole('textbox', { name: 'newPost.topicLabel' })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'newPost.addTopic' })).not.toBeInTheDocument();
   });
 
   it('does not replay a previous visit outcome when the screen is reopened', async () => {
     useNewPostStore.getState().setResult({
       success: true,
       scheduleId: 's-old',
-      slotCount: 3,
+      slotId: 'slot-old',
+      slotCount: 1,
       code: null,
       need: null,
       have: null,
@@ -535,7 +551,7 @@ describe('NewPostPage', () => {
     expect(mockPush).not.toHaveBeenCalled();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
     // The typed draft is kept — only the outcome is dropped.
-    expect(useNewPostStore.getState().topics).toEqual(['How to grow on YouTube']);
+    expect(useNewPostStore.getState().topic).toBe('How to grow on YouTube');
   });
 
   it('points at the persona screen when the user has no personas', () => {
