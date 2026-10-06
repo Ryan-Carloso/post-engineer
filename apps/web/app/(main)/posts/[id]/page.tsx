@@ -183,7 +183,13 @@ export default function PostDetailPage() {
   }, [slotDetail, accountOptions]);
 
   const slot = slotDetail?.slot ?? null;
-  const personaName = slotDetail?.persona?.name ?? generation?.personaName ?? t('posts.personaFallback');
+  // A post created without a persona (migration 012) resolves no persona row
+  // and is not a removed persona: the fallback for that case is its own copy.
+  const personaMissing =
+    slotDetail !== null && slotDetail !== undefined && slotDetail.schedule.personaId === null;
+  const personaName = slotDetail?.persona?.name
+    ?? generation?.personaName
+    ?? (personaMissing ? t('posts.noPersona') : t('posts.personaFallback'));
 
   if (isLoading) return <DetailSkeleton />;
 

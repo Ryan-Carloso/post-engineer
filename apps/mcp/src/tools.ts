@@ -143,11 +143,15 @@ const PublishingAccountIdsShape = {
 };
 
 export const GeneratePersonaVideosShape = {
-  // personaId is REQUIRED even for faceless videos: the API has no
-  // standalone-generation flow, so a persona record always anchors the
-  // schedule. Faceless drops the face via options.faceless (the persona
-  // voice, niche, and script prompt still apply).
-  personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona to generate videos with. REQUIRED even for faceless videos — set options.faceless to true to drop the face.'),
+  // Optional since migration 012: a faceless post can be defined entirely by
+  // options. A persona is not only a face — it is where the voice, the script
+  // prompt, the aspect ratio and the niche come from, so a post without one
+  // must supply them (or at least a voice) via options.
+  personaId: z
+    .string()
+    .min(1, 'personaId must be a non-empty string when provided')
+    .optional()
+    .describe('The persona to generate videos with. Omit for a faceless post with no persona: in that case set options.faceless and options.voiceId (or options.audioUrl), plus options.scriptPrompt / videoAspect / language / niche as needed. With a persona these options still override it.'),
   // The array bounds live in the shape (not a .refine): the MCP SDK parses
   // tool args against the raw shape, so a whole-object refine would be a
   // hollow claim on the tool path (round 26 learning).
@@ -179,13 +183,17 @@ export const GeneratePersonaVideosShape = {
   timezone: z.string().min(1).default('UTC').describe('IANA timezone for a naive startAt and the HH:MM times, e.g. "Europe/Lisbon". Defaults to UTC.'),
   options: z
     .object({
-      faceless: z.boolean().optional().describe('Generate faceless (no face). personaId is still required: the persona voice, niche, and script prompt still apply.'),
+      faceless: z.boolean().optional().describe('Generate faceless (no face). With a persona this drops only the face — the persona voice, niche and script prompt still apply. Without a persona it is REQUIRED.'),
       audioUrl: httpsUrlField('audioUrl').optional().describe('Public URL of custom audio for the videos (overrides the persona voice).'),
       imageId: z.string().min(1, 'imageId must be a non-empty string').optional().describe('Library image ID to use for every video (overrides the deterministic per-video selection; see list_persona_images).'),
       scriptPrompt: z.string().optional().describe('Script prompt override applied to every video in this call.'),
       scriptPrompts: z.array(z.string().min(1)).optional().describe('Per-topic script prompt overrides; must have one entry per topic.'),
       voiceId: z.string().min(1, 'voiceId must be a non-empty string').optional().describe('Voice ID override (see list_voices).'),
       webhookUrl: httpsUrlField('webhookUrl').optional().describe('Callback URL the server POSTs to when each video reaches a terminal state (completed/failed).'),
+      videoAspect: z.enum(['9:16', '16:9']).optional().describe('Frame shape. Overrides the persona when one is given; a post without a persona defaults to 9:16.'),
+      paragraphNumber: z.number().int().min(1).max(10).optional().describe('Paragraph count (1-10). Overrides the persona when one is given.'),
+      language: z.string().min(1).max(32).optional().describe('Spoken language code, e.g. pt-BR. Overrides the persona when one is given.'),
+      niche: z.string().min(1).max(300).optional().describe('Content niche. Overrides the persona when one is given.'),
     })
     .optional()
     .describe('Generation options applied to the videos in this call.'),

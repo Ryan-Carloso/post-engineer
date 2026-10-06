@@ -653,13 +653,55 @@ describe('generate_persona_videos tool', () => {
     expect(result.success).toBe(true);
   });
 
-  it('GeneratePersonaVideosSchema requires personaId (even for faceless)', () => {
-    // Product rule: there is no standalone generation — a persona record
-    // always anchors the schedule, so personaId cannot be omitted.
+  it('GeneratePersonaVideosSchema accepts an omitted personaId (a faceless post)', () => {
+    // Since migration 012 a persona is optional: a faceless post is defined by
+    // options.faceless plus a voice. The empty string is still rejected — it
+    // is a caller bug (half-specified persona), not a way to omit one.
     const { personaId: _personaId, ...rest } = baseArgs;
-    expect(GeneratePersonaVideosSchema.safeParse(rest).success).toBe(false);
+    const withoutPersona = GeneratePersonaVideosSchema.safeParse({
+      ...rest,
+      options: { faceless: true, voiceId: 'calm' },
+    });
+    expect(withoutPersona.success).toBe(true);
     expect(
       GeneratePersonaVideosSchema.safeParse({ ...baseArgs, personaId: '' }).success
+    ).toBe(false);
+  });
+
+  it('GeneratePersonaVideosSchema accepts the persona-less identity options', () => {
+    // The rest of what a persona used to supply. Pinned because they are the
+    // only way to define a post without one.
+    const { personaId: _personaId, ...rest } = baseArgs;
+    const result = GeneratePersonaVideosSchema.safeParse({
+      ...rest,
+      options: {
+        faceless: true,
+        voiceId: 'calm',
+        scriptPrompt: 'Be direct.',
+        videoAspect: '16:9',
+        paragraphNumber: 3,
+        language: 'pt-BR',
+        niche: 'tech',
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('GeneratePersonaVideosSchema rejects an out-of-range identity option', () => {
+    // The caps mirror the engine's PersonaParams; catching them at parse
+    // time is what turns an engine-side validation error into a tool error.
+    const { personaId: _personaId, ...rest } = baseArgs;
+    expect(
+      GeneratePersonaVideosSchema.safeParse({
+        ...rest,
+        options: { faceless: true, voiceId: 'calm', paragraphNumber: 11 },
+      }).success
+    ).toBe(false);
+    expect(
+      GeneratePersonaVideosSchema.safeParse({
+        ...rest,
+        options: { faceless: true, voiceId: 'calm', videoAspect: '4:3' },
+      }).success
     ).toBe(false);
   });
 

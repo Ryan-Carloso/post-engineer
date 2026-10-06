@@ -42,10 +42,13 @@ export interface CreatePersonaInput {
 }
 
 export interface GeneratePersonaVideosInput {
-  // REQUIRED even for faceless generation: the web API has no
-  // standalone-generation flow, so a persona record always anchors the
-  // schedule (faceless drops the face via options.faceless).
-  personaId: string;
+  /**
+   * Optional. Omit it for a faceless post defined entirely by `options` —
+   * the persona is then not just a face: it is where the voice, the script
+   * prompt, the aspect ratio and the niche come from. A post without one
+   * MUST set options.faceless and one of options.voiceId / options.audioUrl.
+   */
+  personaId?: string;
   /** One topic per video, 1-10. */
   topics: string[];
   providers: ('youtube' | 'instagram' | 'linkedin' | 'bluesky')[];
@@ -67,6 +70,10 @@ export interface GeneratePersonaVideosInput {
     scriptPrompts?: string[];
     voiceId?: string;
     webhookUrl?: string;
+    videoAspect?: '9:16' | '16:9';
+    paragraphNumber?: number;
+    language?: string;
+    niche?: string;
   };
   /** Omitted: a UUID is generated per call, so a retry cannot double-generate. */
   idempotencyKey?: string;
@@ -498,7 +505,10 @@ export class PostEngineerClient {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify({
-          personaId: input.personaId,
+          // Omitted rather than sent empty: the API treats an absent
+          // personaId as "post without a persona" and an empty string as the
+          // same thing, but omitting keeps the payload honest.
+          ...(input.personaId !== undefined ? { personaId: input.personaId } : {}),
           topics: input.topics,
           publishing: {
             providers: input.providers,

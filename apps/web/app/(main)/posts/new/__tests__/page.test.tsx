@@ -24,6 +24,7 @@ vi.mock('@/lib/api', () => ({
   useLinkedinAccountsQuery: vi.fn(),
   useBlueskyAccountsQuery: vi.fn(),
   useCreatePostMutation: vi.fn(),
+  useVoicesQuery: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -88,6 +89,7 @@ import {
   useLinkedinAccountsQuery,
   useBlueskyAccountsQuery,
   useCreatePostMutation,
+  useVoicesQuery,
 } from '@/lib/api';
 import { useNewPostStore, useUploadStore } from '@/lib/store';
 
@@ -107,7 +109,15 @@ const SECOND_PERSONA = { ...PERSONA, id: 'p2', name: 'Resenha Fut', niche: 'Fute
 const START_AT = '2030-01-05T09:00';
 const START_INSTANT = '2030-01-05T09:00:00.000Z';
 
-function mockQueries(overrides: { personas?: unknown[]; isLoading?: boolean; isError?: boolean } = {}) {
+function mockQueries(
+  overrides: {
+    personas?: unknown[];
+    isLoading?: boolean;
+    isError?: boolean;
+    voices?: Array<{ id: string }>;
+    voicesError?: boolean;
+  } = {},
+) {
   vi.mocked(usePersonaListQuery).mockReturnValue({
     data: (overrides.personas ?? [PERSONA]) as never,
     isLoading: overrides.isLoading ?? false,
@@ -130,12 +140,28 @@ function mockQueries(overrides: { personas?: unknown[]; isLoading?: boolean; isE
     mutateAsync: mockMutateAsync,
     isPending: false,
   } as never);
+  vi.mocked(useVoicesQuery).mockReturnValue({
+    data: overrides.voices ?? [{ id: 'calm' }, { id: 'energetic' }],
+    isError: overrides.voicesError ?? false,
+  } as never);
 }
 
 /** Fills the mandatory fields so each test only has to break one thing. */
+/** Fills a persona-backed draft (the common case). */
 function fillValidDraft(): void {
   useNewPostStore.getState().setPersonaId('p1');
   useNewPostStore.getState().setTopic('How to grow on YouTube');
+  useNewPostStore.getState().setStartAt(START_AT);
+  useNewPostStore.getState().setTimezone('UTC');
+  useNewPostStore.getState().setTime(0, '09:00');
+  useUploadStore.getState().toggleSelectedAccount('youtube', 'ch1');
+}
+
+/** Fills a persona-LESS draft: no persona, an explicit voice instead. */
+function fillPersonaLessDraft(): void {
+  useNewPostStore.getState().setWithoutPersona(true);
+  useNewPostStore.getState().setVoiceId('calm');
+  useNewPostStore.getState().setTopic(0, 'A topic with no persona');
   useNewPostStore.getState().setStartAt(START_AT);
   useNewPostStore.getState().setTimezone('UTC');
   useNewPostStore.getState().setTime(0, '09:00');
@@ -181,7 +207,9 @@ describe('NewPostPage', () => {
     expect(screen.queryByRole('button', { name: 'newPost.submit' })).not.toBeInTheDocument();
   });
 
-  it('blocks submit and sends nothing when no persona is selected', async () => {
+  it('blocks submit and sends nothing when neither a persona nor "no persona" was chosen', async () => {
+    // An untouched personaId means "not chosen yet", which is different from
+    // an explicit "no persona" — the form must ask, not assume.
     useNewPostStore.getState().setTopic('A topic');
     useNewPostStore.getState().setStartAt(START_AT);
     useUploadStore.getState().toggleSelectedAccount('youtube', 'ch1');
@@ -190,6 +218,21 @@ describe('NewPostPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'newPost.submit' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('newPost.personaRequired');
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('blocks submit and sends nothing when no voice is chosen for a persona-less post', async () => {
+    // A post with no persona inherits no voice, and the engine refuses a job
+    // that speaks with none — so the form must not send it.
+    useNewPostStore.getState().setWithoutPersona(true);
+    useNewPostStore.getState().setTopic(0, 'A topic');
+    useNewPostStore.getState().setStartAt(START_AT);
+    useUploadStore.getState().toggleSelectedAccount('youtube', 'ch1');
+    render(<NewPostPage />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'newPost.submit' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('newPost.voiceRequired');
     expect(mockMutateAsync).not.toHaveBeenCalled();
   });
 
@@ -554,14 +597,20 @@ describe('NewPostPage', () => {
     expect(useNewPostStore.getState().topic).toBe('How to grow on YouTube');
   });
 
-  it('points at the persona screen when the user has no personas', () => {
+  it('still offers the form (persona-less) when the user has no personas', () => {
+    // A persona is optional now, so "no personas" is an explanation plus a
+    // shortcut to create one — NOT a dead end. The form below is the point.
     mockQueries({ personas: [] });
 
     render(<NewPostPage />);
 
     expect(screen.getByText('newPost.noPersonasTitle')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'newPost.createPersona' })).toHaveAttribute('href', '/persona');
-    expect(screen.queryByRole('button', { name: 'newPost.submit' })).not.toBeInTheDocument();
+    // The persona picker is dropped (a lone "no persona" card teaches nothing)
+    // and the persona-less mode is entered automatically.
+    expect(screen.queryByRole('radio', { name: 'newPost.personaNone' })).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'newPost.voiceLabel' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'newPost.submit' })).toBeInTheDocument();
   });
 
   it('blocks the screen when the persona list fails to load', () => {
@@ -571,5 +620,89 @@ describe('NewPostPage', () => {
 
     expect(screen.getByRole('alert')).toHaveTextContent('posts.loadError');
     expect(screen.queryByRole('button', { name: 'newPost.submit' })).not.toBeInTheDocument();
+  });
+
+  describe('without a persona', () => {
+    it('offers "no persona" as a card and a voice picker', () => {
+      render(<NewPostPage />);
+
+      expect(screen.getByRole('radio', { name: 'newPost.personaNone' })).toBeInTheDocument();
+      // The voice field only exists in this mode — with a persona the voice
+      // comes from it and the control would be dead weight.
+      expect(screen.queryByRole('combobox', { name: 'newPost.voiceLabel' })).not.toBeInTheDocument();
+    });
+
+    it('reveals the voice picker and drops the face choice when "no persona" is picked', async () => {
+      render(<NewPostPage />);
+
+      await userEvent.click(screen.getByRole('radio', { name: 'newPost.personaNone' }));
+
+      expect(screen.getByRole('combobox', { name: 'newPost.voiceLabel' })).toBeInTheDocument();
+      // With no persona there is no face to render: only the stock option is
+      // offered, never "with the persona's face".
+      expect(screen.queryByRole('radio', { name: 'newPost.faceWithAvatar' })).not.toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: 'newPost.faceFaceless' })).toBeInTheDocument();
+    });
+
+    it('hides the voice picker again when a persona is picked', async () => {
+      render(<NewPostPage />);
+
+      await userEvent.click(screen.getByRole('radio', { name: 'newPost.personaNone' }));
+      expect(screen.getByRole('combobox', { name: 'newPost.voiceLabel' })).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('radio', { name: 'Viva Leve' }));
+      expect(screen.queryByRole('combobox', { name: 'newPost.voiceLabel' })).not.toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: 'newPost.faceWithAvatar' })).toBeInTheDocument();
+    });
+
+    it('surfaces a voice-catalog failure instead of an empty picker', async () => {
+      mockQueries({ voicesError: true });
+      render(<NewPostPage />);
+
+      await userEvent.click(screen.getByRole('radio', { name: 'newPost.personaNone' }));
+
+      // The picker would render with no options, which reads as "choose
+      // nothing"; the error has to say why the list is empty.
+      expect(screen.getByRole('alert')).toHaveTextContent('newPost.voiceLoadError');
+      expect(screen.queryByRole('combobox', { name: 'newPost.voiceLabel' })).not.toBeInTheDocument();
+    });
+
+    it('sends no personaId, forces faceless and carries the chosen voice', async () => {
+      mockMutateAsync.mockResolvedValue({
+        success: true,
+        scheduleId: 's1',
+        slots: [{ slotId: 'slot-1', slotAt: START_INSTANT, topic: 'A topic with no persona', taskId: 't1', status: 'generating' }],
+        replayed: false,
+        error: null,
+        code: null,
+        need: null,
+        have: null,
+      });
+      render(<NewPostPage />);
+
+      await userEvent.click(screen.getByRole('radio', { name: 'newPost.personaNone' }));
+      // The draft helper sets the persona-less mode too, so it goes first and
+      // the user's voice choice is the last write.
+      fillPersonaLessDraft();
+      await userEvent.selectOptions(screen.getByRole('combobox', { name: 'newPost.voiceLabel' }), 'energetic');
+      await userEvent.click(screen.getByRole('button', { name: 'newPost.submit' }));
+
+      await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+      const sent = mockMutateAsync.mock.calls[0][0];
+      // The key is ABSENT, not empty: the API reads absence as "no persona".
+      expect('personaId' in sent).toBe(false);
+      expect(sent.faceless).toBe(true);
+      expect(sent.voiceId).toBe('energetic');
+    });
+
+    it('prices the persona-less post at the faceless rate, not at zero', () => {
+      fillPersonaLessDraft();
+
+      render(<NewPostPage />);
+
+      // No persona means no face quality to read — quoting 0 would promise a
+      // free video that the server then charges for.
+      expect(screen.getByText('newPost.costValueOne:cost=1')).toBeInTheDocument();
+    });
   });
 });

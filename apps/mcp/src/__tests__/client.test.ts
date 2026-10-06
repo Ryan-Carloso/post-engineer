@@ -438,6 +438,21 @@ describe('generate and schedule videos client', () => {
     });
   });
 
+  it('omits personaId entirely when the caller sends no persona', async () => {
+    // A persona-less post is signalled by the ABSENT key, not by an empty
+    // string: the API reads absence as "no persona", and sending `""` would
+    // ship a value the caller never meant.
+    const { personaId: _personaId, ...rest } = baseInput;
+    await client.generatePersonaVideos({
+      ...rest,
+      options: { faceless: true, voiceId: 'calm', videoAspect: '16:9' },
+    });
+    const body = lastRequestBody();
+    expect('personaId' in body).toBe(false);
+    // The identity travels in options instead.
+    expect(body.options).toEqual({ faceless: true, voiceId: 'calm', videoAspect: '16:9' });
+  });
+
   it('sends an empty accounts record when no account arrays are provided', async () => {
     const { youtubeAccountIds: _yt, blueskyAccountIds: _bsky, ...rest } = baseInput;
     await client.generatePersonaVideos(rest);

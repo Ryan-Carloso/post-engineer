@@ -27,6 +27,38 @@ describe('useNewPostStore topic', () => {
   });
 });
 
+describe('useNewPostStore persona choice', () => {
+  it('starts on neither a persona nor the explicit persona-less choice', () => {
+    // An empty personaId is "not chosen yet", which is NOT the same as
+    // choosing "no persona": the form must be able to tell the user apart.
+    const state = useNewPostStore.getState();
+    expect(state.personaId).toBe('');
+    expect(state.withoutPersona).toBe(false);
+  });
+
+  it('withoutPersona clears any persona', () => {
+    const store = useNewPostStore.getState();
+    store.setPersonaId('p1');
+
+    store.setWithoutPersona(true);
+
+    expect(useNewPostStore.getState().personaId).toBe('');
+    expect(useNewPostStore.getState().withoutPersona).toBe(true);
+  });
+
+  it('choosing a persona clears the persona-less flag', () => {
+    // The two are exclusive: leaving the flag set would coerce the post to
+    // faceless and drop the persona from the request.
+    const store = useNewPostStore.getState();
+    store.setWithoutPersona(true);
+
+    store.setPersonaId('p1');
+
+    expect(useNewPostStore.getState().personaId).toBe('p1');
+    expect(useNewPostStore.getState().withoutPersona).toBe(false);
+  });
+});
+
 describe('useNewPostStore times', () => {
   it('removeTime keeps at least one time row', () => {
     useNewPostStore.getState().addTime();
@@ -45,6 +77,7 @@ describe('useNewPostStore reset', () => {
   it('clears the draft, the outcome and the pending flag', () => {
     const store = useNewPostStore.getState();
     store.setPersonaId('p1');
+    store.setVoiceId('calm');
     store.setTopic('A topic');
     store.setStartAt('2030-01-05T09:00');
     store.setTimezone('Europe/Lisbon');
@@ -56,6 +89,8 @@ describe('useNewPostStore reset', () => {
 
     const state = useNewPostStore.getState();
     expect(state.personaId).toBe('');
+    expect(state.voiceId).toBe('');
+    expect(state.withoutPersona).toBe(false);
     expect(state.topic).toBe('');
     expect(state.startAt).toBe('');
     expect(state.timezone).toBe('UTC');

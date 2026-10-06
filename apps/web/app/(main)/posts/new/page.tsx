@@ -11,6 +11,7 @@ import {
   useLinkedinAccountsQuery,
   useBlueskyAccountsQuery,
   useCreatePostMutation,
+  useVoicesQuery,
   type CreatePostInput,
   type CreatePostResult,
 } from '@/lib/api';
@@ -146,12 +147,18 @@ export default function NewPostPage() {
 
   if (personasQuery.isLoading) return <NewPostPageSkeleton />;
   if (personasQuery.isError) return <NewPostLoadError />;
-  if (personas.length === 0) return <NewPostNoPersonas />;
+
+  // With no personas at all the form still works: a post can be created
+  // without one (faceless, with a chosen voice). The persona picker is
+  // dropped — a single "no persona" card teaches nothing — and the note
+  // above the form explains the choice instead.
+  const withoutAnyPersona = personas.length === 0;
 
   return (
     <div className="space-y-6">
       <NewPostHeader />
       <NewPostFeedback />
+      {withoutAnyPersona ? <NewPostNoPersonasNote /> : null}
       <form
         className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start"
         onSubmit={(event) => {
@@ -160,7 +167,8 @@ export default function NewPostPage() {
         }}
       >
         <div className="space-y-6">
-          <NewPostPersonaField />
+          {withoutAnyPersona ? null : <NewPostPersonaField />}
+          <NewPostVoiceField />
           <NewPostFaceField />
           <NewPostTopicsField />
           <NewPostAccountsField />
@@ -199,18 +207,28 @@ async function handleSubmit(
     providers.push(provider);
   }
 
-  const rejection: TranslationKey | null =
-    store.personaId.trim().length === 0
-      ? 'newPost.personaRequired'
-      : filledTopic.length === 0
-        ? 'newPost.errorTopicsRequired'
-        : filledTimes.length === 0
-          ? 'newPost.errorInvalidScheduleTime'
-          : startInstant === null
-            ? 'newPost.previewEmpty'
-            : providers.length === 0
-              ? 'publishing.mustSelectAccount'
-              : null;
+  // Two distinct rejections, not one: choosing a persona is the normal
+  // path, and the persona-less path needs its own missing field reported
+  // (an empty personaId alone is ambiguous — "not chosen yet" or "no
+  // persona"? The store answers that with `withoutPersona`).
+  const missingPersona = !store.withoutPersona && store.personaId.trim().length === 0;
+  const missingVoice = store.withoutPersona && store.voiceId.trim().length === 0;
+
+  // Ordered guards rather than a nested ternary: the chain is already deep
+  // enough that the indentation carries no meaning, and this way each rule
+  // is one readable line. First match wins — the user fixes one field at a
+  // time, and the API charges tokens, so a request that cannot succeed must
+  // never leave the browser.
+  const firstRejection = (): TranslationKey | null => {
+    if (missingPersona) return 'newPost.personaRequired';
+    if (missingVoice) return 'newPost.voiceRequired';
+    if (filledTopic.length === 0) return 'newPost.errorTopicsRequired';
+    if (filledTimes.length === 0) return 'newPost.errorInvalidScheduleTime';
+    if (startInstant === null) return 'newPost.previewEmpty';
+    if (providers.length === 0) return 'publishing.mustSelectAccount';
+    return null;
+  };
+  const rejection = firstRejection();
 
   if (rejection !== null) {
     store.setValidationKey(rejection);
@@ -225,7 +243,9 @@ async function handleSubmit(
   store.setPending(true);
   try {
     const response = await mutateAsync({
-      personaId: store.personaId.trim(),
+      // Omitted (not empty) when there is no persona — the API reads the
+      // absent key as "post without a persona".
+      ...(store.withoutPersona ? {} : { personaId: store.personaId.trim() }),
       // The API takes one topic per video, so the single-field draft becomes
       // a one-element array here.
       topics: [filledTopic],
@@ -234,7 +254,11 @@ async function handleSubmit(
       startAt: startInstant.toISOString(),
       times: filledTimes,
       timezone: store.timezone,
-      faceless: store.faceless,
+      // No persona means no face to render: the picker hides the face choice
+      // in that mode, so the flag is coerced rather than left to a hidden
+      // toggle (which would still hold its "with face" default).
+      faceless: store.withoutPersona ? true : store.faceless,
+      ...(store.withoutPersona ? { voiceId: store.voiceId.trim() } : {}),
     });
     // Projects the response onto what the banner reads: the raw API error text
     // never enters the store (the UI translates by code).
@@ -345,8 +369,10 @@ const NewPostFeedback = () => {
 };
 
 //---------------
-// Persona — required: it renders the face and brings the voice, so a post
-// does not exist without one.
+// Persona — optional. A persona is more than a face: it is where the voice,
+// the script prompt, the aspect ratio and the niche come from. "No persona"
+// is therefore only offered as a faceless post with an explicit voice (the
+// NewPostVoiceField below), which is exactly what the API accepts.
 //
 // shadcn RadioGroup + Label instead of <select>: the persona is the most
 // important object in the form and needs the photo (the same avatar as the
@@ -357,20 +383,60 @@ const NewPostFeedback = () => {
 // pointing at it: clicking the card selects, and the item remains the keyboard
 // and screen-reader target.
 //---------------
+const NO_PERSONA_VALUE = 'none';
+
 const NewPostPersonaField = () => {
   const { t } = useI18n();
   const personasQuery = usePersonaListQuery();
   const personaId = useNewPostStore((s) => s.personaId);
+  const withoutPersona = useNewPostStore((s) => s.withoutPersona);
   const setPersonaId = useNewPostStore((s) => s.setPersonaId);
+  const setWithoutPersona = useNewPostStore((s) => s.setWithoutPersona);
   return (
     <section className={cn(CARD_CLASS, 'space-y-4')}>
       <SectionTitle icon={<FilmIcon />} label={t('newPost.personaLabel')} hint={t('newPost.personaHint')} />
       <RadioGroup
-        value={personaId}
-        onValueChange={setPersonaId}
+        value={withoutPersona ? NO_PERSONA_VALUE : personaId}
+        onValueChange={(value) =>
+          value === NO_PERSONA_VALUE ? setWithoutPersona(true) : setPersonaId(value)
+        }
         aria-label={t('newPost.personaLabel')}
         className="grid gap-3"
       >
+        <Label
+          htmlFor="new-post-persona-none"
+          data-selected={withoutPersona ? 'true' : 'false'}
+          className={cn(
+            'flex cursor-pointer items-center gap-3 rounded-2xl border bg-white p-3 transition-colors',
+            'has-focus-visible:ring-2 has-focus-visible:ring-accent/40 has-focus-visible:ring-offset-2',
+            withoutPersona
+              ? 'border-accent bg-accent/5 ring-1 ring-accent'
+              : 'border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50',
+          )}
+        >
+          <RadioGroupItem
+            value={NO_PERSONA_VALUE}
+            id="new-post-persona-none"
+            aria-label={t('newPost.personaNone')}
+            className="sr-only"
+          />
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-neutral-500">
+            <SparklesIcon />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold text-neutral-900">
+              {t('newPost.personaNone')}
+            </span>
+            <span className="mt-0.5 block truncate text-xs text-neutral-500">
+              {t('newPost.personaNoneHint')}
+            </span>
+          </span>
+          {withoutPersona ? (
+            <span className="shrink-0 text-accent">
+              <CheckIcon />
+            </span>
+          ) : null}
+        </Label>
         {(personasQuery.data ?? []).map((persona) => {
           const itemId = `new-post-persona-${persona.id}`;
           const selected = personaId === persona.id;
@@ -417,20 +483,35 @@ const NewPostPersonaField = () => {
 
 //---------------
 // Video face — every persona has a face; "no face" is chosen here, per
-// post (100% stock footage, no lipsync, no library image). The persona is
-// still required: it supplies the voice, the niche and the script. Same card
-// pattern as the persona picker above: shadcn RadioGroup as the sr-only item
-// + Label as the clickable card.
+// post (100% stock footage, no lipsync, no library image). With a persona
+// selected, "with the face" is the normal choice. Without one there is
+// nothing to render, so the choice collapses to "no face" and the control
+// says why. Same card pattern as the persona picker above: shadcn RadioGroup
+// as the sr-only item + Label as the clickable card.
 //---------------
 const NewPostFaceField = () => {
   const { t } = useI18n();
   const faceless = useNewPostStore((s) => s.faceless);
   const setFaceless = useNewPostStore((s) => s.setFaceless);
+  const withoutPersona = useNewPostStore((s) => s.withoutPersona);
 
-  const options = [
-    { value: 'face', faceless: false, label: t('newPost.faceWithAvatar'), hint: t('newPost.faceWithAvatarHint') },
-    { value: 'faceless', faceless: true, label: t('newPost.faceFaceless'), hint: t('newPost.faceFacelessHint') },
-  ] as const;
+  const facelessOption = {
+    value: 'faceless',
+    faceless: true,
+    label: t('newPost.faceFaceless'),
+    hint: withoutPersona
+      ? t('newPost.faceFacelessNoPersonaHint')
+      : t('newPost.faceFacelessHint'),
+  } as const;
+  const withFaceOption = {
+    value: 'face',
+    faceless: false,
+    label: t('newPost.faceWithAvatar'),
+    hint: t('newPost.faceWithAvatarHint'),
+  } as const;
+  // No persona means no face to render, so the "with face" option is not
+  // merely preselected away — it is not offered at all.
+  const options = withoutPersona ? [facelessOption] : [withFaceOption, facelessOption];
 
   return (
     <section className={cn(CARD_CLASS, 'space-y-4')}>
@@ -484,6 +565,61 @@ const NewPostFaceField = () => {
           );
         })}
       </RadioGroup>
+    </section>
+  );
+};
+
+//---------------
+// Voice — only for a post created without a persona. With a persona the
+// voice comes from it and this control does not exist; without one the
+// engine requires exactly one voice, so the post cannot be created until it
+// is chosen.
+//
+// Reuses the same voice catalog the persona editor renders (useVoicesQuery),
+// so an id selected here is one the engine actually speaks with. A native
+// <select> is right here: this is a plain id list with no image to show, and
+// the repo's reuse rule is satisfied because nothing else in the form does
+// this job.
+//---------------
+const NewPostVoiceField = () => {
+  const { t } = useI18n();
+  const withoutPersona = useNewPostStore((s) => s.withoutPersona);
+  const voiceId = useNewPostStore((s) => s.voiceId);
+  const setVoiceId = useNewPostStore((s) => s.setVoiceId);
+  const voicesQuery = useVoicesQuery();
+
+  if (!withoutPersona) return null;
+
+  const voices = voicesQuery.data ?? [];
+  return (
+    <section className={cn(CARD_CLASS, 'space-y-4')}>
+      <SectionTitle
+        icon={<ComposeIcon />}
+        label={t('newPost.voiceLabel')}
+        hint={t('newPost.voiceHint')}
+      />
+      {voicesQuery.isError ? (
+        <p
+          role="alert"
+          className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800"
+        >
+          {t('newPost.voiceLoadError')}
+        </p>
+      ) : (
+        <select
+          value={voiceId}
+          onChange={(event) => setVoiceId(event.target.value)}
+          aria-label={t('newPost.voiceLabel')}
+          className={INPUT_CLASS}
+        >
+          <option value="">{t('newPost.voicePlaceholder')}</option>
+          {voices.map((voice) => (
+            <option key={voice.id} value={voice.id}>
+              {voice.id}
+            </option>
+          ))}
+        </select>
+      )}
     </section>
   );
 };
@@ -825,12 +961,18 @@ const NewPostCostSummary = () => {
   const faceless = useNewPostStore((s) => s.faceless);
   const personasQuery = usePersonaListQuery();
   const persona = (personasQuery.data ?? []).find((item) => item.id === personaId);
+  const withoutPersona = useNewPostStore((s) => s.withoutPersona);
   // One topic = one video; an empty topic prices 0 videos, and the plural
   // copy ("0 videos") is then the honest one.
   const videoCount = topic.trim().length > 0 ? 1 : 0;
+  // No persona = no face quality to price, but the post is still real and
+  // still charged: it is always faceless, so it costs the faceless price.
+  // Showing 0 there would quote the user a free video the server then bills.
   const perVideo = persona
     ? computeVideoTokens(faceless, (persona.faceQuality as FaceQuality) ?? 'ok')
-    : 0;
+    : withoutPersona
+      ? computeVideoTokens(true, 'ok')
+      : 0;
   return (
     <section className={cn(CARD_CLASS, 'flex items-center justify-between gap-3')}>
       <span className="flex items-center gap-2 text-sm text-neutral-600">
@@ -876,32 +1018,38 @@ const NewPostSubmitRow = () => {
 };
 
 //---------------
-// Empty state — a post needs a persona, so the next step is creating one.
+// No personas yet — a persona is optional, so the form below stays usable and
+// this note sets the persona-less mode instead of dead-ending the screen.
+// Creating a persona is offered (the richer path), never required.
 //---------------
-const NewPostNoPersonas = () => {
+const NewPostNoPersonasNote = () => {
   const { t } = useI18n();
+  const setWithoutPersona = useNewPostStore((s) => s.setWithoutPersona);
+
+  useEffect(() => {
+    // There is no persona to pick, so the only valid mode is "none".
+    setWithoutPersona(true);
+  }, [setWithoutPersona]);
+
   return (
-    <div className="space-y-6">
-      <NewPostHeader />
-      <section className="rounded-2xl border border-dashed border-neutral-300 bg-linear-to-b from-white to-neutral-50 px-6 py-14 text-center shadow-sm">
-        <span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-accent/10 text-accent">
-          <FilmIcon />
-        </span>
-        <h2 className="mt-5 text-base font-semibold text-neutral-900">{t('newPost.noPersonasTitle')}</h2>
-        <p className="mx-auto mt-3 max-w-sm text-sm leading-5 text-neutral-600">
-          {t('newPost.noPersonasHint')}
-        </p>
-        <div className="mt-7">
-          <Link
-            href="/persona"
-            className="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-accent-hover hover:shadow-md [&_svg]:size-4"
-          >
-            <PlusIcon />
-            {t('newPost.createPersona')}
-          </Link>
-        </div>
-      </section>
-    </div>
+    <section className="rounded-2xl border border-dashed border-neutral-300 bg-linear-to-b from-white to-neutral-50 px-6 py-8 text-center shadow-sm">
+      <span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-accent/10 text-accent">
+        <FilmIcon />
+      </span>
+      <h2 className="mt-5 text-base font-semibold text-neutral-900">{t('newPost.noPersonasTitle')}</h2>
+      <p className="mx-auto mt-3 max-w-md text-sm leading-5 text-neutral-600">
+        {t('newPost.noPersonasCanPostAnyway')}
+      </p>
+      <div className="mt-7">
+        <Link
+          href="/persona"
+          className="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-accent-hover hover:shadow-md [&_svg]:size-4"
+        >
+          <PlusIcon />
+          {t('newPost.createPersona')}
+        </Link>
+      </div>
+    </section>
   );
 };
 

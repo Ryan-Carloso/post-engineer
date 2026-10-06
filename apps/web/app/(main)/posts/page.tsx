@@ -568,15 +568,25 @@ export default function PostsPage() {
               </div>
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {filteredSlots.map((slot) => (
-                  <PostCard
-                    key={slot.id}
-                    slot={slot}
-                    personaName={personaNameById.get(scheduleById.get(slot.scheduleId)?.personaId ?? '') ?? t('posts.personaFallback')}
-                    accounts={resolveSlotAccounts(scheduleById.get(slot.scheduleId), accountOptions)}
-                    locale={locale}
-                  />
-                ))}
+                {filteredSlots.map((slot) => {
+                  // A post created without a persona (migration 012) has
+                  // none to look up — that is not a removed persona, and
+                  // saying so would be a lie about a post that never had one.
+                  const personaId = scheduleById.get(slot.scheduleId)?.personaId ?? null;
+                  const personaName =
+                    personaId === null
+                      ? t('posts.noPersona')
+                      : personaNameById.get(personaId) ?? t('posts.personaFallback');
+                  return (
+                    <PostCard
+                      key={slot.id}
+                      slot={slot}
+                      personaName={personaName}
+                      accounts={resolveSlotAccounts(scheduleById.get(slot.scheduleId), accountOptions)}
+                      locale={locale}
+                    />
+                  );
+                })}
               </div>
             )}
           </>
