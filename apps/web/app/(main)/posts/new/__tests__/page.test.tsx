@@ -161,7 +161,7 @@ function fillValidDraft(): void {
 function fillPersonaLessDraft(): void {
   useNewPostStore.getState().setWithoutPersona(true);
   useNewPostStore.getState().setVoiceId('calm');
-  useNewPostStore.getState().setTopic(0, 'A topic with no persona');
+  useNewPostStore.getState().setTopic('A topic with no persona');
   useNewPostStore.getState().setStartAt(START_AT);
   useNewPostStore.getState().setTimezone('UTC');
   useNewPostStore.getState().setTime(0, '09:00');
@@ -225,7 +225,7 @@ describe('NewPostPage', () => {
     // A post with no persona inherits no voice, and the engine refuses a job
     // that speaks with none — so the form must not send it.
     useNewPostStore.getState().setWithoutPersona(true);
-    useNewPostStore.getState().setTopic(0, 'A topic');
+    useNewPostStore.getState().setTopic('A topic');
     useNewPostStore.getState().setStartAt(START_AT);
     useUploadStore.getState().toggleSelectedAccount('youtube', 'ch1');
     render(<NewPostPage />);
