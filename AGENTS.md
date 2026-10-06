@@ -1220,12 +1220,14 @@ Follow these so the same issues don't come back:
   declares; check whether the alleged contract exists before touching anything.
 - **opencode-review fallback chain (2026-10-06, free-first):**
   `openrouter/openrouter/free` -> `zai-standard/glm-4.7-flash` ->
-  `zai-coding-plan/glm-5.3-flash` -> `openrouter/openrouter/auto`
-  (first success wins; paid auto router is the last resort).
-  glm-4.5-flash was dropped — its review quality was too poor. The OpenRouter tiers use the
-  special router ids `openrouter/free` / `openrouter/auto` (same convention
+  `zai-coding-plan/glm-5.3-flash` -> `openrouter/z-ai/glm-5.3-flash`
+  (first success wins; paid tier is the last resort).
+  glm-4.5-flash was dropped — its review quality was too poor. The OpenRouter free tier uses the
+  special router id `openrouter/free` (same convention
   as the engine's `_PROVIDER_DEFAULT_MODELS`, no hardcoded model list to
-  rot), configured in opencode.json with `@ai-sdk/openai-compatible` against
+  rot); the paid tier pins `z-ai/glm-5.3-flash` (verified on the OpenRouter
+  models API) instead of the auto router, for predictable review quality.
+  Both configured in opencode.json with `@ai-sdk/openai-compatible` against
   `https://openrouter.ai/api/v1` and apiKey `{env:OPENROUTER_API_KEY}`. One
   `OPENROUTER_API_KEY` secret serves both tiers (free models cost $0 even
   on a paid key). The job runs if EITHER key is set; each tier is skipped

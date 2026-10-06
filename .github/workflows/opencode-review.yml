@@ -13,7 +13,8 @@ name: opencode-review
 #     1. OpenRouter free router (openrouter/free) — $0 models first
 #     2. z.ai standard API with the permanently-free glm-4.7-flash
 #     3. z.ai GLM Coding Plan (best quality, quota-limited)
-#     4. OpenRouter auto router (openrouter/auto) — paid, last resort
+#     4. OpenRouter with z-ai/glm-5.3-flash — paid, last resort (pinned
+#        model, not the auto router, for predictable review quality)
 #   glm-4.5-flash was dropped from the chain — its review quality was too
 #   poor. The OpenRouter tiers use the special router ids (no hardcoded
 #   model list to rot — same convention as the engine's _PROVIDER_DEFAULT_MODELS
@@ -52,9 +53,10 @@ concurrency:
 
 env:
   # Review models. OPENCODE_MODEL is provider/model form;
-  # ZAI_FREE_MODEL is a bare id resolved against the zai-standard provider,
-  # OPENROUTER_FREE_MODEL / OPENROUTER_MODEL are router ids resolved
-  # against the openrouter provider (all configured in the review step).
+  # ZAI_FREE_MODEL is a bare id resolved against the zai-standard provider.
+  # OPENROUTER_FREE_MODEL is the free router id and OPENROUTER_MODEL a
+  # concrete model id, both resolved against the openrouter provider
+  # (all configured in the review step).
   # Try order is free-first: OPENROUTER_FREE_MODEL, ZAI_FREE_MODEL,
   # OPENCODE_MODEL, then OPENROUTER_MODEL (paid, last resort).
   OPENCODE_MODEL: zai-coding-plan/glm-5.3-flash
@@ -62,11 +64,13 @@ env:
   # Coding Plan quota exhaustion. Kept to glm-4.7-flash only — glm-4.5-flash
   # was removed for poor review quality.
   ZAI_FREE_MODEL: glm-4.7-flash
-  # OpenRouter fallbacks after z.ai. Special router ids, not concrete models:
-  # /free resolves to the best free model, /auto to the best paid model for
-  # the task. One OPENROUTER_API_KEY serves both tiers.
+  # OpenRouter tiers. The free tier uses the special router id (no hardcoded
+  # model list to rot — same convention as the engine's _PROVIDER_DEFAULT_MODELS);
+  # the paid tier pins z-ai/glm-5.3-flash (verified live on the OpenRouter
+  # models API) instead of the auto router, for predictable review quality.
+  # One OPENROUTER_API_KEY serves both tiers.
   OPENROUTER_FREE_MODEL: openrouter/free
-  OPENROUTER_MODEL: openrouter/auto
+  OPENROUTER_MODEL: z-ai/glm-5.3-flash
 
 jobs:
   review:

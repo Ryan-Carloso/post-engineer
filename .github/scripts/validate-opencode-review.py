@@ -8,10 +8,10 @@ Guards the design decisions of the OpenCode review workflow:
   --standalone flag), no third-party wrapper
 - review chain (free-first, paid last resort): OpenRouter free router
   (openrouter/free) -> z.ai standard (glm-4.7-flash) -> z.ai Coding Plan ->
-  OpenRouter auto router (openrouter/auto); glm-4.5-flash was dropped
+  OpenRouter paid pinned to z-ai/glm-5.3-flash; glm-4.5-flash was dropped
   from the chain
-- OpenRouter tiers use the special router ids (no hardcoded model list to
-  rot — same convention as the engine's _PROVIDER_DEFAULT_MODELS), one
+- OpenRouter free tier uses the special router id (no hardcoded model list
+  to rot — same convention as the engine's _PROVIDER_DEFAULT_MODELS), one
   OPENROUTER_API_KEY serving both tiers
 - the job runs if EITHER key is configured; each tier is skipped when its
   key is missing (secret gating via step outputs: secrets.* are unreliable
@@ -122,8 +122,8 @@ def main() -> int:
     )
     check(
         "OPENROUTER_MODEL default set",
-        "OPENROUTER_MODEL: openrouter/auto" in text,
-        "must use the OpenRouter auto router id, not a concrete model",
+        "OPENROUTER_MODEL: z-ai/glm-5.3-flash" in text,
+        "paid tier must pin z-ai/glm-5.3-flash, not the auto router",
     )
     check(
         "OpenRouter endpoint configured",
