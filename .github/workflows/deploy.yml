@@ -1,6 +1,6 @@
 name: Deploy
 
-# Applies pending Supabase migrations after CI passes on main.
+# Applies pending Supabase migrations right after a PR merges to main.
 #
 # Flow:
 #   1. This workflow runs `supabase db push --linked`, which applies ONLY
@@ -8,6 +8,13 @@ name: Deploy
 #   2. The web app itself is deployed to our own VPS (see
 #      apps/web/docker-compose.yml, deployed with deploy.sh on the host) —
 #      migrations land first, then the host is redeployed.
+#
+# Why on merge instead of on CI success: branch protection already encodes
+# the quality bar via required checks. Gating on the full CI suite going
+# green on main held migrations back whenever a non-required job (e.g.
+# cypress) went red after merge, leaving merged code on main without its
+# schema. The merge is the ship decision; the migration SQL itself was
+# already validated by CI on the PR (supabase-migrations job).
 #
 # Required repository secrets (Settings > Secrets and variables > Actions):
 #   SUPABASE_ACCESS_TOKEN  - Supabase personal access token (for `supabase link`)
@@ -21,9 +28,8 @@ name: Deploy
 #     --db-url "postgresql://postgres:<DB_PASSWORD>@db.<PROJECT_REF>.supabase.co:5432/postgres"
 
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
+  pull_request:
+    types: [closed]
     branches: [main]
 
 concurrency:
@@ -32,7 +38,13 @@ concurrency:
 
 jobs:
   migrate:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    # Only for merged PRs (not plain closes), and only for PRs from this
+    # repo: the pull_request event does not expose secrets to fork PRs, so
+    # without the repo guard a fork merge would fail loudly on the secret
+    # checks below instead of skipping quietly.
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -40,7 +52,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
 
       - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1 pinned 2026-10-03
         with:

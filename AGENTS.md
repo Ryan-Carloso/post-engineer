@@ -318,7 +318,7 @@ migrations" were declined as reviewer churn.
   DDL (`DROP COLUMN`, `TRUNCATE`, unconditional `DROP TABLE`) blocked
   unless the PR has the `db:destructive-approved` label, and the full
   chain must apply cleanly to an ephemeral Postgres.
-- **CD applies migrations after CI on `main`** (`deploy.yml`, on CI success):
+- **CD applies migrations on merge to `main`** (`deploy.yml`, on PR merge):
   `supabase db push --linked` (pending only). The web app itself deploys to
   our own VPS (`apps/web/docker-compose.yml`, via `deploy.sh` on the host)
   — migrations land first, then the host is redeployed. If migrations fail,
