@@ -1231,6 +1231,19 @@ Follow these so the same issues don't come back:
   on a paid key). The job runs if EITHER key is set; each tier is skipped
   when its key is missing. The old "OCR fallback chain mirrors
   opencode-review" note is dead — the ocr-review workflow no longer exists.
+- **opencode-review hardened — grounded findings + mechanical checks
+  (2026-10-06):** the review prompt requires a machine-checkable format per
+  finding (`### SEVERITY: title`, `**Location:** path:line1-line2`, verbatim
+  code fence first, plus "do not report findings you cannot quote verbatim");
+  `.github/scripts/verify-review-grounding.py` drops findings whose
+  file/lines/quote don't verify against the checkout (zero survivors → stub
+  comment; "nothing material" reviews publish as-is).
+  `.github/scripts/review-mechanical-checks.py` appends a "Mechanical
+  checks" section to the comment: FAIL on duplicate `supabase/migrations/`
+  numbers (the real 009 collision) or obvious secrets in added diff lines,
+  WARN on prod files changed with no test file changed — this replaced the
+  LLM's old TDD-coverage prompt bullet. Mechanical FAILs post the comment
+  first, then fail the job.
 
 ## Test quirks (vitest 4.1)
 

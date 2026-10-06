@@ -151,6 +151,48 @@ def main() -> int:
         "the review step comments must pin the four-tier attempt order",
     )
 
+    # Idea A — grounded findings: the prompt forces a machine-checkable
+    # format (### SEVERITY heading, **Location:** line, verbatim code fence)
+    # and verify-review-grounding.py drops ungrounded findings before posting.
+    check(
+        "prompt requires verbatim code quotes",
+        "quote verbatim" in text,
+        "each finding must quote its cited code verbatim",
+    )
+    check(
+        "prompt forbids unquotable findings",
+        "cannot quote verbatim" in text,
+    )
+    check(
+        "prompt defines the machine-checkable finding format",
+        "### SEVERITY:" in text and "**Location:**" in text,
+    )
+    check(
+        "grounding verifier script invoked in workflow",
+        "verify-review-grounding.py" in text,
+    )
+    # Idea C — mechanical checks outside the LLM (replaces the old
+    # TDD-coverage prompt bullet).
+    check(
+        "mechanical checks script invoked in workflow",
+        "review-mechanical-checks.py" in text,
+    )
+    check(
+        "mechanical checks section appended to the comment",
+        "## Mechanical checks" in text,
+    )
+    check(
+        "prompt no longer asks the LLM to flag test coverage",
+        "flag new or changed production logic that ships without test coverage"
+        not in text,
+        "test-coverage flagging moved to the mechanical checks script",
+    )
+    check(
+        "mechanical failures fail the job",
+        "Fail job on mechanical check failure" in text,
+    )
+    # skipped when its key is missing. Gating must not rely on secrets.*
+    # inside job/step `if:`.
     # Two-key gating: the job runs if EITHER key is configured; each tier is
     # skipped when its key is missing. Gating must not rely on secrets.*
     # inside job/step `if:`.

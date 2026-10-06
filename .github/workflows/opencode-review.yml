@@ -22,6 +22,16 @@ name: opencode-review
 # - The job runs if EITHER ZAI_API_KEY or OPENROUTER_API_KEY is configured;
 #   each tier is skipped when its key is missing, so a repo with only one
 #   key still gets reviews through that provider's tiers.
+# - Findings are mechanically grounded: the prompt requires a
+#   `### SEVERITY: title` heading, a `**Location:** path:line1-line2` line
+#   and a verbatim code fence per finding; verify-review-grounding.py drops
+#   findings whose file, lines, or quoted code do not check out against the
+#   checkout, before the comment is posted.
+# - review-mechanical-checks.py runs outside the LLM and appends a
+#   "Mechanical checks" section to the comment: FAIL on duplicate migration
+#   numbers or obvious secrets in the diff, WARN on production files changed
+#   without test files (the LLM's old TDD-coverage bullet was removed from
+#   the prompt in favor of this script).
 # - Posts the review as a new PR comment on every push (the header carries
 #   the head SHA), so each review round stays visible instead of overwriting
 #   the previous one.
@@ -194,6 +204,7 @@ jobs:
           find . -path ./.git -prune -o -type f \( -name '.env*' -o -name '*.pem' -o -name '*.key' \) -exec rm -f {} +
           find . -path ./.git -prune -o -type d \( -name secrets -o -name private \) -prune -exec rm -rf {} +
           gh pr diff "$PR_NUMBER" --patch > pr.diff
+          gh pr diff "$PR_NUMBER" --name-only > pr-files.txt
           # Keep the diff within a sane size for the model context.
           MAX_BYTES=200000
           SIZE=$(wc -c < pr.diff)
@@ -203,6 +214,24 @@ jobs:
             mv pr.diff.truncated pr.diff
           fi
           wc -c pr.diff
+
+      - name: Run mechanical checks
+        id: mechanical
+        if: steps.check.outputs.has_key == 'true'
+        run: |
+          set -euo pipefail
+          # Mechanical checks run outside the LLM: duplicate migration
+          # numbers, test-coverage heuristic, obvious secrets in the diff.
+          # The step never fails here — the result is attached to the review
+          # comment and the job fails explicitly at the end, so the section
+          # is always posted even when a check fails.
+          set +e
+          python3 .github/scripts/review-mechanical-checks.py \
+            --diff pr.diff --files pr-files.txt \
+            --migrations supabase/migrations > mechanical-checks.md
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+          set -e
+          cat mechanical-checks.md
 
       - name: Run OpenCode review with fallbacks
         if: steps.check.outputs.has_key == 'true'
@@ -226,9 +255,16 @@ jobs:
           - Write the entire review in English.
           - NEVER read, open, or quote `.env*`, `*.pem`, `*.key` files, or `**/secrets/**` / `**/private/**` paths.
           - Focus on: real bugs, security issues (especially secret leakage into logs, error messages, or client bundles), broken error handling, and type-safety violations (this repo forbids `any` and requires strict TypeScript).
-          - This is a TDD repo: flag new or changed production logic that ships without test coverage.
           - Be concrete: file paths with line numbers, why it matters, and a suggested fix. Skip style nits.
           - Rate each finding as CRITICAL, MAJOR, or MINOR. If nothing material is wrong, say so briefly instead of inventing issues.
+          - Format every finding exactly like this (the format is machine-checked; findings that deviate are dropped):
+              ### SEVERITY: short title
+              **Location:** path/to/file.ext:12-34
+              ```<language>
+              <the exact cited lines, quoted verbatim — no paraphrasing>
+              ```
+            The fenced block must come first and contain ONLY the cited code; a suggested fix goes in a separate fence afterwards.
+          - Do not report line numbers or findings you cannot quote verbatim.
           - Output ONLY the review as markdown, with no preamble about your process.
           EOF
           } > prompt.md
@@ -272,6 +308,17 @@ jobs:
           fi
           wc -c review.md
 
+      - name: Verify review grounding
+        if: steps.check.outputs.has_key == 'true'
+        run: |
+          set -euo pipefail
+          # Anti-hallucination gate: drops findings whose file, cited lines,
+          # or quoted code do not check out against the checkout. A review
+          # with no findings, or with zero survivors, is handled by the
+          # script (published as-is / stub comment).
+          python3 .github/scripts/verify-review-grounding.py \
+            review.md review.verified.md
+
       - name: Scrub secrets from review output
         if: steps.check.outputs.has_key == 'true'
         env:
@@ -282,24 +329,28 @@ jobs:
           # Prompt-injection guard: the review is LLM output over
           # attacker-controlled PR title/diff. Mask both keys in all
           # subsequent logs, then scrub any occurrence of either key value
-          # from review.md before it becomes a permanent public PR comment.
+          # from the verified review and the mechanical checks output before
+          # they become a permanent public PR comment.
           echo "::add-mask::${ZAI_API_KEY}"
           echo "::add-mask::${OPENROUTER_API_KEY}"
           python3 - <<'EOF'
           import os
-          path = "review.md"
-          text = open(path, encoding="utf-8").read()
-          scrubbed = False
-          for var in ("ZAI_API_KEY", "OPENROUTER_API_KEY"):
-              key = os.environ.get(var, "")
-              if key and key in text:
-                  text = text.replace(key, "***REDACTED***")
-                  scrubbed = True
-          if scrubbed:
-              open(path, "w", encoding="utf-8").write(text)
-              print("scrubbed secret occurrence from review.md")
-          else:
-              print("no secret material found in review.md")
+          files = ("review.verified.md", "mechanical-checks.md")
+          for path in files:
+              if not os.path.exists(path):
+                  continue
+              text = open(path, encoding="utf-8").read()
+              scrubbed = False
+              for var in ("ZAI_API_KEY", "OPENROUTER_API_KEY"):
+                  key = os.environ.get(var, "")
+                  if key and key in text:
+                      text = text.replace(key, "***REDACTED***")
+                      scrubbed = True
+              if scrubbed:
+                  open(path, "w", encoding="utf-8").write(text)
+                  print(f"scrubbed secret occurrence from {path}")
+              else:
+                  print(f"no secret material found in {path}")
           EOF
 
       - name: Post review as a new PR comment
@@ -319,7 +370,17 @@ jobs:
             echo "$MARKER"
             echo "## OpenCode review — ${HEAD_SHORT}"
             echo ""
-            cat review.md
+            cat review.verified.md
+            echo ""
+            echo "## Mechanical checks"
+            echo ""
+            cat mechanical-checks.md
           } > comment.md
           gh pr comment "$PR_NUMBER" --body-file comment.md
           echo "Posted new review comment for ${HEAD_SHORT}"
+
+      - name: Fail job on mechanical check failure
+        if: steps.check.outputs.has_key == 'true' && steps.mechanical.outputs.status != '0'
+        run: |
+          echo "Mechanical checks failed — see the posted review comment." >&2
+          exit 1
