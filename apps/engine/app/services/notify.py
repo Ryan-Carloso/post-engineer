@@ -197,6 +197,23 @@ def safe_reason(exc: BaseException) -> str:
     return scrub_secret_values(message)[:200]
 
 
+def safe_diagnostic(exc: BaseException, edge_chars: int = 200) -> str:
+    """Exception class plus the head and tail of the message, for logs.
+
+    ``safe_reason`` keeps only the first 200 characters. requests puts the
+    request URL first and the urllib3 root cause ("Caused by
+    NameResolutionError(...)") last, so that cut removes the root cause.
+    Same redaction as ``safe_reason``: scrub the full message before any cut.
+    """
+    name = type(exc).__name__
+    if safe_reason(exc) == name:
+        return name
+    message = scrub_secret_values(str(exc))
+    if len(message) <= 2 * edge_chars:
+        return f"{name}: {message}"
+    return f"{name}: {message[:edge_chars]} ... {message[-edge_chars:]}"
+
+
 # ---------------------------------------------------------------------------
 # Messages — pure builders, testable without network
 # ---------------------------------------------------------------------------

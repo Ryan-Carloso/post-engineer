@@ -266,6 +266,40 @@ class SendDiscordTests(unittest.TestCase):
         self.assertNotIn("TOPSECRET123", reason)
         self.assertLessEqual(len(reason), 200)
 
+    def test_diagnostic_keeps_class_and_root_cause_of_long_message(self):
+        # requests puts the long request URL first and the urllib3 root
+        # cause last: the log line must keep both ends of the message.
+        exc = ConnectionError(
+            "HTTPSConnectionPool(host='db.example', port=443): Max retries "
+            "exceeded with url: /rest/v1/scheduled_posts?select=" + "x" * 600
+            + " (Caused by NameResolutionError('Failed to resolve db.example'))"
+        )
+        diagnostic = nf.safe_diagnostic(exc)
+        self.assertTrue(diagnostic.startswith("ConnectionError: HTTPSConnectionPool"))
+        self.assertIn("Caused by NameResolutionError", diagnostic)
+        self.assertLess(len(diagnostic), 450)
+
+    def test_diagnostic_keeps_short_message_whole(self):
+        self.assertEqual(nf.safe_diagnostic(RuntimeError("supabase down")), "RuntimeError: supabase down")
+
+    def test_diagnostic_scrubs_secrets_before_cutting(self):
+        # The probe is longer than both edges: a cut-first revert would let
+        # the scrubber see only fragments.
+        from app.services import analytics as analytics_module
+
+        exc = RuntimeError("E" * 300 + " api_key=TOPSECRET123 " + "F" * 300)
+        with patch.object(
+            nf, "scrub_secret_values", wraps=analytics_module.scrub_secret_values
+        ) as scrub:
+            diagnostic = nf.safe_diagnostic(exc)
+        self.assertTrue(all(call.args == (str(exc),) for call in scrub.call_args_list))
+        self.assertNotIn("TOPSECRET123", diagnostic)
+
+    def test_diagnostic_drops_message_that_carries_the_webhook_url(self):
+        with patch.dict(os_environ(), {"DISCORD_WEBHOOK_URL": "https://discord/hook"}, clear=True):
+            exc = RuntimeError("x" * 500 + " failed calling https://discord/hook")
+            self.assertEqual(nf.safe_diagnostic(exc), "RuntimeError")
+
     def test_long_messages_are_truncated_to_discord_limit(self):
         # m2: Discord rejects messages > 2000 chars — the builder truncates.
         message = nf.generation_batch_msg(3, ["t" * 900] * 3)

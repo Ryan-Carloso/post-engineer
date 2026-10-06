@@ -1322,6 +1322,30 @@ class CoverageGapTests(unittest.TestCase):
             f"expected an ERROR record about the failed stage, got: {[r['message'] for r in records]}",
         )
 
+    def test_failed_stage_log_names_the_root_cause(self):
+        # The urllib3 root cause sits at the END of a long requests message:
+        # the stage log must keep it, or DNS and refused look the same.
+        store = _FakeStore()
+        store.pending_slots = MagicMock(
+            side_effect=ConnectionError(
+                "Max retries exceeded with url: /rest/v1/scheduled_posts?select="
+                + "x" * 600
+                + " (Caused by NameResolutionError('Failed to resolve'))"
+            )
+        )
+        scheduler = self._scheduler(store)
+        records = []
+        handler_id = logger.add(lambda message: records.append(message.record))
+        try:
+            scheduler.run_once(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        finally:
+            logger.remove(handler_id)
+        messages = [r["message"] for r in records if r["level"].name == "ERROR"]
+        self.assertTrue(
+            any("ConnectionError" in m and "NameResolutionError" in m for m in messages),
+            f"expected the stage log to name the class and root cause, got: {messages}",
+        )
+
 
 
 

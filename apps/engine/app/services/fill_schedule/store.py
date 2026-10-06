@@ -18,6 +18,36 @@ from app.services.fill_schedule.constants import (
 )
 
 
+# Connect-phase failures only (DNS, refused, connect timeout): the request
+# never reached Supabase, so a retry is safe even for the token RPC POSTs.
+# Read failures are not retried — a POST may already have been applied.
+CONNECT_RETRIES = 2
+CONNECT_RETRY_BACKOFF_SECONDS = 0.5
+# (connect, read): a short connect timeout bounds the retry cost to
+# about 30s, inside one tick.
+REQUEST_TIMEOUT_SECONDS = (10, 30)
+
+
+def build_retrying_session() -> Any:
+    """``requests.Session`` that retries connect-phase failures to Supabase."""
+    import requests
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
+
+    retry = Retry(
+        total=CONNECT_RETRIES,
+        connect=CONNECT_RETRIES,
+        read=False,
+        other=0,
+        backoff_factor=CONNECT_RETRY_BACKOFF_SECONDS,
+    )
+    session = requests.Session()
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
+
+
 class SupabaseAuthError(RuntimeError):
     """Supabase rejected the service key (HTTP 401).
 
@@ -44,15 +74,13 @@ class ScheduleStore:
         service_key: str | None = None,
         requests_module: Any | None = None,
     ) -> None:
-        import requests
-
         base_url = url or os.getenv("SUPABASE_URL")
         key = service_key or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
         if not base_url:
             raise RuntimeError("SUPABASE_URL is required for fill_schedule")
         if not key:
             raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY is required for fill_schedule")
-        self._requests = requests_module if requests_module is not None else requests
+        self._requests = requests_module if requests_module is not None else build_retrying_session()
         self._base_url = base_url.rstrip("/")
         self._key = key
         self._headers = {
@@ -66,7 +94,7 @@ class ScheduleStore:
             method,
             f"{self._base_url}/rest/v1/{path}",
             headers=kwargs.pop("headers", self._headers),
-            timeout=30,
+            timeout=REQUEST_TIMEOUT_SECONDS,
             **kwargs,
         )
         try:
@@ -241,7 +269,7 @@ class ScheduleStore:
             f"{self._base_url}/storage/v1/object/sign/{bucket}/{path}",
             headers=self._headers,
             json={"expiresIn": SIGNED_URL_EXPIRES_SECONDS},
-            timeout=30,
+            timeout=REQUEST_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
         signed: str = response.json()["signedURL"]
