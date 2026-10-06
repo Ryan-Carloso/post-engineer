@@ -144,6 +144,16 @@ jobs:
           fail_ci_if_error: true
           verbose: true
 
+      # The ui-coverage-gates job (below) aggregates this report over the
+      # PR's changed UI files.
+      - name: Upload vitest coverage for UI gates
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage-vitest
+          path: apps/web/coverage-unit/cobertura-coverage.xml
+          if-no-files-found: warn
+          retention-days: 7
+
   mcp:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -513,6 +523,16 @@ jobs:
           fail_ci_if_error: true
           verbose: true
 
+      # The ui-coverage-gates job (below) aggregates this report over the
+      # PR's changed UI files that fall in the cypress-coverage scope.
+      - name: Upload Cypress coverage for UI gates
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage-cypress
+          path: apps/web/coverage/lcov.info
+          if-no-files-found: warn
+          retention-days: 7
+
   # Validates Supabase migrations on every PR and push: numbering stays
   # append-only and strictly increasing, destructive DDL is blocked unless
   # explicitly approved, and the whole chain applies cleanly to a fresh
@@ -625,3 +645,171 @@ jobs:
           # uses `supabase link` + `db push --linked`, which negotiates TLS.)
           supabase db push --yes --db-url "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable"
           echo "migrations applied cleanly"
+
+  # UI coverage gates: when a PR changes UI files (apps/web/app/** or
+  # apps/web/components/**, *.ts/*.tsx excluding tests), enforce minimum
+  # coverage on exactly those files:
+  #   vitest (unit)      ≥ 80% aggregate line coverage (cobertura report)
+  #   cypress (e2e)      ≥ 80% aggregate line coverage (lcov report), over
+  #                        the changed UI files that fall within the
+  #                        cypress-coverage instrumentation scope
+  #                        (codeCoverage.include in cypress.config.ts);
+  #                        files outside that scope are exempt.
+  #   mutation (stryker) ≥ 60% score over the changed UI files.
+  # Posts (and refreshes) a single PR comment with the three percentages.
+  #
+  # This job runs on EVERY PR (never skipped: `always()` + no path
+  # filters) so it can be a required check in the main ruleset — with no
+  # UI changes it passes vacuously. Missing coverage reports with UI
+  # changes are fail-closed: without measurement there is no proof the
+  # threshold holds.
+  #
+  # Stryker runs here scoped to the changed UI files only (the mutation
+  # workflow's informational run is untouched). The stryker.config.json
+  # sets no thresholds, so Stryker exits 0 on low scores and only fails
+  # on execution errors; the 60% threshold is enforced by evaluate.mjs.
+  ui-coverage-gates:
+    name: ui-coverage-gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      pull-requests: write
+    needs: [web, cypress-coverage]
+    if: always() && github.event_name == 'pull_request' && !cancelled()
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+
+      - name: Unit tests (ui-gates scripts)
+        run: node --test .github/scripts/ui-gates/*.test.mjs
+
+      - name: Detect changed UI files
+        id: detect
+        run: |
+          set -euo pipefail
+          files="$(node .github/scripts/ui-gates/detect.mjs --base "origin/${{ github.base_ref }}" --head HEAD)"
+          echo "files=$files" >> "$GITHUB_OUTPUT"
+          if [ -n "$files" ]; then
+            echo "Changed UI files: $files"
+          else
+            echo "No UI files changed — gates pass vacuously."
+          fi
+
+      - name: Download coverage artifacts
+        if: steps.detect.outputs.files != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ui-gates/vitest /tmp/ui-gates/cypress
+          gh run download "${{ github.run_id }}" -n coverage-vitest -D /tmp/ui-gates/vitest || echo "coverage-vitest artifact not found"
+          gh run download "${{ github.run_id }}" -n coverage-cypress -D /tmp/ui-gates/cypress || echo "coverage-cypress artifact not found"
+          find /tmp/ui-gates -type f | head -20
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        if: steps.detect.outputs.files != ''
+        with:
+          version: 10.22.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: steps.detect.outputs.files != ''
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        if: steps.detect.outputs.files != ''
+        run: pnpm install --frozen-lockfile
+
+      # Same scoped invocation as the mutation workflow; the UI file list
+      # is a subset of that workflow's changed-files scope.
+      - name: Run Stryker on changed UI files
+        if: steps.detect.outputs.files != ''
+        working-directory: apps/web
+        run: |
+          set -euo pipefail
+          stryker_files="$(echo "${{ steps.detect.outputs.files }}" | sed 's|apps/web/||g')"
+          echo "Mutating UI files: $stryker_files"
+          pnpm exec stryker run --mutate "$stryker_files"
+
+      - name: Evaluate gates
+        id: evaluate
+        if: always()
+        run: |
+          set -euo pipefail
+          # Fail closed: if changed-file detection itself failed, never pass
+          # vacuously on an empty file list.
+          if [[ "${{ steps.detect.outcome }}" != "success" ]]; then
+            echo "::error::Changed-UI-file detection failed; refusing to pass vacuously."
+            echo "gates_exit=1" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          cobertura="$(find /tmp/ui-gates/vitest -name 'cobertura-coverage.xml' 2>/dev/null | head -n 1 || true)"
+          lcov="$(find /tmp/ui-gates/cypress -name 'lcov.info' 2>/dev/null | head -n 1 || true)"
+          set +e
+          node .github/scripts/ui-gates/evaluate.mjs \
+            --ui-files "${{ steps.detect.outputs.files }}" \
+            --cobertura "$cobertura" \
+            --lcov "$lcov" \
+            --mutation apps/web/reports/mutation/mutation.json \
+            --out /tmp/ui-gates/findings.json
+          code=$?
+          set -e
+          echo "gates_exit=$code" >> "$GITHUB_OUTPUT"
+          if [ "$code" != "0" ]; then
+            echo "::error::UI coverage gates failed (see the PR comment and the findings below)."
+            cat /tmp/ui-gates/findings.json || true
+          fi
+
+      - name: Post/update PR comment
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          findings=/tmp/ui-gates/findings.json
+          pr="${{ github.event.pull_request.number }}"
+          repo="${{ github.repository }}"
+          existing_id=$(gh api "repos/$repo/issues/$pr/comments" --jq '.[] | select(.body | contains("<!-- ui-coverage-gates -->")) | .id' | head -n 1 || true)
+          if [[ ! -f "$findings" ]]; then
+            echo "no findings file; skipping PR comment"
+            exit 0
+          fi
+          ui_count=$(node --input-type=module -e "import fs from 'node:fs'; console.log(JSON.parse(fs.readFileSync('$findings','utf8')).uiFiles.length)")
+          if [[ "$ui_count" == "0" ]]; then
+            if [[ -n "$existing_id" ]]; then
+              gh api -X DELETE "repos/$repo/issues/comments/$existing_id" > /dev/null
+              echo "no UI files changed; removed stale gate comment $existing_id"
+            else
+              echo "no UI files changed; nothing to post"
+            fi
+            exit 0
+          fi
+          body_file="$(mktemp)"
+          node .github/scripts/ui-gates/comment.mjs --findings "$findings" > "$body_file"
+          if [[ -n "$existing_id" ]]; then
+            gh api -X PATCH "repos/$repo/issues/comments/$existing_id" -F body=@"$body_file" > /dev/null
+            echo "updated PR comment $existing_id"
+          else
+            gh pr comment "$pr" --repo "$repo" --body-file "$body_file" > /dev/null
+            echo "posted new PR comment"
+          fi
+
+      - name: Fail on gate violations
+        if: always()
+        run: |
+          if [[ "${{ steps.evaluate.outputs.gates_exit }}" != "0" ]]; then
+            echo "::error::UI coverage gates failed: vitest ≥ 80%, cypress ≥ 80%, mutation ≥ 60% on changed UI files."
+            exit 1
+          fi
+          echo "UI coverage gates pass."
