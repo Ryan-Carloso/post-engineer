@@ -67,6 +67,25 @@ describe('fetchEngineTaskProgress', () => {
     await expect(fetchEngineTaskProgress(TASK_ID, 'user-1')).rejects.toThrow(/502/);
   });
 
+  it('reports a gone task as terminal instead of throwing', async () => {
+    mockEngine({ message: 'req-1: task not found' }, false, 404);
+    const result = await fetchEngineTaskProgress(TASK_ID, 'user-1');
+    expect(result.gone).toBe(true);
+    expect(result.state).toBe(-1);
+    expect(result.progress).toBe(0);
+  });
+
+  it('reports a live task as not gone', async () => {
+    mockEngine({ body: { progress: 45, state: 4 } });
+    const result = await fetchEngineTaskProgress(TASK_ID, 'user-1');
+    expect(result.gone).toBe(false);
+  });
+
+  it('never reports gone for a non-404 engine error', async () => {
+    mockEngine({ error: 'nope' }, false, 500);
+    await expect(fetchEngineTaskProgress(TASK_ID, 'user-1')).rejects.toThrow(/500/);
+  });
+
   it('reads progress from the data-wrapped task payload', async () => {
     mockEngine({ body: { progress: 45, state: 4 } });
     const result = await fetchEngineTaskProgress(TASK_ID, 'user-1');

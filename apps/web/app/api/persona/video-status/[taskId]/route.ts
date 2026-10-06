@@ -219,19 +219,39 @@ async function recordTerminalFailure(input: {
   errorCode: GenerationErrorCode;
 }): Promise<void> {
   const { supabase, userId, taskId, rawError, errorCode } = input;
-  const generationId = await lookupChargeGenerationId(supabase, userId, taskId);
-  if (!generationId) return;
+  let generationId = await lookupChargeGenerationId(supabase, userId, taskId);
+  // No charge row carries this task id. That is the NORMAL case for a
+  // scheduled post: batch tokens are prepaid once under `batch:<schedule_id>`
+  // (engine_task_id NULL) while each slot dispatches its own task, so this
+  // lookup can only ever match a direct generation.
+  //
+  // Returning early here used to strand every scheduled post in `running`
+  // forever: the caller got its 410 and stopped polling, but the history row
+  // was never advanced. Fall back to the task-id link on the generation row
+  // itself so the terminal state is still recorded.
+  //
+  // NO REFUND on this path — there is no per-generation charge to refund, and
+  // a batch charge covers sibling slots. The billing reconciliation cron owns
+  // that decision.
+  const refundable = generationId !== undefined;
+  if (!generationId) {
+    generationId = await resolveGenerationIdByEngineTask(supabase, userId, taskId);
+    if (!generationId) return;
+  }
   const { data: history } = await supabase
     .from('video_generations')
     .select('status, tokens_refunded')
     .eq('generation_id', generationId)
     .maybeSingle();
   if (terminalAlreadyRecorded(history, 'failed')) return;
-  const refunded = await refundTokens(supabase, userId, generationId);
-  if (!refunded) {
-    logger.error('[api/persona/video-status] refund failed; leaving tokens_refunded unset', null, {
-      generationId,
-    });
+  let refunded = false;
+  if (refundable) {
+    refunded = await refundTokens(supabase, userId, generationId);
+    if (!refunded) {
+      logger.error('[api/persona/video-status] refund failed; leaving tokens_refunded unset', null, {
+        generationId,
+      });
+    }
   }
   await recordGenerationUpdate({
     supabase,
@@ -240,8 +260,38 @@ async function recordTerminalFailure(input: {
     engineTaskId: taskId,
     errorCode,
     errorMessage: rawError,
+    // Only ever set the flag when a refund was actually attempted and
+    // landed. tokens_refunded gates the retry backstop, so writing it for a
+    // path that never refunded would silence the retry forever.
     tokensRefunded: refunded ? true : undefined,
   });
+}
+
+//---------------
+// resolveGenerationIdByEngineTask — the task_id → generation link that works
+// for scheduled posts, whose charge row carries no engine_task_id.
+//---------------
+async function resolveGenerationIdByEngineTask(
+  supabase: SupabaseClient,
+  userId: string,
+  taskId: string,
+): Promise<string | undefined> {
+  const { data, error } = await supabase
+    .from('video_generations')
+    .select('generation_id')
+    .eq('user_id', userId)
+    .eq('engine_task_id', taskId)
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    logger.error('[api/persona/video-status] generation lookup by task id failed', null, {
+      taskId,
+      error: error.message,
+    });
+    return undefined;
+  }
+  const generationId: unknown = data?.generation_id;
+  return typeof generationId === 'string' && generationId.length > 0 ? generationId : undefined;
 }
 
 // (rewriteVideoUrls lives in lib/video-urls.ts — shared with delete-preview.)

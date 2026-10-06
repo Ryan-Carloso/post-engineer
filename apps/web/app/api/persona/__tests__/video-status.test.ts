@@ -163,6 +163,9 @@ describe('GET /api/persona/video-status/:taskId', () => {
       // `unknown` fields: the idempotency gate must narrow whatever the DB
       // returns — tests feed malformed rows to lock that in.
       historyRow: { status: unknown; tokens_refunded: unknown } | null = null,
+      // The generation row found by the engine_task_id fallback (the batch
+      // case: prepaid under `batch:<id>` with no per-task charge row).
+      fallbackGenerationId: string | null = null,
     ) {
       const chargeSingle = vi
         .fn()
@@ -176,12 +179,33 @@ describe('GET /api/persona/video-status/:taskId', () => {
       const chargeSelect = vi.fn().mockReturnValue({ eq: chargeEq1 });
       const historyEq = vi.fn().mockReturnValue({ maybeSingle: historySingle });
       const historySelect = vi.fn().mockReturnValue({ eq: historyEq });
-      // The route issues two queries: the charge lookup on
-      // token_transactions and (new, review MINOR) the idempotency read on
-      // video_generations. Route them by table name.
-      const from = vi.fn().mockImplementation((table: string) => ({
-        select: table === 'video_generations' ? historySelect : chargeSelect,
-      }));
+      // The task-id fallback is the SAME table with a different filter count
+      // (user_id + engine_task_id + limit + maybeSingle). Route it by call
+      // order: the idempotency read runs first only when a charge resolved,
+      // so a distinct builder keeps the two paths from bleeding together.
+      const fallbackSingle = vi
+        .fn()
+        .mockResolvedValue({
+          data: fallbackGenerationId ? { generation_id: fallbackGenerationId } : null,
+          error: null,
+        });
+      const fallbackLimit = vi.fn().mockReturnValue({ maybeSingle: fallbackSingle });
+      const fallbackEq2 = vi.fn().mockReturnValue({ limit: fallbackLimit });
+      const fallbackEq1 = vi.fn().mockReturnValue({ eq: fallbackEq2 });
+      const fallbackSelect = vi.fn().mockReturnValue({ eq: fallbackEq1 });
+      let videoGenerationCalls = 0;
+      const from = vi.fn().mockImplementation((table: string) => {
+        if (table !== 'video_generations') {
+          return { select: chargeSelect };
+        }
+        // With no charge row the FIRST video_generations read is the task-id
+        // fallback (user_id + engine_task_id + limit + maybeSingle) and the
+        // idempotency gate runs second. With a charge row the order reverses:
+        // the idempotency gate reads first and the fallback is never reached.
+        videoGenerationCalls += 1;
+        const useFallback = generationId === null && videoGenerationCalls === 1;
+        return { select: useFallback ? fallbackSelect : historySelect };
+      });
       const client = { from };
       vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
       return client;
@@ -585,6 +609,55 @@ describe('GET /api/persona/video-status/:taskId', () => {
         expect(response.status).toBe(410);
         expect(await response.json()).toMatchObject({ success: false, terminal: true });
         expect(refundTokens).not.toHaveBeenCalled();
+        expect(updateSpy).not.toHaveBeenCalled();
+      } finally {
+        updateSpy.mockRestore();
+      }
+    });
+
+    it('records the failure for a scheduled post whose batch charge carries no task id', async () => {
+      // A scheduled post is prepaid ONCE under `batch:<schedule_id>` with
+      // engine_task_id NULL, so the charge lookup finds nothing. Before the
+      // task-id fallback this returned early and left the history row in
+      // `running` forever while the caller had already been told 410.
+      mockTaskBody({ status: 404, message: 'req-1: task not found' }, 404);
+      const serviceClient = mockServiceClient(null, null, 'batch:sched-1:slot:slot-9');
+      vi.mocked(refundTokens).mockResolvedValue(true);
+      const updateSpy = vi
+        .spyOn(videoGeneration, 'recordGenerationUpdate')
+        .mockResolvedValue(undefined);
+      try {
+        const response = await poll();
+        expect(response.status).toBe(410);
+        expect(updateSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            generationId: 'batch:sched-1:slot:slot-9',
+            status: 'failed',
+            engineTaskId: 'task-1',
+            errorCode: 'engine_restart',
+          }),
+        );
+        // No per-generation charge exists, so nothing may be refunded here —
+        // and the flag must stay unset so the reconciliation cron still owns
+        // (and can still settle) the batch charge.
+        expect(refundTokens).not.toHaveBeenCalled();
+        const patch = updateSpy.mock.calls[0][0];
+        expect(patch.tokensRefunded).toBeUndefined();
+        expect(serviceClient).toBeDefined();
+      } finally {
+        updateSpy.mockRestore();
+      }
+    });
+
+    it('does not touch history when neither the charge nor the task id resolves a generation', async () => {
+      mockTaskBody({ status: 404, message: 'req-1: task not found' }, 404);
+      mockServiceClient(null, null, null);
+      const updateSpy = vi
+        .spyOn(videoGeneration, 'recordGenerationUpdate')
+        .mockResolvedValue(undefined);
+      try {
+        const response = await poll();
+        expect(response.status).toBe(410);
         expect(updateSpy).not.toHaveBeenCalled();
       } finally {
         updateSpy.mockRestore();

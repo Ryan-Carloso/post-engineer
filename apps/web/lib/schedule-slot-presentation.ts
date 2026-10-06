@@ -1,5 +1,8 @@
 import { fetchEngineTaskProgress } from './engine-tasks';
 import { isRetryableGenerationError } from './generation/generation-errors';
+import { resolveGoneGenerationId } from './generation/gone-generation-reconcile';
+import { recordGenerationUpdate } from './generation/video-generation';
+import { createSupabaseServiceClient } from './supabase/service';
 import { logger } from './logger';
 
 //---------------
@@ -8,9 +11,15 @@ import { logger } from './logger';
 // (lists) and GET /api/schedule/slots/[slotId] (detail). The DB keeps the
 // 'pending' string; the API presents it as the friendlier 'awaiting'.
 // progress/stage come from the live engine task for generating slots,
-// fetched read-only via the shared engine-tasks helper — which, unlike
-// the video-status route, performs NO refunds or history writes. A failed
-// lookup degrades (progress 0, stage null) instead of failing the request.
+// fetched read-only via the shared engine-tasks helper. A failed lookup
+// degrades (progress 0, stage null) instead of failing the request.
+//
+// ONE deliberate exception to "read-only": an engine 404 (the engine forgot
+// the task) is TERMINAL. This endpoint is what the UI polls while a video
+// renders, so a task the engine dropped would otherwise be re-polled
+// forever and its history row would sit in `running` indefinitely. On a 404
+// the slot is settled as failed once, here — the same terminal transition
+// the per-task video-status route performs. Everything else stays read-only.
 //---------------
 
 export interface SlotEnrichment {
@@ -26,6 +35,52 @@ export type QueuePositions = Map<string, Map<string, { position: number; total: 
 
 export function presentStatus(dbStatus: string): string {
   return dbStatus === 'pending' ? 'awaiting' : dbStatus;
+}
+
+//---------------
+// GONE_TASK_ERROR — the message stored on a slot whose engine task the
+// engine dropped. It carries the `engine_restart` code so the retryability
+// check classifies it like any other engine-restart failure.
+//---------------
+const GONE_TASK_ERROR = 'engine_restart: the video task no longer exists on the generation engine';
+
+//---------------
+// settleGoneTask — record the terminal failed state for a task the engine
+// no longer has.
+//
+// NO REFUND happens here. The per-generation refund RPC keys on a charge
+// row this path cannot prove exists (batch posts are prepaid under the
+// batch id and refunded by the engine's own batch runner), so this only
+// advances the history row. Tokens for a dropped scheduled post are
+// settled by the billing reconciliation cron, which owns that decision.
+//
+// Failures are logged, never thrown: a status read must not 500 because a
+// history write could not land — the next poll retries.
+//---------------
+async function settleGoneTask(taskId: string, userId: string): Promise<void> {
+  try {
+    const supabase = createSupabaseServiceClient();
+    const generationId = await resolveGoneGenerationId(supabase, userId, taskId);
+    if (!generationId) {
+      logger.warn('[api/schedule] gone task has no resolvable generation; history row left untouched', {
+        taskId,
+      });
+      return;
+    }
+    await recordGenerationUpdate({
+      supabase,
+      generationId,
+      status: 'failed',
+      engineTaskId: taskId,
+      errorCode: 'engine_restart',
+      errorMessage: GONE_TASK_ERROR,
+    });
+  } catch (error) {
+    logger.error('[api/schedule] failed to settle a gone engine task', {
+      taskId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 export async function enrichSlot(
@@ -59,16 +114,27 @@ export async function enrichSlot(
       if (taskId && options.allowEngineLookup !== false) {
         try {
           const task = await fetchEngineTaskProgress(taskId, userId);
-          enrichment.progress = task.progress;
-          if (dbStatus === 'generating') enrichment.stage = task.stage;
+          if (task.gone) {
+            // The engine no longer knows this task and never will: settle the
+            // history row once so the slot stops reporting `running` and the
+            // UI stops polling a task that cannot finish.
+            await settleGoneTask(taskId, userId);
+            enrichment.status = 'failed';
+            enrichment.retryable = isRetryableGenerationError(GONE_TASK_ERROR);
+          } else {
+            enrichment.progress = task.progress;
+            if (dbStatus === 'generating') enrichment.stage = task.stage;
+          }
         } catch (error) {
+          // Transient (5xx, abort, network): degrade, keep the slot as-is so
+          // the next poll retries. Only a 404 is terminal.
           logger.warn('[api/schedule] engine task progress unavailable', {
             taskId,
             error: error instanceof Error ? error.message : String(error),
           });
         }
       }
-      if (dbStatus === 'failed') {
+      if (dbStatus === 'failed' && enrichment.retryable === null) {
         enrichment.retryable = isRetryableGenerationError(
           typeof slot.error === 'string' ? slot.error : null,
         );

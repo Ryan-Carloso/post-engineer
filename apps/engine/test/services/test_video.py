@@ -301,7 +301,9 @@ class TestVideoService(unittest.TestCase):
 
         fake_clip = _FakeClip()
 
-        with patch.object(vd, "_ffmpeg_encoder_exists", return_value=True):
+        with patch.object(vd, "_ffmpeg_encoder_exists", return_value=True), patch.object(
+            vd, "_encoder_actually_usable", return_value=True
+        ):
             used_codec = vd._write_videofile_with_codec_fallback(
                 fake_clip,
                 "/tmp/fake.mp4",
@@ -325,7 +327,9 @@ class TestVideoService(unittest.TestCase):
             def write_videofile(self, output_file, codec, **kwargs):
                 raise RuntimeError(f"{codec} cannot write output")
 
-        with patch.object(vd, "_ffmpeg_encoder_exists", return_value=True):
+        with patch.object(vd, "_ffmpeg_encoder_exists", return_value=True), patch.object(
+            vd, "_encoder_actually_usable", return_value=True
+        ):
             with self.assertRaises(RuntimeError):
                 vd._write_videofile_with_codec_fallback(
                     _FakeClip(),
@@ -373,7 +377,9 @@ class TestVideoService(unittest.TestCase):
             output_file = os.path.join(temp_dir, "combined.mp4")
             Path(clip_file).write_bytes(b"fake")
 
-            with patch.object(vd, "_ffmpeg_encoder_exists", return_value=True):
+            with patch.object(vd, "_ffmpeg_encoder_exists", return_value=True), patch.object(
+            vd, "_encoder_actually_usable", return_value=True
+        ):
                 with patch.object(vd.subprocess, "run", side_effect=fake_run) as run:
                     vd.concat_video_clips_with_ffmpeg(
                         clip_files=[clip_file],
@@ -411,7 +417,9 @@ class TestVideoService(unittest.TestCase):
             output_file = os.path.join(temp_dir, "combined.mp4")
             Path(clip_file).write_bytes(b"fake")
 
-            with patch.object(vd, "_ffmpeg_encoder_exists", return_value=True):
+            with patch.object(vd, "_ffmpeg_encoder_exists", return_value=True), patch.object(
+            vd, "_encoder_actually_usable", return_value=True
+        ):
                 with patch.object(vd.subprocess, "run", side_effect=fake_run):
                     with self.assertRaises(RuntimeError):
                         vd.concat_video_clips_with_ffmpeg(
@@ -1027,6 +1035,222 @@ class TestFontContainment(unittest.TestCase):
     def test_empty_name_is_rejected(self):
         with self.assertRaises(ValueError):
             vd._resolve_font_path("")
+
+
+class TestEncoderProbe(unittest.TestCase):
+    """
+    The encoder-list probe only proves an encoder was COMPILED into ffmpeg.
+    A machine with no GPU still lists h264_nvenc/h264_qsv/h264_vaapi, so the
+    probe accepted them and every real encode then failed and fell back —
+    once per clip, logging the same warning ~18 times in a single task.
+
+    These tests pin a probe that actually tries to USE the encoder.
+    """
+
+    def setUp(self):
+        vd._runtime_disabled_video_codecs.clear()
+        vd._ffmpeg_encoder_exists.cache_clear()
+        vd._encoder_actually_usable.cache_clear()
+
+    def tearDown(self):
+        vd._runtime_disabled_video_codecs.clear()
+        vd._ffmpeg_encoder_exists.cache_clear()
+        vd._encoder_actually_usable.cache_clear()
+
+    def test_encoder_that_fails_a_real_encode_is_rejected(self):
+        """
+        An encoder that advertises itself but cannot encode one frame is
+        unusable — the probe must say so before a task spends minutes
+        failing on it.
+        """
+        with patch.object(
+            vd.subprocess,
+            "run",
+            return_value=types.SimpleNamespace(returncode=1, stdout="", stderr="device not available"),
+        ):
+            self.assertFalse(vd._encoder_actually_usable("h264_nvenc"))
+
+    def test_encoder_that_encodes_a_frame_is_accepted(self):
+        with patch.object(
+            vd.subprocess,
+            "run",
+            return_value=types.SimpleNamespace(returncode=0, stdout="", stderr=""),
+        ):
+            self.assertTrue(vd._encoder_actually_usable("h264_nvenc"))
+
+    def test_encoder_that_cannot_be_probed_is_rejected(self):
+        """
+        An unreadable probe must fail CLOSED: falling back to libx264 is
+        slower but works, while proceeding on an unverified hardware encoder
+        fails the whole generation.
+        """
+        with patch.object(vd.subprocess, "run", side_effect=OSError("no device")):
+            self.assertFalse(vd._encoder_actually_usable("h264_vaapi"))
+
+    def test_effective_codec_falls_back_when_encoder_is_unusable(self):
+        """
+        The end-to-end contract: a configured hardware encoder that is
+        compiled in but unusable yields libx264 without running a task.
+        """
+        with patch.dict(config.app, {"video_codec": "h264_nvenc"}, clear=False), patch.object(
+            vd, "_ffmpeg_encoder_exists", return_value=True
+        ), patch.object(vd, "_encoder_actually_usable", return_value=False):
+            self.assertEqual(vd._get_effective_video_codec(), "libx264")
+
+    def test_unusable_encoder_is_probed_only_once_per_codec(self):
+        """
+        The whole point: one probe for the process, not one per clip. An
+        18-clip task logged the same warning 18 times.
+        """
+        with patch.object(
+            vd.subprocess,
+            "run",
+            return_value=types.SimpleNamespace(returncode=1, stdout="", stderr="no device"),
+        ) as mocked_run:
+            for _ in range(5):
+                vd._encoder_actually_usable("h264_videotoolbox")
+        self.assertEqual(mocked_run.call_count, 1)
+
+
+class TestLipSyncConcat(unittest.TestCase):
+    """
+    replace_video_intro_with_lipsync splices a ~4s talking-avatar intro onto
+    the front of a ~36s clip. It re-encoded the ENTIRE clip to do it, which
+    on this CPU-only host (2 vCPUs, no GPU) took ~13 minutes with no log
+    output at all — indistinguishable from a hang.
+    """
+
+    def setUp(self):
+        # Isolate from whatever the ambient config declares, so these tests
+        # pin the shipped DEFAULT rather than this machine's config.toml.
+        self._original_config = dict(config.app)
+        config.app.pop("video_preset", None)
+        config.app.pop("video_codec", None)
+
+    def tearDown(self):
+        config.app.clear()
+        config.app.update(self._original_config)
+
+    def _run_with_capture(self, duration=5.0, run_side_effect=None):
+        """
+        Drive the splice with ffmpeg stubbed, recording EVERY command it
+        runs. The splice is three ffmpeg invocations now (encode intro,
+        extract tail, join), so tests assert on the recorded list, not on a
+        single command.
+        """
+        captured = {"commands": []}
+
+        def fake_run(command, **run_kwargs):
+            captured["commands"].append({"command": command, "run_kwargs": run_kwargs})
+            if run_side_effect is not None:
+                return run_side_effect(command, run_kwargs)
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        # The concat list is written to disk; keep it in a temp dir so the
+        # test never pollutes /tmp with a real file list.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = os.path.join(tmpdir, "out.mp4")
+            clip = types.SimpleNamespace(w=1080, h=1920)
+            clip.close = lambda: None
+
+            def call():
+                with patch.object(vd.subprocess, "run", side_effect=fake_run), patch.object(
+                    vd, "_open_video_clip_quietly", return_value=clip
+                ), patch.object(vd, "_get_effective_video_codec", return_value="libx264"), patch.object(
+                    vd, "_format_ffmpeg_concat_path", side_effect=lambda p: p
+                ):
+                    return vd.replace_video_intro_with_lipsync(
+                        background_video="/tmp/bg.mp4",
+                        lipsync_video="/tmp/ls.mp4",
+                        output_file=out_path,
+                        duration=duration,
+                    )
+
+            result = call()
+        return result, captured
+
+    def _command_containing(self, captured, needle):
+        for entry in captured["commands"]:
+            if needle in entry["command"]:
+                return entry
+        self.fail(f"no ffmpeg command contained {needle!r}: {captured['commands']}")
+
+    def test_tail_is_stream_copied_instead_of_re_encoded(self):
+        """
+        The ~32s tail needs no re-encode: it is already H.264 at the target
+        resolution and only its start offset changes. Copying it is the
+        difference between ~13 minutes and a fraction of that.
+        """
+        _, captured = self._run_with_capture()
+        tail = self._command_containing(captured, "-ss")
+        self.assertIn("-c:v", tail["command"])
+        self.assertEqual(tail["command"][tail["command"].index("-c:v") + 1], "copy")
+
+    def test_encode_uses_a_fast_preset(self):
+        """
+        libx264's default preset is veryslow. On a CPU-only host that is the
+        dominant cost of the splice.
+        """
+        _, captured = self._run_with_capture()
+        # Only the intro encode carries a preset; the copied steps must not.
+        intro = self._command_containing(captured, "-vf")
+        self.assertIn("-preset", intro["command"])
+        self.assertEqual(intro["command"][intro["command"].index("-preset") + 1], "veryfast")
+
+    def test_configured_preset_overrides_the_default(self):
+        """
+        The default is a default, not a hardcode: a self-hoster who sets
+        video_preset still gets their choice.
+        """
+        with patch.dict(config.app, {"video_preset": "slow"}, clear=False):
+            self.assertEqual(vd._get_configured_video_preset(), "slow")
+
+    def test_encode_is_bounded_by_a_timeout(self):
+        """
+        Without a timeout a wedged ffmpeg leaves the task `running` forever —
+        the engine's own InfiniteTalk timeout does not cover local encodes.
+        """
+        _, captured = self._run_with_capture()
+        self.assertTrue(captured["commands"], "expected at least one ffmpeg invocation")
+        for entry in captured["commands"]:
+            self.assertIn("timeout", entry["run_kwargs"])
+            self.assertGreater(entry["run_kwargs"]["timeout"], 0)
+
+    def test_timeout_is_surfaced_with_the_task_id_context(self):
+        clip = types.SimpleNamespace(w=1080, h=1920)
+        clip.close = lambda: None
+        with patch.object(
+            vd.subprocess, "run", side_effect=subprocess.TimeoutExpired(cmd="ffmpeg", timeout=5)
+        ), patch.object(vd, "_open_video_clip_quietly", return_value=clip), patch.object(
+            vd, "_get_effective_video_codec", return_value="libx264"
+        ):
+            with self.assertRaises(RuntimeError) as ctx:
+                vd.replace_video_intro_with_lipsync(
+                    background_video="/tmp/bg.mp4",
+                    lipsync_video="/tmp/ls.mp4",
+                    output_file="/tmp/out.mp4",
+                )
+        self.assertIn("timed out", str(ctx.exception).lower())
+
+    def test_failed_encode_reports_ffmpeg_stderr(self):
+        clip = types.SimpleNamespace(w=1080, h=1920)
+        clip.close = lambda: None
+        with patch.object(
+            vd.subprocess,
+            "run",
+            return_value=subprocess.CompletedProcess(
+                ["ffmpeg"], 1, stdout="", stderr="Invalid data found"
+            ),
+        ), patch.object(vd, "_open_video_clip_quietly", return_value=clip), patch.object(
+            vd, "_get_effective_video_codec", return_value="libx264"
+        ):
+            with self.assertRaises(RuntimeError) as ctx:
+                vd.replace_video_intro_with_lipsync(
+                    background_video="/tmp/bg.mp4",
+                    lipsync_video="/tmp/ls.mp4",
+                    output_file="/tmp/out.mp4",
+                )
+        self.assertIn("Invalid data found", str(ctx.exception))
 
 
 if __name__ == "__main__":

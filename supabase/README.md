@@ -14,6 +14,7 @@ the order — you never need to guess or read docs to know what comes next:
 | 006 | `migrations/006_test-deploy-supabase.sql`    | Test-deploy schema verification (CI/dev only)    |
 | 007 | `migrations/007_personas-drop-face-mix.sql`  | `scheduled_posts.faceless` (per-post "no face") + `drop column personas.face_mix_percent`: personas are always faced. **Destructive** — needs the `db:destructive-approved` PR label |
 | 008 | `migrations/008_video-generations-engine-task-id-idx.sql` | Index `video_generations.engine_task_id`: generation_id ↔ task_id correlation for debugging. No FK (engine_task_state is ephemeral) |
+| 009 | `migrations/009_batch-charge-task-correlation.sql` | Backfill `token_transactions.engine_task_id` for **single-slot** batch charges, so a scheduled post's prepaid charge can be resolved from its engine task id (fixes history rows stuck in `running` when the engine drops a task). Multi-slot batches are deliberately left NULL — one charge covers several videos. Plus two indexes for the gone-task reconciliation |
 
 ## How to apply
 
