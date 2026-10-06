@@ -59,6 +59,7 @@ export const ptDictionary = {
     statusFailed: 'Falhou',
     statusRunning: 'Em execução',
     statusCompleted: 'Concluído',
+    progressLabel: 'Progresso da geração',
     unknownTopic: 'Sem tema',
     unknownCaption: 'Sem legenda',
     personaFallback: 'Persona removida',

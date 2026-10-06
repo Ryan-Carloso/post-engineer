@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { UseQueryResult } from '@tanstack/react-query';
+import type { QueryClient, UseQueryResult } from '@tanstack/react-query';
 import { createSupabaseClient } from '@/lib/supabase/client';
 import { useUploadStore } from '@/lib/store';
 import type { PublicAccountItem, BlueskyAccountData, LinkedinAccountData } from '@/lib/providers/registry';
@@ -1251,15 +1251,94 @@ export function useCreatePostMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: CreatePostInput) => createPost(input),
-    onSuccess: (result) => {
+    onSuccess: (result, input) => {
       // A failed create charges nothing and created nothing — never
       // invalidate on it, so the caches keep showing the true state.
       if (!result.success) return;
+      // Seed the caches with the created slots/schedule BEFORE invalidating:
+      // the /posts/new screen redirects to /posts right after success, and
+      // the Posts page joins slots against the schedules cache — a refetch
+      // race could otherwise hide the new post until the next poll. The
+      // invalidations below still converge every cache to server truth.
+      seedCreatedPostCaches(queryClient, input, result);
       void queryClient.invalidateQueries({ queryKey: ['fill-schedule-status'] });
       void queryClient.invalidateQueries({ queryKey: ['fill-schedules'] });
       void queryClient.invalidateQueries({ queryKey: ['video-generations'] });
     },
   });
+}
+
+//---------------
+// seedCreatedPostCaches — write the mutation response straight into the
+// list caches so the new post is visible the instant the user lands back on
+// /posts. Slots are future-dated, so they merge into `upcoming` (deduped by
+// id, sorted by slot time); the schedule seed keeps the page's
+// slots-against-schedules join from dropping them. Progress starts at 0 —
+// nothing has generated yet — and the next poll fills in live values.
+//---------------
+export function seedCreatedPostCaches(
+  queryClient: QueryClient,
+  input: CreatePostInput,
+  result: CreatePostResult,
+): void {
+  const scheduleId = result.scheduleId;
+  if (scheduleId === null || result.slots.length === 0) return;
+
+  // Sort by slot time first: the queue position is the chronological
+  // position among the created slots.
+  const ordered = [...result.slots].sort((a, b) => (a.slotAt < b.slotAt ? -1 : a.slotAt > b.slotAt ? 1 : 0));
+  const seededSlots: ScheduledSlot[] = ordered.map((slot, index) => ({
+    id: slot.slotId,
+    scheduleId,
+    slotAt: slot.slotAt,
+    // The API presents the DB 'pending' state as 'awaiting' (see
+    // presentStatus in lib/schedule-slot-presentation.ts).
+    status: (slot.status === 'pending' ? 'awaiting' : slot.status) as ScheduledSlot['status'],
+    topic: slot.topic,
+    error: null,
+    publishedAt: null,
+    taskId: slot.taskId,
+    progress: 0,
+    stage: null,
+    // Queue position is local to this created batch (ordered by slot time);
+    // the next poll overwrites it with the true engine queue position.
+    queuePosition: index + 1,
+    queueTotal: ordered.length,
+    retryable: null,
+  }));
+
+  const seededSchedule: ScheduleConfig = {
+    id: scheduleId,
+    personaId: input.personaId,
+    providers: input.providers,
+    youtubeAccountIds: input.accounts.youtube ?? [],
+    instagramAccountIds: input.accounts.instagram ?? [],
+    linkedinAccountIds: input.accounts.linkedin ?? [],
+    blueskyAccountIds: input.accounts.bluesky ?? [],
+    daysOfWeek: [],
+    startHour: null,
+    endHour: null,
+    postsPerDay: result.slots.length,
+    timezone: input.timezone,
+    active: true,
+  };
+
+  const statusCaches = queryClient.getQueriesData<{ upcoming: ScheduledSlot[]; recent: ScheduledSlot[] }>({
+    queryKey: ['fill-schedule-status'],
+  });
+  for (const [key, data] of statusCaches) {
+    if (!data) continue;
+    const knownIds = new Set(data.upcoming.map((slot) => slot.id));
+    const merged = [...data.upcoming, ...seededSlots.filter((slot) => !knownIds.has(slot.id))].sort((a, b) =>
+      a.slotAt < b.slotAt ? -1 : a.slotAt > b.slotAt ? 1 : 0,
+    );
+    queryClient.setQueryData(key, { ...data, upcoming: merged });
+  }
+
+  const schedules = queryClient.getQueryData<ScheduleConfig[]>(['fill-schedules']) ?? [];
+  if (!schedules.some((schedule) => schedule.id === scheduleId)) {
+    queryClient.setQueryData(['fill-schedules'], [...schedules, seededSchedule]);
+  }
 }
 
 export function useGenerationDetailQuery(generationId: string) {
