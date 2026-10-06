@@ -273,6 +273,11 @@ def main() -> int:
     # .env cleanup before the agent runs
     check("removes .env* before review", "-name '.env*'" in text)
 
+    # The PR diff must be built from the local checkout (git diff), never
+    # `gh pr diff`: the patch-diff CDN can serve a stale diff in the minutes
+    # after a push, which once failed the job on an already-fixed line.
+    check("PR diff built locally, not via gh pr diff", "gh pr diff" not in text)
+
     # Review script unit tests are wired into CI (TDD rule for the new
     # parsing/security logic in the review scripts).
     ci_path = Path(__file__).resolve().parent.parent / "workflows" / "ci.yml"

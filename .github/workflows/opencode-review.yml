@@ -216,8 +216,15 @@ jobs:
           # agent runs, in case one was left behind accidentally.
           find . -path ./.git -prune -o -type f \( -name '.env*' -o -name '*.pem' -o -name '*.key' \) -exec rm -f {} +
           find . -path ./.git -prune -o -type d \( -name secrets -o -name private \) -prune -exec rm -rf {} +
-          gh pr diff "$PR_NUMBER" --patch > pr.diff
-          gh pr diff "$PR_NUMBER" --name-only > pr-files.txt
+          # Build the diff from the local checkout, never via the GitHub
+          # patch-diff CDN: it can serve a stale diff in the minutes after
+          # a push, which once made the mechanical secret scan fail the job
+          # on a fixture line that was already fixed at HEAD. Two-dot diff
+          # against the base branch needs no history beyond the two trees,
+          # so it works with the default shallow checkout.
+          git fetch --quiet origin "${{ github.base_ref }}"
+          git diff --patch "origin/${{ github.base_ref }}" HEAD > pr.diff
+          git diff --name-only "origin/${{ github.base_ref }}" HEAD > pr-files.txt
           # Keep the diff within a sane size for the model context.
           MAX_BYTES=200000
           SIZE=$(wc -c < pr.diff)
