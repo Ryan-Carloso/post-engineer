@@ -14,6 +14,16 @@ services:
       # Monorepo root: pnpm workspace lockfile + VERSION live there.
       context: ../..
       dockerfile: apps/web/Dockerfile
+      args:
+        # Build metadata baked into the bundle at build time (see
+        # apps/web/Dockerfile). CI injects these; export them in the shell
+        # before `docker compose build`, e.g.
+        #   VERSION=$(cat ../../VERSION) BUILD=<ci-run-number> COMMIT=$(git rev-parse --short HEAD)
+        # Empty locally: the app falls back to the VERSION file for the
+        # version and reports null build/commit.
+        VERSION: ${VERSION:-}
+        BUILD: ${BUILD:-}
+        COMMIT: ${COMMIT:-}
     container_name: post-engineer-web
     restart: unless-stopped
     ports:

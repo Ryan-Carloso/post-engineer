@@ -119,6 +119,20 @@ secrets from the adjacent `.env` file (never baked into the image). The API is
 available at `http://127.0.0.1:8080` (see `/docs`); keep that port bound to
 localhost and expose it only through the reverse proxy.
 
+Build metadata (`GET /version`, `/health`): the engine reports the
+`VERSION` / `BUILD` / `COMMIT` env vars when they are set at deploy time —
+export them before building so the live build is identifiable:
+
+```bash
+cd apps/engine
+VERSION=$(cat ../../VERSION) BUILD=<build-number> COMMIT=$(git rev-parse --short HEAD) \
+  docker compose up -d --build
+```
+
+(`BUILD` is the CI run number; any unique number works for manual deploys.)
+Unset, the engine falls back to the mounted `VERSION` file for the version
+and reports `null` build/commit.
+
 To update:
 
 ```bash
@@ -198,7 +212,10 @@ Back up regularly:
 
 1. `git pull` the latest `main`.
 2. Check the release notes for schema changes and apply them to your database.
-3. Rebuild and restart: `docker compose up -d --build` (engine) and redeploy
-   the web app.
+3. Rebuild and restart, exporting the build metadata first so
+   `GET /version` and `/health` identify the live build (see section 3 for
+   the engine; the web takes the same three vars as Docker build args):
+   `VERSION=$(cat VERSION) BUILD=<build-number> COMMIT=$(git rev-parse --short HEAD)`
+   before `docker compose up -d --build`.
 4. Check the release notes for breaking config changes (new required env vars
    are documented in the `.env.example` files).
