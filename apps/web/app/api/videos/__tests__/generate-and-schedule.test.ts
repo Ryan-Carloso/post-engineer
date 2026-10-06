@@ -60,9 +60,10 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { isPersonaAllowed } from '@/lib/api-keys';
-import { startEngineVideoTask, recordGenerationStart } from '@/lib/generation/video-generation';
+import { startEngineVideoTask, recordGenerationStart, recordGenerationUpdate } from '@/lib/generation/video-generation';
 import { checkCustomAudioUrl } from '@/lib/generation/custom-audio';
-import { resolveVideoImage } from '@/lib/persona-images';
+import { resolveVideoImage, recordRecentImageId } from '@/lib/persona-images';
+import { trackApiEvent } from '@/lib/analytics';
 import { IDEMPOTENCY_NAMESPACE, deterministicUuid } from '@/lib/idempotency';
 import { logger } from '@/lib/logger';
 
@@ -101,8 +102,30 @@ interface DbConfig {
   /** Constraint named by a 23505 on the schedule insert, mirroring the
    *  Postgres message (`duplicate key value violates unique constraint "…"`). */
   scheduleInsertConstraint?: string;
+  /** PostgREST error `details` field for the schedule insert failure; the
+   *  route reads the constraint name out of `message + details`. */
+  scheduleInsertDetails?: string;
   slotInsertFails?: boolean;
   engineFailSubjects?: string[];
+  /** Subjects for which the engine task is unreachable (no upstreamStatus),
+   *  exercising the 'engine_unavailable' per-slot code. */
+  engineUnavailableSubjects?: string[];
+  /** Makes storage.createSignedUrl resolve with an error. */
+  signUrlError?: boolean;
+  /** Makes storage.createSignedUrl throw. */
+  signUrlThrows?: boolean;
+  /** Makes the social_accounts lookup fail with a DB error. */
+  socialAccountsError?: boolean;
+  /** Full message for the spend_tokens RPC failure. */
+  spendErrorMessage?: string;
+  /** Tables for which update() resolves with an error (bind-failure path). */
+  updateErrorTables?: string[];
+  /** Makes the scheduled_posts replay select fail (fetchReplay error path). */
+  replaySlotsError?: boolean;
+  /** Subjects for which the engine accepts but returns no task id. */
+  engineNoTaskIdSubjects?: string[];
+  /** Makes the per-slot refund_batch_tokens RPC fail. */
+  refundBatchErrorCode?: string;
 }
 
 const rpcCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
@@ -160,11 +183,12 @@ function makeClient(cfg: DbConfig): unknown {
         inserts[name] = Array.isArray(rows) ? rows : [rows];
         // Postgres names the constraint in the message of a 23505; the route
         // classifies the failure by that name, so the mock must carry it.
-        const insertError = (): { code: string; message: string } => ({
+        const insertError = (): { code: string; message: string; details?: string } => ({
           code: cfg.scheduleInsertErrorCode ?? '23505',
           message: cfg.scheduleInsertConstraint
             ? `duplicate key value violates unique constraint "${cfg.scheduleInsertConstraint}"`
             : 'conflict',
+          ...(cfg.scheduleInsertDetails ? { details: cfg.scheduleInsertDetails } : {}),
         });
         const q: Record<string, unknown> = {
           select: () => q,
@@ -196,9 +220,12 @@ function makeClient(cfg: DbConfig): unknown {
       },
       update: (fields: Record<string, unknown>) => {
         updates.push({ table: name, fields });
+        const updateError = cfg.updateErrorTables?.includes(name)
+          ? { code: 'XX000', message: 'update failed' }
+          : null;
         const q: Record<string, unknown> = {
           eq: () => q,
-          then: (resolve: (v: unknown) => void) => Promise.resolve({ error: null }).then(resolve),
+          then: (resolve: (v: unknown) => void) => Promise.resolve({ error: updateError }).then(resolve),
         };
         return q;
       },
@@ -212,6 +239,9 @@ function makeClient(cfg: DbConfig): unknown {
       },
       then: (resolve: (v: unknown) => void, reject: (e: unknown) => void) => {
         if (name === 'social_accounts') {
+          if (cfg.socialAccountsError) {
+            return Promise.resolve({ data: null, error: { code: 'XX000', message: 'db down' } }).then(resolve, reject);
+          }
           return Promise.resolve({ data: cfg.socialAccounts ?? [], error: null }).then(resolve, reject);
         }
         if (name === 'token_transactions') {
@@ -227,6 +257,9 @@ function makeClient(cfg: DbConfig): unknown {
             const count = cfg.slotCount === undefined ? (cfg.replaySlots ?? []).length : cfg.slotCount;
             return Promise.resolve({ data: [], count, error: null }).then(resolve, reject);
           }
+          if (cfg.replaySlotsError && !isCountQuery) {
+            return Promise.resolve({ data: null, error: { code: 'XX000', message: 'db down' } }).then(resolve, reject);
+          }
           return Promise.resolve({ data: cfg.replaySlots ?? [], error: null }).then(resolve, reject);
         }
         return Promise.resolve({ data: null, error: null }).then(resolve, reject);
@@ -240,12 +273,17 @@ function makeClient(cfg: DbConfig): unknown {
     rpc: vi.fn(async (name: string, args: Record<string, unknown>) => {
       rpcCalls.push({ name, args });
       if (name === 'spend_tokens') {
-        if (cfg.spendErrorCode) return { data: null, error: { code: cfg.spendErrorCode, message: 'spend failed' } };
+        if (cfg.spendErrorCode) {
+          return { data: null, error: { code: cfg.spendErrorCode, message: cfg.spendErrorMessage ?? 'spend failed' } };
+        }
         return { data: cfg.spend ?? { spent: true, balance: 100 }, error: null };
       }
       if (name === 'refund_batch_tokens' || name === 'refund_generation_tokens') {
         if (name === 'refund_generation_tokens' && cfg.refundErrorCode) {
           return { data: null, error: { code: cfg.refundErrorCode, message: 'refund failed' } };
+        }
+        if (name === 'refund_batch_tokens' && cfg.refundBatchErrorCode) {
+          return { data: null, error: { code: cfg.refundBatchErrorCode, message: 'refund failed' } };
         }
         return { data: { refunded: true }, error: null };
       }
@@ -253,7 +291,11 @@ function makeClient(cfg: DbConfig): unknown {
     }),
     storage: {
       from: () => ({
-        createSignedUrl: async () => ({ data: { signedUrl: 'https://cdn.example/signed' }, error: null }),
+        createSignedUrl: async () => {
+          if (cfg.signUrlThrows) throw new Error('storage down');
+          if (cfg.signUrlError) return { data: null, error: { message: 'signing failed' } };
+          return { data: { signedUrl: 'https://cdn.example/signed' }, error: null };
+        },
       }),
     },
   };
@@ -277,6 +319,12 @@ function setup(cfg: DbConfig = {}): void {
     const subject = (payload as { video_subject?: string }).video_subject ?? '';
     if (cfg.engineFailSubjects?.includes(subject)) {
       return { ok: false, response: NextResponse.json({}), upstreamStatus: 500, body: null };
+    }
+    if (cfg.engineUnavailableSubjects?.includes(subject)) {
+      return { ok: false, response: NextResponse.json({}), body: null };
+    }
+    if (cfg.engineNoTaskIdSubjects?.includes(subject)) {
+      return { ok: true, taskId: undefined, body: {} };
     }
     return { ok: true, taskId: `task-${subject}`, body: {} };
   });
@@ -1047,6 +1095,627 @@ describe('POST /api/videos/generate-and-schedule', () => {
       } finally {
         vi.unstubAllEnvs();
       }
+    });
+  });
+
+  describe('validation branches (mutation hardening)', () => {
+    it('rejects an empty-after-trim topic with the indexed field', async () => {
+      const res = await post(baseBody({ topics: ['   '] }));
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.error).toBe('Topic 1 is empty.');
+      expect(json.field).toBe('topics.0');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it('rejects a topic over 300 characters with the indexed field', async () => {
+      const res = await post(baseBody({ topics: ['x'.repeat(301)] }));
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.error).toBe('Topic 1 must be at most 300 characters.');
+      expect(json.field).toBe('topics.0');
+    });
+
+    it('rejects an empty provider list', async () => {
+      const res = await post(
+        baseBody({
+          publishing: {
+            providers: [],
+            schedule: { startAt: futureISO(48), times: ['18:00'], timezone: 'Europe/Lisbon' },
+          },
+        }),
+      );
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.error).toBe('Select at least one provider.');
+      expect(json.field).toBe('publishing.providers');
+    });
+
+    it('dedupes and trims providers before the schedule insert', async () => {
+      const res = await post(
+        baseBody({
+          publishing: {
+            providers: [' youtube ', 'youtube'],
+            accounts: { youtube: ['acct-1'] },
+            schedule: { startAt: futureISO(48), times: ['18:00'], timezone: 'Europe/Lisbon' },
+          },
+        }),
+      );
+      expect(res.status).toBe(200);
+      const rows = inserts.schedules as Array<{ providers: string[] }>;
+      expect(rows).toHaveLength(1);
+      expect(rows[0].providers).toEqual(['youtube']);
+    });
+
+    it('rejects an empty imageId', async () => {
+      const res = await post(baseBody({ options: { imageId: '   ' } }));
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.error).toBe('options.imageId must be a non-empty string.');
+      expect(json.field).toBe('options.imageId');
+    });
+
+    it('rejects an invalid webhookUrl', async () => {
+      const res = await post(baseBody({ options: { webhookUrl: 'ftp://example.com/hook' } }));
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.error).toBe('options.webhookUrl must be a valid http(s) URL.');
+      expect(json.field).toBe('options.webhookUrl');
+    });
+
+    it('rejects an empty voiceId', async () => {
+      const res = await post(baseBody({ options: { voiceId: '  ' } }));
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.error).toBe('options.voiceId must be a non-empty string.');
+      expect(json.field).toBe('options.voiceId');
+    });
+
+    it('rejects an over-long scriptPrompt', async () => {
+      const res = await post(baseBody({ options: { scriptPrompt: 'x'.repeat(2001) } }));
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.error).toBe('options.scriptPrompt must be at most 2000 characters.');
+      expect(json.field).toBe('options.scriptPrompt');
+    });
+
+    it('rejects an over-long scriptPrompts entry with the indexed field', async () => {
+      const res = await post(baseBody({ options: { scriptPrompts: ['x'.repeat(2001), 'fine'] } }));
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.error).toBe('options.scriptPrompts[0] must be at most 2000 characters.');
+      expect(json.field).toBe('options.scriptPrompts.0');
+    });
+
+    it('rejects a failing custom-audio SSRF check', async () => {
+      vi.mocked(checkCustomAudioUrl).mockResolvedValueOnce({
+        ok: false,
+        error: 'audio_url must point to an accessible audio file.',
+      });
+      const res = await post(baseBody({ options: { audioUrl: 'https://example.com/a.mp3' } }));
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.error).toBe('audio_url must point to an accessible audio file.');
+      expect(json.field).toBe('options.audioUrl');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it('rejects an invalid startAt with the startAt field', async () => {
+      const res = await post(
+        baseBody({
+          publishing: {
+            providers: ['youtube'],
+            accounts: { youtube: ['acct-1'] },
+            schedule: { startAt: 'not-a-date', times: ['18:00'], timezone: 'Europe/Lisbon' },
+          },
+        }),
+      );
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.field).toBe('publishing.schedule.startAt');
+    });
+
+    it('rejects empty times with INVALID_SCHEDULE_TIME', async () => {
+      const res = await post(
+        baseBody({
+          publishing: {
+            providers: ['youtube'],
+            accounts: { youtube: ['acct-1'] },
+            schedule: { startAt: futureISO(48), times: [], timezone: 'Europe/Lisbon' },
+          },
+        }),
+      );
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('INVALID_SCHEDULE_TIME');
+      expect(json.field).toBe('publishing.schedule.times');
+    });
+
+    it('500s when the social accounts lookup fails', async () => {
+      setup({ ...DEFAULT_CFG, socialAccountsError: true });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(500);
+      expect(json.code).toBe('INTERNAL_ERROR');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it('rejects a provider with connected accounts but none selected', async () => {
+      const res = await post(
+        baseBody({
+          publishing: {
+            providers: ['youtube'],
+            accounts: {},
+            schedule: { startAt: futureISO(48), times: ['18:00'], timezone: 'Europe/Lisbon' },
+          },
+        }),
+      );
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('INVALID_PROVIDER_ACCOUNT');
+      expect(json.error).toBe('Select at least one youtube account to publish to.');
+      expect(json.field).toBe('publishing.accounts.youtube');
+    });
+
+    it('ignores malformed social account rows and keeps the valid ones', async () => {
+      setup({
+        ...DEFAULT_CFG,
+        socialAccounts: [
+          { provider: 'youtube', provider_account_id: 'acct-1' },
+          { provider: 'youtube', provider_account_id: 42 as unknown as string },
+        ],
+      });
+      // The malformed row is skipped; the valid acct-1 still authorizes.
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+    });
+  });
+
+  describe('persona branches (mutation hardening)', () => {
+    it('rejects a persona niche over 300 characters', async () => {
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, niche: 'x'.repeat(301) } });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.error).toBe('Persona niche must be at most 300 characters: update the persona.');
+      expect(json.field).toBe('personaId');
+    });
+
+    it('rejects a persona language over 35 characters', async () => {
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, language: 'x'.repeat(36) } });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.error).toBe('Persona language must be at most 35 characters: update the persona.');
+      expect(json.field).toBe('personaId');
+    });
+
+    it('rejects an out-of-range paragraph_number', async () => {
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, paragraph_number: 11 } });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.error).toBe('Persona paragraph_number must be an integer between 1 and 10: update the persona.');
+      expect(json.field).toBe('personaId');
+    });
+
+    it('rejects a non-integer paragraph_number', async () => {
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, paragraph_number: 2.5 } });
+      const res = await post(baseBody());
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.field).toBe('personaId');
+    });
+
+    it('503s when the persona voice audio cannot be signed', async () => {
+      setup({
+        ...DEFAULT_CFG,
+        persona: { ...PERSONA, voice_audio_path: 'voice.wav', voice_id: null },
+        signUrlError: true,
+      });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(503);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.error).toBe(
+        'Voice audio is configured for this persona but could not be loaded. Please try again.',
+      );
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it('503s when voice signing throws', async () => {
+      setup({
+        ...DEFAULT_CFG,
+        persona: { ...PERSONA, voice_audio_path: 'voice.wav', voice_id: null },
+        signUrlThrows: true,
+      });
+      const res = await post(baseBody());
+      expect(res.status).toBe(503);
+      const json = await res.json();
+      expect(json.code).toBe('VALIDATION_FAILED');
+    });
+
+    it('uses the signed persona voice audio in the engine payload', async () => {
+      setup({
+        ...DEFAULT_CFG,
+        persona: { ...PERSONA, voice_audio_path: 'voice.wav', voice_id: null },
+      });
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as {
+        persona: { voice_audio_url?: string; voice_id?: string };
+      };
+      expect(payload.persona.voice_audio_url).toBe('https://cdn.example/signed');
+      expect(payload.persona.voice_id).toBeUndefined();
+    });
+
+    it('prefers the per-request audioUrl over the persona voice', async () => {
+      const res = await post(baseBody({ options: { audioUrl: 'https://example.com/custom.mp3' } }));
+      expect(res.status).toBe(200);
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as {
+        persona: { voice_audio_url?: string; voice_id?: string };
+      };
+      expect(payload.persona.voice_audio_url).toBe('https://example.com/custom.mp3');
+      expect(payload.persona.voice_id).toBeUndefined();
+    });
+
+    it('rejects a request with no voice configured anywhere', async () => {
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, voice_id: null, voice_audio_path: null } });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.error).toBe(
+        'No voice available: the persona has no voice configured and no custom audio_url was provided.',
+      );
+      expect(json.field).toBe('options.audioUrl');
+    });
+
+    it('404s with the pinned-image status when the pinned image cannot be resolved', async () => {
+      vi.mocked(resolveVideoImage).mockResolvedValueOnce({ ok: false, error: 'image gone', status: 404 });
+      const res = await post(baseBody({ options: { imageId: 'img-1' } }));
+      const json = await res.json();
+      expect(res.status).toBe(404);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.error).toBe('image gone');
+      expect(json.field).toBe('options.imageId');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+  });
+
+  describe('spend and insert branches (mutation hardening)', () => {
+    it('replays on a spend 23505 that names the generation constraint', async () => {
+      // A concurrent duplicate spent under the same generation_id first:
+      // classify the 23505 by its constraint name and replay instead of
+      // double-charging.
+      setup({
+        ...DEFAULT_CFG,
+        spendErrorCode: '23505',
+        spendErrorMessage:
+          'duplicate key value violates unique constraint "token_transactions_generation_id_key"',
+        replaySlots: [
+          { id: 'slot-0', slot_at: futureISO(49), topic: 'Idea 1', task_id: 'task-1', status: 'generating' },
+        ],
+      });
+      const res = await post(baseBody({ idempotencyKey: 'spend-race-key' }));
+      const json = await res.json();
+      expect(res.status).toBe(200);
+      expect(json.replayed).toBe(true);
+      expect(json.slots).toHaveLength(1);
+      expect(json.slots[0]).toMatchObject({ slotId: 'slot-0', topic: 'Idea 1', taskId: 'task-1' });
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(1);
+    });
+
+    it('500s when the spend-conflict replay fetch fails', async () => {
+      setup({
+        ...DEFAULT_CFG,
+        spendErrorCode: '23505',
+        spendErrorMessage:
+          'duplicate key value violates unique constraint "token_transactions_generation_id_key"',
+        replaySlotsError: true,
+      });
+      const res = await post(baseBody({ idempotencyKey: 'spend-race-broken-key' }));
+      const json = await res.json();
+      expect(res.status).toBe(500);
+      expect(json.code).toBe('INTERNAL_ERROR');
+      expect(json.replayed).toBeUndefined();
+    });
+
+    it('classifies the persona-owner constraint out of the error details field', async () => {
+      // PostgREST surfaces the constraint name in `details` when the
+      // message is generic: the classification must read both.
+      setup({
+        ...DEFAULT_CFG,
+        scheduleInsertErrorCode: '23505',
+        scheduleInsertDetails:
+          'Key (persona_id)=(persona-1) already exists. duplicate key value violates unique constraint "schedules_persona_owner"',
+      });
+      const res = await post(baseBody({ idempotencyKey: 'details-constraint-key' }));
+      const json = await res.json();
+      expect(res.status).toBe(409);
+      expect(json.code).toBe('PERSONA_ALREADY_SCHEDULED');
+      expect(json.replayed).toBeUndefined();
+    });
+
+    it('refunds and 500s on a bare 23505 with no constraint name (violatedConstraint null)', async () => {
+      // Neither message nor details names a constraint: not a PK race, not a
+      // known business rule — refund loudly instead of guessing a replay.
+      setup({ ...DEFAULT_CFG, scheduleInsertErrorCode: '23505' });
+      const res = await post(baseBody({ idempotencyKey: 'bare-23505-key' }));
+      const json = await res.json();
+      expect(res.status).toBe(500);
+      expect(json.code).toBe('INTERNAL_ERROR');
+      expect(json.replayed).toBeUndefined();
+      expect(rpcCalls.filter((c) => c.name === 'refund_generation_tokens')).toHaveLength(1);
+    });
+
+    it('still 409s when the persona-owner refund fails', async () => {
+      // A failed refund is a billing discrepancy, not a request failure: the
+      // conflict is real either way, so the 409 stands and the failure is
+      // logged loudly for investigation.
+      setup({
+        ...DEFAULT_CFG,
+        scheduleInsertErrorCode: '23505',
+        scheduleInsertConstraint: 'schedules_persona_owner',
+        refundErrorCode: 'XX000',
+      });
+      const res = await post(baseBody({ idempotencyKey: 'owner-refund-fail-key' }));
+      const json = await res.json();
+      expect(res.status).toBe(409);
+      expect(json.code).toBe('PERSONA_ALREADY_SCHEDULED');
+      expect(json.replayed).toBeUndefined();
+      expect(rpcCalls.filter((c) => c.name === 'refund_generation_tokens')).toHaveLength(1);
+      expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
+        '[generate-and-schedule] persona-already-scheduled refund failed',
+        expect.anything(),
+        expect.objectContaining({ userId: USER_ID }),
+      );
+    });
+
+    it('rolls back the schedule and refunds when the slot insert fails', async () => {
+      setup({ ...DEFAULT_CFG, slotInsertFails: true });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(500);
+      expect(json.code).toBe('INTERNAL_ERROR');
+      // Compensating rollback: no half-created schedule survives.
+      expect(deletes).toContain('scheduled_posts');
+      expect(deletes).toContain('schedules');
+      const refunds = rpcCalls.filter((c) => c.name === 'refund_generation_tokens');
+      expect(refunds).toHaveLength(1);
+      expect(refunds[0].args.p_reason).toBe('Unified generate+schedule: slot insert failed; tokens refunded');
+    });
+  });
+
+  describe('dispatch branches (mutation hardening)', () => {
+    it("marks the slot bind_failed when the task_id bind errors", async () => {
+      setup({ ...DEFAULT_CFG, updateErrorTables: ['scheduled_posts'] });
+      const res = await post(baseBody());
+      const json = await res.json();
+      // Every slot failed, none with an engine code: honest 502, internal.
+      expect(res.status).toBe(502);
+      expect(json.success).toBe(false);
+      expect(json.code).toBe('INTERNAL_ERROR');
+      expect(json.slots).toHaveLength(2);
+      expect(json.slots[0]).toMatchObject({ topic: 'Idea 1', taskId: null, status: 'failed', errorCode: 'bind_failed' });
+      expect(json.slots[1]).toMatchObject({ topic: 'Idea 2', taskId: null, status: 'failed', errorCode: 'bind_failed' });
+      // The engine accepted both tasks: the task ids were preserved for
+      // recovery instead of being orphaned.
+      expect(vi.mocked(startEngineVideoTask)).toHaveBeenCalledTimes(2);
+    });
+
+    it('marks the slot engine_unavailable when the engine has no upstream status', async () => {
+      setup({ ...DEFAULT_CFG, engineUnavailableSubjects: ['Idea 1', 'Idea 2'] });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(502);
+      expect(json.success).toBe(false);
+      expect(json.code).toBe('ENGINE_UNAVAILABLE');
+      expect(json.slots[0]).toMatchObject({ topic: 'Idea 1', status: 'failed', errorCode: 'engine_unavailable' });
+      expect(json.slots[1]).toMatchObject({ topic: 'Idea 2', status: 'failed', errorCode: 'engine_unavailable' });
+    });
+
+    it('marks the slot image_resolve_failed when dispatch-time resolution fails', async () => {
+      vi.mocked(resolveVideoImage).mockResolvedValue({ ok: false, error: 'library down', status: 500 });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(502);
+      expect(json.success).toBe(false);
+      expect(json.code).toBe('INTERNAL_ERROR');
+      expect(json.slots[0]).toMatchObject({ topic: 'Idea 1', status: 'failed', errorCode: 'image_resolve_failed' });
+    });
+
+    it('marks the slot image_sign_failed when the selected image cannot be signed', async () => {
+      setup({ ...DEFAULT_CFG, signUrlError: true });
+      vi.mocked(resolveVideoImage).mockResolvedValue({
+        ok: true,
+        image: { id: 'img-1', image_path: 'library/img-1.png' } as never,
+      });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(502);
+      expect(json.success).toBe(false);
+      expect(json.slots[0]).toMatchObject({ topic: 'Idea 1', status: 'failed', errorCode: 'image_sign_failed' });
+    });
+
+    it('marks the slot photo_missing when no face source exists', async () => {
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, avatar_url: null, photo_path: null } });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(502);
+      expect(json.success).toBe(false);
+      expect(json.code).toBe('INTERNAL_ERROR');
+      expect(json.slots[0]).toMatchObject({ topic: 'Idea 1', status: 'failed', errorCode: 'photo_missing' });
+    });
+
+    it('marks the slot no_task_id when the engine accepts without a task id', async () => {
+      setup({ ...DEFAULT_CFG, engineNoTaskIdSubjects: ['Idea 1', 'Idea 2'] });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(502);
+      expect(json.success).toBe(false);
+      expect(json.code).toBe('ENGINE_UNAVAILABLE');
+      expect(json.slots[0]).toMatchObject({ topic: 'Idea 1', status: 'failed', errorCode: 'no_task_id' });
+    });
+
+    it('reports INTERNAL_ERROR on mixed engine/non-engine slot failures', async () => {
+      // every() is false but some() is true here: the outage classifier must
+      // not claim a full engine outage when one slot failed for another
+      // reason (this pins the every-vs-some distinction).
+      setup({ ...DEFAULT_CFG, engineUnavailableSubjects: ['Idea 1'], updateErrorTables: ['scheduled_posts'] });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(502);
+      expect(json.success).toBe(false);
+      expect(json.code).toBe('INTERNAL_ERROR');
+      expect(json.slots[0]).toMatchObject({ topic: 'Idea 1', errorCode: 'engine_unavailable' });
+      expect(json.slots[1]).toMatchObject({ topic: 'Idea 2', errorCode: 'bind_failed' });
+    });
+
+    it('records tokensRefunded false when the per-slot refund fails', async () => {
+      setup({ ...DEFAULT_CFG, engineFailSubjects: ['Idea 1'], refundBatchErrorCode: 'XX000' });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(200);
+      expect(json.success).toBe(true);
+      expect(json.slots[0]).toMatchObject({ topic: 'Idea 1', status: 'failed' });
+      // The slot still reports failed; the history marks the refund as not
+      // delivered so the discrepancy stays visible.
+      const failedCall = vi
+        .mocked(recordGenerationUpdate)
+        .mock.calls.find((call) => (call[0] as { status?: string }).status === 'failed');
+      expect(failedCall).toBeDefined();
+      expect(failedCall?.[0]).toMatchObject({ tokensRefunded: false });
+      expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
+        '[generate-and-schedule] per-slot refund failed',
+        expect.anything(),
+        expect.objectContaining({ userId: USER_ID }),
+      );
+    });
+  });
+
+  describe('dispatch success branches (mutation hardening)', () => {
+    it('records the picked library image in the anti-repeat history', async () => {
+      setup({ ...DEFAULT_CFG });
+      vi.mocked(resolveVideoImage).mockResolvedValue({
+        ok: true,
+        image: { id: 'img-7', image_path: 'library/img-7.png' } as never,
+      });
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+      expect(vi.mocked(recordRecentImageId)).toHaveBeenCalledWith(
+        expect.anything(),
+        'persona-1',
+        'img-7',
+        USER_ID,
+      );
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as {
+        persona: { photo_url?: string };
+      };
+      expect(payload.persona.photo_url).toBe('https://cdn.example/signed');
+    });
+
+    it('signs the legacy photo_path when no avatar_url exists', async () => {
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, avatar_url: null, photo_path: 'legacy/photo.png' } });
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as {
+        persona: { photo_url?: string };
+      };
+      expect(payload.persona.photo_url).toBe('https://cdn.example/signed');
+    });
+
+    it('falls back to "Persona" when the persona row has no name', async () => {
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, name: null } });
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as {
+        persona: { name?: string };
+      };
+      expect(payload.persona.name).toBe('Persona');
+    });
+
+    it('trims topics before storing and dispatching', async () => {
+      const res = await post(baseBody({ topics: ['  Idea 1  ', 'Idea 2'] }));
+      const json = await res.json();
+      expect(res.status).toBe(200);
+      expect(json.slots[0].topic).toBe('Idea 1');
+      const slotRows = inserts.scheduled_posts as Array<{ topic: string }>;
+      expect(slotRows.map((r) => r.topic)).toEqual(['Idea 1', 'Idea 2']);
+    });
+
+    it('sorts and dedupes schedule times on insert', async () => {
+      const res = await post(
+        baseBody({
+          publishing: {
+            providers: ['youtube'],
+            accounts: { youtube: ['acct-1'] },
+            schedule: { startAt: futureISO(48), times: ['19:00', '18:00', '19:00'], timezone: 'Europe/Lisbon' },
+          },
+        }),
+      );
+      expect(res.status).toBe(200);
+      const rows = inserts.schedules as Array<{ times: string[] }>;
+      expect(rows[0].times).toEqual(['18:00', '19:00']);
+    });
+
+    it('tracks tasks_created with accepted and failed counts', async () => {
+      setup({ ...DEFAULT_CFG, engineFailSubjects: ['Idea 1'] });
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+      expect(vi.mocked(trackApiEvent)).toHaveBeenCalledWith(
+        'video_tasks_created',
+        expect.objectContaining({ tasksAccepted: 1, tasksFailed: 1 }),
+      );
+      // durationMs is wall-clock elapsed (Date.now() - startedAt), not a sum.
+      const completed = vi
+        .mocked(trackApiEvent)
+        .mock.calls.find((call) => call[0] === 'video_creation_completed');
+      expect(completed).toBeDefined();
+      expect((completed?.[1] as { durationMs: number }).durationMs).toBeLessThan(60_000);
+    });
+  });
+
+  describe('auth and rate-limit branches (mutation hardening)', () => {
+    it('returns the auth error when the session is missing', async () => {
+      const authError = NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+      vi.mocked(requireSupabaseSession).mockResolvedValueOnce({ auth: null, error: authError } as never);
+      const res = await post(baseBody());
+      expect(res.status).toBe(401);
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it('defaults Retry-After to 60 when the limiter omits the header', async () => {
+      vi.mocked(applyRateLimit).mockResolvedValueOnce(NextResponse.json({ success: false }, { status: 429 }));
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(429);
+      expect(json.code).toBe('RATE_LIMIT_EXCEEDED');
+      expect(res.headers.get('Retry-After')).toBe('60');
+    });
+
+    it('500s on a non-unique spend failure', async () => {
+      setup({ ...DEFAULT_CFG, spendErrorCode: 'XX000' });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(500);
+      expect(json.code).toBe('INTERNAL_ERROR');
+      expect(json.replayed).toBeUndefined();
+      expect(rpcCalls.filter((c) => c.name === 'refund_generation_tokens')).toHaveLength(0);
     });
   });
 });
