@@ -6,12 +6,18 @@ service role. Requires explicit SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY (no
 fallback — repo rule). HTTP calls validated with a mocked ``requests``.
 """
 
+import json
 import os
 import sys
+import threading
 import unittest
 from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+from urllib3.connection import HTTPConnection
+from urllib3.exceptions import NameResolutionError, ProtocolError
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -258,3 +264,106 @@ class SlotSelectTests(unittest.TestCase):
 
     def test_slot_select_includes_bluesky_account_ids(self):
         self.assertIn("bluesky_account_ids", fs.ScheduleStore.SLOT_SELECT)
+
+
+class _JsonHandler(BaseHTTPRequestHandler):
+    def _respond(self, payload):
+        body = json.dumps(payload).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):  # noqa: N802 - http.server API
+        self._respond([{"id": "slot-1"}])
+
+    def do_POST(self):  # noqa: N802 - http.server API
+        # Answers the token RPC shape so a retried POST can complete.
+        self._respond({"spent": True, "refunded": True})
+
+    def log_message(self, *args):
+        pass
+
+
+class RetryingSessionTests(unittest.TestCase):
+    """A transient connect failure (DNS blip) must not fail the tick stage."""
+
+    def setUp(self):
+        self.server = HTTPServer(("127.0.0.1", 0), _JsonHandler)
+        thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(self.server.server_close)
+        self.addCleanup(self.server.shutdown)
+        env = {
+            "SUPABASE_URL": f"http://127.0.0.1:{self.server.server_port}",
+            "SUPABASE_SERVICE_ROLE_KEY": "service-key",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            self.store = fs.ScheduleStore()
+
+    def _patch_new_conn(self, failures):
+        original = HTTPConnection._new_conn
+        attempts = []
+
+        def flaky_new_conn(conn):
+            attempts.append(conn.host)
+            if len(attempts) <= failures:
+                raise NameResolutionError(conn.host, conn, OSError("temporary failure"))
+            return original(conn)
+
+        return attempts, patch.object(HTTPConnection, "_new_conn", flaky_new_conn)
+
+    def test_default_store_retries_a_connect_failure(self):
+        attempts, patcher = self._patch_new_conn(failures=1)
+        with patcher:
+            rows = self.store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        self.assertEqual(rows, [{"id": "slot-1"}])
+        self.assertEqual(len(attempts), 2)
+
+    def test_default_store_gives_up_after_the_retry_budget(self):
+        import requests
+
+        attempts, patcher = self._patch_new_conn(failures=10)
+        with patcher, self.assertRaises(requests.ConnectionError):
+            self.store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        self.assertEqual(len(attempts), fs.store.CONNECT_RETRIES + 1)
+
+    def _patch_getresponse(self, failures):
+        """Make the first `failures` reads die, then let them through.
+
+        A read failure means the request reached Supabase and the response
+        was lost, which is the one class that must never be retried.
+        """
+        original = HTTPConnection.getresponse
+        attempts = []
+
+        def flaky_getresponse(conn):
+            attempts.append(1)
+            if len(attempts) <= failures:
+                raise ProtocolError("Connection aborted.", OSError("response lost"))
+            return original(conn)
+
+        return attempts, patch.object(HTTPConnection, "getresponse", flaky_getresponse)
+
+    def test_read_failures_are_not_retried(self):
+        # Behavioral, not a config read: raising from getresponse proves the
+        # request was SENT, so retrying could double-apply a POST. Assert the
+        # attempt count (1), which fails if read retries are ever enabled.
+        import requests
+
+        attempts, patcher = self._patch_getresponse(failures=1)
+        with patcher, self.assertRaises(requests.ConnectionError):
+            self.store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        self.assertEqual(len(attempts), 1, "a read failure was retried")
+
+    def test_post_rpc_retries_a_connect_failure(self):
+        # The billing-relevant half of the policy: spend_tokens is a POST, and
+        # the "connect failure means Supabase never saw it" argument is what
+        # makes retrying it safe. Pins that the connect retry is not gated on
+        # the HTTP method (urllib3's allowed_methods excludes POST).
+        attempts, patcher = self._patch_new_conn(failures=1)
+        with patcher:
+            spent = self.store.spend_tokens("user-1", "batch:sched-1", 2, "why")
+        self.assertTrue(spent, "the retried POST did not reach the handler")
+        self.assertEqual(len(attempts), 2)

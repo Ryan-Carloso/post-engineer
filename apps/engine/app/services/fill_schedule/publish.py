@@ -78,7 +78,14 @@ class BatchPublisher:
         try:
             self.store.recover_stale_publishing()
         except Exception as exc:  # noqa: BLE001 — recovery is best-effort
-            logger.warning(f"fill_schedule: stale publishing recovery failed: {notify_module.safe_reason(exc)}")
+            # safe_diagnostic, not safe_reason: this is a log-only line, and
+            # requests puts the urllib3 root cause ("Caused by
+            # NameResolutionError") at the END of the message, which
+            # safe_reason's 200-char cut drops. The Discord call sites below
+            # keep safe_reason — its output reaches users.
+            logger.warning(
+                f"fill_schedule: stale publishing recovery failed: {notify_module.safe_diagnostic(exc)}"
+            )
 
         published = 0
         for slot in self.store.ready_due_slots(now):
