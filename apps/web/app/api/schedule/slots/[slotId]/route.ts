@@ -186,7 +186,8 @@ async function getHandler(
   }
   const scheduleRow = schedule as {
     id: string;
-    persona_id: string;
+    // NULL for a post created without a persona (migration 012).
+    persona_id: string | null;
     providers: string[] | null;
     youtube_account_ids: string[] | null;
     instagram_account_ids: string[] | null;
@@ -201,20 +202,26 @@ async function getHandler(
     return apiErrorResponse(404, 'Slot not found.', { route: 'GET /api/schedule/slots' });
   }
 
-  const { data: persona, error: personaError } = await supabase
-    .from('personas')
-    .select('id, name')
-    .eq('id', scheduleRow.persona_id)
-    .single();
-  if (personaError && (personaError as { code?: string }).code !== 'PGRST116') {
-    // The persona name is cosmetic on the detail page — a failed lookup
-    // degrades to a null persona, but never silently.
-    logger.warn('[api/schedule/slots] persona lookup failed', {
-      code: personaError.code,
-      message: personaError.message,
-    });
+  // No persona is a real state (a post created without one, migration 012):
+  // skip the lookup entirely rather than issuing `.eq('id', null)` and
+  // logging a spurious failure on every request.
+  let personaRow: { id: string; name: string } | null = null;
+  if (scheduleRow.persona_id !== null) {
+    const { data: persona, error: personaError } = await supabase
+      .from('personas')
+      .select('id, name')
+      .eq('id', scheduleRow.persona_id)
+      .single();
+    if (personaError && (personaError as { code?: string }).code !== 'PGRST116') {
+      // The persona name is cosmetic on the detail page — a failed lookup
+      // degrades to a null persona, but never silently.
+      logger.warn('[api/schedule/slots] persona lookup failed', {
+        code: personaError.code,
+        message: personaError.message,
+      });
+    }
+    personaRow = persona as { id: string; name: string } | null;
   }
-  const personaRow = persona as { id: string; name: string } | null;
 
   const enrichment = await enrichSlot(row, auth.userId);
   const publishLinks = await resolveSlotPublishLinks(row, auth.userId);

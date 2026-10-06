@@ -58,7 +58,10 @@ async function assertScheduleScope(
     });
   }
   if (!data) return errorResponse(404, 'Schedule not found.', `${method} /api/schedule`);
-  if (!isPersonaAllowed(personaScope, data.persona_id)) {
+  // A schedule with no persona (migration 012) belongs to no persona scope, so
+  // there is nothing for isPersonaAllowed to check. The row is already
+  // filtered by user_id, so ownership is the whole boundary here.
+  if (data.persona_id !== null && !isPersonaAllowed(personaScope, data.persona_id)) {
     return errorResponse(403, 'This API key does not have access to this schedule.', `${method} /api/schedule`);
   }
   return null;
@@ -86,9 +89,13 @@ async function getHandler(request?: Request): Promise<NextResponse> {
 
   // Persona-scoped API keys may only see schedules of their own personas.
   // Browser sessions and unrestricted keys (personaIds null/undefined)
-  // keep the full list.
-  const schedules = (data ?? []).filter((schedule) =>
-    isPersonaAllowed(auth.personaIds, schedule.persona_id),
+  // keep the full list. A schedule with no persona (migration 012) is owned
+  // by no persona scope, so it is listed like an unrestricted one rather
+  // than filtered away.
+  const schedules = (data ?? []).filter(
+    (schedule) =>
+      schedule.persona_id === null ||
+      isPersonaAllowed(auth.personaIds, schedule.persona_id),
   );
 
   return NextResponse.json({ success: true, schedules });

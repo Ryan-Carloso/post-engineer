@@ -93,7 +93,13 @@ function mockAuthSession(auth: unknown, error: unknown) {
 // Scoped-key mock: from('schedules') resolves the allowed schedule ids,
 // from('scheduled_posts') captures the .in('schedule_id', …) filter.
 //---------------
-function mockScopedPostsClient(allowedScheduleIds: string[], upcoming: unknown[], recent: unknown[], queue: unknown[] = []) {
+//---------------
+// The scoped lookup now selects the user's own schedules and filters the
+// persona scope in memory, because a persona-less schedule (migration 012)
+// must stay visible to a scoped key. The mock therefore resolves rows
+// carrying `persona_id`, not bare ids — pass the rows, not the ids.
+//---------------
+function mockScopedPostsClient(schedules: Array<{ id: string; persona_id: string | null }>, upcoming: unknown[], recent: unknown[], queue: unknown[] = []) {
   let limitCalls = 0;
   const postsChain = {
     select: vi.fn().mockReturnThis(),
@@ -109,7 +115,7 @@ function mockScopedPostsClient(allowedScheduleIds: string[], upcoming: unknown[]
   const schedulesChain = {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
-    in: vi.fn(async () => ({ data: allowedScheduleIds.map((id) => ({ id })), error: null })),
+    then: (resolve: (value: unknown) => void) => resolve({ data: schedules, error: null }),
   };
   const from = vi.fn((table: string) => (table === 'schedules' ? schedulesChain : postsChain));
   return { from, postsChain, schedulesChain };
@@ -242,7 +248,11 @@ describe('GET auth', () => {
   it('restricts a persona-scoped API key to its allowed schedules', async () => {
     const allowedUpcoming = [{ id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'pending', topic: 'Next', schedule_id: 's1' }];
     const allowedRecent = [{ id: 're-1', slot_at: '2026-09-20T10:00:00Z', status: 'published', topic: 'Old', schedule_id: 's1' }];
-    const client = mockScopedPostsClient(['s1'], allowedUpcoming, allowedRecent);
+    const client = mockScopedPostsClient(
+      [{ id: 's1', persona_id: 'p1' }],
+      allowedUpcoming,
+      allowedRecent,
+    );
     mockAuthSession(
       { userId: USER_ID, accessToken: 'pe_live_scoped', isApiKey: true, keyId: 'key-1', personaIds: ['p1'] },
       null,
@@ -255,7 +265,10 @@ describe('GET auth', () => {
     // The schedules table is queried for ids owned by the allowed personas.
     expect(client.from).toHaveBeenCalledWith('schedules');
     expect(client.schedulesChain.eq).toHaveBeenCalledWith('user_id', USER_ID);
-    expect(client.schedulesChain.in).toHaveBeenCalledWith('persona_id', ['p1']);
+    // The persona scope is filtered in memory (the mock only resolves what
+    // the route asked for), not by the query — a persona-less schedule must
+    // survive the filter.
+    expect(client.schedulesChain.select).toHaveBeenCalledWith('id, persona_id');
     // Both post queries are restricted to the allowed schedule ids.
     expect(client.postsChain.in).toHaveBeenCalledWith('schedule_id', ['s1']);
     const body = await response.json();
@@ -279,6 +292,55 @@ describe('GET auth', () => {
         retryable: null,
       })),
     });
+  });
+
+  it('keeps a persona-less schedule visible to a scoped key', async () => {
+    // A post created without a persona (migration 012) belongs to no persona
+    // scope. It must stay visible to the scoped key that owns it — otherwise
+    // an agent creates the post and can never see it again. The scope filter
+    // must therefore treat persona_id NULL as in-scope, not as out-of-scope.
+    const upcoming = [{ id: 'up-9', slot_at: '2026-09-24T10:00:00Z', status: 'pending', topic: 'No persona', schedule_id: 's9' }];
+    const client = mockScopedPostsClient(
+      [{ id: 's9', persona_id: null }],
+      upcoming,
+      [],
+    );
+    mockAuthSession(
+      { userId: USER_ID, accessToken: 'pe_live_scoped', isApiKey: true, keyId: 'key-1', personaIds: ['p1'] },
+      null,
+    );
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/status'));
+
+    expect(response.status).toBe(200);
+    expect(client.postsChain.in).toHaveBeenCalledWith('schedule_id', ['s9']);
+    const body = await response.json();
+    expect(body.upcoming).toHaveLength(1);
+    expect(body.upcoming[0].topic).toBe('No persona');
+  });
+
+  it('drops a schedule whose persona is outside the key scope', async () => {
+    // The other half of the same filter: a persona the key was not granted
+    // must still be excluded. Without this the NULL rule above could be
+    // satisfied by simply not filtering at all.
+    const upcoming = [{ id: 'up-8', slot_at: '2026-09-24T10:00:00Z', status: 'pending', topic: 'Other persona', schedule_id: 's8' }];
+    const client = mockScopedPostsClient(
+      [{ id: 's8', persona_id: 'p-other' }],
+      upcoming,
+      [],
+    );
+    mockAuthSession(
+      { userId: USER_ID, accessToken: 'pe_live_scoped', isApiKey: true, keyId: 'key-1', personaIds: ['p1'] },
+      null,
+    );
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/status'));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toEqual({ success: true, upcoming: [], recent: [] });
   });
 
   it('returns empty lists for a scoped key with no allowed schedules', async () => {
@@ -798,7 +860,7 @@ describe('GET query contracts', () => {
   });
 
   it('restricts every scoped post query to the allowed schedule ids', async () => {
-    const client = mockScopedPostsClient(['s1'], [], []);
+    const client = mockScopedPostsClient([{ id: 's1', persona_id: 'p1' }], [], []);
     mockAuthSession(
       { userId: USER_ID, accessToken: 'pe_live_scoped', isApiKey: true, keyId: 'key-1', personaIds: ['p1'] },
       null,
@@ -808,7 +870,7 @@ describe('GET query contracts', () => {
     expect(response.status).toBe(200);
     // Upcoming, recent AND the queue-positions query carry the filter.
     expect(scheduleIdFilters(client.postsChain)).toHaveLength(3);
-    expect(client.schedulesChain.select).toHaveBeenCalledWith('id');
+    expect(client.schedulesChain.select).toHaveBeenCalledWith('id, persona_id');
   });
 });
 
@@ -856,7 +918,9 @@ function mockScopedScheduleClient(scheduleResult: { data: unknown; error: unknow
   const schedulesChain = {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
-    in: vi.fn(async () => scheduleResult),
+    // The scoped lookup is a thenable chain (no .limit()), and the persona
+    // scope is now filtered in memory instead of by the query.
+    then: (resolve: (value: unknown) => void) => resolve(scheduleResult),
   };
   const from = vi.fn(() => schedulesChain);
   return { from, schedulesChain };
@@ -1037,8 +1101,10 @@ describe('GET failure handling', () => {
     const response = await GET(new Request('https://example.com/api/schedule/status'));
 
     expect(response.status).toBe(200);
-    // An empty scope list must reach the query verbatim — no silent widening.
-    expect(client.schedulesChain.in).toHaveBeenCalledWith('persona_id', []);
+    // An empty scope list must reach the filter verbatim — no silent
+    // widening. The route now reads the user's schedules rows and filters
+    // them in memory, so there is no query arg left to assert; the outcome
+    // is that no post query runs at all.
     const body = await response.json();
     expect(body).toEqual({ success: true, upcoming: [], recent: [] });
     expect(client.from).not.toHaveBeenCalledWith('scheduled_posts');
