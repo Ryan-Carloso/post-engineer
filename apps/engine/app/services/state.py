@@ -11,6 +11,7 @@ from loguru import logger
 
 from app.config import config
 from app.models import const
+from app.utils.supabase_retry import build_retrying_session
 
 
 # Base class for state management
@@ -187,11 +188,26 @@ class RedisState(BaseState):
         return value_str
 
 
-# HTTP timeout for task-state requests: short enough that a Supabase outage
-# fails fast instead of wedging writers behind update_task's RLock (each
-# holder would otherwise block up to 30s per call, serializing every
+# HTTP timeouts for task-state requests, (connect, read): short enough that a
+# Supabase outage fails fast instead of wedging writers behind update_task's
+# RLock (each holder would otherwise block per call, serializing every
 # concurrent task thread's progress writes).
-_STATE_REQUEST_TIMEOUT_SECONDS = 10
+#
+# Connect is 3s, NOT the fill-schedule store's 10s. This client retries
+# connect failures (shared policy in app/utils/supabase_retry.py), so the
+# worst case per call is max(3 * connect + 1.0s backoff, read) — 3 attempts,
+# not 2 (supabase_retry.worst_case_seconds):
+#   connect=3  -> max(10.0, 10) = 10s  (the pre-retry ceiling, exactly)
+#   connect=10 -> max(31.0, 10) = 31s  (re-serializes every writer)
+# update_task holds the lock across a SELECT and a POST, so the per-call
+# ceiling is paid twice. Keep connect at 3 unless that budget is revisited.
+#
+# Accepted trade: urllib3's connect timeout also bounds the TLS handshake, so
+# a handshake slower than 3s now fails (3 attempts) where it previously
+# succeeded at 10s. Raising connect to 5 pushes the worst case to 16s and
+# breaks the ceiling this constant exists to hold, so the latency sensitivity
+# stays and only the retry budget absorbs it.
+_STATE_REQUEST_TIMEOUT_SECONDS = (3, 10)
 
 # Boot reconcile bounds: a huge orphan backlog after a long outage must not
 # stall boot — leftover rows are drained by subsequent boots.
@@ -235,8 +251,6 @@ class SupabaseTaskState(BaseState):
         table: str = "engine_task_state",
         reconcile_on_boot: bool = True,
     ) -> None:
-        import requests
-
         base_url = url or os.getenv("SUPABASE_URL")
         key = service_key or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
         if not base_url:
@@ -245,7 +259,7 @@ class SupabaseTaskState(BaseState):
             raise RuntimeError(
                 "SUPABASE_SERVICE_ROLE_KEY is required for MPT_STATE_BACKEND=supabase"
             )
-        self._requests = requests_module if requests_module is not None else requests
+        self._requests = requests_module if requests_module is not None else build_retrying_session()
         self._base_url = base_url.rstrip("/")
         self._table = table
         self._headers = {

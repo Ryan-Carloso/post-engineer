@@ -28,6 +28,7 @@ test_*.py
 !test/services/test_*.py
 !test/controllers/test_*.py
 !test/models/test_*.py
+!test/utils/test_*.py
 !test/test_modal_cpu_app.py
 !test/test_mypy_config.py
 !test/test_asgi_health.py

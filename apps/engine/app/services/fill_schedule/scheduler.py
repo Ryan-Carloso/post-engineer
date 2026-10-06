@@ -20,7 +20,7 @@ from app.services.fill_schedule.constants import TICK_SECONDS
 from app.services.fill_schedule.generate import BatchGenerator
 from app.services.fill_schedule.publish import BatchPublisher
 from app.services.fill_schedule.reconcile import BatchReconciler
-from app.services.fill_schedule.store import ScheduleStore
+from app.services.fill_schedule.store import CONNECT_RETRIES, ScheduleStore
 from app.services.fill_schedule.support import token_cost
 
 
@@ -62,6 +62,20 @@ class FillScheduleScheduler:
         A stage that raises reports -1 in the result.
         """
         results: dict[str, int] = {}
+        # Connect circuit breaker: re-arm the retry budget every tick, then
+        # disarm it as soon as a stage fails. A stage failure says nothing
+        # about *why* (deliberately not classified — the requests exception
+        # taxonomy is a urllib3 implementation detail), but it does say
+        # Supabase is unreachable right now: paying the full connect budget
+        # again on each later stage would stretch the tick to ~2min against a
+        # 60s TICK_SECONDS without recovering anything. Re-armed next tick,
+        # so a transient blip costs one tick only.
+        #
+        # Accepted false negative: an UNRELATED stage failure (LLM outage,
+        # bad publish credentials) also disarms, so a genuine DNS blip in a
+        # later stage of the same tick gets no retry. One tick of reduced
+        # resilience, re-armed at the top of the next.
+        self.store.set_connect_retries(CONNECT_RETRIES)
         for stage_name, stage in (
             ("generated", self.generate),
             ("reconciled", self.reconcile),
@@ -74,6 +88,7 @@ class FillScheduleScheduler:
                 # so the PostHog bridge (loguru sink, ERROR+) forwards it.
                 logger.error(f"fill_schedule: stage {stage_name} failed: {notify_module.safe_diagnostic(exc)}")
                 results[stage_name] = -1
+                self.store.set_connect_retries(0)
         if any(value != 0 for value in results.values()):
             logger.info(f"fill_schedule tick: {results}")
         return results

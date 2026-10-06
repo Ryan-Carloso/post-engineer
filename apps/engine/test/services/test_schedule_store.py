@@ -17,7 +17,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from urllib3.connection import HTTPConnection
-from urllib3.exceptions import NameResolutionError
+from urllib3.exceptions import NameResolutionError, ProtocolError
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -267,13 +267,20 @@ class SlotSelectTests(unittest.TestCase):
 
 
 class _JsonHandler(BaseHTTPRequestHandler):
-    def do_GET(self):  # noqa: N802 - http.server API
-        body = json.dumps([{"id": "slot-1"}]).encode()
+    def _respond(self, payload):
+        body = json.dumps(payload).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def do_GET(self):  # noqa: N802 - http.server API
+        self._respond([{"id": "slot-1"}])
+
+    def do_POST(self):  # noqa: N802 - http.server API
+        # Answers the token RPC shape so a retried POST can complete.
+        self._respond({"spent": True, "refunded": True})
 
     def log_message(self, *args):
         pass
@@ -322,10 +329,41 @@ class RetryingSessionTests(unittest.TestCase):
             self.store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
         self.assertEqual(len(attempts), fs.store.CONNECT_RETRIES + 1)
 
+    def _patch_getresponse(self, failures):
+        """Make the first `failures` reads die, then let them through.
+
+        A read failure means the request reached Supabase and the response
+        was lost, which is the one class that must never be retried.
+        """
+        original = HTTPConnection.getresponse
+        attempts = []
+
+        def flaky_getresponse(conn):
+            attempts.append(1)
+            if len(attempts) <= failures:
+                raise ProtocolError("Connection aborted.", OSError("response lost"))
+            return original(conn)
+
+        return attempts, patch.object(HTTPConnection, "getresponse", flaky_getresponse)
+
     def test_read_failures_are_not_retried(self):
-        # A POST (token RPC) may already be applied when the read fails:
-        # only connect-phase failures are safe to retry.
-        retry = self.store._requests.get_adapter("https://supabase.example").max_retries
-        self.assertIs(retry.read, False)
-        self.assertEqual(retry.other, 0)
-        self.assertEqual(retry.connect, fs.store.CONNECT_RETRIES)
+        # Behavioral, not a config read: raising from getresponse proves the
+        # request was SENT, so retrying could double-apply a POST. Assert the
+        # attempt count (1), which fails if read retries are ever enabled.
+        import requests
+
+        attempts, patcher = self._patch_getresponse(failures=1)
+        with patcher, self.assertRaises(requests.ConnectionError):
+            self.store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        self.assertEqual(len(attempts), 1, "a read failure was retried")
+
+    def test_post_rpc_retries_a_connect_failure(self):
+        # The billing-relevant half of the policy: spend_tokens is a POST, and
+        # the "connect failure means Supabase never saw it" argument is what
+        # makes retrying it safe. Pins that the connect retry is not gated on
+        # the HTTP method (urllib3's allowed_methods excludes POST).
+        attempts, patcher = self._patch_new_conn(failures=1)
+        with patcher:
+            spent = self.store.spend_tokens("user-1", "batch:sched-1", 2, "why")
+        self.assertTrue(spent, "the retried POST did not reach the handler")
+        self.assertEqual(len(attempts), 2)

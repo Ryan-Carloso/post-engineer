@@ -6,6 +6,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import requests
 from loguru import logger
 
 from app.services.fill_schedule.constants import (
@@ -16,36 +17,24 @@ from app.services.fill_schedule.constants import (
     SLOT_PUBLISHING,
     SLOT_READY,
 )
+from app.utils.supabase_retry import (
+    CONNECT_RETRIES as CONNECT_RETRIES,  # re-exported: tests and callers read it here
+)
+from app.utils.supabase_retry import build_retrying_session, set_retry_budget
 
-
-# Connect-phase failures only (DNS, refused, connect timeout): the request
-# never reached Supabase, so a retry is safe even for the token RPC POSTs.
-# Read failures are not retried — a POST may already have been applied.
-CONNECT_RETRIES = 2
-CONNECT_RETRY_BACKOFF_SECONDS = 0.5
-# (connect, read): a short connect timeout bounds the retry cost to
-# about 30s, inside one tick.
+# (connect, read). Connect is a narrowing from the previous flat timeout=30,
+# which bounded BOTH at 30: a TLS handshake that took 12-25s used to succeed
+# and now fails (then retries), so this is a real behavior change on a
+# high-latency link, not a pure speedup.
+#
+# Worst case per request is max(3 * 10 + 1.0, 30) = 31s — see
+# supabase_retry.worst_case_seconds (3 attempts, not 2). That is per REQUEST,
+# not per tick: a sustained Supabase outage makes each of the tick's stages
+# pay ~31s on its first call (generated, reconciled, published, plus publish's
+# recover_stale_publishing), so a tick runs ~2min instead of 0s and the
+# effective period stretches past TICK_SECONDS. The scheduler's connect
+# circuit breaker caps that; this comment records the underlying cost.
 REQUEST_TIMEOUT_SECONDS = (10, 30)
-
-
-def build_retrying_session() -> Any:
-    """``requests.Session`` that retries connect-phase failures to Supabase."""
-    import requests
-    from requests.adapters import HTTPAdapter
-    from urllib3.util.retry import Retry
-
-    retry = Retry(
-        total=CONNECT_RETRIES,
-        connect=CONNECT_RETRIES,
-        read=False,
-        other=0,
-        backoff_factor=CONNECT_RETRY_BACKOFF_SECONDS,
-    )
-    session = requests.Session()
-    adapter = HTTPAdapter(max_retries=retry)
-    session.mount("https://", adapter)
-    session.mount("http://", adapter)
-    return session
 
 
 class SupabaseAuthError(RuntimeError):
@@ -81,6 +70,9 @@ class ScheduleStore:
         if not key:
             raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY is required for fill_schedule")
         self._requests = requests_module if requests_module is not None else build_retrying_session()
+        # Retry budget currently armed. The scheduler lowers it to 0 for the
+        # rest of a tick once a stage has failed (see set_connect_retries).
+        self.connect_retries = CONNECT_RETRIES
         self._base_url = base_url.rstrip("/")
         self._key = key
         self._headers = {
@@ -88,6 +80,24 @@ class ScheduleStore:
             "Authorization": f"Bearer {key}",
             "Content-Type": "application/json",
         }
+
+    def set_connect_retries(self, count: int) -> None:
+        """Arm (or disarm) the connect-retry budget for subsequent requests.
+
+        The scheduler calls this with 0 once a stage has failed in the
+        current tick: a stage failure means Supabase is already known-bad, and
+        re-paying the full connect budget on every later stage would stretch
+        the tick past TICK_SECONDS without recovering anything. It re-arms at
+        the top of the next tick, so a transient blip costs one tick only.
+
+        Mutates the mounted adapter in place (set_retry_budget), so the
+        session, its auth headers and its pooled connections all survive.
+        """
+        self.connect_retries = count
+        if isinstance(self._requests, requests.Session):
+            set_retry_budget(self._requests, count)
+        # Otherwise a test injected a mock in place of the session: there is
+        # no adapter to retune, and the recorded flag is what tests assert.
 
     def _request(self, method: str, path: str, **kwargs: Any) -> Any:
         response = self._requests.request(

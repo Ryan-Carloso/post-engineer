@@ -477,12 +477,18 @@ class SupabaseStateTimeoutTests(unittest.TestCase):
         # A Supabase outage must fail fast: update_task holds the RLock
         # across its calls, and a 30s timeout would serialize every
         # concurrent task thread's progress writes behind one wedged holder.
+        #
+        # The tuple is (connect, read). Connect is 3, NOT the store's 10:
+        # with the retry policy the worst case per call is
+        # max(2 * connect + 0.5 backoff, read), so connect=10 would push a
+        # blackholed Supabase to 20.5s under the lock and re-serialize
+        # every writer — exactly what the 10s ceiling exists to prevent.
         requests_mock = MagicMock()
         backend = _make_state(requests_mock)
         requests_mock.request.side_effect = [_response(json_data=[])]
         backend.get_task("t-1")
         call = requests_mock.request.call_args
-        self.assertEqual(call[1]["timeout"], 10)
+        self.assertEqual(call[1]["timeout"], (3, 10))
 
     def test_rpc_uses_short_timeout(self):
         requests_mock = MagicMock()
@@ -490,7 +496,57 @@ class SupabaseStateTimeoutTests(unittest.TestCase):
         requests_mock.request.side_effect = [_response(json_data={"refunded": True})]
         backend._rpc("refund_generation_tokens", {"p_user_id": "u-1"})
         call = requests_mock.request.call_args
-        self.assertEqual(call[1]["timeout"], 10)
+        self.assertEqual(call[1]["timeout"], (3, 10))
+
+    def test_worst_case_per_call_stays_within_the_previous_ceiling(self):
+        # The invariant that keeps update_task's lock bounded: the retry
+        # policy must not raise the 10s ceiling the flat timeout=10 had.
+        from app.utils.supabase_retry import worst_case_seconds
+
+        self.assertLessEqual(worst_case_seconds(3, 10), 10)
+
+
+class SupabaseStateRetryTests(unittest.TestCase):
+    """The task-state client must ride the shared connect-retry policy.
+
+    reconcile/publish call get_task once per generating/ready slot on every
+    tick. Without retries, one DNS blip fails the whole stage — the exact
+    noise the fill-schedule store's retry was added to remove.
+    """
+
+    def setUp(self):
+        self.requests_mock = MagicMock()
+        self.backend = _make_state(self.requests_mock)
+        # _make_state injects requests_module, so build the retrying session
+        # the production path would use and mount it on the same instance.
+        from app.utils.supabase_retry import build_retrying_session
+
+        self.backend._requests = build_retrying_session()
+
+    def test_production_backend_builds_a_retrying_session(self):
+        # Guards the wiring itself: with requests_module injected the session
+        # is bypassed, so assert the default constructor's session retries.
+        from app.utils.supabase_retry import CONNECT_RETRIES
+
+        # The default constructor builds a real session and then verifies the
+        # table, which would do a live DNS lookup. Stub the verify so the
+        # constructor completes and the session can be inspected; the retry
+        # policy is asserted without ever opening a connection.
+        with patch.dict(os.environ, ENV, clear=True):
+            with patch.object(state_module.SupabaseTaskState, "_verify_table"):
+                backend = state_module.SupabaseTaskState(reconcile_on_boot=False)
+        retry = backend._requests.get_adapter("https://supabase.example").max_retries
+        self.assertEqual(retry.connect, CONNECT_RETRIES)
+        self.assertIs(retry.read, False)
+
+    def test_injected_mock_is_not_replaced_by_the_session(self):
+        # The injection seam is load-bearing for ~30 existing tests: when
+        # requests_module is passed, the retrying session must not be built.
+        requests_mock = MagicMock()
+        backend = _make_state(requests_mock)
+        requests_mock.request.side_effect = [_response(json_data=[])]
+        backend.get_task("t-1")
+        self.assertIs(backend._requests, requests_mock)
 
 
 class SupabaseStateQuotingTests(unittest.TestCase):

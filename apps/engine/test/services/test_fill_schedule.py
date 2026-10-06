@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.services import fill_schedule as fs
 from app.services import notify as nf
+from app.utils.supabase_retry import build_retrying_session
 from app.models import const as model_const
 from app.services.upload_publisher import InstagramMetadata, LinkedInMetadata, YouTubeMetadata
 
@@ -35,6 +36,17 @@ class _FakeStore:
         self.refunded = []
         self.refund_batch_calls = []
         self.generating = []
+        # Models ScheduleStore's per-tick connect breaker: every stage call
+        # records the retry budget in force when it ran, so a test can assert
+        # the budget actually dropped rather than only the final flag value.
+        self.connect_retries = fs.store.CONNECT_RETRIES
+        self.retry_calls = []
+
+    def set_connect_retries(self, n):
+        # Records every arm/disarm so a test can assert the budget each stage
+        # actually ran under (the first stage runs before any disarm).
+        self.retry_calls.append(n)
+        self.connect_retries = n
 
     def pending_slots(self, now):
         raise AssertionError("override pending_slots per test")
@@ -1237,7 +1249,166 @@ class CoverageGapTests(unittest.TestCase):
         scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
         store.recover_stale_publishing.assert_called_once()
 
+    def test_stale_recovery_log_names_the_root_cause(self):
+        # The recovery failure is a log-only line, so it uses safe_diagnostic
+        # and keeps the urllib3 cause that safe_reason's 200-char cut drops.
+        store = _FakeStore()
+        store.recover_stale_publishing = MagicMock(
+            side_effect=ConnectionError(
+                "HTTPSConnectionPool(host='db.example', port=443): Max retries "
+                "exceeded with url: /rest/v1/scheduled_posts?select=" + "x" * 600
+                + " (Caused by NameResolutionError('Failed to resolve'))"
+            )
+        )
+        store.ready_due_slots = lambda now: []
+        scheduler = self._scheduler(store)
+        scheduler.publisher.base_url = "https://post-engineer.com"
+        scheduler.publisher.api_secret = "secret"
+
+        records = []
+        handler_id = logger.add(lambda message: records.append(message.record))
+        try:
+            scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
+        finally:
+            logger.remove(handler_id)
+        messages = [r["message"] for r in records if r["level"].name == "WARNING"]
+        self.assertTrue(
+            any("NameResolutionError" in m for m in messages),
+            f"expected the recovery log to name the root cause, got: {messages}",
+        )
+
+    def test_safe_diagnostic_is_confined_to_log_only_sites(self):
+        # safe_diagnostic's output is 400-char head+tail and log-shaped.
+        # safe_reason reaches Discord and (via _fail_task) client-visible task
+        # errors, so it stays on the user-facing sites. Pin the split at the
+        # source level: a behavioral test cannot distinguish "chose
+        # safe_reason" from "never reached the branch".
+        import ast
+        import pathlib
+
+        def called_helpers(path):
+            """Helper names actually CALLED in the file.
+
+            Parsed, not grepped: the explanatory comments name both helpers,
+            so a substring match would pass even after the call site changed.
+            """
+            tree = ast.parse(path.read_text())
+            names = set()
+            for node in ast.walk(tree):
+                if (
+                    isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr in {"safe_reason", "safe_diagnostic"}
+                ):
+                    names.add(node.func.attr)
+            return names
+
+        root = pathlib.Path(fs.__file__).parent
+        by_file = {p.name: called_helpers(p) for p in root.glob("*.py")}
+
+        # publish.py: log-only recovery line uses safe_diagnostic; the
+        # user-facing notify calls keep safe_reason.
+        self.assertIn(
+            "safe_diagnostic",
+            by_file["publish.py"],
+            "publish.py lost its safe_diagnostic call site",
+        )
+        self.assertIn(
+            "safe_reason",
+            by_file["publish.py"],
+            "publish.py lost its user-facing safe_reason call site",
+        )
+        # Log-only sites allowed to call safe_diagnostic. Every OTHER file
+        # reaches Discord (generate.py's slot_failed_msg, publish.py's
+        # notify) or client-visible task errors, so it must stay on
+        # safe_reason. Adding a file here is a deliberate act.
+        log_only = {"scheduler.py", "publish.py"}
+        for name, names in by_file.items():
+            if name in log_only:
+                continue
+            self.assertNotIn(
+                "safe_diagnostic",
+                names,
+                f"{name} calls safe_diagnostic on a user-facing path",
+            )
+
     # -- deterministic task (M4: no duplicate generation on crash) ------------
+    # -- connect circuit breaker ---------------------------------------------
+    def test_a_failed_stage_disables_retries_for_the_rest_of_the_tick(self):
+        # A sustained Supabase outage makes every stage pay the full connect
+        # budget (~30s) on its first call, stretching a tick past TICK_SECONDS.
+        # Once one stage has failed, the rest must fail fast: the network is
+        # already known-bad for this tick and re-paying the budget buys nothing.
+        store = _FakeStore()
+        store.pending_slots = MagicMock(side_effect=ConnectionError("dns"))
+        store.generating_slots = MagicMock(side_effect=ConnectionError("dns"))
+        store.ready_due_slots = MagicMock(side_effect=ConnectionError("dns"))
+        scheduler = self._scheduler(store)
+        scheduler.publisher.base_url = "https://post-engineer.com"
+        scheduler.publisher.api_secret = "secret"
+
+        results = scheduler.run_once(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
+        self.assertEqual(results, {"generated": -1, "reconciled": -1, "published": -1})
+        # Retries armed going in, disarmed after the first stage failed.
+        self.assertEqual(store.connect_retries, 0)
+        # [re-arm, disarm, disarm]: only the first stage saw a live budget.
+        self.assertEqual(store.retry_calls, [fs.store.CONNECT_RETRIES, 0, 0, 0])
+
+    def test_breaker_rearms_at_the_start_of_the_next_tick(self):
+        # The flag is per tick, not sticky: a transient blip must not disable
+        # retries for the rest of the process's life.
+        store = _FakeStore()
+        store.pending_slots = MagicMock(side_effect=[ConnectionError("dns"), []])
+        store.generating_slots = MagicMock(return_value=[])
+        store.ready_due_slots = MagicMock(return_value=[])
+        scheduler = self._scheduler(store)
+        scheduler.publisher.base_url = "https://post-engineer.com"
+        scheduler.publisher.api_secret = "secret"
+
+        scheduler.run_once(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
+        self.assertEqual(store.connect_retries, 0)
+        scheduler.run_once(datetime(2026, 9, 7, 12, 1, tzinfo=UTC))
+        self.assertEqual(store.connect_retries, fs.store.CONNECT_RETRIES)
+        self.assertEqual(store.retry_calls[-1], fs.store.CONNECT_RETRIES)
+
+    def test_a_healthy_tick_keeps_retries_armed(self):
+        store = _FakeStore()
+        store.pending_slots = MagicMock(return_value=[])
+        store.generating_slots = MagicMock(return_value=[])
+        store.ready_due_slots = MagicMock(return_value=[])
+        scheduler = self._scheduler(store)
+        scheduler.publisher.base_url = "https://post-engineer.com"
+        scheduler.publisher.api_secret = "secret"
+
+        results = scheduler.run_once(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
+        self.assertEqual(results["generated"], 0)
+        self.assertEqual(store.connect_retries, fs.store.CONNECT_RETRIES)
+
+    def test_disarmed_store_still_sends_auth_headers_and_reads_rows(self):
+        # set_connect_retries(0) must retune the adapter in place, never
+        # replace the session or the adapter: losing auth headers or the
+        # pooled connections would hurt every later request.
+        store = fs.ScheduleStore.__new__(fs.ScheduleStore)
+        store._requests = build_retrying_session()
+        store._headers = {"Authorization": "Bearer service-key"}
+        session_before = store._requests
+        adapter_before = store._requests.get_adapter("https://supabase.example")
+        pool_before = adapter_before.poolmanager
+        store.connect_retries = fs.store.CONNECT_RETRIES
+        store.set_connect_retries(0)
+        self.assertIs(store._requests, session_before)
+        adapter_after = store._requests.get_adapter("https://supabase.example")
+        self.assertEqual(adapter_after.max_retries.connect, 0)
+        # The scheduler re-arms every tick, so the swap must keep the adapter
+        # and its PoolManager — a fresh adapter drops every pooled connection
+        # and forces a new TCP+TLS handshake on the next call.
+        self.assertIs(adapter_after, adapter_before)
+        self.assertIs(adapter_after.poolmanager, pool_before)
+        # Auth is per-request (_headers), not on the session; the session
+        # object itself still carries requests' own defaults.
+        self.assertTrue(store._requests.headers.get("User-Agent"))
+        self.assertIn("Authorization", store._headers)
+
     def test_task_id_is_deterministic_per_slot(self):
         first = fs.new_task_id({"id": "slot-abc"})
         second = fs.new_task_id({"id": "slot-abc"})
