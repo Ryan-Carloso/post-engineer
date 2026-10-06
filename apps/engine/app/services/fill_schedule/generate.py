@@ -23,10 +23,11 @@ from app.services.fill_schedule.store import ScheduleStore
 from app.services.fill_schedule.support import (
     build_persona_params,
     notify_safe,
-    persona_for,
+    post_identity,
     slot_faceless,
     slot_user_id,
     token_cost,
+    voice_for,
 )
 
 
@@ -76,36 +77,46 @@ class BatchGenerator:
         """Process one pending slot. Returns the notify label on success,
         None when the slot failed (already recorded + notified)."""
         schedule = slot.get("schedules") or {}
-        persona: dict[str, Any] = {}
+        identity: dict[str, Any] = {}
         task_id: str | None = None
         user_id: str | None = None
         try:
-            # The persona may have been deleted after the schedule was
-            # created: fail the slot instead of killing the whole generate
-            # stage every tick.
-            persona = persona_for(schedule)
+            # The identity may be gone (persona deleted after the schedule
+            # was created, and no snapshot): fail the slot instead of killing
+            # the whole generate stage every tick. A persona-less schedule
+            # resolves from its own snapshot columns here.
+            identity = post_identity(schedule)
             # Topics are stored at creation; there is no LLM fallback,
             # so an empty topic fails the slot loudly.
             topic = str(slot.get("topic") or "").strip()
             if not topic:
                 raise RuntimeError("Batch slot has no topic")
+            # Pre-flight before anything about the job itself: a slot that
+            # could never publish is the more fundamental failure, and this
+            # check is free.
             validate_publish_plan(schedule, topic)
+            # `PersonaParams` rejects a job with neither voice_id nor
+            # voice_audio_url, so a schedule that resolves no voice can never
+            # generate. Checked before the dispatch: failing the slot now
+            # gives a readable reason (and refunds) instead of an opaque
+            # engine rejection after the request left.
+            voice_for(identity)
             faceless = slot_faceless(slot)
             request = TaskVideoRequest(
                 video_subject=topic,
-                persona=build_persona_params(persona, self.store, faceless),
-                video_aspect=persona.get("video_aspect") or "9:16",
-                video_script_prompt=persona.get("script_prompt") or "",
+                persona=build_persona_params(identity, self.store, faceless),
+                video_aspect=identity.get("video_aspect") or "9:16",
+                video_script_prompt=identity.get("script_prompt") or "",
                 paragraph_number=(
-                    int(persona["paragraph_number"])
-                    if persona.get("paragraph_number") is not None
+                    int(identity["paragraph_number"])
+                    if identity.get("paragraph_number") is not None
                     else None
                 ),
             )
             user_id = slot_user_id(slot)
             if user_id is None:
                 raise RuntimeError("Scheduled slot has no user_id")
-            face_quality = str(persona.get("face_quality") or "ok")
+            face_quality = str(identity.get("face_quality") or "ok")
             cost = token_cost(faceless, face_quality)
             # Prepaid at request time under this id: no spend here, only a
             # refund if dispatch itself fails.
@@ -119,7 +130,7 @@ class BatchGenerator:
                 flow="batch",
                 pipeline="video",
                 slot_id=slot["id"],
-                persona_id=persona.get("id"),
+                persona_id=identity.get("id"),
             )
             try:
                 self._dispatch_generation(
@@ -144,7 +155,7 @@ class BatchGenerator:
             self.store.update_slot(
                 slot["id"], status=SLOT_GENERATING, topic=topic, task_id=task_id
             )
-            return f"{persona.get('name', 'Persona')}: {topic}"
+            return f"{identity.get('name', 'Persona')}: {topic}"
         except Exception as exc:
             # A failed slot is a real recurring error: log at ERROR so the
             # PostHog bridge (loguru sink, ERROR+) forwards it, scrubbed.
@@ -199,7 +210,7 @@ class BatchGenerator:
             notify_safe(
                 self.notify,
                 notify_module.slot_failed_msg(
-                    persona.get("name", "Persona"), "", notify_module.safe_reason(exc)
+                    identity.get("name", "Persona"), "", notify_module.safe_reason(exc)
                 ),
             )
             return None

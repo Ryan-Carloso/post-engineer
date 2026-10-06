@@ -189,6 +189,63 @@ class BatchScheduleTests(unittest.TestCase):
         dispatch_generation.assert_not_called()
         self.assertEqual(store.updates[0][1]["status"], "failed")
 
+    def test_generate_persona_less_slot_from_the_snapshot_generates(self):
+        # The post created WITHOUT a persona (migration 012): no embed, but
+        # the snapshot columns carry the voice and the script, so the slot must
+        # dispatch instead of failing. Pinned end to end because the whole
+        # feature is this path.
+        slot = self._batch_slot()
+        del slot["schedules"]["personas"]
+        slot["faceless"] = True
+        slot["schedules"].update(
+            {
+                "post_voice_id": "energetic",
+                "post_script_prompt": "Be direct and short.",
+                "post_video_aspect": "16:9",
+                "post_face_quality": "ok",
+            }
+        )
+        store = _FakeStore()
+        store.pending_slots = lambda now: [slot]
+        scheduler = self._scheduler(store)
+        scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
+
+        with patch.object(
+            scheduler.generator, "_dispatch_generation"
+        ) as dispatch_generation:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+
+        self.assertEqual(enqueued, 1)
+        self.assertEqual(store.updates[0][1]["status"], "generating")
+        request = dispatch_generation.call_args.args[1]
+        # The snapshot reached the job: voice chosen, no face, own aspect.
+        self.assertEqual(request.persona.voice_id, "energetic")
+        self.assertIsNone(request.persona.avatar_url)
+        self.assertIsNone(request.persona.photo_url)
+        self.assertEqual(request.video_aspect, "16:9")
+        self.assertEqual(request.video_script_prompt, "Be direct and short.")
+
+    def test_generate_slot_without_any_voice_fails_before_dispatch(self):
+        # A persona with no voice and no audio cannot produce a job:
+        # `PersonaParams` rejects it. The slot must fail here (and refund)
+        # rather than sending a request the engine refuses opaquely.
+        slot = self._batch_slot()
+        slot["schedules"]["personas"] = {"name": "Ana"}
+        store = _FakeStore()
+        store.pending_slots = lambda now: [slot]
+        scheduler = self._scheduler(store)
+        scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
+
+        with patch.object(
+            scheduler.generator, "_dispatch_generation"
+        ) as dispatch_generation:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+
+        self.assertEqual(enqueued, 0)
+        dispatch_generation.assert_not_called()
+        self.assertEqual(store.updates[0][1]["status"], "failed")
+        self.assertIn("no voice", store.updates[0][1]["error"])
+
     def test_generate_batch_dispatch_failure_refunds_single_video(self):
         slot = self._batch_slot()
         store = _FakeStore()
@@ -559,6 +616,38 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
         self.assertEqual(store.updates[0][1]["status"], "failed")
         self.assertEqual(store.refund_batch_calls, [])
+
+    def test_failed_persona_less_slot_refunds_from_the_snapshot(self):
+        # The refund used to be skipped for EVERY failed batch slot: the
+        # reconciler's select fetched `schedules(id)` with no embed, so
+        # `persona_for` raised on every row and the prepaid tokens were
+        # burned. A persona-less post now resolves its identity from the
+        # snapshot and refunds like any other slot.
+        slot = {
+            "id": "slot-np",
+            "user_id": "user-1",
+            "task_id": "t-np",
+            "faceless": True,
+            "schedules": {
+                "id": "sched-np",
+                "user_id": "user-1",
+                "personas": None,
+                "post_voice_id": "energetic",
+                "post_face_quality": "ok",
+            },
+        }
+        store = _FakeStore()
+        store.generating_slots = lambda: [slot]
+        state = MagicMock()
+        state.get_task.return_value = {"state": -1, "error": "gpu exploded"}
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=state, publish_video=MagicMock()
+        )
+        self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
+        self.assertEqual(store.updates[0][1]["status"], "failed")
+        self.assertEqual(len(store.refund_batch_calls), 1)
+        # Faceless is priced from the slot alone, so it is the faceless rate.
+        self.assertEqual(store.refund_batch_calls[0][3], 1)
 
     def test_failed_batch_task_refunds_batch_charge(self):
         # Batch slots are prepaid under `batch:{scheduleId}`; a failed task
@@ -1608,3 +1697,113 @@ class BatchDispatchTests(unittest.TestCase):
         self.assertEqual(enqueued, 2)
         self.assertEqual(dispatch.call_count, 2)
 
+
+
+class PostIdentityTests(unittest.TestCase):
+    """post_identity — the persona is optional; the schedule snapshot is not.
+
+    A persona-less post (migration 012) has no embed at all, so the engine has
+    to read voice/script/aspect from the ``post_*`` columns. And when both
+    exist, the snapshot wins: it is the value the web resolved and charged
+    for at creation, so editing a persona must not rewrite a scheduled video.
+    """
+
+    def test_reads_the_persona_when_the_schedule_has_no_snapshot(self):
+        identity = fs.post_identity(
+            {
+                "id": "sched-1",
+                "personas": {"name": "Ana", "voice_id": "calm", "niche": "fitness"},
+            }
+        )
+        self.assertEqual(identity["name"], "Ana")
+        self.assertEqual(identity["voice_id"], "calm")
+        self.assertEqual(identity["niche"], "fitness")
+
+    def test_reads_a_persona_less_schedule_from_the_snapshot(self):
+        # No `personas` key at all: that is the post created without a persona.
+        identity = fs.post_identity(
+            {
+                "id": "sched-2",
+                "personas": None,
+                "post_voice_id": "energetic",
+                "post_script_prompt": "Be direct.",
+                "post_video_aspect": "16:9",
+                "post_paragraph_number": 3,
+                "post_face_quality": "ok",
+            }
+        )
+        self.assertEqual(identity["voice_id"], "energetic")
+        self.assertEqual(identity["script_prompt"], "Be direct.")
+        self.assertEqual(identity["video_aspect"], "16:9")
+        self.assertEqual(identity["paragraph_number"], 3)
+        self.assertEqual(identity["face_quality"], "ok")
+
+    def test_snapshot_overrides_the_persona_embed(self):
+        # The pin that makes a scheduled post reproducible: editing the
+        # persona afterwards cannot change the aspect ratio or the script of a
+        # video that is already queued.
+        identity = fs.post_identity(
+            {
+                "id": "sched-3",
+                "personas": {
+                    "voice_id": "calm",
+                    "video_aspect": "9:16",
+                    "script_prompt": "old",
+                },
+                "post_voice_id": "energetic",
+                "post_video_aspect": "16:9",
+                "post_script_prompt": "new",
+            }
+        )
+        self.assertEqual(identity["voice_id"], "energetic")
+        self.assertEqual(identity["video_aspect"], "16:9")
+        self.assertEqual(identity["script_prompt"], "new")
+
+    def test_a_null_snapshot_column_does_not_erase_the_persona_value(self):
+        # NULL on a snapshot means "not provided", never "inherit blank":
+        # the migration leaves every pre-existing row that way.
+        identity = fs.post_identity(
+            {
+                "id": "sched-4",
+                "personas": {"voice_id": "calm", "niche": "fitness"},
+                "post_voice_id": None,
+                "post_niche": "",
+            }
+        )
+        self.assertEqual(identity["voice_id"], "calm")
+        self.assertEqual(identity["niche"], "fitness")
+
+    def test_raises_when_neither_a_persona_nor_a_snapshot_exists(self):
+        # The deleted-persona case with no snapshot (a schedule created
+        # before migration 012): the slot must fail with a readable reason.
+        with self.assertRaises(RuntimeError) as ctx:
+            fs.post_identity({"id": "sched-5", "personas": None})
+        self.assertIn("neither a persona nor a post snapshot", str(ctx.exception))
+
+    def test_raises_on_a_malformed_embed_rather_than_reading_it(self):
+        # The guard is `isinstance`, so a list embed must raise like a missing
+        # one instead of silently producing a blank identity.
+        with self.assertRaises(RuntimeError):
+            fs.post_identity({"id": "sched-6", "personas": ["not", "a", "dict"]})
+
+
+class VoiceForTests(unittest.TestCase):
+    """voice_for — `PersonaParams` demands exactly one voice, so a post that
+    resolves none can never generate. The slot must fail here, refundably,
+    instead of dispatching a request the engine rejects opaquely."""
+
+    def test_returns_the_voice_id(self):
+        self.assertEqual(fs.voice_for({"voice_id": "calm"}), "calm")
+
+    def test_raises_without_a_voice_id(self):
+        with self.assertRaises(RuntimeError) as ctx:
+            fs.voice_for({"name": "Ana"})
+        self.assertIn("no voice", str(ctx.exception))
+
+    def test_treats_an_empty_or_non_string_voice_as_absent(self):
+        # Only a non-empty STRING is a voice: None/""/0/False must not pass as
+        # one and leave the rejection to the engine.
+        for value in (None, "", 0, False):
+            with self.subTest(value=value):
+                with self.assertRaises(RuntimeError):
+                    fs.voice_for({"voice_id": value})

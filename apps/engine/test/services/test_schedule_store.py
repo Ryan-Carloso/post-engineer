@@ -74,15 +74,17 @@ class StoreRequestsTests(unittest.TestCase):
         _, url, kwargs = self._last_call()
         self.assertEqual(kwargs["params"]["status"], f"eq.{fs.SLOT_PENDING}")
         self.assertTrue(kwargs["params"]["slot_at"].startswith("lte."))
-        self.assertIn("schedules!inner", kwargs["params"]["select"])
+        self.assertIn("schedules!left", kwargs["params"]["select"])
         self.assertIn("linkedin_account_ids", kwargs["params"]["select"])
         self.assertEqual(kwargs["params"]["order"], "slot_at.asc")
 
     def test_slot_select_embeds_personas_for_generate_stage(self):
-        # C1: generate() needs the personas embed inside schedules!inner.
+        # C1: generate() needs the personas embed inside the schedule join.
         # Without it PostgREST doesn't return personas and EVERY tick fails
         # with "no persona embed" in production (older tests masked this by
         # injecting personas inline in the fixture).
+        # `!left` (not `!inner`) since migration 012: a schedule may have no
+        # persona, and an inner join would drop those slots from every tick.
         self.store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
         _, _, kwargs = self._last_call()
         select = kwargs["params"]["select"]
@@ -102,12 +104,19 @@ class StoreRequestsTests(unittest.TestCase):
         self.assertEqual(kwargs["params"]["status"], f"eq.{fs.SLOT_GENERATING}")
         self.assertEqual(kwargs["params"]["task_id"], "not.is.null")
 
-    def test_generating_slots_embeds_schedule_id(self):
-        # The reconciler refunds batch slots under `batch:{scheduleId}` —
-        # without the schedule embed the batch path is dead.
+    def test_generating_slots_embeds_the_full_schedule_identity(self):
+        # The reconciler refunds batch slots under `batch:{scheduleId}` and
+        # prices each refund from the identity — so this select needs the
+        # whole embed, not just `id`. It used to fetch `schedules(id)` alone,
+        # which made `persona_for` raise on EVERY row and silently skipped
+        # the refund of every failed batch slot (burned prepaid tokens).
         self.store.generating_slots()
         _, _, kwargs = self._last_call()
-        self.assertIn("schedules(id)", kwargs["params"]["select"])
+        select = kwargs["params"]["select"]
+        self.assertIn("schedules!left", select)
+        self.assertIn("id", select)
+        self.assertIn("personas(", select)
+        self.assertIn("face_quality", select)
 
     def test_ready_due_slots_filters_due_time(self):
         self.store.ready_due_slots(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))

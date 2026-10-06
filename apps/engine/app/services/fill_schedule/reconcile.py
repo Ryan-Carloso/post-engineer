@@ -14,7 +14,7 @@ from app.services.fill_schedule.constants import (
 from app.services.analytics import scrub_secret_values, track_event
 from app.services.fill_schedule.store import ScheduleStore
 from app.services.fill_schedule.support import (
-    persona_for,
+    post_identity,
     slot_faceless,
     slot_user_id,
     token_cost,
@@ -66,27 +66,27 @@ class BatchReconciler:
                 # videos' charges intact.
                 if user_id is not None:
                     try:
-                        persona = persona_for(schedule)
+                        identity = post_identity(schedule)
                     except RuntimeError:
-                        # The persona was deleted after the schedule was
-                        # created: no embed to compute the refund cost from.
-                        # Mark the slot failed and move on — throwing here
-                        # would kill the whole reconcile stage every tick.
+                        # Neither a persona nor a snapshot to compute the
+                        # refund cost from. Mark the slot failed and move on —
+                        # throwing here would kill the whole reconcile stage
+                        # every tick.
                         # NOTE: the prepaid tokens for this slot are
                         # permanently burned (the cost is unrecoverable
-                        # without the persona embed). Follow-up: persist the
+                        # without an identity). Follow-up: persist the
                         # per-slot cost on the slot row at schedule creation
                         # so refunds never depend on a joinable persona.
                         logger.warning(
                             "fill_schedule: skipping refund for failed slot "
-                            "without persona embed",
+                            "without a resolvable identity",
                             slot_id=slot.get("id"),
                             schedule_id=schedule.get("id"),
                         )
                     else:
                         cost = token_cost(
                             slot_faceless(slot),
-                            str(persona.get("face_quality") or "ok"),
+                            str(identity.get("face_quality") or "ok"),
                         )
                         batch_generation_id = f"batch:{schedule['id']}"
                         self.store.refund_batch_tokens(
