@@ -1,0 +1,36 @@
+-- ============================================================================
+-- Migration 011 — Drop the legacy one-schedule-per-persona unique constraint
+-- ----------------------------------------------------------------------------
+-- HOW TO APPLY: Supabase Dashboard > SQL Editor > New query > paste & run,
+-- after 010_scheduled-post-progress-history.sql. Safe to re-run (idempotent):
+-- the drop is guarded on the constraint actually existing.
+--
+-- WHY: `schedules_persona_owner unique (persona_id)` came from the old
+-- recurring-timetable model, where a persona had exactly one standing
+-- schedule. That model is gone: every publishing time now travels with its
+-- video (`scheduled_posts.slot_at`), the batch route creates the schedule and
+-- its slots together, and `scheduled_posts.schedule_id` is a plain uuid with
+-- no uniqueness requirement. What the constraint does now is break the second
+-- and every later batch for a persona — the engine still reads slots by
+-- `scheduled_posts` and never looks a schedule up per persona, so nothing
+-- depends on it.
+--
+-- The canonical `supabase/migrations/001_schema.sql` never declared it, so a
+-- database built from this chain never had it. Only databases bootstrapped
+-- from the older `apps/web/supabase/migrations/` chain (which shipped
+-- 0010_fill_schedule.sql) carry it — which is why the failure showed up on
+-- an already-populated database and not on fresh self-hosted installs.
+--
+-- THE FAILURE THIS FIXES: POST /api/videos/generate-and-schedule treated
+-- every SQLSTATE 23505 as a primary-key race. A `schedules_persona_owner`
+-- violation was classified as a lost race, so the route refunded its own
+-- spend and then "replayed" a schedule id that was never inserted —
+-- answering `{slots: [], replayed: true}`, a success that generated nothing.
+--
+-- `alter table ... drop constraint if exists` is used rather than a
+-- do-block: dropping a constraint that is already gone is not an error, and
+-- a constraint this migration did not create is not this migration's to
+-- remove.
+-- ============================================================================
+
+alter table public.schedules drop constraint if exists schedules_persona_owner;

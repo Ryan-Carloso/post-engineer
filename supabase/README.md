@@ -16,6 +16,7 @@ the order — you never need to guess or read docs to know what comes next:
 | 008 | `migrations/008_video-generations-engine-task-id-idx.sql` | Index `video_generations.engine_task_id`: generation_id ↔ task_id correlation for debugging. No FK (engine_task_state is ephemeral) |
 | 009 | `migrations/009_batch-charge-task-correlation.sql` | Backfill `token_transactions.engine_task_id` for **single-slot** batch charges, so a scheduled post's prepaid charge can be resolved from its engine task id (fixes history rows stuck in `running` when the engine drops a task). Multi-slot batches are deliberately left NULL — one charge covers several videos. Plus two indexes for the gone-task reconciliation |
 | 010 | `migrations/010_scheduled-post-progress-history.sql` | `scheduled_post_progress_history`: every observed (progress, stage) transition per post, recorded change-only by `GET /api/schedule/status`; cascade-deletes with the post |
+| 011 | `migrations/011_schedules-drop-persona-owner-unique.sql` | Drop `schedules_persona_owner` (the legacy one-schedule-per-persona unique constraint). Only databases bootstrapped from the old `apps/web/supabase/` chain carry it; it makes every batch after a persona's first one fail. The canonical `001_schema.sql` never declared it |
 
 ## How to apply
 

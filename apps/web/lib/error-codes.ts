@@ -16,6 +16,7 @@ export const ERROR_CODES = {
   SOCIAL_ACCOUNT_NOT_OWNED: 'SOCIAL_ACCOUNT_NOT_OWNED',
   INVALID_PROVIDER_ACCOUNT: 'INVALID_PROVIDER_ACCOUNT',
   NO_CONNECTED_ACCOUNTS: 'NO_CONNECTED_ACCOUNTS',
+  PERSONA_ALREADY_SCHEDULED: 'PERSONA_ALREADY_SCHEDULED',
   TOPICS_REQUIRED: 'TOPICS_REQUIRED',
   TOPICS_LIMIT_EXCEEDED: 'TOPICS_LIMIT_EXCEEDED',
   INVALID_SCHEDULE_TIME: 'INVALID_SCHEDULE_TIME',
@@ -36,6 +37,8 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   SOCIAL_ACCOUNT_NOT_OWNED: 'Selected {provider} account does not belong to this user.',
   INVALID_PROVIDER_ACCOUNT: 'Selected account cannot be used with this provider.',
   NO_CONNECTED_ACCOUNTS: 'No connected {provider} account found.',
+  PERSONA_ALREADY_SCHEDULED:
+    'This persona already has a publishing schedule. Cancel it before scheduling new videos for it.',
   TOPICS_REQUIRED: 'At least one video idea is required.',
   TOPICS_LIMIT_EXCEEDED: 'You can generate up to 10 videos per request.',
   INVALID_SCHEDULE_TIME: 'One or more publishing times are invalid.',
