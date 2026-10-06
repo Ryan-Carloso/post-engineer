@@ -98,6 +98,9 @@ interface DbConfig {
   spendErrorCode?: string;
   refundErrorCode?: string;
   scheduleInsertErrorCode?: string;
+  /** Constraint named by a 23505 on the schedule insert, mirroring the
+   *  Postgres message (`duplicate key value violates unique constraint "…"`). */
+  scheduleInsertConstraint?: string;
   slotInsertFails?: boolean;
   engineFailSubjects?: string[];
 }
@@ -155,17 +158,25 @@ function makeClient(cfg: DbConfig): unknown {
       },
       insert: (rows: unknown) => {
         inserts[name] = Array.isArray(rows) ? rows : [rows];
+        // Postgres names the constraint in the message of a 23505; the route
+        // classifies the failure by that name, so the mock must carry it.
+        const insertError = (): { code: string; message: string } => ({
+          code: cfg.scheduleInsertErrorCode ?? '23505',
+          message: cfg.scheduleInsertConstraint
+            ? `duplicate key value violates unique constraint "${cfg.scheduleInsertConstraint}"`
+            : 'conflict',
+        });
         const q: Record<string, unknown> = {
           select: () => q,
           single: async () => {
             if (name === 'schedules' && cfg.scheduleInsertErrorCode) {
-              return { data: null, error: { code: cfg.scheduleInsertErrorCode, message: 'conflict' } };
+              return { data: null, error: insertError() };
             }
             return { data: { id: 'new-id' }, error: null };
           },
           then: (resolve: (v: unknown) => void, reject: (e: unknown) => void) => {
             if (name === 'schedules' && cfg.scheduleInsertErrorCode) {
-              return Promise.resolve({ data: null, error: { code: cfg.scheduleInsertErrorCode, message: 'conflict' } }).then(resolve, reject);
+              return Promise.resolve({ data: null, error: insertError() }).then(resolve, reject);
             }
             if (name === 'scheduled_posts') {
               if (cfg.slotInsertFails) {
@@ -732,7 +743,12 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const key = 'race-key-1';
       // Step 7 misses the schedule (race), we spend, then the insert hits
       // the PK: our spend is redundant, refund it before replaying.
-      setup({ ...DEFAULT_CFG, scheduleInsertErrorCode: '23505', replaySlots: [] });
+      setup({
+        ...DEFAULT_CFG,
+        scheduleInsertErrorCode: '23505',
+        scheduleInsertConstraint: 'schedules_pkey',
+        replaySlots: [],
+      });
       const res = await post(baseBody({ idempotencyKey: key }));
       const json = await res.json();
       expect(res.status).toBe(200);
@@ -751,7 +767,13 @@ describe('POST /api/videos/generate-and-schedule', () => {
       // its spend. If the schedule insert then PK-conflicts with a concurrent
       // winner, there is no redundant spend of ours to undo: refunding would
       // steal the legitimate prior spend.
-      setup({ ...DEFAULT_CFG, ledgerIds: ['tx-old'], scheduleInsertErrorCode: '23505', replaySlots: [] });
+      setup({
+        ...DEFAULT_CFG,
+        ledgerIds: ['tx-old'],
+        scheduleInsertErrorCode: '23505',
+        scheduleInsertConstraint: 'schedules_pkey',
+        replaySlots: [],
+      });
       const res = await post(baseBody({ idempotencyKey: key }));
       const json = await res.json();
       expect(res.status).toBe(200);
@@ -768,7 +790,13 @@ describe('POST /api/videos/generate-and-schedule', () => {
       // The failure must be logged loudly, but the winner's schedule still
       // exists — return it instead of a 500 that hides it.
       vi.mocked(logger.error).mockClear();
-      setup({ ...DEFAULT_CFG, scheduleInsertErrorCode: '23505', refundErrorCode: 'XX000', replaySlots: [] });
+      setup({
+        ...DEFAULT_CFG,
+        scheduleInsertErrorCode: '23505',
+        scheduleInsertConstraint: 'schedules_pkey',
+        refundErrorCode: 'XX000',
+        replaySlots: [],
+      });
       const res = await post(baseBody({ idempotencyKey: key }));
       const json = await res.json();
       expect(res.status).toBe(200);
@@ -899,6 +927,64 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(500);
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
       expect(inserts['schedules']).toBeUndefined();
+    });
+
+    it('409s with PERSONA_ALREADY_SCHEDULED instead of "replaying" a schedule it never inserted', async () => {
+      // The regression this pins: the persona already owns a schedule row, so
+      // the insert violates schedules_persona_owner. That is not a PK race —
+      // nothing of ours exists to replay. Answering `{slots: [],
+      // replayed: true}` reported a successful batch of videos that was never
+      // generated, which is how every MCP generate call for this persona
+      // silently no-opped.
+      setup({
+        ...DEFAULT_CFG,
+        scheduleInsertErrorCode: '23505',
+        scheduleInsertConstraint: 'schedules_persona_owner',
+        replaySlots: [],
+      });
+      const res = await post(baseBody({ idempotencyKey: 'persona-owner-key' }));
+      const json = await res.json();
+      expect(res.status).toBe(409);
+      expect(json.code).toBe('PERSONA_ALREADY_SCHEDULED');
+      // The lie is the point of the test: no empty "replay" success.
+      expect(json.replayed).toBeUndefined();
+      expect(json.slots).toBeUndefined();
+      // Our spend bought nothing: give it back.
+      const refunds = rpcCalls.filter((c) => c.name === 'refund_generation_tokens');
+      expect(refunds).toHaveLength(1);
+      expect(refunds[0].args.p_generation_id).toMatch(/^batch:/);
+    });
+
+    it('does not refund the persona-already-scheduled conflict when we skipped our spend', async () => {
+      // alreadySpent: this request charged nothing, so the prior charge under
+      // the same generation_id is legitimate and refunding would steal it.
+      setup({
+        ...DEFAULT_CFG,
+        ledgerIds: ['tx-old'],
+        scheduleInsertErrorCode: '23505',
+        scheduleInsertConstraint: 'schedules_persona_owner',
+        replaySlots: [],
+      });
+      const res = await post(baseBody({ idempotencyKey: 'persona-owner-ledger-key' }));
+      expect(res.status).toBe(409);
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+      expect(rpcCalls.filter((c) => c.name === 'refund_generation_tokens')).toHaveLength(0);
+    });
+
+    it('refunds and 500s on a unique violation from an unclassified constraint', async () => {
+      // An unrecognized constraint is not a race and not a known business
+      // rule: fail loudly instead of guessing a replay.
+      setup({
+        ...DEFAULT_CFG,
+        scheduleInsertErrorCode: '23505',
+        scheduleInsertConstraint: 'some_future_constraint',
+        replaySlots: [],
+      });
+      const res = await post(baseBody({ idempotencyKey: 'unknown-constraint-key' }));
+      const json = await res.json();
+      expect(res.status).toBe(500);
+      expect(json.replayed).toBeUndefined();
+      expect(rpcCalls.filter((c) => c.name === 'refund_generation_tokens')).toHaveLength(1);
     });
   });
 

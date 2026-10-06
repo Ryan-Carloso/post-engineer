@@ -128,9 +128,47 @@ function coded(
   return apiErrorResponse(status, message, { code, field, route: ROUTE, extra });
 }
 
-/** PostgREST unique-violation code. */
-function isUniqueViolation(error: { code?: string } | null | undefined): boolean {
-  return error?.code === '23505';
+//---------------
+// Unique-violation classification. Postgres reports SQLSTATE 23505 for EVERY
+// unique constraint, and the two that can fire here mean opposite things:
+//
+//   schedules_pkey           — two concurrent requests derived the same
+//                             deterministic schedule id; the loser must
+//                             refund its own spend and replay the winner.
+//   schedules_persona_owner — the persona already has a schedule row. That is
+//                             NOT a concurrency race: it is the legacy
+//                             one-schedule-per-persona constraint (still
+//                             present on databases bootstrapped from the old
+//                             apps/web/supabase chain, dropped for new ones by
+//                             migration 011). Treating it as a race made this
+//                             route refund a spend, then "replay" a schedule id
+//                             that was never inserted — answering
+//                             `{slots: [], replayed: true}`, i.e. reporting a
+//                             success that generated nothing.
+//
+// So the constraint name is read from the error and classified, never assumed.
+//---------------
+
+/** Postgres unique-violation SQLSTATE. */
+const UNIQUE_VIOLATION_SQLSTATE = '23505';
+
+/** Primary key of public.schedules: a genuine concurrent-duplicate race. */
+const SCHEDULE_PK_CONSTRAINT = 'schedules_pkey';
+
+/**
+ * Legacy one-schedule-per-persona constraint. Migration 011 drops it; until a
+ * database applies that migration, every generation for a persona that already
+ * has a schedule lands here.
+ */
+const SCHEDULES_PERSONA_OWNER_CONSTRAINT = 'schedules_persona_owner';
+
+/** The constraint a 23505 error names, or null when the error is not one. */
+function violatedConstraint(
+  error: { code?: string; message?: string; details?: string } | null | undefined
+): string | null {
+  if (error?.code !== UNIQUE_VIOLATION_SQLSTATE) return null;
+  const source = `${error.message ?? ''} ${error.details ?? ''}`;
+  return /constraint "([^"]+)"/.exec(source)?.[1] ?? null;
 }
 
 /** signedUrl() never throws: a signing failure resolves to undefined and is
@@ -758,7 +796,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       p_reason: `Unified generate+schedule (${topics.length} videos)`,
     });
     if (spendError) {
-      if (isUniqueViolation(spendError)) {
+      if (violatedConstraint(spendError) !== null) {
         // A concurrent duplicate spent under the same generation_id first:
         // replay instead of double-charging.
         const replayed = await fetchReplay(supabase, userId, idem.scheduleId);
@@ -821,12 +859,50 @@ async function postHandler(request: Request): Promise<NextResponse> {
     active: true,
   });
   if (scheduleError) {
-    if (isUniqueViolation(scheduleError)) {
+    const constraint = violatedConstraint(scheduleError);
+    if (constraint === SCHEDULES_PERSONA_OWNER_CONSTRAINT) {
+      // The persona already owns a schedule row and this database still
+      // enforces one-schedule-per-persona (migration 011 has not been applied
+      // here). Nothing was inserted under our schedule id, so there is no
+      // winner to replay: answering `{slots: [], replayed: true}` would tell
+      // the caller a batch of videos is scheduled when not a single one is.
+      // Our own spend is redundant either way — refund it, then report the
+      // conflict honestly. When the spend was skipped (alreadySpent) there is
+      // nothing of ours to undo, and refunding would steal the prior spend.
+      logger.error('[generate-and-schedule] persona already has a schedule; refunding redundant spend', scheduleError, {
+        scheduleId: idem.scheduleId,
+        userId,
+        personaId,
+      });
+      if (!alreadySpent) {
+        const { error: refundError } = await supabase.rpc('refund_generation_tokens', {
+          p_user_id: userId,
+          p_generation_id: idem.generationId,
+          p_reason: 'Persona already scheduled; refunded redundant spend',
+        });
+        if (refundError) {
+          logger.error('[generate-and-schedule] persona-already-scheduled refund failed', refundError, {
+            scheduleId: idem.scheduleId,
+            userId,
+            generationId: idem.generationId,
+          });
+        }
+      }
+      trackApiEvent('video_creation_failed', {
+        userId,
+        scheduleId: idem.scheduleId,
+        errorCode: ERROR_CODES.PERSONA_ALREADY_SCHEDULED,
+        failureStage: 'schedule_insert',
+      });
+      return coded(409, ERROR_CODES.PERSONA_ALREADY_SCHEDULED, formatErrorMessage(ERROR_CODES.PERSONA_ALREADY_SCHEDULED));
+    }
+    if (constraint === SCHEDULE_PK_CONSTRAINT) {
       // Lost a PK race with a concurrent duplicate (or a replay slipped past
-      // the pre-check). If we spent in this request, our spend is redundant:
-      // the winner's own spend under the same generation_id is the single
-      // charge, so undo ours. Without this, the missing unique constraint on
-      // token_transactions.generation_id lets both spends stand.
+      // the pre-check) on schedules_pkey. If we spent in this request, our
+      // spend is redundant: the winner's own spend under the same
+      // generation_id is the single charge, so undo ours. Without this, the
+      // missing unique constraint on token_transactions.generation_id lets
+      // both spends stand.
       // When we skipped our spend (alreadySpent), there is nothing of ours
       // to undo — refunding would steal the legitimate prior spend.
       if (!alreadySpent) {
@@ -849,12 +925,14 @@ async function postHandler(request: Request): Promise<NextResponse> {
           logger.error('[generate-and-schedule] schedule PK race; refunded redundant spend, replaying winner', scheduleError, {
             scheduleId: idem.scheduleId,
             userId,
+            constraint,
           });
         }
       } else {
         logger.error('[generate-and-schedule] schedule PK race; already spent, nothing to refund, replaying winner', scheduleError, {
           scheduleId: idem.scheduleId,
           userId,
+          constraint,
         });
       }
       trackApiEvent('video_creation_failed', {

@@ -97,6 +97,14 @@ Provision the database schema in your Supabase project:
    stays visible on the post detail page after the fact. Rows
    cascade-delete with their post.
 
+10. `supabase/migrations/011_schedules-drop-persona-owner-unique.sql` — drops
+    `schedules_persona_owner`, the old `unique (persona_id)` constraint from
+    the retired recurring-schedule model. A fresh install never had it (the
+    canonical schema never declared it), but a database bootstrapped from the
+    older `apps/web/supabase/` chain does, and then every scheduled batch for
+    a persona after its first one fails. Harmless if you never applied that
+    chain — the drop is guarded with `if exists`.
+
 Paste each file into the Supabase Dashboard > SQL Editor and run, in order
 (the numeric prefixes encode the order — always apply the
 lowest number first), or apply them with the Supabase CLI from the repo
