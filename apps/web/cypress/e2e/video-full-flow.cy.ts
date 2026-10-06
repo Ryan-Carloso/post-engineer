@@ -257,6 +257,14 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
       });
     }).as('createPost');
 
+    // The success navigation lands on the new post's own page, whose detail
+    // query must be stubbed like the later tests do — the create above is
+    // stubbed, so no real slot exists for the real backend to return.
+    cy.intercept('GET', `/api/schedule/slots/${SLOT_ID}`, {
+      statusCode: 200,
+      body: slotDetail('generating', 0, null),
+    }).as('slotDetail');
+
     // From here on the account is connected for this test.
     blueskyConnected = true;
 
