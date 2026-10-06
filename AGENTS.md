@@ -1218,15 +1218,43 @@ Follow these so the same issues don't come back:
   Declined without code change. Pattern: the reviewer invents a "contract"
   (e.g. "5-tuple contract", "should be Optional[...]") that the code never
   declares; check whether the alleged contract exists before touching anything.
-- **OCR fallback chain mirrors opencode-review (2026-09-29):** ocr-review now
-  retries 5.3-flash -> 4.7-flash -> 4.5-flash, same as opencode-review's
-  ZAI_FREE_MODEL -> ZAI_FREE_MODEL_FALLBACK. Invariants the validator pins:
-  all invocations share one action pin (max 3), every fallback carries the
-  fail-closed gates (key-check + env-guard) plus the previous-attempts-failed
-  conditions, non-final attempts have `continue-on-error: true` (otherwise a
-  mid-chain failure ends the job before the next fallback runs) and
-  `upload_artifacts: 'false'` (only the LAST attempt uploads — fixed per-run
-  artifact name would 409-conflict otherwise).
+- **opencode-review fallback chain (2026-10-06, free-first):**
+  `openrouter/openrouter/free` -> `zai-standard/glm-4.7-flash` ->
+  `zai-coding-plan/glm-5.3-flash` -> `openrouter/z-ai/glm-5.3-flash`
+  (first success wins; paid tier is the last resort).
+  glm-4.5-flash was dropped — its review quality was too poor. The OpenRouter free tier uses the
+  special router id `openrouter/free` (same convention
+  as the engine's `_PROVIDER_DEFAULT_MODELS`, no hardcoded model list to
+  rot); the paid tier pins `z-ai/glm-5.3-flash` (verified on the OpenRouter
+  models API) instead of the auto router, for predictable review quality.
+  Both configured in opencode.json with `@ai-sdk/openai-compatible` against
+  `https://openrouter.ai/api/v1` and apiKey `{env:OPENROUTER_API_KEY}`. One
+  `OPENROUTER_API_KEY` secret serves both tiers (free models cost $0 even
+  on a paid key). The job runs if EITHER key is set; each tier is skipped
+  when its key is missing. The old "OCR fallback chain mirrors
+  opencode-review" note is dead — the ocr-review workflow no longer exists.
+- **opencode-review hardened — grounded findings + mechanical checks
+  (2026-10-06):** the review prompt requires a machine-checkable format per
+  finding (`### SEVERITY: title`, `**Location:** path:line1-line2`, verbatim
+  code fence first, plus "do not report findings you cannot quote verbatim");
+  `.github/scripts/verify-review-grounding.py` drops findings whose
+  file/lines/quote don't verify against the checkout (zero survivors → stub
+  comment; "nothing material" reviews publish as-is).
+  `.github/scripts/review-mechanical-checks.py` appends a "Mechanical
+  checks" section to the comment: FAIL on duplicate `supabase/migrations/`
+  numbers (the real 009 collision) or obvious secrets in added diff lines,
+  WARN on prod files changed with no test file changed — this replaced the
+  LLM's old TDD-coverage prompt bullet. Mechanical FAILs post the comment
+  first, then fail the job.
+  **Follow-up (review's own findings, same day):** the grounding verifier
+  now fails closed — finding-like output that ignores the `### SEVERITY:`
+  format is NOT published (a format deviation previously slipped through as
+  "nothing material"); heading detection skips fenced code blocks (a quoted
+  `### ` line no longer splits a finding); the review read uses
+  `errors="replace"`; `::add-mask::` runs in its own step right after the
+  key check, before any LLM output can be logged; both scripts have pytest
+  unit tests (`.github/scripts/tests/`) wired into the `review-workflows` CI
+  job, and the validator pins the posted artifact as `review.verified.md`.
 
 ## Test quirks (vitest 4.1)
 
