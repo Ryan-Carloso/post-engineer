@@ -99,6 +99,19 @@ describe('recordGenerationUpdate', () => {
     );
   });
 
+  it('leaves optional fields out of the patch when they are not provided', async () => {
+    const { supabase, update } = mockSupabase();
+    await recordGenerationUpdate({
+      supabase,
+      generationId: 'gen-1',
+      status: 'running',
+    });
+    expect(update).toHaveBeenCalledWith({
+      status: 'running',
+      updated_at: expect.any(String),
+    });
+  });
+
   it('never throws when the update fails', async () => {
     const { supabase, eq } = mockSupabase();
     eq.mockResolvedValue({ error: new Error('db down') });
