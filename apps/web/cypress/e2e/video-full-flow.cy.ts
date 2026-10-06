@@ -269,7 +269,8 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
     // The click must actually select: assert the store-backed selected state
     // instead of discovering a silent no-op at the submit wait.
     cy.get('label[data-selected="true"]').should('contain', PERSONA.name);
-    cy.get('input[aria-label="Temas 1"]').type(TOPIC);
+    // One topic field, no row index: the form creates a single video per post.
+    cy.get('input[aria-label="Tema"]').type(TOPIC);
     cy.contains('[data-testid="account-card"]', BLUESKY_ACCOUNT.handle).click();
     cy.get('[data-testid="account-card-select"]').should('be.checked');
     // A datetime-local input does not take .type() reliably (its segments

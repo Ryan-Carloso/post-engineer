@@ -174,8 +174,10 @@ describe('Creating a post', () => {
 
     // Persona (required) — the radio card is a label wrapping the text.
     cy.contains('E2E Persona').click();
-    // The single topic field.
-    cy.get('[aria-label="Topic"]').type('E2E topic one');
+    // The single topic field. The app's default locale is pt, so the aria
+    // label is the PT copy — hardcoding the English one made this spec fail
+    // on the label, not on the flow.
+    cy.get('[aria-label="Tema"]').type('E2E topic one');
     // First publish — must parse in the selected timezone.
     setDateTimeValue('input[type="datetime-local"]', '2030-06-01T09:00');
     // At least one publishing account.
@@ -202,7 +204,7 @@ describe('Creating a post', () => {
     cy.visit('/posts/new');
     cy.wait('@personas');
 
-    cy.get('[aria-label="Topic"]').should('have.length', 1);
+    cy.get('[aria-label="Tema"]').should('have.length', 1);
     // A second topic is a second post: the batch form is gone from /posts/new.
     cy.contains('button', /Adicionar tema|Add topic/).should('not.exist');
   });
