@@ -1,8 +1,18 @@
 name: version-check
 
-# Enforces the unified platform version: the repo-root VERSION file is the
-# single source of truth and every release location must agree with it.
-# No agent (human or AI) can forget the bump or leave locations diverged.
+# Validates the repo-root VERSION file: the single, manually-maintained
+# source of truth for the platform SemVer (e.g. 1.8.0).
+#
+# Versioning model — no automatic bumps:
+# - VERSION is edited by hand only when cutting a release: never per PR,
+#   never by CI, and package.json / pyproject.toml / uv.lock are never
+#   rewritten automatically.
+# - Build metadata (build number + commit SHA) is NOT stored in git: CI
+#   injects VERSION/BUILD/COMMIT as env vars at build/deploy time (BUILD
+#   is the CI run number — unique per run, never random), and the engine
+#   reports them via GET /version and /health.
+# - Parallel PRs therefore never conflict on version files: each CI run
+#   generates its own build number.
 on:
   pull_request:
     branches: [main]
@@ -15,18 +25,13 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
-        with:
-          fetch-depth: 0
 
-      - name: All version locations in sync
-        run: bash scripts/bump-version.sh check
-
-      - name: PR bumps VERSION
+      - name: VERSION is valid SemVer
         run: |
           set -euo pipefail
-          base="${{ github.event.pull_request.base.sha }}"
-          if git diff --quiet "$base"...HEAD -- VERSION; then
-            echo "::error::This PR does not bump VERSION. Run 'scripts/bump-version.sh [patch|minor|major]' and commit the result."
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::VERSION must be SemVer x.y.z (got '$VERSION'). Edit it by hand only when cutting a release."
             exit 1
           fi
-          echo "VERSION bumped in this PR."
+          echo "VERSION=$VERSION"

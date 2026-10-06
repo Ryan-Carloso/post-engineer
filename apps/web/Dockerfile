@@ -22,9 +22,18 @@ RUN pnpm install --frozen-lockfile
 # files copied above so editing it does not invalidate the install layer.
 COPY tsconfig.base.json ./
 
-# Application code, VERSION (inlined as APP_VERSION) and build-time env.
+# Application code, VERSION (fallback for local builds) and build-time env.
 COPY VERSION ./
 COPY apps/web ./apps/web
+
+# Build metadata: CI injects VERSION/BUILD/COMMIT as build args (VERSION
+# from the repo-root VERSION file, BUILD from the CI run number, COMMIT
+# from the commit SHA); empty locally. next.config.ts inlines them into
+# the bundle. Declared after the COPY layers so a new build number alone
+# does not invalidate the dependency layers above.
+ARG VERSION=""
+ARG BUILD=""
+ARG COMMIT=""
 RUN cd apps/web && pnpm build
 
 FROM node:22-alpine AS runner

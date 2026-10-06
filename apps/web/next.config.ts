@@ -3,12 +3,16 @@ import fs from "node:fs";
 import path from "node:path";
 
 //---------------
-// Platform version: the repo-root VERSION file is the single source of
-// truth (bumped on every PR). Read once at build time and inlined into the
-// bundle via env — no external service involved. Falls back to 'dev' when
-// the file is unreadable (e.g. a partial checkout).
+// Build metadata: VERSION/BUILD/COMMIT are injected at build time — CI sets
+// them from the repo-root VERSION file (manual SemVer), the CI run number,
+// and the commit SHA (see apps/web/Dockerfile ARGs). Local builds fall back
+// to the VERSION file for the version; build/commit stay empty there.
+// Inlined into the bundle via env — no external service involved. Falls
+// back to 'dev' when the file is unreadable (e.g. a partial checkout).
 //---------------
 function readPlatformVersion(): string {
+  const injected = process.env.VERSION?.trim();
+  if (injected) return injected;
   try {
     return fs.readFileSync(path.join(__dirname, "..", "..", "VERSION"), "utf8").trim() || "dev";
   } catch {
@@ -22,7 +26,9 @@ const nextConfig: NextConfig = {
   // the traced server + node_modules, keeping the image small.
   output: "standalone",
   env: {
-    APP_VERSION: readPlatformVersion(),
+    VERSION: readPlatformVersion(),
+    BUILD: process.env.BUILD?.trim() ?? '',
+    COMMIT: process.env.COMMIT?.trim() ?? '',
   },
   serverExternalPackages: ['googleapis', 'google-auth-library'],
   images: {

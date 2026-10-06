@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -98,11 +98,6 @@ beforeEach(() => {
     data: SESSION_USER,
     isLoading: false,
   } as never);
-  process.env.APP_VERSION = '9.9.9';
-});
-
-afterEach(() => {
-  delete process.env.APP_VERSION;
 });
 
 describe('AccountPanel', () => {
@@ -140,9 +135,17 @@ describe('AccountPanel', () => {
     });
   });
 
-  it('renders the version badge when showVersionBadge is set', () => {
+  it('renders the version badge when showVersionBadge is set', async () => {
+    // The badge fetches /api/version (engine build metadata) on mount.
+    mockFetch.mockImplementation(async (url: string) =>
+      url === '/api/version'
+        ? { ok: true, json: async () => ({ version: '1.8.0', build: 502, commit: 'abc123' }) }
+        : { ok: true, json: async () => ({ success: true, balance: 45, free: 0 }) },
+    );
     render(<AccountPanel showVersionBadge />, { wrapper: createWrapper() });
-    expect(screen.getByTestId('version-badge')).toHaveTextContent('BETA - 9.9.9');
+    await waitFor(() => {
+      expect(screen.getByTestId('version-badge')).toHaveTextContent('BETA - 1.8.0 (502)');
+    });
   });
 
   it('does not render the version badge by default', () => {
