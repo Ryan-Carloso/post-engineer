@@ -82,7 +82,9 @@ def test_unique_migration_numbers_pass(checks, tmp_path, monkeypatch, capsys):
 
 
 def test_secret_values_are_never_printed(checks, tmp_path, monkeypatch, capsys):
-    secret = "sk-abcdefghij1234567890XYZ"
+    # Build the fake key at runtime: a literal sk-... value in this file
+    # would trip the workflow's own mechanical secret scan on the PR diff.
+    secret = "sk-" + "abcdefghij1234567890" + "XYZ"
     diff = (
         "diff --git a/apps/web/lib/x.ts b/apps/web/lib/x.ts\n"
         "+++ b/apps/web/lib/x.ts\n"
