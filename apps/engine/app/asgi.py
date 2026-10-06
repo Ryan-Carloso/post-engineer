@@ -252,33 +252,54 @@ app = get_application()
 # No CORS: the engine is internal — browsers never hit it directly; every
 # call goes through Next.js (same origin as the app) with the Supabase JWT.
 
-# Platform version file: the repo-root VERSION (single source of truth,
-# bumped on every PR) is mounted read-only into the container by
-# docker-compose (see ../../docker-compose.yml volumes).
+# Build metadata: VERSION/BUILD/COMMIT are injected at build/deploy time.
+# CI sets them from the repo-root VERSION file (manual SemVer), the CI run
+# number, and the commit SHA; production deploys pass them through
+# docker-compose (see ../../docker-compose.yml). The repo-root VERSION file
+# is mounted read-only into the container as the fallback for the version
+# when VERSION is unset (local runs). Nothing version-related is committed
+# to git per build — parallel CI runs never conflict on version files.
 VERSION_FILE = "/app/VERSION"
 
 
-def get_deployed_version() -> str:
-    """Deployed platform version, for /health and the startup log.
-
-    Reads the mounted VERSION file; falls back to the APP_VERSION env
-    (manual override) and then "dev". Never raises: version reporting
-    must not break the app.
-    """
+def _read_version_file() -> str | None:
+    """Version from the mounted VERSION file, or None when unreadable."""
     try:
         with open(VERSION_FILE, encoding="utf-8") as handle:
             version = handle.read().strip()
-            if version:
-                return version
+            return version or None
     except OSError:
-        pass
-    return os.environ.get("APP_VERSION") or "dev"
+        return None
+
+
+def get_build_info() -> dict[str, str | int | None]:
+    """Build metadata identifying the exact running build.
+
+    Precedence: injected VERSION/BUILD/COMMIT env vars first (authoritative),
+    then the mounted VERSION file for the version, then "dev". The build
+    number is the CI run number (an int); malformed values degrade to None.
+    Never raises: version reporting must not break the app.
+    """
+    version = os.environ.get("VERSION", "").strip() or _read_version_file() or "dev"
+    build_raw = os.environ.get("BUILD", "").strip()
+    try:
+        build: int | None = int(build_raw) if build_raw else None
+    except ValueError:
+        build = None
+    commit = os.environ.get("COMMIT", "").strip() or None
+    return {"version": version, "build": build, "commit": commit}
+
+
+@app.get("/version")
+def version() -> dict[str, str | int | None]:
+    """Public build metadata (no auth): version + CI build number + commit SHA."""
+    return get_build_info()
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    """Public liveness + version probe (no auth): identifies the live version."""
-    return {"status": "ok", "version": get_deployed_version()}
+def health() -> dict[str, str | int | None]:
+    """Public liveness + build probe (no auth): identifies the live build."""
+    return {"status": "ok", **get_build_info()}
 
 public_dir = utils.public_dir()
 app.mount("/", StaticFiles(directory=public_dir, html=True), name="")
@@ -291,7 +312,11 @@ def shutdown_event():
 
 @app.on_event("startup")
 def startup_event():
-    logger.info(f"startup event (version {get_deployed_version()})")
+    build = get_build_info()
+    logger.info(
+        f"startup event (version {build['version']} "
+        f"build {build['build']} commit {build['commit']})"
+    )
     # Warm the PostHog client on server startup — not at controller import
     # time: the on_accepted funnel callback runs under the task-manager
     # lock, and the first track_event in a process pays the posthog import

@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.services import fill_schedule as fs
 from app.services import notify as nf
+from app.models import const as model_const
 from app.services.upload_publisher import InstagramMetadata, LinkedInMetadata, YouTubeMetadata
 
 UTC = timezone.utc
@@ -232,6 +233,8 @@ class BatchScheduleTests(unittest.TestCase):
             user_id="user-1",
             flow="batch",
             pipeline="video",
+            state=model_const.TASK_STATE_PROCESSING,
+            progress=0,
             slot_id="slot-1",
             schedule_id="sched-1",
             persona_id="persona-1",
@@ -261,7 +264,12 @@ class BatchScheduleTests(unittest.TestCase):
             scheduler.generator._dispatch_generation("task-2", request, "user-1")
 
         scheduler.task_state.update_task.assert_called_once_with(
-            "task-2", user_id="user-1", flow="batch", pipeline="video"
+            "task-2",
+            user_id="user-1",
+            flow="batch",
+            pipeline="video",
+            state=model_const.TASK_STATE_PROCESSING,
+            progress=0,
         )
 
     def test_dispatch_generation_omits_only_the_blank_identity_ids(self):
@@ -293,6 +301,8 @@ class BatchScheduleTests(unittest.TestCase):
             user_id="user-1",
             flow="batch",
             pipeline="video",
+            state=model_const.TASK_STATE_PROCESSING,
+            progress=0,
             schedule_id="sched-3",
             persona_id="persona-3",
         )
@@ -325,6 +335,8 @@ class BatchScheduleTests(unittest.TestCase):
             user_id="user-1",
             flow="batch",
             pipeline="video",
+            state=model_const.TASK_STATE_PROCESSING,
+            progress=0,
             slot_id="slot-4",
             persona_id="persona-4",
         )
@@ -352,7 +364,12 @@ class BatchScheduleTests(unittest.TestCase):
             )
 
         scheduler.task_state.update_task.assert_called_once_with(
-            "task-5", user_id="user-1", flow="batch", pipeline="video"
+            "task-5",
+            user_id="user-1",
+            flow="batch",
+            pipeline="video",
+            state=model_const.TASK_STATE_PROCESSING,
+            progress=0,
         )
 
 

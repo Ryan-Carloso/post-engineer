@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import { render, screen, within, waitFor, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 
@@ -546,5 +546,68 @@ describe('PostDetailPage — post identity', () => {
 
     expect(screen.getByText('gen-3')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'posts.copyPostId' })).toBeInTheDocument();
+  });
+});
+
+describe('PostDetailPage — progress history', () => {
+  const HISTORY = [
+    { progress: 40, stage: 'subtitle', recordedAt: '2026-10-05T22:10:00.000Z' },
+    { progress: 0, stage: 'music_mood', recordedAt: '2026-10-05T22:12:00.000Z' },
+    { progress: 50, stage: 'materials', recordedAt: '2026-10-05T22:14:00.000Z' },
+  ];
+
+  function mockGeneratingWithHistory(history: unknown[]) {
+    mockQueries({
+      slot: slotPayload({
+        id: 'gen-slot',
+        status: 'generating',
+        taskId: 'task-7',
+        progress: 50,
+        stage: 'materials',
+        progressHistory: history,
+      }),
+    });
+    vi.mocked(useParams).mockReturnValue({ id: 'gen-slot' });
+  }
+
+  it('lists the observed progress transitions oldest first', () => {
+    mockGeneratingWithHistory(HISTORY);
+    render(<DetailPage />);
+
+    const section = screen.getByLabelText('posts.progressHistoryTitle');
+    const rows = within(section).getAllByTestId('progress-history-row');
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toHaveTextContent('40%');
+    expect(rows[0]).toHaveTextContent('subtitle');
+    expect(rows[1]).toHaveTextContent('0%');
+    expect(rows[2]).toHaveTextContent('50%');
+  });
+
+  it('marks the regressed row so the 40% -> 0% drop is visible', () => {
+    mockGeneratingWithHistory(HISTORY);
+    render(<DetailPage />);
+
+    const section = screen.getByLabelText('posts.progressHistoryTitle');
+    const rows = within(section).getAllByTestId('progress-history-row');
+    expect(rows[0]).not.toHaveAttribute('data-regressed');
+    // 0% after 40% is a regression; 50% after 0% is forward progress.
+    expect(rows[1]).toHaveAttribute('data-regressed', 'true');
+    expect(rows[2]).not.toHaveAttribute('data-regressed');
+  });
+
+  it('renders a null stage without crashing', () => {
+    mockGeneratingWithHistory([{ progress: 10, stage: null, recordedAt: '2026-10-05T22:09:00.000Z' }]);
+    render(<DetailPage />);
+
+    const section = screen.getByLabelText('posts.progressHistoryTitle');
+    expect(within(section).getByTestId('progress-history-row')).toHaveTextContent('10%');
+  });
+
+  it('renders no history section when nothing was recorded', () => {
+    mockQueries({ slot: slotPayload({ id: 'u1', status: 'awaiting' }) });
+    vi.mocked(useParams).mockReturnValue({ id: 'u1' });
+    render(<DetailPage />);
+
+    expect(screen.queryByLabelText('posts.progressHistoryTitle')).not.toBeInTheDocument();
   });
 });

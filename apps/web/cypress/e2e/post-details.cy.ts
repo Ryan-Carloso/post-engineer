@@ -169,3 +169,67 @@ describe('Post details page', () => {
     cy.url().should('match', /\/posts$/);
   });
 });
+
+//---------------
+// Progress history — the detail page lists every observed (progress,
+// stage) transition of a generating post, with regressed rows marked so a
+// 40% -> 0% drop is visible instead of a mystery.
+//---------------
+describe('Post details page — progress history', () => {
+  const HISTORY = [
+    { progress: 40, stage: 'subtitle', recordedAt: '2026-10-05T22:10:00.000Z' },
+    { progress: 0, stage: 'music_mood', recordedAt: '2026-10-05T22:12:00.000Z' },
+    { progress: 50, stage: 'materials', recordedAt: '2026-10-05T22:14:00.000Z' },
+  ];
+
+  function visitWithHistory(progressHistory: unknown[]) {
+    cy.loginE2EUser();
+    cy.intercept('GET', '/api/persona/video-generations/*', {
+      statusCode: 404,
+      body: { success: false, error: 'Not found' },
+    }).as('generationDetail');
+    const payload = slotDetailPayload() as {
+      success: boolean;
+      slot: Record<string, unknown>;
+      schedule: unknown;
+      persona: unknown;
+    };
+    payload.slot = {
+      ...payload.slot,
+      status: 'generating',
+      taskId: 'task-e2e-7',
+      progress: 50,
+      stage: 'materials',
+      progressHistory,
+    };
+    cy.intercept('GET', '/api/schedule/slots/*', payload).as('slotDetail');
+    cy.intercept('GET', '/api/account', accountsPayload()).as('accounts');
+    cy.visit(`/posts/${POST_DETAIL_SLOT_ID}`);
+    cy.wait('@slotDetail');
+  }
+
+  it('lists the observed transitions oldest-first with the regression marked', () => {
+    visitWithHistory(HISTORY);
+
+    cy.contains(/Histórico de progresso|Progress history/)
+      .scrollIntoView()
+      .should('be.visible');
+    cy.get('[data-testid="progress-history-row"]').should('have.length', 3);
+    cy.get('[data-testid="progress-history-row"]').eq(0).should('contain', '40%');
+    // The 0% row follows 40%: a regression, marked for visibility.
+    cy.get('[data-testid="progress-history-row"]')
+      .eq(1)
+      .should('have.attr', 'data-regressed', 'true')
+      .and('contain', '0%');
+    cy.get('[data-testid="progress-history-row"]')
+      .eq(2)
+      .should('not.have.attr', 'data-regressed');
+  });
+
+  it('hides the section when nothing was recorded', () => {
+    visitWithHistory([]);
+
+    cy.contains(/Histórico de progresso|Progress history/).should('not.exist');
+    cy.get('[data-testid="progress-history-row"]').should('not.exist');
+  });
+});

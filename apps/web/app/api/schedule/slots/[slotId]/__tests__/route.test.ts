@@ -52,6 +52,8 @@ function mockSlotsClient(options: {
   schedule?: unknown;
   persona?: unknown;
   remaining?: unknown[];
+  history?: unknown[];
+  historyError?: unknown;
   deleteError?: unknown;
   rpcResult?: string;
   rpcError?: unknown;
@@ -92,14 +94,27 @@ function mockSlotsClient(options: {
   const postsChain = makeChain('scheduled_posts');
   const schedulesChain = makeChain('schedules');
   const personasChain = makeChain('personas');
+  const historyChain = makeChain('scheduled_post_progress_history');
+  // The progress-history select ends in .order() (not .single()); resolve
+  // the fixture rows there.
+  (historyChain as Record<string, unknown>).order = vi.fn(async () => ({
+    data: options.historyError ? null : (options.history ?? []),
+    error: options.historyError ?? null,
+  }));
   const from = vi.fn((table: string) =>
-    table === 'scheduled_posts' ? postsChain : table === 'schedules' ? schedulesChain : personasChain,
+    table === 'scheduled_posts'
+      ? postsChain
+      : table === 'schedules'
+        ? schedulesChain
+        : table === 'scheduled_post_progress_history'
+          ? historyChain
+          : personasChain,
   );
   const rpc = vi.fn(async () => ({
     data: options.rpcResult ?? 'deleted',
     error: options.rpcError ?? null,
   }));
-  return { from, rpc, postsChain, schedulesChain, personasChain, calls };
+  return { from, rpc, postsChain, schedulesChain, personasChain, historyChain, calls };
 }
 
 function mockAuth() {
@@ -536,6 +551,76 @@ describe('GET /api/schedule/slots/[slotId]', () => {
     });
 
     expect(response.status).toBe(401);
+  });
+
+  it('returns the recorded progress history with the slot', async () => {
+    const client = mockSlotsClient({
+      slot: SLOT_DETAIL_ROW,
+      schedule: SCHEDULE_ROW,
+      persona: { id: 'p1', name: 'Viva Leve' },
+      history: [
+        { progress: 40, stage: 'subtitle', recorded_at: '2026-10-05T22:10:00.000Z' },
+        { progress: 50, stage: 'materials', recorded_at: '2026-10-05T22:12:00.000Z' },
+      ],
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
+      params: Promise.resolve({ slotId: 'slot-1' }),
+    });
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      slot: { progressHistory: { progress: number; stage: string | null; recordedAt: string }[] };
+    };
+    expect(body.slot.progressHistory).toEqual([
+      { progress: 40, stage: 'subtitle', recordedAt: '2026-10-05T22:10:00.000Z' },
+      { progress: 50, stage: 'materials', recordedAt: '2026-10-05T22:12:00.000Z' },
+    ]);
+    // The history lookup is scoped to the slot and its owner.
+    const historyCalls = client.calls.filter((c) => c.table === 'scheduled_post_progress_history');
+    expect(historyCalls.filter((c) => c.op === 'eq').map((c) => c.args)).toEqual([
+      ['post_id', 'slot-1'],
+      ['user_id', USER_ID],
+    ]);
+  });
+
+  it('defaults progressHistory to [] when nothing was recorded', async () => {
+    const client = mockSlotsClient({
+      slot: SLOT_DETAIL_ROW,
+      schedule: SCHEDULE_ROW,
+      persona: { id: 'p1', name: 'Viva Leve' },
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
+      params: Promise.resolve({ slotId: 'slot-1' }),
+    });
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { slot: { progressHistory: unknown[] } };
+    expect(body.slot.progressHistory).toEqual([]);
+  });
+
+  it('degrades to [] when the history lookup fails', async () => {
+    const client = mockSlotsClient({
+      slot: SLOT_DETAIL_ROW,
+      schedule: SCHEDULE_ROW,
+      persona: { id: 'p1', name: 'Viva Leve' },
+      historyError: { message: 'db down' },
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
+      params: Promise.resolve({ slotId: 'slot-1' }),
+    });
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { slot: { progressHistory: unknown[] } };
+    expect(body.slot.progressHistory).toEqual([]);
   });
 });
 

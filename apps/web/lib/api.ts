@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { UseQueryResult } from '@tanstack/react-query';
+import type { QueryClient, UseQueryResult } from '@tanstack/react-query';
 import { createSupabaseClient } from '@/lib/supabase/client';
 import { useUploadStore } from '@/lib/store';
 import type { PublicAccountItem, BlueskyAccountData, LinkedinAccountData } from '@/lib/providers/registry';
@@ -1039,6 +1039,18 @@ export function useDeleteSlotMutation() {
 // throws and is surfaced by the page's error state.
 //---------------
 
+//---------------
+// ProgressHistoryEntry — one observed (progress, stage) transition of a
+// scheduled post, oldest first. Recorded change-only by GET
+// /api/schedule/status while the post was live, so regressions (e.g.
+// 40% -> 0%) stay visible after the fact.
+//---------------
+export interface ProgressHistoryEntry {
+  progress: number;
+  stage: string | null;
+  recordedAt: string;
+}
+
 export interface SlotDetailPayload {
   slot: {
     id: string;
@@ -1057,6 +1069,9 @@ export interface SlotDetailPayload {
     // Where the post went, one entry per provider. Empty until the slot is
     // published (nothing exists to link to before that).
     publishLinks: PublishLink[];
+    // Observed generation progress transitions, oldest first. Empty for
+    // posts that never started generating (or predate the history table).
+    progressHistory: ProgressHistoryEntry[];
   };
   schedule: {
     id: string;
@@ -1102,17 +1117,44 @@ function narrowPublishLinks(value: unknown): PublishLink[] {
   return links;
 }
 
+//---------------
+// narrowProgressHistory — same defensive pattern as narrowPublishLinks:
+// the payload crosses a network boundary, so a slot row predating the
+// field — or a malformed entry — reads as "no history" instead of handing
+// the UI an undefined it would have to guard at every render.
+//---------------
+function narrowProgressHistory(value: unknown): ProgressHistoryEntry[] {
+  if (!Array.isArray(value)) return [];
+  const entries: ProgressHistoryEntry[] = [];
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const record = entry as Record<string, unknown>;
+    if (typeof record.progress !== 'number' || !Number.isFinite(record.progress)) continue;
+    if (typeof record.recordedAt !== 'string') continue;
+    entries.push({
+      progress: record.progress,
+      stage: typeof record.stage === 'string' ? record.stage : null,
+      recordedAt: record.recordedAt,
+    });
+  }
+  return entries;
+}
+
 export async function fetchSlotDetail(slotId: string): Promise<SlotDetailPayload | null> {
   const response = await fetch(`/api/schedule/slots/${encodeURIComponent(slotId)}`, {
     method: 'GET',
   });
   if (response.status === 404) return null;
   if (!response.ok) await throwForBadResponse(response, 'Failed to load post.');
-  const data = await parseJsonBody<{ success: boolean; slot?: Omit<SlotDetailPayload['slot'], 'publishLinks'> & { publishLinks?: unknown }; schedule?: SlotDetailPayload['schedule']; persona?: SlotDetailPayload['persona']; error?: string }>(response);
+  const data = await parseJsonBody<{ success: boolean; slot?: Omit<SlotDetailPayload['slot'], 'publishLinks' | 'progressHistory'> & { publishLinks?: unknown; progressHistory?: unknown }; schedule?: SlotDetailPayload['schedule']; persona?: SlotDetailPayload['persona']; error?: string }>(response);
   if (!data?.success) throw new Error(data?.error ?? 'Failed to load post.');
   if (!data.slot || !data.schedule) throw new Error('Failed to load post.');
   return {
-    slot: { ...data.slot, publishLinks: narrowPublishLinks(data.slot.publishLinks) },
+    slot: {
+      ...data.slot,
+      publishLinks: narrowPublishLinks(data.slot.publishLinks),
+      progressHistory: narrowProgressHistory(data.slot.progressHistory),
+    },
     schedule: data.schedule,
     persona: data.persona ?? null,
   };
@@ -1251,15 +1293,94 @@ export function useCreatePostMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: CreatePostInput) => createPost(input),
-    onSuccess: (result) => {
+    onSuccess: (result, input) => {
       // A failed create charges nothing and created nothing — never
       // invalidate on it, so the caches keep showing the true state.
       if (!result.success) return;
+      // Seed the caches with the created slots/schedule BEFORE invalidating:
+      // the /posts/new screen redirects to /posts right after success, and
+      // the Posts page joins slots against the schedules cache — a refetch
+      // race could otherwise hide the new post until the next poll. The
+      // invalidations below still converge every cache to server truth.
+      seedCreatedPostCaches(queryClient, input, result);
       void queryClient.invalidateQueries({ queryKey: ['fill-schedule-status'] });
       void queryClient.invalidateQueries({ queryKey: ['fill-schedules'] });
       void queryClient.invalidateQueries({ queryKey: ['video-generations'] });
     },
   });
+}
+
+//---------------
+// seedCreatedPostCaches — write the mutation response straight into the
+// list caches so the new post is visible the instant the user lands back on
+// /posts. Slots are future-dated, so they merge into `upcoming` (deduped by
+// id, sorted by slot time); the schedule seed keeps the page's
+// slots-against-schedules join from dropping them. Progress starts at 0 —
+// nothing has generated yet — and the next poll fills in live values.
+//---------------
+export function seedCreatedPostCaches(
+  queryClient: QueryClient,
+  input: CreatePostInput,
+  result: CreatePostResult,
+): void {
+  const scheduleId = result.scheduleId;
+  if (scheduleId === null || result.slots.length === 0) return;
+
+  // Sort by slot time first: the queue position is the chronological
+  // position among the created slots.
+  const ordered = [...result.slots].sort((a, b) => (a.slotAt < b.slotAt ? -1 : a.slotAt > b.slotAt ? 1 : 0));
+  const seededSlots: ScheduledSlot[] = ordered.map((slot, index) => ({
+    id: slot.slotId,
+    scheduleId,
+    slotAt: slot.slotAt,
+    // The API presents the DB 'pending' state as 'awaiting' (see
+    // presentStatus in lib/schedule-slot-presentation.ts).
+    status: (slot.status === 'pending' ? 'awaiting' : slot.status) as ScheduledSlot['status'],
+    topic: slot.topic,
+    error: null,
+    publishedAt: null,
+    taskId: slot.taskId,
+    progress: 0,
+    stage: null,
+    // Queue position is local to this created batch (ordered by slot time);
+    // the next poll overwrites it with the true engine queue position.
+    queuePosition: index + 1,
+    queueTotal: ordered.length,
+    retryable: null,
+  }));
+
+  const seededSchedule: ScheduleConfig = {
+    id: scheduleId,
+    personaId: input.personaId,
+    providers: input.providers,
+    youtubeAccountIds: input.accounts.youtube ?? [],
+    instagramAccountIds: input.accounts.instagram ?? [],
+    linkedinAccountIds: input.accounts.linkedin ?? [],
+    blueskyAccountIds: input.accounts.bluesky ?? [],
+    daysOfWeek: [],
+    startHour: null,
+    endHour: null,
+    postsPerDay: result.slots.length,
+    timezone: input.timezone,
+    active: true,
+  };
+
+  const statusCaches = queryClient.getQueriesData<{ upcoming: ScheduledSlot[]; recent: ScheduledSlot[] }>({
+    queryKey: ['fill-schedule-status'],
+  });
+  for (const [key, data] of statusCaches) {
+    if (!data) continue;
+    const knownIds = new Set(data.upcoming.map((slot) => slot.id));
+    const merged = [...data.upcoming, ...seededSlots.filter((slot) => !knownIds.has(slot.id))].sort((a, b) =>
+      a.slotAt < b.slotAt ? -1 : a.slotAt > b.slotAt ? 1 : 0,
+    );
+    queryClient.setQueryData(key, { ...data, upcoming: merged });
+  }
+
+  const schedules = queryClient.getQueryData<ScheduleConfig[]>(['fill-schedules']) ?? [];
+  if (!schedules.some((schedule) => schedule.id === scheduleId)) {
+    queryClient.setQueryData(['fill-schedules'], [...schedules, seededSchedule]);
+  }
 }
 
 export function useGenerationDetailQuery(generationId: string) {

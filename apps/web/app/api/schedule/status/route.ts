@@ -35,6 +35,7 @@ import {
   type QueuePositions,
   type SlotEnrichment,
 } from '@/lib/schedule-slot-presentation';
+import { recordProgressHistory, type ProgressSample } from '@/lib/schedule-progress-history';
 import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
@@ -192,10 +193,28 @@ async function getHandler(request?: Request): Promise<NextResponse> {
   }
   const queuePositions = buildQueuePositions(queueResult.error ? [] : (queueResult.data ?? []));
 
+  const upcomingEnriched = await withSlotPresentation(upcoming.data ?? [], userId, queuePositions);
+  const recentEnriched = await withSlotPresentation(recent.data ?? [], userId, queuePositions);
+
+  // Best-effort progress history: every observation of a live (generating)
+  // or dead (failed) slot records a (progress, stage) row when it changed
+  // since the last one, so regressions like 40% -> 0% stay visible after
+  // the fact. recordProgressHistory never throws; a history failure must
+  // not fail the status request it rides on.
+  const samples: ProgressSample[] = [...upcomingEnriched, ...recentEnriched]
+    .filter(
+      (slot): slot is typeof slot & { id: string; task_id: string } =>
+        (slot.status === 'generating' || slot.status === 'failed') &&
+        typeof slot.id === 'string' &&
+        typeof slot.task_id === 'string',
+    )
+    .map((slot) => ({ postId: slot.id, progress: slot.progress, stage: slot.stage }));
+  await recordProgressHistory(supabase, userId, samples);
+
   return NextResponse.json({
     success: true,
-    upcoming: await withSlotPresentation(upcoming.data ?? [], userId, queuePositions),
-    recent: await withSlotPresentation(recent.data ?? [], userId, queuePositions),
+    upcoming: upcomingEnriched,
+    recent: recentEnriched,
   });
 }
 

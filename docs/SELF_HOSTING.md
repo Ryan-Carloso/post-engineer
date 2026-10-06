@@ -81,7 +81,6 @@ Provision the database schema in your Supabase project:
    logs, PostHog, or status polls) resolves to the web's generation record
    without a full table scan. Index only — no foreign key to
    `engine_task_state`, which is ephemeral.
-
 8. `supabase/migrations/009_batch-charge-task-correlation.sql` — backfills
    `token_transactions.engine_task_id` for **single-slot** batch charges.
    A scheduled post is charged once up front under `batch:<schedule_id>` with
@@ -90,6 +89,13 @@ Provision the database schema in your Supabase project:
    in the history table forever. Multi-slot batches are left alone on
    purpose — one charge covers several videos. Also adds the two indexes
    the gone-task reconciliation looks up.
+
+9. `supabase/migrations/010_scheduled-post-progress-history.sql` —
+   `scheduled_post_progress_history` records every observed
+   (progress, stage) transition of a scheduled post (written change-only by
+   `GET /api/schedule/status`), so a progress regression like 40% → 0%
+   stays visible on the post detail page after the fact. Rows
+   cascade-delete with their post.
 
 Paste each file into the Supabase Dashboard > SQL Editor and run, in order
 (the numeric prefixes encode the order — always apply the
@@ -112,6 +118,20 @@ The compose file mounts `./config.toml` read-only into the container and reads
 secrets from the adjacent `.env` file (never baked into the image). The API is
 available at `http://127.0.0.1:8080` (see `/docs`); keep that port bound to
 localhost and expose it only through the reverse proxy.
+
+Build metadata (`GET /version`, `/health`): the engine reports the
+`VERSION` / `BUILD` / `COMMIT` env vars when they are set at deploy time —
+export them before building so the live build is identifiable:
+
+```bash
+cd apps/engine
+VERSION=$(cat ../../VERSION) BUILD=<build-number> COMMIT=$(git rev-parse --short HEAD) \
+  docker compose up -d --build
+```
+
+(`BUILD` is the CI run number; any unique number works for manual deploys.)
+Unset, the engine falls back to the mounted `VERSION` file for the version
+and reports `null` build/commit.
 
 To update:
 
@@ -192,7 +212,10 @@ Back up regularly:
 
 1. `git pull` the latest `main`.
 2. Check the release notes for schema changes and apply them to your database.
-3. Rebuild and restart: `docker compose up -d --build` (engine) and redeploy
-   the web app.
+3. Rebuild and restart, exporting the build metadata first so
+   `GET /version` and `/health` identify the live build (see section 3 for
+   the engine; the web takes the same three vars as Docker build args):
+   `VERSION=$(cat VERSION) BUILD=<build-number> COMMIT=$(git rev-parse --short HEAD)`
+   before `docker compose up -d --build`.
 4. Check the release notes for breaking config changes (new required env vars
    are documented in the `.env.example` files).
