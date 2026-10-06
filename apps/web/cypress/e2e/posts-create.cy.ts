@@ -67,8 +67,10 @@ function createPostPayload() {
 
 //---------------
 // newPostSlotDetailPayload — what the detail page fetches for the slot the
-// create response pointed at. The status is `awaiting` (nothing generated
-// yet), so the page shows a 0% progress bar.
+// create response pointed at. The real API flips a fresh slot to
+// 'generating' with its task id in the same create call
+// (generate-and-schedule route), so the stub mirrors that: the 0% progress
+// bar only renders for generating slots, never for awaiting ones.
 //---------------
 function newPostSlotDetailPayload() {
   return {
@@ -77,11 +79,11 @@ function newPostSlotDetailPayload() {
       id: NEW_POST_SLOT_ID,
       scheduleId: NEW_POST_SCHEDULE_ID,
       slotAt: '2030-06-01T09:00:00.000Z',
-      status: 'awaiting',
+      status: 'generating',
       topic: 'E2E topic one',
       error: null,
       publishedAt: null,
-      taskId: null,
+      taskId: 'task-e2e-new',
       progress: 0,
       stage: null,
       retryable: null,

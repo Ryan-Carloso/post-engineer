@@ -309,8 +309,9 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
       expect(String(schedule.startAt), 'schedule startAt').to.contain(startAtDate);
     });
 
-    // Success routes back to /posts, where the new slot is in the list.
-    cy.url().should('match', /\/posts$/);
+    // Success opens the created post's own page (single-topic form, #116),
+    // where the video and its live progress live.
+    cy.url().should('match', /\/posts\/slot-e2e-1$/);
     cy.contains(TOPIC).should('be.visible');
   });
 
