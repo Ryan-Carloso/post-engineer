@@ -242,8 +242,16 @@ def main() -> int:
         "both ZAI_API_KEY and OPENROUTER_API_KEY must be masked",
     )
     check(
-        "scrubs review.md before posting",
-        "review.md" in text and "***REDACTED***" in text,
+        "masking happens before any LLM output is logged",
+        text.index("Mask provider secrets") < text.index("Verify review grounding"),
+        "the add-mask step must precede the grounding step, which echoes "
+        "dropped finding headings",
+    )
+    check(
+        "scrubs review.verified.md before posting",
+        "review.verified.md" in text and "***REDACTED***" in text,
+        "the scrub step must target the posted artifact review.verified.md, "
+        "not the raw review.md",
     )
     check(
         "scrubs both key values from review.md",
@@ -264,6 +272,15 @@ def main() -> int:
 
     # .env cleanup before the agent runs
     check("removes .env* before review", "-name '.env*'" in text)
+
+    # Review script unit tests are wired into CI (TDD rule for the new
+    # parsing/security logic in the review scripts).
+    ci_path = Path(__file__).resolve().parent.parent / "workflows" / "ci.yml"
+    check(
+        "review script unit tests run in CI",
+        "pytest .github/scripts/tests" in ci_path.read_text(),
+        "the review-workflows job must run the script unit tests",
+    )
 
     print()
     if FAILURES:

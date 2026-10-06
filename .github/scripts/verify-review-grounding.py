@@ -16,7 +16,9 @@ For each finding this script verifies, against the checkout:
 
 Findings failing any check are removed before the review is posted. If
 findings existed but none survive, the output is a stub saying so. A
-review with no findings ("nothing material") is published unchanged.
+review with no findings ("nothing material") is published unchanged —
+unless it contains finding-like content that ignored the mandated format,
+in which case nothing is published (fail closed).
 
 Usage: python3 verify-review-grounding.py <review.md> <output.md>
 """
@@ -30,6 +32,17 @@ FINDING_RE = re.compile(r"^###\s+(.+)$")
 LOCATION_RE = re.compile(r"^\*\*Location:\*\*\s*(\S+?)(?::(\d+)(?:-(\d+))?)?\s*$")
 FENCE_OPEN_RE = re.compile(r"^```[a-zA-Z0-9+#.\-]*\s*$")
 
+# Finding-like content that is NOT in the mandated `### SEVERITY:` format:
+# a markdown heading carrying a severity word, a bold severity heading, or
+# a **Location:** line. Used to tell "nothing material" apart from a model
+# that ignored the format — the latter must not be published as-is.
+UNPARSEABLE_HINT_RE = re.compile(
+    r"^(?:#{1,6}\s+.*\b(?:CRITICAL|MAJOR|MINOR)\b"
+    r"|\*\*(?:CRITICAL|MAJOR|MINOR)\b"
+    r"|\*\*Location:\*\*)",
+    re.IGNORECASE | re.MULTILINE,
+)
+
 
 def normalize(text: str) -> str:
     # Only trailing whitespace is normalized; indentation and content stay.
@@ -37,22 +50,42 @@ def normalize(text: str) -> str:
 
 
 def split_findings(text: str) -> tuple[str, list[tuple[str, str]]]:
-    """Return (preamble, [(heading, body), ...]) split on `### ` headings."""
+    """Return (preamble, [(heading, body), ...]) split on `### ` headings.
+
+    Heading detection skips lines inside fenced code blocks: a verbatim
+    quote may itself contain a line starting with `### ` (common when a
+    finding quotes markdown), and that must not split the finding.
+    """
     preamble_lines: list[str] = []
     findings: list[tuple[str, str]] = []
     current_heading: str | None = None
     current_body: list[str] = []
-    for line in text.splitlines():
-        match = FINDING_RE.match(line)
-        if match:
-            if current_heading is not None:
-                findings.append((current_heading, "\n".join(current_body)))
-            current_heading = match.group(1).strip()
-            current_body = []
-        elif current_heading is None:
+    in_fence = False
+
+    def emit(line: str) -> None:
+        if current_heading is None:
             preamble_lines.append(line)
         else:
             current_body.append(line)
+
+    for line in text.splitlines():
+        if not in_fence and FENCE_OPEN_RE.match(line):
+            in_fence = True
+            emit(line)
+        elif in_fence and line.strip() == "```":
+            in_fence = False
+            emit(line)
+        elif in_fence:
+            emit(line)
+        else:
+            match = FINDING_RE.match(line)
+            if match:
+                if current_heading is not None:
+                    findings.append((current_heading, "\n".join(current_body)))
+                current_heading = match.group(1).strip()
+                current_body = []
+            else:
+                emit(line)
     if current_heading is not None:
         findings.append((current_heading, "\n".join(current_body)))
     return "\n".join(preamble_lines), findings
@@ -117,10 +150,22 @@ def main() -> int:
         return 2
     src = Path(sys.argv[1])
     dst = Path(sys.argv[2])
-    text = src.read_text(encoding="utf-8")
+    # Raw model output can contain invalid bytes; degrade instead of failing.
+    text = src.read_text(encoding="utf-8", errors="replace")
     preamble, findings = split_findings(text)
     root = Path.cwd()
     if not findings:
+        if UNPARSEABLE_HINT_RE.search(text):
+            # Finding-like content that ignored the mandated format: fail
+            # closed instead of publishing it as "nothing material".
+            stub = (
+                "**Review not published:** the model produced finding-like "
+                "content but no findings in the required `### SEVERITY:` "
+                "format, so nothing was posted."
+            )
+            dst.write_text(stub + "\n", encoding="utf-8")
+            print("unparseable findings format — wrote not-published stub")
+            return 0
         # "Nothing material" review — publish as-is.
         dst.write_text(text, encoding="utf-8")
         print("no findings — published review unchanged")

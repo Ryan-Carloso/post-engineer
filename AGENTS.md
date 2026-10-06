@@ -1244,6 +1244,15 @@ Follow these so the same issues don't come back:
   WARN on prod files changed with no test file changed — this replaced the
   LLM's old TDD-coverage prompt bullet. Mechanical FAILs post the comment
   first, then fail the job.
+  **Follow-up (review's own findings, same day):** the grounding verifier
+  now fails closed — finding-like output that ignores the `### SEVERITY:`
+  format is NOT published (a format deviation previously slipped through as
+  "nothing material"); heading detection skips fenced code blocks (a quoted
+  `### ` line no longer splits a finding); the review read uses
+  `errors="replace"`; `::add-mask::` runs in its own step right after the
+  key check, before any LLM output can be logged; both scripts have pytest
+  unit tests (`.github/scripts/tests/`) wired into the `review-workflows` CI
+  job, and the validator pins the posted artifact as `review.verified.md`.
 
 ## Test quirks (vitest 4.1)
 

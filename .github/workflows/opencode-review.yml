@@ -108,6 +108,19 @@ jobs:
             echo "has_key=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Mask provider secrets
+        if: steps.check.outputs.has_key == 'true'
+        env:
+          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          set -euo pipefail
+          # Establish log masking before any step that can print LLM output
+          # (the grounding verifier echoes dropped finding headings). The
+          # Scrub step still scrubs the key VALUES from the posted files.
+          echo "::add-mask::${ZAI_API_KEY}"
+          echo "::add-mask::${OPENROUTER_API_KEY}"
+
       - name: Install OpenCode (pinned release)
         if: steps.check.outputs.has_key == 'true'
         env:
@@ -314,8 +327,9 @@ jobs:
           set -euo pipefail
           # Anti-hallucination gate: drops findings whose file, cited lines,
           # or quoted code do not check out against the checkout. A review
-          # with no findings, or with zero survivors, is handled by the
-          # script (published as-is / stub comment).
+          # with no findings publishes as-is; zero survivors produce a stub;
+          # finding-like output that ignored the mandated format is NOT
+          # published (fail closed).
           python3 .github/scripts/verify-review-grounding.py \
             review.md review.verified.md
 
@@ -327,12 +341,11 @@ jobs:
         run: |
           set -euo pipefail
           # Prompt-injection guard: the review is LLM output over
-          # attacker-controlled PR title/diff. Mask both keys in all
-          # subsequent logs, then scrub any occurrence of either key value
-          # from the verified review and the mechanical checks output before
-          # they become a permanent public PR comment.
-          echo "::add-mask::${ZAI_API_KEY}"
-          echo "::add-mask::${OPENROUTER_API_KEY}"
+          # attacker-controlled PR title/diff. Key values were already masked
+          # in the logs by the earlier "Mask provider secrets" step; here
+          # scrub any occurrence of either key value from the verified review
+          # and the mechanical checks output before they become a permanent
+          # public PR comment.
           python3 - <<'EOF'
           import os
           files = ("review.verified.md", "mechanical-checks.md")

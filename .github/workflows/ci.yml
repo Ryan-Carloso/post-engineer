@@ -44,6 +44,12 @@ jobs:
           set -euo pipefail
           python3 .github/scripts/validate-opencode-review.py
 
+      - name: Unit-test review scripts
+        run: |
+          set -euo pipefail
+          pip install --quiet pytest
+          python3 -m pytest .github/scripts/tests -q
+
   # Fails if secret-bearing files are tracked in git. config.toml may hold
   # provider API keys and real .env files must never be committed (see the
   # env-files policy in AGENTS.md).
