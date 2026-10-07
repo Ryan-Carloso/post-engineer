@@ -227,6 +227,14 @@ describe('/api/schedule', () => {
     expect(body.schedules).toHaveLength(1);
   });
 
+  it('GET returns an empty list when the query returns no rows', async () => {
+    mockSupabase({ list: { data: null, error: null } });
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { schedules: unknown[] };
+    expect(body.schedules).toEqual([]);
+  });
+
 
 
 
@@ -323,6 +331,36 @@ describe('/api/schedule persona scoping (scoped API keys)', () => {
 
 
 
+
+  it('GET lists a persona-less schedule for a scoped key', async () => {
+    // A post created without a persona (migration 012) belongs to no
+    // persona scope: filtering it away would hide the key's own post.
+    scopedSupabase({
+      list: {
+        data: [
+          { id: 's-1', persona_id: 'p-allowed' },
+          { id: 's-2', persona_id: 'p-other' },
+          { id: 's-3', persona_id: null },
+        ],
+        error: null,
+      },
+    });
+    const res = await GET(new Request('http://localhost/api/schedule'));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { schedules: { id: string }[] };
+    expect(body.schedules.map((s) => s.id)).toEqual(['s-1', 's-3']);
+  });
+
+  it('DELETE removes a persona-less schedule for a scoped key', async () => {
+    // Ownership is the whole boundary here: the row is already filtered by
+    // user_id, and there is no persona to scope against.
+    scopedSupabase({
+      current: { data: { persona_id: null } },
+      remove: { error: null },
+    });
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-3', { method: 'DELETE' }));
+    expect(res.status).toBe(200);
+  });
 
   it('DELETE rejects an out-of-scope schedule with 403', async () => {
     scopedSupabase({

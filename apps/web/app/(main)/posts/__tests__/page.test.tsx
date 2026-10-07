@@ -159,6 +159,17 @@ describe('PostsPage', () => {
     expect(screen.queryByText('Past topic')).not.toBeInTheDocument();
   });
 
+  it('labels a slot from a persona-less schedule as "no persona", not a removed persona', () => {
+    // A post created without a persona (migration 012) never had one:
+    // saying "persona removed" would be a lie about it.
+    mockQueries({ schedules: [{ ...SCHEDULE, personaId: null }] });
+    render(<PostsPage />);
+
+    expect(screen.getByText('Upcoming topic')).toBeInTheDocument();
+    expect(screen.getByText('posts.noPersona')).toBeInTheDocument();
+    expect(screen.queryByText('posts.personaFallback')).not.toBeInTheDocument();
+  });
+
   // The primary CTA must open the create-post screen, not the persona list:
   // a post is a video + publishing slot, a persona is its face/voice.
   it('links the new-post CTA to /posts/new', () => {

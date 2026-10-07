@@ -1718,4 +1718,154 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(rpcCalls.filter((c) => c.name === 'refund_generation_tokens')).toHaveLength(0);
     });
   });
+
+  describe('post without a persona (migration 012)', () => {
+    it('rejects a persona-less post that is not faceless', async () => {
+      const res = await post(baseBody({ personaId: undefined, options: {} }));
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.field).toBe('options.faceless');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it('rejects a persona-less post with no voice', async () => {
+      const res = await post(baseBody({ personaId: undefined, options: { faceless: true } }));
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.field).toBe('options.voiceId');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it('rejects options.language over 32 characters', async () => {
+      const res = await post(baseBody({ options: { language: 'x'.repeat(33) } }));
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.field).toBe('options.language');
+    });
+
+    it('rejects options.niche over 300 characters', async () => {
+      const res = await post(baseBody({ options: { niche: 'x'.repeat(301) } }));
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.field).toBe('options.niche');
+    });
+
+    it('treats an empty-string personaId as a persona-less post', async () => {
+      // Null is the only accepted spelling: a blank string cannot
+      // half-intend a persona, it becomes the persona-less path (and must
+      // still satisfy it).
+      const res = await post(baseBody({ personaId: '', options: { faceless: true, voiceId: 'voice-eleven' } }));
+      expect(res.status).toBe(200);
+      const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
+      expect(scheduleRows).toHaveLength(1);
+      expect(scheduleRows[0].persona_id).toBeNull();
+    });
+
+    it('creates a persona-less schedule with persona_id null and the identity snapshot', async () => {
+      const res = await post(
+        baseBody({
+          personaId: undefined,
+          options: {
+            faceless: true,
+            voiceId: 'voice-eleven',
+            language: 'pt',
+            niche: 'comedy',
+            videoAspect: '16:9',
+            paragraphNumber: 3,
+            scriptPrompt: 'Be funny',
+          },
+        }),
+      );
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+
+      // The schedule carries the priced identity: null persona plus the
+      // snapshot the engine re-reads at tick time.
+      const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
+      expect(scheduleRows).toHaveLength(1);
+      expect(scheduleRows[0].persona_id).toBeNull();
+      expect(scheduleRows[0].post_voice_id).toBe('voice-eleven');
+      expect(scheduleRows[0].post_language).toBe('pt');
+      expect(scheduleRows[0].post_niche).toBe('comedy');
+      expect(scheduleRows[0].post_video_aspect).toBe('16:9');
+      expect(scheduleRows[0].post_paragraph_number).toBe(3);
+      expect(scheduleRows[0].post_script_prompt).toBe('Be funny');
+      expect(scheduleRows[0].post_face_quality).toBe('ok');
+
+      // The engine payload identifies the post by its own shape: no persona
+      // name, the request's editorial values, no face.
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+      const persona = payload.persona as Record<string, unknown>;
+      expect(persona.name).toBe('Post');
+      expect(persona.voice_id).toBe('voice-eleven');
+      expect(payload.video_language).toBe('pt');
+      expect(payload.video_aspect).toBe('16:9');
+      expect(payload.paragraph_number).toBe(3);
+      expect(payload.lipsync_enabled).toBe(false);
+    });
+
+    it('skips the persona scope check for a persona-less post', async () => {
+      // A scoped API key that allows nothing still creates a persona-less
+      // post: there is no persona to scope against.
+      vi.mocked(isPersonaAllowed).mockReturnValue(false);
+      const res = await post(baseBody({ personaId: undefined, options: { faceless: true, voiceId: 'voice-eleven' } }));
+      expect(res.status).toBe(200);
+      expect(vi.mocked(isPersonaAllowed)).not.toHaveBeenCalled();
+    });
+
+    it('charges the faceless rate and never touches library images for a persona-less post', async () => {
+      const res = await post(baseBody({ personaId: undefined, options: { faceless: true, voiceId: 'voice-eleven' } }));
+      expect(res.status).toBe(200);
+      const spends = rpcCalls.filter((c) => c.name === 'spend_tokens');
+      expect(spends).toHaveLength(1);
+      expect(spends[0].args.p_amount).toBe(2);
+      // No persona means no library to resolve from and no anti-repeat
+      // history to record into.
+      expect(vi.mocked(resolveVideoImage)).not.toHaveBeenCalled();
+      expect(vi.mocked(recordRecentImageId)).not.toHaveBeenCalled();
+    });
+
+    it('snapshots a null video_aspect when the persona has none', async () => {
+      // A legacy persona row can carry a null video_aspect: the snapshot
+      // must store null, not crash on the missing value.
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, video_aspect: null } });
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+      const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
+      expect(scheduleRows).toHaveLength(1);
+      expect(scheduleRows[0].post_video_aspect).toBeNull();
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+      // The payload builder strips null preference fields: the engine
+      // would reject an explicit null with the opaque 502, so absence is
+      // the contract, not null.
+      expect(payload).not.toHaveProperty('video_aspect');
+    });
+
+    it('prefers per-request editorial fields over the persona values', async () => {
+      const res = await post(
+        baseBody({
+          options: { niche: 'tech', language: 'pt', videoAspect: '16:9', paragraphNumber: 2, scriptPrompt: 'Custom script' },
+        }),
+      );
+      expect(res.status).toBe(200);
+      // The snapshot on the schedule is the priced identity: overrides win
+      // over the persona's stored definition.
+      const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
+      expect(scheduleRows[0].post_niche).toBe('tech');
+      expect(scheduleRows[0].post_language).toBe('pt');
+      expect(scheduleRows[0].post_video_aspect).toBe('16:9');
+      expect(scheduleRows[0].post_paragraph_number).toBe(2);
+      expect(scheduleRows[0].post_script_prompt).toBe('Custom script');
+      // And the engine payload carries the same resolved values.
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+      expect(payload.video_language).toBe('pt');
+      expect(payload.video_aspect).toBe('16:9');
+      expect(payload.paragraph_number).toBe(2);
+    });
+  });
 });

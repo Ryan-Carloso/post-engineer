@@ -51,6 +51,8 @@ function mockSlotsClient(options: {
   slot?: unknown;
   schedule?: unknown;
   persona?: unknown;
+  /** Makes the personas single() resolve with a DB error instead of a row. */
+  personaError?: unknown;
   remaining?: unknown[];
   history?: unknown[];
   historyError?: unknown;
@@ -78,6 +80,9 @@ function mockSlotsClient(options: {
         const sawUpdate = calls.some((c) => c.table === table && c.op === 'update');
         if (sawUpdate && options.updateConflict) {
           return { data: null, error: { code: 'PGRST116' } };
+        }
+        if (table === 'personas' && options.personaError) {
+          return { data: null, error: options.personaError };
         }
         return {
           data: table === 'personas' ? (options.persona ?? null) : (options.slot ?? null),
@@ -462,6 +467,60 @@ describe('GET /api/schedule/slots/[slotId]', () => {
       timezone: 'Europe/Lisbon',
     });
     expect(body.persona).toEqual({ id: 'p1', name: 'Viva Leve' });
+  });
+
+  it('skips the persona lookup for a slot on a persona-less schedule', async () => {
+    // No persona is a real state (a post created without one, migration
+    // 012): the route must not issue `.eq('id', null)` and log a spurious
+    // failure on every request.
+    const client = mockSlotsClient({
+      slot: SLOT_DETAIL_ROW,
+      schedule: { ...SCHEDULE_ROW, persona_id: null },
+      persona: null,
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
+      params: Promise.resolve({ slotId: 'slot-1' }),
+    });
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      success: boolean;
+      schedule: Record<string, unknown>;
+      persona: unknown;
+    };
+    expect(body.success).toBe(true);
+    expect(body.schedule).toMatchObject({ id: 's1', personaId: null });
+    expect(body.persona).toBeNull();
+    expect(client.calls.some((c) => c.table === 'personas')).toBe(false);
+  });
+
+  it('degrades to a null persona but logs when the persona lookup hits a DB error', async () => {
+    // The persona name is cosmetic on the detail page: a failed lookup
+    // degrades to null, but never silently.
+    const { logger } = await import('@/lib/logger');
+    const client = mockSlotsClient({
+      slot: SLOT_DETAIL_ROW,
+      schedule: SCHEDULE_ROW,
+      personaError: { code: 'XX000', message: 'connection reset' },
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
+      params: Promise.resolve({ slotId: 'slot-1' }),
+    });
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { success: boolean; persona: unknown };
+    expect(body.success).toBe(true);
+    expect(body.persona).toBeNull();
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[api/schedule/slots] persona lookup failed',
+      expect.objectContaining({ code: 'XX000' }),
+    );
   });
 
   it('uses the service client for OAuth callers (no cookie session)', async () => {

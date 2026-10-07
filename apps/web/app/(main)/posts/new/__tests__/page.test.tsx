@@ -260,6 +260,28 @@ describe('NewPostPage', () => {
     expect(mockMutateAsync).not.toHaveBeenCalled();
   });
 
+  it('blocks submit when every schedule time is blank', async () => {
+    fillValidDraft();
+    useNewPostStore.getState().setTime(0, '   ');
+    render(<NewPostPage />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'newPost.submit' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('newPost.errorInvalidScheduleTime');
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('blocks submit when the start date cannot be parsed', async () => {
+    fillValidDraft();
+    useNewPostStore.getState().setStartAt('not-a-date');
+    render(<NewPostPage />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'newPost.submit' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('newPost.previewEmpty');
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
   it('sends the generate-and-schedule payload and opens the new post detail page', async () => {
     mockMutateAsync.mockResolvedValue({
       success: true,
