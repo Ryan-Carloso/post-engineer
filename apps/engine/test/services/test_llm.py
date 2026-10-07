@@ -197,6 +197,56 @@ class TestScriptPromptOptions(unittest.TestCase):
             )
 
 
+class TestGenerateScriptForeignCharacters(unittest.TestCase):
+    """Guard against foreign-script characters (e.g. CJK) leaking from the
+    LLM into scripts, subtitles, and TTS. Seen in production: the provider
+    returned "veio替代izar" (Chinese for "substituir") inside a Portuguese
+    word, and it went straight to the voiceover and burnt-in subtitles."""
+
+    GLITCHY = "A IA não veio替代izar todos, mas automatizar o tédio."
+    CLEAN = "A IA não veio substituir todos, mas automatizar o tédio."
+
+    def test_latin_language_script_rejects_cjk_and_retries(self):
+        with patch.object(
+            llm,
+            "_generate_response_with_fallback",
+            side_effect=[self.GLITCHY, self.CLEAN],
+        ) as generate:
+            result = llm.generate_script(
+                video_subject="IA no trabalho", language="pt-BR"
+            )
+
+        self.assertEqual(generate.call_count, 2)
+        self.assertNotIn("替代", result)
+        self.assertIn("substituir", result)
+
+    def test_stripped_script_never_ships_foreign_characters(self):
+        # The provider glitches on every attempt: the retries are exhausted
+        # and the last resort strips the intruders instead of shipping them.
+        with patch.object(
+            llm, "_generate_response_with_fallback", return_value=self.GLITCHY
+        ) as generate:
+            result = llm.generate_script(
+                video_subject="IA no trabalho", language="pt-BR"
+            )
+
+        self.assertEqual(generate.call_count, llm._max_retries)
+        self.assertNotIn("替代", result)
+        self.assertIn("izar", result)
+
+    def test_cjk_language_keeps_cjk_characters(self):
+        # A video in Chinese legitimately contains CJK: the guard is only
+        # active for languages written in the Latin script.
+        script = "人工智能正在改变我们的工作方式。"
+        with patch.object(
+            llm, "_generate_response_with_fallback", return_value=script
+        ) as generate:
+            result = llm.generate_script(video_subject="人工智能", language="zh")
+
+        self.assertEqual(generate.call_count, 1)
+        self.assertIn("人工智能", result)
+
+
 class TestLiteLLMProvider(unittest.TestCase):
     def setUp(self):
         self.original_app_config = dict(config.app)

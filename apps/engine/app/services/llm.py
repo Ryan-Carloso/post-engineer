@@ -1059,6 +1059,34 @@ def build_script_prompt(
     return prompt
 
 
+# Characters from non-Latin writing systems that must never reach TTS or
+# burnt-in subtitles when the requested language uses the Latin script.
+# Ranges: CJK Extension A, CJK Unified Ideographs, CJK symbols + Hiragana +
+# Katakana, Hangul syllables.
+_FOREIGN_SCRIPT_RE = re.compile("[㐀-䶿一-鿿　-ヿ가-힯]+")
+
+# Languages normally written in the Latin script: only these get the
+# foreign-script guard. A video in zh/ja/ko legitimately contains CJK and
+# must never be rejected or stripped.
+_LATIN_SCRIPT_LANGUAGES = {"pt", "en", "es", "fr", "it", "de", "nl"}
+
+
+def _uses_latin_script(language: str) -> bool:
+    """True when the requested language is normally written in Latin script."""
+    base = (language or "").strip().lower().replace("_", "-").split("-", 1)[0]
+    return base in _LATIN_SCRIPT_LANGUAGES
+
+
+def _find_foreign_script(text: str) -> list[str]:
+    """All runs of non-Latin-script characters found in the text."""
+    return _FOREIGN_SCRIPT_RE.findall(text or "")
+
+
+def _strip_foreign_script(text: str) -> str:
+    """Remove non-Latin-script characters; the last-resort degradation."""
+    return _FOREIGN_SCRIPT_RE.sub("", text or "")
+
+
 def generate_script(
     video_subject: str,
     language: str = "",
@@ -1123,6 +1151,17 @@ def generate_script(
             if final_script and "当日额度已消耗完" in final_script:
                 raise ValueError(final_script)
 
+            # The provider may mix token scripts (e.g. CJK inside a
+            # Portuguese word). Regenerate, same pattern as the quota error
+            # above; stripping is the last resort on the final return.
+            if final_script and _uses_latin_script(language):
+                intruders = _find_foreign_script(final_script)
+                if intruders:
+                    raise ValueError(
+                        "script contains "
+                        f"{len(intruders)} foreign-script character(s)"
+                    )
+
             if final_script:
                 break
         except Exception as e:
@@ -1134,7 +1173,19 @@ def generate_script(
         logger.error(f"failed to generate video script: {final_script}")
     else:
         logger.success(f"completed: \n{final_script}")
-    return final_script.strip()
+    # Last resort: never ship foreign-script characters to TTS or burnt-in
+    # subtitles. The guard is only active for languages written in the Latin
+    # script — a zh/ja/ko video legitimately contains these characters.
+    # An empty result fails the task loudly at the caller
+    # ("failed to generate video script"); it is never masked.
+    stripped = final_script.strip()
+    cleaned = _strip_foreign_script(stripped) if _uses_latin_script(language) else stripped
+    if cleaned != stripped:
+        logger.error(
+            "script still contained foreign-script characters after "
+            "retries; stripped them"
+        )
+    return cleaned
 
 
 def generate_music_mood(video_script: str, available_moods: tuple[str, ...]) -> str:

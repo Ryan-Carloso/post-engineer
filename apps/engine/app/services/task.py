@@ -842,7 +842,11 @@ def resolve_persona_audio(params: VideoParams) -> tuple[str, str | None]:
         return params.voice_name, persona.voice_audio_url
 
     if persona.voice_id:
-        return HOUSE_VOICE_NAMES.get(persona.voice_id, persona.voice_id), None
+        # Return the RAW house id: generate_audio resolves it through
+        # resolve_house_voice_name(name, params.video_language), which is the
+        # only place that knows the per-language Neural voice. Expanding it
+        # here with HOUSE_VOICE_NAMES pinned every persona to en-US.
+        return persona.voice_id, None
 
     return params.voice_name, None
 
