@@ -14,10 +14,14 @@
 // - No recurrence: the times only distribute this operation's videos.
 //---------------
 
-import { datePartsInTimezone, isValidTimezone, zonedTimeToUtc } from '../timezone';
+import { datePartsInTimezone, isValidTimezone, parseZonedDateTime, zonedTimeToUtc } from '../timezone';
 
 export interface DistributeSlotsInput {
-  /** ISO instant the publishing window opens (offset-aware, e.g. 2026-10-02T18:00:00+01:00). */
+  /**
+   * When the publishing window opens. An explicit offset (Z or +/-hh:mm)
+   * is respected as-is; a naive "2026-10-07T20:00:00" is wall-clock in
+   * `timezone` (the MCP contract). Anything else is rejected.
+   */
   startAtISO: string;
   /** Daily publish times as "HH:MM". Sorted ascending internally. */
   times: string[];
@@ -101,8 +105,8 @@ export function distributeSlots(input: DistributeSlotsInput): DistributedSlot[] 
   if (typeof timezone !== 'string' || !isValidTimezone(timezone)) {
     throw new SlotDistributionError('timezone', `Invalid timezone: "${timezone}".`);
   }
-  const startAt = new Date(startAtISO);
-  if (Number.isNaN(startAt.getTime())) {
+  const startAt = parseZonedDateTime(startAtISO, timezone);
+  if (startAt === null) {
     throw new SlotDistributionError('startAt', `Invalid startAt: "${startAtISO}".`);
   }
 

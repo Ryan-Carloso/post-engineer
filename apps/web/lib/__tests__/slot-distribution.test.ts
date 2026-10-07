@@ -174,6 +174,60 @@ describe('distributeSlots', () => {
     }
   });
 
+  it('interprets a naive startAt as wall-clock in the timezone', () => {
+    // Regression: a naive "2026-10-07T20:00:00" with timezone Europe/Lisbon
+    // is 20:00 Lisbon (19:00Z). Parsing it as UTC pushed the cursor to
+    // 20:00Z, so today's 20:00 slot fell before the cursor and rolled to
+    // tomorrow — contradicting the MCP contract ("naive is wall-clock in
+    // timezone").
+    const slots = distributeSlots({
+      startAtISO: '2026-10-07T20:00:00',
+      times: ['20:00'],
+      timezone: 'Europe/Lisbon',
+      count: 1,
+    });
+    expect(slots.map((s) => s.slotAtISO)).toEqual([
+      '2026-10-07T19:00:00.000Z', // 20:00 WEST today, not tomorrow
+    ]);
+  });
+
+  it('interprets a naive startAt in a negative-offset timezone', () => {
+    const slots = distributeSlots({
+      startAtISO: '2026-10-31T08:00:00',
+      times: ['09:00'],
+      timezone: 'America/New_York',
+      count: 1,
+    });
+    expect(slots.map((s) => s.slotAtISO)).toEqual([
+      '2026-10-31T13:00:00.000Z', // 09:00 EDT today
+    ]);
+  });
+
+  it('keeps naive startAt in UTC identical to explicit-offset behavior', () => {
+    const slots = distributeSlots({
+      startAtISO: '2026-10-02T18:00:00',
+      times: ['18:00'],
+      timezone: 'UTC',
+      count: 1,
+    });
+    expect(slots.map((s) => s.slotAtISO)).toEqual(['2026-10-02T18:00:00.000Z']);
+  });
+
+  it('rejects an out-of-range naive startAt with the startAt field', () => {
+    try {
+      distributeSlots({
+        startAtISO: '2026-13-40T99:99:99',
+        times: ['18:00'],
+        timezone: 'Europe/Lisbon',
+        count: 1,
+      });
+      expect.unreachable('should throw');
+    } catch (error) {
+      expect(error).toBeInstanceOf(SlotDistributionError);
+      expect((error as SlotDistributionError).field).toBe('startAt');
+    }
+  });
+
   it('rejects invalid startAt and non-positive counts', () => {
     expect(() =>
       distributeSlots({
