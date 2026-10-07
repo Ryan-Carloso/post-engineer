@@ -1368,10 +1368,6 @@ class TestLipSyncConcat(unittest.TestCase):
         self.assertIn("Invalid data found", str(ctx.exception))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestTerminalStateGate(unittest.TestCase):
     """stream_video/download_video only serve tasks that COMPLETED.
 
@@ -1582,3 +1578,7 @@ class TestFinalVideoUri(unittest.TestCase):
             self.assertFalse(response["body"]["has_archive"])
         finally:
             sm.state.delete_task(task_id)
+
+
+if __name__ == "__main__":
+    unittest.main()
