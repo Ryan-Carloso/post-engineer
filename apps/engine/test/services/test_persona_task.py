@@ -168,6 +168,62 @@ class TestGenerateAudioLanguageResolution:
         assert returned is sub_maker
 
 
+class TestGenerateAudioHouseVoiceStyle:
+    """The house voice personality (rate/pitch) the preview sample is
+    synthesized with must reach the pipeline TTS: 'energetic' is previewed
+    at 1.2x/+5Hz but the delivered video was narrated flat at 1.0x."""
+
+    def _tts_kwargs(self, params, task_id):
+        sub_maker = object()
+        try:
+            with (
+                patch.object(
+                    task_service.voice, "tts", return_value=sub_maker
+                ) as tts,
+                patch.object(
+                    task_service.voice, "get_audio_duration", return_value=46
+                ),
+            ):
+                task_service.generate_audio(task_id, params, "Rosto humano.")
+        finally:
+            shutil.rmtree(utils.task_dir(task_id), ignore_errors=True)
+        return tts.call_args.kwargs
+
+    def test_house_voice_rate_and_pitch_reach_the_tts(self):
+        params = _params(name="Ana", voice_id="calm")
+        params.video_language = "pt-BR"
+
+        kwargs = self._tts_kwargs(params, "task-style-calm")
+
+        # Assert against the catalog, never hardcoded literals.
+        assert kwargs["voice_rate"] == pytest.approx(
+            persona_service.HOUSE_VOICE_STYLES["calm"]["rate"]
+        )
+        assert (
+            kwargs["voice_pitch"]
+            == persona_service.HOUSE_VOICE_STYLES["calm"]["pitch"]
+        )
+
+    def test_request_rate_scales_the_house_style(self):
+        params = _params(name="Ana", voice_id="calm")
+        params.video_language = "pt-BR"
+        params.voice_rate = 1.2
+
+        kwargs = self._tts_kwargs(params, "task-style-scaled")
+
+        expected = 1.2 * persona_service.HOUSE_VOICE_STYLES["calm"]["rate"]
+        assert kwargs["voice_rate"] == pytest.approx(expected)
+
+    def test_non_house_voice_keeps_the_request_rate_and_no_pitch(self):
+        params = _params(name="Ana", voice_id="en-US-JennyNeural")
+        params.video_language = "pt-BR"
+
+        kwargs = self._tts_kwargs(params, "task-style-custom")
+
+        assert kwargs["voice_rate"] == pytest.approx(params.voice_rate)
+        assert kwargs["voice_pitch"] == ""
+
+
 class TestPersonaHookBoundary:
     def test_hook_ends_on_the_first_complete_paragraph(self):
         script = "A hook ends here.\n\nThe rest explains the story."

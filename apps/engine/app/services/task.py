@@ -896,16 +896,30 @@ def generate_audio(task_id, params, video_script):
         # voice_name — faceless/debug flow, no inline persona. Resolve
         # to the video language's Neural voice before TTS; without this
         # edge-tts rejects with "Invalid voice" and the job fails.
-        from app.services.persona import resolve_house_voice_name
+        from app.services.persona import (
+            compose_voice_rate,
+            house_voice_style,
+            resolve_house_voice_name,
+        )
 
+        # House voices carry a personality (rate/pitch) the preview sample
+        # already used; the pipeline ignored it, so 'energetic' was previewed
+        # at 1.2x/+5Hz but delivered flat at 1.0x. The request rate scales
+        # the house style (nobody sends voice_rate today, so the style wins).
+        # The style is read from the RAW id, before the language resolution
+        # below turns it into a qualified voice name.
+        # voice_pitch is only honored on the azure v1 / edge-tts path
+        # (voice.py); other providers ignore it.
+        style = house_voice_style(persona_voice_name)
         persona_voice_name = resolve_house_voice_name(
             persona_voice_name, getattr(params, "video_language", "")
         )
         sub_maker = voice.tts(
             text=video_script,
             voice_name=voice.parse_voice_name(persona_voice_name),
-            voice_rate=params.voice_rate,
+            voice_rate=compose_voice_rate(params.voice_rate, style),
             voice_file=audio_file,
+            voice_pitch=str(style.get("pitch", "")),
         )
         if sub_maker is None:
             _fail_task(task_id, "failed to generate audio: voice/subtitle mismatch", params, stage="audio")
