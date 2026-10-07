@@ -32,6 +32,9 @@ dependencies = [
     "python-multipart==0.0.32",
     "pyyaml==6.0.3",
     "requests==2.33.1",
+    # S3 client for the optional Cloudflare R2 video archive backend. R2
+    # requires AWS Signature V4, which requests cannot produce on its own.
+    "boto3==1.40.72",
     "socksio==1.0.0",
     "pydub==0.25.1",
     "litellm==1.86.2",
