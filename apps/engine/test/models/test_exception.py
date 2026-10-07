@@ -38,9 +38,16 @@ class HttpExceptionLoggingTests(unittest.TestCase):
             task_id="task-1", http_status_code=404
         )
 
-    def test_non_400_logs_at_error_level(self):
+    def test_4xx_logs_at_warning_level(self):
         with patch("app.models.exception.logger") as mock_logger:
             HttpException(task_id="task-1", status_code=404, message="nope")
+        bound = mock_logger.bind.return_value
+        bound.warning.assert_called_once()
+        bound.error.assert_not_called()
+
+    def test_5xx_logs_at_error_level(self):
+        with patch("app.models.exception.logger") as mock_logger:
+            HttpException(task_id="task-1", status_code=500, message="boom")
         bound = mock_logger.bind.return_value
         bound.error.assert_called_once()
         bound.warning.assert_not_called()

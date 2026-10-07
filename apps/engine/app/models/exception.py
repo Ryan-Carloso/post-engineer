@@ -30,10 +30,13 @@ class HttpException(Exception):
         if generation_id:
             bind_kwargs["generation_id"] = generation_id
         bound = logger.bind(**bind_kwargs)
-        if status_code == 400:
-            bound.warning(msg)
-        else:
+        # Client errors (4xx) are the caller's fault — log as a warning so
+        # they never reach PostHog error tracking as $exception noise.
+        # Only server faults (5xx) are real exceptions worth alerting on.
+        if status_code >= 500:
             bound.error(msg)
+        else:
+            bound.warning(msg)
 
 
 class FileNotFoundException(Exception):
