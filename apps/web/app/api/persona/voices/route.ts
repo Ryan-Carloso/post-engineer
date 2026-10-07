@@ -4,10 +4,10 @@ import { logger } from '@/lib/logger';
 import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
-// GET /api/persona/voices — proxy do catálogo de vozes da casa para o
-// money-print. Fonte única de verdade: os ids usados nos samples e nos
-// jobs de vídeo são sempre os do money-print.
-// Auth = sessão Supabase (cookie) OU API key pessoal (Bearer/x-api-key, MCP).
+// GET /api/persona/voices — proxy of the house voice catalog to
+// money-print. Single source of truth: the ids used in samples and in
+// video jobs are always money-print's.
+// Auth = Supabase session (cookie) OR personal API key (Bearer/x-api-key, MCP).
 //---------------
 
 function moneyPrintBaseUrl(): string {
@@ -47,8 +47,10 @@ async function getHandler(request?: Request): Promise<NextResponse> {
       );
     }
 
-    const body: { data?: unknown } = await upstream.json();
-    const data = body.data;
+    // The engine wraps payloads in its BaseResponse envelope
+    // ({ status, message, body }); the catalog lives under `body`.
+    const envelope: { body?: unknown } = await upstream.json();
+    const data = envelope.body;
     if (
       !Array.isArray(data) ||
       !data.every(

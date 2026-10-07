@@ -14,9 +14,11 @@ vi.mock('@/lib/api-keys', () => ({
 }));
 
 //---------------
-// Testes de GET /api/persona/voices — proxy do catálogo de vozes da casa
-// para o money-print. Auth = sessão Supabase. Apenas Supabase SSR e fetch
-// global (HTTP) são mockados.
+// GET /api/persona/voices tests — proxy of the house voice catalog to
+// money-print. Auth = Supabase session. Only Supabase SSR and the global
+// fetch (HTTP) are mocked. Upstream mocks use the real engine envelope
+// (BaseResponse: { status, message, body }) so the tests pin the
+// production contract instead of a fake shape.
 //---------------
 
 import { GET } from '../route';
@@ -67,7 +69,7 @@ describe('GET /api/persona/voices', () => {
       Response.json({
         status: 200,
         message: 'success',
-        data: [
+        body: [
           { id: 'calm' },
           { id: 'energetic' },
         ],
@@ -98,7 +100,9 @@ describe('GET /api/persona/voices', () => {
     });
     fetchMock.mockResolvedValue(
       Response.json({
-        data: [{ id: 'calm' }, { id: 'energetic' }],
+        status: 200,
+        message: 'success',
+        body: [{ id: 'calm' }, { id: 'energetic' }],
       }),
     );
 
@@ -164,7 +168,7 @@ describe('GET /api/persona/voices', () => {
   });
 
   it('retorna 502 com payload de vozes inválido', async () => {
-    fetchMock.mockResolvedValue(Response.json({ data: 'not-an-array' }));
+    fetchMock.mockResolvedValue(Response.json({ status: 200, message: 'success', body: 'not-an-array' }));
 
     const res = await GET();
 
@@ -177,5 +181,92 @@ describe('GET /api/persona/voices', () => {
     const res = await GET();
 
     expect(res.status).toBe(502);
+  });
+
+  it('inclui o corpo de erro exato na falha de configuração', async () => {
+    vi.stubEnv('MONEYPRINT_API_URL', '');
+
+    const res = await GET();
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({
+      success: false,
+      error: 'MONEYPRINT_API_URL is not defined',
+    });
+  });
+
+  it('inclui o corpo de erro exato quando o money-print falha', async () => {
+    fetchMock.mockResolvedValue(new Response('erro', { status: 500 }));
+
+    const res = await GET();
+
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ success: false, error: 'Voices unavailable.' });
+  });
+
+  it('inclui o corpo de erro exato quando o money-print está inacessível', async () => {
+    fetchMock.mockRejectedValue(new Error('connection refused'));
+
+    const res = await GET();
+
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ success: false, error: 'Voices service unreachable.' });
+  });
+
+  it.each([
+    ['corpo não é array', 'not-an-array'],
+    ['id não é string', [{ id: 123 }]],
+    ['item nulo', [null]],
+    ['item não é objeto', ['x']],
+    ['item sem id', [{}]],
+    ['corpo ausente no envelope', undefined],
+  ])('retorna 502 com payload de vozes inválido (%s)', async (_label, body) => {
+    fetchMock.mockResolvedValue(Response.json({ status: 200, message: 'success', body }));
+
+    const res = await GET();
+
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ success: false, error: 'Invalid voices payload.' });
+  });
+
+  it('rejeita o formato antigo do envelope com chave data', async () => {
+    fetchMock.mockResolvedValue(
+      Response.json({ status: 200, message: 'success', data: [{ id: 'calm' }] }),
+    );
+
+    const res = await GET();
+
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ success: false, error: 'Invalid voices payload.' });
+  });
+
+  it('chama o endpoint do money-print sem barras finais e com cache no-store', async () => {
+    vi.stubEnv('MONEYPRINT_API_URL', 'http://moneyprint.internal:8080///');
+    fetchMock.mockResolvedValue(
+      Response.json({ status: 200, message: 'success', body: [{ id: 'calm' }] }),
+    );
+
+    const res = await GET();
+
+    expect(res.status).toBe(200);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      'http://moneyprint.internal:8080/api/v1/personas/voices',
+    );
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ cache: 'no-store' });
+  });
+
+  it('projeta apenas o id das vozes no catálogo', async () => {
+    fetchMock.mockResolvedValue(
+      Response.json({
+        status: 200,
+        message: 'success',
+        body: [{ id: 'calm', extra: 'ignored' }],
+      }),
+    );
+
+    const res = await GET();
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ voices: [{ id: 'calm' }] });
   });
 });

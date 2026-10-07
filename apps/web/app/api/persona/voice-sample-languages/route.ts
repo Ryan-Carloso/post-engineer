@@ -4,8 +4,8 @@ import { logger } from '@/lib/logger';
 import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
-// GET /api/persona/voice-sample-languages — proxy da lista de idiomas
-// disponíveis para amostras de voz no money-print.
+// GET /api/persona/voice-sample-languages — proxy of the voice sample
+// language list to money-print.
 //---------------
 
 function moneyPrintBaseUrl(): string {
@@ -47,8 +47,10 @@ async function getHandler(): Promise<NextResponse> {
       );
     }
 
-    const body: { data?: unknown } = await upstream.json();
-    const data = body.data;
+    // The engine wraps payloads in its BaseResponse envelope
+    // ({ status, message, body }); the language list lives under `body`.
+    const envelope: { body?: unknown } = await upstream.json();
+    const data = envelope.body;
     if (
       !Array.isArray(data) ||
       !data.every(
