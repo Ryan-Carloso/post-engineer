@@ -88,8 +88,12 @@ describe('Post detail auto-refresh', () => {
     cy.intercept('GET', '/api/persona/video-download/*', { statusCode: 404 });
 
     // Install the fake clock before the app loads so the query's 60s
-    // refetchInterval is a controllable timer.
-    cy.clock();
+    // refetchInterval is a controllable timer. Only the interval timers
+    // (and Date) are faked: React Query delivers query results through a
+    // real setTimeout(0) batch, and faking setTimeout wedges the query in
+    // its loading state forever — the stubbed response arrives but the
+    // page never leaves the skeleton.
+    cy.clock(Date.now(), ['setInterval', 'clearInterval', 'Date']);
     cy.visit(`/posts/${SLOT_ID}`);
     // The page resolves its entity by id through the detail endpoint —
     // wait for the stubbed response the page actually consumes.
