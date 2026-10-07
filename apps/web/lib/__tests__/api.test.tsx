@@ -690,4 +690,49 @@ describe('api', () => {
     const { result: idleResult } = renderHook(() => useSlotDetailQuery(''), { wrapper });
     expect(idleResult.current.fetchStatus).toBe('idle');
   });
+
+  // Regression pin for the frozen detail page: useSlotDetailQuery was the
+  // only query on the post detail screen without a refetchInterval, so a
+  // user parked on a generating post never saw it flip to ready — and the
+  // <video> only renders for ready/publishing/published. Fake timers assert
+  // the actual scheduling; a static config assert would not catch a broken
+  // interval (and Stryker's 60_000 → 60_001 mutant must die here).
+  it('useSlotDetailQuery refetches the slot every 60s', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+        if (String(input) === '/api/schedule/slots/slot-1') {
+          return jsonResponse({ success: true, slot: { id: 'slot-1' }, schedule: { id: 's1' }, persona: null });
+        }
+        return jsonResponse({});
+      });
+      const { useSlotDetailQuery } = await import('@/lib/api');
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const wrapper = ({ children }: { children: ReactNode }): ReactNode => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      );
+
+      const { result } = renderHook(() => useSlotDetailQuery('slot-1'), { wrapper });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(result.current.isSuccess).toBe(true);
+      expect(fetch).toHaveBeenCalledTimes(1);
+
+      // 59_999ms in: still a single fetch — the interval is exactly 60s.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(59_999);
+      });
+      expect(fetch).toHaveBeenCalledTimes(1);
+
+      // The 60s mark fires the scheduled refetch.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(fetch).toHaveBeenLastCalledWith('/api/schedule/slots/slot-1', expect.anything());
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

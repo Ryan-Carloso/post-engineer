@@ -352,6 +352,46 @@ describe('PostDetailPage', () => {
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '45');
   });
 
+  // The scheduled refetch on useSlotDetailQuery delivers the status flip —
+  // the page must swap the progress UI for the player without a reload.
+  it('swaps the progress UI for the player when a refetch flips generating to ready', () => {
+    const generating = slotPayload({
+      status: 'generating',
+      topic: 'Cooking topic',
+      taskId: 'task-7',
+      progress: 45,
+      stage: 'lipsync',
+    });
+    const ready = slotPayload({
+      status: 'ready',
+      topic: 'Cooking topic',
+      taskId: 'task-7',
+      progress: 100,
+      stage: 'done',
+    });
+    let current: Record<string, unknown> = generating;
+    vi.mocked(useSlotDetailQuery).mockImplementation(() => ({
+      data: current as never,
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as never));
+
+    const { rerender } = render(<DetailPage />);
+    expect(document.querySelector('video')).toBeNull();
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '45');
+
+    // The refetch returns ready: the page re-renders with the <video>
+    // instead of the progress bar.
+    current = ready;
+    rerender(<DetailPage />);
+
+    const video = screen.getByRole('region', { name: 'posts.detailsTitle' }).querySelector('video');
+    expect(video).not.toBeNull();
+    expect(video?.getAttribute('src')).toBe('/api/persona/video-download/task-7/final-1.mp4');
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+  });
+
   it('shows the error and allows deleting a failed slot after confirmation', async () => {
     mockQueries({ slot: FAILED_PAYLOAD });
     vi.mocked(useParams).mockReturnValue({ id: 'r2' });
