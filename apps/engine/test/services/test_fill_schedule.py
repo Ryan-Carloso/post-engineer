@@ -151,6 +151,55 @@ class BatchScheduleTests(unittest.TestCase):
         self.assertEqual(update["topic"], "Batch topic one")
         self.assertEqual(update["task_id"], task_id)
 
+    def test_batch_dispatch_carries_the_video_language(self):
+        # The embed's language ('en' in the fixture) must reach the job as
+        # video_language: without it the script prompt carries no
+        # "- language:" line and the script language is left to the LLM's
+        # fallback (same language as the topic) - a coin toss.
+        slot = self._batch_slot()
+        store = _FakeStore()
+        store.pending_slots = lambda now: [slot]
+        scheduler = self._scheduler(store)
+        scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
+
+        with patch.object(
+            scheduler.generator, "_dispatch_generation"
+        ) as dispatch_generation:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+
+        self.assertEqual(enqueued, 1)
+        request = dispatch_generation.call_args.args[1]
+        self.assertEqual(request.video_language, "en")
+
+    def test_persona_less_batch_dispatch_uses_the_snapshot_language(self):
+        # A persona-less schedule has no embed: the language comes from the
+        # post_language snapshot column (post_identity's snapshot-first rule).
+        slot = self._batch_slot()
+        del slot["schedules"]["personas"]
+        slot["faceless"] = True
+        slot["schedules"].update(
+            {
+                "post_voice_id": "energetic",
+                "post_language": "pt-BR",
+                "post_script_prompt": "Be direct and short.",
+                "post_video_aspect": "16:9",
+                "post_face_quality": "ok",
+            }
+        )
+        store = _FakeStore()
+        store.pending_slots = lambda now: [slot]
+        scheduler = self._scheduler(store)
+        scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
+
+        with patch.object(
+            scheduler.generator, "_dispatch_generation"
+        ) as dispatch_generation:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+
+        self.assertEqual(enqueued, 1)
+        request = dispatch_generation.call_args.args[1]
+        self.assertEqual(request.video_language, "pt-BR")
+
     def test_generate_batch_slot_without_topic_fails(self):
         slot = self._batch_slot(topic="   ")
         store = _FakeStore()

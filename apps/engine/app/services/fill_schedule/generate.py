@@ -108,6 +108,11 @@ class BatchGenerator:
                 persona=build_persona_params(identity, self.store, faceless),
                 video_aspect=identity.get("video_aspect") or "9:16",
                 video_script_prompt=identity.get("script_prompt") or "",
+                # Snapshot (post_language) already resolved by post_identity();
+                # without this the prompt carries no "- language:" line and
+                # the script language falls back to the LLM's guess from the
+                # topic (DEFAULT_SCRIPT_SYSTEM_PROMPT rule 7).
+                video_language=str(identity.get("language") or ""),
                 paragraph_number=(
                     int(identity["paragraph_number"])
                     if identity.get("paragraph_number") is not None
