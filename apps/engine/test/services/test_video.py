@@ -128,40 +128,82 @@ class TestSecurityControls(unittest.TestCase):
             shutil.rmtree(task_dir, ignore_errors=True)
 
     def test_download_authorizes_task_from_resolved_path(self):
+        """Traversal in the requested path still resolves to the real task.
+
+        R2 serves the bytes now, so the local path is resolved purely as the
+        input guard; a `wrong/../<task>` URL must still be accepted as that
+        task (same normalization as before) and then serve the archive.
+        """
         task_id = "normalized-task-url"
-        task_dir = utils.task_dir(task_id)
-        video_path = os.path.join(task_dir, "final-1.mp4")
-        Path(video_path).write_bytes(b"fake-video")
-        sm.state.update_task(task_id, state=const.TASK_STATE_COMPLETE, user_id="internal")
+        sm.state.update_task(
+            task_id,
+            state=const.TASK_STATE_COMPLETE,
+            user_id="internal",
+            video_storage_path=f"internal/faceless/{task_id}/final-1.mp4",
+        )
 
         try:
-            response = asyncio.run(
-                video_controller.download_video(
-                    _FakeRequest(), f"wrong/../{task_id}/final-1.mp4"
+            with patch(
+                "app.controllers.v1.video.video_storage.create_signed_url",
+                return_value="https://r2.example/signed?token=abc",
+            ):
+                response = asyncio.run(
+                    video_controller.download_video(
+                        _FakeRequest(), f"wrong/../{task_id}/final-1.mp4"
+                    )
                 )
+            self.assertEqual(response.status_code, 302)
+            self.assertEqual(
+                response.headers["location"], "https://r2.example/signed?token=abc"
             )
-            self.assertEqual(response.path, os.path.realpath(video_path))
         finally:
             sm.state.delete_task(task_id)
-            shutil.rmtree(task_dir, ignore_errors=True)
 
     def test_stream_authorizes_task_from_resolved_path(self):
         task_id = "normalized-stream-url"
-        task_dir = utils.task_dir(task_id)
-        video_path = os.path.join(task_dir, "final-1.mp4")
-        Path(video_path).write_bytes(b"fake-video")
-        sm.state.update_task(task_id, state=const.TASK_STATE_COMPLETE, user_id="internal")
+        sm.state.update_task(
+            task_id,
+            state=const.TASK_STATE_COMPLETE,
+            user_id="internal",
+            video_storage_path=f"internal/faceless/{task_id}/final-1.mp4",
+        )
 
         try:
-            response = asyncio.run(
-                video_controller.stream_video(
-                    _FakeRequest(), f"wrong/../{task_id}/final-1.mp4"
+            with patch(
+                "app.controllers.v1.video.video_storage.create_signed_url",
+                return_value="https://r2.example/signed?token=abc",
+            ):
+                response = asyncio.run(
+                    video_controller.stream_video(
+                        _FakeRequest(), f"wrong/../{task_id}/final-1.mp4"
+                    )
                 )
-            )
-            self.assertEqual(response.status_code, 206)
+            self.assertEqual(response.status_code, 302)
         finally:
             sm.state.delete_task(task_id)
-            shutil.rmtree(task_dir, ignore_errors=True)
+
+    def test_traversal_outside_task_dir_is_still_rejected(self):
+        """The input guard must keep refusing paths that escape tasks_dir.
+
+        Removing the local read did not make this endpoint permissive: the
+        resolved path is what proves the requested task is well-formed.
+        """
+        task_id = "traversal-guard-task"
+        sm.state.update_task(
+            task_id,
+            state=const.TASK_STATE_COMPLETE,
+            user_id="internal",
+            video_storage_path=f"internal/faceless/{task_id}/final-1.mp4",
+        )
+        try:
+            with self.assertRaises(video_controller.HttpException):
+                asyncio.run(
+                    video_controller.download_video(
+                        _FakeRequest(), f"{task_id}/../../../../etc/passwd"
+                    )
+                )
+        finally:
+            sm.state.delete_task(task_id)
 
     def test_in_memory_task_manager_rejects_when_queue_is_full(self):
         """
@@ -178,14 +220,17 @@ class TestSecurityControls(unittest.TestCase):
 
 
 class TestStorageFallback(unittest.TestCase):
-    """When the local file is gone (restart wiped the disk), /stream/ and
-    /download/ redirect to the durable Supabase Storage copy recorded in
-    the task state at generation time."""
+    """/stream/ and /download/ serve the ARCHIVE, always.
+
+    R2 is the source of truth: every response is a 302 to a signed object URL
+    and the engine's local disk is never read, whether or not the file is
+    there. The name is historical — this used to be a fallback for a missing
+    local file; there is no local path left to fall back from."""
 
     def _run(self, coro):
         return asyncio.run(coro)
 
-    def test_download_redirects_to_signed_storage_url_when_local_file_missing(self):
+    def test_download_redirects_to_signed_archive_url(self):
         task_id = "storage-fallback-task"
         sm.state.update_task(
             task_id,
@@ -196,19 +241,19 @@ class TestStorageFallback(unittest.TestCase):
         try:
             with patch(
                 "app.controllers.v1.video.video_storage.create_signed_url",
-                return_value="https://xyz.supabase.co/signed?token=abc",
+                return_value="https://r2.example/signed?token=abc",
             ):
                 response = self._run(
                     video_controller.download_video(_FakeRequest(), f"{task_id}/final-1.mp4")
                 )
             self.assertEqual(response.status_code, 302)
             self.assertEqual(
-                response.headers["location"], "https://xyz.supabase.co/signed?token=abc"
+                response.headers["location"], "https://r2.example/signed?token=abc"
             )
         finally:
             sm.state.delete_task(task_id)
 
-    def test_stream_redirects_to_signed_storage_url_when_local_file_missing(self):
+    def test_stream_redirects_to_signed_archive_url(self):
         task_id = "storage-fallback-stream"
         sm.state.update_task(
             task_id,
@@ -219,7 +264,7 @@ class TestStorageFallback(unittest.TestCase):
         try:
             with patch(
                 "app.controllers.v1.video.video_storage.create_signed_url",
-                return_value="https://xyz.supabase.co/signed?token=abc",
+                return_value="https://r2.example/signed?token=abc",
             ):
                 response = self._run(
                     video_controller.stream_video(_FakeRequest(), f"{task_id}/final-1.mp4")
@@ -228,7 +273,7 @@ class TestStorageFallback(unittest.TestCase):
         finally:
             sm.state.delete_task(task_id)
 
-    def test_missing_local_file_without_storage_copy_still_404s(self):
+    def test_task_without_archive_still_404s(self):
         task_id = "no-storage-copy-task"
         sm.state.update_task(task_id, state=const.TASK_STATE_COMPLETE, user_id="internal")
         try:
@@ -253,7 +298,7 @@ class TestStorageFallback(unittest.TestCase):
         try:
             with patch(
                 "app.controllers.v1.video.video_storage.create_signed_url",
-                return_value="https://xyz.supabase.co/signed?token=abc",
+                return_value="https://r2.example/signed?token=abc",
             ) as signed:
                 with self.assertRaises(video_controller.HttpException) as ctx:
                     self._run(
@@ -266,11 +311,16 @@ class TestStorageFallback(unittest.TestCase):
         finally:
             sm.state.delete_task(task_id)
 
-    def test_local_file_is_served_directly_when_present(self):
+    def test_local_file_present_is_still_never_read(self):
+        """The local file existing must NOT make the engine serve from disk.
+
+        This is the behaviour that flipped: the archive is the source of truth,
+        so even with a file sitting on disk the request must redirect to the
+        signed R2 URL and never open the local path.
+        """
         task_id = "local-file-present-task"
         task_dir = utils.task_dir(task_id)
-        video_path = os.path.join(task_dir, "final-1.mp4")
-        Path(video_path).write_bytes(b"fake-video")
+        Path(os.path.join(task_dir, "final-1.mp4")).write_bytes(b"fake-video")
         sm.state.update_task(
             task_id,
             state=const.TASK_STATE_COMPLETE,
@@ -280,15 +330,50 @@ class TestStorageFallback(unittest.TestCase):
         try:
             with patch(
                 "app.controllers.v1.video.video_storage.create_signed_url",
+                return_value="https://r2.example/signed?token=abc",
             ) as signed:
-                response = self._run(
-                    video_controller.download_video(_FakeRequest(), f"{task_id}/final-1.mp4")
-                )
-            self.assertEqual(response.path, os.path.realpath(video_path))
-            signed.assert_not_called()
+                with patch("builtins.open") as opened:
+                    response = self._run(
+                        video_controller.download_video(
+                            _FakeRequest(), f"{task_id}/final-1.mp4"
+                        )
+                    )
+            self.assertEqual(response.status_code, 302)
+            signed.assert_called_once_with(
+                "internal/faceless/local-file-present-task/final-1.mp4"
+            )
+            opened.assert_not_called()
         finally:
             sm.state.delete_task(task_id)
-            shutil.rmtree(task_dir, ignore_errors=True)
+
+    def test_task_without_verified_archive_reports_the_upload_error(self):
+        """A failed archive must surface as a reason, not a silent 404.
+
+        With no local fallback there is nothing to serve, so the recorded
+        video_storage_error is the only clue that the video was paid for and
+        then lost — it must not be swallowed.
+        """
+        task_id = "archive-failed-task"
+        sm.state.update_task(
+            task_id,
+            state=const.TASK_STATE_COMPLETE,
+            user_id="internal",
+            video_storage_error=f"internal/faceless/{task_id}/final-1.mp4",
+        )
+        try:
+            with patch(
+                "app.controllers.v1.video.video_storage.create_signed_url",
+                return_value=None,
+            ):
+                with self.assertRaises(video_controller.HttpException) as ctx:
+                    self._run(
+                        video_controller.download_video(
+                            _FakeRequest(), f"{task_id}/final-1.mp4"
+                        )
+                    )
+            self.assertEqual(ctx.exception.status_code, 404)
+        finally:
+            sm.state.delete_task(task_id)
 
 
 class TestVideoService(unittest.TestCase):
@@ -1452,7 +1537,7 @@ class TestTerminalStateGate(unittest.TestCase):
         try:
             with patch(
                 "app.controllers.v1.video.video_storage.create_signed_url",
-                return_value="https://xyz.supabase.co/signed?token=abc",
+                return_value="https://r2.example/signed?token=abc",
             ) as signed:
                 with self.assertRaises(video_controller.HttpException) as ctx:
                     self._run(
@@ -1466,24 +1551,33 @@ class TestTerminalStateGate(unittest.TestCase):
             sm.state.delete_task(task_id)
 
     def test_completed_task_is_still_served(self):
+        """A COMPLETE task serves from the archive for both endpoints."""
         task_id = "gate-completed-task"
-        task_dir = self._seed_task(task_id, const.TASK_STATE_COMPLETE)
+        task_dir = self._seed_task(
+            task_id,
+            const.TASK_STATE_COMPLETE,
+            storage_path=f"internal/faceless/{task_id}/final-1.mp4",
+        )
         try:
-            stream = self._run(
-                video_controller.stream_video(
-                    _FakeRequest(), f"{task_id}/final-1.mp4"
+            with patch(
+                "app.controllers.v1.video.video_storage.create_signed_url",
+                return_value="https://r2.example/signed?token=abc",
+            ):
+                stream = self._run(
+                    video_controller.stream_video(
+                        _FakeRequest(), f"{task_id}/final-1.mp4"
+                    )
                 )
-            )
-            self.assertEqual(stream.status_code, 206)
-            download = self._run(
-                video_controller.download_video(
-                    _FakeRequest(), f"{task_id}/final-1.mp4"
+                self.assertEqual(stream.status_code, 302)
+                download = self._run(
+                    video_controller.download_video(
+                        _FakeRequest(), f"{task_id}/final-1.mp4"
+                    )
                 )
-            )
-            self.assertEqual(
-                download.path,
-                os.path.realpath(os.path.join(task_dir, "final-1.mp4")),
-            )
+                self.assertEqual(download.status_code, 302)
+                self.assertEqual(
+                    download.headers["location"], "https://r2.example/signed?token=abc"
+                )
         finally:
             self._cleanup(task_id, task_dir)
 

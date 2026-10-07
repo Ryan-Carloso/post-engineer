@@ -180,5 +180,234 @@ class CreateSignedUrlTests(unittest.TestCase):
             self.assertIsNone(vs.create_signed_url("u1/faceless/t/final-1.mp4"))
 
 
+class R2IsConfiguredTests(unittest.TestCase):
+    """R2 needs account id + key id + secret; any one missing is unconfigured."""
+
+    def test_requires_all_three_r2_env_vars(self):
+        full = {
+            "MPT_VIDEO_STORAGE": "r2",
+            "R2_ACCOUNT_ID": "acct",
+            "R2_ACCESS_KEY_ID": "key-id",
+            "R2_SECRET_ACCESS_KEY": "secret",
+        }
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertFalse(vs.r2_is_configured())
+        # Drop one at a time: a partial config must never be treated as ready,
+        # or the archive silently switches to an unsigned/half-configured client.
+        for missing in full:
+            env = {k: v for k, v in full.items() if k != missing}
+            with patch.dict(os.environ, env, clear=True):
+                self.assertFalse(vs.r2_is_configured())
+        with patch.dict(os.environ, full, clear=True):
+            self.assertTrue(vs.r2_is_configured())
+
+    def test_r2_endpoint_is_derived_from_account_id(self):
+        with patch.dict(
+            os.environ,
+            {
+                "MPT_VIDEO_STORAGE": "r2",
+                "R2_ACCOUNT_ID": "acct123",
+                "R2_ACCESS_KEY_ID": "k",
+                "R2_SECRET_ACCESS_KEY": "s",
+            },
+            clear=True,
+        ):
+            self.assertEqual(
+                vs.r2_endpoint(), "https://acct123.r2.cloudflarestorage.com"
+            )
+
+    def test_blank_values_are_treated_as_unset(self):
+        with patch.dict(
+            os.environ,
+            {
+                "MPT_VIDEO_STORAGE": "r2",
+                "R2_ACCOUNT_ID": "acct",
+                "R2_ACCESS_KEY_ID": "",
+                "R2_SECRET_ACCESS_KEY": "s",
+            },
+            clear=True,
+        ):
+            self.assertFalse(vs.r2_is_configured())
+
+
+class R2UploadTests(unittest.TestCase):
+    def setUp(self):
+        self.env = patch.dict(
+            os.environ,
+            {
+                "MPT_VIDEO_STORAGE": "r2",
+                "R2_ACCOUNT_ID": "acct",
+                "R2_ACCESS_KEY_ID": "key-id",
+                "R2_SECRET_ACCESS_KEY": "secret",
+            },
+            clear=True,
+        )
+        self.env.start()
+        self.addCleanup(self.env.stop)
+        # The archive is a precondition of a servable video, so the upload path
+        # now stats the local file and HEADs the object back. Both are mocked:
+        # a size that matches is what makes the upload count as verified.
+        self.stat = patch(
+            "app.services.video_storage.os.path.getsize", return_value=1024
+        )
+        self.stat.start()
+        self.addCleanup(self.stat.stop)
+
+    def _client(self, remote_bytes=1024):
+        client = MagicMock()
+        client.put_object.return_value = {"ETag": '"abc"'}
+        client.head_object.return_value = {"ContentLength": remote_bytes}
+        return client
+
+    def test_uploads_object_and_returns_path_only_after_verification(self):
+        client = self._client()
+        with patch("app.services.video_storage._r2_client", return_value=client):
+            with patch("builtins.open", MagicMock()):
+                result = vs.upload_final_video_r2(
+                    "u1/faceless/task-7/final-1.mp4", "/tmp/final-1.mp4"
+                )
+        self.assertEqual(result, "u1/faceless/task-7/final-1.mp4")
+        client.put_object.assert_called_once()
+        kwargs = client.put_object.call_args.kwargs
+        self.assertEqual(kwargs["Bucket"], vs.STORAGE_BUCKET)
+        self.assertEqual(kwargs["Key"], "u1/faceless/task-7/final-1.mp4")
+        self.assertEqual(kwargs["ContentType"], "video/mp4")
+        # Verification is not optional: a successful PUT alone is not proof.
+        client.head_object.assert_called_once_with(
+            Bucket=vs.STORAGE_BUCKET, Key="u1/faceless/task-7/final-1.mp4"
+        )
+
+    def test_truncated_object_is_rejected_even_though_put_succeeded(self):
+        """A short object must not be recorded as stored.
+
+        put_object can answer 200 for a truncated body; accepting it would
+        leave a video marked as archived that cannot actually be played.
+        """
+        client = self._client(remote_bytes=500)
+        with patch("app.services.video_storage._r2_client", return_value=client):
+            with patch("builtins.open", MagicMock()):
+                self.assertIsNone(
+                    vs.upload_final_video_r2("u1/faceless/t/final-1.mp4", "/tmp/f.mp4")
+                )
+
+    def test_verification_failure_returns_none(self):
+        client = self._client()
+        client.head_object.side_effect = RuntimeError("head failed")
+        with patch("app.services.video_storage._r2_client", return_value=client):
+            with patch("builtins.open", MagicMock()):
+                self.assertIsNone(
+                    vs.upload_final_video_r2("u1/faceless/t/final-1.mp4", "/tmp/f.mp4")
+                )
+
+    def test_missing_local_file_returns_none_without_uploading(self):
+        with patch(
+            "app.services.video_storage.os.path.getsize",
+            side_effect=OSError("missing"),
+        ):
+            with patch("app.services.video_storage._r2_client") as factory:
+                self.assertIsNone(
+                    vs.upload_final_video_r2("u1/faceless/t/final-1.mp4", "/tmp/f.mp4")
+                )
+                factory.assert_not_called()
+
+    def test_upload_failure_is_best_effort_and_returns_none(self):
+        client = self._client()
+        client.put_object.side_effect = RuntimeError("boom")
+        with patch("app.services.video_storage._r2_client", return_value=client):
+            with patch("builtins.open", MagicMock()):
+                self.assertIsNone(
+                    vs.upload_final_video_r2("u1/faceless/t/final-1.mp4", "/tmp/f.mp4")
+                )
+
+    def test_upload_skipped_when_not_configured(self):
+        with patch.dict(os.environ, {}, clear=True):
+            with patch("app.services.video_storage._r2_client") as factory:
+                self.assertIsNone(vs.upload_final_video_r2("p", "/tmp/f.mp4"))
+                factory.assert_not_called()
+
+
+class R2SignedUrlTests(unittest.TestCase):
+    def setUp(self):
+        self.env = patch.dict(
+            os.environ,
+            {
+                "MPT_VIDEO_STORAGE": "r2",
+                "R2_ACCOUNT_ID": "acct",
+                "R2_ACCESS_KEY_ID": "key-id",
+                "R2_SECRET_ACCESS_KEY": "secret",
+            },
+            clear=True,
+        )
+        self.env.start()
+        self.addCleanup(self.env.stop)
+
+    def test_presigned_url_targets_r2_endpoint(self):
+        client = MagicMock()
+        client.generate_presigned_url.return_value = (
+            "https://acct.r2.cloudflarestorage.com/videos/p?X-Amz-Signature=abc"
+        )
+        with patch("app.services.video_storage._r2_client", return_value=client):
+            url = vs.create_signed_url_r2("u1/faceless/t/final-1.mp4", expires_in=600)
+        self.assertIn("X-Amz-Signature", url)
+        kwargs = client.generate_presigned_url.call_args.kwargs
+        self.assertEqual(kwargs["Params"]["Bucket"], vs.STORAGE_BUCKET)
+        self.assertEqual(kwargs["Params"]["Key"], "u1/faceless/t/final-1.mp4")
+        self.assertEqual(kwargs["ExpiresIn"], 600)
+
+    def test_failure_returns_none(self):
+        client = MagicMock()
+        client.generate_presigned_url.side_effect = RuntimeError("boom")
+        with patch("app.services.video_storage._r2_client", return_value=client):
+            self.assertIsNone(vs.create_signed_url_r2("u1/faceless/t/final-1.mp4"))
+
+    def test_not_configured_returns_none(self):
+        with patch.dict(os.environ, {}, clear=True):
+            with patch("app.services.video_storage._r2_client") as factory:
+                self.assertIsNone(vs.create_signed_url_r2("p"))
+                factory.assert_not_called()
+
+
+class ArchiveFinalVideosAlertTests(unittest.TestCase):
+    """An unarchived video must be recorded, not silently skipped.
+
+    R2 is the only source for serving, so a failed upload/verify means the
+    video is gone the moment the local disk is recycled. Recording the reason
+    on the task is what makes that recoverable instead of invisible.
+    """
+
+    def test_failed_archive_records_video_storage_error(self):
+        from app.services import task as task_mod
+
+        with patch.object(task_mod.sm.state, "get_task", return_value={"user_id": "u1"}):
+            with patch.object(
+                task_mod.video_storage, "upload_final_video", return_value=None
+            ):
+                with patch.object(task_mod, "_update_task") as update:
+                    task_mod.archive_final_videos(
+                        "task-1", ["/tmp/final-1.mp4"], _params(_faceless_persona())
+                    )
+        update.assert_called_once()
+        kwargs = update.call_args.kwargs
+        self.assertEqual(kwargs["video_storage_error"], "u1/faceless/task-1/final-1.mp4")
+        self.assertNotIn("video_storage_path", kwargs)
+
+    def test_verified_archive_records_path_and_no_error(self):
+        from app.services import task as task_mod
+
+        with patch.object(task_mod.sm.state, "get_task", return_value={"user_id": "u1"}):
+            with patch.object(
+                task_mod.video_storage,
+                "upload_final_video",
+                return_value="u1/faceless/task-1/final-1.mp4",
+            ):
+                with patch.object(task_mod, "_update_task") as update:
+                    task_mod.archive_final_videos(
+                        "task-1", ["/tmp/final-1.mp4"], _params(_faceless_persona())
+                    )
+        update.assert_called_once_with(
+            "task-1", video_storage_path="u1/faceless/task-1/final-1.mp4"
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

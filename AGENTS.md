@@ -2324,3 +2324,17 @@ Five MINORs on the merged funnel, fixed as a follow-up PR with one focused TDD c
 - **CI injects `BUILD=<run number>` (old scheme) into every test job's environment.** A test asserting the PR_NUMBER→build fallback that sets PR_NUMBER but not BUILD gets the ambient BUILD leaked in: `patch.dict(os.environ, {...}, clear=False)` and `vi.stubEnv()` only touch the vars you list — unlisted vars keep their ambient values.
 - **When testing env-var fallback/default behavior, explicitly clear or stub every related var.** Engine: call the existing `_clear_build_env(monkeypatch)` helper before `patch.dict`. Web: `vi.stubEnv('BUILD', '')` for the fallback path (or the value under test). Verified: both suites fail with `BUILD=681` ambient and pass after the fix.
 - This bit the PR-tied versioning refactor because `ci.yml` still injects the old-scheme BUILD while the new code reads BUILD-first, PR_NUMBER-second.
+## Reviewer calibration (OpenCode, PR #134, 2026-10-07)
+
+- **Document hard infra names in the module docstring.** Both storage
+  backends share `STORAGE_BUCKET = "videos"` as the literal bucket name
+  with no per-backend override — an R2 bucket with any other name fails
+  every upload (and the failure surfaces as a 404 "no archived video").
+  When a constant doubles as an infrastructure name, the requirement
+  belongs in the module docstring, not only in setup notes.
+- **Prefer the precise param type over the reviewer's `object`.** The
+  review suggested `params: object` for `archive_final_videos`; the
+  caller's signature (`start(task_id, params: VideoParams, ...)`) shows
+  the real type is `VideoParams` — annotate with that. Same class as
+  "verify the reviewer's claim against the code": the suggestion was
+  directionally right (untyped args), the concrete type was weaker.
