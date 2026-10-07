@@ -914,6 +914,26 @@ def generate_audio(task_id, params, video_script):
         persona_voice_name = resolve_house_voice_name(
             persona_voice_name, getattr(params, "video_language", "")
         )
+        # Fail fast when nothing resolved to a usable voice name. An empty
+        # voice_name (or an empty-string persona voice_id, which the
+        # PersonaParams validator counts as a voice but the resolver treats
+        # as absent) would otherwise reach edge-tts, which rejects it as
+        # "Invalid voice ''." after burning its retries, and the job dies
+        # with the cryptic "failed to generate audio: voice/subtitle
+        # mismatch" instead of a readable reason.
+        if not (persona_voice_name or "").strip():
+            _fail_task(
+                task_id,
+                "no voice configured: the persona has no voice_id/voice_audio_url "
+                "and no voice_name was provided",
+                params,
+                stage="audio",
+            )
+            logger.error(
+                f"no voice configured for TTS, task_id: {task_id} "
+                "(empty voice name after persona/house-voice resolution)"
+            )
+            return None, None, None
         sub_maker = voice.tts(
             text=video_script,
             voice_name=voice.parse_voice_name(persona_voice_name),

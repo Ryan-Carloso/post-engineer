@@ -10,7 +10,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.services import task as tm
-from app.models.schema import MaterialInfo, VideoParams
+from app.models.schema import MaterialInfo, PersonaParams, VideoParams
 from app.utils import utils
 
 resources_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources")
@@ -670,6 +670,64 @@ class TestDownloadPersonaVoice(unittest.TestCase):
         kwargs = update_task.call_args.kwargs
         self.assertEqual(kwargs.get("state"), tm.const.TASK_STATE_FAILED)
         self.assertIn("public", str(kwargs.get("error", "")).lower())
+
+
+class TestGenerateAudioMissingVoice(unittest.TestCase):
+    """generate_audio fails fast when no voice resolves, instead of letting
+    edge-tts burn its retries on "Invalid voice ''." — production incident
+    2026-10-07 (task 88600f25): the audio stage failed with the cryptic
+    "failed to generate audio: voice/subtitle mismatch" because the job
+    arrived with no usable voice and the empty default reached TTS."""
+
+    def _run(self, params, task_id):
+        with (
+            patch.object(tm.voice, "tts") as tts,
+            patch.object(tm.sm.state, "update_task") as update_task,
+            patch.object(tm, "send_discord"),
+        ):
+            result = tm.generate_audio(task_id, params, "script")
+        return result, tts, update_task
+
+    def test_fails_fast_with_clear_reason_when_no_voice_configured(self):
+        params = VideoParams(video_subject="no voice", video_script="")
+
+        (audio_file, audio_duration, sub_maker), tts, update_task = self._run(
+            params, "task-no-voice"
+        )
+
+        self.assertIsNone(audio_file)
+        self.assertIsNone(audio_duration)
+        self.assertIsNone(sub_maker)
+        # TTS was never attempted: no wasted edge-tts retries on ''.
+        tts.assert_not_called()
+        update_task.assert_called_once()
+        kwargs = update_task.call_args.kwargs
+        self.assertEqual(kwargs.get("state"), tm.const.TASK_STATE_FAILED)
+        self.assertIn("no voice", str(kwargs.get("error", "")).lower())
+
+    def test_fails_fast_when_persona_voice_id_is_empty_string(self):
+        # PersonaParams counts '' as "exactly one voice" (it checks
+        # is not None), but resolve_persona_audio treats '' as absent and
+        # falls back to the empty voice_name default — the same TTS crash
+        # as having no voice at all.
+        params = VideoParams(
+            video_subject="empty voice id",
+            video_script="",
+            persona=PersonaParams(name="X", voice_id=""),
+        )
+
+        (audio_file, audio_duration, sub_maker), tts, update_task = self._run(
+            params, "task-empty-voice-id"
+        )
+
+        self.assertIsNone(audio_file)
+        self.assertIsNone(audio_duration)
+        self.assertIsNone(sub_maker)
+        tts.assert_not_called()
+        update_task.assert_called_once()
+        kwargs = update_task.call_args.kwargs
+        self.assertEqual(kwargs.get("state"), tm.const.TASK_STATE_FAILED)
+        self.assertIn("no voice", str(kwargs.get("error", "")).lower())
 
 
 class TestFailTaskDiscordDedupe(unittest.TestCase):
