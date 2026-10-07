@@ -141,6 +141,40 @@ def resolve_house_voice_name(voice_name: str, language: str | None) -> str:
     return HOUSE_VOICE_NAMES.get(voice_id, voice_name)
 
 
+# Bounds for the composed TTS rate. Kept coupled with the voice_rate field
+# bounds on VideoParams (app/models/schema.py: ge=0.1, le=5.0): the request
+# rate is schema-validated, the house style rate is a catalog constant, and
+# their product is clamped back into the same window.
+VOICE_RATE_MIN = 0.1
+VOICE_RATE_MAX = 5.0
+
+
+def house_voice_style(voice_name: str | None) -> dict[str, str | float]:
+    """Rate/pitch personality for a house voice id; {} for anything else.
+
+    The preview samples are already synthesized with these values
+    (sample_config_for); the video pipeline must apply the same so the
+    delivered narration matches the preview the user heard.
+    """
+    voice_id = (voice_name or "").strip().lower()
+    if not is_house_voice_id(voice_id):
+        return {}
+    return dict(HOUSE_VOICE_STYLES[voice_id])
+
+
+def compose_voice_rate(
+    request_rate: float | None, style: dict[str, str | float]
+) -> float:
+    """Compose the request rate with the house voice style rate.
+
+    The request rate is a multiplier on the house style (1.0 keeps the
+    style); the product is clamped to the schema's voice_rate bounds.
+    """
+    base = request_rate if request_rate is not None else 1.0
+    style_rate = float(style.get("rate", 1.0))
+    return min(VOICE_RATE_MAX, max(VOICE_RATE_MIN, base * style_rate))
+
+
 class PersonaValidationError(Exception):
     """Raised when the persona payload is missing or invalid."""
 
