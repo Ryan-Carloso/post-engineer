@@ -15,7 +15,11 @@ Two backends are supported:
   1080x1920 render fails to archive and the failure is best-effort.
 - **Cloudflare R2** (``R2_ACCOUNT_ID`` + ``R2_ACCESS_KEY_ID`` +
   ``R2_SECRET_ACCESS_KEY``) — an S3-compatible bucket with a 5 GB per-object
-  limit and 10 GB free, so the same render archives fine.
+  limit and 10 GB free, so the same render archives fine. **The R2 bucket
+  must be named ``videos``**: both backends share the ``STORAGE_BUCKET``
+  constant as the bucket name, and there is no per-backend override —
+  a differently named R2 bucket makes every upload miss and the video
+  unservable.
 
 R2 is opt-in via ``MPT_VIDEO_STORAGE=r2``. When it is set, R2 is used for
 upload and for signed URLs; otherwise the Supabase path runs unchanged.

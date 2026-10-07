@@ -1110,7 +1110,9 @@ def generate_final_videos(
     return final_video_paths, combined_video_paths
 
 
-def archive_final_videos(task_id: str, final_video_paths, params) -> None:
+def archive_final_videos(
+    task_id: str, final_video_paths: list[str], params: VideoParams
+) -> None:
     """Archive each final video to the durable store and VERIFY it landed.
 
     Only the FINAL videos are uploaded — intermediates (combined-1.mp4),
@@ -1138,6 +1140,12 @@ def archive_final_videos(task_id: str, final_video_paths, params) -> None:
             _update_task(task_id, video_storage_path=stored)
         else:
             # Loud and persisted: the video exists only on ephemeral local disk.
+            # Edge case: if a run archives more than one final video and some
+            # succeed, the task row ends up with BOTH video_storage_path and
+            # video_storage_error set. /stream/ + /download/ prefer the
+            # archived copy; the error records which object failed to verify.
+            # Normal workflows produce exactly one final video, so this is
+            # informational, not actionable.
             logger.error(
                 f"archive_final_videos: no verified archive for task {task_id} "
                 f"(candidate={object_path}); video is NOT servable from storage"
