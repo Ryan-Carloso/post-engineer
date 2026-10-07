@@ -38,6 +38,7 @@ import {
   type DistributedSlot,
 } from '@/lib/schedule/slot-distribution';
 import { validateScheduleWindow } from '@/lib/schedule-window';
+import { isValidTimezone } from '@/lib/timezone';
 import { computeVideoTokens, toFiniteNumber, type FaceQuality } from '@/lib/tokens';
 import {
   buildJobPayload,
@@ -79,9 +80,17 @@ const PublishingScheduleSchema = z.object({
 });
 
 const PublishingSchema = z.object({
+  // 'scheduled' (default): publish at the slot times. 'asap': publish each
+  // video the moment generation finishes, with no scheduled time.
+  mode: z.enum(['scheduled', 'asap']).optional(),
   providers: z.array(z.string()),
   accounts: z.record(z.string(), z.array(z.string())).optional(),
-  schedule: PublishingScheduleSchema,
+  // Required in scheduled mode, forbidden in asap mode (a stray plan would
+  // be silently ignored, so it is a 400 instead).
+  schedule: PublishingScheduleSchema.optional(),
+  // ASAP-only: the user's IANA zone, kept for display. Optional because the
+  // schedules.timezone column is NOT NULL DEFAULT 'UTC'.
+  timezone: z.string().optional(),
 });
 
 const OptionsSchema = z
@@ -436,6 +445,73 @@ function validateSlots(
 }
 
 //---------------
+// Publish-mode resolution. 'scheduled' (default) keeps the existing
+// contract: a schedule plan with distributed, window-checked slots.
+// 'asap' publishes each video the moment generation finishes: no schedule
+// plan is accepted (a stray one would be silently ignored, so it is a 400),
+// and every slot lands at the request time — the engine's tick publishes
+// ready slots with slot_at <= now, so no engine change is needed for the
+// immediate publish.
+//---------------
+type PublishMode = 'scheduled' | 'asap';
+
+interface ResolvedPublishPlan {
+  mode: PublishMode;
+  slots: DistributedSlot[];
+  /** Sorted, deduped daily times (empty for asap). */
+  times: string[];
+  /** IANA zone stored on the schedule row (display only for asap). */
+  timezone: string;
+}
+
+function validatePublishMode(
+  publishing: ParsedBody['publishing'],
+  topicCount: number,
+  now: Date,
+): ResolvedPublishPlan | NextResponse {
+  const mode: PublishMode = publishing.mode ?? 'scheduled';
+  if (mode === 'asap') {
+    if (publishing.schedule !== undefined) {
+      return validationFailed(
+        ERROR_CODES.VALIDATION_FAILED,
+        "publishing.schedule must not be set when publishing.mode is 'asap'.",
+        'publishing.schedule',
+      );
+    }
+    const timezone = publishing.timezone?.trim() || 'UTC';
+    if (!isValidTimezone(timezone)) {
+      return validationFailed(
+        ERROR_CODES.VALIDATION_FAILED,
+        `Invalid timezone: "${publishing.timezone}".`,
+        'publishing.timezone',
+      );
+    }
+    const slots: DistributedSlot[] = Array.from({ length: topicCount }, (_, i) => ({
+      slotAtISO: now.toISOString(),
+      dayIndex: 0,
+      timeIndex: i,
+    }));
+    return { mode, slots, times: [], timezone };
+  }
+  if (publishing.schedule === undefined) {
+    return validationFailed(
+      ERROR_CODES.VALIDATION_FAILED,
+      "publishing.schedule is required when publishing.mode is 'scheduled'.",
+      'publishing.schedule',
+    );
+  }
+  const { schedule } = publishing;
+  const slots = validateSlots(schedule.startAt, schedule.times, schedule.timezone, topicCount);
+  if (slots instanceof NextResponse) return slots;
+  return {
+    mode,
+    slots,
+    times: schedule.times,
+    timezone: schedule.timezone,
+  };
+}
+
+//---------------
 // Social account validation. One query loads all of the user's accounts;
 // each requested id must belong to the user AND to the requested provider.
 // More precise than assertAccountsOwned: distinguishes "not yours" from
@@ -708,9 +784,20 @@ async function fetchReplay(
     logger.error('[generate-and-schedule] replay fetch failed', error, { scheduleId });
     return null;
   }
+  // The envelope carries the schedule's publish mode so a replayed ASAP
+  // request reads the same shape as a fresh one. A pre-015 row has no
+  // column value — default to 'scheduled', the only mode that existed.
+  const { data: scheduleRow } = await supabase
+    .from('schedules')
+    .select('publish_mode')
+    .eq('id', scheduleId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  const mode =
+    (scheduleRow as { publish_mode?: unknown } | null)?.publish_mode === 'asap' ? 'asap' : 'scheduled';
   return NextResponse.json({
     success: true,
-    schedule: { id: scheduleId },
+    schedule: { id: scheduleId, mode },
     slots: slots.map((row) => ({
       slotId: (row as { id: string }).id,
       slotAt: (row as { slot_at: string }).slot_at,
@@ -739,7 +826,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
     return validationFailed(ERROR_CODES.VALIDATION_FAILED, `Invalid request: ${issue.message}`, field);
   }
   const { publishing, options, idempotencyKey } = parsed.data;
-  const { schedule } = publishing;
 
   // A blank/absent personaId means "post without a persona" (migration 012).
   // Null is the only accepted spelling so a caller cannot half-intend a
@@ -774,8 +860,13 @@ async function postHandler(request: Request): Promise<NextResponse> {
     }
   }
 
-  const slots = validateSlots(schedule.startAt, schedule.times, schedule.timezone, topics.length);
-  if (slots instanceof NextResponse) return slots;
+  // Publish mode: scheduled (default) distributes slots across the plan's
+  // times; asap skips the schedule entirely and lands every slot at the
+  // request time, so the engine's tick publishes each video the moment its
+  // generation finishes.
+  const plan = validatePublishMode(publishing, topics.length, new Date());
+  if (plan instanceof NextResponse) return plan;
+  const { mode, slots, times, timezone } = plan;
 
   // Custom audio SSRF check before auth: fail fast on a hostile URL without
   // spending an auth lookup. (The HEAD check itself is the expensive part;
@@ -1009,10 +1100,10 @@ async function postHandler(request: Request): Promise<NextResponse> {
   // scheduled_at is a legacy column that always stays NULL during dispatch,
   // so the engine's immediate one-off path cannot race us and
   // double-generate; the tick only reconciles our generating slots.
-  // NOTE: do not add a 'kind' key here — the schedules table has no kind
-  // column, and PostgREST rejects the whole insert on an unknown key (every
-  // call 500s).
-  const sortedTimes = [...new Set(schedule.times.map((t) => t.trim()))].sort();
+  // NOTE: do not add keys here that are not columns on public.schedules —
+  // PostgREST rejects the whole insert on an unknown key (every call 500s).
+  // publish_mode is a real column (migration 015).
+  const sortedTimes = [...new Set(times.map((t) => t.trim()))].sort();
   const { error: scheduleError } = await supabase.from('schedules').insert({
     id: idem.scheduleId,
     user_id: userId,
@@ -1028,9 +1119,12 @@ async function postHandler(request: Request): Promise<NextResponse> {
     end_hour: null,
     posts_per_day: topics.length,
     times: sortedTimes,
-    timezone: schedule.timezone,
+    timezone,
     scheduled_at: null,
     active: true,
+    // Publish mode (migration 015): 'scheduled' publishes at the slot
+    // times, 'asap' publishes each video the moment generation finishes.
+    publish_mode: mode,
     // Identity snapshot (migration 012). The engine reads these at tick time
     // through post_identity, and they are the values this request was priced
     // with — writing them here is what makes a scheduled post reproducible
@@ -1161,6 +1255,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     scheduleId: idem.scheduleId,
     numberOfVideos: topics.length,
     providers,
+    publishMode: mode,
   });
 
   // 10. Insert the slots (pending). The id is database-generated; the
@@ -1374,7 +1469,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   const durationMs = Date.now() - startedAt;
   const envelope = {
-    schedule: { id: idem.scheduleId },
+    schedule: { id: idem.scheduleId, mode },
     slots: results,
     replayed: false,
   };

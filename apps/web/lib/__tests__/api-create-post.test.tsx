@@ -93,6 +93,9 @@ describe('createPost', () => {
       // Explicit, never omitted: the server prices the two cases differently.
       options: { faceless: false },
       publishing: {
+        // Explicit, never omitted: the server defaults it, but the wire
+        // contract states the mode so a proxy log is unambiguous.
+        mode: 'scheduled',
         providers: ['youtube'],
         accounts: { youtube: ['ch1'] },
         schedule: {
@@ -102,6 +105,49 @@ describe('createPost', () => {
         },
       },
     });
+  });
+
+  it('omits the schedule plan in asap mode', async () => {
+    const fetchMock = stubFetch(jsonResponse({ ...SUCCESS_BODY, slots: [] }));
+
+    await createPost({ ...INPUT, mode: 'asap', startAt: undefined, times: undefined });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(init.body)) as { publishing: Record<string, unknown> };
+    expect(body.publishing.mode).toBe('asap');
+    expect(body.publishing).not.toHaveProperty('schedule');
+    // The browser zone still travels for display; the server defaults it.
+    expect(body.publishing.timezone).toBe('Europe/Lisbon');
+  });
+
+  it('omits the timezone key in asap mode when none is provided', async () => {
+    const fetchMock = stubFetch(jsonResponse({ ...SUCCESS_BODY, slots: [] }));
+
+    await createPost({ ...INPUT, mode: 'asap', startAt: undefined, times: undefined, timezone: undefined });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(init.body)) as { publishing: Record<string, unknown> };
+    expect(body.publishing.mode).toBe('asap');
+    expect(body.publishing).not.toHaveProperty('schedule');
+    expect(body.publishing).not.toHaveProperty('timezone');
+  });
+
+  it('reads scheduleMode from the response envelope', async () => {
+    stubFetch(jsonResponse({ ...SUCCESS_BODY, schedule: { id: 's1', mode: 'asap' } }));
+
+    const result = await createPost({ ...INPUT, mode: 'asap' });
+
+    expect(result.success).toBe(true);
+    expect(result.scheduleId).toBe('s1');
+    expect(result.scheduleMode).toBe('asap');
+  });
+
+  it('narrows a missing or garbage schedule mode to null', async () => {
+    stubFetch(jsonResponse(SUCCESS_BODY));
+    expect((await createPost(INPUT)).scheduleMode).toBeNull();
+
+    stubFetch(jsonResponse({ ...SUCCESS_BODY, schedule: { id: 's1', mode: 'someday' } }));
+    expect((await createPost(INPUT)).scheduleMode).toBeNull();
   });
 
   it('sends options.faceless true when the post asks for no face', async () => {
@@ -288,6 +334,7 @@ describe('useCreatePostMutation', () => {
 const SEED_RESULT: CreatePostResult = {
   success: true,
   scheduleId: 's-new',
+  scheduleMode: 'scheduled',
   replayed: false,
   error: null,
   code: null,
@@ -386,5 +433,16 @@ describe('seedCreatedPostCaches', () => {
     const status = client.getQueryData<{ upcoming: unknown[] }>(['fill-schedule-status', 200]);
     expect(status?.upcoming).toHaveLength(0);
     expect(client.getQueryData<unknown[]>(['fill-schedules'])).toHaveLength(0);
+  });
+
+  it('seeds an asap schedule with its publish mode', () => {
+    const client = seedClient();
+
+    seedCreatedPostCaches(client, { ...INPUT, mode: 'asap' }, { ...SEED_RESULT, scheduleMode: 'asap' });
+
+    const schedules = client.getQueryData<{ id: string; publishMode: string; timezone: string }[]>([
+      'fill-schedules',
+    ]);
+    expect(schedules?.[0]).toMatchObject({ id: 's-new', publishMode: 'asap' });
   });
 });

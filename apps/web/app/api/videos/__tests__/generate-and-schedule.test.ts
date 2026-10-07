@@ -90,6 +90,8 @@ interface DbConfig {
   personaErrorCode?: string;
   socialAccounts?: Array<{ provider: string; provider_account_id: string }>;
   existingScheduleId?: string | null;
+  /** publish_mode the mocked schedules row carries (replay envelope test). */
+  existingSchedulePublishMode?: 'scheduled' | 'asap';
   scheduleLookupError?: boolean;
   replaySlots?: Array<{ id: string; slot_at: string; topic: string; task_id: string | null; status: string }>;
   slotCount?: number | null;
@@ -163,7 +165,7 @@ function makeClient(cfg: DbConfig): unknown {
           if (cfg.scheduleLookupError) return { data: null, error: { code: 'XX000', message: 'db down' } };
           if (cfg.existingScheduleId) {
             return {
-              data: { id: cfg.existingScheduleId },
+              data: { id: cfg.existingScheduleId, publish_mode: cfg.existingSchedulePublishMode ?? 'scheduled' },
               error: null,
             };
           }
@@ -411,16 +413,13 @@ describe('POST /api/videos/generate-and-schedule', () => {
       // Sync test: the supabase-js mock records any payload key, so a
       // speculative key (like the removed 'kind') sailed through tests and
       // 500d every production call — PostgREST rejects unknown keys. Parse
-      // the canonical schema and assert every insert key is a real column,
-      // so the next phantom key fails CI instead of production.
-      const { readFileSync } = await import('node:fs');
+      // the canonical schema AND every migration's added columns, then assert
+      // every insert key is a real column, so the next phantom key fails CI
+      // instead of production.
+      const { readFileSync, readdirSync } = await import('node:fs');
       const { join } = await import('node:path');
-      const sqlPath = join(
-        findRepoRoot(import.meta.url),
-        'supabase',
-        'migrations',
-        '001_schema.sql',
-      );
+      const migrationsDir = join(findRepoRoot(import.meta.url), 'supabase', 'migrations');
+      const sqlPath = join(migrationsDir, '001_schema.sql');
       const sql = readFileSync(sqlPath, 'utf8');
       const tableMatch = sql.match(
         /create table if not exists public\.schedules \(([\s\S]*?)\n\);/i,
@@ -447,8 +446,20 @@ describe('POST /api/videos/generate-and-schedule', () => {
               name && !name.startsWith('--') && !constraintKeywords.has(name),
           ),
       );
+      // Later migrations add columns with `alter table ... add column if not
+      // exists <name>` (e.g. migration 015's publish_mode): those are real
+      // columns too.
+      const addColumnPattern =
+        /alter table public\.schedules\s+add column if not exists\s+([a-z_][a-z0-9_]*)/gi;
+      for (const file of readdirSync(migrationsDir).filter((f) => f.endsWith('.sql'))) {
+        const migrationSql = readFileSync(join(migrationsDir, file), 'utf8');
+        for (const match of migrationSql.matchAll(addColumnPattern)) {
+          columns.add(match[1]);
+        }
+      }
       // Sentinel: guards against a degraded parse passing vacuously.
       expect(columns.has('scheduled_at')).toBe(true);
+      expect(columns.has('publish_mode')).toBe(true);
 
       const res = await post(baseBody());
       expect(res.status).toBe(200);
@@ -773,6 +784,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(second.status).toBe(200);
       expect(json.replayed).toBe(true);
       expect(json.schedule.id).toBe(scheduleId);
+      expect(json.schedule.mode).toBe('scheduled');
       expect(json.slots).toHaveLength(2);
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
       expect(inserts['schedules']).toBeUndefined();
@@ -1896,6 +1908,151 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(payload.video_language).toBe('pt');
       expect(payload.video_aspect).toBe('16:9');
       expect(payload.paragraph_number).toBe(2);
+    });
+  });
+
+  describe('asap publish mode', () => {
+    const asapBody = (overrides: Record<string, unknown> = {}): Record<string, unknown> =>
+      baseBody({
+        publishing: {
+          mode: 'asap',
+          providers: ['youtube'],
+          accounts: { youtube: ['acct-1'] },
+        },
+        ...overrides,
+      });
+
+    it('publishes without a schedule: slots land at ~now, no window check', async () => {
+      const before = Date.now();
+      const res = await post(asapBody());
+      const json = await res.json();
+      expect(res.status).toBe(200);
+      expect(json.success).toBe(true);
+      expect(json.schedule.mode).toBe('asap');
+      expect(json.slots).toHaveLength(2);
+
+      // slot_at is the request time, not a distributed future slot: the
+      // engine's tick publishes ready slots with slot_at <= now, so these
+      // go out the moment generation finishes. The 3h window never applies.
+      const slotRows = inserts['scheduled_posts'] as Array<Record<string, unknown>>;
+      expect(slotRows).toHaveLength(2);
+      for (const row of slotRows) {
+        const at = new Date(row.slot_at as string).getTime();
+        expect(at).toBeGreaterThanOrEqual(before - 1000);
+        expect(at).toBeLessThanOrEqual(Date.now() + 1000);
+      }
+
+      const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
+      expect(scheduleRows).toHaveLength(1);
+      expect(scheduleRows[0].publish_mode).toBe('asap');
+      expect(scheduleRows[0].times).toEqual([]);
+    });
+
+    it('replay preserves the asap publish mode', async () => {
+      const key = 'idem-asap-1';
+      const first = await post(asapBody({ idempotencyKey: key }));
+      expect((await first.json()).replayed).toBe(false);
+      const scheduleId = deterministicUuid(IDEMPOTENCY_NAMESPACE, `${USER_ID}:${key}`);
+
+      setup({
+        ...DEFAULT_CFG,
+        existingScheduleId: scheduleId,
+        existingSchedulePublishMode: 'asap',
+        replaySlots: [
+          { id: 'slot-0', slot_at: new Date().toISOString(), topic: 'Idea 1', task_id: 'task-1', status: 'generating' },
+        ],
+      });
+      const second = await post(asapBody({ idempotencyKey: key }));
+      const json = await second.json();
+      expect(second.status).toBe(200);
+      expect(json.replayed).toBe(true);
+      expect(json.schedule.id).toBe(scheduleId);
+      expect(json.schedule.mode).toBe('asap');
+    });
+
+    it('rejects a schedule payload combined with asap mode (no silent ignore)', async () => {
+      const res = await post(
+        asapBody({
+          publishing: {
+            mode: 'asap',
+            providers: ['youtube'],
+            accounts: { youtube: ['acct-1'] },
+            schedule: { startAt: futureISO(48), times: ['18:00'], timezone: 'Europe/Lisbon' },
+          },
+        }),
+      );
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.field).toBe('publishing.schedule');
+    });
+
+    it('rejects an unknown publish mode', async () => {
+      const res = await post(
+        baseBody({
+          publishing: {
+            mode: 'someday',
+            providers: ['youtube'],
+            accounts: { youtube: ['acct-1'] },
+            schedule: { startAt: futureISO(48), times: ['18:00'], timezone: 'Europe/Lisbon' },
+          },
+        }),
+      );
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.field).toBe('publishing.mode');
+    });
+
+    it('requires providers and accounts in asap mode too', async () => {
+      const res = await post(asapBody({ publishing: { mode: 'asap', providers: [], accounts: {} } }));
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.field).toBe('publishing.providers');
+    });
+
+    it('charges the same per-video cost in asap mode', async () => {
+      const res = await post(asapBody());
+      expect(res.status).toBe(200);
+      const spends = rpcCalls.filter((c) => c.name === 'spend_tokens');
+      expect(spends).toHaveLength(1);
+      expect(spends[0].args.p_amount).toBe(4);
+    });
+
+    it('defaults to scheduled and persists publish_mode=scheduled', async () => {
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.schedule.mode).toBe('scheduled');
+      const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
+      expect(scheduleRows[0].publish_mode).toBe('scheduled');
+    });
+
+    it('accepts an explicit scheduled mode with a schedule', async () => {
+      const res = await post(
+        baseBody({
+          publishing: {
+            mode: 'scheduled',
+            providers: ['youtube'],
+            accounts: { youtube: ['acct-1'] },
+            schedule: { startAt: futureISO(48), times: ['18:00'], timezone: 'Europe/Lisbon' },
+          },
+        }),
+      );
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.schedule.mode).toBe('scheduled');
+    });
+
+    it('still requires a schedule in scheduled mode', async () => {
+      const res = await post(
+        baseBody({
+          publishing: { mode: 'scheduled', providers: ['youtube'], accounts: { youtube: ['acct-1'] } },
+        }),
+      );
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.field).toBe('publishing.schedule');
     });
   });
 });

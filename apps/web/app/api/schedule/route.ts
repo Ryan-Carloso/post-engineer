@@ -77,7 +77,7 @@ async function getHandler(request?: Request): Promise<NextResponse> {
 
   const { data, error } = await supabase
     .from('schedules')
-    .select('id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, days_of_week, start_hour, end_hour, posts_per_day, timezone, active, created_at')
+    .select('id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, days_of_week, start_hour, end_hour, posts_per_day, timezone, active, created_at, publish_mode')
     .eq('user_id', user.id)
     .order('created_at', { ascending: true });
 

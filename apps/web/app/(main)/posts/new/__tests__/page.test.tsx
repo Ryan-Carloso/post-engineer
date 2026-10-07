@@ -49,6 +49,7 @@ vi.mock('@/lib/ui', () => {
     'GlobeIcon',
     // PersonaAvatar (components/persona-avatar) falls back to it.
     'ImageIcon',
+    'PlayIcon',
     'PlusIcon',
     'TrashIcon',
     'AlertIcon',
@@ -304,6 +305,7 @@ describe('NewPostPage', () => {
       topics: ['How to grow on YouTube'],
       providers: ['youtube'],
       accounts: { youtube: ['ch1'] },
+      mode: 'scheduled',
       startAt: START_INSTANT,
       times: ['09:00'],
       timezone: 'UTC',
@@ -603,6 +605,7 @@ describe('NewPostPage', () => {
     useNewPostStore.getState().setResult({
       success: true,
       scheduleId: 's-old',
+      scheduleMode: 'scheduled',
       slotId: 'slot-old',
       slotCount: 1,
       code: null,
@@ -725,6 +728,108 @@ describe('NewPostPage', () => {
       // No persona means no face quality to read — quoting 0 would promise a
       // free video that the server then charges for.
       expect(screen.getByText('newPost.costValueOne:cost=1')).toBeInTheDocument();
+    });
+  });
+
+  describe('ASAP publish mode', () => {
+    /** Fills everything ASAP needs: no date or times, just the post itself. */
+    function fillAsapDraft(): void {
+      useNewPostStore.getState().setPersonaId('p1');
+      useNewPostStore.getState().setTopic('How to grow on YouTube');
+      useNewPostStore.getState().setPublishMode('asap');
+      useUploadStore.getState().toggleSelectedAccount('youtube', 'ch1');
+    }
+
+    it('offers Schedule and ASAP, with the schedule inputs visible by default', () => {
+      render(<NewPostPage />);
+
+      expect(screen.getByRole('radio', { name: 'newPost.publishModeScheduled' })).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: 'newPost.publishModeAsap' })).toBeInTheDocument();
+      // Scheduled is the default: the date/time inputs render.
+      expect(screen.getByLabelText('newPost.startAtLabel')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'newPost.submit' })).toBeInTheDocument();
+    });
+
+    it('hides the schedule inputs and explains ASAP when the mode is picked', async () => {
+      render(<NewPostPage />);
+
+      await userEvent.click(screen.getByRole('radio', { name: 'newPost.publishModeAsap' }));
+
+      // Unmounted, not hidden: stale values can never leak into the request.
+      expect(screen.queryByLabelText('newPost.startAtLabel')).not.toBeInTheDocument();
+      expect(screen.getByText('newPost.publishModeAsapHint')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'newPost.submitAsap' })).toBeInTheDocument();
+    });
+
+    it('sends mode asap with no schedule plan and opens the post detail page', async () => {
+      mockMutateAsync.mockResolvedValue({
+        success: true,
+        scheduleId: 's1',
+        scheduleMode: 'asap',
+        slots: [{ slotId: 'slot-1', slotAt: '2030-01-01T00:05:00.000Z', topic: 'How to grow on YouTube', taskId: 't1', status: 'generating' }],
+        replayed: false,
+        error: null,
+        code: null,
+        need: null,
+        have: null,
+      });
+      fillAsapDraft();
+      render(<NewPostPage />);
+
+      await userEvent.click(screen.getByRole('button', { name: 'newPost.submitAsap' }));
+
+      await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+      const sent = mockMutateAsync.mock.calls[0][0];
+      expect(sent.mode).toBe('asap');
+      expect('startAt' in sent).toBe(false);
+      expect('times' in sent).toBe(false);
+      // The browser zone still travels for display.
+      expect(sent.timezone).toBe('UTC');
+      await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/posts/slot-1'));
+    });
+
+    it('does not require a date in ASAP mode', async () => {
+      // The draft helper never sets a date: with the old guards this would
+      // reject with previewEmpty before any network call.
+      mockMutateAsync.mockResolvedValue({
+        success: true,
+        scheduleId: 's1',
+        scheduleMode: 'asap',
+        slots: [],
+        replayed: false,
+        error: null,
+        code: null,
+        need: null,
+        have: null,
+      });
+      fillAsapDraft();
+      render(<NewPostPage />);
+
+      await userEvent.click(screen.getByRole('button', { name: 'newPost.submitAsap' }));
+
+      await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('shows the ASAP success copy after an ASAP create', async () => {
+      mockMutateAsync.mockResolvedValue({
+        success: true,
+        scheduleId: 's1',
+        scheduleMode: 'asap',
+        slots: [],
+        replayed: false,
+        error: null,
+        code: null,
+        need: null,
+        have: null,
+      });
+      fillAsapDraft();
+      render(<NewPostPage />);
+
+      await userEvent.click(screen.getByRole('button', { name: 'newPost.submitAsap' }));
+
+      expect(await screen.findByRole('status')).toHaveTextContent('newPost.successTitleAsap');
+      expect(screen.getByRole('status')).toHaveTextContent('newPost.successHintAsap');
     });
   });
 });

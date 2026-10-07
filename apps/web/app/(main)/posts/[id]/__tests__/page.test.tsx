@@ -69,6 +69,7 @@ const SLOT_SCHEDULE = {
   instagramAccountIds: [],
   linkedinAccountIds: [],
   timezone: 'Europe/Lisbon',
+  publishMode: 'scheduled',
 };
 
 function generationPayload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -653,6 +654,36 @@ describe('PostDetailPage — post identity', () => {
     expect(section).toHaveTextContent('posts.publishedOnLabel');
     expect(section).toHaveTextContent('10:05');
     expect(section).toHaveTextContent('(Europe/Lisbon)');
+  });
+
+  it('explains ASAP instead of a scheduled time for an unpublished asap post', () => {
+    mockQueries({
+      slot: {
+        ...slotPayload({ status: 'generating' }),
+        schedule: { ...SLOT_SCHEDULE, publishMode: 'asap' },
+      },
+    });
+    render(<DetailPage />);
+
+    const section = screen.getByLabelText('posts.scheduleLabel');
+    expect(section).toHaveTextContent('posts.asapLabel');
+    expect(section).toHaveTextContent('posts.asapHint');
+    expect(section).not.toHaveTextContent('posts.scheduledForLabel');
+  });
+
+  it('still shows the published date for an asap post once published', () => {
+    mockQueries({
+      slot: {
+        ...PUBLISHED_PAYLOAD,
+        schedule: { ...SLOT_SCHEDULE, publishMode: 'asap' },
+      },
+    });
+    vi.mocked(useParams).mockReturnValue({ id: 'r1' });
+    render(<DetailPage />);
+
+    const section = screen.getByLabelText('posts.scheduleLabel');
+    expect(section).toHaveTextContent('posts.publishedOnLabel');
+    expect(section).not.toHaveTextContent('posts.asapHint');
   });
 
   it('falls back to the viewer timezone on a garbage schedule timezone and warns', () => {
