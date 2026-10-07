@@ -37,15 +37,36 @@ describe('GET /api/version', () => {
     const fetchMock = mockFetchOnce({
       ok: true,
       status: 200,
-      json: async () => ({ version: '1.8.0', build: 502, commit: 'abc123' }),
+      json: async () => ({ version: '1.28.152', pr: 152, build: 152, commit: '8f31abc' }),
     });
     const res = await GET();
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ version: '1.8.0', build: 502, commit: 'abc123' });
+    expect(await res.json()).toEqual({
+      version: '1.28.152',
+      pr: 152,
+      build: 152,
+      commit: '8f31abc',
+    });
     expect(fetchMock).toHaveBeenCalledWith(
       `${ENGINE_URL}/version`,
       expect.objectContaining({ cache: 'no-store', signal: expect.any(AbortSignal) }),
     );
+  });
+
+  it('passes through a payload without a PR number (build-only engine)', async () => {
+    mockFetchOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ version: '1.8.0', build: 502, commit: 'abc123' }),
+    });
+    const res = await GET();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      version: '1.8.0',
+      pr: null,
+      build: 502,
+      commit: 'abc123',
+    });
   });
 
   it('returns 502 with engine_unreachable when the engine is down', async () => {

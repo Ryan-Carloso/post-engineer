@@ -22,16 +22,19 @@ RUN pnpm install --frozen-lockfile
 # files copied above so editing it does not invalidate the install layer.
 COPY tsconfig.base.json ./
 
-# Application code, VERSION (fallback for local builds) and build-time env.
+# Application code, VERSION (the MAJOR.MINOR release baseline, used as the
+# fallback for local builds) and build-time env.
 COPY VERSION ./
 COPY apps/web ./apps/web
 
-# Build metadata: CI injects VERSION/BUILD/COMMIT as build args (VERSION
-# from the repo-root VERSION file, BUILD from the CI run number, COMMIT
-# from the commit SHA); empty locally. next.config.ts inlines them into
-# the bundle. Declared after the COPY layers so a new build number alone
-# does not invalidate the dependency layers above.
+# Build metadata: the VPS deploy injects VERSION/PR_NUMBER/BUILD/COMMIT as
+# build args from the commit being deployed (VERSION=MAJOR.MINOR.PR, e.g.
+# 1.28.152; PR_NUMBER/BUILD=that PR; COMMIT=full SHA); CI injects its own
+# values so the build exercises the same path; empty locally. next.config.ts
+# inlines them into the bundle. Declared after the COPY layers so a new
+# version alone does not invalidate the dependency layers above.
 ARG VERSION=""
+ARG PR_NUMBER=""
 ARG BUILD=""
 ARG COMMIT=""
 RUN cd apps/web && pnpm build

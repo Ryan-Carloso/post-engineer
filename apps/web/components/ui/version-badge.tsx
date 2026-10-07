@@ -4,11 +4,11 @@ import { useEffect, useState } from 'react';
 import { formatBuildInfo, parseBuildInfo } from '@/lib/version';
 
 //---------------
-// VersionBadge — "BETA - <version> (<build>)" pill next to the brand.
-// Fetches /api/version (which proxies the engine) so the UI shows the SAME
-// version and build the backend runs. Degrades to a bare "BETA" pill while
-// loading or when the backend is unreachable — the badge must never break
-// the page it sits on.
+// VersionBadge — "BETA - 1.28.152 (#152)" pill next to the brand. Fetches
+// /api/version (which proxies the engine) so the UI shows the SAME version
+// and PR the backend runs. Degrades to a bare "BETA" pill while loading or
+// when the backend is unreachable — the badge must never break the page it
+// sits on.
 //---------------
 export default function VersionBadge() {
   const [label, setLabel] = useState('BETA');

@@ -18,18 +18,29 @@
   dev server at `http://localhost:3434` — screenshots, both locales (PT is the
   default), and the console. Never schedule a real post or spend tokens to take
   a picture.
-- **Versioning is manual; build metadata comes from CI.** The repo-root
-  `VERSION` file is the single source of truth for the platform SemVer
-  (e.g. `1.8.0`) and is edited by hand only when cutting a release —
-  never per PR, never by CI. There is no bump script and no sync across
-  `package.json` / `pyproject.toml` / `uv.lock`: those version fields are
-  maintained by hand and CI never rewrites them. The `version-check`
-  workflow only validates that `VERSION` is valid SemVer `x.y.z`.
-  Build metadata is NOT stored in git: CI injects `VERSION` / `BUILD`
-  (the CI run number — unique per run, never random) / `COMMIT` (short
-  SHA) as env vars at build/deploy time, and the engine reports them via
-  `GET /version` and `/health`. Parallel PRs never conflict on version
-  files because each CI run generates its own build number.
+- **The deployed version is generated at deploy time; never bump it by
+  hand.** The repo-root `VERSION` file is ONLY the MAJOR.MINOR release
+  baseline (e.g. `1.28`), edited by hand when cutting a release line —
+  never per PR, never by CI. The deployed version is
+  `MAJOR.MINOR.PR_NUMBER` (e.g. PR #152 -> `1.28.152`), generated on the
+  VPS from the commit being deployed: the patch position is the number of
+  the merged PR that introduced that exact commit, resolved through the
+  GitHub API (`GET /repos/{owner}/{repo}/commits/{sha}/pulls`, merged PRs
+  only, via `deploy-version.sh` in the deployment repo). Consequences:
+  - **No version commits, no version PRs, no version conflicts.** Nothing
+    version-related is ever written back to git; parallel PRs can never
+    conflict on a version file. There is no bump script.
+  - If the PR for the deployed commit cannot be resolved (API down, a
+    direct push with no PR), the deploy FAILS before building instead of
+    shipping an unidentified build.
+  - `package.json` / `pyproject.toml` / `apps/mcp/package.json` versions
+    stay hand-maintained and independent (the npm package has its own
+    release flow); nothing syncs them automatically.
+  - Build metadata is injected as `VERSION` / `PR_NUMBER` / `BUILD` (the
+    PR number) / `COMMIT` (full SHA) at deploy time and reported by the
+    engine's `GET /version` and `/health` (and proxied by the web's
+    `/api/version` for the UI badge). CI injects its own values so the
+    suites exercise the same code path.
 
 # Env Files Policy (NEVER commit real secrets)
 

@@ -8,7 +8,22 @@ describe('VersionBadge', () => {
     vi.unstubAllGlobals();
   });
 
-  it('renders BETA - <version> (<build>) from /api/version', async () => {
+  it('renders BETA - <version> (#<pr>) from /api/version', async () => {
+    // The shape the VPS deploy produces: version is MAJOR.MINOR.PR.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ version: '1.28.152', pr: 152, build: 152, commit: '8f31abc' }),
+      })),
+    );
+    render(<VersionBadge />);
+    await waitFor(() => {
+      expect(screen.getByTestId('version-badge')).toHaveTextContent('BETA - 1.28.152 (#152)');
+    });
+  });
+
+  it('falls back to the build number when the backend reports no PR', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => ({
@@ -27,12 +42,12 @@ describe('VersionBadge', () => {
       'fetch',
       vi.fn(async () => ({
         ok: true,
-        json: async () => ({ version: '1.8.0', build: null, commit: null }),
+        json: async () => ({ version: '1.28', pr: null, build: null, commit: null }),
       })),
     );
     render(<VersionBadge />);
     await waitFor(() => {
-      expect(screen.getByTestId('version-badge')).toHaveTextContent('BETA - 1.8.0');
+      expect(screen.getByTestId('version-badge')).toHaveTextContent('BETA - 1.28');
     });
     expect(screen.getByTestId('version-badge').textContent).not.toContain('(');
   });
