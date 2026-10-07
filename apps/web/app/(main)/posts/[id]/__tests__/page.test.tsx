@@ -467,16 +467,48 @@ describe('PostDetailPage', () => {
   });
 
   it('renders no row for a fact the post does not have', () => {
-    // A null niche produces no row at all — not even the label.
+    // A null fact produces no row at all — not even the label.
     mockQueries({ slot: slotPayload() });
     render(<DetailPage />);
 
     const section = screen.getByRole('region', { name: 'posts.generationFactsLabel' });
+    expect(within(section).queryByText('posts.generationLanguageLabel')).not.toBeInTheDocument();
+    expect(within(section).queryByText('posts.generationVoiceLabel')).not.toBeInTheDocument();
+    expect(within(section).queryByText('posts.generationFormatLabel')).not.toBeInTheDocument();
     expect(within(section).queryByText('posts.generationNicheLabel')).not.toBeInTheDocument();
     expect(within(section).queryByText('posts.generationParagraphsLabel')).not.toBeInTheDocument();
     // ...while the always-rendered rows are still there.
     expect(within(section).getByText('posts.generationFaceLabel')).toBeInTheDocument();
     expect(within(section).getByText('posts.generationPersonaLabel')).toBeInTheDocument();
+  });
+
+  it('renders every fact row when the post has the full snapshot', () => {
+    // Kills the "never push" mutants: each optional fact must appear with
+    // its value when present.
+    mockQueries({
+      slot: slotPayload({}, {
+        generation: generationPayload({
+          language: 'pt-BR',
+          voiceId: 'ana_neural',
+          videoAspect: '9:16',
+          niche: 'cooking',
+          paragraphNumber: 5,
+        }),
+      }),
+    });
+    render(<DetailPage />);
+
+    const section = screen.getByRole('region', { name: 'posts.generationFactsLabel' });
+    expect(within(section).getByText('posts.generationLanguageLabel')).toBeInTheDocument();
+    expect(within(section).getByText('pt-BR')).toBeInTheDocument();
+    expect(within(section).getByText('posts.generationVoiceLabel')).toBeInTheDocument();
+    expect(within(section).getByText('ana_neural')).toBeInTheDocument();
+    expect(within(section).getByText('posts.generationFormatLabel')).toBeInTheDocument();
+    expect(within(section).getByText('9:16')).toBeInTheDocument();
+    expect(within(section).getByText('posts.generationNicheLabel')).toBeInTheDocument();
+    expect(within(section).getByText('cooking')).toBeInTheDocument();
+    expect(within(section).getByText('posts.generationParagraphsLabel')).toBeInTheDocument();
+    expect(within(section).getByText('5')).toBeInTheDocument();
   });
 
   it('never offers editing on the generation facts', () => {
