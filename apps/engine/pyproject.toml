@@ -115,6 +115,8 @@ module = [
     "edge_tts.*",
     "litellm.*",
     "loguru.*",
+    "boto3.*",
+    "botocore.*",
     "PIL.*",
     "cv2.*",
     "toml.*",
