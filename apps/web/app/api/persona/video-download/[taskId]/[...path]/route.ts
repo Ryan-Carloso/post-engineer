@@ -61,7 +61,11 @@ async function getHandler(request: Request, context: DownloadContext): Promise<N
     // file so consumers never need to know the engine's naming. A miss is
     // always logged with both paths.
     const resolved = await resolveEngineVideoPath(taskId, auth.userId);
-    if (resolved) {
+    // Self-redirect guard: the engine keeps 404ing this exact file (a task
+    // that has not finished, or a file that is simply gone). Redirecting to
+    // the resolved path would loop 302 -> 404 -> 302 until the browser gives
+    // up, so a self-match is treated as missing instead of redirecting.
+    if (resolved && !isSamePath(resolved, path)) {
       logger.warn('[video-download] requested file missing; redirecting', {
         taskId,
         requested: path.join('/'),
@@ -162,6 +166,25 @@ function isSafePath(taskId: string, path: string[]): boolean {
     && path.length > 0
     && path.every((segment) => SAFE_TASK_ID.test(segment) && segment !== '.' && segment !== '..')
     && /\.[A-Za-z0-9]{1,8}$/.test(path[path.length - 1] ?? '');
+}
+
+//---------------
+// isSamePath — segment-wise comparison of the resolved engine path against
+// the requested path. The resolved segments may still be percent-encoded
+// (they come from the engine's task body); the requested ones arrive
+// decoded from Next.js params.
+//---------------
+function isSamePath(resolved: string[], requested: string[]): boolean {
+  if (resolved.length !== requested.length) return false;
+  return resolved.every((segment, i) => safeDecodeSegment(segment) === requested[i]);
+}
+
+function safeDecodeSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
 }
 
 //---------------

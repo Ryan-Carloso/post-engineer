@@ -1370,3 +1370,215 @@ class TestLipSyncConcat(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTerminalStateGate(unittest.TestCase):
+    """stream_video/download_video only serve tasks that COMPLETED.
+
+    final-1.mp4 is written progressively by moviepy between progress 75 and
+    100 (task.py), so a PROCESSING task whose file exists on disk is a
+    half-written render. Serving it is how truncated videos reached users.
+    Publishing reads the finished file straight off disk
+    (fill_schedule/publish.py), never through this endpoint, so the gate
+    cannot break the batch.
+    """
+
+    def _run(self, coro):
+        return asyncio.run(coro)
+
+    def _seed_task(self, task_id, state, with_file=True, storage_path=None):
+        task_dir = utils.task_dir(task_id)
+        if with_file:
+            Path(os.path.join(task_dir, "final-1.mp4")).write_bytes(b"fake-video")
+        kwargs = {"state": state, "user_id": "internal"}
+        if storage_path is not None:
+            kwargs["video_storage_path"] = storage_path
+        sm.state.update_task(task_id, **kwargs)
+        return task_dir
+
+    def _cleanup(self, task_id, task_dir):
+        sm.state.delete_task(task_id)
+        shutil.rmtree(task_dir, ignore_errors=True)
+
+    def test_stream_refuses_task_still_processing(self):
+        task_id = "gate-processing-stream"
+        task_dir = self._seed_task(task_id, const.TASK_STATE_PROCESSING)
+        try:
+            with self.assertRaises(video_controller.HttpException) as ctx:
+                self._run(
+                    video_controller.stream_video(
+                        _FakeRequest(), f"{task_id}/final-1.mp4"
+                    )
+                )
+            self.assertEqual(ctx.exception.status_code, 404)
+        finally:
+            self._cleanup(task_id, task_dir)
+
+    def test_download_refuses_task_still_processing(self):
+        task_id = "gate-processing-download"
+        task_dir = self._seed_task(task_id, const.TASK_STATE_PROCESSING)
+        try:
+            with self.assertRaises(video_controller.HttpException) as ctx:
+                self._run(
+                    video_controller.download_video(
+                        _FakeRequest(), f"{task_id}/final-1.mp4"
+                    )
+                )
+            self.assertEqual(ctx.exception.status_code, 404)
+        finally:
+            self._cleanup(task_id, task_dir)
+
+    def test_stream_and_download_refuse_failed_task(self):
+        task_id = "gate-failed-task"
+        task_dir = self._seed_task(task_id, const.TASK_STATE_FAILED)
+        try:
+            for handler in (
+                video_controller.stream_video,
+                video_controller.download_video,
+            ):
+                with self.assertRaises(video_controller.HttpException) as ctx:
+                    self._run(handler(_FakeRequest(), f"{task_id}/final-1.mp4"))
+                self.assertEqual(ctx.exception.status_code, 404)
+        finally:
+            self._cleanup(task_id, task_dir)
+
+    def test_processing_task_does_not_fall_back_to_storage(self):
+        # The gate runs BEFORE the storage fallback: a PROCESSING task must
+        # never 302 to an archived copy, even when video_storage_path is
+        # already recorded.
+        task_id = "gate-processing-fallback"
+        self._seed_task(
+            task_id,
+            const.TASK_STATE_PROCESSING,
+            with_file=False,
+            storage_path=f"internal/faceless/{task_id}/final-1.mp4",
+        )
+        try:
+            with patch(
+                "app.controllers.v1.video.video_storage.create_signed_url",
+                return_value="https://xyz.supabase.co/signed?token=abc",
+            ) as signed:
+                with self.assertRaises(video_controller.HttpException) as ctx:
+                    self._run(
+                        video_controller.download_video(
+                            _FakeRequest(), f"{task_id}/final-1.mp4"
+                        )
+                    )
+            self.assertEqual(ctx.exception.status_code, 404)
+            signed.assert_not_called()
+        finally:
+            sm.state.delete_task(task_id)
+
+    def test_completed_task_is_still_served(self):
+        task_id = "gate-completed-task"
+        task_dir = self._seed_task(task_id, const.TASK_STATE_COMPLETE)
+        try:
+            stream = self._run(
+                video_controller.stream_video(
+                    _FakeRequest(), f"{task_id}/final-1.mp4"
+                )
+            )
+            self.assertEqual(stream.status_code, 206)
+            download = self._run(
+                video_controller.download_video(
+                    _FakeRequest(), f"{task_id}/final-1.mp4"
+                )
+            )
+            self.assertEqual(
+                download.path,
+                os.path.realpath(os.path.join(task_dir, "final-1.mp4")),
+            )
+        finally:
+            self._cleanup(task_id, task_dir)
+
+
+class TestFinalVideoUri(unittest.TestCase):
+    """GET /tasks/{id} exposes the authoritative final render as
+    `final_video` so consumers never guess the filename, plus `has_archive`
+    so the UI knows a durable Storage copy exists."""
+
+    def setUp(self):
+        self.original_app_config = dict(config.app)
+
+    def tearDown(self):
+        config.app.clear()
+        config.app.update(self.original_app_config)
+
+    def test_task_query_exposes_final_video_uri(self):
+        task_id = "final-video-task"
+        task_dir = utils.task_dir(task_id)
+        video_path = os.path.join(task_dir, "final-1.mp4")
+        Path(video_path).write_bytes(b"fake-video")
+        config.app["endpoint"] = ""
+        sm.state.update_task(
+            task_id,
+            state=const.TASK_STATE_COMPLETE,
+            videos=[video_path],
+            user_id="internal",
+        )
+        try:
+            response = video_controller.get_task(_FakeRequest(), task_id=task_id)
+            self.assertEqual(
+                response["body"]["final_video"],
+                f"/api/v1/download/{task_id}/final-1.mp4",
+            )
+        finally:
+            sm.state.delete_task(task_id)
+            shutil.rmtree(task_dir, ignore_errors=True)
+
+    def test_task_query_omits_final_video_when_absent(self):
+        # The key is absent (not null) when the task has no videos.
+        task_id = "no-final-video-task"
+        sm.state.update_task(
+            task_id, state=const.TASK_STATE_COMPLETE, user_id="internal"
+        )
+        try:
+            response = video_controller.get_task(_FakeRequest(), task_id=task_id)
+            self.assertNotIn("final_video", response["body"])
+        finally:
+            sm.state.delete_task(task_id)
+
+    def test_task_query_does_not_mutate_state(self):
+        # final_video is derived on the response; the stored task is untouched.
+        task_id = "final-video-no-mutate"
+        task_dir = utils.task_dir(task_id)
+        video_path = os.path.join(task_dir, "final-1.mp4")
+        Path(video_path).write_bytes(b"fake-video")
+        config.app["endpoint"] = ""
+        sm.state.update_task(
+            task_id,
+            state=const.TASK_STATE_COMPLETE,
+            videos=[video_path],
+            user_id="internal",
+        )
+        try:
+            video_controller.get_task(_FakeRequest(), task_id=task_id)
+            stored = sm.state.get_task(task_id, user_id="internal")
+            self.assertNotIn("final_video", stored)
+            self.assertEqual(stored["videos"], [video_path])
+        finally:
+            sm.state.delete_task(task_id)
+            shutil.rmtree(task_dir, ignore_errors=True)
+
+    def test_task_query_exposes_has_archive(self):
+        task_id = "has-archive-task"
+        sm.state.update_task(
+            task_id,
+            state=const.TASK_STATE_COMPLETE,
+            user_id="internal",
+            video_storage_path=f"internal/faceless/{task_id}/final-1.mp4",
+        )
+        try:
+            response = video_controller.get_task(_FakeRequest(), task_id=task_id)
+            self.assertTrue(response["body"]["has_archive"])
+        finally:
+            sm.state.delete_task(task_id)
+
+        sm.state.update_task(
+            task_id, state=const.TASK_STATE_COMPLETE, user_id="internal"
+        )
+        try:
+            response = video_controller.get_task(_FakeRequest(), task_id=task_id)
+            self.assertFalse(response["body"]["has_archive"])
+        finally:
+            sm.state.delete_task(task_id)

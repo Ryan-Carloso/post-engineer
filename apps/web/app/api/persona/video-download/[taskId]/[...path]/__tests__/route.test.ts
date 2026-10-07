@@ -161,4 +161,35 @@ describe('GET /api/persona/video-download', () => {
       'https://xyz.supabase.co/storage/v1/object/sign/videos/x?token=abc',
     );
   });
+
+  it('returns 404 instead of looping when the resolved path is the requested path', async () => {
+    // The engine keeps 404ing this exact file (e.g. the task has not
+    // finished, so the terminal-state gate rejects it). Redirecting to the
+    // resolved path would loop 302 -> 404 -> 302 until the browser gives up,
+    // so a self-match is treated as missing instead.
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/v1/download/task-1/final-1.mp4')) {
+        return new Response('not found', { status: 404 });
+      }
+      if (url.includes('/api/v1/tasks/task-1')) {
+        return Response.json({
+          data: { files: ['/api/v1/download/task-1/final-1.mp4'] },
+        });
+      }
+      return new Response('unexpected', { status: 500 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await GET(new Request('https://app.test/api/persona/video-download/task-1/final-1.mp4'), {
+      params: Promise.resolve({ taskId: 'task-1', path: ['final-1.mp4'] }),
+    });
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get('location')).toBeNull();
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[video-download] no video file found for task',
+      expect.objectContaining({ taskId: 'task-1' }),
+    );
+  });
 });

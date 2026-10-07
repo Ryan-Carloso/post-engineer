@@ -101,6 +101,29 @@ def _resolve_path_within_directory(base_dir: str, unsafe_path: str, request_id: 
         )
 
 
+def _finished_task(task_id: str, user_id: str, request_id: str) -> dict:
+    """Return the task only when it COMPLETED.
+
+    final-1.mp4 is written progressively by moviepy between progress 75 and
+    100 (task.py), so a PROCESSING task whose file exists on disk is a
+    half-written render. Serving it is how truncated videos reached users.
+    Publishing reads the finished file straight off disk
+    (fill_schedule/publish.py), never through this endpoint, so the gate
+    cannot break the batch.
+
+    404, not 403: indistinguishable from "does not exist", and it never
+    confirms the file's existence to the caller.
+    """
+    task = sm.state.get_task(task_id, user_id=user_id)
+    if task is None or task.get("state") != const.TASK_STATE_COMPLETE:
+        raise HttpException(
+            task_id=request_id,
+            status_code=404,
+            message=f"{request_id}: file not found",
+        )
+    return task
+
+
 def _storage_fallback_redirect(
     request: Request, file_path: str, request_id: str, original_exc: HttpException
 ):
@@ -393,6 +416,17 @@ def get_task(
                 _task_file_to_uri(v, endpoint, task_dir, request_id)
                 for v in task["combined_videos"]
             ]
+        final_videos = task.get("videos") or []
+        if final_videos:
+            # The authoritative finished render. Consumers must never guess
+            # the filename (the web used to hardcode final-1.mp4); the key
+            # is absent (not null) when the task has no finished videos.
+            response_task["final_video"] = _task_file_to_uri(
+                final_videos[0], endpoint, task_dir, request_id
+            )
+        # Whether a durable Supabase Storage copy exists (restart-proof
+        # playback even after the ephemeral disk is wiped).
+        response_task["has_archive"] = bool(task.get("video_storage_path"))
         return utils.get_response(200, response_task)
 
     raise HttpException(
@@ -618,16 +652,20 @@ def upload_video_material_file(request: Request, file: UploadFile = File(...)):
 async def stream_video(request: Request, file_path: str):
     request_id = base.get_task_id(request)
     tasks_dir = utils.task_dir()
+    auth = base.get_auth_context(request)
     try:
         video_path = _resolve_path_within_directory(tasks_dir, file_path, request_id)
     except HttpException as exc:
         if exc.status_code != 404:
             raise
+        # Gate BEFORE the storage fallback: a task that never COMPLETED must
+        # not 302 to an archived copy. The archive is only written after a
+        # successful generation, but the order is explicit and pinned by
+        # test_processing_task_does_not_fall_back_to_storage.
+        _finished_task(file_path.split("/")[0], auth.user_id, request_id)
         return _storage_fallback_redirect(request, file_path, request_id, exc)
-    auth = base.get_auth_context(request)
     task_id = _task_id_from_resolved_path(tasks_dir, video_path)
-    if sm.state.get_task(task_id, user_id=auth.user_id) is None:
-        raise HttpException(task_id=request_id, status_code=404, message=f"{request_id}: file not found")
+    _finished_task(task_id, auth.user_id, request_id)
     range_header = request.headers.get("Range")
     video_size = os.path.getsize(video_path)
     start, end = 0, video_size - 1
@@ -676,16 +714,20 @@ async def download_video(request: Request, file_path: str):
     """
     request_id = base.get_task_id(request)
     tasks_dir = utils.task_dir()
+    auth = base.get_auth_context(request)
     try:
         video_path = _resolve_path_within_directory(tasks_dir, file_path, request_id)
     except HttpException as exc:
         if exc.status_code != 404:
             raise
+        # Gate BEFORE the storage fallback: a task that never COMPLETED must
+        # not 302 to an archived copy. The archive is only written after a
+        # successful generation, but the order is explicit and pinned by
+        # test_processing_task_does_not_fall_back_to_storage.
+        _finished_task(file_path.split("/")[0], auth.user_id, request_id)
         return _storage_fallback_redirect(request, file_path, request_id, exc)
-    auth = base.get_auth_context(request)
     task_id = _task_id_from_resolved_path(tasks_dir, video_path)
-    if sm.state.get_task(task_id, user_id=auth.user_id) is None:
-        raise HttpException(task_id=request_id, status_code=404, message=f"{request_id}: file not found")
+    _finished_task(task_id, auth.user_id, request_id)
     file_path = pathlib.Path(video_path)
     filename = file_path.stem
     extension = file_path.suffix
