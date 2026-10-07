@@ -164,6 +164,17 @@ notices.
   reviewer). Read reviewer feedback before requesting merge; address findings
   in focused follow-up commits.
 
+## Engine proxy contract (2026-10-07)
+
+- The engine wraps every payload in its `BaseResponse` envelope
+  `{ status, message, body }` — the payload key is `body`, never `data`.
+  Both voice proxy routes read `body.data` and returned 502 on every call
+  since the open-source release (the voice picker never loaded in prod).
+- Tests that mock an engine upstream must mock the real envelope; a
+  `{ data: [...] }` mock passes while production 502s. Same class as the
+  round-7 rule "Mock the production invariant, not a fake" — grep every
+  web route that parses an engine response when this shape is in doubt.
+
 ## Reviewer calibration (OpenCode, PR #88, 2026-10-04)
 
 - **The reviewer analyzes the accumulated PR diff, including superseded
