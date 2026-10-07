@@ -2319,3 +2319,8 @@ Five MINORs on the merged funnel, fixed as a follow-up PR with one focused TDD c
 
 ## First storage-schema migration needs CI stubs (2026-10-07, PR #125)
 - **The ephemeral-Postgres `supabase-migrations` job stubs `auth` only.** The first migration to touch `storage.buckets`/`storage.objects` (014, the `videos` bucket) failed with "relation storage.buckets does not exist" on vanilla postgres:16. Extend the "Create Supabase-compat stubs" step with a minimal `storage` schema (buckets/objects tables with the columns the migration references) — same pattern as the existing `auth.uid()` stub. Production Supabase already has the schema, so the migration itself stays untouched.
+
+## Hermetic env-var tests: clear/stub ALL related vars (2026-10-07, PR #133)
+- **CI injects `BUILD=<run number>` (old scheme) into every test job's environment.** A test asserting the PR_NUMBER→build fallback that sets PR_NUMBER but not BUILD gets the ambient BUILD leaked in: `patch.dict(os.environ, {...}, clear=False)` and `vi.stubEnv()` only touch the vars you list — unlisted vars keep their ambient values.
+- **When testing env-var fallback/default behavior, explicitly clear or stub every related var.** Engine: call the existing `_clear_build_env(monkeypatch)` helper before `patch.dict`. Web: `vi.stubEnv('BUILD', '')` for the fallback path (or the value under test). Verified: both suites fail with `BUILD=681` ambient and pass after the fix.
+- This bit the PR-tied versioning refactor because `ci.yml` still injects the old-scheme BUILD while the new code reads BUILD-first, PR_NUMBER-second.
