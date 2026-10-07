@@ -36,6 +36,68 @@ def persona_for(schedule: dict[str, Any]) -> dict[str, Any]:
     return persona
 
 
+# Snapshot columns on ``schedules`` holding what the persona used to supply
+# alone. The engine reads them through ``post_identity`` so a schedule created
+# before migration 012 (no snapshot, persona present) and one created after it
+# (snapshot present) reach the same job payload.
+_SNAPSHOT_FIELDS = (
+    ("voice_id", "post_voice_id"),
+    ("script_prompt", "post_script_prompt"),
+    ("niche", "post_niche"),
+    ("language", "post_language"),
+    ("video_aspect", "post_video_aspect"),
+    ("paragraph_number", "post_paragraph_number"),
+    ("face_quality", "post_face_quality"),
+)
+
+
+def post_identity(schedule: dict[str, Any]) -> dict[str, Any]:
+    """What the engine needs to build the job: persona first, snapshot second.
+
+    A persona-backed schedule keeps reading the embed, so a persona edited
+    after scheduling behaves exactly as before. A persona-less schedule has no
+    embed and reads the snapshot columns written at creation — which is what
+    makes the post reproducible instead of depending on a row that may be
+    deleted later.
+
+    Raises ``RuntimeError`` when NEITHER source can supply the definition: the
+    engine's ``PersonaParams`` rejects a job with no voice, so failing here
+    (a slot-level failure, refundable) beats dispatching a request the engine
+    will refuse with an opaque error.
+    """
+    persona = schedule.get("personas")
+    has_persona = isinstance(persona, dict)
+    identity: dict[str, Any] = dict(persona) if has_persona else {}
+
+    for persona_field, snapshot_field in _SNAPSHOT_FIELDS:
+        value = schedule.get(snapshot_field)
+        if value is None or value == "":
+            continue
+        # The snapshot wins over the embed: it is the value the web resolved
+        # and charged for when the post was created.
+        identity[persona_field] = value
+
+    if not identity:
+        raise RuntimeError(
+            f"schedule {schedule.get('id')} has neither a persona nor a post snapshot"
+        )
+    return identity
+
+
+def voice_for(identity: dict[str, Any]) -> str:
+    """The voice id the job will speak with, or raise.
+
+    ``PersonaParams`` in the engine's schema rejects a job carrying neither
+    ``voice_id`` nor ``voice_audio_url``, so a schedule that resolves no voice
+    can never generate. Checking here fails the SLOT (refundable, one warning)
+    instead of dispatching a request the engine refuses opaquely.
+    """
+    voice_id = identity.get("voice_id")
+    if isinstance(voice_id, str) and voice_id:
+        return voice_id
+    raise RuntimeError("post resolves no voice: a job needs exactly one voice")
+
+
 def slot_user_id(slot: dict[str, Any]) -> str | None:
     """Owner of a slot: the slot row first, then the schedule embed."""
     user_id = slot.get("user_id")

@@ -294,7 +294,21 @@ export const usePersonaStore = create<PersonaFormState>()(
 //---------------
 
 export interface NewPostState {
+  /** The selected persona; '' means "none chosen yet", NOT "no persona". */
   personaId: string;
+  /**
+   * The user explicitly chose "no persona" (migration 012): a faceless post
+   * carrying its own voice. Kept apart from an empty personaId so the form
+   * does not open in persona-less mode before anyone chose anything, and so
+   * "not chosen yet" can still be reported as a missing field.
+   */
+  withoutPersona: boolean;
+  /**
+   * Voice for a post created WITHOUT a persona: with no persona there is no
+   * voice to inherit, and the engine rejects a job that speaks with none.
+   * Unused when a persona is selected — that one supplies its own voice.
+   */
+  voiceId: string;
   /**
    * The single video topic. One post mints one video and one publish slot,
    * so the draft is a string, not a list: a second topic would mean a second
@@ -325,6 +339,9 @@ export interface NewPostState {
   /** True while the create request is in flight. */
   pending: boolean;
   setPersonaId: (personaId: string) => void;
+  /** The persona choice and the persona-less choice are exclusive. */
+  setWithoutPersona: (withoutPersona: boolean) => void;
+  setVoiceId: (voiceId: string) => void;
   setTopic: (value: string) => void;
   setStartAt: (value: string) => void;
   setTime: (index: number, value: string) => void;
@@ -358,6 +375,8 @@ export interface NewPostOutcome {
 
 const initialNewPostState = {
   personaId: '',
+  withoutPersona: false,
+  voiceId: '',
   topic: '',
   startAt: '',
   times: ['18:00'],
@@ -379,7 +398,9 @@ function replaceAt(list: string[], index: number, value: string): string[] {
 export const useNewPostStore = create<NewPostState>()(
   (set) => ({
     ...initialNewPostState,
-    setPersonaId: (personaId) => set({ personaId }),
+    setPersonaId: (personaId) => set({ personaId, withoutPersona: false }),
+    setWithoutPersona: (withoutPersona) => set({ withoutPersona, personaId: '' }),
+    setVoiceId: (voiceId) => set({ voiceId }),
     setTopic: (topic) => set({ topic }),
     setStartAt: (startAt) => set({ startAt }),
     setTime: (index, value) => set((state) => ({ times: replaceAt(state.times, index, value) })),

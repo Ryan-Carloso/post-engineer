@@ -62,6 +62,10 @@ const ROUTE = 'POST /api/videos/generate-and-schedule';
 const MAX_TOPICS = MAX_POST_TOPICS;
 const MAX_TOPIC_CHARS = 300;
 const MAX_SCRIPT_PROMPT_CHARS = 2000;
+// Mirrors the engine's PersonaParams caps (apps/engine/app/models/schema.py):
+// rejecting at the same boundary here is what turns an opaque engine
+// validation error into a 400 that names the field.
+const MAX_LANGUAGE_CHARS = 32;
 const SIGNED_URL_TTL_SECONDS = 3600;
 
 //---------------
@@ -89,11 +93,18 @@ const OptionsSchema = z
     scriptPrompts: z.array(z.string()).optional(),
     webhookUrl: z.string().optional(),
     voiceId: z.string().optional(),
+    // The rest of a persona's editorial definition, for a post created
+    // WITHOUT one (migration 012). With a persona these still override it.
+    videoAspect: z.enum(['9:16', '16:9']).optional(),
+    paragraphNumber: z.number().int().min(1).max(10).optional(),
+    language: z.string().optional(),
+    niche: z.string().optional(),
   })
   .optional();
 
 const BodySchema = z.object({
-  personaId: z.string(),
+  // Optional: a faceless post can be defined entirely by options + topic.
+  personaId: z.string().optional(),
   topics: z.array(z.string()),
   publishing: PublishingSchema,
   options: OptionsSchema,
@@ -209,7 +220,8 @@ class SlotDispatchError extends Error {
 //---------------
 
 interface ValidatedInput {
-  personaId: string;
+  /** Null for a post created without a persona (migration 012). */
+  personaId: string | null;
   topics: string[];
   providers: Provider[];
   accountIds: Record<Provider, string[]>;
@@ -223,6 +235,10 @@ interface ValidatedInput {
   scriptPrompts?: string[];
   webhookUrl?: string;
   voiceId?: string;
+  videoAspect?: '9:16' | '16:9';
+  paragraphNumber?: number;
+  language?: string;
+  niche?: string;
 }
 
 /** Track + return a validation failure. Nothing is charged on this path. */
@@ -284,7 +300,19 @@ function validateOptions(
   options: NonNullable<ParsedBody['options']>,
   topicCount: number,
 ): Omit<ValidatedInput, 'personaId' | 'topics' | 'providers' | 'accountIds' | 'startAt' | 'times' | 'timezone'> | NextResponse {
-  const { faceless = false, audioUrl, imageId, scriptPrompt, scriptPrompts, webhookUrl, voiceId } = options;
+  const {
+    faceless = false,
+    audioUrl,
+    imageId,
+    scriptPrompt,
+    scriptPrompts,
+    webhookUrl,
+    voiceId,
+    videoAspect,
+    paragraphNumber,
+    language,
+    niche,
+  } = options;
   if (typeof faceless !== 'boolean') {
     return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'options.faceless must be a boolean.', 'options.faceless');
   }
@@ -306,6 +334,23 @@ function validateOptions(
   }
   if (voiceId !== undefined && voiceId.trim().length === 0) {
     return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'options.voiceId must be a non-empty string.', 'options.voiceId');
+  }
+  // Caps mirroring the persona's own validation, so a persona-less post is
+  // rejected with the same message the persona editor would give rather than
+  // failing later at the engine with an opaque validation error.
+  if (language !== undefined && language.length > MAX_LANGUAGE_CHARS) {
+    return validationFailed(
+      ERROR_CODES.VALIDATION_FAILED,
+      `options.language must be at most ${MAX_LANGUAGE_CHARS} characters.`,
+      'options.language',
+    );
+  }
+  if (niche !== undefined && niche.length > MAX_TOPIC_CHARS) {
+    return validationFailed(
+      ERROR_CODES.VALIDATION_FAILED,
+      `options.niche must be at most ${MAX_TOPIC_CHARS} characters.`,
+      'options.niche',
+    );
   }
   if (scriptPrompt !== undefined && scriptPrompt.length > MAX_SCRIPT_PROMPT_CHARS) {
     return validationFailed(
@@ -332,7 +377,19 @@ function validateOptions(
       }
     }
   }
-  return { faceless, audioUrl, imageId: imageId?.trim(), scriptPrompt, scriptPrompts, webhookUrl, voiceId: voiceId?.trim() };
+  return {
+    faceless,
+    audioUrl,
+    imageId: imageId?.trim(),
+    scriptPrompt,
+    scriptPrompts,
+    webhookUrl,
+    voiceId: voiceId?.trim(),
+    videoAspect,
+    paragraphNumber,
+    language,
+    niche,
+  };
 }
 
 function validateSlots(
@@ -467,6 +524,75 @@ interface PersonaPrep {
 }
 
 /**
+ * Resolve what the video needs: the persona's editorial definition (voice,
+ * script, aspect, niche, language) or — for a post created without one —
+ * the request's own options. The resolved values are snapshotted onto the
+ * schedule so the engine never has to re-derive them at tick time, and so
+ * editing the persona later cannot rewrite an already-queued video.
+ *
+ * The persona lookup enforces ownership explicitly: the service client
+ * bypasses RLS, so the user_id predicate is the trust boundary.
+ */
+async function preparePost(
+  supabase: SupabaseClient,
+  userId: string,
+  personaId: string | null,
+  opts: {
+    faceless: boolean;
+    audioUrl?: string;
+    imageId?: string;
+    voiceId?: string;
+    scriptPrompt?: string;
+    videoAspect?: '9:16' | '16:9';
+    paragraphNumber?: number;
+    language?: string;
+    niche?: string;
+  },
+): Promise<PersonaPrep | NextResponse> {
+  if (personaId === null) {
+    return resolvePostWithoutPersona(opts);
+  }
+  return preparePersona(supabase, userId, personaId, opts);
+}
+
+//---------------
+// resolvePostWithoutPersona — a faceless post defined entirely by the
+// request. Everything the engine reads off a persona is supplied here and
+// snapshotted; the caller already refused a persona-less post that is not
+// faceless or that carries no voice.
+//---------------
+function resolvePostWithoutPersona(opts: {
+  faceless: boolean;
+  audioUrl?: string;
+  voiceId?: string;
+  scriptPrompt?: string;
+  videoAspect?: '9:16' | '16:9';
+  paragraphNumber?: number;
+  language?: string;
+  niche?: string;
+}): PersonaPrep {
+  return {
+    // The display name for the notification; a persona-less post has no
+    // persona name, so it is identified by its own shape.
+    personaName: 'Post',
+    faceless: true,
+    // No persona to price: a faceless post ignores face quality, and this is
+    // the same value the engine's token_cost reads off the snapshot.
+    faceQuality: 'ok',
+    voiceAudioUrl: opts.audioUrl,
+    voiceIdValue: opts.voiceId,
+    avatarUrl: null,
+    photoPath: null,
+    niche: opts.niche ?? null,
+    scriptPrompt: opts.scriptPrompt ?? null,
+    language: opts.language ?? null,
+    videoAspect: opts.videoAspect ?? null,
+    paragraphNumber: opts.paragraphNumber ?? null,
+    photoRequired: false,
+  };
+}
+
+/**
  * Load the persona (ownership enforced: service-role bypasses RLS, so the
  * user_id predicate is the trust boundary) and resolve the request-level
  * voice/photo inputs. Runs before any token is charged.
@@ -475,7 +601,17 @@ async function preparePersona(
   supabase: SupabaseClient,
   userId: string,
   personaId: string,
-  opts: { faceless: boolean; audioUrl?: string; imageId?: string; voiceId?: string },
+  opts: {
+    faceless: boolean;
+    audioUrl?: string;
+    imageId?: string;
+    voiceId?: string;
+    scriptPrompt?: string;
+    videoAspect?: '9:16' | '16:9';
+    paragraphNumber?: number;
+    language?: string;
+    niche?: string;
+  },
 ): Promise<PersonaPrep | NextResponse> {
   const { data: persona, error: personaError } = await supabase
     .from('personas')
@@ -540,11 +676,14 @@ async function preparePersona(
     voiceIdValue,
     avatarUrl: (persona.avatar_url as string | null) ?? null,
     photoPath: (persona.photo_path as string | null) ?? null,
-    niche,
-    scriptPrompt: (persona.script_prompt as string | null) ?? null,
-    language,
-    videoAspect: (persona.video_aspect as string | null) ?? null,
-    paragraphNumber,
+    // The persona's editorial definition, each overridable per post. These
+    // resolved values are snapshotted onto the schedule (not re-read at tick
+    // time), so a persona edited after this moment cannot rewrite this video.
+    niche: opts.niche ?? niche,
+    scriptPrompt: opts.scriptPrompt ?? ((persona.script_prompt as string | null) ?? null),
+    language: opts.language ?? language,
+    videoAspect: opts.videoAspect ?? ((persona.video_aspect as string | null) ?? null),
+    paragraphNumber: opts.paragraphNumber ?? paragraphNumber,
     // Every persona is faced, so a post WITH the face must resolve one; only a
     // faceless post may proceed without any image.
     photoRequired: !opts.faceless,
@@ -599,18 +738,42 @@ async function postHandler(request: Request): Promise<NextResponse> {
     const field = issue.path.length > 0 ? issue.path.join('.') : undefined;
     return validationFailed(ERROR_CODES.VALIDATION_FAILED, `Invalid request: ${issue.message}`, field);
   }
-  const { personaId, publishing, options, idempotencyKey } = parsed.data;
+  const { publishing, options, idempotencyKey } = parsed.data;
   const { schedule } = publishing;
 
-  if (personaId.trim().length === 0) {
-    return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'personaId is required.', 'personaId');
-  }
+  // A blank/absent personaId means "post without a persona" (migration 012).
+  // Null is the only accepted spelling so a caller cannot half-intend a
+  // persona by sending an empty string.
+  const personaId = parsed.data.personaId?.trim() || null;
   const topics = validateTopics(parsed.data.topics);
   if (topics instanceof NextResponse) return topics;
   const providers = validateProviders(publishing.providers);
   if (providers instanceof NextResponse) return providers;
   const validatedOptions = validateOptions(options ?? {}, topics.length);
   if (validatedOptions instanceof NextResponse) return validatedOptions;
+
+  // A post without a persona has no face to render and no voice to speak
+  // with: the engine's PersonaParams requires exactly one voice, and a face
+  // post without a persona has nothing to render at all. Both are refused
+  // here, before auth and before any charge, instead of failing opaquely at
+  // generation time.
+  if (personaId === null) {
+    if (!validatedOptions.faceless) {
+      return validationFailed(
+        ERROR_CODES.VALIDATION_FAILED,
+        'A post without a persona must be faceless: set options.faceless to true.',
+        'options.faceless',
+      );
+    }
+    if (validatedOptions.voiceId === undefined && validatedOptions.audioUrl === undefined) {
+      return validationFailed(
+        ERROR_CODES.VALIDATION_FAILED,
+        'A post without a persona needs a voice: set options.voiceId (or options.audioUrl).',
+        'options.voiceId',
+      );
+    }
+  }
+
   const slots = validateSlots(schedule.startAt, schedule.times, schedule.timezone, topics.length);
   if (slots instanceof NextResponse) return slots;
 
@@ -654,15 +817,21 @@ async function postHandler(request: Request): Promise<NextResponse> {
     faceless: validatedOptions.faceless,
   });
 
-  // 4. Persona scope (API keys) + ownership.
-  if (!isPersonaAllowed(auth.personaIds, personaId)) {
+  // 4. Persona scope (API keys) + ownership. A persona-less post has nothing
+  // to scope against, so the scope check only applies when one is named.
+  if (personaId !== null && !isPersonaAllowed(auth.personaIds, personaId)) {
     return validationFailed(ERROR_CODES.PERSONA_SCOPE_DENIED, formatErrorMessage(ERROR_CODES.PERSONA_SCOPE_DENIED), 'personaId', 403);
   }
-  const prep = await preparePersona(supabase, userId, personaId, {
+  const prep = await preparePost(supabase, userId, personaId, {
     faceless: validatedOptions.faceless,
     audioUrl: validatedOptions.audioUrl,
     imageId: validatedOptions.imageId,
     voiceId: validatedOptions.voiceId,
+    scriptPrompt: validatedOptions.scriptPrompt,
+    videoAspect: validatedOptions.videoAspect,
+    paragraphNumber: validatedOptions.paragraphNumber,
+    language: validatedOptions.language,
+    niche: validatedOptions.niche,
   });
   if (prep instanceof NextResponse) return prep;
 
@@ -672,8 +841,12 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   // Pinned library image: fail fast when the id does not resolve, before
   // any charge. Per-topic resolution still happens at dispatch time.
-  const requestedImageId = validatedOptions.imageId?.trim() || null;
-  if (requestedImageId) {
+  // A library image belongs to a persona, so it can only be requested with
+  // one — validateOptions already rejects imageId on faceless requests, and
+  // a faceless post without a persona is refused above.
+  const requestedImageId =
+    personaId !== null ? (validatedOptions.imageId?.trim() || null) : null;
+  if (requestedImageId && personaId !== null) {
     const imageCheck = await resolveVideoImage(supabase, personaId, userId, [], {
       topic: topics[0],
       niche: prep.niche,
@@ -843,6 +1016,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   const { error: scheduleError } = await supabase.from('schedules').insert({
     id: idem.scheduleId,
     user_id: userId,
+    // NULL for a post created without one (migration 012).
     persona_id: personaId,
     providers,
     youtube_account_ids: accountIds.youtube ?? [],
@@ -857,6 +1031,17 @@ async function postHandler(request: Request): Promise<NextResponse> {
     timezone: schedule.timezone,
     scheduled_at: null,
     active: true,
+    // Identity snapshot (migration 012). The engine reads these at tick time
+    // through post_identity, and they are the values this request was priced
+    // with — writing them here is what makes a scheduled post reproducible
+    // when the persona is edited (or deleted) afterwards.
+    post_voice_id: prep.voiceIdValue ?? null,
+    post_script_prompt: prep.scriptPrompt,
+    post_niche: prep.niche,
+    post_language: prep.language,
+    post_video_aspect: prep.videoAspect,
+    post_paragraph_number: prep.paragraphNumber,
+    post_face_quality: prep.faceQuality,
   });
   if (scheduleError) {
     const constraint = violatedConstraint(scheduleError);
@@ -1025,7 +1210,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       // this topic (faceless skips the face entirely).
       let photoUrl: string | undefined;
       let pickedImageId: string | null = null;
-      if (!validatedOptions.faceless) {
+      if (!validatedOptions.faceless && personaId !== null) {
         const selection = await resolveVideoImage(supabase, personaId, userId, recentIds, {
           topic,
           niche: prep.niche,
@@ -1126,7 +1311,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
       });
       // Anti-repeat history is committed only after the engine accepts the
       // job: a failed (refunded) dispatch must not burn a rotation slot.
-      if (pickedImageId) {
+      // pickedImageId is only ever set on the persona branch above.
+      if (pickedImageId && personaId !== null) {
         await recordRecentImageId(supabase, personaId, pickedImageId, userId);
         recentIds.push(pickedImageId);
       }

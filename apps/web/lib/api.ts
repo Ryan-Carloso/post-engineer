@@ -702,7 +702,9 @@ export function useVoiceSampleLanguagesQuery() {
 
 export interface ScheduleConfig {
   id: string;
-  personaId: string;
+  /** Null for a schedule created without a persona (migration 012): the post
+      is faceless and carries its own voice. */
+  personaId: string | null;
   providers: string[];
   youtubeAccountIds: string[];
   instagramAccountIds: string[];
@@ -743,7 +745,8 @@ export interface ScheduledSlot {
 
 interface ScheduleRow {
   id: string;
-  persona_id: string;
+  /** Null for a schedule created without a persona (migration 012). */
+  persona_id: string | null;
   providers: string[];
   youtube_account_ids: string[];
   instagram_account_ids: string[];
@@ -1188,7 +1191,9 @@ export function useSlotDetailQuery(slotId: string) {
 //---------------
 
 export interface CreatePostInput {
-  personaId: string;
+  /** Omit for a faceless post with no persona (the API reads the absent key
+      as "no persona"). Sending an empty string would mean something else. */
+  personaId?: string;
   topics: string[];
   providers: string[];
   accounts: Record<string, string[]>;
@@ -1201,6 +1206,9 @@ export interface CreatePostInput {
       faced; this is the per-post choice. Sent explicitly — the server is the
       billing authority and prices the two cases differently. */
   faceless: boolean;
+  /** Required only without a persona: the engine needs exactly one voice and
+      there is no persona to inherit it from. */
+  voiceId?: string;
 }
 
 export interface CreatedSlot {
@@ -1255,9 +1263,14 @@ export async function createPost(input: CreatePostInput): Promise<CreatePostResu
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      personaId: input.personaId,
+      // Spreading rather than `personaId: input.personaId` so a persona-less
+      // post sends no key at all: the server distinguishes absent from empty.
+      ...(input.personaId !== undefined ? { personaId: input.personaId } : {}),
       topics: input.topics,
-      options: { faceless: input.faceless },
+      options: {
+        faceless: input.faceless,
+        ...(input.voiceId !== undefined ? { voiceId: input.voiceId } : {}),
+      },
       publishing: {
         providers: input.providers,
         accounts: input.accounts,
@@ -1351,7 +1364,7 @@ export function seedCreatedPostCaches(
 
   const seededSchedule: ScheduleConfig = {
     id: scheduleId,
-    personaId: input.personaId,
+    personaId: input.personaId ?? null,
     providers: input.providers,
     youtubeAccountIds: input.accounts.youtube ?? [],
     instagramAccountIds: input.accounts.instagram ?? [],

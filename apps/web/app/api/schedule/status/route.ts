@@ -108,14 +108,16 @@ async function getHandler(request?: Request): Promise<NextResponse> {
   const userId = auth.userId;
 
   // Persona-scoped API keys only see posts whose schedule belongs to one of
-  // their allowed personas; resolve those schedule ids first.
+  // their allowed personas; resolve those schedule ids first. A schedule with
+  // no persona (migration 012) belongs to no persona scope, so it is included
+  // like an unrestricted one — otherwise a scoped key that just created a
+  // persona-less post could never see it again.
   let scheduleIds: string[] | null = null;
   if (isScopedApiKey(auth)) {
     const { data, error } = await supabase
       .from('schedules')
-      .select('id')
-      .eq('user_id', userId)
-      .in('persona_id', auth.personaIds ?? []);
+      .select('id, persona_id')
+      .eq('user_id', userId);
     if (error) {
       logger.error('[api/schedule/status] scope lookup failed', error);
       return NextResponse.json(
@@ -123,7 +125,13 @@ async function getHandler(request?: Request): Promise<NextResponse> {
         { status: 500 },
       );
     }
-    scheduleIds = (data ?? []).map((row: { id: string }) => row.id);
+    const allowed = auth.personaIds ?? [];
+    scheduleIds = (data ?? [])
+      .filter(
+        (row: { persona_id: string | null }) =>
+          row.persona_id === null || allowed.includes(row.persona_id),
+      )
+      .map((row: { id: string }) => row.id);
     if (scheduleIds.length === 0) {
       return NextResponse.json({ success: true, upcoming: [], recent: [] });
     }

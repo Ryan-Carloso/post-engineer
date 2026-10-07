@@ -48,14 +48,25 @@ class SupabaseAuthError(RuntimeError):
 class ScheduleStore:
     """Read/write ``schedules`` and ``scheduled_posts`` in Supabase."""
 
-    SLOT_SELECT = (
-        "*,schedules!inner("
+    # `!left` on personas, not `!inner`: a schedule may have no persona
+    # (migration 012 — a faceless post defined by its post_* snapshot
+    # columns), and an inner join would silently drop those slots from every
+    # tick. The snapshot columns ride along so `post_identity` never needs a
+    # second round trip.
+    # The schedules columns a tick reads to build/price a job: publish plan
+    # plus the identity (persona embed and its snapshot). Shared by the
+    # generate/publish selects and the reconciler's refund select — the
+    # reconciler needs the same identity the generator priced with.
+    SLOT_IDENTITY_SELECT = (
         "id,user_id,persona_id,providers,youtube_account_ids,"
         "instagram_account_ids,linkedin_account_ids,bluesky_account_ids,"
+        "post_voice_id,post_script_prompt,post_niche,post_language,"
+        "post_video_aspect,post_paragraph_number,post_face_quality,"
         "personas(name,niche,script_prompt,language,video_aspect,"
         "photo_path,avatar_url,voice_id,voice_audio_path,paragraph_number,face_quality)"
-        ")"
     )
+
+    SLOT_SELECT = "*,schedules!left(" + SLOT_IDENTITY_SELECT + ")"
 
     def __init__(
         self,
@@ -139,13 +150,21 @@ class ScheduleStore:
 
     def generating_slots(self) -> list[dict[str, Any]]:
         # The reconciler refunds under `batch:{scheduleId}`.
+        #
+        # The embed carries the persona AND the post_* snapshot columns: a
+        # refund prices the slot from face_quality, and this select used to
+        # fetch `schedules(id)` alone — so `persona_for` found no embed on
+        # EVERY row and the refund was skipped for every failed batch slot
+        # (the "burned prepaid tokens" note in reconcile.py). Faceless,
+        # which is the common case, prices from the slot alone but still
+        # needs the identity to decide that it is faceless-without-persona.
         rows = self._request(
             "GET",
             "scheduled_posts",
             params={
                 "status": f"eq.{SLOT_GENERATING}",
                 "task_id": "not.is.null",
-                "select": "*,schedules(id)",
+                "select": self.SLOT_SELECT,
             },
         )
         return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []

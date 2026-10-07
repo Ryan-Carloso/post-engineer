@@ -90,7 +90,8 @@ create table if not exists public.persona_images (
 create table if not exists public.schedules (
   id uuid not null default gen_random_uuid() primary key,
   user_id uuid not null,
-  persona_id uuid not null,
+  -- Optional: NULL means a faceless post with no persona (migration 012).
+  persona_id uuid,
   providers text[] not null,
   days_of_week integer[],
   start_hour integer,
@@ -105,7 +106,21 @@ create table if not exists public.schedules (
   times text[] not null,
   linkedin_account_ids text[] not null,
   scheduled_at timestamptz,
-  bluesky_account_ids text[] not null
+  bluesky_account_ids text[] not null,
+  -- Identity snapshot (migration 012). In faceless mode the persona is not
+  -- just a face: the engine reads voice_id, script_prompt, niche, language,
+  -- video_aspect and paragraph_number off it, and rejects a job with no
+  -- voice at all. These columns carry that definition for a post that has no
+  -- persona, and pin it for one that does - editing a persona afterwards
+  -- must not rewrite an already-scheduled video, the same reason the topic
+  -- lives on the slot.
+  post_voice_id text,
+  post_script_prompt text,
+  post_niche text,
+  post_language text,
+  post_video_aspect text,
+  post_paragraph_number integer,
+  post_face_quality text
 );
 
 create table if not exists public.scheduled_posts (
