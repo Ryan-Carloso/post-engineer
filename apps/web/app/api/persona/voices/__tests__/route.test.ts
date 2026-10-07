@@ -14,9 +14,11 @@ vi.mock('@/lib/api-keys', () => ({
 }));
 
 //---------------
-// Testes de GET /api/persona/voices — proxy do catálogo de vozes da casa
-// para o money-print. Auth = sessão Supabase. Apenas Supabase SSR e fetch
-// global (HTTP) são mockados.
+// GET /api/persona/voices tests — proxy of the house voice catalog to
+// money-print. Auth = Supabase session. Only Supabase SSR and the global
+// fetch (HTTP) are mocked. Upstream mocks use the real engine envelope
+// (BaseResponse: { status, message, body }) so the tests pin the
+// production contract instead of a fake shape.
 //---------------
 
 import { GET } from '../route';
@@ -67,7 +69,7 @@ describe('GET /api/persona/voices', () => {
       Response.json({
         status: 200,
         message: 'success',
-        data: [
+        body: [
           { id: 'calm' },
           { id: 'energetic' },
         ],
@@ -98,7 +100,9 @@ describe('GET /api/persona/voices', () => {
     });
     fetchMock.mockResolvedValue(
       Response.json({
-        data: [{ id: 'calm' }, { id: 'energetic' }],
+        status: 200,
+        message: 'success',
+        body: [{ id: 'calm' }, { id: 'energetic' }],
       }),
     );
 
@@ -164,7 +168,7 @@ describe('GET /api/persona/voices', () => {
   });
 
   it('retorna 502 com payload de vozes inválido', async () => {
-    fetchMock.mockResolvedValue(Response.json({ data: 'not-an-array' }));
+    fetchMock.mockResolvedValue(Response.json({ status: 200, message: 'success', body: 'not-an-array' }));
 
     const res = await GET();
 

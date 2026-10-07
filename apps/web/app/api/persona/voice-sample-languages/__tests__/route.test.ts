@@ -5,8 +5,10 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 //---------------
-// Testes de GET /api/persona/voice-sample-languages — proxy da lista de
-// idiomas para amostras de voz. Auth = sessão Supabase.
+// GET /api/persona/voice-sample-languages tests — proxy of the voice
+// sample language list. Auth = Supabase session. The upstream mock uses
+// the real engine envelope (BaseResponse: { status, message, body }) so
+// the tests pin the production contract instead of a fake shape.
 //---------------
 
 import { GET } from '../route';
@@ -53,7 +55,9 @@ describe('GET /api/persona/voice-sample-languages', () => {
   it('proxifica a lista de idiomas com o token da sessão', async () => {
     fetchMock.mockResolvedValue(
       Response.json({
-        data: [
+        status: 200,
+        message: 'success',
+        body: [
           { code: 'en', label: 'English' },
           { code: 'pt', label: 'Português' },
         ],
@@ -108,7 +112,7 @@ describe('GET /api/persona/voice-sample-languages', () => {
     const res = await GET();
     expect(res.status).toBe(502);
 
-    fetchMock.mockResolvedValue(Response.json({ data: null }));
+    fetchMock.mockResolvedValue(Response.json({ status: 200, message: 'success', body: null }));
     const res2 = await GET();
     expect(res2.status).toBe(502);
   });
