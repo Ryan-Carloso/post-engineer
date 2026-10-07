@@ -1181,6 +1181,11 @@ export function useSlotDetailQuery(slotId: string) {
     queryFn: () => fetchSlotDetail(slotId),
     enabled: slotId !== '',
     staleTime: 30_000,
+    // The detail page shows live generation progress: without this the
+    // status freezes on mount (staleTime only gates manual refetches) and
+    // a generating post never flips to ready — so the <video>, which only
+    // renders for ready/publishing/published, never appears.
+    refetchInterval: 60_000,
   });
 }
 
