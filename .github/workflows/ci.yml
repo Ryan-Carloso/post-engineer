@@ -771,12 +771,16 @@ jobs:
 
       # Same scoped invocation as the mutation workflow; the UI file list
       # is a subset of that workflow's changed-files scope.
+      # Brackets in Next.js route paths ([id], [slotId]) are minimatch
+      # character classes — escape them as [[] / []] so Stryker matches the
+      # literal files. (Stryker's normalizeFileName turns backslashes into
+      # slashes, so backslash-escaping cannot work here.)
       - name: Run Stryker on changed UI files
         if: steps.detect.outputs.files != ''
         working-directory: apps/web
         run: |
           set -euo pipefail
-          stryker_files="$(echo "${{ steps.detect.outputs.files }}" | sed 's|apps/web/||g')"
+          stryker_files="$(echo "${{ steps.detect.outputs.files }}" | sed 's|apps/web/||g' | perl -pe 's/(\[|\])/$1 eq "[" ? "[[]" : "[]]"/ge')"
           echo "Mutating UI files: $stryker_files"
           pnpm exec stryker run --mutate "$stryker_files"
 
