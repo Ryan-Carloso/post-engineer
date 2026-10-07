@@ -1111,13 +1111,20 @@ def generate_final_videos(
 
 
 def archive_final_videos(task_id: str, final_video_paths, params) -> None:
-    """Archive each final video to Supabase Storage (durable copy).
+    """Archive each final video to the durable store and VERIFY it landed.
 
     Only the FINAL videos are uploaded — intermediates (combined-1.mp4),
-    caches, and pre-audio renders never leave the local disk. Best-effort:
-    a Storage hiccup must never fail a successful generation; the recorded
-    ``video_storage_path`` lets /stream/ and /download/ fall back to the
-    Storage copy after a restart wipes the local disk.
+    caches, and pre-audio renders never leave the local disk.
+
+    R2 is the source of truth for serving: /stream/ and /download/ redirect to
+    a signed URL on the archived object and never read the engine's local disk.
+    That makes a verified upload a PRECONDITION of a usable video, so an
+    unarchived or truncated object is recorded as an explicit
+    ``video_storage_error`` instead of being silently ignored. Without this the
+    task would look complete with no copy anywhere, and the user would pay for
+    a video nobody can open.
+
+    On success the object path is stored in ``video_storage_path``.
     """
     if not final_video_paths:
         return
@@ -1129,6 +1136,13 @@ def archive_final_videos(task_id: str, final_video_paths, params) -> None:
         stored = video_storage.upload_final_video(object_path, str(video_path))
         if stored:
             _update_task(task_id, video_storage_path=stored)
+        else:
+            # Loud and persisted: the video exists only on ephemeral local disk.
+            logger.error(
+                f"archive_final_videos: no verified archive for task {task_id} "
+                f"(candidate={object_path}); video is NOT servable from storage"
+            )
+            _update_task(task_id, video_storage_error=object_path)
 
 
 def prepare_persona_lipsync_video(

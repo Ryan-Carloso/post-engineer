@@ -44,9 +44,10 @@ async function getHandler(request: Request, context: DownloadContext): Promise<N
 
   let upstream: Response;
   try {
-    // redirect: 'manual' — the engine 302s to a signed Supabase Storage URL
-    // when the local file is gone (see below); the proxy hands the browser
-    // that URL instead of fetching video bytes itself.
+    // redirect: 'manual' — the engine always serves from the archive now and
+    // 302s to a signed Cloudflare R2 URL; the proxy hands that URL to the
+    // browser instead of fetching video bytes itself, so the R2 credentials
+    // stay server-side and this route keeps enforcing auth + rate limiting.
     upstream = await fetch(upstreamUrl, { headers: upstreamHeaders, cache: 'no-store', redirect: 'manual' });
   } catch (error) {
     return apiErrorResponse(502, 'Video service is unavailable.', {
@@ -87,11 +88,10 @@ async function getHandler(request: Request, context: DownloadContext): Promise<N
   }
 
   if (upstream.status >= 300 && upstream.status < 400) {
-    // Engine storage fallback: the local file is gone (a restart wiped the
-    // ephemeral disk) and the engine redirected to a signed Supabase Storage
-    // URL for the archived final video. Pass it straight to the browser —
-    // the signed URL is time-limited and unguessable, and Storage serves
-    // range requests natively for seeking.
+    // The engine redirected to a signed R2 URL for the archived, size-verified
+    // final video. Pass it straight to the browser — the signed URL is
+    // time-limited and unguessable, and R2 serves range requests natively for
+    // seeking. The local engine disk is never read.
     const location = upstream.headers.get('location');
     if (location) {
       const status = [301, 302, 303, 307, 308].includes(upstream.status)

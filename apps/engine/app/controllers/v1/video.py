@@ -9,7 +9,7 @@ from typing import Optional, Union
 
 from fastapi import BackgroundTasks, Depends, Path, Query, Request, UploadFile
 from fastapi.params import File
-from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from loguru import logger
 
 from app.config import config
@@ -127,14 +127,17 @@ def _finished_task(task_id: str, user_id: str, request_id: str) -> dict:
 def _storage_fallback_redirect(
     request: Request, file_path: str, request_id: str, original_exc: HttpException
 ):
-    """302 to the Supabase Storage copy when the local file is gone.
+    """302 to the R2 object — the ONLY source for serving a video.
 
-    Engine disk is ephemeral: a restart wipes every generated file. The
-    final video's Storage path is recorded in the task state at generation
-    time, so a missing local file falls back to a time-limited signed URL
-    instead of 404ing. The task lookup is scoped to the caller's user_id,
-    so one user's storage copy can never leak to another. Re-raises the
-    original 404 when there is no archived copy (or it cannot be signed).
+    Engine disk is ephemeral (a restart wipes every generated file) and the
+    local path is no longer authoritative: final videos are archived and
+    size-verified at generation time, so the archive is the source of truth
+    and the local disk is never read for delivery. The task lookup is scoped
+    to the caller's user_id, so one user's object can never leak to another.
+
+    Re-raises the original 404 when there is no archived copy (or it cannot be
+    signed) — which now means the upload never verified, and the task carries
+    ``video_storage_error`` explaining why.
     """
     task_id = file_path.split("/")[0]
     auth = base.get_auth_context(request)
@@ -144,11 +147,78 @@ def _storage_fallback_redirect(
         signed_url = video_storage.create_signed_url(storage_path)
         if signed_url:
             logger.info(
-                f"storage fallback for missing local file, request_id: {request_id}, "
+                f"redirecting to archived object, request_id: {request_id}, "
                 f"task_id: {task_id}, storage_path: {storage_path}"
             )
             return RedirectResponse(url=signed_url, status_code=302)
+    archive_error = task.get("video_storage_error")
+    if archive_error:
+        logger.error(
+            f"task {task_id} has no servable archive "
+            f"(upload/verify failed at {archive_error}); video is unrecoverable"
+        )
     raise original_exc
+
+
+def _storage_redirect_if_archived(request: Request, task_id: str, request_id: str):
+    """302 to the archived object when this task has a verified copy.
+
+    Returns None when there is nothing archived (or it cannot be signed), so
+    the caller decides the 404. The task lookup is scoped to the caller's
+    user_id: one user's object can never be reached through another's task id.
+    """
+    auth = base.get_auth_context(request)
+    task = sm.state.get_task(task_id, user_id=auth.user_id) or {}
+    storage_path = task.get("video_storage_path")
+    if isinstance(storage_path, str) and storage_path:
+        signed_url = video_storage.create_signed_url(storage_path)
+        if signed_url:
+            logger.info(
+                f"serving from archive, request_id: {request_id}, "
+                f"task_id: {task_id}, storage_path: {storage_path}"
+            )
+            return RedirectResponse(url=signed_url, status_code=302)
+    archive_error = task.get("video_storage_error")
+    if archive_error:
+        logger.error(
+            f"task {task_id} has no servable archive (upload/verify failed at "
+            f"{archive_error}); the video exists only on ephemeral local disk"
+        )
+    return None
+
+
+def _validate_request_shape(
+    tasks_dir: str, file_path: str, request_id: str, user_id: str
+) -> str:
+    """Validate the requested path and return the AUTHORITATIVE task id.
+
+    The path is no longer opened (R2 serves the bytes), so this is purely the
+    input guard. ``require_file=False`` is the point: the local file is
+    irrelevant now — requiring it would 404 every archived video whose disk
+    copy has been recycled, which is the normal state, not a failure.
+
+    The task id is taken from the RESOLVED path, not from splitting the raw
+    input: `wrong/../<task>/final-1.mp4` names <task>, and using the raw
+    first segment ("wrong") would look the wrong task up and 404 a request
+    that is perfectly valid.
+
+    Returns the task id so callers gate on the same one the guard validated.
+    """
+    try:
+        resolved = file_security.resolve_path_within_directory(
+            tasks_dir, file_path, require_file=False
+        )
+    except ValueError as exc:
+        logger.warning(
+            f"reject unsafe file path, request_id: {request_id}, path: {file_path}, "
+            f"error: {str(exc)}"
+        )
+        raise HttpException(
+            task_id=request_id,
+            status_code=403,
+            message=f"{request_id}: invalid file path",
+        )
+    return _task_id_from_resolved_path(tasks_dir, resolved)
 
 
 def _task_file_to_uri(file: str, endpoint: str, task_dir: str, request_id: str) -> str:
@@ -653,88 +723,47 @@ async def stream_video(request: Request, file_path: str):
     request_id = base.get_task_id(request)
     tasks_dir = utils.task_dir()
     auth = base.get_auth_context(request)
-    try:
-        video_path = _resolve_path_within_directory(tasks_dir, file_path, request_id)
-    except HttpException as exc:
-        if exc.status_code != 404:
-            raise
-        # Gate BEFORE the storage fallback: a task that never COMPLETED must
-        # not 302 to an archived copy. The archive is only written after a
-        # successful generation, but the order is explicit and pinned by
-        # test_processing_task_does_not_fall_back_to_storage.
-        _finished_task(file_path.split("/")[0], auth.user_id, request_id)
-        return _storage_fallback_redirect(request, file_path, request_id, exc)
-    task_id = _task_id_from_resolved_path(tasks_dir, video_path)
+    # R2 is the source of truth: the archived, size-verified object is served
+    # and the ephemeral local disk is never consulted. The local path is only
+    # resolved as a way to VALIDATE the request shape (task id + filename),
+    # not as a file to read.
+    task_id = _validate_request_shape(tasks_dir, file_path, request_id, auth.user_id)
     _finished_task(task_id, auth.user_id, request_id)
-    range_header = request.headers.get("Range")
-    video_size = os.path.getsize(video_path)
-    start, end = 0, video_size - 1
-
-    length = video_size
-    if range_header:
-        range_ = range_header.split("bytes=")[1]
-        start, end = [int(part) if part else None for part in range_.split("-")]
-        if start is None:
-            start = video_size - end
-            end = video_size - 1
-        if end is None:
-            end = video_size - 1
-        length = end - start + 1
-
-    def file_iterator(file_path, offset=0, bytes_to_read=None):
-        with open(file_path, "rb") as f:
-            f.seek(offset, os.SEEK_SET)
-            remaining = bytes_to_read or video_size
-            while remaining > 0:
-                bytes_to_read = min(4096, remaining)
-                data = f.read(bytes_to_read)
-                if not data:
-                    break
-                remaining -= len(data)
-                yield data
-
-    response = StreamingResponse(
-        file_iterator(video_path, start, length), media_type="video/mp4"
+    redirect = _storage_redirect_if_archived(request, task_id, request_id)
+    if redirect is not None:
+        return redirect
+    # No verified archive: the upload/verify step failed, so there is
+    # intentionally nothing to serve. The task carries video_storage_error.
+    raise HttpException(
+        request_id,
+        status_code=404,
+        message=f"{request_id}: no archived video for this task",
     )
-    response.headers["Content-Range"] = f"bytes {start}-{end}/{video_size}"
-    response.headers["Accept-Ranges"] = "bytes"
-    response.headers["Content-Length"] = str(length)
-    response.status_code = 206  # Partial Content
-
-    return response
 
 
 @router.get("/download/{file_path:path}")
 async def download_video(request: Request, file_path: str):
     """
-    download video
+    Download the archived video.
+
+    R2 is the source of truth and the local disk is never read: the archived,
+    size-verified object is served through a time-limited signed URL, which
+    also carries the attachment disposition R2 applies for a GET.
+
     :param request: Request request
     :param file_path: video file path, eg: /cd1727ed-3473-42a2-a7da-4faafafec72b/final-1.mp4
-    :return: video file
+    :return: 302 to the signed archive URL, or 404 when nothing was archived
     """
     request_id = base.get_task_id(request)
     tasks_dir = utils.task_dir()
     auth = base.get_auth_context(request)
-    try:
-        video_path = _resolve_path_within_directory(tasks_dir, file_path, request_id)
-    except HttpException as exc:
-        if exc.status_code != 404:
-            raise
-        # Gate BEFORE the storage fallback: a task that never COMPLETED must
-        # not 302 to an archived copy. The archive is only written after a
-        # successful generation, but the order is explicit and pinned by
-        # test_processing_task_does_not_fall_back_to_storage.
-        _finished_task(file_path.split("/")[0], auth.user_id, request_id)
-        return _storage_fallback_redirect(request, file_path, request_id, exc)
-    task_id = _task_id_from_resolved_path(tasks_dir, video_path)
+    task_id = _validate_request_shape(tasks_dir, file_path, request_id, auth.user_id)
     _finished_task(task_id, auth.user_id, request_id)
-    file_path = pathlib.Path(video_path)
-    filename = file_path.stem
-    extension = file_path.suffix
-    headers = {"Content-Disposition": f"attachment; filename={filename}{extension}"}
-    return FileResponse(
-        path=video_path,
-        headers=headers,
-        filename=f"{filename}{extension}",
-        media_type=f"video/{extension[1:]}",
+    redirect = _storage_redirect_if_archived(request, task_id, request_id)
+    if redirect is not None:
+        return redirect
+    raise HttpException(
+        request_id,
+        status_code=404,
+        message=f"{request_id}: no archived video for this task",
     )

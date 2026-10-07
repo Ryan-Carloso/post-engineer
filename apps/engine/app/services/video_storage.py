@@ -91,10 +91,45 @@ def _r2_client():
     )
 
 
+def _verify_r2_object(client, object_path: str, expected_bytes: int) -> bool:
+    """Confirm the object is really in the bucket at the full expected size.
+
+    ``put_object`` returning 200 is not proof the bytes landed: a truncated
+    body can still produce a successful response, and the whole point of
+    making the archive a precondition is that a partial object must not be
+    treated as "stored". HEAD returns ContentLength, so a mismatch means the
+    object is short and the caller must not consider the video safe.
+    """
+    try:
+        head = client.head_object(Bucket=STORAGE_BUCKET, Key=object_path)
+    except Exception as exc:  # noqa: BLE001 — verification is a gate
+        logger.error(f"video_storage: R2 verify HEAD failed for {object_path}: {exc}")
+        return False
+    remote_bytes = int(head.get("ContentLength") or 0)
+    if remote_bytes != expected_bytes:
+        logger.error(
+            f"video_storage: R2 size mismatch for {object_path}: "
+            f"remote={remote_bytes} expected={expected_bytes}"
+        )
+        return False
+    return True
+
+
 def upload_final_video_r2(object_path: str, local_path: str) -> Optional[str]:
-    """Archive the final video to R2. Best-effort: returns None on failure."""
+    """Archive the final video to R2 and VERIFY it landed.
+
+    Returns the object path only when the object is confirmed present at the
+    expected size, None on any failure. The caller treats a None as "no
+    durable copy exists", so a truncated upload can never be mistaken for a
+    stored video.
+    """
     if not r2_is_configured():
-        logger.warning("video_storage: R2 not configured, skipping R2 archive")
+        logger.warning("video_storage: R2 not configured, refusing to mark video as stored")
+        return None
+    try:
+        expected_bytes = os.path.getsize(local_path)
+    except OSError as exc:
+        logger.error(f"video_storage: cannot stat {local_path}: {exc}")
         return None
     try:
         client = _r2_client()
@@ -105,10 +140,15 @@ def upload_final_video_r2(object_path: str, local_path: str) -> Optional[str]:
                 Body=handle,
                 ContentType="video/mp4",
             )
-    except Exception as exc:  # noqa: BLE001 — archive is best-effort
+    except Exception as exc:  # noqa: BLE001 — reported to the caller as None
         logger.error(f"video_storage: R2 upload failed for {object_path}: {exc}")
         return None
-    logger.info(f"video_storage: archived final video to r2/{STORAGE_BUCKET}/{object_path}")
+    if not _verify_r2_object(client, object_path, expected_bytes):
+        return None
+    logger.info(
+        f"video_storage: archived+verified final video to "
+        f"r2/{STORAGE_BUCKET}/{object_path} ({expected_bytes} bytes)"
+    )
     return object_path
 
 
