@@ -257,6 +257,14 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
       });
     }).as('createPost');
 
+    // The success navigation lands on the new post's own page, whose detail
+    // query must be stubbed like the later tests do — the create above is
+    // stubbed, so no real slot exists for the real backend to return.
+    cy.intercept('GET', `/api/schedule/slots/${SLOT_ID}`, {
+      statusCode: 200,
+      body: slotDetail('generating', 0, null),
+    }).as('slotDetail');
+
     // From here on the account is connected for this test.
     blueskyConnected = true;
 
@@ -269,7 +277,7 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
     // The click must actually select: assert the store-backed selected state
     // instead of discovering a silent no-op at the submit wait.
     cy.get('label[data-selected="true"]').should('contain', PERSONA.name);
-    cy.get('input[aria-label="Temas 1"]').type(TOPIC);
+    cy.get('input[aria-label="Tema"]').type(TOPIC);
     cy.contains('[data-testid="account-card"]', BLUESKY_ACCOUNT.handle).click();
     cy.get('[data-testid="account-card-select"]').should('be.checked');
     // A datetime-local input does not take .type() reliably (its segments
@@ -309,8 +317,9 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
       expect(String(schedule.startAt), 'schedule startAt').to.contain(startAtDate);
     });
 
-    // Success routes back to /posts, where the new slot is in the list.
-    cy.url().should('match', /\/posts$/);
+    // Success opens the created post's own page (single-topic form, #116),
+    // where the video and its live progress live.
+    cy.url().should('match', /\/posts\/slot-e2e-1$/);
     cy.contains(TOPIC).should('be.visible');
   });
 
