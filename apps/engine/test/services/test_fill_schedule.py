@@ -227,8 +227,9 @@ class BatchScheduleTests(unittest.TestCase):
 
     def test_generate_slot_without_any_voice_fails_before_dispatch(self):
         # A persona with no voice and no audio cannot produce a job:
-        # `PersonaParams` rejects it. The slot must fail here (and refund)
-        # rather than sending a request the engine refuses opaquely.
+        # `PersonaParams` rejects it. The slot must fail here (before any
+        # dispatch, so no refund is anchored) rather than sending a request
+        # the engine refuses opaquely.
         slot = self._batch_slot()
         slot["schedules"]["personas"] = {"name": "Ana"}
         store = _FakeStore()
@@ -1093,6 +1094,18 @@ class CoverageGapTests(unittest.TestCase):
         self.assertEqual(params["photo_url"], "https://signed/u/f.png")
         self.assertEqual(params["voice_audio_url"], "https://signed/u/v.mp3")
 
+    def test_persona_params_passes_through_a_snapshot_audio_url(self):
+        # A persona-less audio post already carries the validated URL in the
+        # identity (snapshotted by the web): no signing, no persona needed.
+        store = MagicMock()
+        params = fs.build_persona_params(
+            {"voice_audio_url": "https://cdn/v.mp3"},
+            store=store,
+        )
+        self.assertEqual(params["voice_audio_url"], "https://cdn/v.mp3")
+        self.assertNotIn("voice_id", params)
+        store.signed_url.assert_not_called()
+
     def test_persona_params_faceless_drops_visual_identity(self):
         # A faceless post contributes only the voice: no avatar_url and no
         # photo_url even when the persona has both, so the engine renders
@@ -1773,6 +1786,21 @@ class PostIdentityTests(unittest.TestCase):
         self.assertEqual(identity["voice_id"], "calm")
         self.assertEqual(identity["niche"], "fitness")
 
+    def test_snapshot_audio_url_reaches_a_persona_less_identity(self):
+        # A persona-less audio post has no embed: the snapshotted audio URL
+        # is the only voice the identity carries (migration 013).
+        identity = fs.post_identity(
+            {
+                "id": "sched-7",
+                "personas": None,
+                "post_voice_id": None,
+                "post_voice_audio_url": "https://cdn/v.mp3",
+                "post_niche": "fitness",
+            }
+        )
+        self.assertEqual(identity["voice_audio_url"], "https://cdn/v.mp3")
+        self.assertNotIn("voice_id", identity)
+
     def test_raises_when_neither_a_persona_nor_a_snapshot_exists(self):
         # The deleted-persona case with no snapshot (a schedule created
         # before migration 012): the slot must fail with a readable reason.
@@ -1789,8 +1817,8 @@ class PostIdentityTests(unittest.TestCase):
 
 class VoiceForTests(unittest.TestCase):
     """voice_for — `PersonaParams` demands exactly one voice, so a post that
-    resolves none can never generate. The slot must fail here, refundably,
-    instead of dispatching a request the engine rejects opaquely."""
+    resolves none can never generate. The slot must fail here, before any
+    dispatch, instead of dispatching a request the engine rejects opaquely."""
 
     def test_returns_the_voice_id(self):
         self.assertEqual(fs.voice_for({"voice_id": "calm"}), "calm")
@@ -1807,3 +1835,32 @@ class VoiceForTests(unittest.TestCase):
             with self.subTest(value=value):
                 with self.assertRaises(RuntimeError):
                     fs.voice_for({"voice_id": value})
+
+    def test_accepts_an_audio_voice_persona_without_a_voice_id(self):
+        # Regression: an audio-voice persona (custom upload, no voice_id)
+        # carries voice_audio_path in the embed; voice_for must accept it —
+        # build_persona_params signs it into voice_audio_url at dispatch.
+        self.assertEqual(
+            fs.voice_for({"name": "Ana", "voice_audio_path": "u/v.mp3"}),
+            "u/v.mp3",
+        )
+
+    def test_accepts_a_snapshot_audio_url_for_a_persona_less_post(self):
+        # A persona-less audio post has no embed; the web snapshots the
+        # validated URL as voice_audio_url (migration 013).
+        self.assertEqual(
+            fs.voice_for({"voice_audio_url": "https://cdn/v.mp3"}),
+            "https://cdn/v.mp3",
+        )
+
+    def test_prefers_voice_id_over_the_audio_spellings(self):
+        self.assertEqual(
+            fs.voice_for(
+                {
+                    "voice_id": "calm",
+                    "voice_audio_url": "https://cdn/v.mp3",
+                    "voice_audio_path": "u/v.mp3",
+                }
+            ),
+            "calm",
+        )

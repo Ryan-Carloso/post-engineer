@@ -115,6 +115,9 @@ create table if not exists public.schedules (
   -- must not rewrite an already-scheduled video, the same reason the topic
   -- lives on the slot.
   post_voice_id text,
+  -- Audio-voice URL (migration 013): the raw options.audioUrl for a
+  -- persona-less audio post. Never a signed URL - those expire.
+  post_voice_audio_url text,
   post_script_prompt text,
   post_niche text,
   post_language text,

@@ -42,6 +42,7 @@ def persona_for(schedule: dict[str, Any]) -> dict[str, Any]:
 # (snapshot present) reach the same job payload.
 _SNAPSHOT_FIELDS = (
     ("voice_id", "post_voice_id"),
+    ("voice_audio_url", "post_voice_audio_url"),
     ("script_prompt", "post_script_prompt"),
     ("niche", "post_niche"),
     ("language", "post_language"),
@@ -52,18 +53,20 @@ _SNAPSHOT_FIELDS = (
 
 
 def post_identity(schedule: dict[str, Any]) -> dict[str, Any]:
-    """What the engine needs to build the job: persona first, snapshot second.
+    """What the engine needs to build the job: snapshot first, persona second.
 
-    A persona-backed schedule keeps reading the embed, so a persona edited
-    after scheduling behaves exactly as before. A persona-less schedule has no
-    embed and reads the snapshot columns written at creation — which is what
-    makes the post reproducible instead of depending on a row that may be
-    deleted later.
+    The web writes the ``post_*`` snapshot columns for every new schedule, and
+    the snapshot wins over the embed whenever it was written: editing the
+    persona afterwards cannot change an already-scheduled post. The embed is
+    the fallback for rows created before migration 012 (no snapshot). A
+    persona-less schedule has no embed and reads only the snapshot columns —
+    which is what makes the post reproducible instead of depending on a row
+    that may be deleted later.
 
     Raises ``RuntimeError`` when NEITHER source can supply the definition: the
     engine's ``PersonaParams`` rejects a job with no voice, so failing here
-    (a slot-level failure, refundable) beats dispatching a request the engine
-    will refuse with an opaque error.
+    (a slot-level failure, before any dispatch) beats dispatching a request
+    the engine will refuse with an opaque error.
     """
     persona = schedule.get("personas")
     has_persona = isinstance(persona, dict)
@@ -85,16 +88,22 @@ def post_identity(schedule: dict[str, Any]) -> dict[str, Any]:
 
 
 def voice_for(identity: dict[str, Any]) -> str:
-    """The voice id the job will speak with, or raise.
+    """The voice the job will speak with, or raise.
 
-    ``PersonaParams`` in the engine's schema rejects a job carrying neither
-    ``voice_id`` nor ``voice_audio_url``, so a schedule that resolves no voice
-    can never generate. Checking here fails the SLOT (refundable, one warning)
-    instead of dispatching a request the engine refuses opaquely.
+    ``PersonaParams`` in the engine's schema requires exactly one of
+    ``voice_id`` / ``voice_audio_url``, so a schedule that resolves no voice
+    can never generate. An audio-voice persona carries ``voice_audio_path``
+    in the embed (``build_persona_params`` signs it into ``voice_audio_url``
+    at dispatch); a persona-less audio post carries ``voice_audio_url`` in
+    the schedule snapshot. Checking here fails the SLOT with a readable
+    reason instead of dispatching a request the engine refuses opaquely.
+    (Pre-dispatch failures carry no refund: the slot never reached the
+    dispatch a refund is anchored to.)
     """
-    voice_id = identity.get("voice_id")
-    if isinstance(voice_id, str) and voice_id:
-        return voice_id
+    for key in ("voice_id", "voice_audio_url", "voice_audio_path"):
+        value = identity.get(key)
+        if isinstance(value, str) and value:
+            return value
     raise RuntimeError("post resolves no voice: a job needs exactly one voice")
 
 
@@ -150,6 +159,10 @@ def build_persona_params(
             params["photo_url"] = store.signed_url("personas", persona["photo_path"])
     if persona.get("voice_id"):
         params["voice_id"] = persona["voice_id"]
+    elif persona.get("voice_audio_url"):
+        # Persona-less audio post: the web validated the URL and stored it in
+        # the schedule snapshot; pass it through untouched (no signing needed).
+        params["voice_audio_url"] = persona["voice_audio_url"]
     elif persona.get("voice_audio_path"):
         params["voice_audio_url"] = store.signed_url("personas", persona["voice_audio_path"])
     return params
