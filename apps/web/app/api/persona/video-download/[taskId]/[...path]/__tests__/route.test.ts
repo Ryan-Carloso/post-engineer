@@ -137,4 +137,28 @@ describe('GET /api/persona/video-download', () => {
 
     expect(response.status).toBe(502);
   });
+
+  it('passes through the engine storage-fallback redirect instead of following it', async () => {
+    // The engine 302s to a signed Supabase Storage URL when the local file
+    // is gone (restart wiped the disk). The proxy must hand the browser the
+    // signed URL directly — never fetch the video bytes itself.
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(null, {
+        status: 302,
+        headers: { location: 'https://xyz.supabase.co/storage/v1/object/sign/videos/x?token=abc' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await GET(new Request('https://app.test/api/persona/video-download/task-1/final-1.mp4'), {
+      params: Promise.resolve({ taskId: 'task-1', path: ['final-1.mp4'] }),
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ redirect: 'manual' });
+    expect(response.status).toBe(302);
+    expect(response.headers.get('location')).toBe(
+      'https://xyz.supabase.co/storage/v1/object/sign/videos/x?token=abc',
+    );
+  });
 });

@@ -21,6 +21,7 @@ from app.services import (
     subtitle,
     twelvelabs,
     video,
+    video_storage,
     voice,
     upload_post,
 )
@@ -1091,6 +1092,27 @@ def generate_final_videos(
     return final_video_paths, combined_video_paths
 
 
+def archive_final_videos(task_id: str, final_video_paths, params) -> None:
+    """Archive each final video to Supabase Storage (durable copy).
+
+    Only the FINAL videos are uploaded — intermediates (combined-1.mp4),
+    caches, and pre-audio renders never leave the local disk. Best-effort:
+    a Storage hiccup must never fail a successful generation; the recorded
+    ``video_storage_path`` lets /stream/ and /download/ fall back to the
+    Storage copy after a restart wipes the local disk.
+    """
+    if not final_video_paths:
+        return
+    task = sm.state.get_task(task_id) or {}
+    user_id = str(task.get("user_id") or "internal")
+    folder = video_storage.persona_folder(task, params)
+    for video_path in final_video_paths:
+        object_path = video_storage.storage_object_path(user_id, folder, task_id)
+        stored = video_storage.upload_final_video(object_path, str(video_path))
+        if stored:
+            _update_task(task_id, video_storage_path=stored)
+
+
 def prepare_persona_lipsync_video(
     task_id: str,
     params: VideoParams,
@@ -1337,6 +1359,10 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             _fail_task(task_id, "failed to generate final videos", params, stage="render")
             cleanup_task_intermediates(task_id, ())
             return
+
+        # Durable copy of the final video in Supabase Storage before
+        # publishing: local disk is ephemeral, a restart must not lose it.
+        archive_final_videos(task_id, final_video_paths, params)
 
         _mark("publish")
         task_publish.maybe_publish_finished_videos(

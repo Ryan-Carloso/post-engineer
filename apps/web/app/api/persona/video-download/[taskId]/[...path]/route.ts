@@ -44,7 +44,10 @@ async function getHandler(request: Request, context: DownloadContext): Promise<N
 
   let upstream: Response;
   try {
-    upstream = await fetch(upstreamUrl, { headers: upstreamHeaders, cache: 'no-store' });
+    // redirect: 'manual' — the engine 302s to a signed Supabase Storage URL
+    // when the local file is gone (see below); the proxy hands the browser
+    // that URL instead of fetching video bytes itself.
+    upstream = await fetch(upstreamUrl, { headers: upstreamHeaders, cache: 'no-store', redirect: 'manual' });
   } catch (error) {
     return apiErrorResponse(502, 'Video service is unavailable.', {
       route: 'GET /api/persona/video-download',
@@ -77,6 +80,21 @@ async function getHandler(request: Request, context: DownloadContext): Promise<N
       route: 'GET /api/persona/video-download',
       metadata: { taskId },
     });
+  }
+
+  if (upstream.status >= 300 && upstream.status < 400) {
+    // Engine storage fallback: the local file is gone (a restart wiped the
+    // ephemeral disk) and the engine redirected to a signed Supabase Storage
+    // URL for the archived final video. Pass it straight to the browser —
+    // the signed URL is time-limited and unguessable, and Storage serves
+    // range requests natively for seeking.
+    const location = upstream.headers.get('location');
+    if (location) {
+      const status = [301, 302, 303, 307, 308].includes(upstream.status)
+        ? (upstream.status as 301 | 302 | 303 | 307 | 308)
+        : 302;
+      return NextResponse.redirect(location, status);
+    }
   }
 
   const responseHeaders = new Headers();

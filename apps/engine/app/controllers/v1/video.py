@@ -9,7 +9,7 @@ from typing import Optional, Union
 
 from fastapi import BackgroundTasks, Depends, Path, Query, Request, UploadFile
 from fastapi.params import File
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from loguru import logger
 
 from app.config import config
@@ -37,6 +37,7 @@ from app.models.schema import (
 )
 from app.services import state as sm
 from app.services import task as tm
+from app.services import video_storage
 from app.utils import file_security, upload_limits, utils
 
 # Upload size caps: the handlers stream uploads in chunks instead of
@@ -98,6 +99,34 @@ def _resolve_path_within_directory(base_dir: str, unsafe_path: str, request_id: 
             status_code=404 if str(exc) == "file does not exist" else 403,
             message=f"{request_id}: invalid file path",
         )
+
+
+def _storage_fallback_redirect(
+    request: Request, file_path: str, request_id: str, original_exc: HttpException
+):
+    """302 to the Supabase Storage copy when the local file is gone.
+
+    Engine disk is ephemeral: a restart wipes every generated file. The
+    final video's Storage path is recorded in the task state at generation
+    time, so a missing local file falls back to a time-limited signed URL
+    instead of 404ing. The task lookup is scoped to the caller's user_id,
+    so one user's storage copy can never leak to another. Re-raises the
+    original 404 when there is no archived copy (or it cannot be signed).
+    """
+    task_id = file_path.split("/")[0]
+    auth = base.get_auth_context(request)
+    task = sm.state.get_task(task_id, user_id=auth.user_id) or {}
+    storage_path = task.get("video_storage_path")
+    if isinstance(storage_path, str) and storage_path:
+        signed_url = video_storage.create_signed_url(storage_path)
+        if signed_url:
+            logger.info(
+                f"storage fallback for missing local file, request_id: {request_id}, "
+                f"task_id: {task_id}, storage_path: {storage_path}"
+            )
+            return RedirectResponse(url=signed_url, status_code=302)
+    raise original_exc
+
 
 def _task_file_to_uri(file: str, endpoint: str, task_dir: str, request_id: str) -> str:
     if not isinstance(file, str):
@@ -589,7 +618,12 @@ def upload_video_material_file(request: Request, file: UploadFile = File(...)):
 async def stream_video(request: Request, file_path: str):
     request_id = base.get_task_id(request)
     tasks_dir = utils.task_dir()
-    video_path = _resolve_path_within_directory(tasks_dir, file_path, request_id)
+    try:
+        video_path = _resolve_path_within_directory(tasks_dir, file_path, request_id)
+    except HttpException as exc:
+        if exc.status_code != 404:
+            raise
+        return _storage_fallback_redirect(request, file_path, request_id, exc)
     auth = base.get_auth_context(request)
     task_id = _task_id_from_resolved_path(tasks_dir, video_path)
     if sm.state.get_task(task_id, user_id=auth.user_id) is None:
@@ -642,7 +676,12 @@ async def download_video(request: Request, file_path: str):
     """
     request_id = base.get_task_id(request)
     tasks_dir = utils.task_dir()
-    video_path = _resolve_path_within_directory(tasks_dir, file_path, request_id)
+    try:
+        video_path = _resolve_path_within_directory(tasks_dir, file_path, request_id)
+    except HttpException as exc:
+        if exc.status_code != 404:
+            raise
+        return _storage_fallback_redirect(request, file_path, request_id, exc)
     auth = base.get_auth_context(request)
     task_id = _task_id_from_resolved_path(tasks_dir, video_path)
     if sm.state.get_task(task_id, user_id=auth.user_id) is None:
