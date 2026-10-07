@@ -46,6 +46,9 @@ def _get_json(path: str) -> dict:
 
 def test_version_reports_injected_build_metadata(tmp_path, monkeypatch):
     monkeypatch.setattr(asgi, "VERSION_FILE", _write_version(tmp_path, "1.28\n"))
+    # Hermetic: CI injects BUILD=<run number> (old scheme); clear it so the
+    # PR_NUMBER -> build fallback is what the test actually exercises.
+    _clear_build_env(monkeypatch)
     with patch.dict(
         os.environ,
         {"VERSION": "1.28.152", "PR_NUMBER": "152", "COMMIT": "8f31abc"},
@@ -61,6 +64,8 @@ def test_version_reports_injected_build_metadata(tmp_path, monkeypatch):
 
 def test_health_includes_build_metadata(tmp_path, monkeypatch):
     monkeypatch.setattr(asgi, "VERSION_FILE", _write_version(tmp_path, "1.28\n"))
+    # Hermetic: see test_version_reports_injected_build_metadata.
+    _clear_build_env(monkeypatch)
     with patch.dict(
         os.environ,
         {"VERSION": "1.28.152", "PR_NUMBER": "152", "COMMIT": "8f31abc"},

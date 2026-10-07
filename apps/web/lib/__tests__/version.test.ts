@@ -46,6 +46,9 @@ describe('getBuildInfo', () => {
   it('trims surrounding whitespace', () => {
     vi.stubEnv('VERSION', '  1.28.152\n');
     vi.stubEnv('PR_NUMBER', ' 152 ');
+    // Hermetic: CI injects BUILD=<run number> (old scheme); stub it so the
+    // PR_NUMBER -> build fallback is what the test actually exercises.
+    vi.stubEnv('BUILD', '');
     vi.stubEnv('COMMIT', ' 8f31abc\n');
     expect(getBuildInfo()).toEqual({
       version: '1.28.152',
