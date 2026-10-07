@@ -124,4 +124,85 @@ describe('GET /api/persona/voice-sample-languages', () => {
 
     expect(res.status).toBe(502);
   });
+
+  it('inclui o corpo de erro exato na falha de configuração', async () => {
+    vi.stubEnv('MONEYPRINT_API_URL', '');
+
+    const res = await GET();
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({
+      success: false,
+      error: 'MONEYPRINT_API_URL is not defined',
+    });
+  });
+
+  it('inclui o corpo de erro exato quando o money-print falha', async () => {
+    fetchMock.mockResolvedValue(new Response('erro', { status: 500 }));
+
+    const res = await GET();
+
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ success: false, error: 'Sample languages unavailable.' });
+  });
+
+  it('inclui o corpo de erro exato quando o money-print está inacessível', async () => {
+    fetchMock.mockRejectedValue(new Error('connection refused'));
+
+    const res = await GET();
+
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({
+      success: false,
+      error: 'Sample languages service unreachable.',
+    });
+  });
+
+  it.each([
+    ['corpo não é array', 'not-an-array'],
+    ['code não é string', [{ code: 1, label: 'English' }]],
+    ['label ausente', [{ code: 'en' }]],
+    ['item nulo', [null]],
+    ['item não é objeto', ['x']],
+    ['corpo ausente no envelope', undefined],
+  ])('retorna 502 com payload de idiomas inválido (%s)', async (_label, body) => {
+    fetchMock.mockResolvedValue(Response.json({ status: 200, message: 'success', body }));
+
+    const res = await GET();
+
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({
+      success: false,
+      error: 'Invalid sample languages payload.',
+    });
+  });
+
+  it('rejeita o formato antigo do envelope com chave data', async () => {
+    fetchMock.mockResolvedValue(
+      Response.json({ status: 200, message: 'success', data: [{ code: 'en', label: 'x' }] }),
+    );
+
+    const res = await GET();
+
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({
+      success: false,
+      error: 'Invalid sample languages payload.',
+    });
+  });
+
+  it('chama o endpoint do money-print sem barras finais e com cache no-store', async () => {
+    vi.stubEnv('MONEYPRINT_API_URL', 'http://moneyprint.internal:8080///');
+    fetchMock.mockResolvedValue(
+      Response.json({ status: 200, message: 'success', body: [{ code: 'en', label: 'English' }] }),
+    );
+
+    const res = await GET();
+
+    expect(res.status).toBe(200);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      'http://moneyprint.internal:8080/api/v1/personas/voices/sample-languages',
+    );
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ cache: 'no-store' });
+  });
 });

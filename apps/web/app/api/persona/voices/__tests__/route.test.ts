@@ -182,4 +182,91 @@ describe('GET /api/persona/voices', () => {
 
     expect(res.status).toBe(502);
   });
+
+  it('inclui o corpo de erro exato na falha de configuração', async () => {
+    vi.stubEnv('MONEYPRINT_API_URL', '');
+
+    const res = await GET();
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({
+      success: false,
+      error: 'MONEYPRINT_API_URL is not defined',
+    });
+  });
+
+  it('inclui o corpo de erro exato quando o money-print falha', async () => {
+    fetchMock.mockResolvedValue(new Response('erro', { status: 500 }));
+
+    const res = await GET();
+
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ success: false, error: 'Voices unavailable.' });
+  });
+
+  it('inclui o corpo de erro exato quando o money-print está inacessível', async () => {
+    fetchMock.mockRejectedValue(new Error('connection refused'));
+
+    const res = await GET();
+
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ success: false, error: 'Voices service unreachable.' });
+  });
+
+  it.each([
+    ['corpo não é array', 'not-an-array'],
+    ['id não é string', [{ id: 123 }]],
+    ['item nulo', [null]],
+    ['item não é objeto', ['x']],
+    ['item sem id', [{}]],
+    ['corpo ausente no envelope', undefined],
+  ])('retorna 502 com payload de vozes inválido (%s)', async (_label, body) => {
+    fetchMock.mockResolvedValue(Response.json({ status: 200, message: 'success', body }));
+
+    const res = await GET();
+
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ success: false, error: 'Invalid voices payload.' });
+  });
+
+  it('rejeita o formato antigo do envelope com chave data', async () => {
+    fetchMock.mockResolvedValue(
+      Response.json({ status: 200, message: 'success', data: [{ id: 'calm' }] }),
+    );
+
+    const res = await GET();
+
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ success: false, error: 'Invalid voices payload.' });
+  });
+
+  it('chama o endpoint do money-print sem barras finais e com cache no-store', async () => {
+    vi.stubEnv('MONEYPRINT_API_URL', 'http://moneyprint.internal:8080///');
+    fetchMock.mockResolvedValue(
+      Response.json({ status: 200, message: 'success', body: [{ id: 'calm' }] }),
+    );
+
+    const res = await GET();
+
+    expect(res.status).toBe(200);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      'http://moneyprint.internal:8080/api/v1/personas/voices',
+    );
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ cache: 'no-store' });
+  });
+
+  it('projeta apenas o id das vozes no catálogo', async () => {
+    fetchMock.mockResolvedValue(
+      Response.json({
+        status: 200,
+        message: 'success',
+        body: [{ id: 'calm', extra: 'ignored' }],
+      }),
+    );
+
+    const res = await GET();
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ voices: [{ id: 'calm' }] });
+  });
 });
