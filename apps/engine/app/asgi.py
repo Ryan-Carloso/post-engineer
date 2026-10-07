@@ -252,13 +252,16 @@ app = get_application()
 # No CORS: the engine is internal — browsers never hit it directly; every
 # call goes through Next.js (same origin as the app) with the Supabase JWT.
 
-# Build metadata: VERSION/BUILD/COMMIT are injected at build/deploy time.
-# CI sets them from the repo-root VERSION file (manual SemVer), the CI run
-# number, and the commit SHA; production deploys pass them through
-# docker-compose (see ../../docker-compose.yml). The repo-root VERSION file
-# is mounted read-only into the container as the fallback for the version
-# when VERSION is unset (local runs). Nothing version-related is committed
-# to git per build — parallel CI runs never conflict on version files.
+# Build metadata: VERSION/PR_NUMBER/BUILD/COMMIT are injected at build and
+# deploy time. In production the VPS deploy generates them (see
+# deploy-version.sh in the deployment repo): VERSION is MAJOR.MINOR.PR where
+# PR is the merged pull request that introduced the deployed commit, BUILD is
+# that same PR number (the build identifier) and COMMIT is the full SHA. CI
+# injects its own values so the test suite exercises the same code path. The
+# repo-root VERSION file is mounted read-only into the container as the
+# fallback for the version when VERSION is unset (local runs). Nothing
+# version-related is committed to git per build — parallel PRs never conflict
+# on version files.
 VERSION_FILE = "/app/VERSION"
 
 
@@ -272,27 +275,39 @@ def _read_version_file() -> str | None:
         return None
 
 
+def _int_or_none(raw: str) -> int | None:
+    """Parse a non-negative int, or None when blank/malformed."""
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
 def get_build_info() -> dict[str, str | int | None]:
     """Build metadata identifying the exact running build.
 
-    Precedence: injected VERSION/BUILD/COMMIT env vars first (authoritative),
-    then the mounted VERSION file for the version, then "dev". The build
-    number is the CI run number (an int); malformed values degrade to None.
-    Never raises: version reporting must not break the app.
+    Precedence: injected VERSION/PR_NUMBER/BUILD/COMMIT env vars first
+    (authoritative), then the mounted VERSION file for the version, then
+    "dev". ``pr`` is the merged PR number that produced the deployed commit
+    (the deployment version is MAJOR.MINOR.pr, e.g. 1.28.152) and ``build``
+    carries the same identifier for consumers of the older payload shape.
+    Malformed values degrade to None. Never raises: version reporting must
+    not break the app.
     """
     version = os.environ.get("VERSION", "").strip() or _read_version_file() or "dev"
-    build_raw = os.environ.get("BUILD", "").strip()
-    try:
-        build: int | None = int(build_raw) if build_raw else None
-    except ValueError:
-        build = None
+    pr = _int_or_none(os.environ.get("PR_NUMBER", "").strip())
+    build = _int_or_none(os.environ.get("BUILD", "").strip())
+    if build is None:
+        build = pr
     commit = os.environ.get("COMMIT", "").strip() or None
-    return {"version": version, "build": build, "commit": commit}
+    return {"version": version, "build": build, "pr": pr, "commit": commit}
 
 
 @app.get("/version")
 def version() -> dict[str, str | int | None]:
-    """Public build metadata (no auth): version + CI build number + commit SHA."""
+    """Public build metadata (no auth): version + PR number + commit SHA."""
     return get_build_info()
 
 
@@ -315,7 +330,7 @@ def startup_event():
     build = get_build_info()
     logger.info(
         f"startup event (version {build['version']} "
-        f"build {build['build']} commit {build['commit']})"
+        f"pr {build['pr']} build {build['build']} commit {build['commit']})"
     )
     # Warm the PostHog client on server startup — not at controller import
     # time: the on_accepted funnel callback runs under the task-manager

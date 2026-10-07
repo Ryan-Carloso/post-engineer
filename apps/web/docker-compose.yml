@@ -16,12 +16,14 @@ services:
       dockerfile: apps/web/Dockerfile
       args:
         # Build metadata baked into the bundle at build time (see
-        # apps/web/Dockerfile). CI injects these; export them in the shell
-        # before `docker compose build`, e.g.
-        #   VERSION=$(cat ../../VERSION) BUILD=<ci-run-number> COMMIT=$(git rev-parse --short HEAD)
+        # apps/web/Dockerfile). The VPS deploy generates these from the
+        # commit being deployed and exports them before
+        # `docker compose build`, e.g.
+        #   VERSION=1.28.152 PR_NUMBER=152 BUILD=152 COMMIT=$(git rev-parse HEAD)
         # Empty locally: the app falls back to the VERSION file for the
-        # version and reports null build/commit.
+        # version and reports null pr/build/commit.
         VERSION: ${VERSION:-}
+        PR_NUMBER: ${PR_NUMBER:-}
         BUILD: ${BUILD:-}
         COMMIT: ${COMMIT:-}
     container_name: post-engineer-web

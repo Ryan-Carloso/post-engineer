@@ -149,18 +149,20 @@ available at `http://127.0.0.1:8080` (see `/docs`); keep that port bound to
 localhost and expose it only through the reverse proxy.
 
 Build metadata (`GET /version`, `/health`): the engine reports the
-`VERSION` / `BUILD` / `COMMIT` env vars when they are set at deploy time —
-export them before building so the live build is identifiable:
+`VERSION` / `PR_NUMBER` / `BUILD` / `COMMIT` env vars when they are set at
+deploy time. The deployed version is `MAJOR.MINOR.PR_NUMBER` (e.g. PR #152
+-> `1.28.152`), where MAJOR.MINOR comes from the repo-root `VERSION` file
+and the PR number is the merged PR that introduced the commit being
+deployed. A self-hosted manual deploy can pass the same values:
 
 ```bash
 cd apps/engine
-VERSION=$(cat ../../VERSION) BUILD=<build-number> COMMIT=$(git rev-parse --short HEAD) \
+VERSION=1.28.152 PR_NUMBER=152 BUILD=152 COMMIT=$(git rev-parse HEAD) \
   docker compose up -d --build
 ```
 
-(`BUILD` is the CI run number; any unique number works for manual deploys.)
 Unset, the engine falls back to the mounted `VERSION` file for the version
-and reports `null` build/commit.
+and reports `null` pr/build/commit.
 
 To update:
 
@@ -243,8 +245,8 @@ Back up regularly:
 2. Check the release notes for schema changes and apply them to your database.
 3. Rebuild and restart, exporting the build metadata first so
    `GET /version` and `/health` identify the live build (see section 3 for
-   the engine; the web takes the same three vars as Docker build args):
-   `VERSION=$(cat VERSION) BUILD=<build-number> COMMIT=$(git rev-parse --short HEAD)`
+   the engine; the web takes the same vars as Docker build args):
+   `VERSION=<major.minor>.<pr> PR_NUMBER=<pr> BUILD=<pr> COMMIT=$(git rev-parse HEAD)`
    before `docker compose up -d --build`.
 4. Check the release notes for breaking config changes (new required env vars
    are documented in the `.env.example` files).

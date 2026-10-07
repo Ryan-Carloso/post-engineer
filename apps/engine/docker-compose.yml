@@ -24,13 +24,16 @@ services:
       MPT_STORAGE_DIR: /app/storage
       TZ: UTC
       # Build metadata reported by GET /version and /health. Injected at
-      # deploy time: CI sets them (VERSION from the repo-root VERSION file,
-      # BUILD from the CI run number, COMMIT from the commit SHA); export
-      # them in the shell before `docker compose up --build`, e.g.
-      #   VERSION=$(cat ../../VERSION) BUILD=<ci-run-number> COMMIT=$(git rev-parse --short HEAD)
-      # Empty locally: the app falls back to the mounted VERSION file for
-      # the version and reports null build/commit.
+      # deploy time: the VPS deploy generates them from the commit being
+      # deployed (VERSION=MAJOR.MINOR.PR, PR_NUMBER/BUILD=that PR,
+      # COMMIT=full SHA) and exports them before `docker compose up --build`,
+      # e.g.
+      #   VERSION=1.28.152 PR_NUMBER=152 BUILD=152 COMMIT=$(git rev-parse HEAD)
+      # CI injects its own values so the test suite exercises the same path.
+      # Empty locally: the app falls back to the mounted VERSION file for the
+      # version and reports null pr/build/commit.
       VERSION: ${VERSION:-}
+      PR_NUMBER: ${PR_NUMBER:-}
       BUILD: ${BUILD:-}
       COMMIT: ${COMMIT:-}
     extra_hosts:
@@ -38,16 +41,17 @@ services:
     volumes:
       - engine_storage:/app/storage
       - ./config.toml:/app/config.toml:ro
-      # Platform version fallback: the repo-root VERSION file (manual SemVer)
-      # is mounted read-only so /health and the startup log still report a
-      # version when VERSION is not injected (local runs). Injected
-      # VERSION/BUILD/COMMIT env vars take precedence.
+      # Platform version fallback: the repo-root VERSION file (the
+      # MAJOR.MINOR release baseline, e.g. `1.28`) is mounted read-only so
+      # /health and the startup log still report a version when VERSION is
+      # not injected (local runs). Injected VERSION/PR_NUMBER/BUILD/COMMIT
+      # env vars take precedence.
       - ../../VERSION:/app/VERSION:ro
     deploy:
       resources:
         limits:
-          cpus: "2.0"
-          memory: 4g
+          cpus: "3.0"
+          memory: 6g
     logging:
       driver: json-file
       options:

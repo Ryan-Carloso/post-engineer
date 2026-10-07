@@ -3,12 +3,14 @@ import fs from "node:fs";
 import path from "node:path";
 
 //---------------
-// Build metadata: VERSION/BUILD/COMMIT are injected at build time — CI sets
-// them from the repo-root VERSION file (manual SemVer), the CI run number,
-// and the commit SHA (see apps/web/Dockerfile ARGs). Local builds fall back
-// to the VERSION file for the version; build/commit stay empty there.
-// Inlined into the bundle via env — no external service involved. Falls
-// back to 'dev' when the file is unreadable (e.g. a partial checkout).
+// Build metadata: VERSION/PR_NUMBER/BUILD/COMMIT are injected at build
+// time. In production the VPS deploy generates them from the commit being
+// deployed: VERSION is MAJOR.MINOR.PR (e.g. 1.28.152), PR_NUMBER/BUILD are
+// that PR's number and COMMIT is the SHA (see apps/web/Dockerfile ARGs).
+// Local builds fall back to the VERSION file for the version; pr/build/
+// commit stay empty there. Inlined into the bundle via env — no external
+// service involved. Falls back to 'dev' when the file is unreadable (e.g. a
+// partial checkout).
 //---------------
 function readPlatformVersion(): string {
   const injected = process.env.VERSION?.trim();
@@ -27,6 +29,7 @@ const nextConfig: NextConfig = {
   output: "standalone",
   env: {
     VERSION: readPlatformVersion(),
+    PR_NUMBER: process.env.PR_NUMBER?.trim() ?? '',
     BUILD: process.env.BUILD?.trim() ?? '',
     COMMIT: process.env.COMMIT?.trim() ?? '',
   },
