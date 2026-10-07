@@ -2288,3 +2288,6 @@ Five MINORs on the merged funnel, fixed as a follow-up PR with one focused TDD c
 
 ## Cypress: hidden responsive twins in the DOM (2026-10-05, PR #102)
 - **The AppShell renders BOTH the desktop sidebar and the mobile header in the DOM** (`hidden md:flex` / `md:hidden` only hide via CSS). E2E selectors like `button[title="Sair"]` match the hidden twin too: `scrollIntoView()` errors on 2 elements and `should('be.visible')` fails on the hidden one. Scope page assertions to a visible container (`[data-testid=account-page] [data-testid=...]`, `cy.get('@page').find(...)`), and prefer exact-href selectors (`a[href="/account"]`).
+
+## Cypress: cy.clock() vs React Query (2026-10-07, PR #122)
+- **Never `cy.clock()` with all timers faked on a page that uses React Query.** Its notifyManager delivers query results through a real `setTimeout(0)` batch — faking setTimeout wedges every query in its loading state forever: the stubbed response arrives (200 in the command log) but the page never leaves the skeleton, and `cy.tick()` never unstick it. Fake only what the test needs: `cy.clock(Date.now(), ['setInterval', 'clearInterval', 'Date'])` keeps a `refetchInterval` controllable via `cy.tick()` while result delivery keeps working.
