@@ -115,6 +115,50 @@ async function resolveSlotPublishLinks(
 }
 
 //---------------
+// buildGenerationFacts — the read-only record of what the post was
+// generated with: the post_* snapshot columns written at creation
+// (migration 012) plus the slot's faceless flag. A named function (not an
+// inline object literal) so unit tests — and v8 coverage — see every leaf.
+// The object keeps every key with null leaves (never undefined) so the UI
+// never has to feature-detect; pre-012 schedules simply read all null.
+// If a future migration drops or renames one of these columns, the select
+// in getHandler is the thing that 500s.
+//---------------
+function buildGenerationFacts(
+  row: { faceless: boolean | null },
+  scheduleRow: {
+    post_language: string | null;
+    post_voice_id: string | null;
+    post_video_aspect: string | null;
+    post_niche: string | null;
+    post_paragraph_number: number | null;
+    post_face_quality: string | null;
+  },
+): {
+  faceless: boolean;
+  language: string | null;
+  voiceId: string | null;
+  videoAspect: string | null;
+  niche: string | null;
+  paragraphNumber: number | null;
+  faceQuality: string | null;
+} {
+  // Only the literal true counts — mirrors the engine's slot_faceless
+  // rule, so a legacy NULL row is never misread as faceless.
+  // One const per leaf (not an inline object literal): v8 coverage does not
+  // report object-literal property lines, so this keeps every fact visible
+  // to the coverage gate.
+  const faceless = row.faceless === true;
+  const language = scheduleRow.post_language ?? null;
+  const voiceId = scheduleRow.post_voice_id ?? null;
+  const videoAspect = scheduleRow.post_video_aspect ?? null;
+  const niche = scheduleRow.post_niche ?? null;
+  const paragraphNumber = scheduleRow.post_paragraph_number ?? null;
+  const faceQuality = scheduleRow.post_face_quality ?? null;
+  return { faceless, language, voiceId, videoAspect, niche, paragraphNumber, faceQuality };
+}
+
+//---------------
 // GET — one post's full detail: the slot row, its schedule (providers +
 // account ids, so clients can resolve the target accounts) and the
 // persona. Presentation follows /api/schedule/status (pending→awaiting,
@@ -141,7 +185,7 @@ async function getHandler(
 
   const { data: slot, error: slotError } = await supabase
     .from('scheduled_posts')
-    .select('id, schedule_id, slot_at, status, topic, error, published_at, task_id')
+    .select('id, schedule_id, slot_at, status, topic, error, published_at, task_id, faceless')
     .eq('id', slotId)
     .eq('user_id', auth.userId)
     .single();
@@ -167,11 +211,14 @@ async function getHandler(
     error: string | null;
     published_at: string | null;
     task_id: string | null;
+    // NOT NULL DEFAULT false in the schema (migration 007), but read
+    // defensively: only the literal true counts as faceless.
+    faceless: boolean | null;
   };
 
   const { data: schedule, error: scheduleError } = await supabase
     .from('schedules')
-    .select('id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, timezone')
+    .select('id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, timezone, post_language, post_voice_id, post_video_aspect, post_niche, post_paragraph_number, post_face_quality')
     .eq('id', row.schedule_id)
     .eq('user_id', auth.userId)
     .maybeSingle();
@@ -195,6 +242,15 @@ async function getHandler(
     bluesky_account_ids: string[] | null;
     // NOT NULL with a 'UTC' default in the schema — always present.
     timezone: string;
+    // Creation-time snapshot (migration 012): editing the persona
+    // afterwards cannot rewrite an already-queued video. NULL for schedules
+    // created before that migration.
+    post_language: string | null;
+    post_voice_id: string | null;
+    post_video_aspect: string | null;
+    post_niche: string | null;
+    post_paragraph_number: number | null;
+    post_face_quality: string | null;
   } | null;
   // Ownership re-check: the service client (API-key/OAuth callers)
   // bypasses RLS, so the schedule must belong to the caller.
@@ -281,6 +337,7 @@ async function getHandler(
       timezone: scheduleRow.timezone,
     },
     persona: personaRow ? { id: personaRow.id, name: personaRow.name } : null,
+    generation: buildGenerationFacts(row, scheduleRow),
   });
 }
 

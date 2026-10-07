@@ -735,4 +735,88 @@ describe('api', () => {
       vi.useRealTimers();
     }
   });
+
+  // narrowGeneration — the route always sends every generation key, but the
+  // payload crosses the network: a malformed or missing block must narrow
+  // to the all-null shape instead of handing the UI an undefined.
+  it('fetchSlotDetail narrows the generation facts from the route payload', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({
+        success: true,
+        slot: { id: 'slot-1' },
+        schedule: { id: 's1' },
+        persona: null,
+        generation: {
+          faceless: true,
+          language: 'pt-BR',
+          voiceId: 'ana_neural',
+          videoAspect: '9:16',
+          niche: 'cooking',
+          paragraphNumber: 5,
+          faceQuality: 'high',
+        },
+      }),
+    );
+    const { fetchSlotDetail } = await import('@/lib/api');
+    const payload = await fetchSlotDetail('slot-1');
+    expect(payload?.generation).toEqual({
+      faceless: true,
+      language: 'pt-BR',
+      voiceId: 'ana_neural',
+      videoAspect: '9:16',
+      niche: 'cooking',
+      paragraphNumber: 5,
+      faceQuality: 'high',
+    });
+  });
+
+  it('fetchSlotDetail falls back to null leaves when generation is malformed', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({
+        success: true,
+        slot: { id: 'slot-1' },
+        schedule: { id: 's1' },
+        persona: null,
+        generation: {
+          faceless: 'yes',
+          language: 42,
+          voiceId: null,
+          paragraphNumber: Number.NaN,
+        },
+      }),
+    );
+    const { fetchSlotDetail } = await import('@/lib/api');
+    const payload = await fetchSlotDetail('slot-1');
+    expect(payload?.generation).toEqual({
+      faceless: false,
+      language: null,
+      voiceId: null,
+      videoAspect: null,
+      niche: null,
+      paragraphNumber: null,
+      faceQuality: null,
+    });
+  });
+
+  it('fetchSlotDetail defaults generation when the route omits it', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({
+        success: true,
+        slot: { id: 'slot-1' },
+        schedule: { id: 's1' },
+        persona: null,
+      }),
+    );
+    const { fetchSlotDetail } = await import('@/lib/api');
+    const payload = await fetchSlotDetail('slot-1');
+    expect(payload?.generation).toEqual({
+      faceless: false,
+      language: null,
+      voiceId: null,
+      videoAspect: null,
+      niche: null,
+      paragraphNumber: null,
+      faceQuality: null,
+    });
+  });
 });

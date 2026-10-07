@@ -252,6 +252,8 @@ export default function PostDetailPage() {
           locale={locale}
           timezone={slotDetail.schedule.timezone}
           publishLinks={slotDetail.slot.publishLinks ?? []}
+          generation={slotDetail.generation}
+          personaName={personaName}
         />
       )}
     </div>
@@ -367,6 +369,66 @@ export const ScheduleSection = ({
         {formatDateTime(shownAt, locale, timezone)}{' '}
         <span className="font-normal text-muted-foreground">({timezone})</span>
       </p>
+    </section>
+  );
+};
+
+//---------------
+// GenerationFactsSection — read-only record of what the post was generated
+// with. The facts come from the post_* snapshot columns written at creation
+// (migration 012) plus the slot's faceless flag — deliberately a snapshot,
+// so editing the persona afterwards cannot rewrite an already-queued video.
+// This section is a record of what was charged for: it must never gain edit
+// affordances.
+//---------------
+export const GenerationFactsSection = ({
+  generation,
+  personaName,
+}: {
+  generation: SlotDetailPayload['generation'];
+  personaName: string;
+}) => {
+  const { t } = useI18n();
+  const rows: { label: string; value: string }[] = [
+    { label: t('posts.generationPersonaLabel'), value: personaName },
+    {
+      label: t('posts.generationFaceLabel'),
+      value: generation.faceless ? t('posts.generationFaceless') : t('posts.generationWithFace'),
+    },
+  ];
+  if (generation.language !== null) {
+    rows.push({ label: t('posts.generationLanguageLabel'), value: generation.language });
+  }
+  if (generation.voiceId !== null) {
+    rows.push({ label: t('posts.generationVoiceLabel'), value: generation.voiceId });
+  }
+  if (generation.videoAspect !== null) {
+    rows.push({ label: t('posts.generationFormatLabel'), value: generation.videoAspect });
+  }
+  if (generation.niche !== null) {
+    rows.push({ label: t('posts.generationNicheLabel'), value: generation.niche });
+  }
+  if (generation.paragraphNumber !== null) {
+    rows.push({
+      label: t('posts.generationParagraphsLabel'),
+      value: String(generation.paragraphNumber),
+    });
+  }
+  return (
+    <section aria-label={t('posts.generationFactsLabel')} className="mt-6">
+      <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+        {t('posts.generationFactsLabel')}
+      </p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        {rows.map((row) => (
+          <div key={row.label}>
+            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+              {row.label}
+            </p>
+            <p className="mt-1 text-sm font-semibold text-[#0d2b45]">{row.value}</p>
+          </div>
+        ))}
+      </div>
     </section>
   );
 };
@@ -492,12 +554,16 @@ export const SlotDetail = ({
   locale,
   timezone,
   publishLinks,
+  generation,
+  personaName,
 }: {
   slot: SlotDetailPayload['slot'];
   accounts: AccountCardData[];
   locale: 'pt' | 'en';
   timezone: string;
   publishLinks: PublishLink[];
+  generation: SlotDetailPayload['generation'];
+  personaName: string;
 }) => {
   const { t } = useI18n();
   const router = useRouter();
@@ -603,6 +669,8 @@ export const SlotDetail = ({
       <PostIdSection postId={slot.id} />
 
       <ScheduleSection slot={slot} timezone={timezone} locale={locale} />
+
+      <GenerationFactsSection generation={generation} personaName={personaName} />
 
       {accounts.length > 0 && (
         <section aria-label={t('posts.accountsLabel')} className="mt-6">

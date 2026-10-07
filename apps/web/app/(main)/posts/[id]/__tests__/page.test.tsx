@@ -71,7 +71,23 @@ const SLOT_SCHEDULE = {
   timezone: 'Europe/Lisbon',
 };
 
-function slotPayload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function generationPayload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    faceless: false,
+    language: null,
+    voiceId: null,
+    videoAspect: null,
+    niche: null,
+    paragraphNumber: null,
+    faceQuality: null,
+    ...overrides,
+  };
+}
+
+function slotPayload(
+  overrides: Record<string, unknown> = {},
+  topOverrides: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {
     slot: {
       id: 'u1',
@@ -89,6 +105,8 @@ function slotPayload(overrides: Record<string, unknown> = {}): Record<string, un
     },
     schedule: SLOT_SCHEDULE,
     persona: { id: 'p1', name: 'Viva Leve' },
+    generation: generationPayload(),
+    ...topOverrides,
   };
 }
 
@@ -211,7 +229,9 @@ describe('PostDetailPage', () => {
     render(<DetailPage />);
 
     expect(screen.getByText('Upcoming topic')).toBeInTheDocument();
-    expect(screen.getByText('Viva Leve')).toBeInTheDocument();
+    // The header title shows the persona name (the generation-facts section
+    // below renders it a second time in its Persona row).
+    expect(screen.getByRole('heading', { name: 'Viva Leve' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'posts.editCaption' }));
     expect(screen.getByLabelText('posts.captionLabel')).toHaveValue('Upcoming topic');
@@ -390,6 +410,90 @@ describe('PostDetailPage', () => {
     expect(video).not.toBeNull();
     expect(video?.getAttribute('src')).toBe('/api/persona/video-download/task-7/final-1.mp4');
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+  });
+
+  //---------------
+  // GenerationFactsSection — read-only record of what the post was generated
+  // with (the post_* snapshot + faceless flag). Never editable: it records
+  // what was charged for.
+  //---------------
+  it('shows the language, voice and format the post was generated with', () => {
+    mockQueries({
+      slot: slotPayload({}, {
+        generation: generationPayload({
+          language: 'pt-BR',
+          voiceId: 'ana_neural',
+          videoAspect: '9:16',
+        }),
+      }),
+    });
+    render(<DetailPage />);
+
+    const section = screen.getByRole('region', { name: 'posts.generationFactsLabel' });
+    expect(within(section).getByText('posts.generationLanguageLabel')).toBeInTheDocument();
+    expect(within(section).getByText('pt-BR')).toBeInTheDocument();
+    expect(within(section).getByText('posts.generationVoiceLabel')).toBeInTheDocument();
+    expect(within(section).getByText('ana_neural')).toBeInTheDocument();
+    expect(within(section).getByText('posts.generationFormatLabel')).toBeInTheDocument();
+    expect(within(section).getByText('9:16')).toBeInTheDocument();
+  });
+
+  it('labels a faceless post as faceless and a persona post by name', () => {
+    // Faceless direction: the Face row always renders, reading Faceless.
+    // A consistent persona-less fixture has no persona row AND a null
+    // personaId on the schedule (that is what the page keys noPersona on).
+    mockQueries({
+      slot: slotPayload({}, {
+        persona: null,
+        schedule: { ...SLOT_SCHEDULE, personaId: null },
+        generation: generationPayload({ faceless: true }),
+      }),
+    });
+    const { unmount } = render(<DetailPage />);
+    const facelessSection = screen.getByRole('region', { name: 'posts.generationFactsLabel' });
+    expect(within(facelessSection).getByText('posts.generationFaceLabel')).toBeInTheDocument();
+    expect(within(facelessSection).getByText('posts.generationFaceless')).toBeInTheDocument();
+    expect(within(facelessSection).queryByText('posts.generationWithFace')).not.toBeInTheDocument();
+    expect(within(facelessSection).getByText('posts.noPersona')).toBeInTheDocument();
+    unmount();
+
+    // Persona direction: the face row must not claim Faceless for a face post.
+    mockQueries({ slot: slotPayload() });
+    render(<DetailPage />);
+    const faceSection = screen.getByRole('region', { name: 'posts.generationFactsLabel' });
+    expect(within(faceSection).getByText('posts.generationWithFace')).toBeInTheDocument();
+    expect(within(faceSection).queryByText('posts.generationFaceless')).not.toBeInTheDocument();
+    expect(within(faceSection).getByText('Viva Leve')).toBeInTheDocument();
+  });
+
+  it('renders no row for a fact the post does not have', () => {
+    // A null niche produces no row at all — not even the label.
+    mockQueries({ slot: slotPayload() });
+    render(<DetailPage />);
+
+    const section = screen.getByRole('region', { name: 'posts.generationFactsLabel' });
+    expect(within(section).queryByText('posts.generationNicheLabel')).not.toBeInTheDocument();
+    expect(within(section).queryByText('posts.generationParagraphsLabel')).not.toBeInTheDocument();
+    // ...while the always-rendered rows are still there.
+    expect(within(section).getByText('posts.generationFaceLabel')).toBeInTheDocument();
+    expect(within(section).getByText('posts.generationPersonaLabel')).toBeInTheDocument();
+  });
+
+  it('never offers editing on the generation facts', () => {
+    // The user's explicit "apenas como readOnly": no button, input or
+    // checkbox may appear inside the section.
+    mockQueries({
+      slot: slotPayload({}, {
+        generation: generationPayload({ language: 'pt-BR', niche: 'cooking', paragraphNumber: 5 }),
+      }),
+    });
+    render(<DetailPage />);
+
+    const section = screen.getByRole('region', { name: 'posts.generationFactsLabel' });
+    expect(within(section).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(section).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(within(section).queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(within(section).queryByRole('combobox')).not.toBeInTheDocument();
   });
 
   it('shows the error and allows deleting a failed slot after confirmation', async () => {
