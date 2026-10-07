@@ -176,6 +176,121 @@ class TestSecurityControls(unittest.TestCase):
         with self.assertRaises(TaskQueueFullError):
             manager.add_task(lambda: None)
 
+
+class TestStorageFallback(unittest.TestCase):
+    """When the local file is gone (restart wiped the disk), /stream/ and
+    /download/ redirect to the durable Supabase Storage copy recorded in
+    the task state at generation time."""
+
+    def _run(self, coro):
+        return asyncio.run(coro)
+
+    def test_download_redirects_to_signed_storage_url_when_local_file_missing(self):
+        task_id = "storage-fallback-task"
+        sm.state.update_task(
+            task_id,
+            state=const.TASK_STATE_COMPLETE,
+            user_id="internal",
+            video_storage_path="internal/faceless/storage-fallback-task/final-1.mp4",
+        )
+        try:
+            with patch(
+                "app.controllers.v1.video.video_storage.create_signed_url",
+                return_value="https://xyz.supabase.co/signed?token=abc",
+            ):
+                response = self._run(
+                    video_controller.download_video(_FakeRequest(), f"{task_id}/final-1.mp4")
+                )
+            self.assertEqual(response.status_code, 302)
+            self.assertEqual(
+                response.headers["location"], "https://xyz.supabase.co/signed?token=abc"
+            )
+        finally:
+            sm.state.delete_task(task_id)
+
+    def test_stream_redirects_to_signed_storage_url_when_local_file_missing(self):
+        task_id = "storage-fallback-stream"
+        sm.state.update_task(
+            task_id,
+            state=const.TASK_STATE_COMPLETE,
+            user_id="internal",
+            video_storage_path="internal/faceless/storage-fallback-stream/final-1.mp4",
+        )
+        try:
+            with patch(
+                "app.controllers.v1.video.video_storage.create_signed_url",
+                return_value="https://xyz.supabase.co/signed?token=abc",
+            ):
+                response = self._run(
+                    video_controller.stream_video(_FakeRequest(), f"{task_id}/final-1.mp4")
+                )
+            self.assertEqual(response.status_code, 302)
+        finally:
+            sm.state.delete_task(task_id)
+
+    def test_missing_local_file_without_storage_copy_still_404s(self):
+        task_id = "no-storage-copy-task"
+        sm.state.update_task(task_id, state=const.TASK_STATE_COMPLETE, user_id="internal")
+        try:
+            with self.assertRaises(video_controller.HttpException) as ctx:
+                self._run(
+                    video_controller.download_video(_FakeRequest(), f"{task_id}/final-1.mp4")
+                )
+            self.assertEqual(ctx.exception.status_code, 404)
+        finally:
+            sm.state.delete_task(task_id)
+
+    def test_storage_copy_of_another_user_is_not_leaked(self):
+        # The fallback resolves the task through the caller's own user_id:
+        # a storage path recorded under a different user must not redirect.
+        task_id = "other-user-task"
+        sm.state.update_task(
+            task_id,
+            state=const.TASK_STATE_COMPLETE,
+            user_id="someone-else",
+            video_storage_path="someone-else/faceless/other-user-task/final-1.mp4",
+        )
+        try:
+            with patch(
+                "app.controllers.v1.video.video_storage.create_signed_url",
+                return_value="https://xyz.supabase.co/signed?token=abc",
+            ) as signed:
+                with self.assertRaises(video_controller.HttpException) as ctx:
+                    self._run(
+                        video_controller.download_video(
+                            _FakeRequest(), f"{task_id}/final-1.mp4"
+                        )
+                    )
+                self.assertEqual(ctx.exception.status_code, 404)
+                signed.assert_not_called()
+        finally:
+            sm.state.delete_task(task_id)
+
+    def test_local_file_is_served_directly_when_present(self):
+        task_id = "local-file-present-task"
+        task_dir = utils.task_dir(task_id)
+        video_path = os.path.join(task_dir, "final-1.mp4")
+        Path(video_path).write_bytes(b"fake-video")
+        sm.state.update_task(
+            task_id,
+            state=const.TASK_STATE_COMPLETE,
+            user_id="internal",
+            video_storage_path="internal/faceless/local-file-present-task/final-1.mp4",
+        )
+        try:
+            with patch(
+                "app.controllers.v1.video.video_storage.create_signed_url",
+            ) as signed:
+                response = self._run(
+                    video_controller.download_video(_FakeRequest(), f"{task_id}/final-1.mp4")
+                )
+            self.assertEqual(response.path, os.path.realpath(video_path))
+            signed.assert_not_called()
+        finally:
+            sm.state.delete_task(task_id)
+            shutil.rmtree(task_dir, ignore_errors=True)
+
+
 class TestVideoService(unittest.TestCase):
     def setUp(self):
         self.original_app_config = dict(config.app)

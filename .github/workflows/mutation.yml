@@ -102,8 +102,16 @@ jobs:
         if: github.event_name == 'workflow_dispatch' || steps.changed.outputs.files != ''
         working-directory: apps/${{ matrix.app }}
         run: |
+          # Brackets in Next.js route paths ([taskId], [...path]) are
+          # minimatch character classes — escape them as [[] / []] so
+          # Stryker matches the literal files (same escaping as the
+          # ui-coverage-gates job in ci.yml). Stryker's normalizeFileName
+          # turns backslashes into slashes, so backslash-escaping cannot
+          # work here. Single pass only: a second pass would re-escape the
+          # brackets the first pass introduced.
+          stryker_files="$(echo "${{ steps.changed.outputs.files }}" | perl -pe 's/(\[|\])/$1 eq "[" ? "[[]" : "[]]"/ge')"
           if [ -n "${{ steps.changed.outputs.files }}" ]; then
-            pnpm exec stryker run --mutate "${{ steps.changed.outputs.files }}"
+            pnpm exec stryker run --mutate "$stryker_files"
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.scope }}" ]; then
             # Manual scoped run: the glob resolves relative to the app
             # directory. Skip gracefully when it matches nothing here so a

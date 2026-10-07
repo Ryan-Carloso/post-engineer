@@ -983,5 +983,51 @@ class TestReleaseFailureAlertLockBusy(unittest.TestCase):
         self.assertIn("task-lock-busy", tm._discord_notified_failed_tasks)
 
 
+class TestArchiveFinalVideos(unittest.TestCase):
+    """Only final videos reach Supabase Storage, best-effort, and the
+    storage path is recorded in the task state for the /stream/ and
+    /download/ fallback."""
+
+    def test_uploads_final_video_and_records_storage_path(self):
+        task_id = "archive-task-1"
+        tm.sm.state.update_task(task_id, user_id="user-9", persona_id="persona-3")
+        params = VideoParams(video_subject="s")
+        try:
+            with patch(
+                "app.services.task.video_storage.upload_final_video",
+                return_value="user-9/persona-3/archive-task-1/final-1.mp4",
+            ) as upload:
+                tm.archive_final_videos(task_id, ["/tmp/final-1.mp4"], params)
+            upload.assert_called_once_with(
+                "user-9/persona-3/archive-task-1/final-1.mp4", "/tmp/final-1.mp4"
+            )
+            self.assertEqual(
+                tm.sm.state.get_task(task_id)["video_storage_path"],
+                "user-9/persona-3/archive-task-1/final-1.mp4",
+            )
+        finally:
+            tm.sm.state.delete_task(task_id)
+
+    def test_upload_failure_is_best_effort_and_records_nothing(self):
+        task_id = "archive-task-2"
+        tm.sm.state.update_task(task_id, user_id="user-9")
+        params = VideoParams(video_subject="s")
+        try:
+            with patch(
+                "app.services.task.video_storage.upload_final_video",
+                return_value=None,
+            ) as upload:
+                tm.archive_final_videos(task_id, ["/tmp/final-1.mp4"], params)
+            upload.assert_called_once()
+            self.assertNotIn("video_storage_path", tm.sm.state.get_task(task_id))
+        finally:
+            tm.sm.state.delete_task(task_id)
+
+    def test_empty_paths_do_nothing(self):
+        with patch("app.services.task.video_storage.upload_final_video") as upload:
+            tm.archive_final_videos("archive-task-3", [], VideoParams(video_subject="s"))
+            upload.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

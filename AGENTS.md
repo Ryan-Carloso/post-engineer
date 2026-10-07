@@ -2291,3 +2291,9 @@ Five MINORs on the merged funnel, fixed as a follow-up PR with one focused TDD c
 
 ## Cypress: cy.clock() vs React Query (2026-10-07, PR #122)
 - **Never `cy.clock()` with all timers faked on a page that uses React Query.** Its notifyManager delivers query results through a real `setTimeout(0)` batch — faking setTimeout wedges every query in its loading state forever: the stubbed response arrives (200 in the command log) but the page never leaves the skeleton, and `cy.tick()` never unstick it. Fake only what the test needs: `cy.clock(Date.now(), ['setInterval', 'clearInterval', 'Date'])` keeps a `refetchInterval` controllable via `cy.tick()` while result delivery keeps working.
+
+## Stryker bracket escaping lives in mutation.yml too (2026-10-07, PR #125)
+- **The `[[]`/`[]]` single-pass escaping is needed in BOTH Stryker invocations.** PR #123 added it only to ci.yml's ui-coverage-gates; the standalone `mutation.yml` workflow kept passing raw paths, so the first PR touching a bracketed route (`[taskId]/[...path]`) failed `mutation (web)` with zero files matched (verified: minimatch returns false on the unescaped pattern, true on the escaped one). When fixing a Stryker invocation bug, grep every workflow that calls `stryker run --mutate`.
+
+## First storage-schema migration needs CI stubs (2026-10-07, PR #125)
+- **The ephemeral-Postgres `supabase-migrations` job stubs `auth` only.** The first migration to touch `storage.buckets`/`storage.objects` (014, the `videos` bucket) failed with "relation storage.buckets does not exist" on vanilla postgres:16. Extend the "Create Supabase-compat stubs" step with a minimal `storage` schema (buckets/objects tables with the columns the migration references) — same pattern as the existing `auth.uid()` stub. Production Supabase already has the schema, so the migration itself stays untouched.

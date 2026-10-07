@@ -669,10 +669,24 @@ jobs:
           # Vanilla Postgres lacks Supabase's auth schema, but migrations
           # reference auth.uid() in RLS policies (name-resolved at DDL time).
           # Stub it so validation matches production name resolution.
+          # Same for the Storage schema: migration 014 inserts into
+          # storage.buckets and creates policies on storage.objects, which
+          # only exist on a real Supabase project.
           psql "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable" -v ON_ERROR_STOP=1 <<'SQL'
           create schema if not exists auth;
           create or replace function auth.uid() returns uuid
             language sql stable as $$ select null::uuid $$;
+          create schema if not exists storage;
+          create table if not exists storage.buckets (
+            id text primary key,
+            name text not null,
+            public boolean not null default false
+          );
+          create table if not exists storage.objects (
+            id uuid primary key,
+            bucket_id text,
+            name text
+          );
           SQL
 
       - name: Apply migrations to ephemeral Postgres
