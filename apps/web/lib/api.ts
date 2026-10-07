@@ -1089,6 +1089,19 @@ export interface SlotDetailPayload {
     timezone: string;
   };
   persona: { id: string; name: string } | null;
+  // What the post was generated with: the post_* snapshot columns written
+  // at creation (migration 012) plus the slot's faceless flag. Required
+  // with nullable leaves — the route always sends every key, so the UI
+  // never has to feature-detect.
+  generation: {
+    faceless: boolean;
+    language: string | null;
+    voiceId: string | null;
+    videoAspect: string | null;
+    niche: string | null;
+    paragraphNumber: number | null;
+    faceQuality: string | null;
+  };
 }
 
 //---------------
@@ -1143,13 +1156,51 @@ function narrowProgressHistory(value: unknown): ProgressHistoryEntry[] {
   return entries;
 }
 
+//---------------
+// narrowGeneration — the route always sends every key of the generation
+// object, but the payload still crosses a network boundary: a malformed or
+// missing block narrows to the all-null shape (faceless false) instead of
+// handing the UI an undefined it would have to feature-detect at every
+// render.
+//---------------
+function narrowGeneration(value: unknown): SlotDetailPayload['generation'] {
+  const fallback: SlotDetailPayload['generation'] = {
+    faceless: false,
+    language: null,
+    voiceId: null,
+    videoAspect: null,
+    niche: null,
+    paragraphNumber: null,
+    faceQuality: null,
+  };
+  if (typeof value !== 'object' || value === null) return fallback;
+  const record = value as Record<string, unknown>;
+  const text = (key: string): string | null =>
+    typeof record[key] === 'string' ? (record[key] as string) : null;
+  const paragraphNumber = record.paragraphNumber;
+  return {
+    // Only the literal true counts — mirrors the route and the engine's
+    // slot_faceless rule.
+    faceless: record.faceless === true,
+    language: text('language'),
+    voiceId: text('voiceId'),
+    videoAspect: text('videoAspect'),
+    niche: text('niche'),
+    paragraphNumber:
+      typeof paragraphNumber === 'number' && Number.isFinite(paragraphNumber)
+        ? paragraphNumber
+        : null,
+    faceQuality: text('faceQuality'),
+  };
+}
+
 export async function fetchSlotDetail(slotId: string): Promise<SlotDetailPayload | null> {
   const response = await fetch(`/api/schedule/slots/${encodeURIComponent(slotId)}`, {
     method: 'GET',
   });
   if (response.status === 404) return null;
   if (!response.ok) await throwForBadResponse(response, 'Failed to load post.');
-  const data = await parseJsonBody<{ success: boolean; slot?: Omit<SlotDetailPayload['slot'], 'publishLinks' | 'progressHistory'> & { publishLinks?: unknown; progressHistory?: unknown }; schedule?: SlotDetailPayload['schedule']; persona?: SlotDetailPayload['persona']; error?: string }>(response);
+  const data = await parseJsonBody<{ success: boolean; slot?: Omit<SlotDetailPayload['slot'], 'publishLinks' | 'progressHistory'> & { publishLinks?: unknown; progressHistory?: unknown }; schedule?: SlotDetailPayload['schedule']; persona?: SlotDetailPayload['persona']; generation?: unknown; error?: string }>(response);
   if (!data?.success) throw new Error(data?.error ?? 'Failed to load post.');
   if (!data.slot || !data.schedule) throw new Error('Failed to load post.');
   return {
@@ -1160,6 +1211,7 @@ export async function fetchSlotDetail(slotId: string): Promise<SlotDetailPayload
     },
     schedule: data.schedule,
     persona: data.persona ?? null,
+    generation: narrowGeneration(data.generation),
   };
 }
 

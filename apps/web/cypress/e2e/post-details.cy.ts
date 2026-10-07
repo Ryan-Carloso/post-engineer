@@ -40,6 +40,15 @@ function slotDetailPayload() {
       timezone: 'Europe/Lisbon',
     },
     persona: { id: 'persona-e2e-1', name: 'E2E Persona' },
+    generation: {
+      faceless: false,
+      language: 'pt-BR',
+      voiceId: 'ana_neural',
+      videoAspect: '9:16',
+      niche: 'cooking',
+      paragraphNumber: 5,
+      faceQuality: 'high',
+    },
   };
 }
 
@@ -131,6 +140,25 @@ describe('Post details page', () => {
     cy.contains(/Agendado para|Scheduled for/).scrollIntoView().should('be.visible');
     cy.contains('11:00').scrollIntoView().should('be.visible');
     cy.contains('(Europe/Lisbon)').scrollIntoView().should('be.visible');
+  });
+
+  it('shows the generation facts of the post', () => {
+    // The read-only record of what the post was generated with: the
+    // language renders as the raw code, and the Face row names the face
+    // mode. The section sits below the fold of the scrollable main column,
+    // so scroll each target into view before asserting visibility.
+    cy.contains(/Como foi gerado|How it was generated/).scrollIntoView().should('be.visible');
+    cy.contains('pt-BR').scrollIntoView().should('be.visible');
+    cy.contains('ana_neural').scrollIntoView().should('be.visible');
+    cy.contains('9:16').scrollIntoView().should('be.visible');
+    cy.contains(/Com o rosto da persona|With the persona's face/).scrollIntoView().should('be.visible');
+    // Never editable: no edit affordance may appear inside the section.
+    cy.contains(/Como foi gerado|How it was generated/)
+      .parent('section')
+      .within(() => {
+        cy.get('button').should('not.exist');
+        cy.get('input, textarea').should('not.exist');
+      });
   });
 
   it('lists the target accounts by name', () => {

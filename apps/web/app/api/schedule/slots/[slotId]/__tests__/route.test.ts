@@ -684,6 +684,113 @@ describe('GET /api/schedule/slots/[slotId]', () => {
 });
 
 //---------------
+// Generation facts — the read-only record of what the post was generated
+// with. The facts live in the DB (scheduled_posts.faceless, the schedules
+// post_* snapshot columns) and the route must put them on the wire: the
+// detail page cannot render what the API does not select.
+//---------------
+
+describe('GET /api/schedule/slots/[slotId] generation facts', () => {
+  const SNAPSHOT_SCHEDULE_ROW = {
+    ...SCHEDULE_ROW,
+    post_language: 'pt-BR',
+    post_voice_id: 'ana_neural',
+    post_video_aspect: '9:16',
+    post_niche: 'cooking',
+    post_paragraph_number: 5,
+    post_face_quality: 'high',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
+    vi.stubEnv('MONEYPRINT_API_SECRET', 'secret');
+    mockAuth();
+  });
+
+  async function getGeneration(slot: unknown, schedule: unknown) {
+    const client = mockSlotsClient({
+      slot,
+      schedule,
+      persona: { id: 'p1', name: 'Viva Leve' },
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
+      params: Promise.resolve({ slotId: 'slot-1' }),
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      success: boolean;
+      generation: Record<string, unknown>;
+    };
+    expect(body.success).toBe(true);
+    return body.generation;
+  }
+
+  it('returns the generation facts used to create the post', async () => {
+    const generation = await getGeneration(
+      { ...SLOT_DETAIL_ROW, faceless: true },
+      SNAPSHOT_SCHEDULE_ROW,
+    );
+    expect(generation).toEqual({
+      faceless: true,
+      language: 'pt-BR',
+      voiceId: 'ana_neural',
+      videoAspect: '9:16',
+      niche: 'cooking',
+      paragraphNumber: 5,
+      faceQuality: 'high',
+    });
+  });
+
+  it('reports faceless as true only for the literal true', async () => {
+    // Mirrors the engine's slot_faceless rule (support.py: only
+    // `slot.get("faceless") is True` counts), so a legacy NULL row — or a
+    // stray string — is never misread as faceless.
+    for (const faceless of [true, false, null, 'true', 1]) {
+      const generation = await getGeneration({ ...SLOT_DETAIL_ROW, faceless }, SCHEDULE_ROW);
+      expect(generation.faceless).toBe(faceless === true);
+    }
+  });
+
+  it('omits nothing when the snapshot columns are null', async () => {
+    // A schedule created before migration 012 has every post_* NULL — the
+    // object keeps all keys with null leaves (never undefined), so the UI
+    // never has to feature-detect.
+    const generation = await getGeneration(SLOT_DETAIL_ROW, SCHEDULE_ROW);
+    expect(generation).toEqual({
+      faceless: false,
+      language: null,
+      voiceId: null,
+      videoAspect: null,
+      niche: null,
+      paragraphNumber: null,
+      faceQuality: null,
+    });
+  });
+
+  it('keeps persona null for a persona-less post', async () => {
+    const client = mockSlotsClient({
+      slot: SLOT_DETAIL_ROW,
+      schedule: { ...SCHEDULE_ROW, persona_id: null },
+      persona: null,
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
+      params: Promise.resolve({ slotId: 'slot-1' }),
+    });
+    const body = (await response.json()) as {
+      success: boolean;
+      persona: unknown;
+      generation: Record<string, unknown>;
+    };
+    expect(body.success).toBe(true);
+    expect(body.persona).toBeNull();
+    expect(body.generation.faceless).toBe(false);
+  });
+});
+
+//---------------
 // Published links — the engine records one publish_results entry per
 // (provider, video) it published; the detail endpoint surfaces them so the
 // user can open where the post actually went. Only a published slot is
