@@ -173,6 +173,25 @@ def create_signed_url_r2(
         return None
 
 
+def read_final_video_r2(object_path: str) -> bytes:
+    """Read a final video from R2; publishing never falls back to local disk."""
+    if not r2_is_configured():
+        raise RuntimeError("R2 video storage is not configured for publishing")
+    try:
+        response = _r2_client().get_object(Bucket=STORAGE_BUCKET, Key=object_path)
+        body = response["Body"]
+        try:
+            content = body.read()
+        finally:
+            body.close()
+    except Exception as exc:  # noqa: BLE001 — publishing requires the durable copy
+        logger.error(f"video_storage: R2 read failed for {object_path}: {exc}")
+        raise RuntimeError(f"could not read archived video {object_path} from R2") from exc
+    if not content:
+        raise RuntimeError(f"archived video {object_path} in R2 is empty")
+    return content
+
+
 def _supabase_url() -> str:
     return (os.getenv("SUPABASE_URL") or "").rstrip("/")
 

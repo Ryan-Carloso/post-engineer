@@ -409,5 +409,40 @@ class ArchiveFinalVideosAlertTests(unittest.TestCase):
         )
 
 
+class ReadFinalVideoR2Tests(unittest.TestCase):
+    def test_reads_and_closes_r2_body(self):
+        body = MagicMock()
+        body.read.return_value = b"archived-mp4"
+        client = MagicMock()
+        client.get_object.return_value = {"Body": body}
+        with (
+            patch.object(vs, "r2_is_configured", return_value=True),
+            patch.object(vs, "_r2_client", return_value=client),
+        ):
+            result = vs.read_final_video_r2("u/f/task/final-1.mp4")
+        self.assertEqual(result, b"archived-mp4")
+        client.get_object.assert_called_once_with(
+            Bucket=vs.STORAGE_BUCKET, Key="u/f/task/final-1.mp4"
+        )
+        body.close.assert_called_once()
+
+    def test_refuses_to_read_when_r2_is_not_configured(self):
+        with patch.object(vs, "r2_is_configured", return_value=False):
+            with self.assertRaisesRegex(RuntimeError, "not configured"):
+                vs.read_final_video_r2("u/f/task/final-1.mp4")
+
+    def test_does_not_return_an_empty_object(self):
+        body = MagicMock()
+        body.read.return_value = b""
+        client = MagicMock()
+        client.get_object.return_value = {"Body": body}
+        with (
+            patch.object(vs, "r2_is_configured", return_value=True),
+            patch.object(vs, "_r2_client", return_value=client),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "is empty"):
+                vs.read_final_video_r2("u/f/task/final-1.mp4")
+
+
 if __name__ == "__main__":
     unittest.main()

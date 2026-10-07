@@ -50,7 +50,7 @@ class TestUploadPostYouTube(unittest.TestCase):
         mock_post.return_value = _mock_response()
         svc = UploadPostService()
 
-        svc.upload_video("/fake/v.mp4", "Título", youtube_extra={
+        svc.upload_video("/fake/v.mp4", "Título", b"fake", youtube_extra={
             "youtube_title": "Mi Short",
             "youtube_description": "Descripción",
             "tags": ["ia", "shorts"],
@@ -58,6 +58,9 @@ class TestUploadPostYouTube(unittest.TestCase):
         })
 
         data = mock_post.call_args[1]["data"]
+        uploaded_file = mock_post.call_args[1]["files"]["video"]
+        self.assertEqual(uploaded_file[0], "v.mp4")
+        self.assertEqual(uploaded_file[1].read(), b"fake")
         self.assertEqual(_get(data, "youtube_title"), "Mi Short")
         self.assertEqual(_get(data, "youtube_description"), "Descripción")
         self.assertEqual(_get_all(data, "tags[]"), ["ia", "shorts"])
@@ -72,7 +75,7 @@ class TestUploadPostYouTube(unittest.TestCase):
         mock_post.return_value = _mock_response()
         svc = UploadPostService()
 
-        svc.upload_video("/fake/v.mp4", "T", youtube_extra={"containsSyntheticMedia": False})
+        svc.upload_video("/fake/v.mp4", "T", b"fake", youtube_extra={"containsSyntheticMedia": False})
 
         data = mock_post.call_args[1]["data"]
         self.assertEqual(_get(data, "containsSyntheticMedia"), "true")
@@ -87,7 +90,7 @@ class TestUploadPostYouTube(unittest.TestCase):
     def test_tiktok_instagram_sin_youtube_fields(self, mock_post, _exists):
         mock_post.return_value = _mock_response()
         svc = UploadPostService()
-        svc.upload_video("/fake/v.mp4", "T")
+        svc.upload_video("/fake/v.mp4", "T", b"fake")
 
         data = mock_post.call_args[1]["data"]
         self.assertFalse(_has_key(data, "youtube_title"))
@@ -104,7 +107,7 @@ class TestUploadPostYouTube(unittest.TestCase):
     def test_youtube_extra_ignorado_si_youtube_no_en_platforms(self, mock_post, _exists):
         mock_post.return_value = _mock_response()
         svc = UploadPostService()
-        svc.upload_video("/fake/v.mp4", "T", youtube_extra={"youtube_title": "irrelevante"})
+        svc.upload_video("/fake/v.mp4", "T", b"fake", youtube_extra={"youtube_title": "irrelevante"})
 
         data = mock_post.call_args[1]["data"]
         self.assertFalse(_has_key(data, "youtube_title"))
@@ -116,7 +119,7 @@ class TestUploadPostYouTube(unittest.TestCase):
     def test_endpoint_y_platform_format_correcto(self, mock_post, _exists):
         mock_post.return_value = _mock_response()
         svc = UploadPostService()
-        svc.upload_video("/fake/v.mp4", "T")
+        svc.upload_video("/fake/v.mp4", "T", b"fake")
 
         call_url = mock_post.call_args[0][0]
         self.assertTrue(call_url.endswith("/api/upload"), f"Endpoint incorrecto: {call_url}")
@@ -144,7 +147,7 @@ class TestUploadPostErrorScrubbing(unittest.TestCase):
             "E" * 450 + " api_key=TOPSECRET123 " + "F" * 200
         )
         svc = UploadPostService()
-        result = svc.upload_video("/fake/v.mp4", "Title")
+        result = svc.upload_video("/fake/v.mp4", "Title", b"fake")
         self.assertFalse(result["success"])
         self.assertIn("[redacted]", result["error"])
         self.assertNotIn("TOPSECRET123", result["error"])
@@ -182,7 +185,7 @@ class TestUploadPostErrorScrubbing(unittest.TestCase):
         )
         svc = UploadPostService()
         with patch.object(up_module, "logger") as mock_logger:
-            svc.upload_video("/fake/v.mp4", "Title")
+            svc.upload_video("/fake/v.mp4", "Title", b"fake")
         logged = " ".join(str(c) for c in mock_logger.error.call_args_list)
         self.assertIn("[redacted]", logged)
         self.assertNotIn("TOPSECRET123", logged)

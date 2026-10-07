@@ -35,6 +35,17 @@ class TestCpuStorage(unittest.TestCase):
                 self.assertFalse(removed.exists())
                 self.assertFalse(nested.exists())
 
+    def test_cleanup_removes_final_after_archive_and_publishing_complete(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            with patch.dict(os.environ, {"MPT_STORAGE_DIR": temporary_directory}):
+                task_directory = Path(utils.task_dir("task-1"))
+                final_video = task_directory / "final.mp4"
+                final_video.write_text("archived", encoding="utf-8")
+
+                cleanup_task_intermediates("task-1", [])
+
+                self.assertFalse(final_video.exists())
+
     def test_cleanup_ignores_missing_task_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             with patch.dict(os.environ, {"MPT_STORAGE_DIR": temporary_directory}):

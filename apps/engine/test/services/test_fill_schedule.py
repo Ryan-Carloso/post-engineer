@@ -757,6 +757,13 @@ class ReconcileTests(unittest.TestCase):
 
 class PublishDueTests(unittest.TestCase):
     def setUp(self) -> None:
+        from app.services import video_storage
+
+        storage_patcher = patch.object(
+            video_storage, "read_final_video_r2", return_value=b"fake-video-bytes"
+        )
+        storage_patcher.start()
+        self.addCleanup(storage_patcher.stop)
         handle, self.video_path = tempfile.mkstemp(suffix=".mp4")
         with os.fdopen(handle, "wb") as video_file:
             video_file.write(b"fake-video-bytes")
@@ -774,7 +781,10 @@ class PublishDueTests(unittest.TestCase):
         store = _FakeStore()
         store.ready_due_slots = lambda now: [self._slot()]
         state = MagicMock()
-        state.get_task.return_value = {"state": 1, "videos": [self.video_path]}
+        state.get_task.return_value = {
+            "state": 1, "videos": [self.video_path],
+            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+        }
         publish = MagicMock()
         scheduler = fs.FillScheduleScheduler(
             store=store, task_state=state,
@@ -797,7 +807,10 @@ class PublishDueTests(unittest.TestCase):
         store = _FakeStore()
         store.ready_due_slots = lambda now: [slot]
         state = MagicMock()
-        state.get_task.return_value = {"state": 1, "videos": [self.video_path]}
+        state.get_task.return_value = {
+            "state": 1, "videos": [self.video_path],
+            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+        }
         scheduler = fs.FillScheduleScheduler(
             store=store, task_state=state,
             publish_video=MagicMock(),
@@ -816,7 +829,10 @@ class PublishDueTests(unittest.TestCase):
         store = _FakeStore()
         store.ready_due_slots = lambda now: [slot]
         state = MagicMock()
-        state.get_task.return_value = {"state": 1, "videos": [self.video_path]}
+        state.get_task.return_value = {
+            "state": 1, "videos": [self.video_path],
+            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+        }
         scheduler = fs.FillScheduleScheduler(
             store=store, task_state=state,
             publish_video=MagicMock(),
@@ -837,7 +853,10 @@ class PublishDueTests(unittest.TestCase):
         store = _FakeStore()
         store.ready_due_slots = lambda now: [self._slot()]
         state = MagicMock()
-        state.get_task.return_value = {"state": 1, "videos": [self.video_path]}
+        state.get_task.return_value = {
+            "state": 1, "videos": [self.video_path],
+            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+        }
         publish = MagicMock(side_effect=PublishError("boom"))
         scheduler = fs.FillScheduleScheduler(
             store=store, task_state=state,
@@ -860,7 +879,10 @@ class PublishDueTests(unittest.TestCase):
         store = _FakeStore()
         store.ready_due_slots = lambda now: [self._slot()]
         state = MagicMock()
-        state.get_task.return_value = {"state": 1, "videos": [self.video_path]}
+        state.get_task.return_value = {
+            "state": 1, "videos": [self.video_path],
+            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+        }
         error = PublishError("E" * 150 + " api_key=TOPSECRET123 " + "F" * 150)
         publish = MagicMock(side_effect=error)
         scheduler = fs.FillScheduleScheduler(
@@ -895,6 +917,15 @@ class PublishDueTests(unittest.TestCase):
 
 class NotifyIntegrationTests(unittest.TestCase):
     """Discord events on the stages - injected, fire-and-forget, no crash."""
+
+    def setUp(self) -> None:
+        from app.services import video_storage
+
+        storage_patcher = patch.object(
+            video_storage, "read_final_video_r2", return_value=b"fake-video-bytes"
+        )
+        storage_patcher.start()
+        self.addCleanup(storage_patcher.stop)
 
     def _scheduler(self, store, **kwargs):
         defaults = dict(
@@ -1002,7 +1033,10 @@ class NotifyIntegrationTests(unittest.TestCase):
         store = _FakeStore()
         store.ready_due_slots = lambda now: [slot]
         state = MagicMock()
-        state.get_task.return_value = {"state": 1, "videos": [video_path]}
+        state.get_task.return_value = {
+            "state": 1, "videos": [video_path],
+            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+        }
         notify = MagicMock()
         scheduler = self._scheduler(store, task_state=state, notify=notify)
         scheduler.publisher.base_url = "https://post-engineer.com"
@@ -1038,7 +1072,10 @@ class NotifyIntegrationTests(unittest.TestCase):
         store = _FakeStore()
         store.ready_due_slots = lambda now: [slot]
         state = MagicMock()
-        state.get_task.return_value = {"state": 1, "videos": [video_path]}
+        state.get_task.return_value = {
+            "state": 1, "videos": [video_path],
+            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+        }
         notify = MagicMock()
         scheduler = self._scheduler(
             store, task_state=state, notify=notify,
@@ -1091,6 +1128,13 @@ class CoverageGapTests(unittest.TestCase):
     metadata."""
 
     def setUp(self) -> None:
+        from app.services import video_storage
+
+        storage_patcher = patch.object(
+            video_storage, "read_final_video_r2", return_value=b"fake-video-bytes"
+        )
+        storage_patcher.start()
+        self.addCleanup(storage_patcher.stop)
         handle, self.video_path = tempfile.mkstemp(suffix=".mp4")
         with os.fdopen(handle, "wb") as video_file:
             video_file.write(b"fake-video-bytes")
@@ -1328,7 +1372,10 @@ class CoverageGapTests(unittest.TestCase):
         store.claim_ready_slot = MagicMock(return_value=True)
         store.ready_due_slots = lambda now: [self._slot()]
         state = MagicMock()
-        state.get_task.return_value = {"state": 1, "videos": [self.video_path]}
+        state.get_task.return_value = {
+            "state": 1, "videos": [self.video_path],
+            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+        }
         publish = MagicMock()
         scheduler = self._scheduler(store, task_state=state, publish_video=publish)
         scheduler.publisher.base_url = "https://post-engineer.com"
@@ -1352,7 +1399,10 @@ class CoverageGapTests(unittest.TestCase):
         store.claim_ready_slot = MagicMock(return_value=False)
         store.ready_due_slots = lambda now: [self._slot()]
         state = MagicMock()
-        state.get_task.return_value = {"state": 1, "videos": [self.video_path]}
+        state.get_task.return_value = {
+            "state": 1, "videos": [self.video_path],
+            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+        }
         publish = MagicMock()
         scheduler = self._scheduler(store, task_state=state, publish_video=publish)
         scheduler.publisher.base_url = "https://post-engineer.com"
@@ -1373,7 +1423,10 @@ class CoverageGapTests(unittest.TestCase):
         store.claim_ready_slot = MagicMock(return_value=True)
         store.ready_due_slots = lambda now: [self._slot()]
         state = MagicMock()
-        state.get_task.return_value = {"state": 1, "videos": [self.video_path]}
+        state.get_task.return_value = {
+            "state": 1, "videos": [self.video_path],
+            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+        }
         notify = MagicMock()
         scheduler = self._scheduler(
             store, task_state=state, notify=notify,

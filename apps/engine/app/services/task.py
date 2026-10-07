@@ -804,7 +804,7 @@ def resolve_custom_audio_file(task_id: str, custom_audio_file: str | None) -> st
 
 
 def cleanup_task_intermediates(task_id: str, preserved_paths: Sequence[str]) -> None:
-    """Remove task intermediates while keeping final videos available locally."""
+    """Remove task-local files except paths still needed for recovery/publishing."""
     task_directory = path.realpath(utils.task_dir(task_id))
     preserved = {
         path.realpath(file_path)
@@ -1245,6 +1245,7 @@ def prepare_persona_lipsync_video(
 def start(task_id, params: VideoParams, stop_at: str = "video"):
     logger.info(f"start task: {task_id}, stop_at: {stop_at}")
     music_mood = "pending"
+    final_video_paths: list[str] = []
     # [TIMING] phase wall-clock markers to find the real bottleneck per task.
     _phase_start = time.perf_counter()
     _last_phase = "start"
@@ -1420,7 +1421,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             cleanup_task_intermediates(task_id, ())
             return
 
-        # Durable copy of the final video in Supabase Storage before
+        # Durable copy of the final video in R2 before
         # publishing: local disk is ephemeral, a restart must not lose it.
         archive_final_videos(task_id, final_video_paths, params)
 
@@ -1458,9 +1459,17 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
                 }
 
             for video_path in final_video_paths:
+                current_task = sm.state.get_task(task_id) or {}
+                object_path = current_task.get("video_storage_path")
+                if not isinstance(object_path, str) or not object_path:
+                    raise RuntimeError(
+                        f"task {task_id} has no verified R2 video archive for cross-posting"
+                    )
+                video_bytes = video_storage.read_final_video_r2(object_path)
                 result = upload_post.cross_post_video(
                     video_path=video_path,
                     title=params.video_subject or "Check out this video! #shorts #viral",
+                    video_bytes=video_bytes,
                     youtube_extra=youtube_extra,
                 )
                 cross_post_results.append(result)
@@ -1489,7 +1498,13 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             **kwargs,
         )
         try:
-            cleanup_task_intermediates(task_id, final_video_paths + combined_video_paths)
+            completed_task = sm.state.get_task(task_id) or {}
+            archived = bool(completed_task.get("video_storage_path")) and not bool(
+                completed_task.get("video_storage_error")
+            )
+            cleanup_task_intermediates(
+                task_id, [] if archived else final_video_paths
+            )
         except OSError as cleanup_error:
             logger.warning(
                 "failed to clean task intermediates for %s: %s",
@@ -1501,7 +1516,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         logger.exception("task %s crashed", task_id)
         _fail_task(task_id, safe_reason(exc), params, stage=_last_phase, exc=exc, music_mood=music_mood)
         try:
-            cleanup_task_intermediates(task_id, ())
+            cleanup_task_intermediates(task_id, final_video_paths)
         except OSError as cleanup_error:
             logger.warning(
                 "failed to clean task intermediates for failed task %s: %s",
