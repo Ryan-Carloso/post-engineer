@@ -670,8 +670,9 @@ jobs:
           # reference auth.uid() in RLS policies (name-resolved at DDL time).
           # Stub it so validation matches production name resolution.
           # Same for the Storage schema: migration 014 inserts into
-          # storage.buckets and creates policies on storage.objects, which
-          # only exist on a real Supabase project.
+          # storage.buckets and creates policies on storage.objects, and
+          # migration 015 updates storage.buckets.file_size_limit — all of
+          # which only exist on a real Supabase project.
           psql "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable" -v ON_ERROR_STOP=1 <<'SQL'
           create schema if not exists auth;
           create or replace function auth.uid() returns uuid
@@ -680,7 +681,8 @@ jobs:
           create table if not exists storage.buckets (
             id text primary key,
             name text not null,
-            public boolean not null default false
+            public boolean not null default false,
+            file_size_limit bigint
           );
           create table if not exists storage.objects (
             id uuid primary key,
