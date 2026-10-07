@@ -323,6 +323,12 @@ export interface NewPostState {
   times: string[];
   timezone: string;
   /**
+   * How the post publishes: 'scheduled' (default) publishes at the slot
+   * times above; 'asap' publishes the video the moment generation finishes,
+   * with no scheduled time (the 3h lead-time window does not apply).
+   */
+  publishMode: 'scheduled' | 'asap';
+  /**
    * Generate this batch WITHOUT a face: 100% stock footage, no lipsync, and
    * no persona image in the library (the persona still supplies the voice,
    * niche and script prompt — and is still required). Personas are always
@@ -348,6 +354,7 @@ export interface NewPostState {
   addTime: () => void;
   removeTime: (index: number) => void;
   setTimezone: (value: string) => void;
+  setPublishMode: (mode: 'scheduled' | 'asap') => void;
   setFaceless: (faceless: boolean) => void;
   setResult: (result: NewPostOutcome | null) => void;
   setValidationKey: (key: TranslationKey | null) => void;
@@ -360,6 +367,8 @@ export interface NewPostOutcome {
   success: boolean;
   /** Null when the request failed before a schedule existed. */
   scheduleId: string | null;
+  /** The schedule's publish mode, so the banner can speak the right copy. */
+  scheduleMode: 'scheduled' | 'asap' | null;
   /**
    * The created slot the screen navigates to (`/posts/[slotId]`). Null only
    * on a failure that produced no slot; the form never mints an empty
@@ -381,6 +390,7 @@ const initialNewPostState = {
   startAt: '',
   times: ['18:00'],
   timezone: 'UTC',
+  publishMode: 'scheduled' as 'scheduled' | 'asap',
   // Default is WITH the persona's face; "no face" is the opt-in.
   faceless: false,
   result: null as NewPostOutcome | null,
@@ -411,6 +421,7 @@ export const useNewPostStore = create<NewPostState>()(
         return { times: state.times.filter((_, i) => i !== index) };
       }),
     setTimezone: (timezone) => set({ timezone }),
+    setPublishMode: (publishMode) => set({ publishMode }),
     setFaceless: (faceless) => set({ faceless }),
     setResult: (result) => set({ result }),
     setValidationKey: (validationKey) => set({ validationKey }),

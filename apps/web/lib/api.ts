@@ -716,6 +716,9 @@ export interface ScheduleConfig {
   postsPerDay: number;
   timezone: string;
   active: boolean;
+  /** How the post publishes (migration 015): at the slot times, or ASAP —
+      the moment generation finishes, with no scheduled time. */
+  publishMode: 'scheduled' | 'asap';
 }
 
 export interface ScheduledSlot {
@@ -758,6 +761,8 @@ interface ScheduleRow {
   posts_per_day: number;
   timezone: string;
   active: boolean;
+  /** Migration 015. Read defensively: only the literal 'asap' counts. */
+  publish_mode: string | null;
 }
 
 interface SlotRow {
@@ -791,6 +796,7 @@ function mapSchedule(row: ScheduleRow): ScheduleConfig {
     postsPerDay: row.posts_per_day,
     timezone: row.timezone,
     active: row.active,
+    publishMode: row.publish_mode === 'asap' ? 'asap' : 'scheduled',
   };
 }
 
@@ -1087,6 +1093,9 @@ export interface SlotDetailPayload {
     // The schedule's IANA timezone — the detail page renders the slot time
     // in this zone so "10:00" is never ambiguous about whose 10:00 it is.
     timezone: string;
+    // How the post publishes (migration 015). Narrowed defensively at the
+    // fetch boundary: only the literal 'asap' counts.
+    publishMode: 'scheduled' | 'asap';
   };
   persona: { id: string; name: string } | null;
   // What the post was generated with: the post_* snapshot columns written
@@ -1203,13 +1212,17 @@ export async function fetchSlotDetail(slotId: string): Promise<SlotDetailPayload
   const data = await parseJsonBody<{ success: boolean; slot?: Omit<SlotDetailPayload['slot'], 'publishLinks' | 'progressHistory'> & { publishLinks?: unknown; progressHistory?: unknown }; schedule?: SlotDetailPayload['schedule']; persona?: SlotDetailPayload['persona']; generation?: unknown; error?: string }>(response);
   if (!data?.success) throw new Error(data?.error ?? 'Failed to load post.');
   if (!data.slot || !data.schedule) throw new Error('Failed to load post.');
+  const rawSchedule = data.schedule as SlotDetailPayload['schedule'] & { publishMode?: unknown };
   return {
     slot: {
       ...data.slot,
       publishLinks: narrowPublishLinks(data.slot.publishLinks),
       progressHistory: narrowProgressHistory(data.slot.progressHistory),
     },
-    schedule: data.schedule,
+    schedule: {
+      ...data.schedule,
+      publishMode: rawSchedule.publishMode === 'asap' ? 'asap' : 'scheduled',
+    },
     persona: data.persona ?? null,
     generation: narrowGeneration(data.generation),
   };
@@ -1254,11 +1267,17 @@ export interface CreatePostInput {
   topics: string[];
   providers: string[];
   accounts: Record<string, string[]>;
-  /** Offset-aware ISO instant the publishing window opens. */
-  startAt: string;
-  /** Daily publish times as "HH:MM", wall clock in `timezone`. */
-  times: string[];
-  timezone: string;
+  /** 'scheduled' (default): publish at the slot times. 'asap': publish each
+      video the moment generation finishes, with no scheduled time. */
+  mode?: 'scheduled' | 'asap';
+  /** Offset-aware ISO instant the publishing window opens. Required unless
+      mode is 'asap'. */
+  startAt?: string;
+  /** Daily publish times as "HH:MM", wall clock in `timezone`. Required
+      unless mode is 'asap'. */
+  times?: string[];
+  /** Required unless mode is 'asap' (the server defaults it to 'UTC'). */
+  timezone?: string;
   /** Generate without a face (100% stock, no lipsync). Personas are always
       faced; this is the per-post choice. Sent explicitly — the server is the
       billing authority and prices the two cases differently. */
@@ -1281,6 +1300,8 @@ export interface CreatePostResult {
   success: boolean;
   /** Null when the request failed before a schedule existed (never charged). */
   scheduleId: string | null;
+  /** The schedule's publish mode, when the response carried one. */
+  scheduleMode: 'scheduled' | 'asap' | null;
   slots: CreatedSlot[];
   replayed: boolean;
   error: string | null;
@@ -1316,6 +1337,7 @@ function narrowCreatedSlots(value: unknown): CreatedSlot[] {
 }
 
 export async function createPost(input: CreatePostInput): Promise<CreatePostResult> {
+  const mode = input.mode ?? 'scheduled';
   const response = await fetch('/api/videos/generate-and-schedule', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1329,9 +1351,23 @@ export async function createPost(input: CreatePostInput): Promise<CreatePostResu
         ...(input.voiceId !== undefined ? { voiceId: input.voiceId } : {}),
       },
       publishing: {
+        mode,
         providers: input.providers,
         accounts: input.accounts,
-        schedule: { startAt: input.startAt, times: input.times, timezone: input.timezone },
+        // ASAP carries no schedule plan at all: the server lands every slot
+        // at the request time. The key is omitted (not null) so the server
+        // reads absence as "no plan".
+        ...(mode === 'asap'
+          ? input.timezone !== undefined
+            ? { timezone: input.timezone }
+            : {}
+          : {
+            schedule: {
+              startAt: input.startAt,
+              times: input.times,
+              timezone: input.timezone,
+            },
+          }),
       },
     }),
   });
@@ -1341,9 +1377,15 @@ export async function createPost(input: CreatePostInput): Promise<CreatePostResu
     typeof schedule === 'object' && schedule !== null && typeof (schedule as { id?: unknown }).id === 'string'
       ? (schedule as { id: string }).id
       : null;
+  const rawMode =
+    typeof schedule === 'object' && schedule !== null
+      ? (schedule as { mode?: unknown }).mode
+      : null;
+  const scheduleMode = rawMode === 'asap' ? 'asap' : rawMode === 'scheduled' ? 'scheduled' : null;
   const failure: CreatePostResult = {
     success: false,
     scheduleId,
+    scheduleMode,
     slots: narrowCreatedSlots(body !== null ? body.slots : null),
     replayed: body !== null && body.replayed === true,
     error:
@@ -1383,8 +1425,8 @@ export function useCreatePostMutation() {
 //---------------
 // seedCreatedPostCaches — write the mutation response straight into the
 // list caches so the new post is visible the instant the user lands back on
-// /posts. Slots are future-dated, so they merge into `upcoming` (deduped by
-// id, sorted by slot time); the schedule seed keeps the page's
+// /posts. Seeded slots merge into `upcoming` (deduped by id, sorted by slot
+// time); the schedule seed keeps the page's
 // slots-against-schedules join from dropping them. Progress starts at 0 —
 // nothing has generated yet — and the next poll fills in live values.
 //---------------
@@ -1431,8 +1473,9 @@ export function seedCreatedPostCaches(
     startHour: null,
     endHour: null,
     postsPerDay: result.slots.length,
-    timezone: input.timezone,
+    timezone: input.timezone ?? 'UTC',
     active: true,
+    publishMode: input.mode ?? 'scheduled',
   };
 
   const statusCaches = queryClient.getQueriesData<{ upcoming: ScheduledSlot[]; recent: ScheduledSlot[] }>({

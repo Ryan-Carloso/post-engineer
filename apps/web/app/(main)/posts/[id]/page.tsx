@@ -251,6 +251,7 @@ export default function PostDetailPage() {
           accounts={accounts}
           locale={locale}
           timezone={slotDetail.schedule.timezone}
+          publishMode={slotDetail.schedule.publishMode}
           publishLinks={slotDetail.slot.publishLinks ?? []}
           generation={slotDetail.generation}
           personaName={personaName}
@@ -346,20 +347,33 @@ export const PostIdSection = ({ postId }: { postId: string }) => {
 //---------------
 // ScheduleSection — when the post goes out (or went out): the slot time
 // rendered in the schedule's own timezone, with the IANA name beside it,
-// so "10:00" is never ambiguous about whose 10:00 it is.
+// so "10:00" is never ambiguous about whose 10:00 it is. An ASAP post has
+// no scheduled time: until it is published the section says so plainly.
 //---------------
 export const ScheduleSection = ({
   slot,
   timezone,
+  publishMode,
   locale,
 }: {
   slot: ScheduledSlot;
   timezone: string;
+  publishMode: SlotDetailPayload['schedule']['publishMode'];
   locale: 'pt' | 'en';
 }) => {
   const { t } = useI18n();
   const publishedAt = slot.status === 'published' ? slot.publishedAt : null;
   const shownAt = publishedAt ?? slot.slotAt;
+  if (publishedAt === null && publishMode === 'asap') {
+    return (
+      <section aria-label={t('posts.scheduleLabel')} className="mt-6">
+        <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+          {t('posts.asapLabel')}
+        </p>
+        <p className="mt-1 text-sm leading-6 text-[#0d2b45]">{t('posts.asapHint')}</p>
+      </section>
+    );
+  }
   return (
     <section aria-label={t('posts.scheduleLabel')} className="mt-6">
       <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
@@ -553,6 +567,7 @@ export const SlotDetail = ({
   accounts,
   locale,
   timezone,
+  publishMode,
   publishLinks,
   generation,
   personaName,
@@ -561,6 +576,7 @@ export const SlotDetail = ({
   accounts: AccountCardData[];
   locale: 'pt' | 'en';
   timezone: string;
+  publishMode: SlotDetailPayload['schedule']['publishMode'];
   publishLinks: PublishLink[];
   generation: SlotDetailPayload['generation'];
   personaName: string;
@@ -668,7 +684,7 @@ export const SlotDetail = ({
 
       <PostIdSection postId={slot.id} />
 
-      <ScheduleSection slot={slot} timezone={timezone} locale={locale} />
+      <ScheduleSection slot={slot} timezone={timezone} publishMode={publishMode} locale={locale} />
 
       <GenerationFactsSection generation={generation} personaName={personaName} />
 

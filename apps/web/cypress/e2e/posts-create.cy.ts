@@ -100,6 +100,9 @@ function newPostSlotDetailPayload() {
       linkedinAccountIds: [],
       blueskyAccountIds: [],
       timezone: 'UTC',
+      // The real slot-detail route always sends this (migration 015); the
+      // client narrows any other value to 'scheduled'.
+      publishMode: 'scheduled' as 'scheduled' | 'asap',
     },
     persona: { id: 'persona-e2e-1', name: 'E2E Persona' },
   };
@@ -198,6 +201,43 @@ describe('Creating a post', () => {
     // Freshly created: 0% with a progress bar, like the detail page shows.
     cy.contains('0%').should('be.visible');
     cy.get('[role="progressbar"]').should('have.attr', 'aria-valuenow', '0');
+  });
+
+  it('creates an ASAP post with no schedule plan in the request', () => {
+    // An ASAP post has no scheduled time: the detail stub below carries
+    // publishMode 'asap' so the detail page shows the ASAP explainer
+    // instead of a fake timestamp. Defined here (after beforeEach) so it
+    // wins over the scheduled stub for the same URL.
+    const asapDetail = newPostSlotDetailPayload();
+    asapDetail.schedule = { ...asapDetail.schedule, publishMode: 'asap' };
+    cy.intercept('GET', `/api/schedule/slots/${NEW_POST_SLOT_ID}`, asapDetail).as('slotDetailAsap');
+
+    cy.visit('/posts/new');
+    cy.wait('@personas');
+
+    cy.contains('E2E Persona').click();
+    cy.get('[aria-label="Tema"]').type('E2E topic asap');
+
+    // ASAP mode: the date/time inputs unmount (they are not just hidden),
+    // and the schedule plan leaves the request entirely.
+    cy.get('label[for="new-post-publish-mode-asap"]').click();
+    cy.get('label[for="new-post-publish-mode-asap"]').should('have.attr', 'data-selected', 'true');
+    cy.get('input[type="datetime-local"]').should('not.exist');
+
+    cy.get('[data-testid="account-card"]').first().click();
+    cy.contains('button', /Publicar ASAP|Publish ASAP/).click();
+
+    cy.wait('@createPost').its('request.body').should((body) => {
+      const publishing = (body as { publishing: Record<string, unknown> }).publishing;
+      expect(publishing.mode).to.eq('asap');
+      expect(publishing).to.not.have.property('schedule');
+    });
+
+    // Success opens the post's own page, which says ASAP instead of a
+    // scheduled time (PT test env: DEFAULT_LOCALE is 'pt').
+    cy.location('pathname').should('eq', `/posts/${NEW_POST_SLOT_ID}`);
+    cy.wait('@slotDetailAsap');
+    cy.contains(/sem horário marcado|no scheduled time/).should('be.visible');
   });
 
   it('offers a single topic field with no add/remove controls', () => {

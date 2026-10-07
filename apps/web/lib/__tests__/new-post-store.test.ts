@@ -83,7 +83,7 @@ describe('useNewPostStore reset', () => {
     store.setTimezone('Europe/Lisbon');
     store.setValidationKey('newPost.errorGeneric');
     store.setPending(true);
-    store.setResult({ success: false, scheduleId: null, slotId: null, slotCount: 0, code: 'INTERNAL_ERROR', need: null, have: null });
+    store.setResult({ success: false, scheduleId: null, scheduleMode: null, slotId: null, slotCount: 0, code: 'INTERNAL_ERROR', need: null, have: null });
 
     store.reset();
 

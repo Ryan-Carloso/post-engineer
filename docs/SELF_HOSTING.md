@@ -105,6 +105,27 @@ Provision the database schema in your Supabase project:
     a persona after its first one fails. Harmless if you never applied that
     chain — the drop is guarded with `if exists`.
 
+11. `supabase/migrations/012_schedules-optional-persona-snapshot.sql` —
+    lets a post exist without a persona (`schedules.persona_id` becomes
+    nullable) and snapshots the editorial definition the persona used to
+    supply (voice, language, niche, video aspect, paragraph count) on the
+    schedule row, so the engine can generate faceless posts reproducibly.
+
+12. `supabase/migrations/013_schedules-voice-audio-url-snapshot.sql` —
+    snapshots the persona-less audio voice URL (`post_voice_audio_url`) on
+    the schedule, so audio-voice posts keep their voice at tick time instead
+    of re-resolving (and rejecting) it.
+
+13. `supabase/migrations/014_videos-storage-bucket.sql` — creates the
+    private `videos` storage bucket (plus RLS policies) so the engine can
+    archive final videos at
+    `{user_id}/{persona_id|faceless}/{task_id}/final-1.mp4`.
+
+14. `supabase/migrations/015_schedules-publish-mode.sql` — adds
+    `schedules.publish_mode` (`scheduled`/`asap`, CHECK-pinned, default
+    `scheduled`): records whether a post publishes at its slot times or ASAP
+    (published the moment generation finishes, with no scheduled time).
+
 Paste each file into the Supabase Dashboard > SQL Editor and run, in order
 (the numeric prefixes encode the order — always apply the
 lowest number first), or apply them with the Supabase CLI from the repo

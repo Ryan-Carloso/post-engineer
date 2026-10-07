@@ -24,6 +24,7 @@ import {
   ComposeIcon,
   FilmIcon,
   GlobeIcon,
+  PlayIcon,
   PlusIcon,
   SpinnerIcon,
   TrashIcon,
@@ -196,8 +197,12 @@ async function handleSubmit(
   const store = useNewPostStore.getState();
   const { selectedAccountIds } = useUploadStore.getState();
   const filledTopic = store.topic.trim();
+  const isAsap = store.publishMode === 'asap';
   const filledTimes = store.times.map((time) => time.trim()).filter((time) => time.length > 0);
-  const startInstant = parseZonedDateTime(store.startAt, store.timezone);
+  // No schedule plan in ASAP mode: the server lands every slot at the
+  // request time, so the date/time guards below are skipped, not just
+  // hidden — a hidden input must never gate the submit.
+  const startInstant = isAsap ? null : parseZonedDateTime(store.startAt, store.timezone);
 
   const accounts: Record<string, string[]> = {};
   const providers: string[] = [];
@@ -223,8 +228,8 @@ async function handleSubmit(
     if (missingPersona) return 'newPost.personaRequired';
     if (missingVoice) return 'newPost.voiceRequired';
     if (filledTopic.length === 0) return 'newPost.errorTopicsRequired';
-    if (filledTimes.length === 0) return 'newPost.errorInvalidScheduleTime';
-    if (startInstant === null) return 'newPost.previewEmpty';
+    if (!isAsap && filledTimes.length === 0) return 'newPost.errorInvalidScheduleTime';
+    if (!isAsap && startInstant === null) return 'newPost.previewEmpty';
     if (providers.length === 0) return 'publishing.mustSelectAccount';
     return null;
   };
@@ -235,9 +240,17 @@ async function handleSubmit(
     store.setResult(null);
     return;
   }
-  // startInstant is non-null after the guard above; the null branch keeps the
-  // types honest without an assertion.
-  if (startInstant === null) return;
+  // startInstant is non-null after the guard above (scheduled mode only);
+  // the null branch keeps the types honest without an assertion.
+  if (!isAsap && startInstant === null) return;
+
+  // The schedule fields for the request. In ASAP mode the plan is omitted
+  // entirely (the server forbids it); in scheduled mode startInstant is
+  // narrowed non-null by the guard above.
+  const scheduleFields =
+    isAsap || startInstant === null
+      ? { timezone: store.timezone }
+      : { startAt: startInstant.toISOString(), times: filledTimes, timezone: store.timezone };
 
   store.setValidationKey(null);
   store.setPending(true);
@@ -251,9 +264,8 @@ async function handleSubmit(
       topics: [filledTopic],
       providers,
       accounts,
-      startAt: startInstant.toISOString(),
-      times: filledTimes,
-      timezone: store.timezone,
+      mode: store.publishMode,
+      ...scheduleFields,
       // No persona means no face to render: the picker hides the face choice
       // in that mode, so the flag is coerced rather than left to a hidden
       // toggle (which would still hold its "with face" default).
@@ -265,6 +277,7 @@ async function handleSubmit(
     const outcome: NewPostOutcome = {
       success: response.success,
       scheduleId: response.scheduleId,
+      scheduleMode: response.scheduleMode,
       // One post is one video, so the first slot is the post the screen
       // opens. A malformed payload narrows to no slots and lands on null,
       // which keeps the form here instead of navigating nowhere.
@@ -318,6 +331,11 @@ const NewPostFeedback = () => {
   const { t } = useI18n();
   const result = useNewPostStore((s) => s.result);
   const validationKey = useNewPostStore((s) => s.validationKey);
+  const draftMode = useNewPostStore((s) => s.publishMode);
+  // The banner speaks the mode the post was created with; before any submit
+  // (validation errors) it falls back to the draft's current mode.
+  const mode = result?.scheduleMode ?? draftMode;
+  const isAsap = mode === 'asap';
   const params: Record<string, string | number> = {
     max: MAX_POST_TOPICS,
     minHours: SCHEDULE_MIN_ADVANCE_HOURS,
@@ -333,11 +351,15 @@ const NewPostFeedback = () => {
           <CheckIcon />
         </span>
         <div>
-          <p className="text-sm font-semibold text-green-900">{t('newPost.successTitle')}</p>
+          <p className="text-sm font-semibold text-green-900">
+            {t(isAsap ? 'newPost.successTitleAsap' : 'newPost.successTitle')}
+          </p>
           <p className="mt-0.5 text-sm text-green-800">
-            {t(pluralKey(result.slotCount, 'newPost.successHintOne', 'newPost.successHint'), {
-              count: result.slotCount,
-            })}
+            {isAsap
+              ? t('newPost.successHintAsap')
+              : t(pluralKey(result.slotCount, 'newPost.successHintOne', 'newPost.successHint'), {
+                count: result.slotCount,
+              })}
           </p>
         </div>
       </div>
@@ -358,7 +380,9 @@ const NewPostFeedback = () => {
         <AlertIcon />
       </span>
       <div>
-        <p className="text-sm font-semibold text-red-900">{t('newPost.errorTitle')}</p>
+        <p className="text-sm font-semibold text-red-900">
+          {t(isAsap ? 'newPost.errorTitleAsap' : 'newPost.errorTitle')}
+        </p>
         <p className="mt-0.5 text-sm text-red-800">
           {t(key, params)}
           {result !== null && result.scheduleId !== null ? ` ${t('newPost.successPartial')}` : ''}
@@ -774,7 +798,90 @@ const NewPostAccountsField = () => {
 // Publishing plan — the first publish (wall-clock time + timezone) and the
 // daily times.
 //---------------
-const NewPostScheduleField = () => {
+//---------------
+// When to publish — the Schedule/ASAP mode picker plus the schedule inputs
+// (scheduled mode only). In ASAP mode there is no date or time to pick: the
+// video is published the moment generation finishes, so the section explains
+// that on the option card instead of showing inputs the server would ignore.
+// Same card pattern as the persona picker (shadcn RadioGroup + Label,
+// sr-only item as the real control).
+//---------------
+const PUBLISH_MODE_OPTIONS = [
+  {
+    value: 'scheduled',
+    labelKey: 'newPost.publishModeScheduled',
+    hintKey: 'newPost.publishModeScheduledHint',
+    icon: 'scheduled',
+  },
+  {
+    value: 'asap',
+    labelKey: 'newPost.publishModeAsap',
+    hintKey: 'newPost.publishModeAsapHint',
+    icon: 'asap',
+  },
+] as const;
+
+const NewPostPublishModePicker = () => {
+  const { t } = useI18n();
+  const publishMode = useNewPostStore((s) => s.publishMode);
+  const setPublishMode = useNewPostStore((s) => s.setPublishMode);
+  return (
+    <RadioGroup
+      value={publishMode}
+      onValueChange={(value) => setPublishMode(value === 'asap' ? 'asap' : 'scheduled')}
+      aria-label={t('newPost.publishModeLabel')}
+      className="grid gap-3 sm:grid-cols-2"
+    >
+      {PUBLISH_MODE_OPTIONS.map((option) => {
+        const selected = publishMode === option.value;
+        const itemId = `new-post-publish-mode-${option.value}`;
+        return (
+          <Label
+            key={option.value}
+            htmlFor={itemId}
+            data-selected={selected ? 'true' : 'false'}
+            className={cn(
+              'flex cursor-pointer items-start gap-3 rounded-2xl border bg-white p-3 transition-colors',
+              'has-focus-visible:ring-2 has-focus-visible:ring-accent/40 has-focus-visible:ring-offset-2',
+              selected
+                ? 'border-accent bg-accent/5 ring-1 ring-accent'
+                : 'border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50',
+            )}
+          >
+            <RadioGroupItem
+              value={option.value}
+              id={itemId}
+              aria-label={t(option.labelKey)}
+              className="sr-only"
+            />
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-neutral-500">
+              {option.icon === 'asap' ? <PlayIcon /> : <CalendarIcon />}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-neutral-900">
+                {t(option.labelKey)}
+              </span>
+              <span className="mt-0.5 block text-xs leading-5 text-neutral-500">
+                {t(option.hintKey)}
+              </span>
+            </span>
+            {selected ? (
+              <span className="shrink-0 text-accent">
+                <CheckIcon />
+              </span>
+            ) : null}
+          </Label>
+        );
+      })}
+    </RadioGroup>
+  );
+};
+
+//---------------
+// The date/time/timezone inputs for scheduled mode. Unmounted (not hidden)
+// in ASAP mode so stale values can never leak into the request.
+//---------------
+const NewPostScheduledInputs = () => {
   const { t } = useI18n();
   const startAt = useNewPostStore((s) => s.startAt);
   const times = useNewPostStore((s) => s.times);
@@ -791,7 +898,7 @@ const NewPostScheduleField = () => {
   }, [timezone]);
 
   return (
-    <section className={cn(CARD_CLASS, 'space-y-5')}>
+    <>
       <SectionTitle
         icon={<CalendarIcon />}
         label={t('newPost.startAtLabel')}
@@ -855,6 +962,19 @@ const NewPostScheduleField = () => {
           {t('newPost.addTime')}
         </button>
       </div>
+    </>
+  );
+};
+
+const NewPostScheduleField = () => {
+  const { t } = useI18n();
+  const publishMode = useNewPostStore((s) => s.publishMode);
+
+  return (
+    <section className={cn(CARD_CLASS, 'space-y-5')}>
+      <SectionTitle icon={<CalendarIcon />} label={t('newPost.publishModeLabel')} />
+      <NewPostPublishModePicker />
+      {publishMode === 'asap' ? null : <NewPostScheduledInputs />}
     </section>
   );
 };
@@ -866,6 +986,7 @@ const NewPostScheduleField = () => {
 //---------------
 const NewPostPreviewCard = () => {
   const { t, locale } = useI18n();
+  const publishMode = useNewPostStore((s) => s.publishMode);
   const startAt = useNewPostStore((s) => s.startAt);
   const times = useNewPostStore((s) => s.times);
   const timezone = useNewPostStore((s) => s.timezone);
@@ -892,6 +1013,11 @@ const NewPostPreviewCard = () => {
       return null;
     }
   }, [startAt, timezone, filledTopic, filledTimes]);
+
+  // No schedule to preview in ASAP mode: the video publishes the moment
+  // generation finishes. The return sits after every hook — an early return
+  // above would break the hooks order on mode switches.
+  if (publishMode === 'asap') return null;
 
   const outOfWindow =
     preview !== null && preview.some((slot) => !validateScheduleWindow(new Date(slot.slotAtISO)).ok);
@@ -1000,17 +1126,18 @@ const NewPostCostSummary = () => {
 const NewPostSubmitRow = () => {
   const { t } = useI18n();
   const pending = useNewPostStore((s) => s.pending);
+  const isAsap = useNewPostStore((s) => s.publishMode) === 'asap';
   return (
     <button type="submit" disabled={pending} className={PRIMARY_BUTTON_CLASS}>
       {pending ? (
         <>
           <SpinnerIcon />
-          {t('newPost.submitting')}
+          {t(isAsap ? 'newPost.submittingAsap' : 'newPost.submitting')}
         </>
       ) : (
         <>
           <ComposeIcon />
-          {t('newPost.submit')}
+          {t(isAsap ? 'newPost.submitAsap' : 'newPost.submit')}
         </>
       )}
     </button>

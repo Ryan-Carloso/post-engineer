@@ -258,6 +258,12 @@ describe('/api/schedule', () => {
     expect(db.selectArgs.some((arg) => arg.includes('bluesky_account_ids'))).toBe(true);
   });
 
+  it('GET includes publish_mode in the select', async () => {
+    const db = mockSupabase({ list: { data: [], error: null } });
+    await GET();
+    expect(db.selectArgs.some((arg) => arg.includes('publish_mode'))).toBe(true);
+  });
+
 
 
 

@@ -17,6 +17,10 @@ the order — you never need to guess or read docs to know what comes next:
 | 009 | `migrations/009_batch-charge-task-correlation.sql` | Backfill `token_transactions.engine_task_id` for **single-slot** batch charges, so a scheduled post's prepaid charge can be resolved from its engine task id (fixes history rows stuck in `running` when the engine drops a task). Multi-slot batches are deliberately left NULL — one charge covers several videos. Plus two indexes for the gone-task reconciliation |
 | 010 | `migrations/010_scheduled-post-progress-history.sql` | `scheduled_post_progress_history`: every observed (progress, stage) transition per post, recorded change-only by `GET /api/schedule/status`; cascade-deletes with the post |
 | 011 | `migrations/011_schedules-drop-persona-owner-unique.sql` | Drop `schedules_persona_owner` (the legacy one-schedule-per-persona unique constraint). Only databases bootstrapped from the old `apps/web/supabase/` chain carry it; it makes every batch after a persona's first one fail. The canonical `001_schema.sql` never declared it |
+| 012 | `migrations/012_schedules-optional-persona-snapshot.sql` | Let a post exist without a persona: `schedules.persona_id` becomes nullable, and the editorial definition the persona used to supply (voice, language, niche, video aspect, paragraph count) is snapshotted on the schedule row so the engine can generate faceless posts reproducibly |
+| 013 | `migrations/013_schedules-voice-audio-url-snapshot.sql` | Snapshot the persona-less audio voice URL (`post_voice_audio_url`) on the schedule, so audio-voice posts keep their voice at tick time instead of re-resolving (and rejecting) it |
+| 014 | `migrations/014_videos-storage-bucket.sql` | Create the private `videos` storage bucket (plus RLS policies) so the engine can archive final videos at `{user_id}/{persona_id\|faceless}/{task_id}/final-1.mp4` |
+| 015 | `migrations/015_schedules-publish-mode.sql` | `schedules.publish_mode` (`scheduled` default, CHECK-pinned to `scheduled`/`asap`): records whether a post publishes at its slot times or ASAP (the moment generation finishes, no scheduled time) |
 
 ## How to apply
 

@@ -218,7 +218,7 @@ async function getHandler(
 
   const { data: schedule, error: scheduleError } = await supabase
     .from('schedules')
-    .select('id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, timezone, post_language, post_voice_id, post_video_aspect, post_niche, post_paragraph_number, post_face_quality')
+    .select('id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, timezone, post_language, post_voice_id, post_video_aspect, post_niche, post_paragraph_number, post_face_quality, publish_mode')
     .eq('id', row.schedule_id)
     .eq('user_id', auth.userId)
     .maybeSingle();
@@ -251,6 +251,9 @@ async function getHandler(
     post_niche: string | null;
     post_paragraph_number: number | null;
     post_face_quality: string | null;
+    // Migration 015. Read defensively: only the literal 'asap' counts —
+    // a pre-015 row (or a garbage value) is a scheduled post.
+    publish_mode: string | null;
   } | null;
   // Ownership re-check: the service client (API-key/OAuth callers)
   // bypasses RLS, so the schedule must belong to the caller.
@@ -335,6 +338,7 @@ async function getHandler(
       linkedinAccountIds: scheduleRow.linkedin_account_ids ?? [],
       blueskyAccountIds: scheduleRow.bluesky_account_ids ?? [],
       timezone: scheduleRow.timezone,
+      publishMode: scheduleRow.publish_mode === 'asap' ? 'asap' : 'scheduled',
     },
     persona: personaRow ? { id: personaRow.id, name: personaRow.name } : null,
     generation: buildGenerationFacts(row, scheduleRow),

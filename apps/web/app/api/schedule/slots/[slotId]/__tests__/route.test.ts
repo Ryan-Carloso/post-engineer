@@ -420,6 +420,7 @@ const SCHEDULE_ROW = {
   linkedin_account_ids: [],
   bluesky_account_ids: ['bsky1'],
   timezone: 'Europe/Lisbon',
+  publish_mode: 'scheduled',
 };
 
 describe('GET /api/schedule/slots/[slotId]', () => {
@@ -467,6 +468,47 @@ describe('GET /api/schedule/slots/[slotId]', () => {
       timezone: 'Europe/Lisbon',
     });
     expect(body.persona).toEqual({ id: 'p1', name: 'Viva Leve' });
+  });
+
+  it('exposes the asap publish mode on the schedule payload', async () => {
+    const client = mockSlotsClient({
+      slot: SLOT_DETAIL_ROW,
+      schedule: { ...SCHEDULE_ROW, publish_mode: 'asap' },
+      persona: { id: 'p1', name: 'Viva Leve' },
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
+      params: Promise.resolve({ slotId: 'slot-1' }),
+    });
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { success: boolean; schedule: Record<string, unknown> };
+    expect(body.success).toBe(true);
+    expect(body.schedule.publishMode).toBe('asap');
+  });
+
+  it('narrows a missing publish mode to scheduled', async () => {
+    // Pre-015 rows have no column value: they are scheduled posts by
+    // construction, so the payload must read 'scheduled', not null.
+    const { publish_mode: _dropped, ...rowWithoutMode } = SCHEDULE_ROW;
+    const client = mockSlotsClient({
+      slot: SLOT_DETAIL_ROW,
+      schedule: rowWithoutMode,
+      persona: { id: 'p1', name: 'Viva Leve' },
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
+      params: Promise.resolve({ slotId: 'slot-1' }),
+    });
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { success: boolean; schedule: Record<string, unknown> };
+    expect(body.success).toBe(true);
+    expect(body.schedule.publishMode).toBe('scheduled');
   });
 
   it('skips the persona lookup for a slot on a persona-less schedule', async () => {
