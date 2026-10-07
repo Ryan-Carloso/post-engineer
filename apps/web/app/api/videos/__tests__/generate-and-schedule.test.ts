@@ -1818,6 +1818,36 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(vi.mocked(isPersonaAllowed)).not.toHaveBeenCalled();
     });
 
+    it('snapshots the audioUrl for a persona-less audio post so the engine tick can resolve its voice', async () => {
+      // Without this column the engine's voice_for pre-dispatch check would
+      // fail every slot of an audioUrl post with "post resolves no voice".
+      const res = await post(
+        baseBody({
+          personaId: undefined,
+          options: { faceless: true, audioUrl: 'https://example.com/voice.mp3' },
+        }),
+      );
+      expect(res.status).toBe(200);
+      const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
+      expect(scheduleRows).toHaveLength(1);
+      expect(scheduleRows[0].persona_id).toBeNull();
+      expect(scheduleRows[0].post_voice_id).toBeNull();
+      expect(scheduleRows[0].post_voice_audio_url).toBe('https://example.com/voice.mp3');
+    });
+
+    it('does not snapshot a signed voice URL for a persona-backed audio-voice post', async () => {
+      // preparePersona signs voice_audio_path into a 1-hour URL for the
+      // direct dispatch; snapshotting it would store an expired URL that
+      // shadows the fresh re-signing at tick time. The tick must re-sign
+      // from the persona embed instead.
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, voice_id: null, voice_audio_path: 'u/v.mp3' } });
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+      const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
+      expect(scheduleRows[0].post_voice_audio_url).toBeNull();
+      expect(scheduleRows[0].post_voice_id).toBeNull();
+    });
+
     it('charges the faceless rate and never touches library images for a persona-less post', async () => {
       const res = await post(baseBody({ personaId: undefined, options: { faceless: true, voiceId: 'voice-eleven' } }));
       expect(res.status).toBe(200);

@@ -95,11 +95,12 @@ class BatchGenerator:
             # could never publish is the more fundamental failure, and this
             # check is free.
             validate_publish_plan(schedule, topic)
-            # `PersonaParams` rejects a job with neither voice_id nor
-            # voice_audio_url, so a schedule that resolves no voice can never
-            # generate. Checked before the dispatch: failing the slot now
-            # gives a readable reason (and refunds) instead of an opaque
-            # engine rejection after the request left.
+            # `PersonaParams` requires exactly one of voice_id / voice_audio_url,
+            # so a schedule that resolves no voice can never generate. Checked
+            # before the dispatch: failing the slot now gives a readable reason
+            # instead of an opaque engine rejection after the request left.
+            # (No refund on this path: the slot never reached the dispatch a
+            # refund is anchored to.)
             voice_for(identity)
             faceless = slot_faceless(slot)
             request = TaskVideoRequest(

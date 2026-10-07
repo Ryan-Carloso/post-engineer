@@ -1036,6 +1036,12 @@ async function postHandler(request: Request): Promise<NextResponse> {
     // with — writing them here is what makes a scheduled post reproducible
     // when the persona is edited (or deleted) afterwards.
     post_voice_id: prep.voiceIdValue ?? null,
+    // Snapshot the RAW request audioUrl, not the resolved voiceAudioUrl: for
+    // a persona-backed post that is a 1-hour signed URL of the persona's
+    // voice_audio_path, and snapshotting it would store an expired URL that
+    // shadows the fresh re-signing at tick time. The raw URL is only ever a
+    // stable remote URL (validated + SSRF-checked above).
+    post_voice_audio_url: validatedOptions.audioUrl ?? null,
     post_script_prompt: prep.scriptPrompt,
     post_niche: prep.niche,
     post_language: prep.language,
