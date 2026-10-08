@@ -1036,6 +1036,48 @@ class PublishRetryLimitTests(unittest.TestCase):
         scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
         self.assertEqual(store.updates[0][1]["status"], "failed")
 
+    def test_refund_soft_failure_is_logged_loudly(self):
+        # refund_batch_tokens returns a bool: False means the RPC answered
+        # but the charge was NOT refunded. Per the billing rule, a soft
+        # failure must be logged loudly — and must not break the tick.
+        from app.services.upload_publisher import PublishError
+
+        store = _FakeStore()
+        store.ready_due_slots = lambda now: [self._slot(publish_attempts=2)]
+
+        def soft_fail(user_id, generation_id, refund_key, amount, reason):
+            store.refund_batch_calls.append(
+                (user_id, generation_id, refund_key, amount, reason)
+            )
+            return False
+
+        store.refund_batch_tokens = soft_fail
+        state = MagicMock()
+        state.get_task.return_value = {
+            "state": 1, "videos": [self.video_path],
+            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+        }
+        publish = MagicMock(side_effect=PublishError("boom"))
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=state,
+            publish_video=publish,
+        )
+        scheduler.publisher.base_url = "https://post-engineer.com"
+        scheduler.publisher.api_secret = "secret"
+        with patch("app.services.fill_schedule.publish.logger") as mock_logger:
+            published = scheduler.publish_due(
+                datetime(2026, 9, 7, 12, 0, tzinfo=UTC)
+            )
+        self.assertEqual(published, 0)
+        self.assertEqual(store.updates[0][1]["status"], "failed")
+        error_messages = [
+            str(call.args[0]) for call in mock_logger.error.call_args_list
+        ]
+        self.assertTrue(
+            any("refund" in message for message in error_messages),
+            f"expected a loud refund-failure log, got: {error_messages}",
+        )
+
 
 class NotifyIntegrationTests(unittest.TestCase):
     """Discord events on the stages - injected, fire-and-forget, no crash."""

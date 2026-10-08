@@ -242,7 +242,7 @@ class BatchPublisher:
                 )
                 batch_generation_id = f"batch:{schedule_id}"
                 try:
-                    self.store.refund_batch_tokens(
+                    refunded = self.store.refund_batch_tokens(
                         user_id,
                         batch_generation_id,
                         f"{batch_generation_id}:slot:{slot['id']}:publish",
@@ -254,6 +254,16 @@ class BatchPublisher:
                         f"fill_schedule: refund failed for publish-failed "
                         f"slot {slot['id']}: {exc}"
                     )
+                else:
+                    # The RPC answered but the charge was NOT refunded: a
+                    # soft failure. Log loudly (billing rule) and keep the
+                    # tick running — the slot is already terminal.
+                    if not refunded:
+                        logger.error(
+                            f"fill_schedule: refund not applied for "
+                            f"publish-failed slot {slot['id']}: rpc returned "
+                            f"not-refunded"
+                        )
         else:
             logger.error(
                 "fill_schedule: cannot refund publish-failed slot without "
