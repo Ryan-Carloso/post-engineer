@@ -253,6 +253,45 @@ class CompleteTaskTests(unittest.TestCase):
             tm._complete_task(self.task_id, _params())
         track.assert_not_called()
 
+    def test_complete_task_attaches_cost_usd_to_generated_event(self):
+        """The Modal GPU cost rides the direct video_generated event as a
+        PostHog-only property — the API layer strips it from responses."""
+        with (
+            patch.object(tm, "track_event") as track,
+            patch.object(tm.task_webhook, "notify_terminal_task"),
+        ):
+            tm._complete_task(self.task_id, _params(), cost_usd=0.1)
+        track.assert_called_once_with(
+            "video_generated",
+            {
+                "task_id": self.task_id,
+                "user_id": "user-1",
+                "flow": "direct",
+                "pipeline": "video",
+                "cost_usd": 0.1,
+            },
+        )
+
+    def test_complete_task_omits_cost_usd_when_absent(self):
+        """Faceless videos (no Modal intro) carry no cost property at all:
+        unknown cost is absence, never zero."""
+        with (
+            patch.object(tm, "track_event") as track,
+            patch.object(tm.task_webhook, "notify_terminal_task"),
+        ):
+            tm._complete_task(self.task_id, _params())
+        _, props = track.call_args[0]
+        self.assertNotIn("cost_usd", props)
+
+    def test_complete_task_ignores_non_numeric_cost_usd(self):
+        with (
+            patch.object(tm, "track_event") as track,
+            patch.object(tm.task_webhook, "notify_terminal_task"),
+        ):
+            tm._complete_task(self.task_id, _params(), cost_usd="free")
+        _, props = track.call_args[0]
+        self.assertNotIn("cost_usd", props)
+
 
 class FailTaskTests(unittest.TestCase):
     def setUp(self):
