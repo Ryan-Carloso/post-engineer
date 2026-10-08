@@ -802,6 +802,10 @@ class PublishDueTests(unittest.TestCase):
         # The published bytes must be the verified R2 archive contents, not
         # a re-read from the (possibly recycled) local disk.
         self.assertEqual(kwargs["video_bytes"], b"fake-video-bytes")
+        # Only the basename is sent upstream; a None-swapped or full-path
+        # video_path would break the provider upload.
+        self.assertEqual(kwargs["video_path"], os.path.basename(self.video_path))
+        self.assertEqual(kwargs["content_type"], "video/mp4")
         self.assertEqual(store.updates[0][1]["status"], "published")
 
     def test_scheduled_publish_reads_from_the_verified_archive_path(self):
