@@ -22,6 +22,17 @@ name: mutation
 # engine: app/**/*.py). If a PR touches no source files for an app, that
 # app's mutation step is skipped gracefully and the check still succeeds.
 #
+# Speed (2026-10-08): the engine job is sharded by file — one matrix leg
+# per changed file, each on its own runner. mutmut's own incremental
+# engine is fed by a per-PR/per-file cache of apps/engine/mutants/, so
+# synchronize re-runs only re-test mutants invalidated by source changes.
+# Stryker runs incrementally (`incremental: true` + a per-PR cache of the
+# incremental file) so synchronize re-runs only re-test changed mutants.
+# (Deliberately NOT set: mutmut's `mutate_only_covered_lines` — its extra
+# in-process coverage run breaks the subsequent stats collection on
+# test_material.py's order-sensitive tests (3/3 local repros); revisit
+# after that isolation bug is fixed.)
+#
 # Results: per-app artifacts (Stryker HTML report / mutmut stats dir) and
 # the mutation score in the job summary. The free Stryker dashboard is
 # intentionally NOT wired (needs an API key secret); artifacts suffice.
@@ -59,6 +70,21 @@ jobs:
         with:
           # Full history: the changed-files diff needs origin/<base>.
           fetch-depth: 0
+
+      # Stryker incremental state. Without this cache, `incremental: true`
+      # is a no-op on ephemeral runners — the cache is the point: each
+      # synchronize reuses the previous run's results and only re-tests
+      # changed mutants. run_id is in the key because actions/cache entries
+      # are immutable (re-saving under an existing key is a silent no-op),
+      # so every run needs a fresh key; restore-keys picks the latest one
+      # from this PR (or from manual dispatches).
+      - name: Restore Stryker incremental state
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: apps/${{ matrix.app }}/reports/stryker-incremental.json
+          key: stryker-inc-${{ matrix.app }}-pr-${{ github.event.pull_request.number || 'manual' }}-${{ github.run_id }}
+          restore-keys: |
+            stryker-inc-${{ matrix.app }}-pr-${{ github.event.pull_request.number || 'manual' }}-
 
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
@@ -166,14 +192,80 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # Python mutation testing for the engine (mutmut 3.x over pytest).
-  # Separate job (not matrix): the toolchain (uv, system deps) is entirely
-  # different from the Node/pnpm Stryker jobs above.
-  mutation-engine:
-    name: mutation (engine)
+  #
+  # Sharded by file: one matrix leg per changed file, so a PR touching N
+  # files gets N parallel runners instead of one runner grinding through
+  # every mutant sequentially. Each leg is a fresh VM, so the per-leg
+  # pyproject.toml patch below cannot collide across legs (same reasoning
+  # as the PR #104 calibration note in AGENTS.md). Jobs beyond the
+  # account's concurrency limit simply queue.
+  #
+  # The statically-named `mutation (engine)` aggregator at the end is what
+  # the branch ruleset's required check matches: matrix legs render as
+  # "mutation (engine shard) (<file>)" and can never satisfy an exact-name
+  # required check, so without the aggregator a required "mutation
+  # (engine)" would block every PR forever.
+  mutation-engine-changes:
+    name: mutation (engine) / changed files
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      files_json: ${{ steps.changed.outputs.files_json }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Full history: the changed-files diff needs origin/<base>.
+          fetch-depth: 0
+
+      # Changed engine source files as a JSON array, relative to
+      # apps/engine (mutmut's working directory). Excludes deleted files.
+      # - PR: the PR's changed files; [] when the PR touches no engine
+      #   source, and the shard job below skips gracefully.
+      # - Manual dispatch with a scope input: the glob expanded relative
+      #   to apps/engine; [] when it matches nothing (skip gracefully).
+      # - Manual dispatch without scope: [""] — a single shard whose empty
+      #   file means "full app/ scope, don't pin only_mutate".
+      - name: Compute engine files to mutate
+        id: changed
+        run: |
+          set -uo pipefail
+          files_json="[]"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            files_json="$(git diff --name-only --diff-filter=ACMR \
+              "origin/${{ github.base_ref }}...HEAD" \
+              -- 'apps/engine/app/**/*.py' \
+              | sed 's|^apps/engine/||' \
+              | jq -R -s -c 'split("\n") | map(select(length > 0))')"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ -n "${{ inputs.scope }}" ]; then
+              cd apps/engine || exit 1
+              shopt -s globstar nullglob
+              matches=( ${{ inputs.scope }} )
+              files_json="$(printf '%s\n' "${matches[@]}" \
+                | jq -R -s -c 'split("\n") | map(select(length > 0))')"
+            else
+              files_json='[""]'
+            fi
+          fi
+          echo "files_json=$files_json" >> "$GITHUB_OUTPUT"
+          echo "Engine files to mutate: $files_json"
+
+  mutation-engine-shard:
+    # Display names render as e.g. "mutation (engine shard)
+    # (app/services/task.py)".
+    name: mutation (engine shard)
+    needs: [mutation-engine-changes]
+    if: needs.mutation-engine-changes.outputs.files_json != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        file: ${{ fromJSON(needs.mutation-engine-changes.outputs.files_json) }}
     defaults:
       run:
         working-directory: apps/engine
@@ -181,8 +273,46 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          # Full history: the changed-files diff needs origin/<base>.
+          # Full history: not strictly needed per shard, kept for parity
+          # with the other jobs.
           fetch-depth: 0
+
+      # Artifact names containing '/' restore as nested directories —
+      # flatten them so each shard's report (and cache key) uses one
+      # flat slug.
+      - name: Compute shard slug
+        id: slug
+        run: |
+          file="${{ matrix.file }}"
+          if [ -z "$file" ]; then
+            slug="full"
+          else
+            slug="${file//\//-}"
+          fi
+          echo "slug=$slug" >> "$GITHUB_OUTPUT"
+
+      # mutmut's incremental engine: with a previous mutants/ state dir
+      # (.meta verdicts + mutmut-stats.json), only mutants invalidated by
+      # source/config changes are re-tested — no flag needed. Ephemeral
+      # runners rebuild mutants/ from scratch every run, so without this
+      # cache the incremental path never kicks in. Namespaced per PR and
+      # per file: each shard only ever mutates its own file, so caches
+      # must not mix. run_id is in the key because cache entries are
+      # immutable (re-saving under an existing key is a silent no-op).
+      - name: Restore mutmut incremental state
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: apps/engine/mutants/
+          key: mutmut-${{ steps.slug.outputs.slug }}-pr-${{ github.event.pull_request.number || 'manual' }}-${{ github.run_id }}
+          restore-keys: |
+            mutmut-${{ steps.slug.outputs.slug }}-pr-${{ github.event.pull_request.number || 'manual' }}-
+
+      # Runtime artifacts from a previous run are not part of mutmut's
+      # incremental state — drop them so no test ever observes another
+      # run's leftovers.
+      - name: Prune ephemeral artifacts from restored cache
+        run: |
+          rm -rf mutants/storage mutants/.pytest_cache
 
       - name: Install system dependencies
         run: |
@@ -196,77 +326,36 @@ jobs:
       - name: Sync dependencies
         run: uv sync --frozen
 
-      # Changed engine source files, relative to apps/engine (mutmut's
-      # working directory). Excludes deleted files. Empty when the PR
-      # touches no engine source — or on manual dispatch (full app/ scope).
-      # NOTE: this step runs at the workspace root — the job's default
-      # working-directory (apps/engine) would break the repo-root pathspec.
-      - name: Compute changed files
-        id: changed
-        working-directory: ${{ github.workspace }}
-        run: |
-          set -uo pipefail
-          files=""
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            files="$(git diff --name-only --diff-filter=ACMR \
-              "origin/${{ github.base_ref }}...HEAD" \
-              -- 'apps/engine/app/**/*.py' \
-              | sed 's|^apps/engine/||' | paste -sd ',' -)"
-          fi
-          echo "files=$files" >> "$GITHUB_OUTPUT"
-          if [ -n "$files" ]; then
-            echo "Mutating changed files: $files"
-          else
-            echo "No changed engine source files (or manual dispatch: full app/ scope)."
-          fi
-
       # mutmut 3.x reads its config only from pyproject.toml — there is no
       # CLI flag to override the mutated file set. Patch only_mutate in
-      # place on the ephemeral runner (never committed). On manual dispatch
-      # with a scope input, expand the glob (relative to apps/engine) and
-      # pin only_mutate to the matched files, same shape as the per-PR path.
-      - name: Scope mutmut to changed files
-        id: mutmut-scope
-        if: steps.changed.outputs.files != '' || (github.event_name == 'workflow_dispatch' && inputs.scope != '')
+      # place on the ephemeral runner (never committed). An empty matrix
+      # file means full app/ scope (manual dispatch without a scope
+      # input): leave only_mutate untouched.
+      - name: Scope mutmut to this shard's file
+        if: matrix.file != ''
         env:
-          CHANGED_FILES: ${{ steps.changed.outputs.files }}
-          DISPATCH_SCOPE: ${{ inputs.scope }}
-          EVENT_NAME: ${{ github.event_name }}
+          SHARD_FILE: ${{ matrix.file }}
         run: |
           uv run python - <<'EOF'
-          import glob
           import os
           import re
 
-          if os.environ["EVENT_NAME"] == "workflow_dispatch" and os.environ["DISPATCH_SCOPE"]:
-              scope = os.environ["DISPATCH_SCOPE"]
-              files = sorted({f for f in glob.glob(scope, recursive=True) if os.path.isfile(f)})
-              print(f"scope '{scope}' matched {len(files)} file(s)")
-          else:
-              files = os.environ["CHANGED_FILES"].split(",")
-
+          shard_file = os.environ["SHARD_FILE"]
           p = "pyproject.toml"
           s = open(p).read()
           idx = s.index("[tool.mutmut]")
           head, tail = s[:idx], s[idx:]
-          body = "\n".join(f'    "{f}",' for f in files)
           tail = re.sub(
               r"only_mutate = \[[^\]]*\]",
-              f"only_mutate = [\n{body}\n]",
+              f'only_mutate = [\n    "{shard_file}",\n]',
               tail,
               count=1,
           )
           open(p, "w").write(head + tail)
-          print(f"only_mutate set to {len(files)} file(s)")
-          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
-              fh.write(f"matched={'true' if files else 'false'}\n")
+          print(f"only_mutate set to [{shard_file}]")
           EOF
 
       - name: Run mutmut mutation testing
-        if: >-
-          steps.changed.outputs.files != '' ||
-          (github.event_name == 'workflow_dispatch' &&
-           steps.mutmut-scope.outputs.matched != 'false')
         run: uv run mutmut run
 
       - name: Export CI/CD stats
@@ -278,9 +367,9 @@ jobs:
 
       - name: Upload mutmut report
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@ea165f8d65b6e75f139c82e0e9b575b73 # v4
         with:
-          name: mutation-report-engine-${{ github.event.pull_request.number || 'manual' }}
+          name: mutation-report-engine-${{ github.event.pull_request.number || 'manual' }}-${{ steps.slug.outputs.slug }}
           path: apps/engine/mutants/
           if-no-files-found: ignore
 
@@ -288,8 +377,10 @@ jobs:
         if: always()
         run: |
           set -uo pipefail
+          label="${{ matrix.file }}"
+          if [ -z "$label" ]; then label="full scope"; fi
           {
-            echo "## Mutation testing — engine"
+            echo "## Mutation testing — engine ($label)"
             echo ""
             STATS="mutants/mutmut-cicd-stats.json"
             if [ -f "$STATS" ]; then
@@ -307,8 +398,38 @@ jobs:
               )"
               echo "**Mutation score: ${SCORE}%** (${KILLED} killed, ${SURVIVED} survived, ${TIMEOUT} timed out, ${TOTAL} mutants)"
             else
-              echo "No mutation report produced — no engine source files changed, or the run failed."
+              echo "No mutation report produced for $label — the run failed."
             fi
             echo ""
-            echo "Full report: download the \`mutation-report-engine-\` artifact from this run."
+            echo "Full report: download the \`mutation-report-engine-\` artifact for this shard from this run."
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Single, statically-named gate: the branch ruleset's required check
+  # "mutation (engine)" matches this job's one check run.
+  mutation-engine:
+    name: mutation (engine)
+    needs: [mutation-engine-changes, mutation-engine-shard]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Aggregate shard results
+        run: |
+          changes="${{ needs.mutation-engine-changes.result }}"
+          shards="${{ needs.mutation-engine-shard.result }}"
+          echo "changed-files job: $changes; shard jobs: $shards"
+          if [ "$changes" != "success" ]; then
+            echo "::error::changed-files computation did not succeed ($changes)"
+            exit 1
+          fi
+          case "$shards" in
+            success|skipped)
+              echo "mutation (engine): $shards — no shard failures."
+              ;;
+            *)
+              echo "::error::mutation shards ended as '$shards'"
+              exit 1
+              ;;
+          esac
