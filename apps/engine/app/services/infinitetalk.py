@@ -279,5 +279,9 @@ def _generate_intro_impl(
     _raise_for_status(response, "download")
     if not response.content:
         raise InfiniteTalkError("InfiniteTalk returned an empty video")
+    # The task storage dir can vanish between utils.task_dir() creating it
+    # and the Modal job finishing its (multi-minute) poll, e.g. a cleanup
+    # between stage retries. Recreate it instead of crashing the task.
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     Path(output_path).write_bytes(response.content)
     return output_path, job_id, cost_usd
