@@ -61,11 +61,25 @@ class TestUploadPostYouTube(unittest.TestCase):
         uploaded_file = mock_post.call_args[1]["files"]["video"]
         self.assertEqual(uploaded_file[0], "v.mp4")
         self.assertEqual(uploaded_file[1].read(), b"fake")
+        # The multipart part must carry the mp4 content type; a None or
+        # mistyped content type would make the upstream reject the upload.
+        self.assertEqual(uploaded_file[2], "video/mp4")
         self.assertEqual(_get(data, "youtube_title"), "Mi Short")
         self.assertEqual(_get(data, "youtube_description"), "Descripción")
         self.assertEqual(_get_all(data, "tags[]"), ["ia", "shorts"])
         self.assertEqual(_get(data, "privacyStatus"), "unlisted")
         self.assertEqual(_get(data, "containsSyntheticMedia"), "true")
+
+    @patch("app.services.upload_post.config.app", _CONFIG_BASE)
+    @patch("app.services.upload_post.requests.post")
+    def test_empty_bytes_are_rejected_without_uploading(self, mock_post):
+        # The bytes come from the R2 archive; empty bytes mean the archive
+        # read failed and must not reach the upstream as a 0-byte upload.
+        svc = UploadPostService()
+        result = svc.upload_video("/fake/v.mp4", "T", b"")
+        self.assertFalse(result["success"])
+        self.assertEqual(result["error"], "Archived video is empty")
+        mock_post.assert_not_called()
 
     @patch("app.services.upload_post.config.app", _CONFIG_BASE)
     @patch("app.services.upload_post.os.path.exists", return_value=True)

@@ -134,6 +134,14 @@ unavailable, so this is safe on any host.
 - Verify against a real mutmut transform, not a hand-rolled one: use
   mutmut's own `mutate_file_contents` on the module, or the `mutants/`
   artifact from a failed CI run.
+- **`patch.dict(os.environ, ..., clear=True)` blinds mutmut.** mutmut 3.x
+  activates the mutant under test through the `MUTANT_UNDER_TEST` env var,
+  read at call time by its trampoline; a plain `clear=True` wipes it, so
+  every mutant trivially "survives" (the original code always runs) and the
+  stats run associates no tests to the mutated functions. Tests that need a
+  cleared env must preserve the variable (pattern: `_isolated_environ` in
+  `test/services/test_video_storage.py`). Outside mutmut it is unset, so the
+  helper behaves exactly like `patch.dict(clear=True)`.
 
 ---
 

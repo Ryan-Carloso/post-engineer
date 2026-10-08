@@ -999,6 +999,54 @@ class TestPublishFailureDiscordAlert(unittest.TestCase):
         self.assertEqual(props["stage"], "publish")
 
 
+class TestStartR2Requirement(unittest.TestCase):
+    """start() fails fast when video generation needs R2 but it is unconfigured."""
+
+    def _no_r2_env(self):
+        # Unset only the R2 vars; keep MUTANT_UNDER_TEST for mutmut runs.
+        env = os.environ.copy()
+        for var in ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"):
+            env.pop(var, None)
+        return patch.dict(os.environ, env, clear=True)
+
+    def test_video_run_fails_fast_without_r2(self):
+        # With stop_at="video" (full pipeline) and no R2 credentials, the
+        # require_r2_configuration guard must fire before any generation
+        # work starts. A mutant removing the guard would let the pipeline
+        # proceed to generate_script.
+        params = VideoParams(video_subject="s")
+        with (
+            self._no_r2_env(),
+            patch.object(tm.sm.state, "update_task"),
+            patch.object(tm, "send_discord"),
+            patch.object(tm, "track_event"),
+            patch.object(tm, "generate_script") as gen_script,
+            patch.object(tm, "_fail_task") as fail_task,
+        ):
+            tm.start(task_id="task-r2-guard", params=params)
+        gen_script.assert_not_called()
+        fail_task.assert_called_once()
+        self.assertIn("R2", str(fail_task.call_args))
+
+    def test_partial_run_skips_r2_check(self):
+        # stop_at != "video" means no video will be generated, so the R2
+        # guard must not fire. A mutant flipping the condition would fail
+        # partial runs that never touch R2.
+        params = VideoParams(video_subject="s")
+        with (
+            self._no_r2_env(),
+            patch.object(tm.sm.state, "update_task"),
+            patch.object(tm, "send_discord"),
+            patch.object(tm, "track_event"),
+            patch.object(tm, "generate_script", return_value="script") as gen_script,
+            patch.object(tm, "save_script_data"),
+            patch.object(tm, "_complete_task"),
+        ):
+            result = tm.start(task_id="task-r2-skip", params=params, stop_at="script")
+        gen_script.assert_called_once()
+        self.assertEqual(result, {"script": "script"})
+
+
 class TestShouldSendFailureAlertLockFallback(unittest.TestCase):
     """If the dedupe lock can't be acquired in time, err on the side of alerting."""
 
