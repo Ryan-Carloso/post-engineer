@@ -35,15 +35,6 @@ def r2_endpoint() -> str:
     return f"https://{_r2_account_id()}.r2.cloudflarestorage.com"
 
 
-def r2_is_configured() -> bool:
-    """True when all mandatory R2 credentials are present."""
-    return bool(
-        _r2_account_id()
-        and (os.getenv("R2_ACCESS_KEY_ID") or "").strip()
-        and (os.getenv("R2_SECRET_ACCESS_KEY") or "").strip()
-    )
-
-
 def require_r2_configuration() -> None:
     """Fail before video work can use an unconfigured archive backend."""
     missing = [
@@ -203,5 +194,15 @@ def upload_final_video(object_path: str, local_path: str) -> Optional[str]:
 
 
 def create_signed_url(object_path: str, expires_in: int = _SIGNED_URL_TTL_SECONDS) -> Optional[str]:
-    """Mint a time-limited R2 URL for a stored final video."""
-    return create_signed_url_r2(object_path, expires_in)
+    """Mint a time-limited R2 URL for a stored final video.
+
+    Returns None when the archive cannot be signed — including when R2
+    credentials are absent. Serving callers translate None into a 404; the
+    R2-mandatory precondition is enforced at generation and publish time,
+    not on this user-facing read path.
+    """
+    try:
+        return create_signed_url_r2(object_path, expires_in)
+    except RuntimeError as exc:
+        logger.error(f"video_storage: cannot sign {object_path}: {exc}")
+        return None
