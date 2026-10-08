@@ -22,10 +22,18 @@ class PublishTaskVideosTest(unittest.TestCase):
         os.environ["MPT_UPLOAD_API_BASE_URL"] = "https://post-engineer.com"
         os.environ["MONEYPRINT_API_SECRET"] = "test-shared-secret"
         self._state = sm.MemoryState()
+        storage_patcher = patch.object(
+            task_publish.video_storage, "read_final_video_r2", return_value=b"mp4-bytes"
+        )
+        storage_patcher.start()
+        self.addCleanup(storage_patcher.stop)
         patcher = patch.object(sm, "state", self._state)
         patcher.start()
         self.addCleanup(patcher.stop)
-        self._state.update_task("task_1", state=const.TASK_STATE_PROCESSING, user_id="user-1")
+        self._state.update_task(
+            "task_1", state=const.TASK_STATE_PROCESSING, user_id="user-1",
+            video_storage_path="user-1/faceless/task_1/final-1.mp4",
+        )
 
     def tearDown(self) -> None:
         os.environ.pop("MPT_UPLOAD_API_BASE_URL", None)
@@ -75,6 +83,17 @@ class PublishTaskVideosTest(unittest.TestCase):
                 params=self._request(),
                 video_paths=["/tmp/final.mp4"],
             )
+
+    def test_missing_r2_archive_fails_without_reading_local_video(self) -> None:
+        self._state.update_task("task_1", video_storage_path=None)
+        with patch.object(task_publish.video_storage, "read_final_video_r2") as read_mock:
+            with self.assertRaisesRegex(RuntimeError, "no verified R2 video archive"):
+                task_publish.publish_task_videos(
+                    task_id="task_1",
+                    params=self._request(),
+                    video_paths=["/does/not/exist/final.mp4"],
+                )
+        read_mock.assert_not_called()
 
     def test_publishes_and_records_results(self) -> None:
         with tempfile.NamedTemporaryFile(suffix=".mp4") as video_file:
@@ -181,10 +200,18 @@ class MaybePublishHookTest(unittest.TestCase):
         os.environ["MPT_UPLOAD_API_BASE_URL"] = "https://post-engineer.com"
         os.environ["MONEYPRINT_API_SECRET"] = "test-shared-secret"
         self._state = sm.MemoryState()
+        storage_patcher = patch.object(
+            task_publish.video_storage, "read_final_video_r2", return_value=b"mp4-bytes"
+        )
+        storage_patcher.start()
+        self.addCleanup(storage_patcher.stop)
         patcher = patch.object(sm, "state", self._state)
         patcher.start()
         self.addCleanup(patcher.stop)
-        self._state.update_task("task_1", state=const.TASK_STATE_PROCESSING, user_id="user-1")
+        self._state.update_task(
+            "task_1", state=const.TASK_STATE_PROCESSING, user_id="user-1",
+            video_storage_path="user-1/faceless/task_1/final-1.mp4",
+        )
 
     def tearDown(self) -> None:
         os.environ.pop("MPT_UPLOAD_API_BASE_URL", None)

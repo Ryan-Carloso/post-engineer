@@ -4,6 +4,7 @@ Upload-Post API integration for cross-posting videos to TikTok, Instagram and Yo
 Docs: https://docs.upload-post.com
 """
 import os
+from io import BytesIO
 from typing import Optional
 
 import requests
@@ -30,6 +31,7 @@ class UploadPostService:
         self,
         video_path: str,
         title: str,
+        video_bytes: bytes,
         platforms: Optional[list] = None,
         privacy_level: str = "PUBLIC_TO_EVERYONE",
         youtube_extra: Optional[dict] = None,
@@ -41,54 +43,54 @@ class UploadPostService:
         if platforms is None:
             platforms = self.platforms
 
-        if not os.path.exists(video_path):
-            logger.error(f"Video file not found: {video_path}")
-            return {"success": False, "error": f"Video file not found: {video_path}"}
+        if not video_bytes:
+            return {"success": False, "error": "Archived video is empty"}
 
         logger.info(f"Cross-posting video to {', '.join(platforms)} via Upload-Post...")
 
         try:
-            with open(video_path, 'rb') as video_file:
-                files = {'video': video_file}
+            files = {
+                'video': (os.path.basename(video_path), BytesIO(video_bytes), 'video/mp4')
+            }
 
-                data = [
-                    ('user', self.username),
-                    ('title', title[:2200]),
-                    ('privacy_level', privacy_level),
-                ]
+            data = [
+                ('user', self.username),
+                ('title', title[:2200]),
+                ('privacy_level', privacy_level),
+            ]
 
-                for platform in platforms:
-                    data.append(('platform[]', platform))
+            for platform in platforms:
+                data.append(('platform[]', platform))
 
-                if youtube_extra and any(p.startswith("youtube") for p in platforms):
-                    if "youtube_title" in youtube_extra:
-                        data.append(('youtube_title', youtube_extra["youtube_title"][:100]))
-                    if "youtube_description" in youtube_extra:
-                        data.append(('youtube_description', youtube_extra["youtube_description"]))
-                    for tag in youtube_extra.get("tags", []):
-                        data.append(('tags[]', tag))
-                    data.append(('privacyStatus', youtube_extra.get("privacyStatus", "public")))
-                    data.append(('containsSyntheticMedia', "true"))
+            if youtube_extra and any(p.startswith("youtube") for p in platforms):
+                if "youtube_title" in youtube_extra:
+                    data.append(('youtube_title', youtube_extra["youtube_title"][:100]))
+                if "youtube_description" in youtube_extra:
+                    data.append(('youtube_description', youtube_extra["youtube_description"]))
+                for tag in youtube_extra.get("tags", []):
+                    data.append(('tags[]', tag))
+                data.append(('privacyStatus', youtube_extra.get("privacyStatus", "public")))
+                data.append(('containsSyntheticMedia', "true"))
 
-                headers = {'Authorization': f'Apikey {self.api_key}'}
+            headers = {'Authorization': f'Apikey {self.api_key}'}
 
-                response = requests.post(
-                    f"{self.API_BASE}/api/upload",
-                    headers=headers,
-                    data=data,
-                    files=files,
-                    timeout=300,
-                )
+            response = requests.post(
+                f"{self.API_BASE}/api/upload",
+                headers=headers,
+                data=data,
+                files=files,
+                timeout=300,
+            )
 
-                response.raise_for_status()
-                result = response.json()
+            response.raise_for_status()
+            result = response.json()
 
-                if result.get('success'):
-                    logger.info(f"✅ Video cross-posted successfully! Request ID: {result.get('request_id')}")
-                else:
-                    logger.warning(f"Cross-post failed: {result.get('message', 'Unknown error')}")
+            if result.get('success'):
+                logger.info(f"✅ Video cross-posted successfully! Request ID: {result.get('request_id')}")
+            else:
+                logger.warning(f"Cross-post failed: {result.get('message', 'Unknown error')}")
 
-                return result
+            return result
 
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to cross-post video: {scrub_secret_values(str(e))}")
@@ -137,7 +139,10 @@ upload_post_service = UploadPostService()
 def cross_post_video(
     video_path: str,
     title: str,
+    video_bytes: bytes,
     platforms: Optional[list] = None,
     youtube_extra: Optional[dict] = None,
 ) -> dict:
-    return upload_post_service.upload_video(video_path, title, platforms, youtube_extra=youtube_extra)
+    return upload_post_service.upload_video(
+        video_path, title, video_bytes, platforms, youtube_extra=youtube_extra
+    )

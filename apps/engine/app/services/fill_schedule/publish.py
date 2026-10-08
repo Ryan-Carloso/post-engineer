@@ -10,6 +10,7 @@ from loguru import logger
 
 from app.services import notify as notify_module
 from app.services import upload_publisher
+from app.services import video_storage
 from app.services.analytics import scrub_secret_values, track_event
 from app.services.fill_schedule.constants import (
     SLOT_FAILED,
@@ -98,15 +99,22 @@ class BatchPublisher:
             track_event("video_publish_started", _publish_tracking_context(slot, schedule))
             task = self.task_state.get_task(str(slot["task_id"]))
             videos = (task or {}).get("videos") or []
+            object_path = (task or {}).get("video_storage_path")
             if not videos:
                 self.store.update_slot(
-                    slot["id"], status=SLOT_FAILED, error="task has no finished videos"
+                    slot["id"], status=SLOT_FAILED,
+                    error="task has no finished videos",
+                )
+                continue
+            if not isinstance(object_path, str) or not object_path:
+                self.store.update_slot(
+                    slot["id"], status=SLOT_FAILED,
+                    error="task has no verified R2 video archive",
                 )
                 continue
             try:
+                video_bytes = video_storage.read_final_video_r2(object_path)
                 for video_path in videos:
-                    with open(video_path, "rb") as video_file:
-                        video_bytes = video_file.read()
                     for provider in schedule.get("providers", []):
                         self.publish_video(
                             base_url=self.base_url,
@@ -136,7 +144,7 @@ class BatchPublisher:
                         [str(provider) for provider in schedule.get("providers", [])],
                     ),
                 )
-            except (upload_publisher.PublishError, OSError) as exc:
+            except (upload_publisher.PublishError, OSError, RuntimeError) as exc:
                 # The upstream response body (if any) is logged server-side
                 # only — the Discord alert via safe_reason must not carry
                 # remote-controlled response text.

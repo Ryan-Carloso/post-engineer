@@ -20,6 +20,7 @@ from app.models.publish import PublishParams
 from app.models.schema import TaskVideoRequest
 from app.services import state as sm
 from app.services import upload_publisher
+from app.services import video_storage
 
 BASE_URL_ENV: str = "MPT_UPLOAD_API_BASE_URL"
 SERVICE_KEY_ENV: str = "MONEYPRINT_API_SECRET"
@@ -132,17 +133,21 @@ def publish_task_videos(
     )
 
     results: list[dict[str, object]] = []
+    object_path = existing.get("video_storage_path")
+    if not isinstance(object_path, str) or not object_path:
+        raise RuntimeError(f"task {task_id} has no verified R2 video archive")
+    video_bytes = video_storage.read_final_video_r2(object_path)
+    provider_metadata_by_name = {
+        upload_publisher.YOUTUBE_PROVIDER: metadata.youtube,
+        upload_publisher.INSTAGRAM_PROVIDER: metadata.instagram,
+        upload_publisher.BLUESKY_PROVIDER: metadata.bluesky,
+        upload_publisher.LINKEDIN_PROVIDER: metadata.linkedin,
+    }
     for provider in metadata.providers:
-        provider_metadata = (
-            metadata.youtube
-            if provider == upload_publisher.YOUTUBE_PROVIDER
-            else metadata.instagram
-        )
+        provider_metadata = provider_metadata_by_name.get(provider)
         if provider_metadata is None:  # validated upstream; defensive only
             continue
         for video_path in video_paths:
-            with open(video_path, "rb") as video_file:
-                video_bytes = video_file.read()
             try:
                 result = upload_publisher.publish_video(
                     base_url=base_url,

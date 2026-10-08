@@ -1,28 +1,12 @@
-"""Durable archive for FINAL videos.
+"""Durable R2 archive for FINAL videos.
 
 Local engine disk is ephemeral: a container restart wipes every generated
-file, and /stream/ + /download/ start 404ing. The task STATE already lives
-in Supabase (MPT_STATE_BACKEND=supabase); this module gives the video FILES
-the same durability.
+file, and /stream/ + /download/ start 404ing. Final video bytes therefore
+live exclusively in Cloudflare R2. R2 credentials are mandatory; this module
+never falls back to Supabase Storage or engine-local files.
 
-Two backends are supported:
-
-- **Supabase Storage** (``SUPABASE_URL`` + ``SUPABASE_SERVICE_ROLE_KEY``) —
-  the original backend, still the default so an existing deployment changes
-  nothing. Its Free plan caps a single object at ~50 MB, and the bucket's
-  ``file_size_limit`` is NOT configurable through the API (a PUT setting it
-  is rejected with the same 413 that rejects oversized uploads), so a long
-  1080x1920 render fails to archive and the failure is best-effort.
-- **Cloudflare R2** (``R2_ACCOUNT_ID`` + ``R2_ACCESS_KEY_ID`` +
-  ``R2_SECRET_ACCESS_KEY``) — an S3-compatible bucket with a 5 GB per-object
-  limit and 10 GB free, so the same render archives fine. **The R2 bucket
-  must be named ``videos``**: both backends share the ``STORAGE_BUCKET``
-  constant as the bucket name, and there is no per-backend override —
-  a differently named R2 bucket makes every upload miss and the video
-  unservable.
-
-R2 is opt-in via ``MPT_VIDEO_STORAGE=r2``. When it is set, R2 is used for
-upload and for signed URLs; otherwise the Supabase path runs unchanged.
+The R2 bucket must be named ``videos``. It is private and accessed through
+S3-compatible signed requests.
 
 Scope is deliberately narrow — only the FINAL video (final-1.mp4, the
 post-audio-mux render) is archived. Intermediates (combined-1.mp4),
@@ -35,22 +19,12 @@ Layout inside the bucket (private):
 import os
 from typing import Optional
 
-import requests
 from loguru import logger
 
 STORAGE_BUCKET = "videos"
 FINAL_VIDEO_FILENAME = "final-1.mp4"
 FACELESS_FOLDER = "faceless"
 _SIGNED_URL_TTL_SECONDS = 3600
-
-# R2 access is opt-in: without this the engine keeps using Supabase Storage,
-# so adding credentials is never enough on its own to switch backends.
-_R2_BACKEND_VALUE = "r2"
-
-
-def _r2_selected() -> bool:
-    return (os.getenv("MPT_VIDEO_STORAGE") or "").strip().lower() == _R2_BACKEND_VALUE
-
 
 def _r2_account_id() -> str:
     return (os.getenv("R2_ACCOUNT_ID") or "").strip()
@@ -61,19 +35,21 @@ def r2_endpoint() -> str:
     return f"https://{_r2_account_id()}.r2.cloudflarestorage.com"
 
 
-def r2_is_configured() -> bool:
-    """True when R2 is selected AND all three credentials are present.
-
-    All three are required together: a partial config would build an unsigned
-    or half-valid client and fail at the first PUT, so it is treated as
-    unconfigured instead (archive stays best-effort and the caller falls back).
-    """
-    return bool(
-        _r2_selected()
-        and _r2_account_id()
-        and (os.getenv("R2_ACCESS_KEY_ID") or "").strip()
-        and (os.getenv("R2_SECRET_ACCESS_KEY") or "").strip()
-    )
+def require_r2_configuration() -> None:
+    """Fail before video work can use an unconfigured archive backend."""
+    missing = [
+        name
+        for name, value in (
+            ("R2_ACCOUNT_ID", _r2_account_id()),
+            ("R2_ACCESS_KEY_ID", (os.getenv("R2_ACCESS_KEY_ID") or "").strip()),
+            ("R2_SECRET_ACCESS_KEY", (os.getenv("R2_SECRET_ACCESS_KEY") or "").strip()),
+        )
+        if not value
+    ]
+    if missing:
+        raise RuntimeError(
+            "R2 video storage is required; missing " + ", ".join(missing)
+        )
 
 
 def _r2_client():
@@ -83,7 +59,7 @@ def _r2_client():
     botocore does the signing. Endpoint URL is explicit because R2 is
     S3-compatible but NOT AWS, so the default AWS endpoint would be wrong.
     """
-    import boto3  # imported lazily: the Supabase path must not require it
+    import boto3  # imported lazily so non-video engine operations need no client
 
     return boto3.client(
         "s3",
@@ -127,9 +103,7 @@ def upload_final_video_r2(object_path: str, local_path: str) -> Optional[str]:
     durable copy exists", so a truncated upload can never be mistaken for a
     stored video.
     """
-    if not r2_is_configured():
-        logger.warning("video_storage: R2 not configured, refusing to mark video as stored")
-        return None
+    require_r2_configuration()
     try:
         expected_bytes = os.path.getsize(local_path)
     except OSError as exc:
@@ -160,8 +134,7 @@ def create_signed_url_r2(
     object_path: str, expires_in: int = _SIGNED_URL_TTL_SECONDS
 ) -> Optional[str]:
     """Mint a presigned GET URL for a video stored in R2."""
-    if not r2_is_configured():
-        return None
+    require_r2_configuration()
     try:
         return _r2_client().generate_presigned_url(
             "get_object",
@@ -173,22 +146,22 @@ def create_signed_url_r2(
         return None
 
 
-def _supabase_url() -> str:
-    return (os.getenv("SUPABASE_URL") or "").rstrip("/")
-
-
-def _service_key() -> str:
-    return os.getenv("SUPABASE_SERVICE_ROLE_KEY") or ""
-
-
-def is_configured() -> bool:
-    """True when the engine can reach Supabase Storage (service role)."""
-    return bool(_supabase_url() and _service_key())
-
-
-def _auth_headers() -> dict:
-    key = _service_key()
-    return {"apikey": key, "Authorization": f"Bearer {key}"}
+def read_final_video_r2(object_path: str) -> bytes:
+    """Read a final video from R2; publishing never falls back to local disk."""
+    require_r2_configuration()
+    try:
+        response = _r2_client().get_object(Bucket=STORAGE_BUCKET, Key=object_path)
+        body = response["Body"]
+        try:
+            content = body.read()
+        finally:
+            body.close()
+    except Exception as exc:  # noqa: BLE001 — publishing requires the durable copy
+        logger.error(f"video_storage: R2 read failed for {object_path}: {exc}")
+        raise RuntimeError(f"could not read archived video {object_path} from R2") from exc
+    if not content:
+        raise RuntimeError(f"archived video {object_path} in R2 is empty")
+    return content
 
 
 def storage_object_path(user_id: str, persona_folder: str, task_id: str) -> str:
@@ -216,70 +189,20 @@ def persona_folder(task: dict, params) -> str:
 
 
 def upload_final_video(object_path: str, local_path: str) -> Optional[str]:
-    """Upload the final video to the configured backend.
-
-    R2 when ``MPT_VIDEO_STORAGE=r2`` is selected and configured, otherwise
-    Supabase Storage (the historical default, unchanged for existing
-    deployments).
-
-    Best-effort: returns the object path on success, None on any failure
-    (generation must never fail because the archive hiccuped). Callers
-    record the returned path in the task state so /stream/ and /download/
-    can fall back to it after a restart wipes the local disk.
-    """
-    if _r2_selected():
-        return upload_final_video_r2(object_path, local_path)
-    if not is_configured():
-        logger.warning(
-            "video_storage: SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY not set, skipping archive"
-        )
-        return None
-    url = f"{_supabase_url()}/storage/v1/object/{STORAGE_BUCKET}/{object_path}"
-    try:
-        with open(local_path, "rb") as handle:
-            response = requests.post(
-                url,
-                headers={**_auth_headers(), "Content-Type": "video/mp4", "x-upsert": "true"},
-                data=handle,
-                timeout=600,
-            )
-    except Exception as exc:  # noqa: BLE001 — archive is best-effort
-        logger.error(f"video_storage: upload failed for {object_path}: {exc}")
-        return None
-    if not response.ok:
-        logger.error(
-            f"video_storage: upload failed for {object_path}: "
-            f"{response.status_code} {response.text[:200]}"
-        )
-        return None
-    logger.info(f"video_storage: archived final video to {STORAGE_BUCKET}/{object_path}")
-    return object_path
+    """Upload a final video to the mandatory R2 archive."""
+    return upload_final_video_r2(object_path, local_path)
 
 
 def create_signed_url(object_path: str, expires_in: int = _SIGNED_URL_TTL_SECONDS) -> Optional[str]:
-    """Mint a time-limited signed URL for a stored final video.
+    """Mint a time-limited R2 URL for a stored final video.
 
-    R2 when selected, otherwise the Supabase Storage signing endpoint.
+    Returns None when the archive cannot be signed — including when R2
+    credentials are absent. Serving callers translate None into a 404; the
+    R2-mandatory precondition is enforced at generation and publish time,
+    not on this user-facing read path.
     """
-    if _r2_selected():
-        return create_signed_url_r2(object_path, expires_in)
-    if not is_configured():
-        return None
-    url = f"{_supabase_url()}/storage/v1/object/sign/{STORAGE_BUCKET}/{object_path}"
     try:
-        response = requests.post(
-            url, headers=_auth_headers(), json={"expiresIn": expires_in}, timeout=30
-        )
-    except Exception as exc:  # noqa: BLE001 — fall back to the 404
-        logger.error(f"video_storage: signed URL failed for {object_path}: {exc}")
+        return create_signed_url_r2(object_path, expires_in)
+    except RuntimeError as exc:
+        logger.error(f"video_storage: cannot sign {object_path}: {exc}")
         return None
-    if not response.ok:
-        logger.error(
-            f"video_storage: signed URL failed for {object_path}: "
-            f"{response.status_code} {response.text[:200]}"
-        )
-        return None
-    signed = response.json().get("signedURL") or ""
-    if signed.startswith("/"):
-        signed = f"{_supabase_url()}{signed}"
-    return signed or None

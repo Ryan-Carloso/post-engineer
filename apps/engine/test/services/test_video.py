@@ -285,6 +285,31 @@ class TestStorageFallback(unittest.TestCase):
         finally:
             sm.state.delete_task(task_id)
 
+    def test_unconfigured_r2_still_404s_instead_of_500(self):
+        """An archived task must 404 (not 500) when R2 credentials are absent.
+
+        create_signed_url degrades to None so the serving contract holds even
+        if credentials disappear after the archive verified.
+        """
+        task_id = "r2-unconfigured-task"
+        sm.state.update_task(
+            task_id,
+            state=const.TASK_STATE_COMPLETE,
+            user_id="internal",
+            video_storage_path=f"internal/faceless/{task_id}/final-1.mp4",
+        )
+        try:
+            with patch.dict(os.environ, {}, clear=True):
+                with self.assertRaises(video_controller.HttpException) as ctx:
+                    self._run(
+                        video_controller.download_video(
+                            _FakeRequest(), f"{task_id}/final-1.mp4"
+                        )
+                    )
+                self.assertEqual(ctx.exception.status_code, 404)
+        finally:
+            sm.state.delete_task(task_id)
+
     def test_storage_copy_of_another_user_is_not_leaked(self):
         # The fallback resolves the task through the caller's own user_id:
         # a storage path recorded under a different user must not redirect.
