@@ -766,6 +766,9 @@ def generate_terms(task_id, params, video_script):
             search_terms=video_terms,
         )
 
+    # Always on, ALL video kinds (not persona-specific): weak terms never
+    # reach the download queue. If every term is filtered the original list
+    # is kept, so the worst case is the pre-filter behavior.
     video_terms = _filter_weak_stock_terms(params, video_terms)
 
     return video_terms
@@ -1189,8 +1192,10 @@ def generate_final_videos(
             subtitle_path=subtitle_path,
         )
         # Experimental face-fill: close the video on the persona so weak
-        # stock never has to fill the tail. Best-effort — a skipped tail
-        # keeps the intro-only video.
+        # stock never has to fill the tail. Best-effort — ANY failure
+        # (Modal down, unreadable file) degrades to the intro-only video;
+        # the residual cost is that a slow Modal backend can hold the task
+        # for up to the infinitetalk timeout before the fallback fires.
         video_for_render = _apply_persona_face_fill(
             task_id=task_id,
             params=params,
@@ -1324,6 +1329,17 @@ def prepare_persona_lipsync_video(
         PERSONA_HOOK_MIN_SECONDS,
         PERSONA_HOOK_MAX_SECONDS,
     )
+    # Explicit GPU-ceiling guard: persona_hook_end_seconds only knows the
+    # hook window, so a future PERSONA_HOOK_MAX_SECONDS edit past the
+    # InfiniteTalk cost ceiling fails here instead of rendering oversized
+    # intros (the constant pair is pinned by
+    # test_hook_constants_stay_inside_the_gpu_ceiling; this is the runtime
+    # counterpart).
+    if hook_duration > PERSONA_LIPSYNC_MAX_SECONDS:
+        raise ValueError(
+            f"persona hook exceeds the lipsync ceiling: hook ends at "
+            f"{hook_duration:g}s, max {PERSONA_LIPSYNC_MAX_SECONDS:g}s"
+        )
     lipsync_path = path.join(task_dir, f"lipsync-intro-{index}.mp4")
     infinitetalk.generate_intro(
         image_path=image_path,
@@ -1405,20 +1421,52 @@ def _apply_persona_face_fill(
     InfiniteTalk segment and spliced over the background tail. The slot is
     cut on the video timeline (not the audio's) so the muxed voiceover —
     which starts at video second 0 — stays lip-synced. When the tail window
-    can't be derived the video is returned untouched — the feature is
-    best-effort by design and never fails a task that already has a video.
+    can't be derived the video is returned untouched. EVERY failure is
+    swallowed with a logged warning: a complete intro-only video already
+    exists, so a face-fill problem (Modal down, unreadable file, ffmpeg
+    error) must degrade to the intro-only video, never fail the task.
+    The accepted trade-off: a slow Modal backend can still hold the task
+    for up to the configured infinitetalk timeout before the fallback
+    kicks in — no separate timeout knob is added (product-fixed pacing).
     """
+    try:
+        filled = _build_persona_face_fill(
+            task_id=task_id,
+            params=params,
+            video_file=video_file,
+            audio_file=audio_file,
+            subtitle_path=subtitle_path,
+            index=index,
+        )
+    except Exception as exc:  # noqa: BLE001 — best-effort by contract
+        logger.error(
+            f"face-fill skipped after error (keeping intro-only video): "
+            f"{scrub_secret_values(str(exc))[:500]}"
+        )
+        return video_file
+    return video_file if filled is None else filled
+
+
+def _build_persona_face_fill(
+    task_id: str,
+    params: VideoParams,
+    video_file: str,
+    audio_file: str,
+    subtitle_path: str,
+    index: int,
+) -> str | None:
+    """Build the face-fill outro; return None when no slot/image exists."""
     subtitles = subtitle.file_to_subtitles(subtitle_path)
     video_duration = video.video_duration_seconds(video_file)
     tail = _face_fill_tail_seconds(subtitles, video_duration)
     if tail is None:
-        return video_file
+        return None
     tail_start, tail_seconds = tail
     task_dir = utils.task_dir(task_id)
     image_path = path.join(task_dir, "persona-lipsync-image.png")
     if not os.path.isfile(image_path):
         logger.warning("face-fill skipped: persona image not found on disk")
-        return video_file
+        return None
     tail_audio = path.join(task_dir, f"tail-audio-{index}.mp3")
     infinitetalk.trim_audio(
         audio_file,

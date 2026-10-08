@@ -607,3 +607,137 @@ class TestOutroSplice:
         # Head covers everything before the outro (30s total - 5s tail).
         assert head[head.index("-t") + 1] == "25.0"
         assert "-c:v" in head and "copy" in head
+
+
+class TestFaceFillBestEffort:
+    """Face-fill NEVER fails a task that already has an intro-only video:
+    any error in the probe/trim/Modal/splice chain degrades to the input
+    video with a logged, sanitized error."""
+
+    def _run(self, tmp_path, video_file="intro-only.mp4", **extra_patches):
+        import contextlib
+
+        patchers = {
+            "subs": patch.object(
+                task_service.subtitle,
+                "file_to_subtitles",
+                return_value=_subtitles_for_face_fill(),
+            ),
+            "duration": patch.object(
+                task_service.video, "video_duration_seconds", return_value=24.5
+            ),
+            "isfile": patch.object(
+                task_service.os.path, "isfile", return_value=True
+            ),
+            "task_dir": patch.object(
+                task_service.utils, "task_dir", return_value=str(tmp_path)
+            ),
+            "trim": patch.object(task_service.infinitetalk, "trim_audio"),
+            "intro": patch.object(
+                task_service.infinitetalk, "generate_intro"
+            ),
+            "splice": patch.object(
+                task_service.video,
+                "replace_video_outro_with_lipsync",
+                return_value="spliced-outro.mp4",
+            ),
+            "log_error": patch.object(task_service.logger, "error"),
+            **extra_patches,
+        }
+        mocks: dict = {}
+        with contextlib.ExitStack() as stack:
+            for key, patcher in patchers.items():
+                mocks[key] = stack.enter_context(patcher)
+            result = task_service._apply_persona_face_fill(
+                task_id="task-1",
+                params=_params(voice_id="calm", photo_url=None, avatar_url="https://x.test/a.png"),
+                video_file=video_file,
+                audio_file="audio.mp3",
+                subtitle_path="subtitle.srt",
+                index=1,
+            )
+        return result, mocks["log_error"]
+
+    def test_happy_path_returns_the_spliced_outro(self, tmp_path):
+        result, log_error = self._run(tmp_path)
+        assert result == "spliced-outro.mp4"
+        log_error.assert_not_called()
+
+    def test_duration_probe_failure_keeps_the_intro_only_video(self, tmp_path):
+        failure = patch.object(
+            task_service.video,
+            "video_duration_seconds",
+            side_effect=RuntimeError("unreadable file"),
+        )
+        result, log_error = self._run(tmp_path, duration=failure)
+        assert result == "intro-only.mp4"
+        log_error.assert_called_once()
+
+    def test_modal_failure_keeps_the_intro_only_video(self, tmp_path):
+        from app.services.infinitetalk import InfiniteTalkError
+
+        failure = patch.object(
+            task_service.infinitetalk,
+            "generate_intro",
+            side_effect=InfiniteTalkError("InfiniteTalk job timed out"),
+        )
+        result, log_error = self._run(tmp_path, intro=failure)
+        assert result == "intro-only.mp4"
+        log_error.assert_called_once()
+        # Error text is sanitized and bounded before logging.
+        message = log_error.call_args.args[0]
+        assert "timed out" in message
+
+    def test_splice_failure_keeps_the_intro_only_video(self, tmp_path):
+        failure = patch.object(
+            task_service.video,
+            "replace_video_outro_with_lipsync",
+            side_effect=RuntimeError("lip-sync concat failed"),
+        )
+        result, log_error = self._run(tmp_path, splice=failure)
+        assert result == "intro-only.mp4"
+        log_error.assert_called_once()
+
+    def test_logged_error_is_sanitized_and_bounded(self, tmp_path):
+        from app.services.infinitetalk import InfiniteTalkError
+
+        secret = "Bearer super-secret-token"
+        failure = patch.object(
+            task_service.infinitetalk,
+            "generate_intro",
+            side_effect=InfiniteTalkError(f"submit failed with {secret}"),
+        )
+        _, log_error = self._run(tmp_path, intro=failure)
+        message = log_error.call_args.args[0]
+        assert secret not in message
+        assert len(message) < 600
+
+
+class TestLipsyncCeilingGuard:
+    """The hook window constant could be edited past the InfiniteTalk GPU
+    ceiling; prepare_persona_lipsync_video rejects it at runtime instead of
+    rendering an oversized intro."""
+
+    def test_hook_past_the_lipsync_ceiling_raises(self, tmp_path, monkeypatch):
+        import base64 as b64
+
+        monkeypatch.setattr(
+            task_service, "persona_hook_end_seconds", lambda *a, **k: 16.0
+        )
+        monkeypatch.setattr(task_service.utils, "task_dir", lambda _tid: str(tmp_path))
+        monkeypatch.setattr(
+            task_service.subtitle,
+            "file_to_subtitles",
+            lambda _path: _subtitles_for_face_fill(),
+        )
+        params = _params(voice_id="calm", photo_url=None, avatar_url="data:image/png;base64," + b64.b64encode(b"img").decode())
+        with pytest.raises(ValueError, match="exceeds the lipsync ceiling"):
+            task_service.prepare_persona_lipsync_video(
+                task_id="task-1",
+                params=params,
+                audio_file="audio.mp3",
+                background_video="bg.mp4",
+                index=1,
+                video_script="Hook.\n\nBody.",
+                subtitle_path="subtitle.srt",
+            )
