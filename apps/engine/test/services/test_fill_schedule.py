@@ -799,7 +799,35 @@ class PublishDueTests(unittest.TestCase):
         kwargs = publish.call_args.kwargs
         self.assertIsInstance(kwargs["metadata"], YouTubeMetadata)
         self.assertEqual(kwargs["owner_user_id"], "user-1")
+        # The published bytes must be the verified R2 archive contents, not
+        # a re-read from the (possibly recycled) local disk.
+        self.assertEqual(kwargs["video_bytes"], b"fake-video-bytes")
         self.assertEqual(store.updates[0][1]["status"], "published")
+
+    def test_scheduled_publish_reads_from_the_verified_archive_path(self):
+        # The R2 object path recorded at archive time is the only source:
+        # a None-swapped or dropped argument must fail.
+        from app.services import video_storage
+
+        store = _FakeStore()
+        store.ready_due_slots = lambda now: [self._slot()]
+        state = MagicMock()
+        state.get_task.return_value = {
+            "state": 1, "videos": [self.video_path],
+            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+        }
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=state,
+            publish_video=MagicMock(),
+        )
+        scheduler.publisher.base_url = "https://post-engineer.com"
+        scheduler.publisher.api_secret = "test-shared-secret"
+
+        with patch.object(
+            video_storage, "read_final_video_r2", return_value=b"fake-video-bytes"
+        ) as read_mock:
+            scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
+        read_mock.assert_called_once_with("user-1/faceless/t-1/final-1.mp4")
 
     def test_instagram_provider_uses_caption_metadata(self):
         slot = self._slot()
