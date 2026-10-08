@@ -26,6 +26,8 @@ name: mutation
 # per changed file, each on its own runner. mutmut's own incremental
 # engine is fed by a per-PR/per-file cache of apps/engine/mutants/, so
 # synchronize re-runs only re-test mutants invalidated by source changes.
+# Stryker runs incrementally (`incremental: true` + a per-PR cache of the
+# incremental file) so synchronize re-runs only re-test changed mutants.
 # (Deliberately NOT set: mutmut's `mutate_only_covered_lines` — its extra
 # in-process coverage run breaks the subsequent stats collection on
 # test_material.py's order-sensitive tests (3/3 local repros); revisit
@@ -68,6 +70,21 @@ jobs:
         with:
           # Full history: the changed-files diff needs origin/<base>.
           fetch-depth: 0
+
+      # Stryker incremental state. Without this cache, `incremental: true`
+      # is a no-op on ephemeral runners — the cache is the point: each
+      # synchronize reuses the previous run's results and only re-tests
+      # changed mutants. run_id is in the key because actions/cache entries
+      # are immutable (re-saving under an existing key is a silent no-op),
+      # so every run needs a fresh key; restore-keys picks the latest one
+      # from this PR (or from manual dispatches).
+      - name: Restore Stryker incremental state
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: apps/${{ matrix.app }}/reports/stryker-incremental.json
+          key: stryker-inc-${{ matrix.app }}-pr-${{ github.event.pull_request.number || 'manual' }}-${{ github.run_id }}
+          restore-keys: |
+            stryker-inc-${{ matrix.app }}-pr-${{ github.event.pull_request.number || 'manual' }}-
 
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
