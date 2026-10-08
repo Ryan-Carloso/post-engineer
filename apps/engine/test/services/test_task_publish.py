@@ -95,6 +95,39 @@ class PublishTaskVideosTest(unittest.TestCase):
                 )
         read_mock.assert_not_called()
 
+    def test_empty_r2_archive_path_fails_explicitly(self) -> None:
+        # The guard is `not isinstance(...) or not object_path`: an empty
+        # string must raise (an `and` mutant would let it through to R2).
+        self._state.update_task("task_1", video_storage_path="")
+        with patch.object(
+            task_publish.video_storage, "read_final_video_r2"
+        ) as read_mock:
+            with self.assertRaisesRegex(RuntimeError, "no verified R2 video archive"):
+                task_publish.publish_task_videos(
+                    task_id="task_1",
+                    params=self._request(),
+                    video_paths=["/tmp/final.mp4"],
+                )
+        read_mock.assert_not_called()
+
+    def test_reads_video_bytes_from_the_verified_archive_path(self) -> None:
+        # The R2 object path recorded at archive time is the only source:
+        # a None-swapped or dropped argument must fail.
+        with patch.object(
+            task_publish.video_storage, "read_final_video_r2", return_value=b"mp4-bytes"
+        ) as read_mock:
+            with patch.object(
+                task_publish.upload_publisher,
+                "publish_video",
+                return_value={"success": True},
+            ):
+                task_publish.publish_task_videos(
+                    task_id="task_1",
+                    params=self._request(),
+                    video_paths=["/tmp/final.mp4"],
+                )
+        read_mock.assert_called_once_with("user-1/faceless/task_1/final-1.mp4")
+
     def test_publishes_and_records_results(self) -> None:
         with tempfile.NamedTemporaryFile(suffix=".mp4") as video_file:
             video_file.write(b"mp4-bytes")
@@ -116,6 +149,9 @@ class PublishTaskVideosTest(unittest.TestCase):
         self.assertEqual(kwargs["api_secret"], "test-shared-secret")
         self.assertEqual(kwargs["owner_user_id"], "user-1")
         self.assertEqual(kwargs["video_path"], os.path.basename(video_file.name))
+        # The published bytes must be the R2 archive contents, not a
+        # re-read from local disk (a None-swapped video_bytes must fail).
+        self.assertEqual(kwargs["video_bytes"], b"mp4-bytes")
         task = self._state.get_task("task_1")
         assert task is not None
         self.assertEqual(task["publish_results"], results)
