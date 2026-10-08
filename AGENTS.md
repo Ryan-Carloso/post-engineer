@@ -2338,3 +2338,7 @@ Five MINORs on the merged funnel, fixed as a follow-up PR with one focused TDD c
   the real type is `VideoParams` — annotate with that. Same class as
   "verify the reviewer's claim against the code": the suggestion was
   directionally right (untyped args), the concrete type was weaker.
+## mutmut baseline runs a subset in arbitrary order — never assert global state counts (2026-10-08, PR #140)
+- mutmut's "Running clean tests" runs ONLY the tests covering the mutated files (`tests_for_mutant_names` returns a **set**, so pytest gets them in arbitrary order), not the full suite in collection order. A test that passes in the full engine job can fail in the baseline because the subset's relative order differs.
+- **Never assert exact counts over shared global state** (e.g. `len(get_all_tasks()) == 1` on the in-memory `sm.state`): pre-existing leakers (`test_task_webhook`'s `wc-1`, `test_task_failure_logging`'s `crash-task`/`stage-task` — all `user_id="u-1"`, no tearDown) pollute the state, and in the full suite they happen to run after. Locate your own fixture by id (`next(t for t in tasks if t["task_id"] == ...)`) instead.
+- The failure mode is unmistakable: baseline fails with `AssertionError: N != 1` on a count assertion while the engine CI job is green. Reproduce locally by running the leaking tests before the fragile one, in one pytest invocation.

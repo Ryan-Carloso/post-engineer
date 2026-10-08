@@ -55,9 +55,11 @@ class TaskPrivacyTests(unittest.TestCase):
     def test_get_all_tasks_strips_cost_usd(self):
         response = video_controller.get_all_tasks(_request(), 1, 10)
         tasks = response["body"]["tasks"]
-        self.assertEqual(len(tasks), 1)
-        self.assertNotIn("cost_usd", tasks[0])
-        self.assertEqual(tasks[0]["task_id"], self.task_id)
+        # Locate our own task: other tests share the global in-memory state
+        # and may leak tasks (mutmut runs an arbitrary subset order), so a
+        # global count assertion would be order-dependent.
+        task = next(t for t in tasks if t["task_id"] == self.task_id)
+        self.assertNotIn("cost_usd", task)
 
     def test_public_task_view_returns_a_copy(self):
         task = {"task_id": "t", "cost_usd": 0.1}
