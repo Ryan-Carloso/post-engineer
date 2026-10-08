@@ -73,25 +73,8 @@ class PersonaFolderTests(unittest.TestCase):
         self.assertEqual(vs.persona_folder({}, _params()), "faceless")
 
 
-class R2IsConfiguredTests(unittest.TestCase):
-    """R2 needs account id + key id + secret; any one missing is unconfigured."""
-
-    def test_requires_all_three_r2_env_vars(self):
-        full = {
-            "R2_ACCOUNT_ID": "acct",
-            "R2_ACCESS_KEY_ID": "key-id",
-            "R2_SECRET_ACCESS_KEY": "secret",
-        }
-        with patch.dict(os.environ, {}, clear=True):
-            self.assertFalse(vs.r2_is_configured())
-        # Drop one at a time: a partial config must never be treated as ready,
-        # or the archive silently switches to an unsigned/half-configured client.
-        for missing in full:
-            env = {k: v for k, v in full.items() if k != missing}
-            with patch.dict(os.environ, env, clear=True):
-                self.assertFalse(vs.r2_is_configured())
-        with patch.dict(os.environ, full, clear=True):
-            self.assertTrue(vs.r2_is_configured())
+class R2ConfigurationTests(unittest.TestCase):
+    """R2 credentials are mandatory; missing values fail explicitly."""
 
     def test_r2_endpoint_is_derived_from_account_id(self):
         with patch.dict(
@@ -122,7 +105,8 @@ class R2IsConfiguredTests(unittest.TestCase):
             },
             clear=True,
         ):
-            self.assertFalse(vs.r2_is_configured())
+            with self.assertRaisesRegex(RuntimeError, "R2 video storage is required"):
+                vs.require_r2_configuration()
 
 
 class R2UploadTests(unittest.TestCase):
@@ -254,11 +238,19 @@ class R2SignedUrlTests(unittest.TestCase):
         with patch("app.services.video_storage._r2_client", return_value=client):
             self.assertIsNone(vs.create_signed_url_r2("u1/faceless/t/final-1.mp4"))
 
-    def test_not_configured_returns_none(self):
+    def test_not_configured_raises(self):
         with patch.dict(os.environ, {}, clear=True):
             with patch("app.services.video_storage._r2_client") as factory:
                 with self.assertRaisesRegex(RuntimeError, "R2 video storage is required"):
                     vs.create_signed_url_r2("p")
+                factory.assert_not_called()
+
+    def test_serving_wrapper_returns_none_when_unconfigured(self):
+        # The serving-facing wrapper degrades to None (callers 404); only
+        # create_signed_url_r2 fails fast.
+        with patch.dict(os.environ, {}, clear=True):
+            with patch("app.services.video_storage._r2_client") as factory:
+                self.assertIsNone(vs.create_signed_url("u1/faceless/t/final-1.mp4"))
                 factory.assert_not_called()
 
 
