@@ -93,6 +93,20 @@ def _raise_for_status(response: requests.Response, operation: str) -> None:
         )
 
 
+def _modal_cost_usd(status: dict[str, object]) -> float | None:
+    """Extract the GPU cost (USD) the Modal app reports on a done job.
+
+    Returns None when the payload carries no usable cost (older jobs predate
+    cost reporting); a non-numeric value is "unknown", never zero.
+    """
+    cost = status.get("cost_usd")
+    if isinstance(cost, bool) or not isinstance(cost, (int, float)):
+        return None
+    if not math.isfinite(cost):
+        return None
+    return float(cost)
+
+
 def trim_audio(
     audio_path: str,
     output_path: str,
@@ -133,20 +147,21 @@ def generate_intro(
     output_path: str,
     request: Request = requests.request,
     duration_seconds: float | None = None,
-) -> str:
+) -> tuple[str, float | None]:
     """Generate and download the persona intro using a fixed quality preset.
 
-    Tracked as one ai_request event (backend=modal): the Modal job id,
-    duration, and sanitized error when it fails. The job id is captured
-    even when the job fails after submit, so post-submit failures stay
-    correlatable in PostHog.
+    Returns (output_path, cost_usd): the Modal GPU cost in USD reported on
+    the completed job, or None when the job reports no cost. Tracked as one
+    ai_request event (backend=modal): the Modal job id, duration, and
+    sanitized error when it fails. The job id is captured even when the job
+    fails after submit, so post-submit failures stay correlatable in PostHog.
     """
     start = time.monotonic()
     # Populated by _generate_intro_impl once the job is submitted, so a
     # failure during polling/download still reports the job_id.
     job_ids: list[str] = []
     try:
-        output_path, job_id = _generate_intro_impl(
+        output_path, job_id, cost_usd = _generate_intro_impl(
             image_path,
             audio_path,
             quality,
@@ -177,7 +192,7 @@ def generate_intro(
             "error": "",
         }
     )
-    return output_path
+    return output_path, cost_usd
 
 
 def _generate_intro_impl(
@@ -188,9 +203,11 @@ def _generate_intro_impl(
     request: Request = requests.request,
     duration_seconds: float | None = None,
     job_id_holder: list[str] | None = None,
-) -> tuple[str, str]:
-    """Submit/poll/download the intro video; returns (output_path, job_id).
+) -> tuple[str, str, float | None]:
+    """Submit/poll/download the intro video.
 
+    Returns (output_path, job_id, cost_usd): the Modal GPU cost in USD from
+    the completed job's status payload, or None when it reports none.
     Appends the submitted job_id to job_id_holder as soon as the submit
     succeeds, so callers can report it even when polling/download fails.
     """
@@ -238,6 +255,7 @@ def _generate_intro_impl(
             job_id_holder.append(job_id)
 
     deadline = time.monotonic() + timeout_seconds
+    cost_usd: float | None = None
     while time.monotonic() < deadline:
         response = request(
             "POST", status_url, data={"job_id": job_id}, headers=headers, timeout=60
@@ -246,6 +264,7 @@ def _generate_intro_impl(
         status = _json_object(response)
         state = status.get("status")
         if state == "done":
+            cost_usd = _modal_cost_usd(status)
             break
         if state == "failed":
             error = status.get("error", "unknown error")
@@ -261,4 +280,4 @@ def _generate_intro_impl(
     if not response.content:
         raise InfiniteTalkError("InfiniteTalk returned an empty video")
     Path(output_path).write_bytes(response.content)
-    return output_path, job_id
+    return output_path, job_id, cost_usd

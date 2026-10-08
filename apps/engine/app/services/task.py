@@ -362,6 +362,12 @@ def _complete_task(
     # degraded context (flow "unknown", e.g. the row was deleted mid-flight)
     # may be a batch task, and reporting it too would double count.
     if context.get("flow") == "direct":
+        cost = kwargs.get("cost_usd")
+        # Private unit-economics metric: attached to the PostHog event only.
+        # The task row keeps it for the batch reconciler; the API layer
+        # strips it from every response so users never see it.
+        if isinstance(cost, (int, float)) and not isinstance(cost, bool):
+            context["cost_usd"] = float(cost)
         track_event("video_generated", context)
     task_webhook.notify_terminal_task(
         task_id,
@@ -1063,9 +1069,16 @@ def get_video_materials(task_id, params, video_terms, audio_duration):
 
 def generate_final_videos(
     task_id, params, downloaded_videos, audio_file, subtitle_path, video_script, music_mood
-):
+) -> tuple[list[str], list[str], float | None]:
+    """Assemble the final videos.
+
+    Returns (final_video_paths, combined_video_paths, intro_cost_usd): the
+    Modal GPU cost in USD for the persona lip-sync intro, or None when no
+    intro ran or the job reported no cost.
+    """
     final_video_paths = []
     combined_video_paths = []
+    intro_cost_usd: float | None = None
     # Single output per task. match_materials_to_script forces sequential
     # concatenation (stable, explainable timeline); otherwise, respects the
     # configured concat mode.
@@ -1096,7 +1109,7 @@ def generate_final_videos(
     video_for_render = combined_video_path
     if persona_lipsync_active(params):
         logger.info("generating persona lip-sync intro")
-        video_for_render = prepare_persona_lipsync_video(
+        video_for_render, intro_cost_usd = prepare_persona_lipsync_video(
             task_id=task_id,
             params=params,
             audio_file=audio_file,
@@ -1127,7 +1140,7 @@ def generate_final_videos(
     final_video_paths.append(final_video_path)
     combined_video_paths.append(combined_video_path)
 
-    return final_video_paths, combined_video_paths
+    return final_video_paths, combined_video_paths, intro_cost_usd
 
 
 def archive_final_videos(
@@ -1181,8 +1194,12 @@ def prepare_persona_lipsync_video(
     index: int,
     video_script: str,
     subtitle_path: str,
-) -> str:
-    """Generate the persona intro through a complete hook paragraph."""
+) -> tuple[str, float | None]:
+    """Generate the persona intro through a complete hook paragraph.
+
+    Returns (output_path, intro_cost_usd): the Modal GPU cost in USD for the
+    intro, or None when the job reports no cost.
+    """
     persona = params.persona
     if persona is None:
         raise infinitetalk.InfiniteTalkError("lip sync requires a persona")
@@ -1226,7 +1243,7 @@ def prepare_persona_lipsync_video(
     subtitles = subtitle.file_to_subtitles(subtitle_path)
     hook_duration = persona_hook_end_seconds(video_script, subtitles)
     lipsync_path = path.join(task_dir, f"lipsync-intro-{index}.mp4")
-    infinitetalk.generate_intro(
+    _, intro_cost_usd = infinitetalk.generate_intro(
         image_path=image_path,
         audio_path=audio_file,
         quality=params.video_quality,
@@ -1234,11 +1251,14 @@ def prepare_persona_lipsync_video(
         duration_seconds=hook_duration,
     )
     output_path = path.join(task_dir, f"combined-lipsync-{index}.mp4")
-    return video.replace_video_intro_with_lipsync(
-        background_video,
-        lipsync_path,
-        output_path,
-        duration=hook_duration,
+    return (
+        video.replace_video_intro_with_lipsync(
+            background_video,
+            lipsync_path,
+            output_path,
+            duration=hook_duration,
+        ),
+        intro_cost_usd,
     )
 
 
@@ -1407,7 +1427,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             params.video_concat_mode = VideoConcatMode(params.video_concat_mode)
 
         # 6. Generate final videos
-        final_video_paths, combined_video_paths = generate_final_videos(
+        final_video_paths, combined_video_paths, intro_cost_usd = generate_final_videos(
             task_id,
             params,
             downloaded_videos,
@@ -1494,6 +1514,12 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             "music_mood": music_mood,
             "cross_post_results": cross_post_results if cross_post_results else None,
         }
+        if intro_cost_usd is not None:
+            # Private unit-economics metric: persisted on the task row so the
+            # batch reconciler can attach it to the PostHog video_generated
+            # event. The API layer strips it from every response — it is
+            # never visible to users, only in the operator's PostHog.
+            kwargs["cost_usd"] = intro_cost_usd
         _complete_task(
             task_id, params,
             video_url=_first_http_url(final_video_paths),

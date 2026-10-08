@@ -522,9 +522,11 @@ class ReconcileTests(unittest.TestCase):
         store = _FakeStore()
         store.generating_slots = lambda: [slot]
         state = MagicMock()
+        # cost_usd is persisted flat on the task row by the task pipeline
+        # (no state backend ever nests it under a "result" key).
         state.get_task.return_value = {
             "state": 1,
-            "result": {"cost_usd": 0.1},
+            "cost_usd": 0.1,
         }
         scheduler = fs.FillScheduleScheduler(
             store=store, task_state=state,
@@ -545,6 +547,34 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(props["user_id"], "user-1")
         self.assertEqual(props["slotId"], "slot-1")
         self.assertEqual(props["cost_usd"], 0.1)
+
+    def test_reconcile_generated_event_omits_cost_usd_when_absent(self):
+        from app.services.fill_schedule import reconcile as rec_module
+
+        slot = {
+            "id": "slot-1",
+            "task_id": "t-1",
+            "user_id": "user-1",
+            "schedules": {"id": "sched-1", "user_id": "user-1"},
+        }
+        store = _FakeStore()
+        store.generating_slots = lambda: [slot]
+        state = MagicMock()
+        state.get_task.return_value = {"state": 1}
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=state,
+            publish_video=MagicMock(),
+        )
+        with patch.object(rec_module, "track_event") as track:
+            self.assertEqual(
+                scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1
+            )
+        generated_calls = [
+            c for c in track.call_args_list if c[0][0] == "video_generated"
+        ]
+        self.assertEqual(len(generated_calls), 1)
+        _, props = generated_calls[0][0]
+        self.assertNotIn("cost_usd", props)
 
     def test_failed_task_becomes_failed(self):
         slot = {
