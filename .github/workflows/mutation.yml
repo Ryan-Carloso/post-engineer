@@ -367,7 +367,7 @@ jobs:
 
       - name: Upload mutmut report
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75f139c82e0e9b575b73 # v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: mutation-report-engine-${{ github.event.pull_request.number || 'manual' }}-${{ steps.slug.outputs.slug }}
           path: apps/engine/mutants/
