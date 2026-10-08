@@ -98,14 +98,23 @@ def trim_audio(
     output_path: str,
     duration_seconds: float = 5,
     padding_seconds: float = 0,
+    start_seconds: float = 0,
 ) -> None:
-    """Create an accurately cut, standalone audio intro for InfiniteTalk."""
+    """Create an accurately cut, standalone audio segment for InfiniteTalk.
+
+    ``start_seconds`` offsets the cut (used for face-fill tail segments);
+    0 keeps the historical intro-trim behavior byte-for-byte.
+    """
+    input_args = ["-i", audio_path]
+    if start_seconds > 0:
+        # -ss before -i seeks on the demuxer; accurate enough for narration
+        # segment cuts and fast on long files.
+        input_args = ["-ss", str(start_seconds)] + input_args
     result = subprocess.run(
         [
             "ffmpeg",
             "-y",
-            "-i",
-            audio_path,
+            *input_args,
             "-t",
             str(duration_seconds),
             "-af",

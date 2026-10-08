@@ -533,36 +533,54 @@ def persona_hook_end_seconds(
 
 # Regeneration attempts for an overshooting persona hook before the task
 # fails. Each attempt costs one LLM call plus one TTS call; the hook prompt
-# already targets the 3-6s window, so retries should be rare.
+# already targets the configured window, so retries should be rare.
 _PERSONA_HOOK_MAX_RETRIES = 2
-_PERSONA_HOOK_MIN_WORDS = 8
-_PERSONA_HOOK_MAX_WORDS = 12
+
+# Product-fixed persona pacing ("always this way"): the hook opens the video
+# and the face-fill outro closes it. Deliberately NOT config-driven — these
+# values were validated against GPU intro cost and lipsync quality windows,
+# and tunable knobs reopen those failure modes (hooks over the GPU ceiling,
+# tails that eat the hook). Stock adhesion uses the offline token-overlap
+# judge; weak terms never enter the download queue.
+PERSONA_HOOK_MIN_SECONDS = 3.0
+PERSONA_HOOK_MAX_SECONDS = 12.0
+PERSONA_HOOK_TARGET_WORDS_MIN = 8
+PERSONA_HOOK_TARGET_WORDS_MAX = 28
+PERSONA_LIPSYNC_MAX_SECONDS = 15.0
+FACE_FILL_MIN_SECONDS = 5.0
+FACE_FILL_MAX_SECONDS = 8.0
+PERSONA_SELECTIVE_STOCK_MIN_SCORE = 0.3
 
 
 def _regenerate_fitting_hook(
     params: VideoParams, video_script: str, measured_seconds: float
 ) -> str:
-    """Regenerate only the hook paragraph, sized toward the 3-6s window.
+    """Regenerate only the hook paragraph, sized toward the configured window.
 
     The rest of the script (body paragraphs) is kept verbatim: only the
     hook timing was wrong.
     """
+    window_min = PERSONA_HOOK_MIN_SECONDS
+    window_max = PERSONA_HOOK_MAX_SECONDS
+    words_min = PERSONA_HOOK_TARGET_WORDS_MIN
+    words_max = PERSONA_HOOK_TARGET_WORDS_MAX
     paragraphs = [
         paragraph.strip()
         for paragraph in re.split(r"\n\s*\n", video_script.strip())
         if paragraph.strip()
     ]
     hook_words = len(paragraphs[0].split())
-    # Aim for ~4.5s (window center): scale the observed word count by the
+    # Aim for the window center: scale the observed word count by the
     # target/measured ratio, clamped to a sane hook size.
     if measured_seconds > 0:
-        word_cap = round(hook_words * 4.5 / measured_seconds)
+        word_cap = round(hook_words * (window_min + window_max) / 2 / measured_seconds)
     else:
-        word_cap = 10
-    word_cap = max(_PERSONA_HOOK_MIN_WORDS, min(_PERSONA_HOOK_MAX_WORDS, word_cap))
+        word_cap = (words_min + words_max) // 2
+    word_cap = max(words_min, min(words_max, word_cap))
     logger.warning(
         f"persona hook ended at {measured_seconds:g}s ({hook_words} words), "
-        f"outside the 3-6s window; regenerating a hook of at most {word_cap} words"
+        f"outside the {window_min:g}-{window_max:g}s window; regenerating a hook "
+        f"of at most {word_cap} words"
     )
     hook = llm.generate_script(
         video_subject=params.video_subject,
@@ -571,10 +589,11 @@ def _regenerate_fitting_hook(
         video_script_prompt=(
             f"{params.video_script_prompt} Return only a standalone hook paragraph: "
             f"one complete sentence of at most {word_cap} words ending with terminal "
-            "punctuation, designed to take 3 to 6 seconds when spoken."
+            f"punctuation, designed to take {window_min:g} to {window_max:g} seconds "
+            "when spoken."
         ),
         custom_system_prompt=params.custom_system_prompt,
-        target_words_min=_PERSONA_HOOK_MIN_WORDS,
+        target_words_min=words_min,
         target_words_max=word_cap,
     )
     return _limit_generated_script(f"{hook.strip()}\n\n" + "\n\n".join(paragraphs[1:]))
@@ -591,11 +610,11 @@ def _ensure_persona_hook_fits(
 ):
     """Validate the persona hook duration right after subtitles exist.
 
-    The lip-sync intro needs the hook to end between 3 and 6 seconds. When
-    TTS generated the audio, an overshooting hook is LLM variance — regenerate
-    a shorter hook (plus its audio/subtitles) instead of failing the whole
-    task. With custom audio the hook timing is fixed by the user's recording,
-    so an overshoot still fails the task as before.
+    The lip-sync intro needs the hook to end inside the configured persona
+    hook window. When TTS generated the audio, an overshooting hook is LLM
+    variance — regenerate a shorter hook (plus its audio/subtitles) instead
+    of failing the whole task. With custom audio the hook timing is fixed by
+    the user's recording, so an overshoot still fails the task as before.
 
     Returns the (possibly regenerated) script/audio/subtitle tuple. A
     (None, None, None) audio triple means generate_audio already failed the
@@ -603,6 +622,8 @@ def _ensure_persona_hook_fits(
     """
     if not persona_lipsync_active(params) or sub_maker is None:
         return video_script, audio_file, audio_duration, sub_maker, subtitle_path
+    window_min = PERSONA_HOOK_MIN_SECONDS
+    window_max = PERSONA_HOOK_MAX_SECONDS
     attempts = _PERSONA_HOOK_MAX_RETRIES + 1
     for attempt in range(attempts):
         try:
@@ -614,11 +635,12 @@ def _ensure_persona_hook_fits(
             # punctuation, hook not found in subtitles): regenerating a
             # shorter hook cannot fix it — fail the task as before.
             raise
-        if 3.0 <= end_seconds <= 6.0:
+        if window_min <= end_seconds <= window_max:
             return video_script, audio_file, audio_duration, sub_maker, subtitle_path
         if attempt + 1 >= attempts:
             raise ValueError(
-                f"persona hook must end between 3 and 6 seconds, got {end_seconds:g}"
+                f"persona hook must end between {window_min:g} and "
+                f"{window_max:g} seconds, got {end_seconds:g}"
             )
         video_script = _regenerate_fitting_hook(params, video_script, end_seconds)
         audio_file, audio_duration, sub_maker = generate_audio(task_id, params, video_script)
@@ -635,8 +657,10 @@ def generate_script(task_id, params):
         script_prompt = params.video_script_prompt
         if persona_lipsync_active(params):
             script_prompt = (
-                f"{script_prompt} Start with a standalone hook paragraph of 8 to 12 words, "
-                "designed to take 3 to 6 seconds when spoken. End the hook with terminal "
+                f"{script_prompt} Start with a standalone hook paragraph of "
+                f"{PERSONA_HOOK_TARGET_WORDS_MIN} to {PERSONA_HOOK_TARGET_WORDS_MAX} words, "
+                f"designed to take {PERSONA_HOOK_MIN_SECONDS:g} to {PERSONA_HOOK_MAX_SECONDS:g} "
+                "seconds when spoken. End the hook with terminal "
                 "punctuation, then add exactly one blank line before the main content."
             ).strip()
         video_script = llm.generate_script(
@@ -667,12 +691,13 @@ def generate_script(task_id, params):
                 video_script_prompt=(
                     f"{params.video_script_prompt} Regenerate the entire script. "
                     "Return only the standalone first paragraph: a complete "
-                    "3 to 6 second hook of 8 to 12 words ending with terminal "
-                    "punctuation."
+                    f"{PERSONA_HOOK_MIN_SECONDS:g} to {PERSONA_HOOK_MAX_SECONDS:g} second hook "
+                    f"of {PERSONA_HOOK_TARGET_WORDS_MIN} to {PERSONA_HOOK_TARGET_WORDS_MAX} words "
+                    "ending with terminal punctuation."
                 ),
                 custom_system_prompt=params.custom_system_prompt,
-                target_words_min=8,
-                target_words_max=12,
+                target_words_min=PERSONA_HOOK_TARGET_WORDS_MIN,
+                target_words_max=PERSONA_HOOK_TARGET_WORDS_MAX,
             )
             body = llm.generate_script(
                 video_subject=params.video_subject,
@@ -741,7 +766,65 @@ def generate_terms(task_id, params, video_script):
             search_terms=video_terms,
         )
 
+    video_terms = _filter_weak_stock_terms(params, video_terms)
+
     return video_terms
+
+
+def _stock_adhesion_score(term: str, subject: str) -> float:
+    """Offline adhesion score between a stock search term and the subject.
+
+    Deterministic token-overlap fallback used when TwelveLabs Marengo
+    embeddings are unavailable: the share of the term's significant tokens
+    (length >= 3, casefolded, unique) that also appear in the subject. A
+    term with no significant tokens scores 0.0 — it says nothing the subject
+    confirms, and weak terms are exactly what selective stock drops.
+    """
+    def tokens(text: str) -> set[str]:
+        # Unicode-letter-initial tokens only; short tokens (a, de, o) carry
+        # no adhesion signal.
+        return {
+            token
+            for token in re.findall(r"[^\W\d_][\w]*", text.casefold(), re.UNICODE)
+            if len(token) >= 3
+        }
+
+    term_tokens = tokens(term)
+    if not term_tokens:
+        return 0.0
+    subject_tokens = tokens(subject)
+    return len(term_tokens & subject_tokens) / len(term_tokens)
+
+
+def _filter_weak_stock_terms(params: VideoParams, video_terms: list[str]) -> list[str]:
+    """Drop stock terms whose adhesion to the subject scores below the floor.
+
+    Always on: weak stock never enters the download queue, so the timeline
+    holds the persona/strong footage instead of swapping frames with
+    off-topic B-roll. If every term is filtered, the original list is kept —
+    a video with some stock beats a task failure for lack of footage.
+    """
+    if not params.video_subject or len(video_terms) <= 1:
+        return video_terms
+    min_score = PERSONA_SELECTIVE_STOCK_MIN_SCORE
+    kept = [
+        term
+        for term in video_terms
+        if _stock_adhesion_score(term, params.video_subject) >= min_score
+    ]
+    if not kept:
+        logger.warning(
+            "selective stock filtered every term; keeping the original list"
+        )
+        return video_terms
+    dropped = [term for term in video_terms if term not in kept]
+    if dropped:
+        # Log counts, not term content — terms are user-derived content.
+        logger.info(
+            f"selective stock kept {len(kept)}/{len(video_terms)} terms "
+            f"(min score {min_score}); {len(dropped)} weak terms dropped"
+        )
+    return kept
 
 
 def save_script_data(task_id, video_script, video_terms, params):
@@ -1105,6 +1188,17 @@ def generate_final_videos(
             video_script=video_script,
             subtitle_path=subtitle_path,
         )
+        # Experimental face-fill: close the video on the persona so weak
+        # stock never has to fill the tail. Best-effort — a skipped tail
+        # keeps the intro-only video.
+        video_for_render = _apply_persona_face_fill(
+            task_id=task_id,
+            params=params,
+            video_file=video_for_render,
+            audio_file=audio_file,
+            subtitle_path=subtitle_path,
+            index=1,
+        )
 
     _update_task(task_id, progress=75, music_mood=music_mood)
 
@@ -1224,7 +1318,12 @@ def prepare_persona_lipsync_video(
             ) from exc
 
     subtitles = subtitle.file_to_subtitles(subtitle_path)
-    hook_duration = persona_hook_end_seconds(video_script, subtitles)
+    hook_duration = persona_hook_end_seconds(
+        video_script,
+        subtitles,
+        PERSONA_HOOK_MIN_SECONDS,
+        PERSONA_HOOK_MAX_SECONDS,
+    )
     lipsync_path = path.join(task_dir, f"lipsync-intro-{index}.mp4")
     infinitetalk.generate_intro(
         image_path=image_path,
@@ -1239,6 +1338,109 @@ def prepare_persona_lipsync_video(
         lipsync_path,
         output_path,
         duration=hook_duration,
+    )
+
+
+def _face_fill_tail_seconds(
+    subtitles: Sequence[tuple[int, str, str]],
+    video_duration: float,
+) -> tuple[float, float] | None:
+    """Tail (start, duration) for the face-fill outro, snapped to subtitles.
+
+    The slot is chosen on the VIDEO timeline: the muxed narration starts at
+    video second 0, so a boundary B on the video is also B on the audio —
+    slicing the tail audio at B and rendering lipsync for [B, V] keeps the
+    mouth in sync with the muxed voiceover. Boundaries only come from
+    subtitle event starts (never mid-word). Among the valid windows
+    (FACE_FILL_MIN_SECONDS..FACE_FILL_MAX_SECONDS, after the hook) the one
+    closest to the window midpoint wins. Returns None when no valid
+    boundary exists.
+    """
+    min_seconds = FACE_FILL_MIN_SECONDS
+    max_seconds = FACE_FILL_MAX_SECONDS
+    events: list[tuple[float, float]] = []
+    for _, timing, _text in subtitles:
+        match = re.search(
+            r"(\d+):(\d+):(\d+)[,\.](\d+)\s*-->\s*(\d+):(\d+):(\d+)[,\.](\d+)",
+            timing,
+        )
+        if match is None:
+            continue
+        g = [int(x) for x in match.groups()]
+        start = g[0] * 3600 + g[1] * 60 + g[2] + g[3] / 1000
+        end = g[4] * 3600 + g[5] * 60 + g[6] + g[7] / 1000
+        if end > start:
+            events.append((start, end))
+    if not events:
+        return None
+    # The hook boundary is the end of the first subtitle event; a
+    # single-event video has no separate body to protect.
+    hook_end = events[0][1] if len(events) >= 2 else 0.0
+    target = (min_seconds + max_seconds) / 2
+    best: tuple[float, float] | None = None
+    for start, _end in events:
+        tail = video_duration - start
+        if not min_seconds <= tail <= max_seconds:
+            continue
+        # The tail must not eat the hook: keep >=1s of body between them.
+        if start <= hook_end + 1.0:
+            continue
+        if best is None or abs(tail - target) < abs(best[1] - target):
+            best = (start, tail)
+    return best
+
+
+def _apply_persona_face_fill(
+    task_id: str,
+    params: VideoParams,
+    video_file: str,
+    audio_file: str,
+    subtitle_path: str,
+    index: int,
+) -> str:
+    """Close the video with a lipsync outro instead of trailing stock.
+
+    Experimental face-fill: after the intro splice, the last subtitle-
+    bounded segment of the VIDEO timeline is re-rendered as a second
+    InfiniteTalk segment and spliced over the background tail. The slot is
+    cut on the video timeline (not the audio's) so the muxed voiceover —
+    which starts at video second 0 — stays lip-synced. When the tail window
+    can't be derived the video is returned untouched — the feature is
+    best-effort by design and never fails a task that already has a video.
+    """
+    subtitles = subtitle.file_to_subtitles(subtitle_path)
+    video_duration = video.video_duration_seconds(video_file)
+    tail = _face_fill_tail_seconds(subtitles, video_duration)
+    if tail is None:
+        return video_file
+    tail_start, tail_seconds = tail
+    task_dir = utils.task_dir(task_id)
+    image_path = path.join(task_dir, "persona-lipsync-image.png")
+    if not os.path.isfile(image_path):
+        logger.warning("face-fill skipped: persona image not found on disk")
+        return video_file
+    tail_audio = path.join(task_dir, f"tail-audio-{index}.mp3")
+    infinitetalk.trim_audio(
+        audio_file,
+        tail_audio,
+        duration_seconds=tail_seconds,
+        padding_seconds=0.2,
+        start_seconds=tail_start,
+    )
+    lipsync_path = path.join(task_dir, f"lipsync-outro-{index}.mp4")
+    infinitetalk.generate_intro(
+        image_path=image_path,
+        audio_path=tail_audio,
+        quality=params.video_quality,
+        output_path=lipsync_path,
+        duration_seconds=tail_seconds,
+    )
+    output_path = path.join(task_dir, f"combined-lipsync-outro-{index}.mp4")
+    return video.replace_video_outro_with_lipsync(
+        video_file,
+        lipsync_path,
+        output_path,
+        duration=tail_seconds,
     )
 
 

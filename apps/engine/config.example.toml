@@ -42,6 +42,11 @@ bgm_history_db = "storage/bgm_history.sqlite3"
 # Callers can also override per request with the `lipsync_enabled` field.
 persona_lipsync_enabled = true
 
+# Persona hook pacing and the face-fill outro are product-fixed in
+# app/services/task.py (PERSONA_HOOK_* / FACE_FILL_* constants) — the values
+# were validated against GPU intro cost and lipsync quality windows and are
+# intentionally not tunable.
+
 # 是否隐藏配置面板
 hide_config = false
 
