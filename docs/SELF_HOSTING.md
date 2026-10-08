@@ -126,6 +126,11 @@ Provision the database schema in your Supabase project:
     `scheduled`): records whether a post publishes at its slot times or ASAP
     (published the moment generation finishes, with no scheduled time).
 
+15. `supabase/migrations/016_scheduled-posts-publish-attempts.sql` —
+    adds `scheduled_posts.publish_attempts` (NOT NULL DEFAULT 0): counts
+    publish attempts per slot so the engine auto-cancels (failed) with a
+    token refund after 3 failures instead of retrying forever.
+
 Paste each file into the Supabase Dashboard > SQL Editor and run, in order
 (the numeric prefixes encode the order — always apply the
 lowest number first), or apply them with the Supabase CLI from the repo

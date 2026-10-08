@@ -13,13 +13,20 @@ from app.services import upload_publisher
 from app.services import video_storage
 from app.services.analytics import scrub_secret_values, track_event
 from app.services.fill_schedule.constants import (
+    MAX_PUBLISH_ATTEMPTS,
     SLOT_FAILED,
     SLOT_PUBLISHED,
     SLOT_READY,
 )
 from app.services.fill_schedule.metadata import metadata_for
 from app.services.fill_schedule.store import ScheduleStore
-from app.services.fill_schedule.support import notify_safe, slot_user_id
+from app.services.fill_schedule.support import (
+    notify_safe,
+    post_identity,
+    slot_faceless,
+    slot_user_id,
+    token_cost,
+)
 
 
 def _publish_tracking_context(
@@ -107,9 +114,15 @@ class BatchPublisher:
                 )
                 continue
             if not isinstance(object_path, str) or not object_path:
-                self.store.update_slot(
-                    slot["id"], status=SLOT_FAILED,
-                    error="task has no verified R2 video archive",
+                # A video generated before the R2 archive flow can never
+                # publish: fail fast with a refund instead of retrying a
+                # hopeless slot on every tick.
+                self._fail_slot_permanently(
+                    slot,
+                    schedule,
+                    "task has no verified R2 video archive",
+                    "Publish failed: video was generated before the R2 archive; "
+                    "video refunded",
                 )
                 continue
             try:
@@ -153,9 +166,24 @@ class BatchPublisher:
                     f"fill_schedule: slot {slot['id']} publish failed: {exc}"
                     + (f" | upstream response: {upstream}" if upstream else "")
                 )
-                # back to 'ready' (not 'failed'): may be transient; the atomic
-                # claim guarantees only one worker publishes at a time.
-                self.store.update_slot(slot["id"], status=SLOT_READY)
+                attempts = int(slot.get("publish_attempts") or 0) + 1
+                if attempts >= MAX_PUBLISH_ATTEMPTS:
+                    # Bounded retries: auto-cancel the slot and refund the
+                    # prepaid token instead of retrying forever.
+                    self._fail_slot_permanently(
+                        slot,
+                        schedule,
+                        f"publish failed after {attempts} attempts: "
+                        f"{notify_module.safe_reason(exc)}",
+                        f"Publish failed after {attempts} attempts; video refunded",
+                        attempts=attempts,
+                    )
+                else:
+                    # back to 'ready' (not 'failed'): may be transient; the atomic
+                    # claim guarantees only one worker publishes at a time.
+                    self.store.update_slot(
+                        slot["id"], status=SLOT_READY, publish_attempts=attempts
+                    )
                 track_event(
                     "video_publish_failed",
                     {
@@ -164,7 +192,8 @@ class BatchPublisher:
                         # landing mid-key would leave a fragment the
                         # key-anchored pattern can no longer match.
                         "reason": scrub_secret_values(str(exc))[:200],
-                        "retryable": True,
+                        "retryable": attempts < MAX_PUBLISH_ATTEMPTS,
+                        "attempts": attempts,
                     },
                 )
                 notify_safe(
@@ -176,3 +205,66 @@ class BatchPublisher:
                     ),
                 )
         return published
+
+    def _fail_slot_permanently(
+        self,
+        slot: dict[str, Any],
+        schedule: dict[str, Any],
+        error: str,
+        refund_reason: str,
+        attempts: int | None = None,
+    ) -> None:
+        """Auto-cancel a slot that can never publish and refund its token.
+
+        Mirrors the reconciler's per-slot refund convention: the unified
+        generate+schedule flow prepays under ``batch:{scheduleId}`` and each
+        slot refunds with its own idempotent key (the ``:publish`` suffix keeps
+        it distinct from a generation-failure refund of the same slot). A
+        refund RPC failure never kills the tick — the slot is already
+        terminal, and the loud log line is the recovery trail.
+        """
+        user_id = slot_user_id(slot)
+        schedule_id = schedule.get("id")
+        if user_id and isinstance(schedule_id, str) and schedule_id:
+            try:
+                identity = post_identity(schedule)
+            except RuntimeError:
+                logger.warning(
+                    "fill_schedule: skipping refund for publish-failed slot "
+                    "without a resolvable identity",
+                    slot_id=slot.get("id"),
+                    schedule_id=schedule_id,
+                )
+            else:
+                cost = token_cost(
+                    slot_faceless(slot),
+                    str(identity.get("face_quality") or "ok"),
+                )
+                batch_generation_id = f"batch:{schedule_id}"
+                try:
+                    self.store.refund_batch_tokens(
+                        user_id,
+                        batch_generation_id,
+                        f"{batch_generation_id}:slot:{slot['id']}:publish",
+                        cost,
+                        refund_reason,
+                    )
+                except Exception as exc:  # noqa: BLE001 — refund is best-effort here
+                    logger.error(
+                        f"fill_schedule: refund failed for publish-failed "
+                        f"slot {slot['id']}: {exc}"
+                    )
+        else:
+            logger.error(
+                "fill_schedule: cannot refund publish-failed slot without "
+                "user_id/schedule_id",
+                slot_id=slot.get("id"),
+            )
+        # The error column is client-visible: scrub before storing.
+        fields: dict[str, Any] = {
+            "status": SLOT_FAILED,
+            "error": scrub_secret_values(error)[:200],
+        }
+        if attempts is not None:
+            fields["publish_attempts"] = attempts
+        self.store.update_slot(slot["id"], **fields)

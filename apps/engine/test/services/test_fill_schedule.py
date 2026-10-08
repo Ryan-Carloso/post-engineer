@@ -915,6 +915,128 @@ class PublishDueTests(unittest.TestCase):
         self.assertLessEqual(len(str(props["reason"])), 200)
 
 
+class PublishRetryLimitTests(unittest.TestCase):
+    """Bounded publish retries: after MAX_PUBLISH_ATTEMPTS failures the slot
+    is auto-cancelled (failed) and the prepaid token refunded — publish must
+    never retry forever waiting on a human to cancel the slot."""
+
+    def setUp(self) -> None:
+        from app.services import video_storage
+
+        storage_patcher = patch.object(
+            video_storage, "read_final_video_r2", return_value=b"fake-video-bytes"
+        )
+        storage_patcher.start()
+        self.addCleanup(storage_patcher.stop)
+        handle, self.video_path = tempfile.mkstemp(suffix=".mp4")
+        with os.fdopen(handle, "wb") as video_file:
+            video_file.write(b"fake-video-bytes")
+        self.addCleanup(os.unlink, self.video_path)
+
+    def _slot(self, publish_attempts=0):
+        return {
+            "id": "slot-1",
+            "topic": "Tokyo coffee",
+            "task_id": "t-1",
+            "faceless": True,
+            "publish_attempts": publish_attempts,
+            "schedules": {
+                "id": "sched-1",
+                "user_id": "user-1",
+                "providers": ["youtube"],
+                "post_voice_id": "energetic",
+                "post_face_quality": "ok",
+            },
+        }
+
+    def _run_publish(self, slot, video_storage_path="user-1/faceless/t-1/final-1.mp4"):
+        from app.services.upload_publisher import PublishError
+
+        store = _FakeStore()
+        store.ready_due_slots = lambda now: [slot]
+        state = MagicMock()
+        task = {"state": 1, "videos": [self.video_path]}
+        if video_storage_path is not None:
+            task["video_storage_path"] = video_storage_path
+        state.get_task.return_value = task
+        publish = MagicMock(side_effect=PublishError("boom"))
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=state,
+            publish_video=publish,
+        )
+        scheduler.publisher.base_url = "https://post-engineer.com"
+        scheduler.publisher.api_secret = "secret"
+        published = scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
+        return store, published
+
+    def test_max_publish_attempts_is_three(self):
+        from app.services.fill_schedule.constants import MAX_PUBLISH_ATTEMPTS
+
+        self.assertEqual(MAX_PUBLISH_ATTEMPTS, 3)
+
+    def test_failure_below_limit_returns_slot_to_ready_with_attempts_incremented(self):
+        store, published = self._run_publish(self._slot(publish_attempts=1))
+        self.assertEqual(published, 0)
+        self.assertEqual(store.updates[0][1]["status"], "ready")
+        self.assertEqual(store.updates[0][1]["publish_attempts"], 2)
+        self.assertEqual(store.refund_batch_calls, [])
+
+    def test_attempts_default_to_zero_when_column_missing(self):
+        # Rows selected before the publish_attempts migration (or partial
+        # projections) carry no counter: the first failure counts as attempt 1.
+        slot = self._slot()
+        del slot["publish_attempts"]
+        store, _ = self._run_publish(slot)
+        self.assertEqual(store.updates[0][1]["status"], "ready")
+        self.assertEqual(store.updates[0][1]["publish_attempts"], 1)
+        self.assertEqual(store.refund_batch_calls, [])
+
+    def test_final_failure_marks_slot_failed_and_refunds_token(self):
+        store, published = self._run_publish(self._slot(publish_attempts=2))
+        self.assertEqual(published, 0)
+        self.assertEqual(store.updates[0][1]["status"], "failed")
+        self.assertEqual(store.updates[0][1]["publish_attempts"], 3)
+        self.assertEqual(len(store.refund_batch_calls), 1)
+        user_id, generation_id, refund_key, amount, reason = store.refund_batch_calls[0]
+        self.assertEqual(user_id, "user-1")
+        self.assertEqual(generation_id, "batch:sched-1")
+        self.assertEqual(refund_key, "batch:sched-1:slot:slot-1:publish")
+        # Faceless posts are priced at the faceless rate.
+        self.assertEqual(amount, 1)
+        self.assertIn("3 attempts", reason)
+
+    def test_missing_r2_archive_marks_slot_failed_and_refunds_token(self):
+        # A video generated before the R2 archive flow can never publish:
+        # fail fast with a refund instead of retrying a hopeless slot.
+        store, published = self._run_publish(self._slot(), video_storage_path=None)
+        self.assertEqual(published, 0)
+        self.assertEqual(store.updates[0][1]["status"], "failed")
+        self.assertEqual(len(store.refund_batch_calls), 1)
+        self.assertEqual(store.refund_batch_calls[0][1], "batch:sched-1")
+
+    def test_refund_error_does_not_break_the_tick(self):
+        from app.services.upload_publisher import PublishError
+
+        store = _FakeStore()
+        store.ready_due_slots = lambda now: [self._slot(publish_attempts=2)]
+        store.refund_batch_tokens = MagicMock(side_effect=RuntimeError("rpc down"))
+        state = MagicMock()
+        state.get_task.return_value = {
+            "state": 1, "videos": [self.video_path],
+            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+        }
+        publish = MagicMock(side_effect=PublishError("boom"))
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=state,
+            publish_video=publish,
+        )
+        scheduler.publisher.base_url = "https://post-engineer.com"
+        scheduler.publisher.api_secret = "secret"
+        # Must not raise: one slot's refund failure never kills the tick.
+        scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
+        self.assertEqual(store.updates[0][1]["status"], "failed")
+
+
 class NotifyIntegrationTests(unittest.TestCase):
     """Discord events on the stages - injected, fire-and-forget, no crash."""
 
