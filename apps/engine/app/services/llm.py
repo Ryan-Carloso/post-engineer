@@ -591,6 +591,12 @@ def _generate_response_inner(
             elif llm_provider == "litellm":
                 model_name = config.app.get("litellm_model_name")
 
+            else:
+                # Unknown provider names (e.g. a typo in config.toml) used to
+                # leave api_key unbound and surface as a cryptic
+                # UnboundLocalError. Fail fast with a clear message instead.
+                raise ValueError(f"unsupported llm provider: {llm_provider}")
+
             if llm_provider not in ["pollinations", "ollama", "litellm"]:  # Skip validation for providers that don't require API key
                 if not api_key:
                     raise ValueError(
