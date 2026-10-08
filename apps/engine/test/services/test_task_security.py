@@ -58,7 +58,7 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
             patch("requests.get", return_value=response or _FakeImageResponse()),
             patch.object(tm.subtitle, "file_to_subtitles", return_value=[]),
             patch.object(tm, "persona_hook_end_seconds", return_value=1.0),
-            patch.object(tm.infinitetalk, "generate_intro", return_value="intro.mp4"),
+            patch.object(tm.infinitetalk, "generate_intro", return_value=("intro.mp4", 0.05)),
             patch.object(
                 tm.video, "replace_video_intro_with_lipsync", return_value="final.mp4"
             ),
@@ -97,8 +97,9 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
         self.assertEqual(os.listdir(self.tmp), [])
 
     def test_accepts_valid_public_image(self):
-        result = self._run("https://cdn.example.com/avatar.png")
+        result, intro_cost_usd = self._run("https://cdn.example.com/avatar.png")
         self.assertEqual(result, "final.mp4")
+        self.assertEqual(intro_cost_usd, 0.05)
         files = os.listdir(self.tmp)
         self.assertEqual(len(files), 1)
         self.assertTrue(files[0].startswith("persona"))

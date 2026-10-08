@@ -41,9 +41,10 @@ class BatchReconciler:
             if task.get("state") == const.TASK_STATE_COMPLETE:
                 self.store.update_slot(slot["id"], status=SLOT_READY)
                 updated += 1
-                # GPU cost (USD) is calculated by the Modal app and returned
-                # in the task result. Include it for unit-economics tracking.
-                # Never in API responses — PostHog dashboard only.
+                # GPU cost (USD) is calculated by the Modal app and persisted
+                # flat on the task row by the task pipeline. Include it for
+                # unit-economics tracking. Never in API responses — PostHog
+                # dashboard only (the API layer strips it).
                 properties: dict[str, object] = {
                     "task_id": str(slot["task_id"]),
                     "flow": "batch",
@@ -53,11 +54,9 @@ class BatchReconciler:
                 slot_user = slot_user_id(slot)
                 if slot_user is not None:
                     properties["user_id"] = slot_user
-                result = task.get("result")
-                if isinstance(result, dict):
-                    cost = result.get("cost_usd")
-                    if isinstance(cost, (int, float)):
-                        properties["cost_usd"] = cost
+                cost = task.get("cost_usd")
+                if isinstance(cost, (int, float)) and not isinstance(cost, bool):
+                    properties["cost_usd"] = float(cost)
                 track_event("video_generated", properties)
             elif task.get("state") == const.TASK_STATE_FAILED:
                 user_id = slot_user_id(slot)

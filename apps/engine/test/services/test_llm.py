@@ -297,6 +297,20 @@ class TestLiteLLMProvider(unittest.TestCase):
         self.assertIn("Error:", result)
         self.assertIn("model_name is not set", result)
 
+    def test_unknown_provider_raises_clear_error(self):
+        """
+        A provider name matching no branch must fail with a clear error
+        naming the provider. Without this guard api_key stayed unbound and
+        surfaced as the cryptic UnboundLocalError "cannot access local
+        variable 'api_key'..." seen in production. _generate_response_inner
+        wraps inner errors in LLMResponseError, so that is what the caller
+        sees.
+        """
+        with self.assertRaisesRegex(
+            llm.LLMResponseError, "unsupported llm provider: not-a-provider"
+        ):
+            llm._generate_response_inner("Say hello", "not-a-provider")
+
     def test_litellm_provider_handles_empty_response(self):
         self._use_litellm_provider()
 

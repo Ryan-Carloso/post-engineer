@@ -522,9 +522,11 @@ class ReconcileTests(unittest.TestCase):
         store = _FakeStore()
         store.generating_slots = lambda: [slot]
         state = MagicMock()
+        # cost_usd is persisted flat on the task row by the task pipeline
+        # (no state backend ever nests it under a "result" key).
         state.get_task.return_value = {
             "state": 1,
-            "result": {"cost_usd": 0.1},
+            "cost_usd": 0.1,
         }
         scheduler = fs.FillScheduleScheduler(
             store=store, task_state=state,
@@ -545,6 +547,34 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(props["user_id"], "user-1")
         self.assertEqual(props["slotId"], "slot-1")
         self.assertEqual(props["cost_usd"], 0.1)
+
+    def test_reconcile_generated_event_omits_cost_usd_when_absent(self):
+        from app.services.fill_schedule import reconcile as rec_module
+
+        slot = {
+            "id": "slot-1",
+            "task_id": "t-1",
+            "user_id": "user-1",
+            "schedules": {"id": "sched-1", "user_id": "user-1"},
+        }
+        store = _FakeStore()
+        store.generating_slots = lambda: [slot]
+        state = MagicMock()
+        state.get_task.return_value = {"state": 1}
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=state,
+            publish_video=MagicMock(),
+        )
+        with patch.object(rec_module, "track_event") as track:
+            self.assertEqual(
+                scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1
+            )
+        generated_calls = [
+            c for c in track.call_args_list if c[0][0] == "video_generated"
+        ]
+        self.assertEqual(len(generated_calls), 1)
+        _, props = generated_calls[0][0]
+        self.assertNotIn("cost_usd", props)
 
     def test_failed_task_becomes_failed(self):
         slot = {
@@ -799,7 +829,39 @@ class PublishDueTests(unittest.TestCase):
         kwargs = publish.call_args.kwargs
         self.assertIsInstance(kwargs["metadata"], YouTubeMetadata)
         self.assertEqual(kwargs["owner_user_id"], "user-1")
+        # The published bytes must be the verified R2 archive contents, not
+        # a re-read from the (possibly recycled) local disk.
+        self.assertEqual(kwargs["video_bytes"], b"fake-video-bytes")
+        # Only the basename is sent upstream; a None-swapped or full-path
+        # video_path would break the provider upload.
+        self.assertEqual(kwargs["video_path"], os.path.basename(self.video_path))
+        self.assertEqual(kwargs["content_type"], "video/mp4")
         self.assertEqual(store.updates[0][1]["status"], "published")
+
+    def test_scheduled_publish_reads_from_the_verified_archive_path(self):
+        # The R2 object path recorded at archive time is the only source:
+        # a None-swapped or dropped argument must fail.
+        from app.services import video_storage
+
+        store = _FakeStore()
+        store.ready_due_slots = lambda now: [self._slot()]
+        state = MagicMock()
+        state.get_task.return_value = {
+            "state": 1, "videos": [self.video_path],
+            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+        }
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=state,
+            publish_video=MagicMock(),
+        )
+        scheduler.publisher.base_url = "https://post-engineer.com"
+        scheduler.publisher.api_secret = "test-shared-secret"
+
+        with patch.object(
+            video_storage, "read_final_video_r2", return_value=b"fake-video-bytes"
+        ) as read_mock:
+            scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
+        read_mock.assert_called_once_with("user-1/faceless/t-1/final-1.mp4")
 
     def test_instagram_provider_uses_caption_metadata(self):
         slot = self._slot()

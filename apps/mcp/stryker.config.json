@@ -1,7 +1,9 @@
 {
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
-  "_comment": "Per-PR mutation testing for apps/mcp (vitest); the mutation workflow passes the PR's changed files via --mutate. Manual 'workflow_dispatch' runs use this full scope: src/**.",
+  "_comment": "Per-PR mutation testing for apps/mcp (vitest); the mutation workflow passes the PR's changed files via --mutate. Manual 'workflow_dispatch' runs use this full scope: src/**. Incremental results live in reports/stryker-incremental.json, cached per-PR by the mutation workflow so synchronize re-runs only re-test changed mutants.",
   "coverageAnalysis": "perTest",
+  "incremental": true,
+  "incrementalFile": "reports/stryker-incremental.json",
   "ignorePatterns": [
     "node_modules",
     "dist/**",

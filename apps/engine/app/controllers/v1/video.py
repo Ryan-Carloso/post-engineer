@@ -40,6 +40,18 @@ from app.services import task as tm
 from app.services import video_storage
 from app.utils import file_security, upload_limits, utils
 
+# Operator-private task fields: persisted on the task row for server-side
+# use (e.g. cost_usd for PostHog unit economics) but never exposed through
+# the API. The web forwards task bodies to browsers wholesale, so every
+# endpoint that serializes a task must strip these via _public_task_view.
+PRIVATE_TASK_FIELDS = frozenset({"cost_usd"})
+
+
+def _public_task_view(task: dict[str, object]) -> dict[str, object]:
+    """Return a copy of a task dict with operator-private fields removed."""
+    return {key: value for key, value in task.items() if key not in PRIVATE_TASK_FIELDS}
+
+
 # Upload size caps: the handlers stream uploads in chunks instead of
 # buffering the whole body in RAM.
 _BGM_MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
@@ -451,7 +463,7 @@ def get_all_tasks(request: Request, page: int = Query(1, ge=1), page_size: int =
     tasks, total = sm.state.get_all_tasks(page, page_size, user_id=auth.user_id)
 
     response = {
-        "tasks": tasks,
+        "tasks": [_public_task_view(task) for task in tasks],
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -474,7 +486,7 @@ def get_task(
     task = sm.state.get_task(task_id, user_id=auth.user_id)
     if task:
         task_dir = utils.task_dir()
-        response_task = dict(task)
+        response_task = _public_task_view(dict(task))
 
         if "videos" in task:
             response_task["videos"] = [
