@@ -143,6 +143,10 @@ def test_faceless_pipeline_renders_multi_material_video(tmp_path, monkeypatch):
     monkeypatch.setattr(
         llm_service, "generate_script", lambda **kwargs: MOCKED_SCRIPT
     )
+    # This rendering test validates local media composition, not R2. Keep the
+    # final file locally so ffprobe can inspect it after the pipeline returns.
+    monkeypatch.setattr(tm.video_storage, "require_r2_configuration", lambda: None)
+    monkeypatch.setattr(tm.video_storage, "upload_final_video", lambda *_: None)
 
     material_names = _make_materials(local_videos)
     audio_name = _make_audio(local_videos)

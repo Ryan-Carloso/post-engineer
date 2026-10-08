@@ -494,7 +494,7 @@ def get_task(
             response_task["final_video"] = _task_file_to_uri(
                 final_videos[0], endpoint, task_dir, request_id
             )
-        # Whether a durable Supabase Storage copy exists (restart-proof
+        # Whether a durable R2 archive exists (restart-proof
         # playback even after the ephemeral disk is wiped).
         response_task["has_archive"] = bool(task.get("video_storage_path"))
         return utils.get_response(200, response_task)

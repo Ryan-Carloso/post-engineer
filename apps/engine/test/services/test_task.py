@@ -944,6 +944,7 @@ class TestPublishFailureDiscordAlert(unittest.TestCase):
                 "maybe_publish_finished_videos",
                 side_effect=PublishFailedError("publish failed for final.mp4: 403"),
             ),
+            patch.object(tm.video_storage, "require_r2_configuration"),
             patch.object(tm, "cleanup_task_intermediates"),
         ):
             tm.start(task_id="task-pub", params=params)
@@ -983,6 +984,7 @@ class TestPublishFailureDiscordAlert(unittest.TestCase):
                     "maybe_publish_finished_videos",
                     side_effect=PublishFailedError("publish failed for final.mp4: 403"),
                 ),
+                patch.object(tm.video_storage, "require_r2_configuration"),
                 patch.object(tm, "cleanup_task_intermediates"),
                 patch.object(tm, "track_event") as track,
             ):
@@ -1042,9 +1044,7 @@ class TestReleaseFailureAlertLockBusy(unittest.TestCase):
 
 
 class TestArchiveFinalVideos(unittest.TestCase):
-    """Only final videos reach Supabase Storage, best-effort, and the
-    storage path is recorded in the task state for the /stream/ and
-    /download/ fallback."""
+    """Only final videos reach R2 and their paths are recorded for serving."""
 
     def test_uploads_final_video_and_records_storage_path(self):
         task_id = "archive-task-1"

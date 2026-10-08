@@ -1,9 +1,9 @@
-"""Supabase Storage archive for final videos (app/services/video_storage.py).
+"""R2 archive for final videos (app/services/video_storage.py).
 
 Only the FINAL video (final-1.mp4, post audio-mux) is archived — never
 intermediates (combined-1.mp4), caches, or pre-audio renders. Layout:
     videos/{user_id}/{persona_id|faceless}/{task_id}/final-1.mp4
-so Supabase RLS can scope every object to its owning user by path prefix.
+so R2 objects can be scoped to their owning user by path prefix.
 """
 
 import os
@@ -73,119 +73,11 @@ class PersonaFolderTests(unittest.TestCase):
         self.assertEqual(vs.persona_folder({}, _params()), "faceless")
 
 
-class IsConfiguredTests(unittest.TestCase):
-    def test_requires_both_env_vars(self):
-        with patch.dict(os.environ, {}, clear=True):
-            self.assertFalse(vs.is_configured())
-        with patch.dict(os.environ, {"SUPABASE_URL": "https://x.supabase.co"}, clear=True):
-            self.assertFalse(vs.is_configured())
-        with patch.dict(
-            os.environ,
-            {
-                "SUPABASE_URL": "https://x.supabase.co",
-                "SUPABASE_SERVICE_ROLE_KEY": "svc-key",
-            },
-            clear=True,
-        ):
-            self.assertTrue(vs.is_configured())
-
-
-class UploadFinalVideoTests(unittest.TestCase):
-    def setUp(self):
-        self.env = patch.dict(
-            os.environ,
-            {
-                "SUPABASE_URL": "https://xyz.supabase.co",
-                "SUPABASE_SERVICE_ROLE_KEY": "svc-key",
-            },
-            clear=True,
-        )
-        self.env.start()
-        self.addCleanup(self.env.stop)
-
-    def test_uploads_to_bucket_path_with_service_key(self):
-        response = MagicMock()
-        response.ok = True
-        response.status_code = 200
-        with patch("app.services.video_storage.requests.post", return_value=response) as post:
-            with patch("builtins.open", MagicMock()):
-                result = vs.upload_final_video(
-                    "u1/faceless/task-7/final-1.mp4", "/tmp/final-1.mp4"
-                )
-        self.assertEqual(result, "u1/faceless/task-7/final-1.mp4")
-        args, kwargs = post.call_args
-        self.assertEqual(
-            args[0],
-            "https://xyz.supabase.co/storage/v1/object/videos/u1/faceless/task-7/final-1.mp4",
-        )
-        self.assertEqual(kwargs["headers"]["Authorization"], "Bearer svc-key")
-        self.assertEqual(kwargs["headers"]["Content-Type"], "video/mp4")
-
-    def test_upload_failure_is_best_effort_and_returns_none(self):
-        response = MagicMock()
-        response.ok = False
-        response.status_code = 500
-        response.text = "boom"
-        with patch("app.services.video_storage.requests.post", return_value=response):
-            with patch("builtins.open", MagicMock()):
-                self.assertIsNone(
-                    vs.upload_final_video("u1/faceless/t/final-1.mp4", "/tmp/final-1.mp4")
-                )
-
-    def test_upload_skipped_when_not_configured(self):
-        with patch.dict(os.environ, {}, clear=True):
-            with patch("app.services.video_storage.requests.post") as post:
-                self.assertIsNone(vs.upload_final_video("p", "/tmp/f.mp4"))
-                post.assert_not_called()
-
-
-class CreateSignedUrlTests(unittest.TestCase):
-    def setUp(self):
-        self.env = patch.dict(
-            os.environ,
-            {
-                "SUPABASE_URL": "https://xyz.supabase.co",
-                "SUPABASE_SERVICE_ROLE_KEY": "svc-key",
-            },
-            clear=True,
-        )
-        self.env.start()
-        self.addCleanup(self.env.stop)
-
-    def test_returns_signed_url(self):
-        response = MagicMock()
-        response.ok = True
-        response.json.return_value = {
-            "signedURL": "https://xyz.supabase.co/storage/v1/object/sign/videos/p?token=abc"
-        }
-        with patch("app.services.video_storage.requests.post", return_value=response) as post:
-            url = vs.create_signed_url("u1/faceless/t/final-1.mp4", expires_in=600)
-        self.assertEqual(
-            url, "https://xyz.supabase.co/storage/v1/object/sign/videos/p?token=abc"
-        )
-        args, kwargs = post.call_args
-        self.assertIn("/storage/v1/object/sign/videos/u1/faceless/t/final-1.mp4", args[0])
-        self.assertEqual(kwargs["json"], {"expiresIn": 600})
-
-    def test_failure_returns_none(self):
-        response = MagicMock()
-        response.ok = False
-        response.status_code = 404
-        response.text = "not found"
-        with patch("app.services.video_storage.requests.post", return_value=response):
-            self.assertIsNone(vs.create_signed_url("u1/faceless/t/final-1.mp4"))
-
-    def test_not_configured_returns_none(self):
-        with patch.dict(os.environ, {}, clear=True):
-            self.assertIsNone(vs.create_signed_url("u1/faceless/t/final-1.mp4"))
-
-
 class R2IsConfiguredTests(unittest.TestCase):
     """R2 needs account id + key id + secret; any one missing is unconfigured."""
 
     def test_requires_all_three_r2_env_vars(self):
         full = {
-            "MPT_VIDEO_STORAGE": "r2",
             "R2_ACCOUNT_ID": "acct",
             "R2_ACCESS_KEY_ID": "key-id",
             "R2_SECRET_ACCESS_KEY": "secret",
@@ -205,8 +97,7 @@ class R2IsConfiguredTests(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                "MPT_VIDEO_STORAGE": "r2",
-                "R2_ACCOUNT_ID": "acct123",
+                    "R2_ACCOUNT_ID": "acct123",
                 "R2_ACCESS_KEY_ID": "k",
                 "R2_SECRET_ACCESS_KEY": "s",
             },
@@ -216,12 +107,16 @@ class R2IsConfiguredTests(unittest.TestCase):
                 vs.r2_endpoint(), "https://acct123.r2.cloudflarestorage.com"
             )
 
+    def test_missing_credentials_fail_explicitly(self):
+        with patch.dict(os.environ, {}, clear=True):
+            with self.assertRaisesRegex(RuntimeError, "R2 video storage is required"):
+                vs.require_r2_configuration()
+
     def test_blank_values_are_treated_as_unset(self):
         with patch.dict(
             os.environ,
             {
-                "MPT_VIDEO_STORAGE": "r2",
-                "R2_ACCOUNT_ID": "acct",
+                    "R2_ACCOUNT_ID": "acct",
                 "R2_ACCESS_KEY_ID": "",
                 "R2_SECRET_ACCESS_KEY": "s",
             },
@@ -235,8 +130,7 @@ class R2UploadTests(unittest.TestCase):
         self.env = patch.dict(
             os.environ,
             {
-                "MPT_VIDEO_STORAGE": "r2",
-                "R2_ACCOUNT_ID": "acct",
+                    "R2_ACCOUNT_ID": "acct",
                 "R2_ACCESS_KEY_ID": "key-id",
                 "R2_SECRET_ACCESS_KEY": "secret",
             },
@@ -322,7 +216,8 @@ class R2UploadTests(unittest.TestCase):
     def test_upload_skipped_when_not_configured(self):
         with patch.dict(os.environ, {}, clear=True):
             with patch("app.services.video_storage._r2_client") as factory:
-                self.assertIsNone(vs.upload_final_video_r2("p", "/tmp/f.mp4"))
+                with self.assertRaisesRegex(RuntimeError, "R2 video storage is required"):
+                    vs.upload_final_video_r2("p", "/tmp/f.mp4")
                 factory.assert_not_called()
 
 
@@ -331,8 +226,7 @@ class R2SignedUrlTests(unittest.TestCase):
         self.env = patch.dict(
             os.environ,
             {
-                "MPT_VIDEO_STORAGE": "r2",
-                "R2_ACCOUNT_ID": "acct",
+                    "R2_ACCOUNT_ID": "acct",
                 "R2_ACCESS_KEY_ID": "key-id",
                 "R2_SECRET_ACCESS_KEY": "secret",
             },
@@ -363,7 +257,8 @@ class R2SignedUrlTests(unittest.TestCase):
     def test_not_configured_returns_none(self):
         with patch.dict(os.environ, {}, clear=True):
             with patch("app.services.video_storage._r2_client") as factory:
-                self.assertIsNone(vs.create_signed_url_r2("p"))
+                with self.assertRaisesRegex(RuntimeError, "R2 video storage is required"):
+                    vs.create_signed_url_r2("p")
                 factory.assert_not_called()
 
 
@@ -410,15 +305,25 @@ class ArchiveFinalVideosAlertTests(unittest.TestCase):
 
 
 class ReadFinalVideoR2Tests(unittest.TestCase):
+    def setUp(self):
+        self.env = patch.dict(
+            os.environ,
+            {
+                "R2_ACCOUNT_ID": "acct",
+                "R2_ACCESS_KEY_ID": "key-id",
+                "R2_SECRET_ACCESS_KEY": "secret",
+            },
+            clear=True,
+        )
+        self.env.start()
+        self.addCleanup(self.env.stop)
+
     def test_reads_and_closes_r2_body(self):
         body = MagicMock()
         body.read.return_value = b"archived-mp4"
         client = MagicMock()
         client.get_object.return_value = {"Body": body}
-        with (
-            patch.object(vs, "r2_is_configured", return_value=True),
-            patch.object(vs, "_r2_client", return_value=client),
-        ):
+        with patch.object(vs, "_r2_client", return_value=client):
             result = vs.read_final_video_r2("u/f/task/final-1.mp4")
         self.assertEqual(result, b"archived-mp4")
         client.get_object.assert_called_once_with(
@@ -427,8 +332,8 @@ class ReadFinalVideoR2Tests(unittest.TestCase):
         body.close.assert_called_once()
 
     def test_refuses_to_read_when_r2_is_not_configured(self):
-        with patch.object(vs, "r2_is_configured", return_value=False):
-            with self.assertRaisesRegex(RuntimeError, "not configured"):
+        with patch.dict(os.environ, {}, clear=True):
+            with self.assertRaisesRegex(RuntimeError, "R2 video storage is required"):
                 vs.read_final_video_r2("u/f/task/final-1.mp4")
 
     def test_does_not_return_an_empty_object(self):
@@ -436,10 +341,7 @@ class ReadFinalVideoR2Tests(unittest.TestCase):
         body.read.return_value = b""
         client = MagicMock()
         client.get_object.return_value = {"Body": body}
-        with (
-            patch.object(vs, "r2_is_configured", return_value=True),
-            patch.object(vs, "_r2_client", return_value=client),
-        ):
+        with patch.object(vs, "_r2_client", return_value=client):
             with self.assertRaisesRegex(RuntimeError, "is empty"):
                 vs.read_final_video_r2("u/f/task/final-1.mp4")
 

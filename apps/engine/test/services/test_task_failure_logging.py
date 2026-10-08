@@ -255,6 +255,7 @@ class StartCrashStageTests(unittest.TestCase):
             ),
             patch.object(task_service, "send_discord", return_value=True),
             patch.object(task_service, "cleanup_task_intermediates"),
+            patch.object(task_service.video_storage, "require_r2_configuration"),
             _LogCapture() as capture,
         ):
             if fail_in == "generate_script":
