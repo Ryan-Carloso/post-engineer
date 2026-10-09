@@ -174,6 +174,26 @@ export const ListTokenTransactionsShape = {
 
 export const ListTokenTransactionsSchema = z.object(ListTokenTransactionsShape);
 
+export const GetPersonaDeletePreviewShape = {
+  personaId: z
+    .string()
+    .min(1, 'personaId is required')
+    .describe('The persona ID to preview deletion for. Read-only: shows what deleting the persona would remove (counts plus per-video download links).'),
+};
+
+export const GetPersonaDeletePreviewSchema = z.object(GetPersonaDeletePreviewShape);
+
+export const DeletePersonaShape = {
+  personaId: z
+    .string()
+    .min(1, 'personaId is required')
+    .describe(
+      'The persona ID to delete. DESTRUCTIVE and irreversible: deletes the persona, all its schedules and slots, all generated videos, and the image library. No token refunds — prepaid tokens for pending slots are forfeited. Call get_persona_delete_preview first to see exactly what will be removed.',
+    ),
+};
+
+export const DeletePersonaSchema = z.object(DeletePersonaShape);
+
 export const GetTokenBalanceShape = {};
 
 export const GetTokenBalanceSchema = z.object(GetTokenBalanceShape);
@@ -795,6 +815,166 @@ export async function handleListTokenTransactions(
       isError: true,
     };
   }
+}
+
+export async function handleGetPersonaDeletePreview(
+  client: PostEngineerClient,
+  args: z.infer<typeof GetPersonaDeletePreviewSchema>
+): Promise<McpToolResponse> {
+  try {
+    const narrowed = narrowDeletePreview(await client.getPersonaDeletePreview(args.personaId));
+    const counts = narrowed.counts;
+    const humanSummary =
+      `Deleting persona "${narrowed.persona.name ?? args.personaId}" would remove ` +
+      `${counts.schedules ?? '?'} schedule(s), ${counts.upcomingSlots ?? '?'} upcoming slot(s), ` +
+      `${counts.publishedSlots ?? '?'} published slot(s), ${counts.generatedVideos ?? '?'} generated video(s), ` +
+      `and ${counts.personaImages ?? '?'} library image(s). No token refunds.`;
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `${humanSummary}\n${JSON.stringify(narrowed, null, 2)}`,
+        },
+      ],
+    };
+  } catch (error) {
+    if (error instanceof ApiError && error.code !== null) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error getting persona delete preview: ${JSON.stringify({
+              code: error.code,
+              message: sanitizeEngineError(getErrorMessage(error)),
+              field: error.field,
+            })}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error getting persona delete preview: ${getErrorMessage(error)}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+export async function handleDeletePersona(
+  client: PostEngineerClient,
+  args: z.infer<typeof DeletePersonaSchema>
+): Promise<McpToolResponse> {
+  try {
+    await client.deletePersona(args.personaId);
+    return {
+      content: [
+        {
+          type: 'text',
+          text:
+            `Persona ${args.personaId} deleted: the persona, all its schedules and slots, ` +
+            `all generated videos, and the image library are gone. No token refunds were issued.`,
+        },
+      ],
+    };
+  } catch (error) {
+    if (error instanceof ApiError && error.code !== null) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error deleting persona: ${JSON.stringify({
+              code: error.code,
+              message: sanitizeEngineError(getErrorMessage(error)),
+              field: error.field,
+            })}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error deleting persona: ${getErrorMessage(error)}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/** Narrows the GET /api/persona/delete-preview envelope: the persona, the
+ * removal counts, and the per-video download links. Anything the API adds
+ * later rides through unparsed. */
+function narrowDeletePreview(result: unknown): {
+  persona: { id: string | null; name: string | null };
+  counts: {
+    schedules: number | null;
+    upcomingSlots: number | null;
+    publishedSlots: number | null;
+    failedSlots: number | null;
+    generatedVideos: number | null;
+    personaImages: number | null;
+  };
+  videos: Array<{
+    taskId: string | null;
+    topic: string | null;
+    status: string | null;
+    downloadUrl: string | null;
+  }>;
+  videosTruncated: boolean | null;
+  linksIncomplete: boolean | null;
+} {
+  const record =
+    typeof result === 'object' && result !== null
+      ? (result as Record<string, unknown>)
+      : {};
+  const persona =
+    typeof record.persona === 'object' && record.persona !== null
+      ? (record.persona as Record<string, unknown>)
+      : {};
+  const counts =
+    typeof record.counts === 'object' && record.counts !== null
+      ? (record.counts as Record<string, unknown>)
+      : {};
+  const rawVideos = Array.isArray(record.videos) ? record.videos : [];
+  const str = (value: unknown): string | null =>
+    typeof value === 'string' ? value : null;
+  const num = (value: unknown): number | null =>
+    typeof value === 'number' ? value : null;
+  const bool = (value: unknown): boolean | null =>
+    typeof value === 'boolean' ? value : null;
+  return {
+    persona: { id: str(persona.id), name: str(persona.name) },
+    counts: {
+      schedules: num(counts.schedules),
+      upcomingSlots: num(counts.upcomingSlots),
+      publishedSlots: num(counts.publishedSlots),
+      failedSlots: num(counts.failedSlots),
+      generatedVideos: num(counts.generatedVideos),
+      personaImages: num(counts.personaImages),
+    },
+    videos: rawVideos.map((video) => {
+      const v =
+        typeof video === 'object' && video !== null
+          ? (video as Record<string, unknown>)
+          : {};
+      return {
+        taskId: str(v.taskId),
+        topic: str(v.topic),
+        status: str(v.status),
+        downloadUrl: str(v.downloadUrl),
+      };
+    }),
+    videosTruncated: bool(record.videosTruncated),
+    linksIncomplete: bool(record.linksIncomplete),
+  };
 }
 
 /** One narrowed token_transactions row: the fields the tool contract promises. */

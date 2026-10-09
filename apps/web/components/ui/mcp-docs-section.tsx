@@ -8,6 +8,7 @@ import { whatsappUrl } from '@/lib/whatsapp';
 import { Button } from '@/components/ui/button';
 import {
   AccountsIcon,
+  AlertIcon,
   CalendarIcon,
   CheckIcon,
   CoinsIcon,
@@ -56,6 +57,8 @@ const MCP_TOOL_CARDS: McpToolCard[] = [
   { id: 'list_video_generations', descKey: 'apiKeys.toolDescListVideoGenerations', Icon: HistoryIcon },
   { id: 'get_video_generation', descKey: 'apiKeys.toolDescGetVideoGeneration', Icon: FilmIcon },
   { id: 'list_token_transactions', descKey: 'apiKeys.toolDescListTokenTransactions', Icon: CoinsIcon },
+  { id: 'get_persona_delete_preview', descKey: 'apiKeys.toolDescGetPersonaDeletePreview', Icon: AlertIcon },
+  { id: 'delete_persona', descKey: 'apiKeys.toolDescDeletePersona', Icon: TrashIcon },
 ];
 
 export default function McpDocsSection(): ReactNode {
@@ -115,6 +118,8 @@ export default function McpDocsSection(): ReactNode {
         '- list_video_generations: list my video generation history, newest first (optional limit, default 50, max 200).',
         '- get_video_generation: get one video generation\'s detail by generation ID.',
         '- list_token_transactions: list my token ledger — every credit and debit (purchases, generation spends, refunds), newest first (optional limit, default 20, max 100).',
+        '- get_persona_delete_preview: preview what deleting a persona would remove (counts + per-video download links). Read-only.',
+        '- delete_persona: DESTRUCTIVE — delete a persona with all its schedules, slots, videos, and image library. No token refunds.',
         '',
         'How to work with me (agent instructions):',
         '1. Start by calling list_personas and showing me what I already have (name, language, niche). If I have none, say so.',
@@ -177,6 +182,8 @@ export default function McpDocsSection(): ReactNode {
       '- list_video_generations: listar meu histórico de gerações de vídeo, do mais recente ao mais antigo (limit opcional, padrão 50, máx 200).',
       '- get_video_generation: ver o detalhe de uma geração de vídeo pelo generation ID.',
       '- list_token_transactions: listar meu extrato de tokens — todos os créditos e débitos (compras, gastos de geração, reembolsos), do mais recente ao mais antigo (limit opcional, padrão 20, máx 100).',
+      '- get_persona_delete_preview: ver o que deletar uma persona removeria (contagens + links de download por vídeo). Somente leitura.',
+      '- delete_persona: DESTRUTIVO — deleta uma persona com todos os agendamentos, slots, vídeos e biblioteca de imagens. Sem reembolso de tokens.',
       '',
       'Como trabalhar comigo (instruções para o agente):',
       '1. Comece chamando list_personas e me mostrando o que eu já tenho (nome, idioma, nicho). Se eu não tiver nenhuma, diga isso.',

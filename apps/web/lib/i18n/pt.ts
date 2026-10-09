@@ -406,6 +406,8 @@ export const ptDictionary = {
     toolDescListVideoGenerations: 'Listar histórico de gerações de vídeo',
     toolDescGetVideoGeneration: 'Ver o detalhe de uma geração de vídeo',
     toolDescListTokenTransactions: 'Listar o extrato de tokens',
+    toolDescGetPersonaDeletePreview: 'Ver impacto de deletar persona',
+    toolDescDeletePersona: 'Deletar uma persona (destrutivo)',
   },
 
   // App API Key

@@ -29,6 +29,8 @@ import {
   ListVideoGenerationsShape,
   GetVideoGenerationShape,
   ListTokenTransactionsShape,
+  GetPersonaDeletePreviewShape,
+  DeletePersonaShape,
 } from '../tools.js';
 import type { PostEngineerClient } from '../client.js';
 
@@ -54,6 +56,8 @@ const EXPECTED_TOOLS = [
   'list_video_generations',
   'get_video_generation',
   'list_token_transactions',
+  'get_persona_delete_preview',
+  'delete_persona',
   'get_token_balance',
   'generate_persona_videos',
   'get_video_status',
@@ -182,6 +186,8 @@ describe('registered tool schemas (single source of truth)', () => {
       list_video_generations: ListVideoGenerationsShape,
       get_video_generation: GetVideoGenerationShape,
       list_token_transactions: ListTokenTransactionsShape,
+      get_persona_delete_preview: GetPersonaDeletePreviewShape,
+      delete_persona: DeletePersonaShape,
       get_token_balance: GetTokenBalanceShape,
       generate_persona_videos: GeneratePersonaVideosShape,
       get_video_status: GetVideoStatusShape,

@@ -407,6 +407,8 @@ export const enDictionary: Dictionary = {
     toolDescListVideoGenerations: 'List video generation history',
     toolDescGetVideoGeneration: 'Get one video generation\'s detail',
     toolDescListTokenTransactions: 'List the token ledger',
+    toolDescGetPersonaDeletePreview: 'Preview persona deletion impact',
+    toolDescDeletePersona: 'Delete a persona (destructive)',
   },
 
   // App API Key

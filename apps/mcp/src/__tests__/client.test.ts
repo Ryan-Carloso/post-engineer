@@ -499,6 +499,36 @@ describe('PostEngineerClient', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  it('gets a persona delete preview by persona id', async () => {
+    const mockPreview = { success: true, persona: { id: 'persona-1', name: 'Ava' }, counts: {} };
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(mockPreview),
+    });
+
+    const result = await client.getPersonaDeletePreview('persona-1');
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/persona/delete-preview?personaId=persona-1`,
+      expect.objectContaining({ method: 'GET' })
+    );
+    expect(result).toEqual(mockPreview);
+  });
+
+  it('deletes a persona by id', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+    });
+
+    await client.deletePersona('persona-1');
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/persona?personaId=persona-1`,
+      expect.objectContaining({ method: 'DELETE' })
+    );
+  });
+
 describe('generate and schedule videos client', () => {
   const baseUrl = 'https://post-engineer.com';
   let client: PostEngineerClient;

@@ -1392,3 +1392,84 @@ describe('token ledger tool', () => {
     expect(textOf(response)).toContain('"code":"INTERNAL_ERROR"');
   });
 });
+
+describe('delete persona tools', () => {
+  const mockClient = {
+    getPersonaDeletePreview: vi.fn(),
+    deletePersona: vi.fn(),
+  } as unknown as PostEngineerClient;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('GetPersonaDeletePreviewSchema requires a non-empty personaId', async () => {
+    const { GetPersonaDeletePreviewSchema } = await import('../tools.js');
+    expect(GetPersonaDeletePreviewSchema.safeParse({ personaId: 'persona-1' }).success).toBe(true);
+    expect(GetPersonaDeletePreviewSchema.safeParse({ personaId: '' }).success).toBe(false);
+  });
+
+  it('handleGetPersonaDeletePreview narrows counts and videos, and summarizes', async () => {
+    const { handleGetPersonaDeletePreview } = await import('../tools.js');
+    vi.mocked(mockClient.getPersonaDeletePreview).mockResolvedValue({
+      success: true,
+      persona: { id: 'persona-1', name: 'Ava' },
+      counts: {
+        schedules: 2,
+        upcomingSlots: 5,
+        publishedSlots: 10,
+        failedSlots: 1,
+        generatedVideos: 16,
+        personaImages: 3,
+      },
+      videos: [
+        { taskId: 'task-1', topic: 'Launch day', status: 'completed', downloadUrl: 'https://cdn.example.com/v.mp4' },
+      ],
+      videosTruncated: false,
+      linksIncomplete: false,
+      internalField: 'rides through unparsed',
+    });
+
+    const response = await handleGetPersonaDeletePreview(mockClient, { personaId: 'persona-1' });
+    expect(mockClient.getPersonaDeletePreview).toHaveBeenCalledWith('persona-1');
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toContain('Ava');
+    expect(text).toContain('5');
+    expect(text).toContain('"upcomingSlots": 5');
+    expect(text).toContain('https://cdn.example.com/v.mp4');
+    expect(text).not.toContain('internalField');
+  });
+
+  it('DeletePersonaSchema requires a non-empty personaId', async () => {
+    const { DeletePersonaSchema } = await import('../tools.js');
+    expect(DeletePersonaSchema.safeParse({ personaId: 'persona-1' }).success).toBe(true);
+    expect(DeletePersonaSchema.safeParse({ personaId: '' }).success).toBe(false);
+  });
+
+  it('handleDeletePersona confirms the destructive deletion', async () => {
+    const { handleDeletePersona } = await import('../tools.js');
+    vi.mocked(mockClient.deletePersona).mockResolvedValue({ success: true });
+
+    const response = await handleDeletePersona(mockClient, { personaId: 'persona-1' });
+    expect(mockClient.deletePersona).toHaveBeenCalledWith('persona-1');
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toContain('persona-1');
+    expect(text).toMatch(/deleted/i);
+  });
+
+  it('handleDeletePersona surfaces API errors with the structured contract', async () => {
+    const { handleDeletePersona } = await import('../tools.js');
+    const { ApiError } = await import('../errors.js');
+    vi.mocked(mockClient.deletePersona).mockRejectedValue(
+      new ApiError('Failed to delete persona: 404 Persona not found.', 'PERSONA_NOT_FOUND', 'personaId')
+    );
+
+    const response = await handleDeletePersona(mockClient, { personaId: 'nope' });
+    expect(response.isError).toBe(true);
+    const text = textOf(response);
+    expect(text).toContain('"code":"PERSONA_NOT_FOUND"');
+    expect(text).toContain('"field":"personaId"');
+  });
+});

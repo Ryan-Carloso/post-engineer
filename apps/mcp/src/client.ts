@@ -578,6 +578,25 @@ export class PostEngineerClient {
     );
   }
 
+  async getPersonaDeletePreview(personaId: string): Promise<unknown> {
+    return this.request(
+      `/api/persona/delete-preview?personaId=${encodeURIComponent(personaId)}`,
+      { method: 'GET', headers: this.getHeaders() },
+      'get persona delete preview'
+    );
+  }
+
+  async deletePersona(personaId: string): Promise<unknown> {
+    // Destructive and irreversible: the persona, all its schedules, slots,
+    // generated videos, and image library are removed. No token refunds —
+    // prepaid tokens for pending slots are forfeited.
+    return this.request(
+      `/api/persona?personaId=${encodeURIComponent(personaId)}`,
+      { method: 'DELETE', headers: this.getHeaders() },
+      'delete persona'
+    );
+  }
+
   async generatePersonaVideos(input: GeneratePersonaVideosInput): Promise<unknown> {
     // Map the per-provider account arrays into the publishing.accounts
     // record. Only set entries the caller provided: the server enforces

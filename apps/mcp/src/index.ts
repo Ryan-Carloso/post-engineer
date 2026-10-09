@@ -22,6 +22,8 @@ import {
   ListVideoGenerationsShape,
   GetVideoGenerationShape,
   ListTokenTransactionsShape,
+  GetPersonaDeletePreviewShape,
+  DeletePersonaShape,
   GeneratePersonaVideosShape,
   GetVideoStatusShape,
   GetVideoTaskProgressShape,
@@ -45,6 +47,8 @@ import {
   handleListVideoGenerations,
   handleGetVideoGeneration,
   handleListTokenTransactions,
+  handleGetPersonaDeletePreview,
+  handleDeletePersona,
   handleGetTokenBalance,
   handleGeneratePersonaVideos,
   handleGetVideoStatus,
@@ -231,6 +235,24 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
     ListTokenTransactionsShape,
     withTracking('list_token_transactions', async (args) => {
       return handleListTokenTransactions(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'get_persona_delete_preview',
+    'Preview what deleting a persona would remove: counts of schedules, upcoming/published/failed slots, generated videos and library images, plus per-video download links (read-only, never mutates). Call before delete_persona.',
+    GetPersonaDeletePreviewShape,
+    withTracking('get_persona_delete_preview', async (args) => {
+      return handleGetPersonaDeletePreview(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'delete_persona',
+    'DESTRUCTIVE and irreversible: delete a persona with all its schedules, slots, generated videos, and image library. No token refunds — prepaid tokens for pending slots are forfeited. Call get_persona_delete_preview first.',
+    DeletePersonaShape,
+    withTracking('delete_persona', async (args) => {
+      return handleDeletePersona(apiClient, args);
     })
   );
 
