@@ -91,12 +91,10 @@ async function postHandler(request: NextRequest) {
     // Per-user rate limit — uses the per-operation profile for the provider.
     // The multi-account loop counts as ONE request (the per-account ceiling
     // is the destination platform's quota, not the local rate limit).
+    // Only YouTube has a dedicated profile; every other provider shares the
+    // instagram-post profile.
     const rateProfile =
-      provider === 'youtube'
-        ? RATE_LIMITS.youtubeUpload
-        : provider === 'bluesky'
-          ? RATE_LIMITS.instagramPost
-          : RATE_LIMITS.instagramPost;
+      provider === 'youtube' ? RATE_LIMITS.youtubeUpload : RATE_LIMITS.instagramPost;
     const limited = await applyRateLimit(request, rateProfile, userId);
     if (limited) return limited;
 
