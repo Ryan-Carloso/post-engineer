@@ -16,6 +16,9 @@ import {
   GetTokenBalanceShape,
   ListPostsShape,
   CancelScheduleShape,
+  GetSlotShape,
+  UpdateSlotTopicShape,
+  DeleteSlotShape,
   GeneratePersonaVideosShape,
   GetVideoStatusShape,
   GetVideoTaskProgressShape,
@@ -33,6 +36,9 @@ import {
   handleListSchedules,
   handleListPosts,
   handleCancelSchedule,
+  handleGetSlot,
+  handleUpdateSlotTopic,
+  handleDeleteSlot,
   handleGetTokenBalance,
   handleGeneratePersonaVideos,
   handleGetVideoStatus,
@@ -165,6 +171,33 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
     CancelScheduleShape,
     withTracking('cancel_schedule', async (args) => {
       return handleCancelSchedule(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'get_slot',
+    'Get one scheduled post\'s full detail by slot ID: status, topic, scheduled time, generation progress, its schedule (providers, publish mode) and persona. Use the slotId from list_posts.',
+    GetSlotShape,
+    withTracking('get_slot', async (args) => {
+      return handleGetSlot(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'update_slot_topic',
+    'Edit the topic text of one scheduled post. Only a slot that has not started generating (status pending/awaiting) can be edited — published or mid-flight slots are rejected.',
+    UpdateSlotTopicShape,
+    withTracking('update_slot_topic', async (args) => {
+      return handleUpdateSlotTopic(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'delete_slot',
+    'Delete one scheduled post slot. Only pending (awaiting) or failed slots can be deleted; published or mid-flight slots are rejected. The schedule\'s last slot cannot be deleted — use cancel_schedule to delete the whole schedule instead.',
+    DeleteSlotShape,
+    withTracking('delete_slot', async (args) => {
+      return handleDeleteSlot(apiClient, args);
     })
   );
 

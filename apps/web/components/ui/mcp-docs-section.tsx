@@ -12,6 +12,7 @@ import {
   CheckIcon,
   CoinsIcon,
   ComposeIcon,
+  ExternalLinkIcon,
   FilmIcon,
   GlobeIcon,
   HistoryIcon,
@@ -49,6 +50,9 @@ const MCP_TOOL_CARDS: McpToolCard[] = [
   { id: 'list_schedules', descKey: 'apiKeys.toolDescListSchedules', Icon: HistoryIcon },
   { id: 'list_posts', descKey: 'apiKeys.toolDescListPosts', Icon: CalendarIcon },
   { id: 'cancel_schedule', descKey: 'apiKeys.toolDescCancelSchedule', Icon: TrashIcon },
+  { id: 'get_slot', descKey: 'apiKeys.toolDescGetSlot', Icon: ExternalLinkIcon },
+  { id: 'update_slot_topic', descKey: 'apiKeys.toolDescUpdateSlotTopic', Icon: ComposeIcon },
+  { id: 'delete_slot', descKey: 'apiKeys.toolDescDeleteSlot', Icon: TrashIcon },
 ];
 
 export default function McpDocsSection(): ReactNode {
@@ -102,6 +106,9 @@ export default function McpDocsSection(): ReactNode {
         // Keep in lockstep.
         '- list_posts: list my upcoming (scheduled) and past posts across all connected accounts (optional limit, default 20, max 500).',
         '- cancel_schedule: cancel a schedule by its ID.',
+        '- get_slot: get one scheduled post\'s full detail by slot ID (status, topic, scheduled time, progress, schedule, persona).',
+        '- update_slot_topic: edit the topic of a scheduled post that has not started generating yet.',
+        '- delete_slot: delete one scheduled post slot (only pending/awaiting or failed slots; never the schedule\'s last slot).',
         '',
         'How to work with me (agent instructions):',
         '1. Start by calling list_personas and showing me what I already have (name, language, niche). If I have none, say so.',
@@ -158,6 +165,9 @@ export default function McpDocsSection(): ReactNode {
       // Keep in lockstep.
       '- list_posts: listar meus posts futuros (agendados) e passados em todas as contas conectadas (limit opcional, padrão 20, máx 500).',
       '- cancel_schedule: cancelar um agendamento pelo ID.',
+      '- get_slot: ver o detalhe completo de um post agendado pelo slot ID (status, tópico, horário, progresso, agendamento, persona).',
+      '- update_slot_topic: editar o tópico de um post agendado que ainda não começou a gerar.',
+      '- delete_slot: deletar um slot de post agendado (só slots pendentes/aguardando ou falhados; nunca o último slot do agendamento).',
       '',
       'Como trabalhar comigo (instruções para o agente):',
       '1. Comece chamando list_personas e me mostrando o que eu já tenho (nome, idioma, nicho). Se eu não tiver nenhuma, diga isso.',

@@ -489,6 +489,43 @@ export class PostEngineerClient {
     );
   }
 
+  async getSlot(slotId: string): Promise<unknown> {
+    return this.request(
+      `/api/schedule/slots/${encodeURIComponent(slotId)}`,
+      { method: 'GET', headers: this.getHeaders() },
+      'get slot'
+    );
+  }
+
+  async updateSlotTopic(slotId: string, topic: string): Promise<unknown> {
+    // The route 400s on an empty topic — fail fast with the field named
+    // before any fetch goes out. The trimmed value is sent: the server
+    // stores the trimmed topic, so the payload carries exactly what lands.
+    const trimmed = topic.trim();
+    if (trimmed.length === 0) {
+      throw new Error('topic must be a non-empty string.');
+    }
+    return this.request(
+      `/api/schedule/slots/${encodeURIComponent(slotId)}`,
+      {
+        method: 'PATCH',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ topic: trimmed }),
+      },
+      'update slot topic'
+    );
+  }
+
+  async deleteSlot(slotId: string): Promise<unknown> {
+    // Only pending (awaiting) or failed slots are deletable; the server
+    // 409s anything mid-flight or published, and the schedule's last slot.
+    return this.request(
+      `/api/schedule/slots/${encodeURIComponent(slotId)}`,
+      { method: 'DELETE', headers: this.getHeaders() },
+      'delete slot'
+    );
+  }
+
   async getTokenBalance(): Promise<unknown> {
     return this.request(
       '/api/billing/tokens',

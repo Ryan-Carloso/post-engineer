@@ -23,6 +23,9 @@ import {
   AddPersonaImageShape,
   UpdatePersonaImageShape,
   RemovePersonaImageShape,
+  GetSlotShape,
+  UpdateSlotTopicShape,
+  DeleteSlotShape,
 } from '../tools.js';
 import type { PostEngineerClient } from '../client.js';
 
@@ -42,6 +45,9 @@ const EXPECTED_TOOLS = [
   'list_schedules',
   'list_posts',
   'cancel_schedule',
+  'get_slot',
+  'update_slot_topic',
+  'delete_slot',
   'get_token_balance',
   'generate_persona_videos',
   'get_video_status',
@@ -164,6 +170,9 @@ describe('registered tool schemas (single source of truth)', () => {
       list_schedules: ListSchedulesShape,
       list_posts: ListPostsShape,
       cancel_schedule: CancelScheduleShape,
+      get_slot: GetSlotShape,
+      update_slot_topic: UpdateSlotTopicShape,
+      delete_slot: DeleteSlotShape,
       get_token_balance: GetTokenBalanceShape,
       generate_persona_videos: GeneratePersonaVideosShape,
       get_video_status: GetVideoStatusShape,

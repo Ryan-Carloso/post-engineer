@@ -102,6 +102,39 @@ export const CancelScheduleShape = {
 
 export const CancelScheduleSchema = z.object(CancelScheduleShape);
 
+export const GetSlotShape = {
+  slotId: z
+    .string()
+    .min(1, 'slotId is required')
+    .describe('The slot ID (the slotId field from list_posts or generate_persona_videos).'),
+};
+
+export const GetSlotSchema = z.object(GetSlotShape);
+
+export const UpdateSlotTopicShape = {
+  slotId: z
+    .string()
+    .min(1, 'slotId is required')
+    .describe('The slot ID (the slotId field from list_posts or generate_persona_videos).'),
+  topic: z
+    .string()
+    .min(1, 'topic is required')
+    .describe('The new topic text for the slot. Only a slot that has not started generating (status pending/awaiting) can be edited; published or mid-flight slots are rejected.'),
+};
+
+export const UpdateSlotTopicSchema = z.object(UpdateSlotTopicShape);
+
+export const DeleteSlotShape = {
+  slotId: z
+    .string()
+    .min(1, 'slotId is required')
+    .describe(
+      'The slot ID to delete. Only pending (awaiting) or failed slots can be deleted; published or mid-flight slots are rejected. The schedule\'s last slot cannot be deleted — delete the whole schedule with cancel_schedule instead.',
+    ),
+};
+
+export const DeleteSlotSchema = z.object(DeleteSlotShape);
+
 export const GetTokenBalanceShape = {};
 
 export const GetTokenBalanceSchema = z.object(GetTokenBalanceShape);
@@ -438,6 +471,183 @@ export async function handleCancelSchedule(
   args: z.infer<typeof CancelScheduleSchema>
 ): Promise<McpToolResponse> {
   return handleLibraryCall(() => client.cancelSchedule(args.scheduleId), 'cancelling schedule', 'Schedule cancelled successfully');
+}
+
+export async function handleGetSlot(
+  client: PostEngineerClient,
+  args: z.infer<typeof GetSlotSchema>
+): Promise<McpToolResponse> {
+  try {
+    const narrowed = narrowSlotDetail(await client.getSlot(args.slotId));
+    const slot = narrowed.slot;
+    const humanSummary = `Slot ${slot.id ?? args.slotId}: "${slot.topic ?? '(untitled)'}" — ${slot.status ?? 'unknown'}, scheduled for ${slot.slotAt ?? '(unscheduled)'}.`;
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `${humanSummary}\n${JSON.stringify(narrowed, null, 2)}`,
+        },
+      ],
+    };
+  } catch (error) {
+    if (error instanceof ApiError && error.code !== null) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error getting slot: ${JSON.stringify({
+              code: error.code,
+              message: sanitizeEngineError(getErrorMessage(error)),
+              field: error.field,
+            })}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error getting slot: ${getErrorMessage(error)}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+export async function handleUpdateSlotTopic(
+  client: PostEngineerClient,
+  args: z.infer<typeof UpdateSlotTopicSchema>
+): Promise<McpToolResponse> {
+  try {
+    const result = (await client.updateSlotTopic(args.slotId, args.topic)) as {
+      topic?: unknown;
+    };
+    const topic = typeof result.topic === 'string' ? result.topic : args.topic;
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Slot ${args.slotId} topic updated to "${topic}".\n${JSON.stringify({ success: true, topic }, null, 2)}`,
+        },
+      ],
+    };
+  } catch (error) {
+    if (error instanceof ApiError && error.code !== null) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error updating slot topic: ${JSON.stringify({
+              code: error.code,
+              message: sanitizeEngineError(getErrorMessage(error)),
+              field: error.field,
+            })}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error updating slot topic: ${getErrorMessage(error)}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+export async function handleDeleteSlot(
+  client: PostEngineerClient,
+  args: z.infer<typeof DeleteSlotSchema>
+): Promise<McpToolResponse> {
+  return handleLibraryCall(
+    () => client.deleteSlot(args.slotId),
+    'deleting slot',
+    `Slot ${args.slotId} deleted`
+  );
+}
+
+/** Narrows the GET /api/schedule/slots/[slotId] envelope to the fields the
+ * tool contract promises: the slot row, its schedule, and the persona.
+ * Anything the API adds later rides through unparsed — the projection only
+ * pins what the tool renders and documents. */
+function narrowSlotDetail(result: unknown): {
+  slot: {
+    id: string | null;
+    scheduleId: string | null;
+    slotAt: string | null;
+    status: string | null;
+    topic: string | null;
+    taskId: string | null;
+    progress: number | null;
+    stage: string | null;
+    error: string | null;
+    publishedAt: string | null;
+  };
+  schedule: {
+    id: string | null;
+    providers: string[];
+    publishMode: string | null;
+    timezone: string | null;
+  } | null;
+  persona: { id: string | null; name: string | null } | null;
+} {
+  const record =
+    typeof result === 'object' && result !== null
+      ? (result as Record<string, unknown>)
+      : {};
+  const slot =
+    typeof record.slot === 'object' && record.slot !== null
+      ? (record.slot as Record<string, unknown>)
+      : {};
+  const schedule =
+    typeof record.schedule === 'object' && record.schedule !== null
+      ? (record.schedule as Record<string, unknown>)
+      : null;
+  const persona =
+    typeof record.persona === 'object' && record.persona !== null
+      ? (record.persona as Record<string, unknown>)
+      : null;
+  const str = (value: unknown): string | null =>
+    typeof value === 'string' ? value : null;
+  const num = (value: unknown): number | null =>
+    typeof value === 'number' ? value : null;
+  const providers = Array.isArray(schedule?.providers)
+    ? schedule.providers.filter((p): p is string => typeof p === 'string')
+    : [];
+  return {
+    slot: {
+      id: str(slot.id),
+      scheduleId: str(slot.scheduleId),
+      slotAt: str(slot.slotAt),
+      status: str(slot.status),
+      topic: str(slot.topic),
+      taskId: str(slot.taskId),
+      progress: num(slot.progress),
+      stage: str(slot.stage),
+      error: str(slot.error),
+      publishedAt: str(slot.publishedAt),
+    },
+    schedule:
+      schedule === null
+        ? null
+        : {
+            id: str(schedule.id),
+            providers,
+            publishMode: str(schedule.publishMode),
+            timezone: str(schedule.timezone),
+          },
+    persona:
+      persona === null
+        ? null
+        : { id: str(persona.id), name: str(persona.name) },
+  };
 }
 
 export async function handleGetTokenBalance(

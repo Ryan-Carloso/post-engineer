@@ -400,6 +400,9 @@ export const ptDictionary = {
     toolDescListSchedules: 'Liste agendamentos automáticos',
     toolDescListPosts: 'Liste posts futuros e passados',
     toolDescCancelSchedule: 'Cancele um agendamento',
+    toolDescGetSlot: 'Ver o detalhe de um post agendado',
+    toolDescUpdateSlotTopic: 'Editar o tópico de um post agendado',
+    toolDescDeleteSlot: 'Deletar um slot de post agendado',
   },
 
   // App API Key

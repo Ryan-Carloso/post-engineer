@@ -1118,3 +1118,111 @@ describe('narrowTaskProgress type narrowing', () => {
     expect(text).toContain('"error": null');
   });
 });
+
+describe('slot tools', () => {
+  const mockClient = {
+    getSlot: vi.fn(),
+    updateSlotTopic: vi.fn(),
+    deleteSlot: vi.fn(),
+  } as unknown as PostEngineerClient;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('GetSlotSchema requires a non-empty slotId', async () => {
+    const { GetSlotSchema } = await import('../tools.js');
+    expect(GetSlotSchema.safeParse({ slotId: 'slot-1' }).success).toBe(true);
+    expect(GetSlotSchema.safeParse({ slotId: '' }).success).toBe(false);
+    expect(GetSlotSchema.safeParse({}).success).toBe(false);
+  });
+
+  it('UpdateSlotTopicSchema requires slotId and a non-empty topic', async () => {
+    const { UpdateSlotTopicSchema } = await import('../tools.js');
+    expect(
+      UpdateSlotTopicSchema.safeParse({ slotId: 'slot-1', topic: 'New' }).success
+    ).toBe(true);
+    expect(
+      UpdateSlotTopicSchema.safeParse({ slotId: 'slot-1', topic: '' }).success
+    ).toBe(false);
+    expect(UpdateSlotTopicSchema.safeParse({ slotId: 'slot-1' }).success).toBe(false);
+  });
+
+  it('handleGetSlot narrows the detail envelope and summarizes', async () => {
+    const { handleGetSlot } = await import('../tools.js');
+    vi.mocked(mockClient.getSlot).mockResolvedValue({
+      success: true,
+      slot: {
+        id: 'slot-1',
+        scheduleId: 'sched-1',
+        slotAt: '2026-10-10T20:00:00Z',
+        status: 'awaiting',
+        topic: 'Launch day',
+        taskId: 'task-1',
+        progress: 0,
+        stage: null,
+        error: null,
+        publishedAt: null,
+      },
+      schedule: { id: 'sched-1', providers: ['youtube'], publishMode: 'scheduled', timezone: 'Europe/Lisbon' },
+      persona: { id: 'persona-1', name: 'Ava' },
+      extraUnpinnedField: 'rides through unparsed',
+    });
+
+    const response = await handleGetSlot(mockClient, { slotId: 'slot-1' });
+    expect(mockClient.getSlot).toHaveBeenCalledWith('slot-1');
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toContain('slot-1');
+    expect(text).toContain('Launch day');
+    expect(text).toContain('awaiting');
+    expect(text).toContain('"topic": "Launch day"');
+    expect(text).not.toContain('extraUnpinnedField');
+  });
+
+  it('handleGetSlot surfaces API errors with the structured contract', async () => {
+    const { handleGetSlot } = await import('../tools.js');
+    const { ApiError } = await import('../errors.js');
+    vi.mocked(mockClient.getSlot).mockRejectedValue(
+      new ApiError('Failed to get slot: 404 Slot not found.', 'SLOT_NOT_FOUND', 'slotId')
+    );
+
+    const response = await handleGetSlot(mockClient, { slotId: 'nope' });
+    expect(response.isError).toBe(true);
+    const text = textOf(response);
+    expect(text).toContain('"code":"SLOT_NOT_FOUND"');
+    expect(text).toContain('"field":"slotId"');
+  });
+
+  it('handleUpdateSlotTopic passes the trimmed topic and summarizes', async () => {
+    const { handleUpdateSlotTopic } = await import('../tools.js');
+    vi.mocked(mockClient.updateSlotTopic).mockResolvedValue({
+      success: true,
+      topic: 'New topic',
+    });
+
+    const response = await handleUpdateSlotTopic(mockClient, {
+      slotId: 'slot-1',
+      topic: 'New topic',
+    });
+    expect(mockClient.updateSlotTopic).toHaveBeenCalledWith('slot-1', 'New topic');
+    expect(response.isError).toBeUndefined();
+    expect(textOf(response)).toContain('New topic');
+  });
+
+  it('handleDeleteSlot confirms the deletion', async () => {
+    const { handleDeleteSlot } = await import('../tools.js');
+    vi.mocked(mockClient.deleteSlot).mockResolvedValue({ success: true });
+
+    const response = await handleDeleteSlot(mockClient, { slotId: 'slot-1' });
+    expect(mockClient.deleteSlot).toHaveBeenCalledWith('slot-1');
+    expect(response.isError).toBeUndefined();
+    expect(textOf(response)).toContain('slot-1');
+  });
+
+  it('DeleteSlotSchema requires a non-empty slotId', async () => {
+    const { DeleteSlotSchema } = await import('../tools.js');
+    expect(DeleteSlotSchema.safeParse({ slotId: 'slot-1' }).success).toBe(true);
+    expect(DeleteSlotSchema.safeParse({ slotId: '' }).success).toBe(false);
+  });
+});

@@ -344,6 +344,59 @@ describe('PostEngineerClient', () => {
     );
   });
 
+  it('gets one slot by id', async () => {
+    const mockSlot = { success: true, slot: { id: 'slot-1', topic: 'Hello' } };
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(mockSlot),
+    });
+
+    const result = await client.getSlot('slot-1');
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/schedule/slots/slot-1`,
+      expect.objectContaining({ method: 'GET' })
+    );
+    expect(result).toEqual(mockSlot);
+  });
+
+  it('updates a slot topic with a PATCH body', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true, topic: 'New topic' }),
+    });
+
+    await client.updateSlotTopic('slot-1', '  New topic  ');
+    const [, init] = vi.mocked(global.fetch).mock.calls[0] as [string, RequestInit];
+    expect(init.method).toBe('PATCH');
+    // Trimmed before sending: the server stores the trimmed topic, so the
+    // payload carries exactly what will be stored.
+    expect(JSON.parse(String(init.body))).toEqual({ topic: 'New topic' });
+  });
+
+  it('fails fast on an empty slot topic without fetching', async () => {
+    global.fetch = vi.fn();
+    await expect(client.updateSlotTopic('slot-1', '   ')).rejects.toThrow(
+      /topic must be a non-empty string/
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('deletes one slot by id', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+    });
+
+    await client.deleteSlot('slot-1');
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/schedule/slots/slot-1`,
+      expect.objectContaining({ method: 'DELETE' })
+    );
+  });
+
   it('gets the token balance successfully', async () => {
     const mockBalance = { success: true, balance: 8, free: 3 };
 

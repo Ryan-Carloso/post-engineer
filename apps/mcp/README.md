@@ -107,6 +107,9 @@ The `Authorization: Bearer` API key header is sent to the configured base URL, s
 - `list_schedules`: list automation schedules.
 - `list_posts`: list upcoming (scheduled) and past (published/failed) posts across all connected accounts.
 - `cancel_schedule`: cancel a schedule by its ID.
+- `get_slot`: get one scheduled post's full detail by slot ID (status, topic, scheduled time, progress, schedule, persona).
+- `update_slot_topic`: edit the topic of a scheduled post that has not started generating yet.
+- `delete_slot`: delete one scheduled post slot (only pending/awaiting or failed slots; never the schedule's last slot).
 
 ### Social account IDs for `generate_persona_videos`
 
