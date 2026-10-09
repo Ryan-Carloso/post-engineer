@@ -56,11 +56,18 @@ export interface GeneratePersonaVideosInput {
   instagramAccountIds?: string[];
   linkedinAccountIds?: string[];
   blueskyAccountIds?: string[];
-  /** ISO datetime when the first publish slot may start; naive values are wall-clock in timezone. */
-  startAt: string;
-  /** Daily publish times (HH:MM, 24h). */
-  times: string[];
-  /** IANA timezone for a naive startAt and the times. Defaults to UTC. */
+  /**
+   * Publish mode. 'scheduled' (default) distributes publish slots across
+   * startAt + times; 'asap' publishes each video the moment generation
+   * finishes, with no scheduled time. In 'asap' mode startAt/times must not
+   * be set.
+   */
+  mode?: 'scheduled' | 'asap';
+  /** ISO datetime when the first publish slot may start; naive values are wall-clock in timezone. Required unless mode is 'asap'. */
+  startAt?: string;
+  /** Daily publish times (HH:MM, 24h). Required unless mode is 'asap'. */
+  times?: string[];
+  /** IANA timezone for a naive startAt and the times (display-only in 'asap' mode). Defaults to UTC. */
   timezone?: string;
   options?: {
     faceless?: boolean;
@@ -499,6 +506,17 @@ export class PostEngineerClient {
     if (input.instagramAccountIds !== undefined) accounts.instagram = input.instagramAccountIds;
     if (input.linkedinAccountIds !== undefined) accounts.linkedin = input.linkedinAccountIds;
     if (input.blueskyAccountIds !== undefined) accounts.bluesky = input.blueskyAccountIds;
+    // A stray schedule plan in ASAP mode is a caller bug: the server 400s
+    // ("publishing.schedule must not be set"), so fail fast with the same
+    // rule before any fetch goes out. Conversely, scheduled mode without
+    // a plan would 400 ("publishing.schedule is required").
+    const mode = input.mode ?? 'scheduled';
+    if (mode === 'asap' && (input.startAt !== undefined || input.times !== undefined)) {
+      throw new Error("startAt and times must not be set when mode is 'asap'.");
+    }
+    if (mode === 'scheduled' && (input.startAt === undefined || input.times === undefined)) {
+      throw new Error("startAt and times are required when mode is 'scheduled'.");
+    }
     return this.request(
       '/api/videos/generate-and-schedule',
       {
@@ -511,13 +529,20 @@ export class PostEngineerClient {
           ...(input.personaId !== undefined ? { personaId: input.personaId } : {}),
           topics: input.topics,
           publishing: {
+            mode,
             providers: input.providers,
             accounts,
-            schedule: {
-              startAt: input.startAt,
-              times: input.times,
-              timezone: input.timezone ?? 'UTC',
-            },
+            // ASAP mode carries no schedule plan: the timezone is kept for
+            // display, matching the API contract.
+            ...(mode === 'asap'
+              ? { timezone: input.timezone ?? 'UTC' }
+              : {
+                  schedule: {
+                    startAt: input.startAt,
+                    times: input.times,
+                    timezone: input.timezone ?? 'UTC',
+                  },
+                }),
           },
           options: input.options ?? undefined,
           // A retry without a stable key would generate a second schedule:
