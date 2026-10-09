@@ -60,22 +60,26 @@ def audio_duration_seconds(audio_path: str) -> float:
     return duration
 
 
+_INFINITETALK_ENV_VARS: dict[str, str] = {
+    "submit_url": "INFINITETALK_SUBMIT_URL",
+    "status_url": "INFINITETALK_STATUS_URL",
+    "download_url": "INFINITETALK_DOWNLOAD_URL",
+}
+
+
 def _url(name: str) -> str:
-    value = config.infinitetalk.get(name, "")
-    if not isinstance(value, str) or not value.strip():
-        raise InfiniteTalkError(f"InfiniteTalk {name} is not configured")
+    env_name = _INFINITETALK_ENV_VARS[name]
+    value = os.environ.get(env_name, "")
+    if not value.strip():
+        raise InfiniteTalkError(f"InfiniteTalk {name} is not configured ({env_name})")
     return value
 
 
 def _bearer_headers() -> dict[str, str]:
     """Authorization header for the Modal HTTP endpoints (required, no fallback)."""
-    secret = config.infinitetalk.get("http_secret", "") or os.environ.get(
-        "INFINITETALK_HTTP_SECRET", ""
-    )
-    if not isinstance(secret, str) or not secret.strip():
-        raise InfiniteTalkError(
-            "InfiniteTalk http_secret is not configured (config.toml [infinitetalk])"
-        )
+    secret = os.environ.get("INFINITETALK_HTTP_SECRET", "")
+    if not secret.strip():
+        raise InfiniteTalkError("INFINITETALK_HTTP_SECRET is not configured")
     return {"Authorization": f"Bearer {secret}"}
 
 
