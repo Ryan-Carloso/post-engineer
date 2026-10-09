@@ -112,6 +112,16 @@ class BatchPublisher:
                     slot["id"], status=SLOT_FAILED,
                     error="task has no finished videos",
                 )
+                # A fail-fast abort is still an abort: the funnel needs the
+                # failed event with the reason, not just the started one.
+                track_event(
+                    "video_publish_failed",
+                    {
+                        **_publish_tracking_context(slot, schedule),
+                        "reason": "task has no finished videos",
+                        "retryable": False,
+                    },
+                )
                 continue
             if not isinstance(object_path, str) or not object_path:
                 # A video generated before the R2 archive flow can never
@@ -177,6 +187,9 @@ class BatchPublisher:
                         f"{notify_module.safe_reason(exc)}",
                         f"Publish failed after {attempts} attempts; video refunded",
                         attempts=attempts,
+                        # The video_publish_failed event with the attempt
+                        # history fires below; don't emit a second one.
+                        emit_failed_event=False,
                     )
                 else:
                     # back to 'ready' (not 'failed'): may be transient; the atomic
@@ -213,6 +226,7 @@ class BatchPublisher:
         error: str,
         refund_reason: str,
         attempts: int | None = None,
+        emit_failed_event: bool = True,
     ) -> None:
         """Auto-cancel a slot that can never publish and refund its token.
 
@@ -222,7 +236,24 @@ class BatchPublisher:
         it distinct from a generation-failure refund of the same slot). A
         refund RPC failure never kills the tick — the slot is already
         terminal, and the loud log line is the recovery trail.
+
+        Every permanent abort emits ``video_publish_failed`` with the reason,
+        so the analytics funnel never ends at ``video_publish_started``.
+        Callers that already emitted the event themselves (the exhausted
+        publish-attempts path, which carries the attempt history) pass
+        ``emit_failed_event=False``.
         """
+        if emit_failed_event:
+            track_event(
+                "video_publish_failed",
+                {
+                    **_publish_tracking_context(slot, schedule),
+                    # Same scrub-then-truncate convention as the exception
+                    # path: the reason is client-visible in the error column.
+                    "reason": scrub_secret_values(error)[:200],
+                    "retryable": False,
+                },
+            )
         user_id = slot_user_id(slot)
         schedule_id = schedule.get("id")
         if user_id and isinstance(schedule_id, str) and schedule_id:
