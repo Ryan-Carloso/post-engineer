@@ -336,5 +336,49 @@ class TestGenerateIntroCost(unittest.TestCase):
         self.assertIsNone(cost_usd)
 
 
+class TestTrimAudio(unittest.TestCase):
+    def _capture_ffmpeg_args(self, **kwargs):
+        captured: list[list[str]] = []
+
+        class FakeCompleted:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        def fake_run(argv, **_kwargs):
+            captured.append(list(argv))
+            return FakeCompleted()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            audio_path = str(Path(temp_dir) / "audio.mp3")
+            output_path = str(Path(temp_dir) / "trimmed.mp3")
+            Path(audio_path).write_bytes(b"audio")
+            with (
+                patch.object(infinitetalk.subprocess, "run", side_effect=fake_run),
+                patch("os.path.isfile", return_value=True),
+            ):
+                infinitetalk.trim_audio(audio_path, output_path, **kwargs)
+        return captured[0]
+
+    def test_trim_audio_passes_exactly_one_duration_flag(self):
+        # Regression: a second "-t" silently overrides the first, so the
+        # output length becomes duration + padding instead of the intended
+        # duration (OpenCode review on a24e322).
+        args = self._capture_ffmpeg_args(duration_seconds=5, padding_seconds=0.75)
+        self.assertEqual(args.count("-t"), 1)
+        flag_index = args.index("-t")
+        self.assertEqual(args[flag_index + 1], str(5 + 0.75))
+
+    def test_trim_audio_seeks_before_input_for_start_offset(self):
+        args = self._capture_ffmpeg_args(
+            duration_seconds=2, padding_seconds=0.5, start_seconds=1.5
+        )
+        self.assertLess(args.index("-ss"), args.index("-i"))
+        self.assertEqual(args[args.index("-ss") + 1], "1.5")
+        self.assertEqual(args.count("-t"), 1)
+        flag_index = args.index("-t")
+        self.assertEqual(args[flag_index + 1], str(2 + 0.5))
+
+
 if __name__ == "__main__":
     unittest.main()

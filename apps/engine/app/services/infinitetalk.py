@@ -121,7 +121,9 @@ def trim_audio(
     """Create an accurately cut, standalone audio segment for InfiniteTalk.
 
     ``start_seconds`` offsets the cut (used for face-fill tail segments);
-    0 keeps the historical intro-trim behavior byte-for-byte.
+    0 keeps the historical intro-trim duration behavior. A single ``-t``
+    flag sets the output length: ffmpeg silently applies the LAST
+    duplicate flag, so passing two is dead code with a misleading value.
     """
     input_args = ["-i", audio_path]
     if start_seconds > 0:
@@ -134,11 +136,9 @@ def trim_audio(
             "-y",
             *input_args,
             "-t",
-            str(duration_seconds),
+            str(duration_seconds + padding_seconds),
             "-af",
             f"apad=pad_dur={padding_seconds}",
-            "-t",
-            str(duration_seconds + padding_seconds),
             "-vn",
             "-acodec",
             "libmp3lame",
