@@ -406,6 +406,7 @@ export const enDictionary: Dictionary = {
     toolDescDeleteSlot: 'Delete one scheduled post slot',
     toolDescListVideoGenerations: 'List video generation history',
     toolDescGetVideoGeneration: 'Get one video generation\'s detail',
+    toolDescListTokenTransactions: 'List the token ledger',
   },
 
   // App API Key

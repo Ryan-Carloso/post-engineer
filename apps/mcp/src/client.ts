@@ -557,6 +557,27 @@ export class PostEngineerClient {
     );
   }
 
+  async listTokenTransactions(limit?: number, offset?: number): Promise<unknown> {
+    // The server silently falls back to its defaults on invalid paging —
+    // fail fast with the field named instead of sending values the caller
+    // never meant.
+    if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 100)) {
+      throw new Error('limit must be an integer between 1 and 100.');
+    }
+    if (offset !== undefined && (!Number.isInteger(offset) || offset < 0)) {
+      throw new Error('offset must be a non-negative integer.');
+    }
+    const params = new URLSearchParams();
+    if (limit !== undefined) params.set('limit', String(limit));
+    if (offset !== undefined) params.set('offset', String(offset));
+    const query = params.size > 0 ? `?${params.toString()}` : '';
+    return this.request(
+      `/api/billing/transactions${query}`,
+      { method: 'GET', headers: this.getHeaders() },
+      'list token transactions'
+    );
+  }
+
   async generatePersonaVideos(input: GeneratePersonaVideosInput): Promise<unknown> {
     // Map the per-provider account arrays into the publishing.accounts
     // record. Only set entries the caller provided: the server enforces

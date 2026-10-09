@@ -21,6 +21,7 @@ import {
   DeleteSlotShape,
   ListVideoGenerationsShape,
   GetVideoGenerationShape,
+  ListTokenTransactionsShape,
   GeneratePersonaVideosShape,
   GetVideoStatusShape,
   GetVideoTaskProgressShape,
@@ -43,6 +44,7 @@ import {
   handleDeleteSlot,
   handleListVideoGenerations,
   handleGetVideoGeneration,
+  handleListTokenTransactions,
   handleGetTokenBalance,
   handleGeneratePersonaVideos,
   handleGetVideoStatus,
@@ -220,6 +222,15 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
     GetVideoGenerationShape,
     withTracking('get_video_generation', async (args) => {
       return handleGetVideoGeneration(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'list_token_transactions',
+    'List the token ledger: every token credit and debit (purchases, generation spends, refunds), newest first, with amounts, reasons, and the related generation when there is one. Use to audit where tokens went.',
+    ListTokenTransactionsShape,
+    withTracking('list_token_transactions', async (args) => {
+      return handleListTokenTransactions(apiClient, args);
     })
   );
 

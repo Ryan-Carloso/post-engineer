@@ -405,6 +405,7 @@ export const ptDictionary = {
     toolDescDeleteSlot: 'Deletar um slot de post agendado',
     toolDescListVideoGenerations: 'Listar histórico de gerações de vídeo',
     toolDescGetVideoGeneration: 'Ver o detalhe de uma geração de vídeo',
+    toolDescListTokenTransactions: 'Listar o extrato de tokens',
   },
 
   // App API Key

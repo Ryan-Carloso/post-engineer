@@ -112,6 +112,7 @@ The `Authorization: Bearer` API key header is sent to the configured base URL, s
 - `delete_slot`: delete one scheduled post slot (only pending/awaiting or failed slots; never the schedule's last slot).
 - `list_video_generations`: list the video generation history, newest first (status, error code, token refunds).
 - `get_video_generation`: get one video generation's detail by generation ID.
+- `list_token_transactions`: list the token ledger — every credit and debit (purchases, generation spends, refunds), newest first.
 
 ### Social account IDs for `generate_persona_videos`
 

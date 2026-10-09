@@ -460,6 +460,45 @@ describe('PostEngineerClient', () => {
     expect(result).toEqual(mockGeneration);
   });
 
+  it('lists token transactions with limit and offset', async () => {
+    const mockLedger = {
+      success: true,
+      transactions: [{ id: 'tx-1', amount: -1 }],
+      total: 42,
+      limit: 20,
+      offset: 0,
+    };
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(mockLedger),
+    });
+
+    const result = await client.listTokenTransactions(20, 40);
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/billing/transactions?limit=20&offset=40`,
+      expect.objectContaining({ method: 'GET' })
+    );
+    expect(result).toEqual(mockLedger);
+
+    await client.listTokenTransactions();
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/billing/transactions`,
+      expect.objectContaining({ method: 'GET' })
+    );
+  });
+
+  it('fails fast on out-of-range ledger paging without fetching', async () => {
+    // The server silently falls back to its defaults on bad paging; the
+    // client names the bad field instead.
+    global.fetch = vi.fn();
+    await expect(client.listTokenTransactions(0)).rejects.toThrow(/limit must be an integer between 1 and 100/);
+    await expect(client.listTokenTransactions(101)).rejects.toThrow(/limit must be an integer between 1 and 100/);
+    await expect(client.listTokenTransactions(20, -1)).rejects.toThrow(/offset must be a non-negative integer/);
+    await expect(client.listTokenTransactions(20, 1.5)).rejects.toThrow(/offset must be a non-negative integer/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
 describe('generate and schedule videos client', () => {
   const baseUrl = 'https://post-engineer.com';
   let client: PostEngineerClient;

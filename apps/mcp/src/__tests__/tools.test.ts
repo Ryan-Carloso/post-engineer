@@ -1321,3 +1321,74 @@ describe('video generation history tools', () => {
     expect(text).toContain('"tokensRefunded": true');
   });
 });
+
+describe('token ledger tool', () => {
+  const mockClient = {
+    listTokenTransactions: vi.fn(),
+  } as unknown as PostEngineerClient;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('ListTokenTransactionsSchema accepts omitted or bounded paging', async () => {
+    const { ListTokenTransactionsSchema } = await import('../tools.js');
+    expect(ListTokenTransactionsSchema.safeParse({}).success).toBe(true);
+    expect(ListTokenTransactionsSchema.safeParse({ limit: 20, offset: 40 }).success).toBe(true);
+    expect(ListTokenTransactionsSchema.safeParse({ limit: 0 }).success).toBe(false);
+    expect(ListTokenTransactionsSchema.safeParse({ limit: 101 }).success).toBe(false);
+    expect(ListTokenTransactionsSchema.safeParse({ offset: -1 }).success).toBe(false);
+  });
+
+  it('handleListTokenTransactions narrows rows and summarizes with totals', async () => {
+    const { handleListTokenTransactions } = await import('../tools.js');
+    vi.mocked(mockClient.listTokenTransactions).mockResolvedValue({
+      success: true,
+      transactions: [
+        {
+          id: 'tx-1',
+          amount: -1,
+          type: 'spend',
+          description: 'Video generation',
+          reason: 'generation_completed',
+          generationId: 'gen-1',
+          createdAt: '2026-10-08T10:00:00Z',
+          internalField: 'rides through unparsed',
+        },
+        {
+          id: 'tx-2',
+          amount: 10,
+          type: 'purchase',
+          description: 'Token pack',
+          reason: null,
+          generationId: null,
+          createdAt: '2026-10-07T10:00:00Z',
+        },
+      ],
+      total: 42,
+      limit: 20,
+      offset: 0,
+    });
+
+    const response = await handleListTokenTransactions(mockClient, { limit: 20, offset: 0 });
+    expect(mockClient.listTokenTransactions).toHaveBeenCalledWith(20, 0);
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toContain('42');
+    expect(text).toContain('"amount": -1');
+    expect(text).toContain('"type": "spend"');
+    expect(text).not.toContain('internalField');
+  });
+
+  it('handleListTokenTransactions surfaces API errors with the structured contract', async () => {
+    const { handleListTokenTransactions } = await import('../tools.js');
+    const { ApiError } = await import('../errors.js');
+    vi.mocked(mockClient.listTokenTransactions).mockRejectedValue(
+      new ApiError('Failed to list token transactions: 500 Could not load token transactions.', 'INTERNAL_ERROR', null)
+    );
+
+    const response = await handleListTokenTransactions(mockClient, {});
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('"code":"INTERNAL_ERROR"');
+  });
+});

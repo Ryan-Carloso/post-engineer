@@ -156,6 +156,24 @@ export const GetVideoGenerationShape = {
 
 export const GetVideoGenerationSchema = z.object(GetVideoGenerationShape);
 
+export const ListTokenTransactionsShape = {
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .optional()
+    .describe('Max transactions to return (1-100). Defaults to 20, newest first.'),
+  offset: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe('How many newest transactions to skip for paging. Defaults to 0.'),
+};
+
+export const ListTokenTransactionsSchema = z.object(ListTokenTransactionsShape);
+
 export const GetTokenBalanceShape = {};
 
 export const GetTokenBalanceSchema = z.object(GetTokenBalanceShape);
@@ -731,6 +749,101 @@ function narrowVideoGenerations(result: unknown): NarrowedVideoGeneration[] {
       : {};
   const raw = Array.isArray(record.generations) ? record.generations : [];
   return raw.map((row) => narrowVideoGeneration(row));
+}
+
+export async function handleListTokenTransactions(
+  client: PostEngineerClient,
+  args: z.infer<typeof ListTokenTransactionsSchema>
+): Promise<McpToolResponse> {
+  try {
+    const narrowed = narrowTokenTransactions(await client.listTokenTransactions(args.limit, args.offset));
+    const shown = narrowed.transactions.length;
+    const humanSummary =
+      `Token ledger: showing ${shown} of ${narrowed.total ?? '?'} transaction(s) (newest first). ` +
+      `Negative amounts are spends, positive amounts are credits.`;
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `${humanSummary}\n${JSON.stringify(narrowed, null, 2)}`,
+        },
+      ],
+    };
+  } catch (error) {
+    if (error instanceof ApiError && error.code !== null) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error listing token transactions: ${JSON.stringify({
+              code: error.code,
+              message: sanitizeEngineError(getErrorMessage(error)),
+              field: error.field,
+            })}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error listing token transactions: ${getErrorMessage(error)}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/** One narrowed token_transactions row: the fields the tool contract promises. */
+interface NarrowedTokenTransaction {
+  id: string | null;
+  amount: number | null;
+  type: string | null;
+  description: string | null;
+  reason: string | null;
+  generationId: string | null;
+  createdAt: string | null;
+}
+
+/** Narrows the GET /api/billing/transactions envelope. Anything the API
+ * adds later rides through unparsed — the projection only pins what the
+ * tool renders and documents. */
+function narrowTokenTransactions(result: unknown): {
+  transactions: NarrowedTokenTransaction[];
+  total: number | null;
+  limit: number | null;
+  offset: number | null;
+} {
+  const record =
+    typeof result === 'object' && result !== null
+      ? (result as Record<string, unknown>)
+      : {};
+  const raw = Array.isArray(record.transactions) ? record.transactions : [];
+  const str = (value: unknown): string | null =>
+    typeof value === 'string' ? value : null;
+  const num = (value: unknown): number | null =>
+    typeof value === 'number' ? value : null;
+  return {
+    transactions: raw.map((row) => {
+      const r =
+        typeof row === 'object' && row !== null ? (row as Record<string, unknown>) : {};
+      return {
+        id: str(r.id),
+        amount: num(r.amount),
+        type: str(r.type),
+        description: str(r.description),
+        reason: str(r.reason),
+        generationId: str(r.generationId),
+        createdAt: str(r.createdAt),
+      };
+    }),
+    total: num(record.total),
+    limit: num(record.limit),
+    offset: num(record.offset),
+  };
 }
 
 /** Narrows the GET /api/schedule/slots/[slotId] envelope to the fields the
