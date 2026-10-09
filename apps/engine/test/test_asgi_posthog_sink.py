@@ -286,6 +286,17 @@ def _captured_properties(*log_calls) -> list[dict]:
     return [call.args[1] for call in track_event.call_args_list]
 
 
+def _running_under_mutmut() -> bool:
+    # mutmut 3.x rewrites the module under test so every function routes
+    # through its trampoline: frame-counting (logger.opt(depth=1)) then
+    # attributes the record to the trampoline, not the raise site. The
+    # mock-based tests in test_exception.py pin the opt(depth=1) call
+    # itself (and kill its mutants); the raise-site integration test below
+    # is skipped under the transform instead of asserting a harness
+    # artifact.
+    return "mutmut.mutation.trampoline" in sys.modules
+
+
 class FlatLogGroupingTests(unittest.TestCase):
     def test_flat_logs_from_two_sources_get_different_fingerprints(self):
         storage, scheduler = _captured_properties(
@@ -337,6 +348,11 @@ class FlatLogGroupingTests(unittest.TestCase):
         _, properties = track_event.call_args[0]
         assert "$exception_fingerprint" not in properties
 
+    @unittest.skipIf(
+        _running_under_mutmut(),
+        "mutmut's trampoline sits one frame above __init__, so opt(depth=1) "
+        "attributes there instead of the raise site",
+    )
     def test_http_exception_fingerprint_uses_raise_site_not_init(self):
         # HttpException logs from its own __init__: without depth
         # attribution every 5xx raised anywhere would share one
