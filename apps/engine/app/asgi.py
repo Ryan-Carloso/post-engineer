@@ -115,12 +115,34 @@ def _flat_log_fingerprint(record: dict[str, object], exc_type: str) -> str | Non
     machine path, and free of message text (task ids would create one
     issue per request). The line number stays out so an edit to the file
     does not split an issue on every deploy.
+
+    Two bounded qualifiers sharpen the key without risking one issue per
+    request: the HTTP status code on HttpException keys (a 502 from a dead
+    upstream is a different issue than a 500 from our own bug), and the
+    pipeline stage bound by _fail_task (upload vs script failures have
+    different root causes). Both stay out when absent or unusable.
     """
     module = record.get("name")
     function = record.get("function")
     if not (isinstance(module, str) and module and isinstance(function, str) and function):
         return None
-    return scrub_secret_values(f"{exc_type}:{module}:{function}")[:_MAX_TEXT_CHARS]
+    extra = record.get("extra")
+    if not isinstance(extra, dict):
+        extra = {}
+    key = exc_type
+    # The status separates caller faults from server faults only when it is
+    # a real int: bools take the string path in property forwarding (a
+    # secret is never an int), so they must not reach the key either.
+    status_code = extra.get("http_status_code")
+    if isinstance(status_code, int) and not isinstance(status_code, bool):
+        key += f":{status_code}"
+    key += f":{module}:{function}"
+    # Stage names are the pipeline's own bounded phase vocabulary, never
+    # free text: safe to group on.
+    stage = extra.get("stage")
+    if isinstance(stage, str) and stage:
+        key += f":stage={stage}"
+    return scrub_secret_values(key)[:_MAX_TEXT_CHARS]
 
 
 def _loguru_posthog_sink(message) -> None:
