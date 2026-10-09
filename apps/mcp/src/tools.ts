@@ -135,6 +135,27 @@ export const DeleteSlotShape = {
 
 export const DeleteSlotSchema = z.object(DeleteSlotShape);
 
+export const ListVideoGenerationsShape = {
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe('Max generations to return (1-200). Defaults to 50, newest first.'),
+};
+
+export const ListVideoGenerationsSchema = z.object(ListVideoGenerationsShape);
+
+export const GetVideoGenerationShape = {
+  generationId: z
+    .string()
+    .min(1, 'generationId is required')
+    .describe('The generation ID (the generationId field from list_video_generations).'),
+};
+
+export const GetVideoGenerationSchema = z.object(GetVideoGenerationShape);
+
 export const GetTokenBalanceShape = {};
 
 export const GetTokenBalanceSchema = z.object(GetTokenBalanceShape);
@@ -571,6 +592,145 @@ export async function handleDeleteSlot(
     'deleting slot',
     `Slot ${args.slotId} deleted`
   );
+}
+
+export async function handleListVideoGenerations(
+  client: PostEngineerClient,
+  args: z.infer<typeof ListVideoGenerationsSchema>
+): Promise<McpToolResponse> {
+  try {
+    const generations = narrowVideoGenerations(await client.listVideoGenerations(args.limit));
+    const humanSummary = `${generations.length} video generation(s) in history (newest first).`;
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `${humanSummary}\n${JSON.stringify({ generations }, null, 2)}`,
+        },
+      ],
+    };
+  } catch (error) {
+    if (error instanceof ApiError && error.code !== null) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error listing video generations: ${JSON.stringify({
+              code: error.code,
+              message: sanitizeEngineError(getErrorMessage(error)),
+              field: error.field,
+            })}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error listing video generations: ${getErrorMessage(error)}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+export async function handleGetVideoGeneration(
+  client: PostEngineerClient,
+  args: z.infer<typeof GetVideoGenerationSchema>
+): Promise<McpToolResponse> {
+  try {
+    const result = (await client.getVideoGeneration(args.generationId)) as {
+      generation?: unknown;
+    } | null;
+    const generation = narrowVideoGeneration(
+      result !== null && typeof result === 'object' ? result.generation : null
+    );
+    const humanSummary = `Generation ${generation.generationId ?? args.generationId}: "${generation.videoSubject ?? '(untitled)'}" — ${generation.status ?? 'unknown'}.`;
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `${humanSummary}\n${JSON.stringify({ generation }, null, 2)}`,
+        },
+      ],
+    };
+  } catch (error) {
+    if (error instanceof ApiError && error.code !== null) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error getting video generation: ${JSON.stringify({
+              code: error.code,
+              message: sanitizeEngineError(getErrorMessage(error)),
+              field: error.field,
+            })}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error getting video generation: ${getErrorMessage(error)}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/** One narrowed video_generations row: the fields the tool contract promises. */
+interface NarrowedVideoGeneration {
+  id: string | null;
+  generationId: string | null;
+  engineTaskId: string | null;
+  personaName: string | null;
+  videoSubject: string | null;
+  status: string | null;
+  errorCode: string | null;
+  tokensRefunded: boolean | null;
+  createdAt: string | null;
+  completedAt: string | null;
+}
+
+/** Narrows one video_generations row. Anything the API adds later rides
+ * through unparsed — the projection only pins what the tool renders and
+ * documents. */
+function narrowVideoGeneration(row: unknown): NarrowedVideoGeneration {
+  const record =
+    typeof row === 'object' && row !== null ? (row as Record<string, unknown>) : {};
+  const str = (value: unknown): string | null =>
+    typeof value === 'string' ? value : null;
+  return {
+    id: str(record.id),
+    generationId: str(record.generationId),
+    engineTaskId: str(record.engineTaskId),
+    personaName: str(record.personaName),
+    videoSubject: str(record.videoSubject),
+    status: str(record.status),
+    errorCode: str(record.errorCode),
+    tokensRefunded:
+      typeof record.tokensRefunded === 'boolean' ? record.tokensRefunded : null,
+    createdAt: str(record.createdAt),
+    completedAt: str(record.completedAt),
+  };
+}
+
+/** Narrows the GET /api/persona/video-generations envelope to the pinned
+ * row fields. */
+function narrowVideoGenerations(result: unknown): NarrowedVideoGeneration[] {
+  const record =
+    typeof result === 'object' && result !== null
+      ? (result as Record<string, unknown>)
+      : {};
+  const raw = Array.isArray(record.generations) ? record.generations : [];
+  return raw.map((row) => narrowVideoGeneration(row));
 }
 
 /** Narrows the GET /api/schedule/slots/[slotId] envelope to the fields the

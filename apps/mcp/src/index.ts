@@ -19,6 +19,8 @@ import {
   GetSlotShape,
   UpdateSlotTopicShape,
   DeleteSlotShape,
+  ListVideoGenerationsShape,
+  GetVideoGenerationShape,
   GeneratePersonaVideosShape,
   GetVideoStatusShape,
   GetVideoTaskProgressShape,
@@ -39,6 +41,8 @@ import {
   handleGetSlot,
   handleUpdateSlotTopic,
   handleDeleteSlot,
+  handleListVideoGenerations,
+  handleGetVideoGeneration,
   handleGetTokenBalance,
   handleGeneratePersonaVideos,
   handleGetVideoStatus,
@@ -198,6 +202,24 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
     DeleteSlotShape,
     withTracking('delete_slot', async (args) => {
       return handleDeleteSlot(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'list_video_generations',
+    'List the video generation history (newest first): one row per generated video with status, error code, token refund flag, and timestamps. Use get_video_generation for one row\'s detail.',
+    ListVideoGenerationsShape,
+    withTracking('list_video_generations', async (args) => {
+      return handleListVideoGenerations(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'get_video_generation',
+    'Get one video generation\'s detail by generation ID (the generationId field from list_video_generations).',
+    GetVideoGenerationShape,
+    withTracking('get_video_generation', async (args) => {
+      return handleGetVideoGeneration(apiClient, args);
     })
   );
 

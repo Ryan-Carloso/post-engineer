@@ -1226,3 +1226,98 @@ describe('slot tools', () => {
     expect(DeleteSlotSchema.safeParse({ slotId: '' }).success).toBe(false);
   });
 });
+
+describe('video generation history tools', () => {
+  const mockClient = {
+    listVideoGenerations: vi.fn(),
+    getVideoGeneration: vi.fn(),
+  } as unknown as PostEngineerClient;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('ListVideoGenerationsSchema accepts an omitted or bounded limit', async () => {
+    const { ListVideoGenerationsSchema } = await import('../tools.js');
+    expect(ListVideoGenerationsSchema.safeParse({}).success).toBe(true);
+    expect(ListVideoGenerationsSchema.safeParse({ limit: 10 }).success).toBe(true);
+    expect(ListVideoGenerationsSchema.safeParse({ limit: 0 }).success).toBe(false);
+    expect(ListVideoGenerationsSchema.safeParse({ limit: 201 }).success).toBe(false);
+  });
+
+  it('handleListVideoGenerations narrows rows and summarizes', async () => {
+    const { handleListVideoGenerations } = await import('../tools.js');
+    vi.mocked(mockClient.listVideoGenerations).mockResolvedValue({
+      success: true,
+      generations: [
+        {
+          id: 'row-1',
+          generationId: 'gen-1',
+          engineTaskId: 'task-1',
+          personaName: 'Ava',
+          videoSubject: 'Launch day',
+          status: 'completed',
+          errorCode: null,
+          tokensRefunded: false,
+          createdAt: '2026-10-08T10:00:00Z',
+          completedAt: '2026-10-08T10:05:00Z',
+          internalField: 'rides through unparsed',
+        },
+      ],
+    });
+
+    const response = await handleListVideoGenerations(mockClient, { limit: 10 });
+    expect(mockClient.listVideoGenerations).toHaveBeenCalledWith(10);
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toContain('gen-1');
+    expect(text).toContain('Launch day');
+    expect(text).toContain('"generationId": "gen-1"');
+    expect(text).not.toContain('internalField');
+  });
+
+  it('handleListVideoGenerations surfaces API errors with the structured contract', async () => {
+    const { handleListVideoGenerations } = await import('../tools.js');
+    const { ApiError } = await import('../errors.js');
+    vi.mocked(mockClient.listVideoGenerations).mockRejectedValue(
+      new ApiError('Failed to list video generations: 500 Could not load generation history.', 'INTERNAL_ERROR', null)
+    );
+
+    const response = await handleListVideoGenerations(mockClient, {});
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('"code":"INTERNAL_ERROR"');
+  });
+
+  it('GetVideoGenerationSchema requires a non-empty generationId', async () => {
+    const { GetVideoGenerationSchema } = await import('../tools.js');
+    expect(GetVideoGenerationSchema.safeParse({ generationId: 'gen-1' }).success).toBe(true);
+    expect(GetVideoGenerationSchema.safeParse({ generationId: '' }).success).toBe(false);
+  });
+
+  it('handleGetVideoGeneration narrows the detail and summarizes', async () => {
+    const { handleGetVideoGeneration } = await import('../tools.js');
+    vi.mocked(mockClient.getVideoGeneration).mockResolvedValue({
+      success: true,
+      generation: {
+        id: 'row-1',
+        generationId: 'gen-1',
+        engineTaskId: 'task-1',
+        personaName: 'Ava',
+        videoSubject: 'Launch day',
+        status: 'failed',
+        errorCode: 'engine_rejected',
+        tokensRefunded: true,
+        createdAt: '2026-10-08T10:00:00Z',
+        completedAt: null,
+      },
+    });
+
+    const response = await handleGetVideoGeneration(mockClient, { generationId: 'gen-1' });
+    expect(mockClient.getVideoGeneration).toHaveBeenCalledWith('gen-1');
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toContain('gen-1');
+    expect(text).toContain('failed');
+    expect(text).toContain('"tokensRefunded": true');
+  });
+});

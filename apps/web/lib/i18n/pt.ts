@@ -403,6 +403,8 @@ export const ptDictionary = {
     toolDescGetSlot: 'Ver o detalhe de um post agendado',
     toolDescUpdateSlotTopic: 'Editar o tópico de um post agendado',
     toolDescDeleteSlot: 'Deletar um slot de post agendado',
+    toolDescListVideoGenerations: 'Listar histórico de gerações de vídeo',
+    toolDescGetVideoGeneration: 'Ver o detalhe de uma geração de vídeo',
   },
 
   // App API Key

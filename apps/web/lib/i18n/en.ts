@@ -404,6 +404,8 @@ export const enDictionary: Dictionary = {
     toolDescGetSlot: 'Get one scheduled post\'s detail',
     toolDescUpdateSlotTopic: 'Edit a scheduled post\'s topic',
     toolDescDeleteSlot: 'Delete one scheduled post slot',
+    toolDescListVideoGenerations: 'List video generation history',
+    toolDescGetVideoGeneration: 'Get one video generation\'s detail',
   },
 
   // App API Key

@@ -110,6 +110,8 @@ The `Authorization: Bearer` API key header is sent to the configured base URL, s
 - `get_slot`: get one scheduled post's full detail by slot ID (status, topic, scheduled time, progress, schedule, persona).
 - `update_slot_topic`: edit the topic of a scheduled post that has not started generating yet.
 - `delete_slot`: delete one scheduled post slot (only pending/awaiting or failed slots; never the schedule's last slot).
+- `list_video_generations`: list the video generation history, newest first (status, error code, token refunds).
+- `get_video_generation`: get one video generation's detail by generation ID.
 
 ### Social account IDs for `generate_persona_videos`
 

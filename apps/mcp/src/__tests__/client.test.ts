@@ -414,6 +414,52 @@ describe('PostEngineerClient', () => {
     expect(result).toEqual(mockBalance);
   });
 
+  it('lists video generations with an optional limit', async () => {
+    const mockHistory = { success: true, generations: [{ generationId: 'gen-1' }] };
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(mockHistory),
+    });
+
+    const result = await client.listVideoGenerations(10);
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/persona/video-generations?limit=10`,
+      expect.objectContaining({ method: 'GET' })
+    );
+    expect(result).toEqual(mockHistory);
+
+    await client.listVideoGenerations();
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/persona/video-generations`,
+      expect.objectContaining({ method: 'GET' })
+    );
+  });
+
+  it('fails fast on an out-of-range generations limit without fetching', async () => {
+    global.fetch = vi.fn();
+    await expect(client.listVideoGenerations(0)).rejects.toThrow(/limit must be an integer between 1 and 200/);
+    await expect(client.listVideoGenerations(201)).rejects.toThrow(/limit must be an integer between 1 and 200/);
+    await expect(client.listVideoGenerations(1.5)).rejects.toThrow(/limit must be an integer between 1 and 200/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('gets one video generation by id', async () => {
+    const mockGeneration = { success: true, generation: { generationId: 'gen-1' } };
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(mockGeneration),
+    });
+
+    const result = await client.getVideoGeneration('gen-1');
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/persona/video-generations/gen-1`,
+      expect.objectContaining({ method: 'GET' })
+    );
+    expect(result).toEqual(mockGeneration);
+  });
+
 describe('generate and schedule videos client', () => {
   const baseUrl = 'https://post-engineer.com';
   let client: PostEngineerClient;

@@ -534,6 +534,29 @@ export class PostEngineerClient {
     );
   }
 
+  async listVideoGenerations(limit?: number): Promise<unknown> {
+    // The server silently falls back to its default on an invalid limit —
+    // fail fast with the field named instead of sending a value the caller
+    // never meant.
+    if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 200)) {
+      throw new Error('limit must be an integer between 1 and 200.');
+    }
+    const query = limit !== undefined ? `?limit=${encodeURIComponent(String(limit))}` : '';
+    return this.request(
+      `/api/persona/video-generations${query}`,
+      { method: 'GET', headers: this.getHeaders() },
+      'list video generations'
+    );
+  }
+
+  async getVideoGeneration(generationId: string): Promise<unknown> {
+    return this.request(
+      `/api/persona/video-generations/${encodeURIComponent(generationId)}`,
+      { method: 'GET', headers: this.getHeaders() },
+      'get video generation'
+    );
+  }
+
   async generatePersonaVideos(input: GeneratePersonaVideosInput): Promise<unknown> {
     // Map the per-provider account arrays into the publishing.accounts
     // record. Only set entries the caller provided: the server enforces

@@ -26,6 +26,8 @@ import {
   GetSlotShape,
   UpdateSlotTopicShape,
   DeleteSlotShape,
+  ListVideoGenerationsShape,
+  GetVideoGenerationShape,
 } from '../tools.js';
 import type { PostEngineerClient } from '../client.js';
 
@@ -48,6 +50,8 @@ const EXPECTED_TOOLS = [
   'get_slot',
   'update_slot_topic',
   'delete_slot',
+  'list_video_generations',
+  'get_video_generation',
   'get_token_balance',
   'generate_persona_videos',
   'get_video_status',
@@ -173,6 +177,8 @@ describe('registered tool schemas (single source of truth)', () => {
       get_slot: GetSlotShape,
       update_slot_topic: UpdateSlotTopicShape,
       delete_slot: DeleteSlotShape,
+      list_video_generations: ListVideoGenerationsShape,
+      get_video_generation: GetVideoGenerationShape,
       get_token_balance: GetTokenBalanceShape,
       generate_persona_videos: GeneratePersonaVideosShape,
       get_video_status: GetVideoStatusShape,
