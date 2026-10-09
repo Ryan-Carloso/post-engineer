@@ -159,19 +159,27 @@ export const GeneratePersonaVideosShape = {
     .array(z.string().min(1, 'Each topic must be a non-empty string'))
     .min(1, 'Provide at least one video topic')
     .max(10, 'At most 10 topics per call')
-    .describe('Video topics, one per video (1-10). The server assigns each topic a publish slot: topic i goes to day startAt\'s date + floor(i/times.length) at the i-th sorted time.'),
+    .describe('Video topics, one per video (1-10). In scheduled mode the server assigns each topic a publish slot: topic i goes to day startAt\'s date + floor(i/times.length) at the i-th sorted time. In asap mode each video publishes the moment its generation finishes.'),
   providers: z
     .array(z.enum(['youtube', 'instagram', 'linkedin', 'bluesky']))
     .min(1, 'Provide at least one provider')
     .describe('Where to publish the videos.'),
   ...PublishingAccountIdsShape,
+  // Publish mode: 'scheduled' (default) distributes publish slots across
+  // startAt + times; 'asap' publishes each video the moment generation
+  // finishes, with no scheduled time. In asap mode startAt and times must
+  // NOT be set (the handler fails fast on a stray plan).
+  mode: z
+    .enum(['scheduled', 'asap'])
+    .default('scheduled')
+    .describe("Publish mode: 'scheduled' (default) slots each video across startAt + times; 'asap' publishes each video the moment generation finishes, with no scheduled time — do not set startAt or times."),
   startAt: z
     .string()
-    .min(1, 'startAt is required')
     .refine((value) => !Number.isNaN(Date.parse(value)), {
       message: 'startAt must be a valid ISO datetime (e.g. "2026-10-02T20:00:00")',
     })
-    .describe('When the first publish slot may start: ISO datetime. A naive "2026-10-02T20:00:00" is wall-clock in timezone. Slots before startAt are skipped; every slot must be 3h–30d ahead.'),
+    .optional()
+    .describe('When the first publish slot may start: ISO datetime. A naive "2026-10-02T20:00:00" is wall-clock in timezone. Required unless mode is \'asap\'. Slots before startAt are skipped; every slot must be 3h–30d ahead.'),
   times: z
     .array(
       z
@@ -179,8 +187,9 @@ export const GeneratePersonaVideosShape = {
         .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Each time must be HH:MM in 24-hour format (e.g. "09:30", "20:00")')
     )
     .min(1, 'Provide at least one publish time')
-    .describe('Daily publish times in HH:MM 24-hour format.'),
-  timezone: z.string().min(1).default('UTC').describe('IANA timezone for a naive startAt and the HH:MM times, e.g. "Europe/Lisbon". Defaults to UTC.'),
+    .optional()
+    .describe('Daily publish times in HH:MM 24-hour format. Required unless mode is \'asap\'.'),
+  timezone: z.string().min(1).default('UTC').describe('IANA timezone for a naive startAt and the HH:MM times, e.g. "Europe/Lisbon". Defaults to UTC. Display-only when mode is \'asap\'.'),
   options: z
     .object({
       faceless: z.boolean().optional().describe('Generate faceless (no face). With a persona this drops only the face — the persona voice, niche and script prompt still apply. Without a persona it is REQUIRED.'),
@@ -602,6 +611,18 @@ export async function handleGeneratePersonaVideos(
   args: z.infer<typeof GeneratePersonaVideosSchema>
 ): Promise<McpToolResponse> {
   try {
+    // The MCP SDK parses tool args against the raw shape, so a whole-object
+    // refine would be a hollow claim on the tool path (round 26 learning):
+    // the mode/plan consistency rule lives here instead, where it always
+    // runs. A stray schedule plan 400s server-side; name the rule before
+    // the client fires.
+    const mode = args.mode ?? 'scheduled';
+    if (mode === 'asap' && (args.startAt !== undefined || args.times !== undefined)) {
+      throw new Error("startAt and times must not be set when mode is 'asap'.");
+    }
+    if (mode === 'scheduled' && (args.startAt === undefined || args.times === undefined)) {
+      throw new Error("startAt and times are required when mode is 'scheduled'.");
+    }
     const narrowed = narrowScheduledVideos(
       await client.generatePersonaVideos({
         personaId: args.personaId,
@@ -611,6 +632,7 @@ export async function handleGeneratePersonaVideos(
         instagramAccountIds: args.instagramAccountIds,
         linkedinAccountIds: args.linkedinAccountIds,
         blueskyAccountIds: args.blueskyAccountIds,
+        mode,
         startAt: args.startAt,
         times: args.times,
         timezone: args.timezone,
@@ -626,7 +648,9 @@ export async function handleGeneratePersonaVideos(
     const scheduleId = narrowed.schedule.id ?? '(unknown id)';
     const humanSummary = narrowed.replayed
       ? `Replayed idempotent schedule ${scheduleId}: ${slotCount} publish slot(s) (no new videos generated).`
-      : `Scheduled ${slotCount} video(s) in schedule ${scheduleId}: each video is generated and auto-published at its slot.`;
+      : narrowed.schedule.mode === 'asap'
+        ? `Generating ${slotCount} video(s) in schedule ${scheduleId}: each video publishes as soon as its generation finishes (ASAP mode).`
+        : `Scheduled ${slotCount} video(s) in schedule ${scheduleId}: each video is generated and auto-published at its slot.`;
     const slotLines = narrowed.slots.map(
       (slot, i) =>
         `${i + 1}. ${slot.topic ?? '(untitled)'} → ${slot.slotAt ?? '(unscheduled)'} [${slot.status ?? 'unknown'}${slot.taskId ? `, task ${slot.taskId}` : ''}]`
@@ -673,11 +697,12 @@ export async function handleGeneratePersonaVideos(
 }
 
 /** Narrows the generate-and-schedule success envelope to the fields the
- * tool contract promises: the schedule id, one row per publish slot, and
- * the replayed flag. Anything the API adds later rides through unparsed —
- * the projection only pins what the tool renders and documents. */
+ * tool contract promises: the schedule id and publish mode, one row per
+ * publish slot, and the replayed flag. Anything the API adds later rides
+ * through unparsed — the projection only pins what the tool renders and
+ * documents. */
 function narrowScheduledVideos(result: unknown): {
-  schedule: { id: string | null };
+  schedule: { id: string | null; mode: string | null };
   slots: Array<{
     slotId: string | null;
     slotAt: string | null;
@@ -699,7 +724,7 @@ function narrowScheduledVideos(result: unknown): {
   const str = (value: unknown): string | null =>
     typeof value === 'string' ? value : null;
   return {
-    schedule: { id: str(schedule.id) },
+    schedule: { id: str(schedule.id), mode: str(schedule.mode) },
     slots: rawSlots.map((slot) => {
       const s =
         typeof slot === 'object' && slot !== null

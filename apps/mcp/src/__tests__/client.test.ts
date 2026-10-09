@@ -412,6 +412,7 @@ describe('generate and schedule videos client', () => {
     expect(body.personaId).toBe('persona-123');
     expect(body.topics).toEqual(['Launch a SaaS in days', 'Pricing lessons']);
     expect(body.publishing).toEqual({
+      mode: 'scheduled',
       providers: ['youtube', 'bluesky'],
       accounts: { youtube: ['chan-1'], bluesky: ['did:plc:abc'] },
       schedule: {
@@ -492,6 +493,65 @@ describe('generate and schedule videos client', () => {
     expect(first).toMatch(uuid);
     expect(second).toMatch(uuid);
     expect(first).not.toBe(second);
+  });
+
+  it("sends mode 'scheduled' explicitly by default", async () => {
+    // The API defaults an absent mode to 'scheduled'; the client sends it
+    // explicitly so the payload always says what the caller meant.
+    await client.generatePersonaVideos(baseInput);
+    const publishing = lastRequestBody().publishing as Record<string, unknown>;
+    expect(publishing.mode).toBe('scheduled');
+  });
+
+  it("sends mode 'asap' with no schedule plan and a display timezone", async () => {
+    // In ASAP mode the videos publish the moment generation finishes: the
+    // request carries no schedule plan, only the display timezone.
+    const { startAt: _startAt, times: _times, ...rest } = baseInput;
+    await client.generatePersonaVideos({ ...rest, mode: 'asap' });
+    const publishing = lastRequestBody().publishing as Record<string, unknown>;
+    expect(publishing).toEqual({
+      mode: 'asap',
+      providers: ['youtube', 'bluesky'],
+      accounts: { youtube: ['chan-1'], bluesky: ['did:plc:abc'] },
+      timezone: 'Europe/Lisbon',
+    });
+    expect('schedule' in publishing).toBe(false);
+  });
+
+  it("fails fast when startAt or times ride along with mode 'asap'", async () => {
+    // A stray schedule plan in ASAP mode would 400 server-side ("must not
+    // be set"); fail fast with the same rule before any fetch goes out.
+    const withStartAt: unknown = await client
+      .generatePersonaVideos({ ...baseInput, mode: 'asap' })
+      .catch((e: unknown) => e);
+    expect(withStartAt).toBeInstanceOf(Error);
+    expect((withStartAt as Error).message).toMatch(/must not be set/i);
+
+    const { startAt: _startAt, ...withTimes } = baseInput;
+    const withTimesOnly: unknown = await client
+      .generatePersonaVideos({ ...withTimes, mode: 'asap' })
+      .catch((e: unknown) => e);
+    expect((withTimesOnly as Error).message).toMatch(/must not be set/i);
+
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("fails fast when startAt or times are missing in scheduled mode", async () => {
+    // Without a plan the server 400s ("publishing.schedule is required");
+    // name the missing fields before any fetch goes out.
+    const { startAt: _startAt, ...noStartAt } = baseInput;
+    const missingStartAt: unknown = await client
+      .generatePersonaVideos(noStartAt)
+      .catch((e: unknown) => e);
+    expect((missingStartAt as Error).message).toMatch(/startAt and times are required/i);
+
+    const { times: _times, ...noTimes } = baseInput;
+    const missingTimes: unknown = await client
+      .generatePersonaVideos(noTimes)
+      .catch((e: unknown) => e);
+    expect((missingTimes as Error).message).toMatch(/startAt and times are required/i);
+
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('throws a structured ApiError carrying code and field on API errors', async () => {

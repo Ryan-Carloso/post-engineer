@@ -705,15 +705,30 @@ describe('generate_persona_videos tool', () => {
     ).toBe(false);
   });
 
-  it('GeneratePersonaVideosSchema requires topics, providers, startAt, times', () => {
+  it('GeneratePersonaVideosSchema requires topics and providers', () => {
     const { topics: _topics, ...noTopics } = baseArgs;
     expect(GeneratePersonaVideosSchema.safeParse(noTopics).success).toBe(false);
     const { providers: _providers, ...noProviders } = baseArgs;
     expect(GeneratePersonaVideosSchema.safeParse(noProviders).success).toBe(false);
-    const { startAt: _startAt, ...noStartAt } = baseArgs;
-    expect(GeneratePersonaVideosSchema.safeParse(noStartAt).success).toBe(false);
-    const { times: _times, ...noTimes } = baseArgs;
-    expect(GeneratePersonaVideosSchema.safeParse(noTimes).success).toBe(false);
+  });
+
+  it("GeneratePersonaVideosSchema defaults mode to 'scheduled'", () => {
+    const result = GeneratePersonaVideosSchema.safeParse(baseArgs);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.mode).toBe('scheduled');
+  });
+
+  it("GeneratePersonaVideosSchema accepts mode 'asap' without startAt/times", () => {
+    // ASAP mode publishes each video the moment generation finishes: no
+    // schedule plan is sent, so startAt and times are simply absent.
+    const { startAt: _startAt, times: _times, ...rest } = baseArgs;
+    const result = GeneratePersonaVideosSchema.safeParse({ ...rest, mode: 'asap' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.mode).toBe('asap');
+      expect(result.data.startAt).toBeUndefined();
+      expect(result.data.times).toBeUndefined();
+    }
   });
 
   it('GeneratePersonaVideosSchema bounds topics to 1-10', () => {
@@ -826,6 +841,69 @@ describe('generate_persona_videos tool', () => {
     expect(text).toContain('task-2');
     expect(text).toContain('"replayed": false');
     expect(text).toContain('"slotId": "slot-1"');
+  });
+
+  it("handleGeneratePersonaVideos fails fast when startAt/times ride along with mode 'asap'", async () => {
+    // A stray schedule plan 400s server-side; the tool names the rule
+    // before the client ever fires.
+    const { startAt: _startAt, times: _times, ...rest } = baseArgs;
+    const withStartAt = await handleGeneratePersonaVideos(
+      mockClient,
+      GeneratePersonaVideosSchema.parse({ ...baseArgs, mode: 'asap' })
+    );
+    expect(withStartAt.isError).toBe(true);
+    expect(textOf(withStartAt)).toMatch(/must not be set/i);
+
+    const withTimes = await handleGeneratePersonaVideos(
+      mockClient,
+      GeneratePersonaVideosSchema.parse({ ...rest, mode: 'asap', times: ['20:00'] })
+    );
+    expect(withTimes.isError).toBe(true);
+    expect(textOf(withTimes)).toMatch(/must not be set/i);
+
+    expect(mockClient.generatePersonaVideos).not.toHaveBeenCalled();
+  });
+
+  it("handleGeneratePersonaVideos fails fast when startAt/times are missing in scheduled mode", async () => {
+    const { startAt: _startAt, times: _times, ...rest } = baseArgs;
+    const response = await handleGeneratePersonaVideos(
+      mockClient,
+      GeneratePersonaVideosSchema.parse(rest)
+    );
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toMatch(/startAt and times are required/i);
+    expect(mockClient.generatePersonaVideos).not.toHaveBeenCalled();
+  });
+
+  it("handleGeneratePersonaVideos passes mode through and summarizes ASAP publishing", async () => {
+    vi.mocked(mockClient.generatePersonaVideos).mockResolvedValue({
+      success: true,
+      schedule: { id: 'sched-7', mode: 'asap' },
+      slots: [
+        {
+          slotId: 'slot-7',
+          slotAt: '2026-10-09T22:00:00Z',
+          topic: 'Launch a SaaS in days',
+          taskId: 'task-7',
+          status: 'generating',
+        },
+      ],
+      replayed: false,
+    });
+
+    const { startAt: _startAt, times: _times, ...rest } = baseArgs;
+    const response = await handleGeneratePersonaVideos(
+      mockClient,
+      GeneratePersonaVideosSchema.parse({ ...rest, mode: 'asap' })
+    );
+
+    expect(mockClient.generatePersonaVideos).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'asap' })
+    );
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toMatch(/as soon as/i);
+    expect(text).toContain('"mode": "asap"');
   });
 
   it('handleGeneratePersonaVideos notes a replayed idempotent schedule', async () => {
