@@ -60,22 +60,26 @@ def audio_duration_seconds(audio_path: str) -> float:
     return duration
 
 
+_INFINITETALK_ENV_VARS: dict[str, str] = {
+    "submit_url": "INFINITETALK_SUBMIT_URL",
+    "status_url": "INFINITETALK_STATUS_URL",
+    "download_url": "INFINITETALK_DOWNLOAD_URL",
+}
+
+
 def _url(name: str) -> str:
-    value = config.infinitetalk.get(name, "")
-    if not isinstance(value, str) or not value.strip():
-        raise InfiniteTalkError(f"InfiniteTalk {name} is not configured")
+    env_name = _INFINITETALK_ENV_VARS[name]
+    value = os.environ.get(env_name, "")
+    if not value.strip():
+        raise InfiniteTalkError(f"InfiniteTalk {name} is not configured ({env_name})")
     return value
 
 
 def _bearer_headers() -> dict[str, str]:
     """Authorization header for the Modal HTTP endpoints (required, no fallback)."""
-    secret = config.infinitetalk.get("http_secret", "") or os.environ.get(
-        "INFINITETALK_HTTP_SECRET", ""
-    )
-    if not isinstance(secret, str) or not secret.strip():
-        raise InfiniteTalkError(
-            "InfiniteTalk http_secret is not configured (config.toml [infinitetalk])"
-        )
+    secret = os.environ.get("INFINITETALK_HTTP_SECRET", "")
+    if not secret.strip():
+        raise InfiniteTalkError("INFINITETALK_HTTP_SECRET is not configured")
     return {"Authorization": f"Bearer {secret}"}
 
 
@@ -112,20 +116,29 @@ def trim_audio(
     output_path: str,
     duration_seconds: float = 5,
     padding_seconds: float = 0,
+    start_seconds: float = 0,
 ) -> None:
-    """Create an accurately cut, standalone audio intro for InfiniteTalk."""
+    """Create an accurately cut, standalone audio segment for InfiniteTalk.
+
+    ``start_seconds`` offsets the cut (used for face-fill tail segments);
+    0 keeps the historical intro-trim duration behavior. A single ``-t``
+    flag sets the output length: ffmpeg silently applies the LAST
+    duplicate flag, so passing two is dead code with a misleading value.
+    """
+    input_args = ["-i", audio_path]
+    if start_seconds > 0:
+        # -ss before -i seeks on the demuxer; accurate enough for narration
+        # segment cuts and fast on long files.
+        input_args = ["-ss", str(start_seconds)] + input_args
     result = subprocess.run(
         [
             "ffmpeg",
             "-y",
-            "-i",
-            audio_path,
-            "-t",
-            str(duration_seconds),
-            "-af",
-            f"apad=pad_dur={padding_seconds}",
+            *input_args,
             "-t",
             str(duration_seconds + padding_seconds),
+            "-af",
+            f"apad=pad_dur={padding_seconds}",
             "-vn",
             "-acodec",
             "libmp3lame",

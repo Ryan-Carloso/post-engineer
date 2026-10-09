@@ -215,6 +215,17 @@ notices.
   nothing, and the `matched=false` path already skips the job with a clear
   log line. No handling needed.
 
+## Reviewer calibration (OpenCode, PR #146, 2026-10-09)
+
+- **ffmpeg applies the LAST duplicate output flag silently.** The review
+  caught two `-t` flags in `trim_audio` (a24e322): the second overrode
+  the first, making the earlier flag dead code and the output length
+  `duration_seconds + padding_seconds` instead of `duration_seconds`.
+  Real bug, not a hallucination — fixed to a single `-t` with a docstring
+  warning. Never build a subprocess command with the same output flag
+  twice; assert single-flag construction in unit tests by capturing the
+  argv list.
+
 ## Codecov PR comment (PR #90, 2026-10-04)
 
 - **The `header`/`flags` comment sections only render when the PR diff

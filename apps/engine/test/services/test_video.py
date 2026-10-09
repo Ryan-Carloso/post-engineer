@@ -807,6 +807,73 @@ class TestVideoService(unittest.TestCase):
         self.assertEqual(ffmpeg_reencode_mock.call_count, 4)
         write_mock.assert_not_called()
 
+    def test_combine_videos_trims_the_last_clip_to_the_required_duration(self):
+        """
+        A long clip (video_clip_duration >= 5) must not overshoot the
+        voiceover: the timeline is cut to audio + margin so the face-fill
+        outro — spliced by subtitle timestamps on the audio timeline —
+        stays in sync and no silent footage enters the end of the video.
+        """
+
+        class _FakeAudioClip:
+            duration = 10.0
+
+            def close(self):
+                pass
+
+        class _FakeVideoClip:
+            def __init__(self, duration):
+                self.duration = duration
+                self.size = (1080, 1920)
+                self.w = 1080
+                self.h = 1920
+
+        video_durations = {
+            "clip-1.mp4": 9.0,
+            "clip-2.mp4": 9.0,
+        }
+
+        def _open_fake_video_clip(video_path):
+            return _FakeVideoClip(video_durations[video_path])
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            combined_video_path = os.path.join(temp_dir, "combined.mp4")
+
+            with patch.object(vd, "AudioFileClip", return_value=_FakeAudioClip()):
+                with patch.object(
+                    vd, "_open_video_clip_quietly", side_effect=_open_fake_video_clip
+                ):
+                    with patch.object(
+                        vd, "_reencode_clip_with_ffmpeg",
+                        side_effect=lambda **kwargs: True,
+                    ) as ffmpeg_reencode_mock:
+                        with patch.object(
+                            vd, "_write_videofile_with_codec_fallback"
+                        ):
+                            with patch.object(vd, "concat_video_clips_with_ffmpeg"):
+                                with patch.object(vd, "delete_files"):
+                                    vd.combine_videos(
+                                        combined_video_path=combined_video_path,
+                                        video_paths=list(video_durations.keys()),
+                                        audio_file=os.path.join(temp_dir, "audio.mp3"),
+                                        video_aspect=vd.VideoAspect.portrait,
+                                        video_concat_mode=vd.VideoConcatMode.sequential,
+                                        video_transition_mode=None,
+                                        max_clip_duration=9,
+                                    )
+
+        # 10s audio + 0.1 margin: the first 9s clip passes whole, the second
+        # is trimmed to the remaining 1.1s — and no third clip is pulled.
+        self.assertEqual(ffmpeg_reencode_mock.call_count, 2)
+        first = ffmpeg_reencode_mock.call_args_list[0].kwargs
+        second = ffmpeg_reencode_mock.call_args_list[1].kwargs
+        self.assertAlmostEqual(
+            first["end_time"] - first["start_time"], 9.0, places=6
+        )
+        self.assertAlmostEqual(
+            second["end_time"] - second["start_time"], 1.1, places=6
+        )
+
     def test_prioritize_unique_source_clips_uses_each_source_before_reuse(self):
         """
         In random mode, one long material is split into several clips. The
