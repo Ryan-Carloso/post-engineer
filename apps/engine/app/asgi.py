@@ -118,9 +118,7 @@ def _flat_log_fingerprint(record: dict[str, object], exc_type: str) -> str | Non
     """
     module = record.get("name")
     function = record.get("function")
-    if not isinstance(module, str) or not isinstance(function, str):
-        return None
-    if not module or not function:
+    if not (isinstance(module, str) and module and isinstance(function, str) and function):
         return None
     return scrub_secret_values(f"{exc_type}:{module}:{function}")[:_MAX_TEXT_CHARS]
 
