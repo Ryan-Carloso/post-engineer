@@ -11,6 +11,12 @@ SLOT_PUBLISHING = "publishing"
 SLOT_PUBLISHED = "published"
 SLOT_FAILED = "failed"
 
+# Publish retries: a slot whose publish keeps failing (provider outage, R2
+# misconfiguration) is retried on later ticks up to this many attempts, then
+# auto-cancelled (failed) with the prepaid token refunded. Publish must never
+# retry forever waiting on a human to cancel the slot.
+MAX_PUBLISH_ATTEMPTS = 3
+
 # Unified generate+schedule batches (POST /api/videos/generate-and-schedule):
 # finite, user-requested, prepaid at request time. Their slots carry the
 # topic chosen by the user.

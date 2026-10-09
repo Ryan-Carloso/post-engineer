@@ -355,8 +355,40 @@ jobs:
           print(f"only_mutate set to [{shard_file}]")
           EOF
 
+      # mutmut 3.x only instruments function bodies: a shard file with no
+      # function definitions (e.g. a pure constants module) produces zero
+      # mutants, and `mutmut run` exits 1 ("Stopping early, because we could
+      # not find any test case for any mutant") — which is not a failure.
+      # Detect that case up front so the shard skips gracefully instead.
+      - name: Check shard file has mutable code
+        if: matrix.file != ''
+        id: mutable
+        env:
+          SHARD_FILE: ${{ matrix.file }}
+        run: |
+          uv run python - <<'EOF'
+          import ast
+          import os
+
+          path = os.environ["SHARD_FILE"]
+          tree = ast.parse(open(path).read())
+          has_functions = any(
+              isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+              for node in ast.walk(tree)
+          )
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"has_functions={'true' if has_functions else 'false'}\n")
+          print(f"{path}: has_functions={has_functions}")
+          EOF
+
       - name: Run mutmut mutation testing
+        if: matrix.file == '' || steps.mutable.outputs.has_functions == 'true'
         run: uv run mutmut run
+
+      - name: Report skipped shard
+        if: matrix.file != '' && steps.mutable.outputs.has_functions == 'false'
+        run: |
+          echo "No function definitions in ${{ matrix.file }} — nothing for mutmut to mutate, shard skipped."
 
       - name: Export CI/CD stats
         if: always()
@@ -367,7 +399,7 @@ jobs:
 
       - name: Upload mutmut report
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75f139c82e0e9b575b73 # v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: mutation-report-engine-${{ github.event.pull_request.number || 'manual' }}-${{ steps.slug.outputs.slug }}
           path: apps/engine/mutants/
@@ -398,7 +430,11 @@ jobs:
               )"
               echo "**Mutation score: ${SCORE}%** (${KILLED} killed, ${SURVIVED} survived, ${TIMEOUT} timed out, ${TOTAL} mutants)"
             else
-              echo "No mutation report produced for $label — the run failed."
+              if [ "${{ steps.mutable.outputs.has_functions }}" = "false" ]; then
+                echo "Shard skipped: no function definitions in $label, nothing for mutmut to mutate."
+              else
+                echo "No mutation report produced for $label — the run failed."
+              fi
             fi
             echo ""
             echo "Full report: download the \`mutation-report-engine-\` artifact for this shard from this run."

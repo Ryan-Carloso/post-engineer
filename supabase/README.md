@@ -21,6 +21,7 @@ the order — you never need to guess or read docs to know what comes next:
 | 013 | `migrations/013_schedules-voice-audio-url-snapshot.sql` | Snapshot the persona-less audio voice URL (`post_voice_audio_url`) on the schedule, so audio-voice posts keep their voice at tick time instead of re-resolving (and rejecting) it |
 | 014 | `migrations/014_videos-storage-bucket.sql` | Create the private `videos` storage bucket (plus RLS policies) so the engine can archive final videos at `{user_id}/{persona_id\|faceless}/{task_id}/final-1.mp4` |
 | 015 | `migrations/015_schedules-publish-mode.sql` | `schedules.publish_mode` (`scheduled` default, CHECK-pinned to `scheduled`/`asap`): records whether a post publishes at its slot times or ASAP (the moment generation finishes, no scheduled time) |
+| 016 | `migrations/016_scheduled-posts-publish-attempts.sql` | `scheduled_posts.publish_attempts` (NOT NULL DEFAULT 0): counts publish attempts per slot so the engine auto-cancels (failed) with a token refund after 3 failures instead of retrying forever |
 
 ## How to apply
 
