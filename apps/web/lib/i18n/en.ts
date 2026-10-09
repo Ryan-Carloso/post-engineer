@@ -409,6 +409,7 @@ export const enDictionary: Dictionary = {
     toolDescListTokenTransactions: 'List the token ledger',
     toolDescGetPersonaDeletePreview: 'Preview persona deletion impact',
     toolDescDeletePersona: 'Delete a persona (destructive)',
+    toolDescDisconnectAccount: 'Disconnect a social account',
   },
 
   // App API Key

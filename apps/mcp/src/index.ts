@@ -24,6 +24,7 @@ import {
   ListTokenTransactionsShape,
   GetPersonaDeletePreviewShape,
   DeletePersonaShape,
+  DisconnectAccountShape,
   GeneratePersonaVideosShape,
   GetVideoStatusShape,
   GetVideoTaskProgressShape,
@@ -49,6 +50,7 @@ import {
   handleListTokenTransactions,
   handleGetPersonaDeletePreview,
   handleDeletePersona,
+  handleDisconnectAccount,
   handleGetTokenBalance,
   handleGeneratePersonaVideos,
   handleGetVideoStatus,
@@ -253,6 +255,15 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
     DeletePersonaShape,
     withTracking('delete_persona', async (args) => {
       return handleDeletePersona(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'disconnect_account',
+    'Disconnect a social account by provider and account ID (the IDs from list_social_accounts). The account stops being available for publishing.',
+    DisconnectAccountShape,
+    withTracking('disconnect_account', async (args) => {
+      return handleDisconnectAccount(apiClient, args);
     })
   );
 

@@ -194,6 +194,20 @@ export const DeletePersonaShape = {
 
 export const DeletePersonaSchema = z.object(DeletePersonaShape);
 
+export const DisconnectAccountShape = {
+  provider: z
+    .enum(['youtube', 'instagram', 'linkedin', 'bluesky'])
+    .describe('The social platform of the account to disconnect.'),
+  providerAccountId: z
+    .string()
+    .min(1, 'providerAccountId is required')
+    .describe(
+      'The account ID on that provider (the channelId / igUserId / providerAccountId / did field from list_social_accounts).',
+    ),
+};
+
+export const DisconnectAccountSchema = z.object(DisconnectAccountShape);
+
 export const GetTokenBalanceShape = {};
 
 export const GetTokenBalanceSchema = z.object(GetTokenBalanceShape);
@@ -902,6 +916,48 @@ export async function handleDeletePersona(
         {
           type: 'text',
           text: `Error deleting persona: ${getErrorMessage(error)}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+export async function handleDisconnectAccount(
+  client: PostEngineerClient,
+  args: z.infer<typeof DisconnectAccountSchema>
+): Promise<McpToolResponse> {
+  try {
+    await client.disconnectAccount(args.provider, args.providerAccountId);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Account ${args.providerAccountId} (${args.provider}) disconnected.`,
+        },
+      ],
+    };
+  } catch (error) {
+    if (error instanceof ApiError && error.code !== null) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error disconnecting account: ${JSON.stringify({
+              code: error.code,
+              message: sanitizeEngineError(getErrorMessage(error)),
+              field: error.field,
+            })}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error disconnecting account: ${getErrorMessage(error)}`,
         },
       ],
       isError: true,

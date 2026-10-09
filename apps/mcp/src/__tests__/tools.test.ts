@@ -1473,3 +1473,57 @@ describe('delete persona tools', () => {
     expect(text).toContain('"field":"personaId"');
   });
 });
+
+describe('disconnect account tool', () => {
+  const mockClient = {
+    disconnectAccount: vi.fn(),
+  } as unknown as PostEngineerClient;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('DisconnectAccountSchema validates provider and account id', async () => {
+    const { DisconnectAccountSchema } = await import('../tools.js');
+    expect(
+      DisconnectAccountSchema.safeParse({ provider: 'bluesky', providerAccountId: 'did:plc:abc' }).success
+    ).toBe(true);
+    expect(
+      DisconnectAccountSchema.safeParse({ provider: 'myspace', providerAccountId: 'acc-1' }).success
+    ).toBe(false);
+    expect(
+      DisconnectAccountSchema.safeParse({ provider: 'youtube', providerAccountId: '' }).success
+    ).toBe(false);
+  });
+
+  it('handleDisconnectAccount confirms the disconnection', async () => {
+    const { handleDisconnectAccount } = await import('../tools.js');
+    vi.mocked(mockClient.disconnectAccount).mockResolvedValue({ success: true });
+
+    const response = await handleDisconnectAccount(mockClient, {
+      provider: 'bluesky',
+      providerAccountId: 'did:plc:abc',
+    });
+    expect(mockClient.disconnectAccount).toHaveBeenCalledWith('bluesky', 'did:plc:abc');
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toContain('bluesky');
+    expect(text).toContain('did:plc:abc');
+    expect(text).toMatch(/disconnected/i);
+  });
+
+  it('handleDisconnectAccount surfaces API errors with the structured contract', async () => {
+    const { handleDisconnectAccount } = await import('../tools.js');
+    const { ApiError } = await import('../errors.js');
+    vi.mocked(mockClient.disconnectAccount).mockRejectedValue(
+      new ApiError('Failed to disconnect account: 500 Failed to disconnect account.', 'DELETE_ERROR', 'provider')
+    );
+
+    const response = await handleDisconnectAccount(mockClient, {
+      provider: 'youtube',
+      providerAccountId: 'chan-1',
+    });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('"code":"DELETE_ERROR"');
+  });
+});

@@ -408,6 +408,7 @@ export const ptDictionary = {
     toolDescListTokenTransactions: 'Listar o extrato de tokens',
     toolDescGetPersonaDeletePreview: 'Ver impacto de deletar persona',
     toolDescDeletePersona: 'Deletar uma persona (destrutivo)',
+    toolDescDisconnectAccount: 'Desconectar uma conta social',
   },
 
   // App API Key

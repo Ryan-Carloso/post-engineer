@@ -529,6 +529,33 @@ describe('PostEngineerClient', () => {
     );
   });
 
+  it('disconnects a social account by provider and account id', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+    });
+
+    await client.disconnectAccount('bluesky', 'did:plc:abc');
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/account?provider=bluesky&providerAccountId=did%3Aplc%3Aabc`,
+      expect.objectContaining({ method: 'DELETE' })
+    );
+  });
+
+  it('fails fast on an unknown provider or empty account id without fetching', async () => {
+    // The route 400s INVALID_PROVIDER / INVALID_PARAMS — name the field
+    // before any fetch goes out.
+    global.fetch = vi.fn();
+    await expect(client.disconnectAccount('myspace', 'acc-1')).rejects.toThrow(
+      /provider must be one of: youtube, instagram, linkedin, bluesky/
+    );
+    await expect(client.disconnectAccount('youtube', '   ')).rejects.toThrow(
+      /providerAccountId must be a non-empty string/
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
 describe('generate and schedule videos client', () => {
   const baseUrl = 'https://post-engineer.com';
   let client: PostEngineerClient;

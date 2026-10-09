@@ -31,6 +31,7 @@ import {
   ListTokenTransactionsShape,
   GetPersonaDeletePreviewShape,
   DeletePersonaShape,
+  DisconnectAccountShape,
 } from '../tools.js';
 import type { PostEngineerClient } from '../client.js';
 
@@ -58,6 +59,7 @@ const EXPECTED_TOOLS = [
   'list_token_transactions',
   'get_persona_delete_preview',
   'delete_persona',
+  'disconnect_account',
   'get_token_balance',
   'generate_persona_videos',
   'get_video_status',
@@ -188,6 +190,7 @@ describe('registered tool schemas (single source of truth)', () => {
       list_token_transactions: ListTokenTransactionsShape,
       get_persona_delete_preview: GetPersonaDeletePreviewShape,
       delete_persona: DeletePersonaShape,
+      disconnect_account: DisconnectAccountShape,
       get_token_balance: GetTokenBalanceShape,
       generate_persona_videos: GeneratePersonaVideosShape,
       get_video_status: GetVideoStatusShape,

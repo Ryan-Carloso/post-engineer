@@ -115,6 +115,7 @@ The `Authorization: Bearer` API key header is sent to the configured base URL, s
 - `list_token_transactions`: list the token ledger — every credit and debit (purchases, generation spends, refunds), newest first.
 - `get_persona_delete_preview`: preview what deleting a persona would remove (counts + per-video download links). Read-only.
 - `delete_persona`: DESTRUCTIVE — delete a persona with all its schedules, slots, videos, and image library. No token refunds.
+- `disconnect_account`: disconnect a social account by provider and account ID.
 
 ### Social account IDs for `generate_persona_videos`
 

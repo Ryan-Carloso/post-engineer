@@ -597,6 +597,27 @@ export class PostEngineerClient {
     );
   }
 
+  async disconnectAccount(provider: string, providerAccountId: string): Promise<unknown> {
+    // The route 400s INVALID_PROVIDER / INVALID_PARAMS — fail fast with the
+    // field named before any fetch goes out.
+    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky'];
+    if (!validProviders.includes(provider)) {
+      throw new Error(`provider must be one of: ${validProviders.join(', ')}.`);
+    }
+    if (providerAccountId.trim().length === 0) {
+      throw new Error('providerAccountId must be a non-empty string.');
+    }
+    const params = new URLSearchParams({
+      provider,
+      providerAccountId: providerAccountId.trim(),
+    });
+    return this.request(
+      `/api/account?${params.toString()}`,
+      { method: 'DELETE', headers: this.getHeaders() },
+      'disconnect account'
+    );
+  }
+
   async generatePersonaVideos(input: GeneratePersonaVideosInput): Promise<unknown> {
     // Map the per-provider account arrays into the publishing.accounts
     // record. Only set entries the caller provided: the server enforces
