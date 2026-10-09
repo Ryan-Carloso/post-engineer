@@ -1771,7 +1771,7 @@ describe('new tool error paths and narrowing fallbacks', () => {
     });
     expect(response.isError).toBe(true);
     expect(textOf(response)).toBe('Error disconnecting account: network down');
-
+  });
 });
 
 describe('publish video direct tool', () => {
