@@ -10,6 +10,8 @@ import sys
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from loguru import logger
+
 from app import asgi
 
 
@@ -234,6 +236,78 @@ class PostHogSinkTests(unittest.TestCase):
         with patch("app.asgi.track_event", side_effect=RuntimeError("posthog down")):
             asgi._loguru_posthog_sink(BadMessage())
             asgi._loguru_posthog_sink(_message())
+
+
+def _log_storage_failure(task_id: str) -> None:
+    logger.error(f"video_storage: upload failed for {task_id}")
+
+
+def _log_scheduler_failure(task_id: str) -> None:
+    logger.error(f"fill_schedule: stage generated failed for {task_id}")
+
+
+def _captured_properties(*log_calls) -> list[dict]:
+    """Run each log call through the real loguru pipeline into the sink."""
+    handler_id = logger.add(asgi._loguru_posthog_sink, level="ERROR")
+    try:
+        with patch("app.asgi.track_event") as track_event:
+            for log_call in log_calls:
+                log_call()
+    finally:
+        logger.remove(handler_id)
+    return [call.args[1] for call in track_event.call_args_list]
+
+
+class FlatLogGroupingTests(unittest.TestCase):
+    def test_flat_logs_from_two_sources_get_different_fingerprints(self):
+        storage, scheduler = _captured_properties(
+            lambda: _log_storage_failure("task-1"),
+            lambda: _log_scheduler_failure("task-1"),
+        )
+        assert storage["$exception_fingerprint"] != scheduler["$exception_fingerprint"]
+
+    def test_repeated_flat_logs_from_one_source_share_a_fingerprint(self):
+        # The task id changes per request: it must not reach the key, or
+        # every request would open its own issue.
+        first, second = _captured_properties(
+            lambda: _log_storage_failure("task-1"),
+            lambda: _log_storage_failure("task-2"),
+        )
+        assert first["$exception_message"] != second["$exception_message"]
+        assert first["$exception_fingerprint"] == second["$exception_fingerprint"]
+        assert "task-1" not in first["$exception_fingerprint"]
+
+    def test_fingerprint_names_module_and_function_not_path(self):
+        (properties,) = _captured_properties(lambda: _log_storage_failure("task-1"))
+        assert properties["$exception_fingerprint"] == (
+            f"Error:{__name__}:_log_storage_failure"
+        )
+
+    def test_http_exception_type_is_part_of_the_fingerprint(self):
+        plain, http = _captured_properties(
+            lambda: logger.error("boom"),
+            lambda: logger.bind(http_status_code=500).error("boom"),
+        )
+        assert plain["$exception_fingerprint"].startswith("Error:")
+        assert http["$exception_fingerprint"].startswith("HttpException:")
+
+    def test_record_with_exception_keeps_frame_grouping(self):
+        # Records with a live exception carry real frames: PostHog groups
+        # them by those frames, so the sink adds no fingerprint.
+        def _log_with_exception() -> None:
+            try:
+                raise ValueError("boom")
+            except ValueError:
+                logger.exception("failed")
+
+        (properties,) = _captured_properties(_log_with_exception)
+        assert "$exception_fingerprint" not in properties
+
+    def test_record_without_source_fields_sends_no_fingerprint(self):
+        with patch("app.asgi.track_event") as track_event:
+            asgi._loguru_posthog_sink(_message())
+        _, properties = track_event.call_args[0]
+        assert "$exception_fingerprint" not in properties
 
 
 class StartupWarmClientTests(unittest.TestCase):

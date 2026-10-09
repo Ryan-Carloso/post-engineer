@@ -106,6 +106,23 @@ def _exception_list_entry(
     }
 
 
+def _flat_log_fingerprint(record: dict[str, object], exc_type: str) -> str | None:
+    """Stable grouping key for an ERROR record without an exception tuple.
+
+    With an empty frame list, PostHog put every flat log of one type into
+    a single issue, whatever its source. The key is the log call's
+    module and function: bounded by the codebase, independent of the
+    machine path, and free of message text (task ids would create one
+    issue per request). The line number stays out so an edit to the file
+    does not split an issue on every deploy.
+    """
+    module = record.get("name")
+    function = record.get("function")
+    if not (isinstance(module, str) and module and isinstance(function, str) and function):
+        return None
+    return scrub_secret_values(f"{exc_type}:{module}:{function}")[:_MAX_TEXT_CHARS]
+
+
 def _loguru_posthog_sink(message) -> None:
     """Forward ERROR+ loguru records to PostHog as $exception events.
 
@@ -168,6 +185,9 @@ def _loguru_posthog_sink(message) -> None:
             )
             exc_message = str(properties["$exception_message"])
             stacktrace = {"type": "raw", "frames": []}
+            fingerprint = _flat_log_fingerprint(record, exc_type_name)
+            if fingerprint is not None:
+                properties["$exception_fingerprint"] = fingerprint
         properties["$exception_list"] = [
             _exception_list_entry(exc_type_name, exc_message, stacktrace)
         ]
