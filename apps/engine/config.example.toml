@@ -571,13 +571,11 @@ model_id = "chatterbox"
 voices = ["default-Female"]
 
 [infinitetalk]
-submit_url = "https://your-modal-app-submit-url"
-status_url = "https://your-modal-app-status-url"
-download_url = "https://your-modal-app-download-url"
-# Bearer secret required by the Modal HTTP endpoints. Must match the
-# INFINITETALK_HTTP_SECRET configured in the deployed Modal app
-# (`modal secret create infinitetalk-http INFINITETALK_HTTP_SECRET=...`).
-http_secret = ""
+# The Modal endpoints and bearer secret are ENV VARS, not TOML (they differ
+# per environment — dev and prod use separate Modal accounts):
+#   INFINITETALK_SUBMIT_URL / INFINITETALK_STATUS_URL / INFINITETALK_DOWNLOAD_URL
+#   INFINITETALK_HTTP_SECRET  (must match the secret deployed via:
+#     `modal secret create infinitetalk-http INFINITETALK_HTTP_SECRET=...`)
 poll_interval_seconds = 5
 timeout_seconds = 1800
 intro_duration_seconds = 5
