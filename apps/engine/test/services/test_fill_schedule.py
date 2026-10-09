@@ -1076,6 +1076,47 @@ class PublishRetryLimitTests(unittest.TestCase):
         self.assertEqual(len(store.refund_batch_calls), 1)
         self.assertEqual(store.refund_batch_calls[0][1], "batch:sched-1")
 
+    def test_missing_r2_archive_emits_publish_failed(self):
+        # The no-verified-archive fail-fast used to abort silently: the
+        # started event fired, then nothing. The failed event must carry
+        # the reason so the funnel closes.
+        from app.services.fill_schedule import publish as pub_module
+
+        with patch.object(pub_module, "track_event") as track:
+            store, published = self._run_publish(self._slot(), video_storage_path=None)
+        self.assertEqual(published, 0)
+        failed_calls = [
+            c for c in track.call_args_list if c[0][0] == "video_publish_failed"
+        ]
+        self.assertEqual(len(failed_calls), 1)
+        _, props = failed_calls[0][0]
+        self.assertEqual(props["reason"], "task has no verified R2 video archive")
+        self.assertFalse(props["retryable"])
+        self.assertEqual(props["slotId"], "slot-1")
+        self.assertEqual(props["task_id"], "t-1")
+        self.assertEqual(props["user_id"], "user-1")
+        self.assertEqual(props["schedule_id"], "sched-1")
+
+    def test_final_failure_emits_single_publish_failed(self):
+        # The exhausted-attempts path emits its own failed event (with the
+        # attempt history); the permanent-fail helper must not emit a
+        # second one.
+        from app.services.fill_schedule import publish as pub_module
+
+        with patch.object(pub_module, "track_event") as track:
+            store, published = self._run_publish(self._slot(publish_attempts=2))
+        self.assertEqual(published, 0)
+        failed_calls = [
+            c for c in track.call_args_list if c[0][0] == "video_publish_failed"
+        ]
+        self.assertEqual(len(failed_calls), 1)
+        _, props = failed_calls[0][0]
+        self.assertEqual(props["attempts"], 3)
+        self.assertFalse(props["retryable"])
+        # The exception path reports the raw failure; the "3 attempts"
+        # wrapper lives on the slot's error column instead.
+        self.assertEqual(props["reason"], "boom")
+
     def test_refund_error_does_not_break_the_tick(self):
         from app.services.upload_publisher import PublishError
 
@@ -1498,6 +1539,35 @@ class CoverageGapTests(unittest.TestCase):
         self.assertEqual(scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC)), 0)
         self.assertEqual(store.updates[0][1]["status"], "failed")
         self.assertIn("no finished videos", store.updates[0][1]["error"])
+
+    def test_due_slot_without_videos_emits_publish_failed(self):
+        # A fail-fast abort must still close the analytics funnel: the
+        # started event is never the last word — the failed event carries
+        # the reason.
+        from app.services.fill_schedule import publish as pub_module
+
+        store = _FakeStore()
+        store.ready_due_slots = lambda now: [self._slot()]
+        state = MagicMock()
+        state.get_task.return_value = {"state": 1, "videos": []}
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=state,
+            publish_video=MagicMock(),
+        )
+        scheduler.publisher.base_url = "https://post-engineer.com"
+        scheduler.publisher.api_secret = "secret"
+        with patch.object(pub_module, "track_event") as track:
+            scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
+        failed_calls = [
+            c for c in track.call_args_list if c[0][0] == "video_publish_failed"
+        ]
+        self.assertEqual(len(failed_calls), 1)
+        _, props = failed_calls[0][0]
+        self.assertEqual(props["reason"], "task has no finished videos")
+        self.assertFalse(props["retryable"])
+        self.assertEqual(props["slotId"], "slot-1")
+        self.assertEqual(props["task_id"], "t-1")
+        self.assertEqual(props["user_id"], "user-1")
 
     # -- reconcile with missing task ------------------------------------------
     def test_reconcile_skips_unknown_task(self):
