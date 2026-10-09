@@ -435,7 +435,7 @@ class TestGenerateFinalVideosSingleOutput(unittest.TestCase):
             patch.object(tm.video, "combine_videos") as combine,
             patch.object(tm.video, "generate_video") as generate,
         ):
-            final_paths, combined_paths = tm.generate_final_videos(
+            final_paths, combined_paths, _ = tm.generate_final_videos(
                 task_id="single-video",
                 params=params,
                 downloaded_videos=["c1.mp4", "c2.mp4"],
@@ -938,7 +938,7 @@ class TestPublishFailureDiscordAlert(unittest.TestCase):
             patch.object(tm, "get_video_materials", return_value=["v.mp4"]),
             patch.object(tm.video, "get_available_music_moods", return_value=[]),
             patch.object(tm.llm, "generate_music_mood", return_value="chill"),
-            patch.object(tm, "generate_final_videos", return_value=(["/tmp/x/final.mp4"], [])),
+            patch.object(tm, "generate_final_videos", return_value=(["/tmp/x/final.mp4"], [], None)),
             patch.object(
                 tm.task_publish,
                 "maybe_publish_finished_videos",
@@ -977,7 +977,7 @@ class TestPublishFailureDiscordAlert(unittest.TestCase):
                 patch.object(tm.video, "get_available_music_moods", return_value=[]),
                 patch.object(tm.llm, "generate_music_mood", return_value="chill"),
                 patch.object(
-                    tm, "generate_final_videos", return_value=(["/tmp/x/final.mp4"], [])
+                    tm, "generate_final_videos", return_value=(["/tmp/x/final.mp4"], [], None)
                 ),
                 patch.object(
                     tm.task_publish,

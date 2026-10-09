@@ -179,7 +179,8 @@ class TestGenerateIntroTracking(unittest.TestCase):
                                 str(output_path),
                                 request=request,
                             )
-            self.assertTrue(Path(result).exists())
+            output_path_result, cost_usd = result
+            self.assertTrue(Path(output_path_result).exists())
             return result
 
     def _submit_status_download(self):
@@ -252,6 +253,87 @@ class TestGenerateIntroTracking(unittest.TestCase):
         props = track.call_args[0][0]
         self.assertFalse(props["success"])
         self.assertEqual(props["job_id"], "job-42")
+
+
+class TestGenerateIntroCost(unittest.TestCase):
+    """The Modal done payload carries the GPU cost (USD) for unit economics."""
+
+    def _run_with_status(self, status_body: bytes):
+        submit = requests.Response()
+        submit.status_code = 200
+        submit._content = b'{"job_id":"job-1"}'
+        status = requests.Response()
+        status.status_code = 200
+        status._content = status_body
+        download = requests.Response()
+        download.status_code = 200
+        download._content = b"valid-mp4"
+        responses = [submit, status, download]
+
+        def request(*args: object, **kwargs: object) -> requests.Response:
+            return responses.pop(0)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            image_path = Path(temp_dir) / "image.png"
+            audio_path = Path(temp_dir) / "audio.mp3"
+            output_path = Path(temp_dir) / "intro.mp4"
+            image_path.write_bytes(b"image")
+            audio_path.write_bytes(b"audio")
+            with patch.object(infinitetalk, "trim_audio") as trim:
+                def fake_trim(
+                    source: str,
+                    target: str,
+                    duration_seconds: float,
+                    padding_seconds: float,
+                ) -> None:
+                    Path(target).write_bytes(b"audio")
+
+                trim.side_effect = fake_trim
+                with patch.object(
+                    infinitetalk, "audio_duration_seconds", return_value=5.0
+                ):
+                    with patch.dict(
+                        os.environ,
+                        {
+                            "INFINITETALK_SUBMIT_URL": "https://modal.test/submit",
+                            "INFINITETALK_STATUS_URL": "https://modal.test/status",
+                            "INFINITETALK_DOWNLOAD_URL": "https://modal.test/download",
+                            "INFINITETALK_HTTP_SECRET": "test-secret",
+                        },
+                    ):
+                        with patch.object(
+                            infinitetalk.config,
+                            "infinitetalk",
+                            {
+                                "poll_interval_seconds": 0,
+                                "timeout_seconds": 1,
+                                "intro_duration_seconds": 5,
+                            },
+                        ):
+                            return infinitetalk.generate_intro(
+                                str(image_path),
+                                str(audio_path),
+                                LipSyncQuality.ok,
+                                str(output_path),
+                                request=request,
+                            )
+
+    def test_returns_cost_usd_from_done_payload(self):
+        _, cost_usd = self._run_with_status(b'{"status":"done","cost_usd":0.1234}')
+        self.assertEqual(cost_usd, 0.1234)
+
+    def test_returns_none_when_cost_absent(self):
+        # Older Modal jobs predate cost reporting: unknown, not zero.
+        _, cost_usd = self._run_with_status(b'{"status":"done"}')
+        self.assertIsNone(cost_usd)
+
+    def test_returns_none_for_non_numeric_cost(self):
+        _, cost_usd = self._run_with_status(b'{"status":"done","cost_usd":"free"}')
+        self.assertIsNone(cost_usd)
+
+    def test_returns_none_for_non_finite_cost(self):
+        _, cost_usd = self._run_with_status(b'{"status":"done","cost_usd":Infinity}')
+        self.assertIsNone(cost_usd)
 
 
 if __name__ == "__main__":
