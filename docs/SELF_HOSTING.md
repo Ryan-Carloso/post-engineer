@@ -131,6 +131,14 @@ Provision the database schema in your Supabase project:
     publish attempts per slot so the engine auto-cancels (failed) with a
     token refund after 3 failures instead of retrying forever.
 
+16. `supabase/migrations/017_refund-batch-tokens.sql` — creates the
+    `public.refund_batch_tokens` RPC the engine's fill_schedule store and
+    the web's generate-and-schedule route already call for per-slot
+    refunds of a prepaid batch (no migration ever created it, so every
+    call 404'd and failed slots were never refunded). Idempotent per
+    refund key, total refunds capped at the batch charge, restores the
+    free/paid split.
+
 Paste each file into the Supabase Dashboard > SQL Editor and run, in order
 (the numeric prefixes encode the order — always apply the
 lowest number first), or apply them with the Supabase CLI from the repo
