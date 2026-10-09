@@ -344,6 +344,59 @@ describe('PostEngineerClient', () => {
     );
   });
 
+  it('gets one slot by id', async () => {
+    const mockSlot = { success: true, slot: { id: 'slot-1', topic: 'Hello' } };
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(mockSlot),
+    });
+
+    const result = await client.getSlot('slot-1');
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/schedule/slots/slot-1`,
+      expect.objectContaining({ method: 'GET' })
+    );
+    expect(result).toEqual(mockSlot);
+  });
+
+  it('updates a slot topic with a PATCH body', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true, topic: 'New topic' }),
+    });
+
+    await client.updateSlotTopic('slot-1', '  New topic  ');
+    const [, init] = vi.mocked(global.fetch).mock.calls[0] as [string, RequestInit];
+    expect(init.method).toBe('PATCH');
+    // Trimmed before sending: the server stores the trimmed topic, so the
+    // payload carries exactly what will be stored.
+    expect(JSON.parse(String(init.body))).toEqual({ topic: 'New topic' });
+  });
+
+  it('fails fast on an empty slot topic without fetching', async () => {
+    global.fetch = vi.fn();
+    await expect(client.updateSlotTopic('slot-1', '   ')).rejects.toThrow(
+      /topic must be a non-empty string/
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('deletes one slot by id', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+    });
+
+    await client.deleteSlot('slot-1');
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/schedule/slots/slot-1`,
+      expect.objectContaining({ method: 'DELETE' })
+    );
+  });
+
   it('gets the token balance successfully', async () => {
     const mockBalance = { success: true, balance: 8, free: 3 };
 
@@ -359,6 +412,148 @@ describe('PostEngineerClient', () => {
       expect.objectContaining({ method: 'GET' })
     );
     expect(result).toEqual(mockBalance);
+  });
+
+  it('lists video generations with an optional limit', async () => {
+    const mockHistory = { success: true, generations: [{ generationId: 'gen-1' }] };
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(mockHistory),
+    });
+
+    const result = await client.listVideoGenerations(10);
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/persona/video-generations?limit=10`,
+      expect.objectContaining({ method: 'GET' })
+    );
+    expect(result).toEqual(mockHistory);
+
+    await client.listVideoGenerations();
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/persona/video-generations`,
+      expect.objectContaining({ method: 'GET' })
+    );
+  });
+
+  it('fails fast on an out-of-range generations limit without fetching', async () => {
+    global.fetch = vi.fn();
+    await expect(client.listVideoGenerations(0)).rejects.toThrow(/limit must be an integer between 1 and 200/);
+    await expect(client.listVideoGenerations(201)).rejects.toThrow(/limit must be an integer between 1 and 200/);
+    await expect(client.listVideoGenerations(1.5)).rejects.toThrow(/limit must be an integer between 1 and 200/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('gets one video generation by id', async () => {
+    const mockGeneration = { success: true, generation: { generationId: 'gen-1' } };
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(mockGeneration),
+    });
+
+    const result = await client.getVideoGeneration('gen-1');
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/persona/video-generations/gen-1`,
+      expect.objectContaining({ method: 'GET' })
+    );
+    expect(result).toEqual(mockGeneration);
+  });
+
+  it('lists token transactions with limit and offset', async () => {
+    const mockLedger = {
+      success: true,
+      transactions: [{ id: 'tx-1', amount: -1 }],
+      total: 42,
+      limit: 20,
+      offset: 0,
+    };
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(mockLedger),
+    });
+
+    const result = await client.listTokenTransactions(20, 40);
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/billing/transactions?limit=20&offset=40`,
+      expect.objectContaining({ method: 'GET' })
+    );
+    expect(result).toEqual(mockLedger);
+
+    await client.listTokenTransactions();
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/billing/transactions`,
+      expect.objectContaining({ method: 'GET' })
+    );
+  });
+
+  it('fails fast on out-of-range ledger paging without fetching', async () => {
+    // The server silently falls back to its defaults on bad paging; the
+    // client names the bad field instead.
+    global.fetch = vi.fn();
+    await expect(client.listTokenTransactions(0)).rejects.toThrow(/limit must be an integer between 1 and 100/);
+    await expect(client.listTokenTransactions(101)).rejects.toThrow(/limit must be an integer between 1 and 100/);
+    await expect(client.listTokenTransactions(20, -1)).rejects.toThrow(/offset must be a non-negative integer/);
+    await expect(client.listTokenTransactions(20, 1.5)).rejects.toThrow(/offset must be a non-negative integer/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('gets a persona delete preview by persona id', async () => {
+    const mockPreview = { success: true, persona: { id: 'persona-1', name: 'Ava' }, counts: {} };
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(mockPreview),
+    });
+
+    const result = await client.getPersonaDeletePreview('persona-1');
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/persona/delete-preview?personaId=persona-1`,
+      expect.objectContaining({ method: 'GET' })
+    );
+    expect(result).toEqual(mockPreview);
+  });
+
+  it('deletes a persona by id', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+    });
+
+    await client.deletePersona('persona-1');
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/persona?personaId=persona-1`,
+      expect.objectContaining({ method: 'DELETE' })
+    );
+  });
+
+  it('disconnects a social account by provider and account id', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+    });
+
+    await client.disconnectAccount('bluesky', 'did:plc:abc');
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/account?provider=bluesky&providerAccountId=did%3Aplc%3Aabc`,
+      expect.objectContaining({ method: 'DELETE' })
+    );
+  });
+
+  it('fails fast on an unknown provider or empty account id without fetching', async () => {
+    // The route 400s INVALID_PROVIDER / INVALID_PARAMS — name the field
+    // before any fetch goes out.
+    global.fetch = vi.fn();
+    await expect(client.disconnectAccount('myspace', 'acc-1')).rejects.toThrow(
+      /provider must be one of: youtube, instagram, linkedin, bluesky/
+    );
+    await expect(client.disconnectAccount('youtube', '   ')).rejects.toThrow(
+      /providerAccountId must be a non-empty string/
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
 describe('generate and schedule videos client', () => {

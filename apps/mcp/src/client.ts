@@ -489,11 +489,132 @@ export class PostEngineerClient {
     );
   }
 
+  async getSlot(slotId: string): Promise<unknown> {
+    return this.request(
+      `/api/schedule/slots/${encodeURIComponent(slotId)}`,
+      { method: 'GET', headers: this.getHeaders() },
+      'get slot'
+    );
+  }
+
+  async updateSlotTopic(slotId: string, topic: string): Promise<unknown> {
+    // The route 400s on an empty topic — fail fast with the field named
+    // before any fetch goes out. The trimmed value is sent: the server
+    // stores the trimmed topic, so the payload carries exactly what lands.
+    const trimmed = topic.trim();
+    if (trimmed.length === 0) {
+      throw new Error('topic must be a non-empty string.');
+    }
+    return this.request(
+      `/api/schedule/slots/${encodeURIComponent(slotId)}`,
+      {
+        method: 'PATCH',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ topic: trimmed }),
+      },
+      'update slot topic'
+    );
+  }
+
+  async deleteSlot(slotId: string): Promise<unknown> {
+    // Only pending (awaiting) or failed slots are deletable; the server
+    // 409s anything mid-flight or published, and the schedule's last slot.
+    return this.request(
+      `/api/schedule/slots/${encodeURIComponent(slotId)}`,
+      { method: 'DELETE', headers: this.getHeaders() },
+      'delete slot'
+    );
+  }
+
   async getTokenBalance(): Promise<unknown> {
     return this.request(
       '/api/billing/tokens',
       { method: 'GET', headers: this.getHeaders() },
       'get token balance'
+    );
+  }
+
+  async listVideoGenerations(limit?: number): Promise<unknown> {
+    // The server silently falls back to its default on an invalid limit —
+    // fail fast with the field named instead of sending a value the caller
+    // never meant.
+    if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 200)) {
+      throw new Error('limit must be an integer between 1 and 200.');
+    }
+    const query = limit !== undefined ? `?limit=${encodeURIComponent(String(limit))}` : '';
+    return this.request(
+      `/api/persona/video-generations${query}`,
+      { method: 'GET', headers: this.getHeaders() },
+      'list video generations'
+    );
+  }
+
+  async getVideoGeneration(generationId: string): Promise<unknown> {
+    return this.request(
+      `/api/persona/video-generations/${encodeURIComponent(generationId)}`,
+      { method: 'GET', headers: this.getHeaders() },
+      'get video generation'
+    );
+  }
+
+  async listTokenTransactions(limit?: number, offset?: number): Promise<unknown> {
+    // The server silently falls back to its defaults on invalid paging —
+    // fail fast with the field named instead of sending values the caller
+    // never meant.
+    if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 100)) {
+      throw new Error('limit must be an integer between 1 and 100.');
+    }
+    if (offset !== undefined && (!Number.isInteger(offset) || offset < 0)) {
+      throw new Error('offset must be a non-negative integer.');
+    }
+    const params = new URLSearchParams();
+    if (limit !== undefined) params.set('limit', String(limit));
+    if (offset !== undefined) params.set('offset', String(offset));
+    const query = params.size > 0 ? `?${params.toString()}` : '';
+    return this.request(
+      `/api/billing/transactions${query}`,
+      { method: 'GET', headers: this.getHeaders() },
+      'list token transactions'
+    );
+  }
+
+  async getPersonaDeletePreview(personaId: string): Promise<unknown> {
+    return this.request(
+      `/api/persona/delete-preview?personaId=${encodeURIComponent(personaId)}`,
+      { method: 'GET', headers: this.getHeaders() },
+      'get persona delete preview'
+    );
+  }
+
+  async deletePersona(personaId: string): Promise<unknown> {
+    // Destructive and irreversible: the persona, all its schedules, slots,
+    // generated videos, and image library are removed. No token refunds —
+    // prepaid tokens for pending slots are forfeited.
+    return this.request(
+      `/api/persona?personaId=${encodeURIComponent(personaId)}`,
+      { method: 'DELETE', headers: this.getHeaders() },
+      'delete persona'
+    );
+  }
+
+  async disconnectAccount(provider: string, providerAccountId: string): Promise<unknown> {
+    // The route 400s INVALID_PROVIDER / INVALID_PARAMS — fail fast with the
+    // field named before any fetch goes out.
+    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky'];
+    if (!validProviders.includes(provider)) {
+      throw new Error(`provider must be one of: ${validProviders.join(', ')}.`);
+    }
+    if (providerAccountId.trim().length === 0) {
+      throw new Error('providerAccountId must be a non-empty string.');
+    }
+    const params = new URLSearchParams({
+      provider,
+      providerAccountId: providerAccountId.trim(),
+    });
+    return this.request(
+      `/api/account?${params.toString()}`,
+      { method: 'DELETE', headers: this.getHeaders() },
+      'disconnect account'
     );
   }
 

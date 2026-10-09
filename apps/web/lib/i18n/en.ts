@@ -401,6 +401,15 @@ export const enDictionary: Dictionary = {
     toolDescListSchedules: 'List automation schedules',
     toolDescListPosts: 'List upcoming and past posts',
     toolDescCancelSchedule: 'Cancel a schedule',
+    toolDescGetSlot: 'Get one scheduled post\'s detail',
+    toolDescUpdateSlotTopic: 'Edit a scheduled post\'s topic',
+    toolDescDeleteSlot: 'Delete one scheduled post slot',
+    toolDescListVideoGenerations: 'List video generation history',
+    toolDescGetVideoGeneration: 'Get one video generation\'s detail',
+    toolDescListTokenTransactions: 'List the token ledger',
+    toolDescGetPersonaDeletePreview: 'Preview persona deletion impact',
+    toolDescDeletePersona: 'Delete a persona (destructive)',
+    toolDescDisconnectAccount: 'Disconnect a social account',
   },
 
   // App API Key

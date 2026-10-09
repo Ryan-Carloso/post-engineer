@@ -16,6 +16,15 @@ import {
   GetTokenBalanceShape,
   ListPostsShape,
   CancelScheduleShape,
+  GetSlotShape,
+  UpdateSlotTopicShape,
+  DeleteSlotShape,
+  ListVideoGenerationsShape,
+  GetVideoGenerationShape,
+  ListTokenTransactionsShape,
+  GetPersonaDeletePreviewShape,
+  DeletePersonaShape,
+  DisconnectAccountShape,
   GeneratePersonaVideosShape,
   GetVideoStatusShape,
   GetVideoTaskProgressShape,
@@ -33,6 +42,15 @@ import {
   handleListSchedules,
   handleListPosts,
   handleCancelSchedule,
+  handleGetSlot,
+  handleUpdateSlotTopic,
+  handleDeleteSlot,
+  handleListVideoGenerations,
+  handleGetVideoGeneration,
+  handleListTokenTransactions,
+  handleGetPersonaDeletePreview,
+  handleDeletePersona,
+  handleDisconnectAccount,
   handleGetTokenBalance,
   handleGeneratePersonaVideos,
   handleGetVideoStatus,
@@ -165,6 +183,87 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
     CancelScheduleShape,
     withTracking('cancel_schedule', async (args) => {
       return handleCancelSchedule(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'get_slot',
+    'Get one scheduled post\'s full detail by slot ID: status, topic, scheduled time, generation progress, its schedule (providers, publish mode) and persona. Use the slotId from list_posts.',
+    GetSlotShape,
+    withTracking('get_slot', async (args) => {
+      return handleGetSlot(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'update_slot_topic',
+    'Edit the topic text of one scheduled post. Only a slot that has not started generating (status pending/awaiting) can be edited — published or mid-flight slots are rejected.',
+    UpdateSlotTopicShape,
+    withTracking('update_slot_topic', async (args) => {
+      return handleUpdateSlotTopic(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'delete_slot',
+    'Delete one scheduled post slot. Only pending (awaiting) or failed slots can be deleted; published or mid-flight slots are rejected. The schedule\'s last slot cannot be deleted — use cancel_schedule to delete the whole schedule instead.',
+    DeleteSlotShape,
+    withTracking('delete_slot', async (args) => {
+      return handleDeleteSlot(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'list_video_generations',
+    'List the video generation history (newest first): one row per generated video with status, error code, token refund flag, and timestamps. Use get_video_generation for one row\'s detail.',
+    ListVideoGenerationsShape,
+    withTracking('list_video_generations', async (args) => {
+      return handleListVideoGenerations(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'get_video_generation',
+    'Get one video generation\'s detail by generation ID (the generationId field from list_video_generations).',
+    GetVideoGenerationShape,
+    withTracking('get_video_generation', async (args) => {
+      return handleGetVideoGeneration(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'list_token_transactions',
+    'List the token ledger: every token credit and debit (purchases, generation spends, refunds), newest first, with amounts, reasons, and the related generation when there is one. Use to audit where tokens went.',
+    ListTokenTransactionsShape,
+    withTracking('list_token_transactions', async (args) => {
+      return handleListTokenTransactions(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'get_persona_delete_preview',
+    'Preview what deleting a persona would remove: counts of schedules, upcoming/published/failed slots, generated videos and library images, plus per-video download links (read-only, never mutates). Call before delete_persona.',
+    GetPersonaDeletePreviewShape,
+    withTracking('get_persona_delete_preview', async (args) => {
+      return handleGetPersonaDeletePreview(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'delete_persona',
+    'DESTRUCTIVE and irreversible: delete a persona with all its schedules, slots, generated videos, and image library. No token refunds — prepaid tokens for pending slots are forfeited. Call get_persona_delete_preview first.',
+    DeletePersonaShape,
+    withTracking('delete_persona', async (args) => {
+      return handleDeletePersona(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'disconnect_account',
+    'Disconnect a social account by provider and account ID (the IDs from list_social_accounts). The account stops being available for publishing.',
+    DisconnectAccountShape,
+    withTracking('disconnect_account', async (args) => {
+      return handleDisconnectAccount(apiClient, args);
     })
   );
 

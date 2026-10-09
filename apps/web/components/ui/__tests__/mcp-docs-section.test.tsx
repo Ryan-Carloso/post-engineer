@@ -79,7 +79,7 @@ describe('McpDocsSection', () => {
     expect(screen.queryByTestId('mcp-docs-help-cta')).toBeNull();
   });
 
-  it('renders the tools grid with all nineteen tools', () => {
+  it('renders the tools grid with all twenty-seven tools', () => {
     render(<McpDocsSection />);
 
     const grid = screen.getByTestId('mcp-tools-grid');
@@ -103,6 +103,15 @@ describe('McpDocsSection', () => {
       'list_schedules',
       'list_posts',
       'cancel_schedule',
+      'get_slot',
+      'update_slot_topic',
+      'delete_slot',
+      'list_video_generations',
+      'get_video_generation',
+      'list_token_transactions',
+      'get_persona_delete_preview',
+      'delete_persona',
+      'disconnect_account',
     ]) {
       expect(grid).toHaveTextContent(tool);
     }
@@ -155,6 +164,21 @@ describe('McpDocsSection', () => {
     expect(prompt).not.toContain('Clone');
     expect(prompt).not.toContain('apps/mcp/dist/index.js');
     expect(prompt).not.toContain('POST_ENGINEER_API_URL');
+    // The nine gap-closing tools must be documented for the agent in the
+    // copied prompt, or the prompt silently omits what the server offers.
+    for (const tool of [
+      'get_slot',
+      'update_slot_topic',
+      'delete_slot',
+      'list_video_generations',
+      'get_video_generation',
+      'list_token_transactions',
+      'get_persona_delete_preview',
+      'delete_persona',
+      'disconnect_account',
+    ]) {
+      expect(prompt).toContain(`- ${tool}:`);
+    }
     const visiblePrompt = screen.getByTestId('mcp-install-prompt');
     expect(visiblePrompt).toHaveTextContent('post-engineer-mcp');
     expect(visiblePrompt).toHaveTextContent('How to work with me');
@@ -202,6 +226,20 @@ describe('McpDocsSection', () => {
       expect(commandLine, `${locale} prompt npx command`).toContain(
         'post-engineer-mcp@latest',
       );
+      // The nine gap-closing tools are documented in both locales' prompts.
+      for (const tool of [
+        'get_slot',
+        'update_slot_topic',
+        'delete_slot',
+        'list_video_generations',
+        'get_video_generation',
+        'list_token_transactions',
+        'get_persona_delete_preview',
+        'delete_persona',
+        'disconnect_account',
+      ]) {
+        expect(prompts[locale], `${locale} prompt`).toContain(tool);
+      }
     }
   });
 });

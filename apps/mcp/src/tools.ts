@@ -102,6 +102,112 @@ export const CancelScheduleShape = {
 
 export const CancelScheduleSchema = z.object(CancelScheduleShape);
 
+export const GetSlotShape = {
+  slotId: z
+    .string()
+    .min(1, 'slotId is required')
+    .describe('The slot ID (the slotId field from list_posts or generate_persona_videos).'),
+};
+
+export const GetSlotSchema = z.object(GetSlotShape);
+
+export const UpdateSlotTopicShape = {
+  slotId: z
+    .string()
+    .min(1, 'slotId is required')
+    .describe('The slot ID (the slotId field from list_posts or generate_persona_videos).'),
+  topic: z
+    .string()
+    .min(1, 'topic is required')
+    .describe('The new topic text for the slot. Only a slot that has not started generating (status pending/awaiting) can be edited; published or mid-flight slots are rejected.'),
+};
+
+export const UpdateSlotTopicSchema = z.object(UpdateSlotTopicShape);
+
+export const DeleteSlotShape = {
+  slotId: z
+    .string()
+    .min(1, 'slotId is required')
+    .describe(
+      'The slot ID to delete. Only pending (awaiting) or failed slots can be deleted; published or mid-flight slots are rejected. The schedule\'s last slot cannot be deleted — delete the whole schedule with cancel_schedule instead.',
+    ),
+};
+
+export const DeleteSlotSchema = z.object(DeleteSlotShape);
+
+export const ListVideoGenerationsShape = {
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe('Max generations to return (1-200). Defaults to 50, newest first.'),
+};
+
+export const ListVideoGenerationsSchema = z.object(ListVideoGenerationsShape);
+
+export const GetVideoGenerationShape = {
+  generationId: z
+    .string()
+    .min(1, 'generationId is required')
+    .describe('The generation ID (the generationId field from list_video_generations).'),
+};
+
+export const GetVideoGenerationSchema = z.object(GetVideoGenerationShape);
+
+export const ListTokenTransactionsShape = {
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .optional()
+    .describe('Max transactions to return (1-100). Defaults to 20, newest first.'),
+  offset: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe('How many newest transactions to skip for paging. Defaults to 0.'),
+};
+
+export const ListTokenTransactionsSchema = z.object(ListTokenTransactionsShape);
+
+export const GetPersonaDeletePreviewShape = {
+  personaId: z
+    .string()
+    .min(1, 'personaId is required')
+    .describe('The persona ID to preview deletion for. Read-only: shows what deleting the persona would remove (counts plus per-video download links).'),
+};
+
+export const GetPersonaDeletePreviewSchema = z.object(GetPersonaDeletePreviewShape);
+
+export const DeletePersonaShape = {
+  personaId: z
+    .string()
+    .min(1, 'personaId is required')
+    .describe(
+      'The persona ID to delete. DESTRUCTIVE and irreversible: deletes the persona, all its schedules and slots, all generated videos, and the image library. No token refunds — prepaid tokens for pending slots are forfeited. Call get_persona_delete_preview first to see exactly what will be removed.',
+    ),
+};
+
+export const DeletePersonaSchema = z.object(DeletePersonaShape);
+
+export const DisconnectAccountShape = {
+  provider: z
+    .enum(['youtube', 'instagram', 'linkedin', 'bluesky'])
+    .describe('The social platform of the account to disconnect.'),
+  providerAccountId: z
+    .string()
+    .min(1, 'providerAccountId is required')
+    .describe(
+      'The account ID on that provider (the channelId / igUserId / providerAccountId / did field from list_social_accounts).',
+    ),
+};
+
+export const DisconnectAccountSchema = z.object(DisconnectAccountShape);
+
 export const GetTokenBalanceShape = {};
 
 export const GetTokenBalanceSchema = z.object(GetTokenBalanceShape);
@@ -438,6 +544,619 @@ export async function handleCancelSchedule(
   args: z.infer<typeof CancelScheduleSchema>
 ): Promise<McpToolResponse> {
   return handleLibraryCall(() => client.cancelSchedule(args.scheduleId), 'cancelling schedule', 'Schedule cancelled successfully');
+}
+
+export async function handleGetSlot(
+  client: PostEngineerClient,
+  args: z.infer<typeof GetSlotSchema>
+): Promise<McpToolResponse> {
+  try {
+    const narrowed = narrowSlotDetail(await client.getSlot(args.slotId));
+    const slot = narrowed.slot;
+    const humanSummary = `Slot ${slot.id ?? args.slotId}: "${slot.topic ?? '(untitled)'}" — ${slot.status ?? 'unknown'}, scheduled for ${slot.slotAt ?? '(unscheduled)'}.`;
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `${humanSummary}\n${JSON.stringify(narrowed, null, 2)}`,
+        },
+      ],
+    };
+  } catch (error) {
+    if (error instanceof ApiError && error.code !== null) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error getting slot: ${JSON.stringify({
+              code: error.code,
+              message: sanitizeEngineError(getErrorMessage(error)),
+              field: error.field,
+            })}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error getting slot: ${getErrorMessage(error)}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+export async function handleUpdateSlotTopic(
+  client: PostEngineerClient,
+  args: z.infer<typeof UpdateSlotTopicSchema>
+): Promise<McpToolResponse> {
+  try {
+    const result = (await client.updateSlotTopic(args.slotId, args.topic)) as {
+      topic?: unknown;
+    };
+    const topic = typeof result.topic === 'string' ? result.topic : args.topic;
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Slot ${args.slotId} topic updated to "${topic}".\n${JSON.stringify({ success: true, topic }, null, 2)}`,
+        },
+      ],
+    };
+  } catch (error) {
+    if (error instanceof ApiError && error.code !== null) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error updating slot topic: ${JSON.stringify({
+              code: error.code,
+              message: sanitizeEngineError(getErrorMessage(error)),
+              field: error.field,
+            })}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error updating slot topic: ${getErrorMessage(error)}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+export async function handleDeleteSlot(
+  client: PostEngineerClient,
+  args: z.infer<typeof DeleteSlotSchema>
+): Promise<McpToolResponse> {
+  return handleLibraryCall(
+    () => client.deleteSlot(args.slotId),
+    'deleting slot',
+    `Slot ${args.slotId} deleted`
+  );
+}
+
+export async function handleListVideoGenerations(
+  client: PostEngineerClient,
+  args: z.infer<typeof ListVideoGenerationsSchema>
+): Promise<McpToolResponse> {
+  try {
+    const generations = narrowVideoGenerations(await client.listVideoGenerations(args.limit));
+    const humanSummary = `${generations.length} video generation(s) in history (newest first).`;
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `${humanSummary}\n${JSON.stringify({ generations }, null, 2)}`,
+        },
+      ],
+    };
+  } catch (error) {
+    if (error instanceof ApiError && error.code !== null) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error listing video generations: ${JSON.stringify({
+              code: error.code,
+              message: sanitizeEngineError(getErrorMessage(error)),
+              field: error.field,
+            })}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error listing video generations: ${getErrorMessage(error)}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+export async function handleGetVideoGeneration(
+  client: PostEngineerClient,
+  args: z.infer<typeof GetVideoGenerationSchema>
+): Promise<McpToolResponse> {
+  try {
+    const result = (await client.getVideoGeneration(args.generationId)) as {
+      generation?: unknown;
+    } | null;
+    const generation = narrowVideoGeneration(
+      result !== null && typeof result === 'object' ? result.generation : null
+    );
+    const humanSummary = `Generation ${generation.generationId ?? args.generationId}: "${generation.videoSubject ?? '(untitled)'}" — ${generation.status ?? 'unknown'}.`;
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `${humanSummary}\n${JSON.stringify({ generation }, null, 2)}`,
+        },
+      ],
+    };
+  } catch (error) {
+    if (error instanceof ApiError && error.code !== null) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error getting video generation: ${JSON.stringify({
+              code: error.code,
+              message: sanitizeEngineError(getErrorMessage(error)),
+              field: error.field,
+            })}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error getting video generation: ${getErrorMessage(error)}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/** One narrowed video_generations row: the fields the tool contract promises. */
+interface NarrowedVideoGeneration {
+  id: string | null;
+  generationId: string | null;
+  engineTaskId: string | null;
+  personaName: string | null;
+  videoSubject: string | null;
+  status: string | null;
+  errorCode: string | null;
+  tokensRefunded: boolean | null;
+  createdAt: string | null;
+  completedAt: string | null;
+}
+
+/** Narrows one video_generations row. Anything the API adds later rides
+ * through unparsed — the projection only pins what the tool renders and
+ * documents. */
+function narrowVideoGeneration(row: unknown): NarrowedVideoGeneration {
+  const record =
+    typeof row === 'object' && row !== null ? (row as Record<string, unknown>) : {};
+  const str = (value: unknown): string | null =>
+    typeof value === 'string' ? value : null;
+  return {
+    id: str(record.id),
+    generationId: str(record.generationId),
+    engineTaskId: str(record.engineTaskId),
+    personaName: str(record.personaName),
+    videoSubject: str(record.videoSubject),
+    status: str(record.status),
+    errorCode: str(record.errorCode),
+    tokensRefunded:
+      typeof record.tokensRefunded === 'boolean' ? record.tokensRefunded : null,
+    createdAt: str(record.createdAt),
+    completedAt: str(record.completedAt),
+  };
+}
+
+/** Narrows the GET /api/persona/video-generations envelope to the pinned
+ * row fields. */
+function narrowVideoGenerations(result: unknown): NarrowedVideoGeneration[] {
+  const record =
+    typeof result === 'object' && result !== null
+      ? (result as Record<string, unknown>)
+      : {};
+  const raw = Array.isArray(record.generations) ? record.generations : [];
+  return raw.map((row) => narrowVideoGeneration(row));
+}
+
+export async function handleListTokenTransactions(
+  client: PostEngineerClient,
+  args: z.infer<typeof ListTokenTransactionsSchema>
+): Promise<McpToolResponse> {
+  try {
+    const narrowed = narrowTokenTransactions(await client.listTokenTransactions(args.limit, args.offset));
+    const shown = narrowed.transactions.length;
+    const humanSummary =
+      `Token ledger: showing ${shown} of ${narrowed.total ?? '?'} transaction(s) (newest first). ` +
+      `Negative amounts are spends, positive amounts are credits.`;
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `${humanSummary}\n${JSON.stringify(narrowed, null, 2)}`,
+        },
+      ],
+    };
+  } catch (error) {
+    if (error instanceof ApiError && error.code !== null) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error listing token transactions: ${JSON.stringify({
+              code: error.code,
+              message: sanitizeEngineError(getErrorMessage(error)),
+              field: error.field,
+            })}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error listing token transactions: ${getErrorMessage(error)}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+export async function handleGetPersonaDeletePreview(
+  client: PostEngineerClient,
+  args: z.infer<typeof GetPersonaDeletePreviewSchema>
+): Promise<McpToolResponse> {
+  try {
+    const narrowed = narrowDeletePreview(await client.getPersonaDeletePreview(args.personaId));
+    const counts = narrowed.counts;
+    const humanSummary =
+      `Deleting persona "${narrowed.persona.name ?? args.personaId}" would remove ` +
+      `${counts.schedules ?? '?'} schedule(s), ${counts.upcomingSlots ?? '?'} upcoming slot(s), ` +
+      `${counts.publishedSlots ?? '?'} published slot(s), ${counts.generatedVideos ?? '?'} generated video(s), ` +
+      `and ${counts.personaImages ?? '?'} library image(s). No token refunds.`;
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `${humanSummary}\n${JSON.stringify(narrowed, null, 2)}`,
+        },
+      ],
+    };
+  } catch (error) {
+    if (error instanceof ApiError && error.code !== null) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error getting persona delete preview: ${JSON.stringify({
+              code: error.code,
+              message: sanitizeEngineError(getErrorMessage(error)),
+              field: error.field,
+            })}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error getting persona delete preview: ${getErrorMessage(error)}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+export async function handleDeletePersona(
+  client: PostEngineerClient,
+  args: z.infer<typeof DeletePersonaSchema>
+): Promise<McpToolResponse> {
+  try {
+    await client.deletePersona(args.personaId);
+    return {
+      content: [
+        {
+          type: 'text',
+          text:
+            `Persona ${args.personaId} deleted: the persona, all its schedules and slots, ` +
+            `all generated videos, and the image library are gone. No token refunds were issued.`,
+        },
+      ],
+    };
+  } catch (error) {
+    if (error instanceof ApiError && error.code !== null) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error deleting persona: ${JSON.stringify({
+              code: error.code,
+              message: sanitizeEngineError(getErrorMessage(error)),
+              field: error.field,
+            })}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error deleting persona: ${getErrorMessage(error)}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+export async function handleDisconnectAccount(
+  client: PostEngineerClient,
+  args: z.infer<typeof DisconnectAccountSchema>
+): Promise<McpToolResponse> {
+  try {
+    await client.disconnectAccount(args.provider, args.providerAccountId);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Account ${args.providerAccountId} (${args.provider}) disconnected.`,
+        },
+      ],
+    };
+  } catch (error) {
+    if (error instanceof ApiError && error.code !== null) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error disconnecting account: ${JSON.stringify({
+              code: error.code,
+              message: sanitizeEngineError(getErrorMessage(error)),
+              field: error.field,
+            })}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error disconnecting account: ${getErrorMessage(error)}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/** Narrows the GET /api/persona/delete-preview envelope: the persona, the
+ * removal counts, and the per-video download links. Anything the API adds
+ * later rides through unparsed. */
+function narrowDeletePreview(result: unknown): {
+  persona: { id: string | null; name: string | null };
+  counts: {
+    schedules: number | null;
+    upcomingSlots: number | null;
+    publishedSlots: number | null;
+    failedSlots: number | null;
+    generatedVideos: number | null;
+    personaImages: number | null;
+  };
+  videos: Array<{
+    taskId: string | null;
+    topic: string | null;
+    status: string | null;
+    downloadUrl: string | null;
+  }>;
+  videosTruncated: boolean | null;
+  linksIncomplete: boolean | null;
+} {
+  const record =
+    typeof result === 'object' && result !== null
+      ? (result as Record<string, unknown>)
+      : {};
+  const persona =
+    typeof record.persona === 'object' && record.persona !== null
+      ? (record.persona as Record<string, unknown>)
+      : {};
+  const counts =
+    typeof record.counts === 'object' && record.counts !== null
+      ? (record.counts as Record<string, unknown>)
+      : {};
+  const rawVideos = Array.isArray(record.videos) ? record.videos : [];
+  const str = (value: unknown): string | null =>
+    typeof value === 'string' ? value : null;
+  const num = (value: unknown): number | null =>
+    typeof value === 'number' ? value : null;
+  const bool = (value: unknown): boolean | null =>
+    typeof value === 'boolean' ? value : null;
+  return {
+    persona: { id: str(persona.id), name: str(persona.name) },
+    counts: {
+      schedules: num(counts.schedules),
+      upcomingSlots: num(counts.upcomingSlots),
+      publishedSlots: num(counts.publishedSlots),
+      failedSlots: num(counts.failedSlots),
+      generatedVideos: num(counts.generatedVideos),
+      personaImages: num(counts.personaImages),
+    },
+    videos: rawVideos.map((video) => {
+      const v =
+        typeof video === 'object' && video !== null
+          ? (video as Record<string, unknown>)
+          : {};
+      return {
+        taskId: str(v.taskId),
+        topic: str(v.topic),
+        status: str(v.status),
+        downloadUrl: str(v.downloadUrl),
+      };
+    }),
+    videosTruncated: bool(record.videosTruncated),
+    linksIncomplete: bool(record.linksIncomplete),
+  };
+}
+
+/** One narrowed token_transactions row: the fields the tool contract promises. */
+interface NarrowedTokenTransaction {
+  id: string | null;
+  amount: number | null;
+  type: string | null;
+  description: string | null;
+  reason: string | null;
+  generationId: string | null;
+  createdAt: string | null;
+}
+
+/** Narrows the GET /api/billing/transactions envelope. Anything the API
+ * adds later rides through unparsed — the projection only pins what the
+ * tool renders and documents. */
+function narrowTokenTransactions(result: unknown): {
+  transactions: NarrowedTokenTransaction[];
+  total: number | null;
+  limit: number | null;
+  offset: number | null;
+} {
+  const record =
+    typeof result === 'object' && result !== null
+      ? (result as Record<string, unknown>)
+      : {};
+  const raw = Array.isArray(record.transactions) ? record.transactions : [];
+  const str = (value: unknown): string | null =>
+    typeof value === 'string' ? value : null;
+  const num = (value: unknown): number | null =>
+    typeof value === 'number' ? value : null;
+  return {
+    transactions: raw.map((row) => {
+      const r =
+        typeof row === 'object' && row !== null ? (row as Record<string, unknown>) : {};
+      return {
+        id: str(r.id),
+        amount: num(r.amount),
+        type: str(r.type),
+        description: str(r.description),
+        reason: str(r.reason),
+        generationId: str(r.generationId),
+        createdAt: str(r.createdAt),
+      };
+    }),
+    total: num(record.total),
+    limit: num(record.limit),
+    offset: num(record.offset),
+  };
+}
+
+/** Narrows the GET /api/schedule/slots/[slotId] envelope to the fields the
+ * tool contract promises: the slot row, its schedule, and the persona.
+ * Anything the API adds later rides through unparsed — the projection only
+ * pins what the tool renders and documents. */
+function narrowSlotDetail(result: unknown): {
+  slot: {
+    id: string | null;
+    scheduleId: string | null;
+    slotAt: string | null;
+    status: string | null;
+    topic: string | null;
+    taskId: string | null;
+    progress: number | null;
+    stage: string | null;
+    error: string | null;
+    publishedAt: string | null;
+  };
+  schedule: {
+    id: string | null;
+    providers: string[];
+    publishMode: string | null;
+    timezone: string | null;
+  } | null;
+  persona: { id: string | null; name: string | null } | null;
+} {
+  const record =
+    typeof result === 'object' && result !== null
+      ? (result as Record<string, unknown>)
+      : {};
+  const slot =
+    typeof record.slot === 'object' && record.slot !== null
+      ? (record.slot as Record<string, unknown>)
+      : {};
+  const schedule =
+    typeof record.schedule === 'object' && record.schedule !== null
+      ? (record.schedule as Record<string, unknown>)
+      : null;
+  const persona =
+    typeof record.persona === 'object' && record.persona !== null
+      ? (record.persona as Record<string, unknown>)
+      : null;
+  const str = (value: unknown): string | null =>
+    typeof value === 'string' ? value : null;
+  const num = (value: unknown): number | null =>
+    typeof value === 'number' ? value : null;
+  const providers = Array.isArray(schedule?.providers)
+    ? schedule.providers.filter((p): p is string => typeof p === 'string')
+    : [];
+  return {
+    slot: {
+      id: str(slot.id),
+      scheduleId: str(slot.scheduleId),
+      slotAt: str(slot.slotAt),
+      status: str(slot.status),
+      topic: str(slot.topic),
+      taskId: str(slot.taskId),
+      progress: num(slot.progress),
+      stage: str(slot.stage),
+      error: str(slot.error),
+      publishedAt: str(slot.publishedAt),
+    },
+    schedule:
+      schedule === null
+        ? null
+        : {
+            id: str(schedule.id),
+            providers,
+            publishMode: str(schedule.publishMode),
+            timezone: str(schedule.timezone),
+          },
+    persona:
+      persona === null
+        ? null
+        : { id: str(persona.id), name: str(persona.name) },
+  };
 }
 
 export async function handleGetTokenBalance(

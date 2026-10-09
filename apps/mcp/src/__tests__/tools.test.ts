@@ -1118,3 +1118,658 @@ describe('narrowTaskProgress type narrowing', () => {
     expect(text).toContain('"error": null');
   });
 });
+
+describe('slot tools', () => {
+  const mockClient = {
+    getSlot: vi.fn(),
+    updateSlotTopic: vi.fn(),
+    deleteSlot: vi.fn(),
+  } as unknown as PostEngineerClient;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('GetSlotSchema requires a non-empty slotId', async () => {
+    const { GetSlotSchema } = await import('../tools.js');
+    expect(GetSlotSchema.safeParse({ slotId: 'slot-1' }).success).toBe(true);
+    expect(GetSlotSchema.safeParse({ slotId: '' }).success).toBe(false);
+    expect(GetSlotSchema.safeParse({}).success).toBe(false);
+  });
+
+  it('UpdateSlotTopicSchema requires slotId and a non-empty topic', async () => {
+    const { UpdateSlotTopicSchema } = await import('../tools.js');
+    expect(
+      UpdateSlotTopicSchema.safeParse({ slotId: 'slot-1', topic: 'New' }).success
+    ).toBe(true);
+    expect(
+      UpdateSlotTopicSchema.safeParse({ slotId: 'slot-1', topic: '' }).success
+    ).toBe(false);
+    expect(UpdateSlotTopicSchema.safeParse({ slotId: 'slot-1' }).success).toBe(false);
+  });
+
+  it('handleGetSlot narrows the detail envelope and summarizes', async () => {
+    const { handleGetSlot } = await import('../tools.js');
+    vi.mocked(mockClient.getSlot).mockResolvedValue({
+      success: true,
+      slot: {
+        id: 'slot-1',
+        scheduleId: 'sched-1',
+        slotAt: '2026-10-10T20:00:00Z',
+        status: 'awaiting',
+        topic: 'Launch day',
+        taskId: 'task-1',
+        progress: 0,
+        stage: null,
+        error: null,
+        publishedAt: null,
+      },
+      schedule: { id: 'sched-1', providers: ['youtube'], publishMode: 'scheduled', timezone: 'Europe/Lisbon' },
+      persona: { id: 'persona-1', name: 'Ava' },
+      extraUnpinnedField: 'rides through unparsed',
+    });
+
+    const response = await handleGetSlot(mockClient, { slotId: 'slot-1' });
+    expect(mockClient.getSlot).toHaveBeenCalledWith('slot-1');
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toContain('slot-1');
+    expect(text).toContain('Launch day');
+    expect(text).toContain('awaiting');
+    expect(text).toContain('"topic": "Launch day"');
+    expect(text).not.toContain('extraUnpinnedField');
+  });
+
+  it('handleGetSlot surfaces API errors with the structured contract', async () => {
+    const { handleGetSlot } = await import('../tools.js');
+    const { ApiError } = await import('../errors.js');
+    vi.mocked(mockClient.getSlot).mockRejectedValue(
+      new ApiError('Failed to get slot: 404 Slot not found.', 'SLOT_NOT_FOUND', 'slotId')
+    );
+
+    const response = await handleGetSlot(mockClient, { slotId: 'nope' });
+    expect(response.isError).toBe(true);
+    const text = textOf(response);
+    expect(text).toContain('"code":"SLOT_NOT_FOUND"');
+    expect(text).toContain('"field":"slotId"');
+  });
+
+  it('handleUpdateSlotTopic passes the trimmed topic and summarizes', async () => {
+    const { handleUpdateSlotTopic } = await import('../tools.js');
+    vi.mocked(mockClient.updateSlotTopic).mockResolvedValue({
+      success: true,
+      topic: 'New topic',
+    });
+
+    const response = await handleUpdateSlotTopic(mockClient, {
+      slotId: 'slot-1',
+      topic: 'New topic',
+    });
+    expect(mockClient.updateSlotTopic).toHaveBeenCalledWith('slot-1', 'New topic');
+    expect(response.isError).toBeUndefined();
+    expect(textOf(response)).toContain('New topic');
+  });
+
+  it('handleDeleteSlot confirms the deletion', async () => {
+    const { handleDeleteSlot } = await import('../tools.js');
+    vi.mocked(mockClient.deleteSlot).mockResolvedValue({ success: true });
+
+    const response = await handleDeleteSlot(mockClient, { slotId: 'slot-1' });
+    expect(mockClient.deleteSlot).toHaveBeenCalledWith('slot-1');
+    expect(response.isError).toBeUndefined();
+    expect(textOf(response)).toContain('slot-1');
+  });
+
+  it('DeleteSlotSchema requires a non-empty slotId', async () => {
+    const { DeleteSlotSchema } = await import('../tools.js');
+    expect(DeleteSlotSchema.safeParse({ slotId: 'slot-1' }).success).toBe(true);
+    expect(DeleteSlotSchema.safeParse({ slotId: '' }).success).toBe(false);
+  });
+});
+
+describe('video generation history tools', () => {
+  const mockClient = {
+    listVideoGenerations: vi.fn(),
+    getVideoGeneration: vi.fn(),
+  } as unknown as PostEngineerClient;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('ListVideoGenerationsSchema accepts an omitted or bounded limit', async () => {
+    const { ListVideoGenerationsSchema } = await import('../tools.js');
+    expect(ListVideoGenerationsSchema.safeParse({}).success).toBe(true);
+    expect(ListVideoGenerationsSchema.safeParse({ limit: 10 }).success).toBe(true);
+    expect(ListVideoGenerationsSchema.safeParse({ limit: 0 }).success).toBe(false);
+    expect(ListVideoGenerationsSchema.safeParse({ limit: 201 }).success).toBe(false);
+  });
+
+  it('handleListVideoGenerations narrows rows and summarizes', async () => {
+    const { handleListVideoGenerations } = await import('../tools.js');
+    vi.mocked(mockClient.listVideoGenerations).mockResolvedValue({
+      success: true,
+      generations: [
+        {
+          id: 'row-1',
+          generationId: 'gen-1',
+          engineTaskId: 'task-1',
+          personaName: 'Ava',
+          videoSubject: 'Launch day',
+          status: 'completed',
+          errorCode: null,
+          tokensRefunded: false,
+          createdAt: '2026-10-08T10:00:00Z',
+          completedAt: '2026-10-08T10:05:00Z',
+          internalField: 'rides through unparsed',
+        },
+      ],
+    });
+
+    const response = await handleListVideoGenerations(mockClient, { limit: 10 });
+    expect(mockClient.listVideoGenerations).toHaveBeenCalledWith(10);
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toContain('gen-1');
+    expect(text).toContain('Launch day');
+    expect(text).toContain('"generationId": "gen-1"');
+    expect(text).not.toContain('internalField');
+  });
+
+  it('handleListVideoGenerations surfaces API errors with the structured contract', async () => {
+    const { handleListVideoGenerations } = await import('../tools.js');
+    const { ApiError } = await import('../errors.js');
+    vi.mocked(mockClient.listVideoGenerations).mockRejectedValue(
+      new ApiError('Failed to list video generations: 500 Could not load generation history.', 'INTERNAL_ERROR', null)
+    );
+
+    const response = await handleListVideoGenerations(mockClient, {});
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('"code":"INTERNAL_ERROR"');
+  });
+
+  it('GetVideoGenerationSchema requires a non-empty generationId', async () => {
+    const { GetVideoGenerationSchema } = await import('../tools.js');
+    expect(GetVideoGenerationSchema.safeParse({ generationId: 'gen-1' }).success).toBe(true);
+    expect(GetVideoGenerationSchema.safeParse({ generationId: '' }).success).toBe(false);
+  });
+
+  it('handleGetVideoGeneration narrows the detail and summarizes', async () => {
+    const { handleGetVideoGeneration } = await import('../tools.js');
+    vi.mocked(mockClient.getVideoGeneration).mockResolvedValue({
+      success: true,
+      generation: {
+        id: 'row-1',
+        generationId: 'gen-1',
+        engineTaskId: 'task-1',
+        personaName: 'Ava',
+        videoSubject: 'Launch day',
+        status: 'failed',
+        errorCode: 'engine_rejected',
+        tokensRefunded: true,
+        createdAt: '2026-10-08T10:00:00Z',
+        completedAt: null,
+      },
+    });
+
+    const response = await handleGetVideoGeneration(mockClient, { generationId: 'gen-1' });
+    expect(mockClient.getVideoGeneration).toHaveBeenCalledWith('gen-1');
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toContain('gen-1');
+    expect(text).toContain('failed');
+    expect(text).toContain('"tokensRefunded": true');
+  });
+});
+
+describe('token ledger tool', () => {
+  const mockClient = {
+    listTokenTransactions: vi.fn(),
+  } as unknown as PostEngineerClient;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('ListTokenTransactionsSchema accepts omitted or bounded paging', async () => {
+    const { ListTokenTransactionsSchema } = await import('../tools.js');
+    expect(ListTokenTransactionsSchema.safeParse({}).success).toBe(true);
+    expect(ListTokenTransactionsSchema.safeParse({ limit: 20, offset: 40 }).success).toBe(true);
+    expect(ListTokenTransactionsSchema.safeParse({ limit: 0 }).success).toBe(false);
+    expect(ListTokenTransactionsSchema.safeParse({ limit: 101 }).success).toBe(false);
+    expect(ListTokenTransactionsSchema.safeParse({ offset: -1 }).success).toBe(false);
+  });
+
+  it('handleListTokenTransactions narrows rows and summarizes with totals', async () => {
+    const { handleListTokenTransactions } = await import('../tools.js');
+    vi.mocked(mockClient.listTokenTransactions).mockResolvedValue({
+      success: true,
+      transactions: [
+        {
+          id: 'tx-1',
+          amount: -1,
+          type: 'spend',
+          description: 'Video generation',
+          reason: 'generation_completed',
+          generationId: 'gen-1',
+          createdAt: '2026-10-08T10:00:00Z',
+          internalField: 'rides through unparsed',
+        },
+        {
+          id: 'tx-2',
+          amount: 10,
+          type: 'purchase',
+          description: 'Token pack',
+          reason: null,
+          generationId: null,
+          createdAt: '2026-10-07T10:00:00Z',
+        },
+      ],
+      total: 42,
+      limit: 20,
+      offset: 0,
+    });
+
+    const response = await handleListTokenTransactions(mockClient, { limit: 20, offset: 0 });
+    expect(mockClient.listTokenTransactions).toHaveBeenCalledWith(20, 0);
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toContain('42');
+    expect(text).toContain('"amount": -1');
+    expect(text).toContain('"type": "spend"');
+    expect(text).not.toContain('internalField');
+  });
+
+  it('handleListTokenTransactions surfaces API errors with the structured contract', async () => {
+    const { handleListTokenTransactions } = await import('../tools.js');
+    const { ApiError } = await import('../errors.js');
+    vi.mocked(mockClient.listTokenTransactions).mockRejectedValue(
+      new ApiError('Failed to list token transactions: 500 Could not load token transactions.', 'INTERNAL_ERROR', null)
+    );
+
+    const response = await handleListTokenTransactions(mockClient, {});
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('"code":"INTERNAL_ERROR"');
+  });
+});
+
+describe('delete persona tools', () => {
+  const mockClient = {
+    getPersonaDeletePreview: vi.fn(),
+    deletePersona: vi.fn(),
+  } as unknown as PostEngineerClient;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('GetPersonaDeletePreviewSchema requires a non-empty personaId', async () => {
+    const { GetPersonaDeletePreviewSchema } = await import('../tools.js');
+    expect(GetPersonaDeletePreviewSchema.safeParse({ personaId: 'persona-1' }).success).toBe(true);
+    expect(GetPersonaDeletePreviewSchema.safeParse({ personaId: '' }).success).toBe(false);
+  });
+
+  it('handleGetPersonaDeletePreview narrows counts and videos, and summarizes', async () => {
+    const { handleGetPersonaDeletePreview } = await import('../tools.js');
+    vi.mocked(mockClient.getPersonaDeletePreview).mockResolvedValue({
+      success: true,
+      persona: { id: 'persona-1', name: 'Ava' },
+      counts: {
+        schedules: 2,
+        upcomingSlots: 5,
+        publishedSlots: 10,
+        failedSlots: 1,
+        generatedVideos: 16,
+        personaImages: 3,
+      },
+      videos: [
+        { taskId: 'task-1', topic: 'Launch day', status: 'completed', downloadUrl: 'https://cdn.example.com/v.mp4' },
+      ],
+      videosTruncated: false,
+      linksIncomplete: false,
+      internalField: 'rides through unparsed',
+    });
+
+    const response = await handleGetPersonaDeletePreview(mockClient, { personaId: 'persona-1' });
+    expect(mockClient.getPersonaDeletePreview).toHaveBeenCalledWith('persona-1');
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toContain('Ava');
+    expect(text).toContain('5');
+    expect(text).toContain('"upcomingSlots": 5');
+    expect(text).toContain('https://cdn.example.com/v.mp4');
+    expect(text).not.toContain('internalField');
+  });
+
+  it('DeletePersonaSchema requires a non-empty personaId', async () => {
+    const { DeletePersonaSchema } = await import('../tools.js');
+    expect(DeletePersonaSchema.safeParse({ personaId: 'persona-1' }).success).toBe(true);
+    expect(DeletePersonaSchema.safeParse({ personaId: '' }).success).toBe(false);
+  });
+
+  it('handleDeletePersona confirms the destructive deletion', async () => {
+    const { handleDeletePersona } = await import('../tools.js');
+    vi.mocked(mockClient.deletePersona).mockResolvedValue({ success: true });
+
+    const response = await handleDeletePersona(mockClient, { personaId: 'persona-1' });
+    expect(mockClient.deletePersona).toHaveBeenCalledWith('persona-1');
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toContain('persona-1');
+    expect(text).toMatch(/deleted/i);
+  });
+
+  it('handleDeletePersona surfaces API errors with the structured contract', async () => {
+    const { handleDeletePersona } = await import('../tools.js');
+    const { ApiError } = await import('../errors.js');
+    vi.mocked(mockClient.deletePersona).mockRejectedValue(
+      new ApiError('Failed to delete persona: 404 Persona not found.', 'PERSONA_NOT_FOUND', 'personaId')
+    );
+
+    const response = await handleDeletePersona(mockClient, { personaId: 'nope' });
+    expect(response.isError).toBe(true);
+    const text = textOf(response);
+    expect(text).toContain('"code":"PERSONA_NOT_FOUND"');
+    expect(text).toContain('"field":"personaId"');
+  });
+});
+
+describe('disconnect account tool', () => {
+  const mockClient = {
+    disconnectAccount: vi.fn(),
+  } as unknown as PostEngineerClient;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('DisconnectAccountSchema validates provider and account id', async () => {
+    const { DisconnectAccountSchema } = await import('../tools.js');
+    expect(
+      DisconnectAccountSchema.safeParse({ provider: 'bluesky', providerAccountId: 'did:plc:abc' }).success
+    ).toBe(true);
+    expect(
+      DisconnectAccountSchema.safeParse({ provider: 'myspace', providerAccountId: 'acc-1' }).success
+    ).toBe(false);
+    expect(
+      DisconnectAccountSchema.safeParse({ provider: 'youtube', providerAccountId: '' }).success
+    ).toBe(false);
+  });
+
+  it('handleDisconnectAccount confirms the disconnection', async () => {
+    const { handleDisconnectAccount } = await import('../tools.js');
+    vi.mocked(mockClient.disconnectAccount).mockResolvedValue({ success: true });
+
+    const response = await handleDisconnectAccount(mockClient, {
+      provider: 'bluesky',
+      providerAccountId: 'did:plc:abc',
+    });
+    expect(mockClient.disconnectAccount).toHaveBeenCalledWith('bluesky', 'did:plc:abc');
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toContain('bluesky');
+    expect(text).toContain('did:plc:abc');
+    expect(text).toMatch(/disconnected/i);
+  });
+
+  it('handleDisconnectAccount surfaces API errors with the structured contract', async () => {
+    const { handleDisconnectAccount } = await import('../tools.js');
+    const { ApiError } = await import('../errors.js');
+    vi.mocked(mockClient.disconnectAccount).mockRejectedValue(
+      new ApiError('Failed to disconnect account: 500 Failed to disconnect account.', 'DELETE_ERROR', 'provider')
+    );
+
+    const response = await handleDisconnectAccount(mockClient, {
+      provider: 'youtube',
+      providerAccountId: 'chan-1',
+    });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('"code":"DELETE_ERROR"');
+  });
+});
+
+describe('new tool error paths and narrowing fallbacks', () => {
+  const mockClient = {
+    getSlot: vi.fn(),
+    updateSlotTopic: vi.fn(),
+    listVideoGenerations: vi.fn(),
+    getVideoGeneration: vi.fn(),
+    listTokenTransactions: vi.fn(),
+    getPersonaDeletePreview: vi.fn(),
+    deletePersona: vi.fn(),
+    disconnectAccount: vi.fn(),
+  } as unknown as PostEngineerClient;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('handleGetSlot surfaces a plain failure without the structured contract', async () => {
+    const { handleGetSlot } = await import('../tools.js');
+    vi.mocked(mockClient.getSlot).mockRejectedValue(new Error('network down'));
+
+    const response = await handleGetSlot(mockClient, { slotId: 'slot-1' });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toBe('Error getting slot: network down');
+  });
+
+  it('handleGetSlot falls back to arg values when the detail has no fields', async () => {
+    const { handleGetSlot } = await import('../tools.js');
+    vi.mocked(mockClient.getSlot).mockResolvedValue(null);
+
+    const response = await handleGetSlot(mockClient, { slotId: 'slot-1' });
+    expect(response.isError).toBeUndefined();
+    expect(textOf(response)).toContain('Slot slot-1: "(untitled)" — unknown, scheduled for (unscheduled).');
+  });
+
+  it('handleGetSlot coerces wrong-typed detail fields to null', async () => {
+    const { handleGetSlot } = await import('../tools.js');
+    vi.mocked(mockClient.getSlot).mockResolvedValue({
+      slot: { id: 'slot-1', progress: 'fast' },
+      schedule: { id: 'sched-1', providers: ['youtube', 42] },
+      persona: { id: 'persona-1', name: 'Ava' },
+    });
+
+    const response = await handleGetSlot(mockClient, { slotId: 'slot-1' });
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toContain('"progress": null');
+    expect(text).toContain('"providers": [\n      "youtube"\n    ]');
+    expect(text).not.toContain('42');
+  });
+
+  it('handleUpdateSlotTopic surfaces API errors with the structured contract', async () => {
+    const { handleUpdateSlotTopic } = await import('../tools.js');
+    const { ApiError } = await import('../errors.js');
+    vi.mocked(mockClient.updateSlotTopic).mockRejectedValue(
+      new ApiError('Failed to update slot topic: 409 Slot already generating.', 'SLOT_LOCKED', 'slotId')
+    );
+
+    const response = await handleUpdateSlotTopic(mockClient, { slotId: 'slot-1', topic: 'New' });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('"code":"SLOT_LOCKED"');
+  });
+
+  it('handleUpdateSlotTopic surfaces a plain failure without the structured contract', async () => {
+    const { handleUpdateSlotTopic } = await import('../tools.js');
+    vi.mocked(mockClient.updateSlotTopic).mockRejectedValue(new Error('network down'));
+
+    const response = await handleUpdateSlotTopic(mockClient, { slotId: 'slot-1', topic: 'New' });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toBe('Error updating slot topic: network down');
+  });
+
+  it('handleUpdateSlotTopic falls back to the requested topic when the response has none', async () => {
+    const { handleUpdateSlotTopic } = await import('../tools.js');
+    vi.mocked(mockClient.updateSlotTopic).mockResolvedValue({ success: true, topic: 42 });
+
+    const response = await handleUpdateSlotTopic(mockClient, { slotId: 'slot-1', topic: 'New' });
+    expect(response.isError).toBeUndefined();
+    expect(textOf(response)).toContain('Slot slot-1 topic updated to "New".');
+  });
+
+  it('handleListVideoGenerations surfaces a plain failure without the structured contract', async () => {
+    const { handleListVideoGenerations } = await import('../tools.js');
+    vi.mocked(mockClient.listVideoGenerations).mockRejectedValue(new Error('network down'));
+
+    const response = await handleListVideoGenerations(mockClient, {});
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toBe('Error listing video generations: network down');
+  });
+
+  it('handleListVideoGenerations treats a missing envelope as an empty history', async () => {
+    const { handleListVideoGenerations } = await import('../tools.js');
+    vi.mocked(mockClient.listVideoGenerations).mockResolvedValue(null);
+
+    const response = await handleListVideoGenerations(mockClient, {});
+    expect(response.isError).toBeUndefined();
+    expect(textOf(response)).toContain('0 video generation(s) in history (newest first).');
+  });
+
+  it('handleListVideoGenerations coerces malformed rows to nulls', async () => {
+    const { handleListVideoGenerations } = await import('../tools.js');
+    vi.mocked(mockClient.listVideoGenerations).mockResolvedValue({
+      generations: [null, { id: 7, generationId: 'gen-1', tokensRefunded: 'yes' }],
+    });
+
+    const response = await handleListVideoGenerations(mockClient, {});
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toContain('"id": null');
+    expect(text).toContain('"tokensRefunded": null');
+  });
+
+  it('handleGetVideoGeneration surfaces API errors with the structured contract', async () => {
+    const { handleGetVideoGeneration } = await import('../tools.js');
+    const { ApiError } = await import('../errors.js');
+    vi.mocked(mockClient.getVideoGeneration).mockRejectedValue(
+      new ApiError('Failed to get video generation: 404 Generation not found.', 'GENERATION_NOT_FOUND', 'generationId')
+    );
+
+    const response = await handleGetVideoGeneration(mockClient, { generationId: 'nope' });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('"code":"GENERATION_NOT_FOUND"');
+  });
+
+  it('handleGetVideoGeneration surfaces a plain failure without the structured contract', async () => {
+    const { handleGetVideoGeneration } = await import('../tools.js');
+    vi.mocked(mockClient.getVideoGeneration).mockRejectedValue(new Error('network down'));
+
+    const response = await handleGetVideoGeneration(mockClient, { generationId: 'gen-1' });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toBe('Error getting video generation: network down');
+  });
+
+  it('handleGetVideoGeneration falls back to arg values when the detail has no fields', async () => {
+    const { handleGetVideoGeneration } = await import('../tools.js');
+    vi.mocked(mockClient.getVideoGeneration).mockResolvedValue(null);
+
+    const response = await handleGetVideoGeneration(mockClient, { generationId: 'gen-1' });
+    expect(response.isError).toBeUndefined();
+    expect(textOf(response)).toContain('Generation gen-1: "(untitled)" — unknown.');
+  });
+
+  it('handleListTokenTransactions surfaces a plain failure without the structured contract', async () => {
+    const { handleListTokenTransactions } = await import('../tools.js');
+    vi.mocked(mockClient.listTokenTransactions).mockRejectedValue(new Error('network down'));
+
+    const response = await handleListTokenTransactions(mockClient, {});
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toBe('Error listing token transactions: network down');
+  });
+
+  it('handleListTokenTransactions treats a missing envelope as an empty ledger', async () => {
+    const { handleListTokenTransactions } = await import('../tools.js');
+    vi.mocked(mockClient.listTokenTransactions).mockResolvedValue(null);
+
+    const response = await handleListTokenTransactions(mockClient, {});
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toContain('showing 0 of ? transaction(s)');
+  });
+
+  it('handleListTokenTransactions coerces malformed rows to nulls', async () => {
+    const { handleListTokenTransactions } = await import('../tools.js');
+    vi.mocked(mockClient.listTokenTransactions).mockResolvedValue({
+      transactions: [42, { id: 'tx-1', amount: 'a lot' }],
+      total: 2,
+    });
+
+    const response = await handleListTokenTransactions(mockClient, {});
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toContain('"id": null');
+    expect(text).toContain('"amount": null');
+  });
+
+  it('handleGetPersonaDeletePreview surfaces API errors with the structured contract', async () => {
+    const { handleGetPersonaDeletePreview } = await import('../tools.js');
+    const { ApiError } = await import('../errors.js');
+    vi.mocked(mockClient.getPersonaDeletePreview).mockRejectedValue(
+      new ApiError('Failed to get delete preview: 404 Persona not found.', 'PERSONA_NOT_FOUND', 'personaId')
+    );
+
+    const response = await handleGetPersonaDeletePreview(mockClient, { personaId: 'nope' });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('"code":"PERSONA_NOT_FOUND"');
+  });
+
+  it('handleGetPersonaDeletePreview surfaces a plain failure without the structured contract', async () => {
+    const { handleGetPersonaDeletePreview } = await import('../tools.js');
+    vi.mocked(mockClient.getPersonaDeletePreview).mockRejectedValue(new Error('network down'));
+
+    const response = await handleGetPersonaDeletePreview(mockClient, { personaId: 'persona-1' });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toBe('Error getting persona delete preview: network down');
+  });
+
+  it('handleGetPersonaDeletePreview coerces a malformed envelope to nulls', async () => {
+    const { handleGetPersonaDeletePreview } = await import('../tools.js');
+    vi.mocked(mockClient.getPersonaDeletePreview).mockResolvedValue({
+      persona: { id: 5 },
+      counts: { schedules: 'many' },
+      videos: [null],
+      videosTruncated: 'yes',
+    });
+
+    const response = await handleGetPersonaDeletePreview(mockClient, { personaId: 'persona-1' });
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toContain('Deleting persona "persona-1" would remove ? schedule(s)');
+    expect(text).toContain('"schedules": null');
+    expect(text).toContain('"taskId": null');
+    expect(text).toContain('"videosTruncated": null');
+  });
+
+  it('handleGetPersonaDeletePreview treats a missing envelope as all-null', async () => {
+    const { handleGetPersonaDeletePreview } = await import('../tools.js');
+    vi.mocked(mockClient.getPersonaDeletePreview).mockResolvedValue(null);
+
+    const response = await handleGetPersonaDeletePreview(mockClient, { personaId: 'persona-1' });
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toContain('Deleting persona "persona-1" would remove ? schedule(s)');
+    expect(text).toContain('"videos": []');
+  });
+
+  it('handleDeletePersona surfaces a plain failure without the structured contract', async () => {
+    const { handleDeletePersona } = await import('../tools.js');
+    vi.mocked(mockClient.deletePersona).mockRejectedValue(new Error('network down'));
+
+    const response = await handleDeletePersona(mockClient, { personaId: 'persona-1' });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toBe('Error deleting persona: network down');
+  });
+
+  it('handleDisconnectAccount surfaces a plain failure without the structured contract', async () => {
+    const { handleDisconnectAccount } = await import('../tools.js');
+    vi.mocked(mockClient.disconnectAccount).mockRejectedValue(new Error('network down'));
+
+    const response = await handleDisconnectAccount(mockClient, {
+      provider: 'youtube',
+      providerAccountId: 'chan-1',
+    });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toBe('Error disconnecting account: network down');
+  });
+});
