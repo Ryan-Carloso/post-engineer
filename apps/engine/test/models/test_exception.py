@@ -42,22 +42,27 @@ class HttpExceptionLoggingTests(unittest.TestCase):
         with patch("app.models.exception.logger") as mock_logger:
             HttpException(task_id="task-1", status_code=404, message="nope")
         bound = mock_logger.bind.return_value
-        bound.warning.assert_called_once()
-        bound.error.assert_not_called()
+        # depth=1 attributes the record to the raise site, not __init__,
+        # so the PostHog sink groups flat logs by where they were raised.
+        bound.opt.assert_called_once_with(depth=1)
+        bound.opt.return_value.warning.assert_called_once()
+        bound.opt.return_value.error.assert_not_called()
 
     def test_5xx_logs_at_error_level(self):
         with patch("app.models.exception.logger") as mock_logger:
             HttpException(task_id="task-1", status_code=500, message="boom")
         bound = mock_logger.bind.return_value
-        bound.error.assert_called_once()
-        bound.warning.assert_not_called()
+        bound.opt.assert_called_once_with(depth=1)
+        bound.opt.return_value.error.assert_called_once()
+        bound.opt.return_value.warning.assert_not_called()
 
     def test_400_logs_at_warning_level(self):
         with patch("app.models.exception.logger") as mock_logger:
             HttpException(task_id="task-1", status_code=400, message="bad")
         bound = mock_logger.bind.return_value
-        bound.warning.assert_called_once()
-        bound.error.assert_not_called()
+        bound.opt.assert_called_once_with(depth=1)
+        bound.opt.return_value.warning.assert_called_once()
+        bound.opt.return_value.error.assert_not_called()
 
     def test_task_id_stored_as_attribute(self):
         with patch("app.models.exception.logger"):
