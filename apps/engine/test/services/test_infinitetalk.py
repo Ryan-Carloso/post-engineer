@@ -1,4 +1,5 @@
 import unittest
+import os
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
@@ -64,26 +65,31 @@ class TestInfiniteTalkClient(unittest.TestCase):
 
                 trim.side_effect = fake_trim
                 with patch.object(infinitetalk, "audio_duration_seconds", return_value=5.0):
-                    with patch.object(
-                        infinitetalk.config,
-                        "infinitetalk",
+                    with patch.dict(
+                        os.environ,
                         {
-                            "submit_url": "https://modal.test/submit",
-                            "status_url": "https://modal.test/status",
-                            "download_url": "https://modal.test/download",
-                            "poll_interval_seconds": 0,
-                            "timeout_seconds": 1,
-                            "intro_duration_seconds": 5,
-                            "http_secret": "test-secret",
+                            "INFINITETALK_SUBMIT_URL": "https://modal.test/submit",
+                            "INFINITETALK_STATUS_URL": "https://modal.test/status",
+                            "INFINITETALK_DOWNLOAD_URL": "https://modal.test/download",
+                            "INFINITETALK_HTTP_SECRET": "test-secret",
                         },
                     ):
-                        infinitetalk.generate_intro(
-                            str(image_path),
-                            str(audio_path),
-                            LipSyncQuality.very_good,
-                            str(output_path),
-                            request=request,
-                        )
+                        with patch.object(
+                            infinitetalk.config,
+                            "infinitetalk",
+                            {
+                                "poll_interval_seconds": 0,
+                                "timeout_seconds": 1,
+                                "intro_duration_seconds": 5,
+                            },
+                        ):
+                            infinitetalk.generate_intro(
+                                str(image_path),
+                                str(audio_path),
+                                LipSyncQuality.very_good,
+                                str(output_path),
+                                request=request,
+                            )
 
             self.assertEqual(output_path.read_bytes(), b"valid-mp4")
             self.assertEqual(calls[0]["data"], {"quality": "very-good", "frames": "121"})
@@ -101,15 +107,16 @@ class TestInfiniteTalkClient(unittest.TestCase):
             image_path.write_bytes(b"image")
             audio_path.write_bytes(b"audio")
             with patch.object(infinitetalk, "trim_audio"):
-                with patch.object(
-                    infinitetalk.config,
-                    "infinitetalk",
-                    {
-                        "submit_url": "https://modal.test/submit",
-                        "status_url": "https://modal.test/status",
-                        "download_url": "https://modal.test/download",
-                    },
-                ):
+                with patch.dict(os.environ):
+                    # The URLs are set but the bearer secret is missing: the
+                    # client must fail fast on the env var, not the config.
+                    for var in (
+                        "INFINITETALK_SUBMIT_URL",
+                        "INFINITETALK_STATUS_URL",
+                        "INFINITETALK_DOWNLOAD_URL",
+                    ):
+                        os.environ[var] = "https://modal.test/endpoint"
+                    os.environ.pop("INFINITETALK_HTTP_SECRET", None)
                     with self.assertRaises(infinitetalk.InfiniteTalkError):
                         infinitetalk.generate_intro(
                             str(image_path),
@@ -147,26 +154,31 @@ class TestGenerateIntroTracking(unittest.TestCase):
                 with patch.object(
                     infinitetalk, "audio_duration_seconds", return_value=5.0
                 ):
-                    with patch.object(
-                        infinitetalk.config,
-                        "infinitetalk",
+                    with patch.dict(
+                        os.environ,
                         {
-                            "submit_url": "https://modal.test/submit",
-                            "status_url": "https://modal.test/status",
-                            "download_url": "https://modal.test/download",
-                            "poll_interval_seconds": 0,
-                            "timeout_seconds": 1,
-                            "intro_duration_seconds": 5,
-                            "http_secret": "test-secret",
+                            "INFINITETALK_SUBMIT_URL": "https://modal.test/submit",
+                            "INFINITETALK_STATUS_URL": "https://modal.test/status",
+                            "INFINITETALK_DOWNLOAD_URL": "https://modal.test/download",
+                            "INFINITETALK_HTTP_SECRET": "test-secret",
                         },
                     ):
-                        result = infinitetalk.generate_intro(
-                            str(image_path),
-                            str(audio_path),
-                            LipSyncQuality.very_good,
-                            str(output_path),
-                            request=request,
-                        )
+                        with patch.object(
+                            infinitetalk.config,
+                            "infinitetalk",
+                            {
+                                "poll_interval_seconds": 0,
+                                "timeout_seconds": 1,
+                                "intro_duration_seconds": 5,
+                            },
+                        ):
+                            result = infinitetalk.generate_intro(
+                                str(image_path),
+                                str(audio_path),
+                                LipSyncQuality.very_good,
+                                str(output_path),
+                                request=request,
+                            )
             output_path_result, cost_usd = result
             self.assertTrue(Path(output_path_result).exists())
             return result
@@ -280,26 +292,31 @@ class TestGenerateIntroCost(unittest.TestCase):
                 with patch.object(
                     infinitetalk, "audio_duration_seconds", return_value=5.0
                 ):
-                    with patch.object(
-                        infinitetalk.config,
-                        "infinitetalk",
+                    with patch.dict(
+                        os.environ,
                         {
-                            "submit_url": "https://modal.test/submit",
-                            "status_url": "https://modal.test/status",
-                            "download_url": "https://modal.test/download",
-                            "poll_interval_seconds": 0,
-                            "timeout_seconds": 1,
-                            "intro_duration_seconds": 5,
-                            "http_secret": "test-secret",
+                            "INFINITETALK_SUBMIT_URL": "https://modal.test/submit",
+                            "INFINITETALK_STATUS_URL": "https://modal.test/status",
+                            "INFINITETALK_DOWNLOAD_URL": "https://modal.test/download",
+                            "INFINITETALK_HTTP_SECRET": "test-secret",
                         },
                     ):
-                        return infinitetalk.generate_intro(
-                            str(image_path),
-                            str(audio_path),
-                            LipSyncQuality.ok,
-                            str(output_path),
-                            request=request,
-                        )
+                        with patch.object(
+                            infinitetalk.config,
+                            "infinitetalk",
+                            {
+                                "poll_interval_seconds": 0,
+                                "timeout_seconds": 1,
+                                "intro_duration_seconds": 5,
+                            },
+                        ):
+                            return infinitetalk.generate_intro(
+                                str(image_path),
+                                str(audio_path),
+                                LipSyncQuality.ok,
+                                str(output_path),
+                                request=request,
+                            )
 
     def test_returns_cost_usd_from_done_payload(self):
         _, cost_usd = self._run_with_status(b'{"status":"done","cost_usd":0.1234}')
