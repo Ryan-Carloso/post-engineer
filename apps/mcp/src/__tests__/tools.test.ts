@@ -1527,3 +1527,249 @@ describe('disconnect account tool', () => {
     expect(textOf(response)).toContain('"code":"DELETE_ERROR"');
   });
 });
+
+describe('new tool error paths and narrowing fallbacks', () => {
+  const mockClient = {
+    getSlot: vi.fn(),
+    updateSlotTopic: vi.fn(),
+    listVideoGenerations: vi.fn(),
+    getVideoGeneration: vi.fn(),
+    listTokenTransactions: vi.fn(),
+    getPersonaDeletePreview: vi.fn(),
+    deletePersona: vi.fn(),
+    disconnectAccount: vi.fn(),
+  } as unknown as PostEngineerClient;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('handleGetSlot surfaces a plain failure without the structured contract', async () => {
+    const { handleGetSlot } = await import('../tools.js');
+    vi.mocked(mockClient.getSlot).mockRejectedValue(new Error('network down'));
+
+    const response = await handleGetSlot(mockClient, { slotId: 'slot-1' });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toBe('Error getting slot: network down');
+  });
+
+  it('handleGetSlot falls back to arg values when the detail has no fields', async () => {
+    const { handleGetSlot } = await import('../tools.js');
+    vi.mocked(mockClient.getSlot).mockResolvedValue(null);
+
+    const response = await handleGetSlot(mockClient, { slotId: 'slot-1' });
+    expect(response.isError).toBeUndefined();
+    expect(textOf(response)).toContain('Slot slot-1: "(untitled)" — unknown, scheduled for (unscheduled).');
+  });
+
+  it('handleGetSlot coerces wrong-typed detail fields to null', async () => {
+    const { handleGetSlot } = await import('../tools.js');
+    vi.mocked(mockClient.getSlot).mockResolvedValue({
+      slot: { id: 'slot-1', progress: 'fast' },
+      schedule: { id: 'sched-1', providers: ['youtube', 42] },
+      persona: { id: 'persona-1', name: 'Ava' },
+    });
+
+    const response = await handleGetSlot(mockClient, { slotId: 'slot-1' });
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toContain('"progress": null');
+    expect(text).toContain('"providers": [\n      "youtube"\n    ]');
+    expect(text).not.toContain('42');
+  });
+
+  it('handleUpdateSlotTopic surfaces API errors with the structured contract', async () => {
+    const { handleUpdateSlotTopic } = await import('../tools.js');
+    const { ApiError } = await import('../errors.js');
+    vi.mocked(mockClient.updateSlotTopic).mockRejectedValue(
+      new ApiError('Failed to update slot topic: 409 Slot already generating.', 'SLOT_LOCKED', 'slotId')
+    );
+
+    const response = await handleUpdateSlotTopic(mockClient, { slotId: 'slot-1', topic: 'New' });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('"code":"SLOT_LOCKED"');
+  });
+
+  it('handleUpdateSlotTopic surfaces a plain failure without the structured contract', async () => {
+    const { handleUpdateSlotTopic } = await import('../tools.js');
+    vi.mocked(mockClient.updateSlotTopic).mockRejectedValue(new Error('network down'));
+
+    const response = await handleUpdateSlotTopic(mockClient, { slotId: 'slot-1', topic: 'New' });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toBe('Error updating slot topic: network down');
+  });
+
+  it('handleUpdateSlotTopic falls back to the requested topic when the response has none', async () => {
+    const { handleUpdateSlotTopic } = await import('../tools.js');
+    vi.mocked(mockClient.updateSlotTopic).mockResolvedValue({ success: true, topic: 42 });
+
+    const response = await handleUpdateSlotTopic(mockClient, { slotId: 'slot-1', topic: 'New' });
+    expect(response.isError).toBeUndefined();
+    expect(textOf(response)).toContain('Slot slot-1 topic updated to "New".');
+  });
+
+  it('handleListVideoGenerations surfaces a plain failure without the structured contract', async () => {
+    const { handleListVideoGenerations } = await import('../tools.js');
+    vi.mocked(mockClient.listVideoGenerations).mockRejectedValue(new Error('network down'));
+
+    const response = await handleListVideoGenerations(mockClient, {});
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toBe('Error listing video generations: network down');
+  });
+
+  it('handleListVideoGenerations treats a missing envelope as an empty history', async () => {
+    const { handleListVideoGenerations } = await import('../tools.js');
+    vi.mocked(mockClient.listVideoGenerations).mockResolvedValue(null);
+
+    const response = await handleListVideoGenerations(mockClient, {});
+    expect(response.isError).toBeUndefined();
+    expect(textOf(response)).toContain('0 video generation(s) in history (newest first).');
+  });
+
+  it('handleListVideoGenerations coerces malformed rows to nulls', async () => {
+    const { handleListVideoGenerations } = await import('../tools.js');
+    vi.mocked(mockClient.listVideoGenerations).mockResolvedValue({
+      generations: [null, { id: 7, generationId: 'gen-1', tokensRefunded: 'yes' }],
+    });
+
+    const response = await handleListVideoGenerations(mockClient, {});
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toContain('"id": null');
+    expect(text).toContain('"tokensRefunded": null');
+  });
+
+  it('handleGetVideoGeneration surfaces API errors with the structured contract', async () => {
+    const { handleGetVideoGeneration } = await import('../tools.js');
+    const { ApiError } = await import('../errors.js');
+    vi.mocked(mockClient.getVideoGeneration).mockRejectedValue(
+      new ApiError('Failed to get video generation: 404 Generation not found.', 'GENERATION_NOT_FOUND', 'generationId')
+    );
+
+    const response = await handleGetVideoGeneration(mockClient, { generationId: 'nope' });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('"code":"GENERATION_NOT_FOUND"');
+  });
+
+  it('handleGetVideoGeneration surfaces a plain failure without the structured contract', async () => {
+    const { handleGetVideoGeneration } = await import('../tools.js');
+    vi.mocked(mockClient.getVideoGeneration).mockRejectedValue(new Error('network down'));
+
+    const response = await handleGetVideoGeneration(mockClient, { generationId: 'gen-1' });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toBe('Error getting video generation: network down');
+  });
+
+  it('handleGetVideoGeneration falls back to arg values when the detail has no fields', async () => {
+    const { handleGetVideoGeneration } = await import('../tools.js');
+    vi.mocked(mockClient.getVideoGeneration).mockResolvedValue(null);
+
+    const response = await handleGetVideoGeneration(mockClient, { generationId: 'gen-1' });
+    expect(response.isError).toBeUndefined();
+    expect(textOf(response)).toContain('Generation gen-1: "(untitled)" — unknown.');
+  });
+
+  it('handleListTokenTransactions surfaces a plain failure without the structured contract', async () => {
+    const { handleListTokenTransactions } = await import('../tools.js');
+    vi.mocked(mockClient.listTokenTransactions).mockRejectedValue(new Error('network down'));
+
+    const response = await handleListTokenTransactions(mockClient, {});
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toBe('Error listing token transactions: network down');
+  });
+
+  it('handleListTokenTransactions treats a missing envelope as an empty ledger', async () => {
+    const { handleListTokenTransactions } = await import('../tools.js');
+    vi.mocked(mockClient.listTokenTransactions).mockResolvedValue(null);
+
+    const response = await handleListTokenTransactions(mockClient, {});
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toContain('showing 0 of ? transaction(s)');
+  });
+
+  it('handleListTokenTransactions coerces malformed rows to nulls', async () => {
+    const { handleListTokenTransactions } = await import('../tools.js');
+    vi.mocked(mockClient.listTokenTransactions).mockResolvedValue({
+      transactions: [42, { id: 'tx-1', amount: 'a lot' }],
+      total: 2,
+    });
+
+    const response = await handleListTokenTransactions(mockClient, {});
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toContain('"id": null');
+    expect(text).toContain('"amount": null');
+  });
+
+  it('handleGetPersonaDeletePreview surfaces API errors with the structured contract', async () => {
+    const { handleGetPersonaDeletePreview } = await import('../tools.js');
+    const { ApiError } = await import('../errors.js');
+    vi.mocked(mockClient.getPersonaDeletePreview).mockRejectedValue(
+      new ApiError('Failed to get delete preview: 404 Persona not found.', 'PERSONA_NOT_FOUND', 'personaId')
+    );
+
+    const response = await handleGetPersonaDeletePreview(mockClient, { personaId: 'nope' });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('"code":"PERSONA_NOT_FOUND"');
+  });
+
+  it('handleGetPersonaDeletePreview surfaces a plain failure without the structured contract', async () => {
+    const { handleGetPersonaDeletePreview } = await import('../tools.js');
+    vi.mocked(mockClient.getPersonaDeletePreview).mockRejectedValue(new Error('network down'));
+
+    const response = await handleGetPersonaDeletePreview(mockClient, { personaId: 'persona-1' });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toBe('Error getting persona delete preview: network down');
+  });
+
+  it('handleGetPersonaDeletePreview coerces a malformed envelope to nulls', async () => {
+    const { handleGetPersonaDeletePreview } = await import('../tools.js');
+    vi.mocked(mockClient.getPersonaDeletePreview).mockResolvedValue({
+      persona: { id: 5 },
+      counts: { schedules: 'many' },
+      videos: [null],
+      videosTruncated: 'yes',
+    });
+
+    const response = await handleGetPersonaDeletePreview(mockClient, { personaId: 'persona-1' });
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toContain('Deleting persona "persona-1" would remove ? schedule(s)');
+    expect(text).toContain('"schedules": null');
+    expect(text).toContain('"taskId": null');
+    expect(text).toContain('"videosTruncated": null');
+  });
+
+  it('handleGetPersonaDeletePreview treats a missing envelope as all-null', async () => {
+    const { handleGetPersonaDeletePreview } = await import('../tools.js');
+    vi.mocked(mockClient.getPersonaDeletePreview).mockResolvedValue(null);
+
+    const response = await handleGetPersonaDeletePreview(mockClient, { personaId: 'persona-1' });
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toContain('Deleting persona "persona-1" would remove ? schedule(s)');
+    expect(text).toContain('"videos": []');
+  });
+
+  it('handleDeletePersona surfaces a plain failure without the structured contract', async () => {
+    const { handleDeletePersona } = await import('../tools.js');
+    vi.mocked(mockClient.deletePersona).mockRejectedValue(new Error('network down'));
+
+    const response = await handleDeletePersona(mockClient, { personaId: 'persona-1' });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toBe('Error deleting persona: network down');
+  });
+
+  it('handleDisconnectAccount surfaces a plain failure without the structured contract', async () => {
+    const { handleDisconnectAccount } = await import('../tools.js');
+    vi.mocked(mockClient.disconnectAccount).mockRejectedValue(new Error('network down'));
+
+    const response = await handleDisconnectAccount(mockClient, {
+      provider: 'youtube',
+      providerAccountId: 'chan-1',
+    });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toBe('Error disconnecting account: network down');
+  });
+});

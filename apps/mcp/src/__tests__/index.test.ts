@@ -280,3 +280,124 @@ describe('withTracking wrapper', () => {
     }
   });
 });
+
+describe('new tool registrations run their handlers', () => {
+  // The registration lambdas in createPostEngineerMcpServer only execute
+  // when the tool is actually called: drive each of the nine new tools
+  // through the in-memory transport so the wrappers stay covered.
+  const mockClient = {
+    getSlot: vi.fn(),
+    updateSlotTopic: vi.fn(),
+    deleteSlot: vi.fn(),
+    listVideoGenerations: vi.fn(),
+    getVideoGeneration: vi.fn(),
+    listTokenTransactions: vi.fn(),
+    getPersonaDeletePreview: vi.fn(),
+    deletePersona: vi.fn(),
+    disconnectAccount: vi.fn(),
+  } as unknown as PostEngineerClient;
+
+  beforeEach(() => {
+    mockTrackEvent.mockClear();
+    vi.clearAllMocks();
+  });
+
+  async function callNewTool(
+    toolName: string,
+    args: Record<string, unknown>,
+    clientMethod: ReturnType<typeof vi.fn>,
+    payload: unknown
+  ) {
+    clientMethod.mockResolvedValue(payload);
+    const server = createPostEngineerMcpServer(mockClient);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'test-client', version: '0.0.0' });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const result = await client.callTool({ name: toolName, arguments: args });
+      expect(result.isError).toBeFalsy();
+      expect(clientMethod).toHaveBeenCalled();
+      expect(mockTrackEvent).toHaveBeenCalledWith(
+        'mcp_tool_called',
+        expect.objectContaining({ toolName })
+      );
+    } finally {
+      await client.close();
+    }
+  }
+
+  it('calls through get_slot', async () => {
+    await callNewTool('get_slot', { slotId: 's1' }, vi.mocked(mockClient.getSlot), {
+      slot: { id: 's1' },
+    });
+  });
+
+  it('calls through update_slot_topic', async () => {
+    await callNewTool(
+      'update_slot_topic',
+      { slotId: 's1', topic: 'T' },
+      vi.mocked(mockClient.updateSlotTopic),
+      { topic: 'T' }
+    );
+  });
+
+  it('calls through delete_slot', async () => {
+    await callNewTool('delete_slot', { slotId: 's1' }, vi.mocked(mockClient.deleteSlot), {
+      success: true,
+    });
+  });
+
+  it('calls through list_video_generations', async () => {
+    await callNewTool(
+      'list_video_generations',
+      {},
+      vi.mocked(mockClient.listVideoGenerations),
+      { generations: [] }
+    );
+  });
+
+  it('calls through get_video_generation', async () => {
+    await callNewTool(
+      'get_video_generation',
+      { generationId: 'g1' },
+      vi.mocked(mockClient.getVideoGeneration),
+      { generation: { generationId: 'g1' } }
+    );
+  });
+
+  it('calls through list_token_transactions', async () => {
+    await callNewTool(
+      'list_token_transactions',
+      {},
+      vi.mocked(mockClient.listTokenTransactions),
+      { transactions: [], total: 0 }
+    );
+  });
+
+  it('calls through get_persona_delete_preview', async () => {
+    await callNewTool(
+      'get_persona_delete_preview',
+      { personaId: 'p1' },
+      vi.mocked(mockClient.getPersonaDeletePreview),
+      { persona: { id: 'p1', name: 'Ava' }, counts: {}, videos: [] }
+    );
+  });
+
+  it('calls through delete_persona', async () => {
+    await callNewTool(
+      'delete_persona',
+      { personaId: 'p1' },
+      vi.mocked(mockClient.deletePersona),
+      { success: true }
+    );
+  });
+
+  it('calls through disconnect_account', async () => {
+    await callNewTool(
+      'disconnect_account',
+      { provider: 'bluesky', providerAccountId: 'did:plc:x' },
+      vi.mocked(mockClient.disconnectAccount),
+      { success: true }
+    );
+  });
+});
