@@ -3,7 +3,7 @@ import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { PostEngineerClient, MAX_LIBRARY_IMAGES, MAX_LIBRARY_IMAGE_MB } from './client.js';
+import { PostEngineerClient, MAX_LIBRARY_IMAGES, MAX_LIBRARY_IMAGE_MB, MAX_UPLOAD_VIDEO_GB } from './client.js';
 import {
   CreatePersonaShape,
   ListPersonasShape,
@@ -32,6 +32,7 @@ import {
   AddPersonaImageShape,
   UpdatePersonaImageShape,
   RemovePersonaImageShape,
+  PublishVideoDirectShape,
   handleCreatePersona,
   handleListPersonas,
   handleListVoices,
@@ -59,6 +60,7 @@ import {
   handleAddPersonaImage,
   handleUpdatePersonaImage,
   handleRemovePersonaImage,
+  handlePublishVideoDirect,
 } from './tools.js';
 import { trackEvent } from './analytics.js';
 
@@ -336,6 +338,15 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
     RemovePersonaImageShape,
     withTracking('remove_persona_image', async (args) => {
       return handleRemovePersonaImage(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'publish_video_direct',
+    `Publish a ready-made video file directly to social accounts — no generation, no schedule. Reads a local video (.mp4 or .mov, max ${MAX_UPLOAD_VIDEO_GB}GB) and posts it immediately via POST /api/upload-content. YouTube requires title, description, tags, and privacyStatus; Instagram/Bluesky/LinkedIn require caption.`,
+    PublishVideoDirectShape,
+    withTracking('publish_video_direct', async (args) => {
+      return handlePublishVideoDirect(apiClient, args);
     })
   );
 

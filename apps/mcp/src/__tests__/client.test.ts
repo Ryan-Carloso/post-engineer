@@ -1512,3 +1512,179 @@ describe('PostEngineerClient persona image library', () => {
     );
   });
 });
+
+describe('publishVideoDirect', () => {
+  let client: PostEngineerClient;
+  const baseUrl = 'https://post-engineer.com';
+  const apiKey = 'test-token-123';
+  const tempDirs: string[] = [];
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    client = new PostEngineerClient({ apiKey });
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          success: true,
+          provider: 'youtube',
+          results: [
+            { accountId: 'chan-1', success: true, videoId: 'vid-1', videoUrl: 'https://youtu.be/vid-1' },
+          ],
+          successCount: 1,
+          logId: 'log-1',
+        }),
+    });
+  });
+
+  afterEach(async () => {
+    const { rm } = await import('node:fs/promises');
+    await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  });
+
+  async function writeTempVideo(name: string, size = 8): Promise<string> {
+    const { mkdtempSync } = await import('node:fs');
+    const { writeFile } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'pe-mcp-video-test-'));
+    tempDirs.push(dir);
+    const path = join(dir, name);
+    await writeFile(path, Buffer.alloc(size, 0x00));
+    return path;
+  }
+
+  const youtubeInput = (videoPath: string) => ({
+    provider: 'youtube' as const,
+    videoPath,
+    accountIds: ['chan-1'],
+    title: 'My video',
+    description: 'A description',
+    tags: ['tech', 'ai'],
+    privacyStatus: 'unlisted' as const,
+  });
+
+  it('posts the video as multipart with youtube field names', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await client.publishVideoDirect(youtubeInput(videoPath));
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/upload-content`,
+      expect.objectContaining({ method: 'POST' })
+    );
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.get('provider')).toBe('youtube');
+    expect(formData.get('title')).toBe('My video');
+    expect(formData.get('description')).toBe('A description');
+    expect(formData.get('tags')).toBe('tech,ai');
+    expect(formData.get('privacyStatus')).toBe('unlisted');
+    expect(formData.getAll('accountIds')).toEqual(['chan-1']);
+    const video = formData.get('video');
+    expect(video).toBeInstanceOf(Blob);
+    expect((video as Blob).size).toBe(8);
+  });
+
+  it('maps account ids to the instagram field names', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await client.publishVideoDirect({
+      provider: 'instagram',
+      videoPath,
+      accountIds: ['ig-1', 'ig-2'],
+      caption: 'hello world',
+    });
+
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.get('provider')).toBe('instagram');
+    expect(formData.get('caption')).toBe('hello world');
+    expect(formData.getAll('igAccountIds')).toEqual(['ig-1', 'ig-2']);
+    expect(formData.get('file')).toBeInstanceOf(Blob);
+  });
+
+  it('maps account ids to the bluesky did field name', async () => {
+    const videoPath = await writeTempVideo('clip.mov');
+    await client.publishVideoDirect({
+      provider: 'bluesky',
+      videoPath,
+      accountIds: ['did:plc:abc'],
+      caption: 'hello bluesky',
+    });
+
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.getAll('did')).toEqual(['did:plc:abc']);
+    expect(formData.get('video')).toBeInstanceOf(Blob);
+  });
+
+  it('maps account ids to the linkedin field name', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await client.publishVideoDirect({
+      provider: 'linkedin',
+      videoPath,
+      accountIds: ['urn:li:org:1'],
+      caption: 'hello linkedin',
+    });
+
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.getAll('linkedinAccountIds')).toEqual(['urn:li:org:1']);
+    expect(formData.get('video')).toBeInstanceOf(Blob);
+  });
+
+  it('fails fast on an unknown provider without fetching', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await expect(
+      client.publishVideoDirect({
+        provider: 'tiktok' as 'youtube',
+        videoPath,
+        accountIds: ['acc-1'],
+      })
+    ).rejects.toThrow(/provider/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('fails fast when the video file does not exist', async () => {
+    await expect(client.publishVideoDirect(youtubeInput('/tmp/does-not-exist-pe-mcp.mp4'))).rejects.toThrow(
+      /Failed to read video/
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('fails fast when the video exceeds the 2GB server limit', async () => {
+    const { assertVideoSize } = await import('../client.js');
+    expect(() => assertVideoSize(2 * 1024 * 1024 * 1024 + 1, '/tmp/clip.mp4')).toThrow(/2GB/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('fails fast when the extension is not a supported video type', async () => {
+    const videoPath = await writeTempVideo('clip.avi');
+    await expect(client.publishVideoDirect(youtubeInput(videoPath))).rejects.toThrow(/Unsupported video extension/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('fails fast for youtube when title, description, tags, or privacyStatus are missing', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    const base = youtubeInput(videoPath);
+    for (const field of ['title', 'description', 'tags', 'privacyStatus'] as const) {
+      const input = { ...base, [field]: undefined };
+      await expect(client.publishVideoDirect(input)).rejects.toThrow(new RegExp(`${field} is required for youtube`));
+    }
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('fails fast for instagram, bluesky, and linkedin when caption is missing', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    for (const provider of ['instagram', 'bluesky', 'linkedin'] as const) {
+      await expect(
+        client.publishVideoDirect({ provider, videoPath, accountIds: ['acc-1'] })
+      ).rejects.toThrow(/caption is required/);
+    }
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('fails fast when no account ids are given', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await expect(
+      client.publishVideoDirect({ ...youtubeInput(videoPath), accountIds: [] })
+    ).rejects.toThrow(/At least one account ID/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+});

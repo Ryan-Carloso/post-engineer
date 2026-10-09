@@ -38,7 +38,7 @@ export class ApiError extends Error {
  * sniffing misclassifies any future error whose prose happens to match, or
  * silently re-wraps the size error if the message is ever reworded.
  */
-import { MAX_LIBRARY_IMAGE_MB } from './limits.js';
+import { MAX_LIBRARY_IMAGE_MB, MAX_UPLOAD_VIDEO_GB } from './limits.js';
 
 export class ImageTooLargeError extends Error {
   /** Full local path of the oversized image. */
@@ -52,6 +52,26 @@ export class ImageTooLargeError extends Error {
     // enforced bound.
     super(`Image "${path}" is too large (${sizeBytes} bytes; max ${MAX_LIBRARY_IMAGE_MB}MB).`);
     this.name = 'ImageTooLargeError';
+    this.path = path;
+    this.sizeBytes = sizeBytes;
+  }
+}
+
+/**
+ * Thrown when a direct-publish video exceeds the size limit. Carries the
+ * path and the observed size so the catch block in videoFormFile can
+ * discriminate by type (`instanceof`) instead of sniffing the error
+ * message text.
+ */
+export class VideoTooLargeError extends Error {
+  /** Full local path of the oversized video. */
+  readonly path: string;
+  /** Observed size in bytes (from stat, or from the read buffer). */
+  readonly sizeBytes: number;
+
+  constructor(path: string, sizeBytes: number) {
+    super(`Video "${path}" is too large (${sizeBytes} bytes; max ${MAX_UPLOAD_VIDEO_GB}GB).`);
+    this.name = 'VideoTooLargeError';
     this.path = path;
     this.sizeBytes = sizeBytes;
   }

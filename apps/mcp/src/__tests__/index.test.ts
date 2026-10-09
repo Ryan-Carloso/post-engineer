@@ -32,6 +32,7 @@ import {
   GetPersonaDeletePreviewShape,
   DeletePersonaShape,
   DisconnectAccountShape,
+  PublishVideoDirectShape,
 } from '../tools.js';
 import type { PostEngineerClient } from '../client.js';
 
@@ -68,6 +69,7 @@ const EXPECTED_TOOLS = [
   'add_persona_image',
   'update_persona_image',
   'remove_persona_image',
+  'publish_video_direct',
 ];
 
 async function listServerToolNames(server: ReturnType<typeof createPostEngineerMcpServer>) {
@@ -199,6 +201,7 @@ describe('registered tool schemas (single source of truth)', () => {
       add_persona_image: AddPersonaImageShape,
       update_persona_image: UpdatePersonaImageShape,
       remove_persona_image: RemovePersonaImageShape,
+      publish_video_direct: PublishVideoDirectShape,
     };
     expect(schemas.size).toBe(Object.keys(expected).length);
     for (const [name, shape] of Object.entries(expected)) {

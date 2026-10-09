@@ -1771,5 +1771,86 @@ describe('new tool error paths and narrowing fallbacks', () => {
     });
     expect(response.isError).toBe(true);
     expect(textOf(response)).toBe('Error disconnecting account: network down');
+
+});
+
+describe('publish video direct tool', () => {
+  const mockClient = {
+    publishVideoDirect: vi.fn(),
+  } as unknown as PostEngineerClient;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('PublishVideoDirectSchema requires accountIds and validates provider', async () => {
+    const { PublishVideoDirectSchema } = await import('../tools.js');
+    const base = {
+      provider: 'youtube',
+      videoPath: '/tmp/clip.mp4',
+      accountIds: ['chan-1'],
+      title: 't',
+      description: 'd',
+      tags: ['x'],
+      privacyStatus: 'unlisted',
+    };
+    expect(PublishVideoDirectSchema.safeParse(base).success).toBe(true);
+    expect(
+      PublishVideoDirectSchema.safeParse({ ...base, accountIds: [] }).success
+    ).toBe(false);
+    expect(
+      PublishVideoDirectSchema.safeParse({ ...base, provider: 'tiktok' }).success
+    ).toBe(false);
+    expect(
+      PublishVideoDirectSchema.safeParse({ ...base, privacyStatus: 'friends' }).success
+    ).toBe(false);
+  });
+
+  it('handlePublishVideoDirect summarizes per-account results as human text + machine JSON', async () => {
+    const { handlePublishVideoDirect } = await import('../tools.js');
+    vi.mocked(mockClient.publishVideoDirect).mockResolvedValue({
+      success: true,
+      provider: 'youtube',
+      results: [
+        { accountId: 'chan-1', success: true, videoId: 'vid-1', videoUrl: 'https://youtu.be/vid-1' },
+        { accountId: 'chan-2', success: false, error: 'quota exceeded' },
+      ],
+      successCount: 1,
+      logId: 'log-1',
+    });
+
+    const response = await handlePublishVideoDirect(mockClient, {
+      provider: 'youtube',
+      videoPath: '/tmp/clip.mp4',
+      accountIds: ['chan-1', 'chan-2'],
+      title: 't',
+      description: 'd',
+      tags: ['x'],
+      privacyStatus: 'unlisted',
+    });
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toContain('1/2');
+    expect(text).toContain('chan-1');
+    expect(text).toContain('quota exceeded');
+    // Machine-readable results for the agent.
+    expect(text).toContain('"successCount":1');
+  });
+
+  it('handlePublishVideoDirect surfaces API errors with the structured contract', async () => {
+    const { handlePublishVideoDirect } = await import('../tools.js');
+    const { ApiError } = await import('../errors.js');
+    vi.mocked(mockClient.publishVideoDirect).mockRejectedValue(
+      new ApiError('Failed to publish video: 401 Invalid API key.', 'UPLOAD_ERROR', 'accountIds')
+    );
+
+    const response = await handlePublishVideoDirect(mockClient, {
+      provider: 'instagram',
+      videoPath: '/tmp/clip.mp4',
+      accountIds: ['ig-1'],
+      caption: 'hello',
+    });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('"code":"UPLOAD_ERROR"');
   });
 });

@@ -395,6 +395,7 @@ export const ptDictionary = {
     toolDescAddPersonaImage: 'Adicione uma imagem à biblioteca',
     toolDescUpdatePersonaImage: 'Atualize uma imagem da biblioteca',
     toolDescRemovePersonaImage: 'Remova uma imagem da biblioteca',
+    toolDescPublishVideoDirect: 'Publicar um vídeo diretamente',
     toolDescConnectAccount: 'Conecte uma conta social',
     toolDescListSocialAccounts: 'Liste contas sociais conectadas',
     toolDescListSchedules: 'Liste agendamentos automáticos',
