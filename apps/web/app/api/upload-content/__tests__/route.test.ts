@@ -75,7 +75,7 @@ describe('POST /api/upload-content', () => {
     mockHandleInstagramUpload.mockResolvedValue({ success: true, provider: 'instagram', results: [] });
   });
 
-  it('retorna 401 sem sessão', async () => {
+  it('returns 401 without a session', async () => {
     mockRequireSupabaseSession.mockResolvedValue({
       auth: null,
       error: NextResponse.json({ success: false }, { status: 401 }),
@@ -86,7 +86,7 @@ describe('POST /api/upload-content', () => {
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
   });
 
-  it('usa a sessão do usuário e repassa o userId ao handler', async () => {
+  it('uses the user session and forwards the userId to the handler', async () => {
     const res = await POST(makeRequest());
 
     expect(res.status).toBe(200);
@@ -95,7 +95,7 @@ describe('POST /api/upload-content', () => {
     expect(userId).toBe(USER_ID);
   });
 
-  it('aceita o segredo compartilhado (publish-back do engine) com userId no form', async () => {
+  it('accepts the shared secret (engine publish-back) with userId in the form', async () => {
     mockRequireSupabaseSession.mockResolvedValue({
       auth: null,
       error: NextResponse.json({ success: false }, { status: 401 }),
@@ -111,7 +111,7 @@ describe('POST /api/upload-content', () => {
     expect(userId).toBe('engine-owner');
   });
 
-  it('retorna 401 com segredo válido mas sem userId no form', async () => {
+  it('returns 401 with a valid secret but no userId in the form', async () => {
     mockRequireSupabaseSession.mockResolvedValue({
       auth: null,
       error: NextResponse.json({ success: false }, { status: 401 }),
@@ -123,7 +123,7 @@ describe('POST /api/upload-content', () => {
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
   });
 
-  it('rejeita bearer que não é o segredo compartilhado', async () => {
+  it('rejects a bearer that is not the shared secret', async () => {
     mockRequireSupabaseSession.mockResolvedValue({
       auth: null,
       error: NextResponse.json({ success: false }, { status: 401 }),
@@ -135,7 +135,7 @@ describe('POST /api/upload-content', () => {
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
   });
 
-  it('bearer de comprimento diferente do segredo não lança (comparação timing-safe)', async () => {
+  it('a different-length bearer does not throw (timing-safe comparison)', async () => {
     mockRequireSupabaseSession.mockResolvedValue({
       auth: null,
       error: NextResponse.json({ success: false }, { status: 401 }),
@@ -147,7 +147,7 @@ describe('POST /api/upload-content', () => {
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
   });
 
-  it('retorna 400 quando provider está ausente', async () => {
+  it('returns 400 when provider is missing', async () => {
     const req = makeRequest({ provider: null });
     mockBuildUploadErrorResponse.mockReturnValue(
       NextResponse.json({ success: false, error: 'bad provider' }, { status: 400 }),
@@ -158,7 +158,7 @@ describe('POST /api/upload-content', () => {
     expect(mockBuildUploadErrorResponse).toHaveBeenCalled();
   });
 
-  it('rejeita provider desconhecido listando os providers suportados (sem hardcode)', async () => {
+  it('rejects an unknown provider listing the supported providers (no hardcode)', async () => {
     const req = makeRequest({ provider: 'tiktok' });
     mockBuildUploadErrorResponse.mockReturnValue(
       NextResponse.json({ success: false, error: 'bad provider' }, { status: 400 }),
@@ -172,7 +172,7 @@ describe('POST /api/upload-content', () => {
     expect(err.message).toBe('Invalid provider. Use one of: youtube, instagram, bluesky, linkedin');
   });
 
-  it('aplica rate limit por usuário', async () => {
+  it('applies the per-user rate limit', async () => {
     const limited = NextResponse.json({ success: false }, { status: 429 });
     mockApplyRateLimit.mockResolvedValue(limited);
 
@@ -183,7 +183,7 @@ describe('POST /api/upload-content', () => {
     expect(identity).toBe(USER_ID);
   });
 
-  it('trata upload instagram', async () => {
+  it('handles the instagram upload', async () => {
     const res = await POST(makeRequest({ provider: 'instagram' }));
 
     expect(mockHandleInstagramUpload).toHaveBeenCalledTimes(1);
@@ -192,7 +192,7 @@ describe('POST /api/upload-content', () => {
     expect(body).toEqual({ success: true, provider: 'instagram', results: [] });
   });
 
-  it('responde com erro tratado quando o handler lança', async () => {
+  it('responds with a handled error when the handler throws', async () => {
     mockHandleYoutubeUpload.mockRejectedValue(new Error('boom'));
     mockBuildUploadErrorResponse.mockReturnValue(
       NextResponse.json({ success: false, error: 'boom' }, { status: 500 }),
@@ -201,5 +201,52 @@ describe('POST /api/upload-content', () => {
     const res = await POST(makeRequest());
     expect(res.status).toBe(500);
     expect(mockBuildUploadErrorResponse).toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/upload-content with a personal API key', () => {
+  const KEY_USER = 'api-key-user';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv('MONEYPRINT_API_SECRET', API_SECRET);
+    mockApplyRateLimit.mockResolvedValue(null);
+    mockHandleYoutubeUpload.mockResolvedValue({ success: true, provider: 'youtube', results: [] });
+  });
+
+  it('passes the request to requireSupabaseSession so personal API keys are accepted', async () => {
+    mockRequireSupabaseSession.mockResolvedValue({
+      auth: { userId: KEY_USER, accessToken: 'pe_live_abc123', isApiKey: true },
+      error: null,
+    });
+
+    // A form userId must never let an API-key caller publish as someone
+    // else: the identity comes from the resolved key, not the form.
+    const req = makeRequest({ userId: 'someone-else' });
+    const res = await POST(req);
+
+    expect(res.status).toBe(200);
+    // The auth helper only inspects Bearer/x-api-key headers when it
+    // receives the request — this assertion pins the API-key capability.
+    expect(mockRequireSupabaseSession).toHaveBeenCalledTimes(1);
+    expect(mockRequireSupabaseSession.mock.calls[0][0]).toBe(req);
+    const [, userId] = mockHandleYoutubeUpload.mock.calls[0] as unknown[];
+    expect(userId).toBe(KEY_USER);
+  });
+
+  it('still accepts the engine shared secret after the API-key change', async () => {
+    mockRequireSupabaseSession.mockResolvedValue({
+      auth: null,
+      error: NextResponse.json({ success: false }, { status: 401 }),
+    });
+
+    const res = await POST(makeRequest({
+      authorization: `Bearer ${API_SECRET}`,
+      userId: 'engine-owner',
+    }));
+
+    expect(res.status).toBe(200);
+    const [, userId] = mockHandleYoutubeUpload.mock.calls[0] as unknown[];
+    expect(userId).toBe('engine-owner');
   });
 });
