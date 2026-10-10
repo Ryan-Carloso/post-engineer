@@ -1,0 +1,8 @@
+# Chatterbox voice catalog on the `chatterbox-voices` Modal volume.
+# Each section maps a logical voice name (used by the engine as
+# "chatterbox:<name>") to its reference sample and Chatterbox language code.
+# Reference paths are relative to /voices and must not escape it.
+
+[ryan]
+reference = "ryan/reference.wav"
+language_id = "pt"

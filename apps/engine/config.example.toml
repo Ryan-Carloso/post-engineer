@@ -574,6 +574,10 @@ api_key = ""
 model_id = "chatterbox"
 # Voices exposed by your server; shown in the WebUI dropdown as chatterbox:<name>
 voices = ["default-Female"]
+# Edge-tts voice used when the Chatterbox server fails (automatic fallback).
+# Must exist in app/services/data/azure_voices.json. Set to "" to disable the
+# fallback and let Chatterbox failures fail the TTS step normally.
+fallback_voice = "pt-BR-AntonioNeural"
 
 [infinitetalk]
 # The Modal endpoints and bearer secret are ENV VARS, not TOML (they differ

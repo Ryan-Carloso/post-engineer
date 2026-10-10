@@ -54,6 +54,7 @@ GPU_USD_PER_SECOND = 0.001261  # Modal H200 SXM public rate: $4.5396/hour.
 GPU_RATE_USD_S = GPU_USD_PER_SECOND
 _CONTAINER_START = time.monotonic()  # Approximate container boot (module import).
 # Modal account/app prefix for the deployed InfiniteTalk HTTP endpoints.
+# (dev redeploy 2026-10-10: pick up updated Modal Secrets with app name)
 # Set INFINITETALK_MODAL_APP_NAME in the environment (see apps/engine/.env.example);
 # there is no default — the endpoint URLs cannot be built without it.
 _MODAL_APP_NAME = os.environ.get("INFINITETALK_MODAL_APP_NAME")

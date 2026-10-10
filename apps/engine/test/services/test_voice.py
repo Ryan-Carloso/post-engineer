@@ -626,6 +626,65 @@ class TestVoiceService(unittest.TestCase):
         self.assertIsNone(result)
         self.assertEqual(post.call_count, 3)
 
+    def test_chatterbox_fallback_default_voice(self):
+        """The fallback voice defaults to a pt-BR edge voice when unset."""
+        with patch.object(vs.config, "chatterbox", {}):
+            self.assertEqual(
+                vs.get_chatterbox_fallback_voice(), "pt-BR-AntonioNeural"
+            )
+        with patch.object(
+            vs.config, "chatterbox", {"fallback_voice": "en-US-GuyNeural"}
+        ):
+            self.assertEqual(vs.get_chatterbox_fallback_voice(), "en-US-GuyNeural")
+
+    def test_chatterbox_failure_falls_back_to_edge_tts(self):
+        """A Chatterbox failure in the dispatcher triggers the edge-tts fallback."""
+        fallback_marker = vs.ensure_legacy_submaker_fields(vs.SubMaker())
+        with tempfile.TemporaryDirectory() as tmp_dir, patch.object(
+            vs.config, "chatterbox", {}
+        ), patch.object(
+            vs, "chatterbox_tts", return_value=None
+        ) as chatterbox, patch.object(
+            vs, "azure_tts_v1", return_value=fallback_marker
+        ) as azure:
+            result = vs.tts(
+                "hello world", "chatterbox:ryan", 1.0, str(Path(tmp_dir) / "v.mp3")
+            )
+        self.assertIs(result, fallback_marker)
+        chatterbox.assert_called_once()
+        azure.assert_called_once_with("hello world", "pt-BR-AntonioNeural", 1.0,
+                                      str(Path(tmp_dir) / "v.mp3"))
+
+    def test_chatterbox_success_skips_fallback(self):
+        """A successful Chatterbox result is returned without edge-tts being called."""
+        chatterbox_marker = vs.ensure_legacy_submaker_fields(vs.SubMaker())
+        with tempfile.TemporaryDirectory() as tmp_dir, patch.object(
+            vs.config, "chatterbox", {}
+        ), patch.object(
+            vs, "chatterbox_tts", return_value=chatterbox_marker
+        ), patch.object(
+            vs, "azure_tts_v1"
+        ) as azure:
+            result = vs.tts(
+                "hello world", "chatterbox:ryan", 1.0, str(Path(tmp_dir) / "v.mp3")
+            )
+        self.assertIs(result, chatterbox_marker)
+        azure.assert_not_called()
+
+    def test_chatterbox_fallback_disabled_by_empty_config(self):
+        """An empty fallback_voice disables the fallback (no edge-tts call)."""
+        with tempfile.TemporaryDirectory() as tmp_dir, patch.object(
+            vs.config, "chatterbox", {"fallback_voice": ""}
+        ), patch.object(vs, "chatterbox_tts", return_value=None), patch.object(
+            vs, "azure_tts_v1"
+        ) as azure:
+            result = vs.tts(
+                "hello world", "chatterbox:ryan", 1.0, str(Path(tmp_dir) / "v.mp3")
+            )
+        self.assertIsNone(result)
+        azure.assert_not_called()
+
+
     def test_generate_subtitle_keeps_edge_provider_for_gemini_legacy_submaker(self):
         """
         验证 Gemini TTS 返回的 legacy 字幕结构在 edge provider 下可以直接产出
