@@ -163,26 +163,34 @@ class TestInfiniteTalkClient(unittest.TestCase):
                 with patch.object(
                     infinitetalk, "audio_duration_seconds", return_value=5.0
                 ):
-                    with patch.object(
-                        infinitetalk.config,
-                        "infinitetalk",
+                    # Since #146 the endpoint URLs and HTTP secret come from
+                    # env vars, not config.toml — only the poll/timeout
+                    # tunables still come from config.
+                    with patch.dict(
+                        os.environ,
                         {
-                            "submit_url": "https://modal.test/submit",
-                            "status_url": "https://modal.test/status",
-                            "download_url": "https://modal.test/download",
-                            "poll_interval_seconds": 0,
-                            "timeout_seconds": 1,
-                            "intro_duration_seconds": 5,
-                            "http_secret": "test-secret",
+                            "INFINITETALK_SUBMIT_URL": "https://modal.test/submit",
+                            "INFINITETALK_STATUS_URL": "https://modal.test/status",
+                            "INFINITETALK_DOWNLOAD_URL": "https://modal.test/download",
+                            "INFINITETALK_HTTP_SECRET": "test-secret",
                         },
                     ):
-                        infinitetalk.generate_intro(
-                            str(image_path),
-                            str(audio_path),
-                            LipSyncQuality.very_good,
-                            str(output_path),
-                            request=request,
-                        )
+                        with patch.object(
+                            infinitetalk.config,
+                            "infinitetalk",
+                            {
+                                "poll_interval_seconds": 0,
+                                "timeout_seconds": 1,
+                                "intro_duration_seconds": 5,
+                            },
+                        ):
+                            infinitetalk.generate_intro(
+                                str(image_path),
+                                str(audio_path),
+                                LipSyncQuality.very_good,
+                                str(output_path),
+                                request=request,
+                            )
             self.assertEqual(output_path.read_bytes(), b"valid-mp4")
 
 
