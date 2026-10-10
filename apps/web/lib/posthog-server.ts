@@ -188,6 +188,18 @@ export function getPostHogServer(): ServerPostHogClient | null {
 }
 
 //---------------
+// Boolean-only view of the telemetry configuration. Reuses getConfig so
+// the key-resolution rules live in exactly one place; returns only a
+// boolean, never the key, so it is safe to expose on public endpoints
+// (e.g. GET /api/version) for external monitoring. Note: like
+// getPostHogServer, this warns once per process when unconfigured —
+// that warn is intentional visibility, not noise.
+//---------------
+export function isPostHogServerConfigured(): boolean {
+  return getConfig() !== null;
+}
+
+//---------------
 // Awaitable flush for request-scoped error handling (e.g. Next.js
 // onRequestError). Ensures captured events are delivered before the
 // serverless function freezes.

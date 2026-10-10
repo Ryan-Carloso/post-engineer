@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { withApiErrorReporting } from '@/lib/api-error-reporting';
 import { apiErrorResponse } from '@/lib/api-error';
 import { parseBuildInfo } from '@/lib/version';
+import { isPostHogServerConfigured } from '@/lib/posthog-server';
 
 //---------------
 // Public version endpoint — no auth required. Proxies the engine's
@@ -10,6 +11,9 @@ import { parseBuildInfo } from '@/lib/version';
 // live"). An unreachable or misbehaving engine is a loud 502
 // (engine_unreachable, reported to PostHog) — the version badge degrades
 // to a bare "BETA" pill rather than showing a stale or web-only version.
+// posthogConfigured is the web's own telemetry state (boolean only — the
+// key never leaves the server), so a silent misconfiguration like
+// issue #157 is monitorable from the outside.
 //---------------
 const ENGINE_VERSION_TIMEOUT_MS = 5000;
 
@@ -41,7 +45,7 @@ async function getHandler() {
         logMessage: 'Engine /version returned an unexpected payload',
       });
     }
-    return NextResponse.json(info);
+    return NextResponse.json({ ...info, posthogConfigured: isPostHogServerConfigured() });
   } catch (cause) {
     return apiErrorResponse(502, 'Engine version unavailable', {
       route: 'GET /api/version',
