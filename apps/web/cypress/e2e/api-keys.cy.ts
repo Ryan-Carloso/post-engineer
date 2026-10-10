@@ -108,4 +108,25 @@ describe('API Keys — UI & E2E', () => {
     cy.get('[data-testid="revoke-key-btn-key-1"]').click();
     cy.wait('@revokeApiKey');
   });
+
+  it('copies the MCP install prompt and shows the confirmation label', () => {
+    cy.visit('/api-keys', {
+      onBeforeLoad(win) {
+        // The real clipboard API is permission-gated in the runner; the
+        // copy handler only needs writeText to resolve.
+        cy.stub(win.navigator.clipboard, 'writeText').resolves();
+      },
+    });
+    cy.wait('@getApiKeys');
+
+    cy.get('[data-testid="copy-mcp-prompt-btn"]')
+      .scrollIntoView()
+      .should('be.visible')
+      .and('contain', 'Copiar')
+      .click()
+      .should('contain', 'Copiado!');
+    cy.get('[data-testid="mcp-install-prompt"]')
+      .scrollIntoView()
+      .should('contain', 'post-engineer-mcp');
+  });
 });

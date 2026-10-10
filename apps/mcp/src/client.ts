@@ -1,8 +1,13 @@
-import { getErrorMessage, ImageTooLargeError, ApiError } from './errors.js';
-import { MAX_LIBRARY_IMAGE_BYTES, MAX_LIBRARY_IMAGE_MB } from './limits.js';
+import { getErrorMessage, ImageTooLargeError, VideoTooLargeError, ApiError } from './errors.js';
+import {
+  MAX_LIBRARY_IMAGE_BYTES,
+  MAX_LIBRARY_IMAGE_MB,
+  MAX_UPLOAD_VIDEO_BYTES,
+  MAX_UPLOAD_VIDEO_GB,
+} from './limits.js';
 
 // Re-exported so existing import sites (`../client.js`) keep working.
-export { MAX_LIBRARY_IMAGE_BYTES, MAX_LIBRARY_IMAGE_MB };
+export { MAX_LIBRARY_IMAGE_BYTES, MAX_LIBRARY_IMAGE_MB, MAX_UPLOAD_VIDEO_BYTES, MAX_UPLOAD_VIDEO_GB };
 import { readFile, stat } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -182,6 +187,61 @@ async function imageFormFile(path: string): Promise<Blob> {
   return new Blob([buffer], { type: mimeType });
 }
 
+/**
+ * Shared size guard for direct-publish videos: the server rejects anything
+ * over 2GB, so fail fast locally before uploading gigabytes. Throws the
+ * typed VideoTooLargeError carrying the full path.
+ */
+export function assertVideoSize(sizeBytes: number, path: string): void {
+  if (sizeBytes > MAX_UPLOAD_VIDEO_BYTES) {
+    throw new VideoTooLargeError(path, sizeBytes);
+  }
+}
+
+function mimeTypeForVideoPath(path: string): string {
+  const extension = extname(path).toLowerCase();
+  if (extension === '.mp4') return 'video/mp4';
+  if (extension === '.mov') return 'video/quicktime';
+  throw new Error(
+    `Unsupported video extension "${extension || '(none)'}": use MP4 or MOV.`,
+  );
+}
+
+async function videoFormFile(path: string): Promise<Blob> {
+  // Validate before uploading: the API rejects the file anyway, so an
+  // oversized or unsupported video fails fast locally instead of wasting an
+  // upload. A stat() pre-check bounds memory before readFile — a multi-GB
+  // file would otherwise load fully into this stdio process. The TOCTOU
+  // window is benign: the authoritative size check still runs on the buffer.
+  // Any failure surfaces with the full path for a consistent, actionable
+  // message. The server re-validates content via magic bytes, so a
+  // mislabeled file still fails server-side.
+  const mimeType = mimeTypeForVideoPath(path);
+  try {
+    const fileStat = await stat(path);
+    assertVideoSize(fileStat.size, path);
+  } catch (error) {
+    // Discriminate by type, not by message text: the typed size error
+    // passes through untouched, while stat failures become the actionable
+    // "Failed to read video" wrapper.
+    if (error instanceof VideoTooLargeError) throw error;
+    throw new Error(`Failed to read video "${path}": ${getErrorMessage(error)}`);
+  }
+  let buffer: Buffer;
+  try {
+    buffer = await readFile(path);
+  } catch (error) {
+    throw new Error(`Failed to read video "${path}": ${getErrorMessage(error)}`);
+  }
+  if (buffer.length === 0) {
+    throw new Error(`Video "${path}" is empty.`);
+  }
+  // The post-read check reuses the shared guard: same limit, same message,
+  // full path — and it covers the (benign) TOCTOU window after stat.
+  assertVideoSize(buffer.length, path);
+  return new Blob([buffer], { type: mimeType });
+}
+
 // Normalize library metadata: trim; empty/whitespace-only values normalize
 // to ''. Both upload paths (the create-persona imageTags/imageDescriptions
 // arrays and the add-persona-image tag/description fields) send '' for empty
@@ -244,6 +304,82 @@ function resolveBaseUrl(override: string | undefined): string {
   // identical: origin drops userinfo, trailing slashes are stripped so
   // `${baseUrl}${path}` never yields `//api/...`.
   return url.origin + url.pathname.replace(/\/+$/, '');
+}
+
+/** Input for publishing a user-provided video directly, without generation. */
+export interface PublishVideoDirectInput {
+  provider: 'youtube' | 'instagram' | 'linkedin' | 'bluesky';
+  /** Local path to the video file (.mp4 or .mov, max 2GB). */
+  videoPath: string;
+  /** Target accounts (channel IDs / IG user IDs / DIDs / LinkedIn member IDs or org URNs). */
+  accountIds: string[];
+  /** YouTube only: required. */
+  title?: string;
+  /** YouTube only: required. */
+  description?: string;
+  /** YouTube only: required, at least one tag. */
+  tags?: string[];
+  /** YouTube only: required. */
+  privacyStatus?: 'public' | 'private' | 'unlisted';
+  /** Instagram/Bluesky/LinkedIn: required. */
+  caption?: string;
+}
+
+/** One per-account outcome from a direct-publish upload. */
+export interface DirectPublishAccountResult {
+  accountId: string;
+  success: boolean;
+  videoId?: string;
+  videoUrl?: string;
+  postId?: string;
+  error?: string;
+}
+
+/** Narrowed POST /api/upload-content response. */
+export interface DirectPublishResult {
+  success: boolean;
+  provider: string;
+  results: DirectPublishAccountResult[];
+  successCount: number;
+  logId: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function narrowDirectPublishAccountResult(value: unknown): DirectPublishAccountResult {
+  if (!isRecord(value) || typeof value.accountId !== 'string' || typeof value.success !== 'boolean') {
+    throw new Error('Malformed direct-publish account result from the API.');
+  }
+  const result: DirectPublishAccountResult = {
+    accountId: value.accountId,
+    success: value.success,
+  };
+  if (typeof value.videoId === 'string') result.videoId = value.videoId;
+  if (typeof value.videoUrl === 'string') result.videoUrl = value.videoUrl;
+  if (typeof value.postId === 'string') result.postId = value.postId;
+  if (typeof value.error === 'string') result.error = value.error;
+  return result;
+}
+
+// A 200 with a malformed body is an error, never a silent success: the agent
+// must not report "published" on a body it can't read.
+function narrowDirectPublishResult(value: unknown): DirectPublishResult {
+  if (!isRecord(value)) {
+    throw new Error('Malformed direct-publish response from the API.');
+  }
+  const resultsRaw = value.results;
+  if (!Array.isArray(resultsRaw)) {
+    throw new Error('Malformed direct-publish response from the API: results is not an array.');
+  }
+  return {
+    success: value.success === true,
+    provider: typeof value.provider === 'string' ? value.provider : 'unknown',
+    results: resultsRaw.map(narrowDirectPublishAccountResult),
+    successCount: typeof value.successCount === 'number' ? value.successCount : 0,
+    logId: typeof value.logId === 'string' ? value.logId : '',
+  };
 }
 
 export class PostEngineerClient {
@@ -774,5 +910,90 @@ export class PostEngineerClient {
       { method: 'DELETE', headers: this.getHeaders() },
       'delete persona image'
     );
+  }
+
+  async publishVideoDirect(input: PublishVideoDirectInput): Promise<DirectPublishResult> {
+    // Direct publish of a user-provided video — no generation, no schedule.
+    // Mirrors the server-side 400s: provider-specific required fields and
+    // per-provider account-id field names fail fast here, before any fetch.
+    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky'];
+    if (!validProviders.includes(input.provider)) {
+      throw new Error(`provider must be one of: ${validProviders.join(', ')}.`);
+    }
+    if (input.accountIds.length === 0) {
+      throw new Error('At least one account ID is required.');
+    }
+    // Provider-specific required fields, validated before any fetch so the
+    // agent gets a named failure instead of a server 400 after uploading.
+    let title = '';
+    let description = '';
+    let tags: string[] = [];
+    let privacyStatus = '';
+    let caption = '';
+    if (input.provider === 'youtube') {
+      if (input.title === undefined || input.title.trim().length === 0) {
+        throw new Error('title is required for youtube.');
+      }
+      if (input.description === undefined || input.description.trim().length === 0) {
+        throw new Error('description is required for youtube.');
+      }
+      if (input.tags === undefined || input.tags.length === 0) {
+        throw new Error('tags is required for youtube.');
+      }
+      const validPrivacy = ['public', 'private', 'unlisted'];
+      if (input.privacyStatus === undefined || !validPrivacy.includes(input.privacyStatus)) {
+        throw new Error('privacyStatus is required for youtube.');
+      }
+      title = input.title.trim();
+      description = input.description.trim();
+      tags = input.tags;
+      privacyStatus = input.privacyStatus;
+    } else {
+      if (input.caption === undefined || input.caption.trim().length === 0) {
+        throw new Error(`caption is required for ${input.provider}.`);
+      }
+      caption = input.caption.trim();
+    }
+
+    const formData = new FormData();
+    formData.append('provider', input.provider);
+    const videoBlob = await videoFormFile(input.videoPath);
+    const filename = basename(input.videoPath);
+    if (input.provider === 'youtube') {
+      formData.append('video', videoBlob, filename);
+      formData.append('title', title);
+      formData.append('description', description);
+      formData.append('tags', tags.join(','));
+      formData.append('privacyStatus', privacyStatus);
+      for (const accountId of input.accountIds) {
+        formData.append('accountIds', accountId);
+      }
+    } else if (input.provider === 'instagram') {
+      formData.append('file', videoBlob, filename);
+      formData.append('caption', caption);
+      for (const accountId of input.accountIds) {
+        formData.append('igAccountIds', accountId);
+      }
+    } else if (input.provider === 'bluesky') {
+      formData.append('video', videoBlob, filename);
+      formData.append('caption', caption);
+      for (const accountId of input.accountIds) {
+        formData.append('did', accountId);
+      }
+    } else {
+      formData.append('video', videoBlob, filename);
+      formData.append('caption', caption);
+      for (const accountId of input.accountIds) {
+        formData.append('linkedinAccountIds', accountId);
+      }
+    }
+
+    const result: unknown = await this.request(
+      '/api/upload-content',
+      { method: 'POST', headers: this.getHeaders(), body: formData },
+      'publish video direct',
+      UPLOAD_TIMEOUT_MS
+    );
+    return narrowDirectPublishResult(result);
   }
 }

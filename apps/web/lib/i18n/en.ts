@@ -396,6 +396,7 @@ export const enDictionary: Dictionary = {
     toolDescAddPersonaImage: 'Add an image to the library',
     toolDescUpdatePersonaImage: 'Update a library image',
     toolDescRemovePersonaImage: 'Remove a library image',
+    toolDescPublishVideoDirect: 'Publish a video directly',
     toolDescConnectAccount: 'Connect a social account',
     toolDescListSocialAccounts: 'List connected social accounts',
     toolDescListSchedules: 'List automation schedules',

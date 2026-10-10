@@ -102,6 +102,7 @@ The `Authorization: Bearer` API key header is sent to the configured base URL, s
 - `add_persona_image`: add an image to a persona image library from a local file path (JPG/JPEG, PNG, or WebP, max 9MB). Optional tag and description drive the deterministic per-video image selection.
 - `update_persona_image`: update a persona library image tag, description, or primary flag.
 - `remove_persona_image`: remove an image from a persona image library.
+- `publish_video_direct`: publish a ready-made video file directly to social accounts — no generation, no schedule (local .mp4/.mov, max 2GB; YouTube needs title, description, tags, privacyStatus; others need caption).
 - `list_social_accounts`: list connected social accounts with the account IDs needed for scheduling.
 - `connect_account`: connect a social account. For youtube/instagram/linkedin: returns an authorization URL — the user must open it in a browser and authorize, then the account connects automatically (verify with `list_social_accounts`). For bluesky: connects directly with handle + app password.
 - `list_schedules`: list automation schedules.

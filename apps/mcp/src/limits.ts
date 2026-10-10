@@ -14,3 +14,16 @@ export const MAX_LIBRARY_IMAGE_BYTES = 10 * 1024 * 1024;
  * (tool descriptions, error messages) can't drift from the enforced bound.
  */
 export const MAX_LIBRARY_IMAGE_MB = MAX_LIBRARY_IMAGE_BYTES / (1024 * 1024);
+
+/**
+ * Max direct-publish video size in bytes (2GB). Mirrors the server-side
+ * limit in POST /api/upload-content (youtube handler): the MCP fails fast
+ * locally instead of uploading gigabytes the server would reject.
+ */
+export const MAX_UPLOAD_VIDEO_BYTES = 2 * 1024 * 1024 * 1024;
+
+/**
+ * Same limit in whole GB, derived from the byte limit so user-facing copy
+ * can't drift from the enforced bound.
+ */
+export const MAX_UPLOAD_VIDEO_GB = MAX_UPLOAD_VIDEO_BYTES / (1024 * 1024 * 1024);

@@ -6,6 +6,7 @@ import {
   MAX_LIBRARY_IMAGE_MB,
   MAX_LIBRARY_TAG_LENGTH,
   MAX_LIBRARY_DESCRIPTION_LENGTH,
+  MAX_UPLOAD_VIDEO_GB,
 } from './client.js';
 import { getErrorMessage, ApiError } from './errors.js';
 
@@ -1461,3 +1462,109 @@ function narrowScheduledVideos(result: unknown): {
   };
 }
 
+export const PublishVideoDirectShape = {
+  provider: z
+    .enum(['youtube', 'instagram', 'linkedin', 'bluesky'])
+    .describe('The social platform to publish the video to.'),
+  videoPath: z
+    .string()
+    .min(1, 'videoPath is required')
+    .describe(
+      `Local path to the video file (.mp4 or .mov, max ${MAX_UPLOAD_VIDEO_GB}GB). The video is published as-is: no generation, no schedule.`,
+    ),
+  accountIds: z
+    .array(z.string().min(1))
+    .min(1, 'At least one account ID is required')
+    .describe(
+      'Target accounts: the IDs from list_social_accounts (channel IDs for YouTube, IG user IDs for Instagram, DIDs for Bluesky, member IDs or org URNs for LinkedIn).',
+    ),
+  title: z
+    .string()
+    .optional()
+    .describe('YouTube only: required video title.'),
+  description: z
+    .string()
+    .optional()
+    .describe('YouTube only: required video description.'),
+  tags: z
+    .array(z.string())
+    .optional()
+    .describe('YouTube only: required list of tags.'),
+  privacyStatus: z
+    .enum(['public', 'private', 'unlisted'])
+    .optional()
+    .describe('YouTube only: required privacy status.'),
+  caption: z
+    .string()
+    .optional()
+    .describe('Instagram/Bluesky/LinkedIn: required caption.'),
+};
+
+export const PublishVideoDirectSchema = z.object(PublishVideoDirectShape);
+
+export async function handlePublishVideoDirect(
+  client: PostEngineerClient,
+  args: z.infer<typeof PublishVideoDirectSchema>
+): Promise<McpToolResponse> {
+  try {
+    const result = await client.publishVideoDirect({
+      provider: args.provider,
+      videoPath: args.videoPath,
+      accountIds: args.accountIds,
+      title: args.title,
+      description: args.description,
+      tags: args.tags,
+      privacyStatus: args.privacyStatus,
+      caption: args.caption,
+    });
+    const lines = result.results.map((account) => {
+      if (account.success) {
+        const link = account.videoUrl ?? account.postId ?? account.videoId ?? '';
+        return `- ${account.accountId}: published${link ? ` (${link})` : ''}`;
+      }
+      return `- ${account.accountId}: FAILED — ${account.error ?? 'unknown error'}`;
+    });
+    return {
+      content: [
+        {
+          type: 'text',
+          text:
+            `Direct publish to ${result.provider}: ${result.successCount}/${result.results.length} accounts succeeded.\n` +
+            lines.join('\n') +
+            `\n${JSON.stringify({
+              success: result.success,
+              provider: result.provider,
+              successCount: result.successCount,
+              results: result.results,
+              logId: result.logId,
+            })}`,
+        },
+      ],
+    };
+  } catch (error) {
+    if (error instanceof ApiError && error.code !== null) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error publishing video: ${JSON.stringify({
+              code: error.code,
+              message: sanitizeEngineError(getErrorMessage(error)),
+              field: error.field,
+            })}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error publishing video: ${getErrorMessage(error)}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
