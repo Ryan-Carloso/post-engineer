@@ -15,6 +15,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.utils import utils
+from app.services import chatterbox_fallback as cf
 from app.services import voice as vs
 from app.services import task as task_service
 from pydub import AudioSegment
@@ -630,12 +631,12 @@ class TestVoiceService(unittest.TestCase):
         """The fallback voice defaults to a pt-BR edge voice when unset."""
         with patch.object(vs.config, "chatterbox", {}):
             self.assertEqual(
-                vs.get_chatterbox_fallback_voice(), "pt-BR-AntonioNeural"
+                cf.get_chatterbox_fallback_voice(), "pt-BR-AntonioNeural"
             )
         with patch.object(
             vs.config, "chatterbox", {"fallback_voice": "en-US-GuyNeural"}
         ):
-            self.assertEqual(vs.get_chatterbox_fallback_voice(), "en-US-GuyNeural")
+            self.assertEqual(cf.get_chatterbox_fallback_voice(), "en-US-GuyNeural")
 
     def test_chatterbox_failure_falls_back_to_edge_tts(self):
         """A Chatterbox failure in the dispatcher triggers the edge-tts fallback."""

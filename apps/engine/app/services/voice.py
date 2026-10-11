@@ -24,13 +24,10 @@ from moviepy.audio.io.AudioFileClip import AudioFileClip
 from openai import OpenAI
 
 from app.config import config
+from app.services.chatterbox_fallback import chatterbox_tts_with_fallback
 from app.utils import utils
 
 _DEFAULT_EDGE_TTS_TIMEOUT_SECONDS = 30.0
-# Edge-tts voice used when the Chatterbox provider fails (fallback chain).
-# Must exist in app/services/data/azure_voices.json; male pt-BR to match the
-# first Chatterbox house voice ("ryan").
-_DEFAULT_CHATTERBOX_FALLBACK_VOICE = "pt-BR-AntonioNeural"
 _MIMO_DEFAULT_BASE_URL = "https://api.xiaomimimo.com/v1"
 _MIMO_DEFAULT_TTS_MODEL = "mimo-v2.5-tts"
 NO_VOICE_NAME = "no-voice"
@@ -504,16 +501,8 @@ def tts(
             chatterbox_voice = parts[1].strip()
             if chatterbox_voice.endswith(("-Female", "-Male")):
                 chatterbox_voice = chatterbox_voice.rsplit("-", 1)[0]
-            sub_maker = chatterbox_tts(
-                text, chatterbox_voice, voice_file, voice_rate, voice_volume
-            )
-            if sub_maker is not None:
-                return sub_maker
-            # Recoverable Chatterbox failure (HTTP error, timeout, empty
-            # audio): fall back to edge-tts so a Modal outage degrades to a
-            # different voice instead of failing the whole video. Logged so
-            # the provider switch stays auditable.
-            return chatterbox_edge_tts_fallback(text, voice_rate, voice_file)
+            return chatterbox_tts_with_fallback(
+                text, chatterbox_voice, voice_file, voice_rate, voice_volume)
         else:
             logger.error(f"Invalid chatterbox voice name format: {voice_name}")
             return None
@@ -1415,42 +1404,6 @@ def elevenlabs_tts(
             logger.error(f"elevenlabs tts failed: {str(e)}")
 
     return None
-
-
-def get_chatterbox_fallback_voice() -> str:
-    """Return the edge-tts voice used when Chatterbox fails.
-
-    Configured via ``[chatterbox] fallback_voice`` in config.toml. An empty
-    value explicitly disables the fallback (Chatterbox failures then surface
-    as normal TTS failures).
-    """
-    voice = str(
-        config.chatterbox.get("fallback_voice", _DEFAULT_CHATTERBOX_FALLBACK_VOICE)
-        or ""
-    ).strip()
-    return voice
-
-
-def chatterbox_edge_tts_fallback(
-    text: str, voice_rate: float, voice_file: str
-) -> Union[SubMaker, None]:
-    """Fall back to edge-tts after a Chatterbox failure.
-
-    Keeps the pipeline producing audio during a Modal/Chatterbox outage at
-    the cost of a different (non-cloned) voice. The provider switch is always
-    logged so downstream quality complaints can be traced back to it.
-    """
-    fallback_voice = get_chatterbox_fallback_voice()
-    if not fallback_voice:
-        logger.error(
-            "chatterbox tts failed and fallback is disabled "
-            "([chatterbox] fallback_voice is empty)"
-        )
-        return None
-    logger.warning(
-        f"chatterbox tts failed, falling back to edge-tts voice: {fallback_voice}"
-    )
-    return azure_tts_v1(text, fallback_voice, voice_rate, voice_file)
 
 
 def chatterbox_tts(
