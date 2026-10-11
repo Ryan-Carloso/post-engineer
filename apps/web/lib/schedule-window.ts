@@ -4,10 +4,11 @@
 //
 // Callers pass the CONVERTED instant (a Date): timezone-aware parsing
 // happens before this validator runs — the route passes slots already
-// converted to UTC instants by distributeSlots (which converts via
-// zonedTimeToUtc, lib/timezone.ts). The schedule form parses the naive
-// start date with parseZonedDateTime but does not run this validator;
-// the server enforces the window.
+// converted to UTC instants by distributeSlots (which resolves naive
+// startAt as wall-clock in the timezone via parseZonedDateTime and each
+// candidate slot via zonedTimeToUtc, lib/timezone.ts). The schedule form
+// parses the naive start date with parseZonedDateTime but does not run
+// this validator; the server enforces the window.
 //---------------
 
 export const SCHEDULE_MIN_ADVANCE_HOURS = 3;

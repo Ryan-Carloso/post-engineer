@@ -30,13 +30,15 @@ class HttpException(Exception):
         if generation_id:
             bind_kwargs["generation_id"] = generation_id
         bound = logger.bind(**bind_kwargs)
-        # Client errors (4xx) are the caller's fault — log as a warning so
-        # they never reach PostHog error tracking as $exception noise.
-        # Only server faults (5xx) are real exceptions worth alerting on.
+        # Attribute the record to the raise site (the frame that constructed
+        # this exception), not __init__: the PostHog sink groups flat ERROR
+        # logs by module:function, so without depth every 5xx raised anywhere
+        # would collapse into one "...:__init__" issue. Same attribution for
+        # the 4xx warning path so console/file logs point at the caller too.
         if status_code >= 500:
-            bound.error(msg)
+            bound.opt(depth=1).error(msg)
         else:
-            bound.warning(msg)
+            bound.opt(depth=1).warning(msg)
 
 
 class FileNotFoundException(Exception):

@@ -7,7 +7,11 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { __resetPostHogServerForTests, getPostHogServer } from '@/lib/posthog-server';
+import {
+  __resetPostHogServerForTests,
+  getPostHogServer,
+  isPostHogServerConfigured,
+} from '@/lib/posthog-server';
 
 describe('getPostHogServer (node runtime)', () => {
   const originalEnv = { ...process.env };
@@ -65,5 +69,49 @@ describe('getPostHogServer (node runtime)', () => {
     for (const m of posthogImports) {
       expect(m[1]).toMatch(/webpackIgnore:\s*true/);
     }
+  });
+});
+
+describe('isPostHogServerConfigured', () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    __resetPostHogServerForTests();
+    process.env = { ...originalEnv };
+    delete process.env.POSTHOG_API_KEY;
+    delete process.env.NEXT_PUBLIC_POSTHOG_KEY;
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    __resetPostHogServerForTests();
+    vi.restoreAllMocks();
+  });
+
+  it('is true when POSTHOG_API_KEY is set', () => {
+    process.env.POSTHOG_API_KEY = 'test-key';
+    expect(isPostHogServerConfigured()).toBe(true);
+  });
+
+  it('is true with the public key fallback', () => {
+    process.env.NEXT_PUBLIC_POSTHOG_KEY = 'public-key';
+    expect(isPostHogServerConfigured()).toBe(true);
+  });
+
+  it('is false with no key configured', () => {
+    expect(isPostHogServerConfigured()).toBe(false);
+  });
+
+  it('is false with an empty key', () => {
+    process.env.POSTHOG_API_KEY = '';
+    expect(isPostHogServerConfigured()).toBe(false);
+  });
+
+  it('never leaks the key value', () => {
+    process.env.POSTHOG_API_KEY = 'super-secret-key';
+    const configured = isPostHogServerConfigured();
+    expect(configured).toBe(true);
+    expect(JSON.stringify({ posthogConfigured: configured })).not.toContain('super-secret-key');
   });
 });

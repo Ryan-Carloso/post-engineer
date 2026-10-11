@@ -22,6 +22,7 @@ the order — you never need to guess or read docs to know what comes next:
 | 014 | `migrations/014_videos-storage-bucket.sql` | Create the private `videos` storage bucket (plus RLS policies) so the engine can archive final videos at `{user_id}/{persona_id\|faceless}/{task_id}/final-1.mp4` |
 | 015 | `migrations/015_schedules-publish-mode.sql` | `schedules.publish_mode` (`scheduled` default, CHECK-pinned to `scheduled`/`asap`): records whether a post publishes at its slot times or ASAP (the moment generation finishes, no scheduled time) |
 | 016 | `migrations/016_scheduled-posts-publish-attempts.sql` | `scheduled_posts.publish_attempts` (NOT NULL DEFAULT 0): counts publish attempts per slot so the engine auto-cancels (failed) with a token refund after 3 failures instead of retrying forever |
+| 017 | `migrations/017_refund-batch-tokens.sql` | Create the missing `public.refund_batch_tokens` RPC: per-slot refund of a batch prepaid under `batch:<scheduleId>`. Idempotent per refund key (`token_transactions.reference_id`), total refunds capped at the batch charge, restores the free/paid split, answers `{refunded}` like `refund_generation_tokens`. Both the engine's fill_schedule store and the web's generate-and-schedule route already call it — every call 404'd until this migration |
 
 ## How to apply
 

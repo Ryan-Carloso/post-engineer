@@ -3,7 +3,7 @@ import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { PostEngineerClient, MAX_LIBRARY_IMAGES, MAX_LIBRARY_IMAGE_MB } from './client.js';
+import { PostEngineerClient, MAX_LIBRARY_IMAGES, MAX_LIBRARY_IMAGE_MB, MAX_UPLOAD_VIDEO_GB } from './client.js';
 import {
   CreatePersonaShape,
   ListPersonasShape,
@@ -16,6 +16,15 @@ import {
   GetTokenBalanceShape,
   ListPostsShape,
   CancelScheduleShape,
+  GetSlotShape,
+  UpdateSlotTopicShape,
+  DeleteSlotShape,
+  ListVideoGenerationsShape,
+  GetVideoGenerationShape,
+  ListTokenTransactionsShape,
+  GetPersonaDeletePreviewShape,
+  DeletePersonaShape,
+  DisconnectAccountShape,
   GeneratePersonaVideosShape,
   GetVideoStatusShape,
   GetVideoTaskProgressShape,
@@ -23,6 +32,7 @@ import {
   AddPersonaImageShape,
   UpdatePersonaImageShape,
   RemovePersonaImageShape,
+  PublishVideoDirectShape,
   handleCreatePersona,
   handleListPersonas,
   handleListVoices,
@@ -33,6 +43,15 @@ import {
   handleListSchedules,
   handleListPosts,
   handleCancelSchedule,
+  handleGetSlot,
+  handleUpdateSlotTopic,
+  handleDeleteSlot,
+  handleListVideoGenerations,
+  handleGetVideoGeneration,
+  handleListTokenTransactions,
+  handleGetPersonaDeletePreview,
+  handleDeletePersona,
+  handleDisconnectAccount,
   handleGetTokenBalance,
   handleGeneratePersonaVideos,
   handleGetVideoStatus,
@@ -41,6 +60,7 @@ import {
   handleAddPersonaImage,
   handleUpdatePersonaImage,
   handleRemovePersonaImage,
+  handlePublishVideoDirect,
 } from './tools.js';
 import { trackEvent } from './analytics.js';
 
@@ -169,6 +189,87 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
   );
 
   server.tool(
+    'get_slot',
+    'Get one scheduled post\'s full detail by slot ID: status, topic, scheduled time, generation progress, its schedule (providers, publish mode) and persona. Use the slotId from list_posts.',
+    GetSlotShape,
+    withTracking('get_slot', async (args) => {
+      return handleGetSlot(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'update_slot_topic',
+    'Edit the topic text of one scheduled post. Only a slot that has not started generating (status pending/awaiting) can be edited — published or mid-flight slots are rejected.',
+    UpdateSlotTopicShape,
+    withTracking('update_slot_topic', async (args) => {
+      return handleUpdateSlotTopic(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'delete_slot',
+    'Delete one scheduled post slot. Only pending (awaiting) or failed slots can be deleted; published or mid-flight slots are rejected. The schedule\'s last slot cannot be deleted — use cancel_schedule to delete the whole schedule instead.',
+    DeleteSlotShape,
+    withTracking('delete_slot', async (args) => {
+      return handleDeleteSlot(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'list_video_generations',
+    'List the video generation history (newest first): one row per generated video with status, error code, token refund flag, and timestamps. Use get_video_generation for one row\'s detail.',
+    ListVideoGenerationsShape,
+    withTracking('list_video_generations', async (args) => {
+      return handleListVideoGenerations(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'get_video_generation',
+    'Get one video generation\'s detail by generation ID (the generationId field from list_video_generations).',
+    GetVideoGenerationShape,
+    withTracking('get_video_generation', async (args) => {
+      return handleGetVideoGeneration(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'list_token_transactions',
+    'List the token ledger: every token credit and debit (purchases, generation spends, refunds), newest first, with amounts, reasons, and the related generation when there is one. Use to audit where tokens went.',
+    ListTokenTransactionsShape,
+    withTracking('list_token_transactions', async (args) => {
+      return handleListTokenTransactions(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'get_persona_delete_preview',
+    'Preview what deleting a persona would remove: counts of schedules, upcoming/published/failed slots, generated videos and library images, plus per-video download links (read-only, never mutates). Call before delete_persona.',
+    GetPersonaDeletePreviewShape,
+    withTracking('get_persona_delete_preview', async (args) => {
+      return handleGetPersonaDeletePreview(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'delete_persona',
+    'DESTRUCTIVE and irreversible: delete a persona with all its schedules, slots, generated videos, and image library. No token refunds — prepaid tokens for pending slots are forfeited. Call get_persona_delete_preview first.',
+    DeletePersonaShape,
+    withTracking('delete_persona', async (args) => {
+      return handleDeletePersona(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'disconnect_account',
+    'Disconnect a social account by provider and account ID (the IDs from list_social_accounts). The account stops being available for publishing.',
+    DisconnectAccountShape,
+    withTracking('disconnect_account', async (args) => {
+      return handleDisconnectAccount(apiClient, args);
+    })
+  );
+
+  server.tool(
     'get_token_balance',
     'Get the prepaid token wallet balance. Check before triggering video generation, which costs tokens.',
     GetTokenBalanceShape,
@@ -179,7 +280,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
 
   server.tool(
     'generate_persona_videos',
-    'Generate and schedule 1-10 persona videos in ONE operation. Product rule: generation is always tied to publishing — one call generates each video AND schedules its automatic publish; there is no separate schedule step and no orphan generation. personaId is REQUIRED even for faceless videos (set options.faceless: true to drop the face; the persona voice, niche, and script prompt still apply). topics is one topic per video; the server assigns publish slots (topic i lands on day startAt\'s date + floor(i/times.length) at the i-th sorted time in times). Pass providers plus per-provider account IDs (see list_social_accounts), startAt (ISO datetime, wall-clock in timezone when naive), times (HH:MM, 24h), and timezone. Every slot must be 3h-30d ahead. idempotencyKey is generated automatically; reuse it to retry without generating twice (replayed: true). Poll each slot\'s taskId with get_video_task_progress.',
+    'Generate and schedule 1-10 persona videos in ONE operation. Product rule: generation is always tied to publishing — one call generates each video AND schedules its automatic publish; there is no separate schedule step and no orphan generation. personaId is REQUIRED even for faceless videos (set options.faceless: true to drop the face; the persona voice, niche, and script prompt still apply). topics is one topic per video; the server assigns publish slots (topic i lands on day startAt\'s date + floor(i/times.length) at the i-th sorted time in times). Pass providers plus per-provider account IDs (see list_social_accounts), startAt (ISO datetime, wall-clock in timezone when naive), times (HH:MM, 24h), and timezone. Set mode to \'asap\' to publish each video the moment its generation finishes instead of scheduling it — startAt and times must NOT be set then. Every slot must be 3h-30d ahead. idempotencyKey is generated automatically; reuse it to retry without generating twice (replayed: true). Poll each slot\'s taskId with get_video_task_progress.',
     GeneratePersonaVideosShape,
     withTracking('generate_persona_videos', async (args) => {
       return handleGeneratePersonaVideos(apiClient, args);
@@ -237,6 +338,15 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
     RemovePersonaImageShape,
     withTracking('remove_persona_image', async (args) => {
       return handleRemovePersonaImage(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'publish_video_direct',
+    `Publish a ready-made video file directly to social accounts — no generation, no schedule. Reads a local video (.mp4 or .mov, max ${MAX_UPLOAD_VIDEO_GB}GB) and posts it immediately via POST /api/upload-content. YouTube requires title, description, tags, and privacyStatus; Instagram/Bluesky/LinkedIn require caption.`,
+    PublishVideoDirectShape,
+    withTracking('publish_video_direct', async (args) => {
+      return handlePublishVideoDirect(apiClient, args);
     })
   );
 

@@ -10,7 +10,10 @@ import sys
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from loguru import logger
+
 from app import asgi
+from app.models.exception import HttpException
 
 
 def _message(**record_overrides):
@@ -234,6 +237,179 @@ class PostHogSinkTests(unittest.TestCase):
         with patch("app.asgi.track_event", side_effect=RuntimeError("posthog down")):
             asgi._loguru_posthog_sink(BadMessage())
             asgi._loguru_posthog_sink(_message())
+
+
+def _log_storage_failure(task_id: str) -> None:
+    logger.error(f"video_storage: upload failed for {task_id}")
+
+
+def _log_scheduler_failure(task_id: str) -> None:
+    logger.error(f"fill_schedule: stage generated failed for {task_id}")
+
+
+def _raise_http_from_storage(task_id: str) -> None:
+    raise HttpException(task_id=task_id, status_code=500, message="storage blew up")
+
+
+def _raise_http_from_scheduler(task_id: str) -> None:
+    raise HttpException(task_id=task_id, status_code=500, message="scheduler blew up")
+
+
+def _raise_http_with_status(task_id: str, status_code: int) -> None:
+    raise HttpException(task_id=task_id, status_code=status_code, message="boom")
+
+
+def _swallow_http_exception(raise_fn, *args) -> None:
+    try:
+        raise_fn(*args)
+    except HttpException:
+        pass
+
+
+def _log_fail_task_stage(task_id: str, stage: str) -> None:
+    # Same shape as services.task._fail_task: task id, stage and error type
+    # bound as extras on a flat ERROR record.
+    logger.bind(task_id=task_id, stage=stage, error_type="TaskError").error(
+        "video task failed at stage {stage}: boom", stage=stage
+    )
+
+
+def _captured_properties(*log_calls) -> list[dict]:
+    """Run each log call through the real loguru pipeline into the sink."""
+    handler_id = logger.add(asgi._loguru_posthog_sink, level="ERROR")
+    try:
+        with patch("app.asgi.track_event") as track_event:
+            for log_call in log_calls:
+                log_call()
+    finally:
+        logger.remove(handler_id)
+    return [call.args[1] for call in track_event.call_args_list]
+
+
+def _running_under_mutmut() -> bool:
+    # mutmut 3.x rewrites the module under test so every function routes
+    # through its trampoline: frame-counting (logger.opt(depth=1)) then
+    # attributes the record to the trampoline, not the raise site. The
+    # mock-based tests in test_exception.py pin the opt(depth=1) call
+    # itself (and kill its mutants); the raise-site integration test below
+    # is skipped under the transform instead of asserting a harness
+    # artifact.
+    return "mutmut.mutation.trampoline" in sys.modules
+
+
+class FlatLogGroupingTests(unittest.TestCase):
+    def test_flat_logs_from_two_sources_get_different_fingerprints(self):
+        storage, scheduler = _captured_properties(
+            lambda: _log_storage_failure("task-1"),
+            lambda: _log_scheduler_failure("task-1"),
+        )
+        assert storage["$exception_fingerprint"] != scheduler["$exception_fingerprint"]
+
+    def test_repeated_flat_logs_from_one_source_share_a_fingerprint(self):
+        # The task id changes per request: it must not reach the key, or
+        # every request would open its own issue.
+        first, second = _captured_properties(
+            lambda: _log_storage_failure("task-1"),
+            lambda: _log_storage_failure("task-2"),
+        )
+        assert first["$exception_message"] != second["$exception_message"]
+        assert first["$exception_fingerprint"] == second["$exception_fingerprint"]
+        assert "task-1" not in first["$exception_fingerprint"]
+
+    def test_fingerprint_names_module_and_function_not_path(self):
+        (properties,) = _captured_properties(lambda: _log_storage_failure("task-1"))
+        assert properties["$exception_fingerprint"] == (
+            f"Error:{__name__}:_log_storage_failure"
+        )
+
+    def test_http_exception_type_is_part_of_the_fingerprint(self):
+        plain, http = _captured_properties(
+            lambda: logger.error("boom"),
+            lambda: logger.bind(http_status_code=500).error("boom"),
+        )
+        assert plain["$exception_fingerprint"].startswith("Error:")
+        assert http["$exception_fingerprint"].startswith("HttpException:")
+
+    def test_record_with_exception_keeps_frame_grouping(self):
+        # Records with a live exception carry real frames: PostHog groups
+        # them by those frames, so the sink adds no fingerprint.
+        def _log_with_exception() -> None:
+            try:
+                raise ValueError("boom")
+            except ValueError:
+                logger.exception("failed")
+
+        (properties,) = _captured_properties(_log_with_exception)
+        assert "$exception_fingerprint" not in properties
+
+    def test_record_without_source_fields_sends_no_fingerprint(self):
+        with patch("app.asgi.track_event") as track_event:
+            asgi._loguru_posthog_sink(_message())
+        _, properties = track_event.call_args[0]
+        assert "$exception_fingerprint" not in properties
+
+    @unittest.skipIf(
+        _running_under_mutmut(),
+        "mutmut's trampoline sits one frame above __init__, so opt(depth=1) "
+        "attributes there instead of the raise site",
+    )
+    def test_http_exception_fingerprint_uses_raise_site_not_init(self):
+        # HttpException logs from its own __init__: without depth
+        # attribution every 5xx raised anywhere would share one
+        # "...:__init__" issue.
+        storage, scheduler = _captured_properties(
+            lambda: _swallow_http_exception(_raise_http_from_storage, "task-1"),
+            lambda: _swallow_http_exception(_raise_http_from_scheduler, "task-1"),
+        )
+        assert storage["$exception_fingerprint"] != scheduler["$exception_fingerprint"]
+        assert "_raise_http_from_storage" in storage["$exception_fingerprint"]
+        assert "__init__" not in storage["$exception_fingerprint"]
+
+    def test_http_exception_fingerprint_includes_status_code(self):
+        # A 502 from a dead upstream and a 500 from our own bug are
+        # different issues even when raised at the same site.
+        err_500, err_502 = _captured_properties(
+            lambda: _swallow_http_exception(_raise_http_with_status, "task-1", 500),
+            lambda: _swallow_http_exception(_raise_http_with_status, "task-1", 502),
+        )
+        assert err_500["$exception_fingerprint"] != err_502["$exception_fingerprint"]
+        assert ":500:" in err_500["$exception_fingerprint"]
+        assert ":502:" in err_502["$exception_fingerprint"]
+
+    def test_fail_task_stages_get_separate_fingerprints(self):
+        # Upload failures (bad R2 creds) and script failures (dead LLM)
+        # have different root causes: one issue per pipeline stage.
+        upload, script = _captured_properties(
+            lambda: _log_fail_task_stage("task-1", "upload"),
+            lambda: _log_fail_task_stage("task-1", "script"),
+        )
+        assert upload["$exception_fingerprint"] != script["$exception_fingerprint"]
+        assert "stage=upload" in upload["$exception_fingerprint"]
+
+    def test_fail_task_same_stage_shares_fingerprint_across_tasks(self):
+        first, second = _captured_properties(
+            lambda: _log_fail_task_stage("task-1", "upload"),
+            lambda: _log_fail_task_stage("task-2", "upload"),
+        )
+        assert first["$exception_fingerprint"] == second["$exception_fingerprint"]
+        assert "task-1" not in first["$exception_fingerprint"]
+
+    def test_bool_status_code_gets_no_status_qualifier(self):
+        # A non-int status must not reach the key (same bool exclusion
+        # as property forwarding); the type prefix alone still groups it.
+        with patch("app.asgi.track_event") as track_event:
+            asgi._loguru_posthog_sink(
+                _message(
+                    extra={"http_status_code": True},
+                    name="some.module",
+                    function="some_function",
+                )
+            )
+        _, properties = track_event.call_args[0]
+        assert (
+            properties["$exception_fingerprint"]
+            == "HttpException:some.module:some_function"
+        )
 
 
 class StartupWarmClientTests(unittest.TestCase):

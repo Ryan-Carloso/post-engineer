@@ -344,6 +344,59 @@ describe('PostEngineerClient', () => {
     );
   });
 
+  it('gets one slot by id', async () => {
+    const mockSlot = { success: true, slot: { id: 'slot-1', topic: 'Hello' } };
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(mockSlot),
+    });
+
+    const result = await client.getSlot('slot-1');
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/schedule/slots/slot-1`,
+      expect.objectContaining({ method: 'GET' })
+    );
+    expect(result).toEqual(mockSlot);
+  });
+
+  it('updates a slot topic with a PATCH body', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true, topic: 'New topic' }),
+    });
+
+    await client.updateSlotTopic('slot-1', '  New topic  ');
+    const [, init] = vi.mocked(global.fetch).mock.calls[0] as [string, RequestInit];
+    expect(init.method).toBe('PATCH');
+    // Trimmed before sending: the server stores the trimmed topic, so the
+    // payload carries exactly what will be stored.
+    expect(JSON.parse(String(init.body))).toEqual({ topic: 'New topic' });
+  });
+
+  it('fails fast on an empty slot topic without fetching', async () => {
+    global.fetch = vi.fn();
+    await expect(client.updateSlotTopic('slot-1', '   ')).rejects.toThrow(
+      /topic must be a non-empty string/
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('deletes one slot by id', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+    });
+
+    await client.deleteSlot('slot-1');
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/schedule/slots/slot-1`,
+      expect.objectContaining({ method: 'DELETE' })
+    );
+  });
+
   it('gets the token balance successfully', async () => {
     const mockBalance = { success: true, balance: 8, free: 3 };
 
@@ -359,6 +412,148 @@ describe('PostEngineerClient', () => {
       expect.objectContaining({ method: 'GET' })
     );
     expect(result).toEqual(mockBalance);
+  });
+
+  it('lists video generations with an optional limit', async () => {
+    const mockHistory = { success: true, generations: [{ generationId: 'gen-1' }] };
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(mockHistory),
+    });
+
+    const result = await client.listVideoGenerations(10);
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/persona/video-generations?limit=10`,
+      expect.objectContaining({ method: 'GET' })
+    );
+    expect(result).toEqual(mockHistory);
+
+    await client.listVideoGenerations();
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/persona/video-generations`,
+      expect.objectContaining({ method: 'GET' })
+    );
+  });
+
+  it('fails fast on an out-of-range generations limit without fetching', async () => {
+    global.fetch = vi.fn();
+    await expect(client.listVideoGenerations(0)).rejects.toThrow(/limit must be an integer between 1 and 200/);
+    await expect(client.listVideoGenerations(201)).rejects.toThrow(/limit must be an integer between 1 and 200/);
+    await expect(client.listVideoGenerations(1.5)).rejects.toThrow(/limit must be an integer between 1 and 200/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('gets one video generation by id', async () => {
+    const mockGeneration = { success: true, generation: { generationId: 'gen-1' } };
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(mockGeneration),
+    });
+
+    const result = await client.getVideoGeneration('gen-1');
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/persona/video-generations/gen-1`,
+      expect.objectContaining({ method: 'GET' })
+    );
+    expect(result).toEqual(mockGeneration);
+  });
+
+  it('lists token transactions with limit and offset', async () => {
+    const mockLedger = {
+      success: true,
+      transactions: [{ id: 'tx-1', amount: -1 }],
+      total: 42,
+      limit: 20,
+      offset: 0,
+    };
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(mockLedger),
+    });
+
+    const result = await client.listTokenTransactions(20, 40);
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/billing/transactions?limit=20&offset=40`,
+      expect.objectContaining({ method: 'GET' })
+    );
+    expect(result).toEqual(mockLedger);
+
+    await client.listTokenTransactions();
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/billing/transactions`,
+      expect.objectContaining({ method: 'GET' })
+    );
+  });
+
+  it('fails fast on out-of-range ledger paging without fetching', async () => {
+    // The server silently falls back to its defaults on bad paging; the
+    // client names the bad field instead.
+    global.fetch = vi.fn();
+    await expect(client.listTokenTransactions(0)).rejects.toThrow(/limit must be an integer between 1 and 100/);
+    await expect(client.listTokenTransactions(101)).rejects.toThrow(/limit must be an integer between 1 and 100/);
+    await expect(client.listTokenTransactions(20, -1)).rejects.toThrow(/offset must be a non-negative integer/);
+    await expect(client.listTokenTransactions(20, 1.5)).rejects.toThrow(/offset must be a non-negative integer/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('gets a persona delete preview by persona id', async () => {
+    const mockPreview = { success: true, persona: { id: 'persona-1', name: 'Ava' }, counts: {} };
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(mockPreview),
+    });
+
+    const result = await client.getPersonaDeletePreview('persona-1');
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/persona/delete-preview?personaId=persona-1`,
+      expect.objectContaining({ method: 'GET' })
+    );
+    expect(result).toEqual(mockPreview);
+  });
+
+  it('deletes a persona by id', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+    });
+
+    await client.deletePersona('persona-1');
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/persona?personaId=persona-1`,
+      expect.objectContaining({ method: 'DELETE' })
+    );
+  });
+
+  it('disconnects a social account by provider and account id', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+    });
+
+    await client.disconnectAccount('bluesky', 'did:plc:abc');
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/account?provider=bluesky&providerAccountId=did%3Aplc%3Aabc`,
+      expect.objectContaining({ method: 'DELETE' })
+    );
+  });
+
+  it('fails fast on an unknown provider or empty account id without fetching', async () => {
+    // The route 400s INVALID_PROVIDER / INVALID_PARAMS — name the field
+    // before any fetch goes out.
+    global.fetch = vi.fn();
+    await expect(client.disconnectAccount('myspace', 'acc-1')).rejects.toThrow(
+      /provider must be one of: youtube, instagram, linkedin, bluesky/
+    );
+    await expect(client.disconnectAccount('youtube', '   ')).rejects.toThrow(
+      /providerAccountId must be a non-empty string/
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
 describe('generate and schedule videos client', () => {
@@ -412,6 +607,7 @@ describe('generate and schedule videos client', () => {
     expect(body.personaId).toBe('persona-123');
     expect(body.topics).toEqual(['Launch a SaaS in days', 'Pricing lessons']);
     expect(body.publishing).toEqual({
+      mode: 'scheduled',
       providers: ['youtube', 'bluesky'],
       accounts: { youtube: ['chan-1'], bluesky: ['did:plc:abc'] },
       schedule: {
@@ -492,6 +688,65 @@ describe('generate and schedule videos client', () => {
     expect(first).toMatch(uuid);
     expect(second).toMatch(uuid);
     expect(first).not.toBe(second);
+  });
+
+  it("sends mode 'scheduled' explicitly by default", async () => {
+    // The API defaults an absent mode to 'scheduled'; the client sends it
+    // explicitly so the payload always says what the caller meant.
+    await client.generatePersonaVideos(baseInput);
+    const publishing = lastRequestBody().publishing as Record<string, unknown>;
+    expect(publishing.mode).toBe('scheduled');
+  });
+
+  it("sends mode 'asap' with no schedule plan and a display timezone", async () => {
+    // In ASAP mode the videos publish the moment generation finishes: the
+    // request carries no schedule plan, only the display timezone.
+    const { startAt: _startAt, times: _times, ...rest } = baseInput;
+    await client.generatePersonaVideos({ ...rest, mode: 'asap' });
+    const publishing = lastRequestBody().publishing as Record<string, unknown>;
+    expect(publishing).toEqual({
+      mode: 'asap',
+      providers: ['youtube', 'bluesky'],
+      accounts: { youtube: ['chan-1'], bluesky: ['did:plc:abc'] },
+      timezone: 'Europe/Lisbon',
+    });
+    expect('schedule' in publishing).toBe(false);
+  });
+
+  it("fails fast when startAt or times ride along with mode 'asap'", async () => {
+    // A stray schedule plan in ASAP mode would 400 server-side ("must not
+    // be set"); fail fast with the same rule before any fetch goes out.
+    const withStartAt: unknown = await client
+      .generatePersonaVideos({ ...baseInput, mode: 'asap' })
+      .catch((e: unknown) => e);
+    expect(withStartAt).toBeInstanceOf(Error);
+    expect((withStartAt as Error).message).toMatch(/must not be set/i);
+
+    const { startAt: _startAt, ...withTimes } = baseInput;
+    const withTimesOnly: unknown = await client
+      .generatePersonaVideos({ ...withTimes, mode: 'asap' })
+      .catch((e: unknown) => e);
+    expect((withTimesOnly as Error).message).toMatch(/must not be set/i);
+
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("fails fast when startAt or times are missing in scheduled mode", async () => {
+    // Without a plan the server 400s ("publishing.schedule is required");
+    // name the missing fields before any fetch goes out.
+    const { startAt: _startAt, ...noStartAt } = baseInput;
+    const missingStartAt: unknown = await client
+      .generatePersonaVideos(noStartAt)
+      .catch((e: unknown) => e);
+    expect((missingStartAt as Error).message).toMatch(/startAt and times are required/i);
+
+    const { times: _times, ...noTimes } = baseInput;
+    const missingTimes: unknown = await client
+      .generatePersonaVideos(noTimes)
+      .catch((e: unknown) => e);
+    expect((missingTimes as Error).message).toMatch(/startAt and times are required/i);
+
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('throws a structured ApiError carrying code and field on API errors', async () => {
@@ -1255,5 +1510,181 @@ describe('PostEngineerClient persona image library', () => {
       `${baseUrl}/api/persona/images?id=img-1`,
       expect.objectContaining({ method: 'DELETE' })
     );
+  });
+});
+
+describe('publishVideoDirect', () => {
+  let client: PostEngineerClient;
+  const baseUrl = 'https://post-engineer.com';
+  const apiKey = 'test-token-123';
+  const tempDirs: string[] = [];
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    client = new PostEngineerClient({ apiKey });
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          success: true,
+          provider: 'youtube',
+          results: [
+            { accountId: 'chan-1', success: true, videoId: 'vid-1', videoUrl: 'https://youtu.be/vid-1' },
+          ],
+          successCount: 1,
+          logId: 'log-1',
+        }),
+    });
+  });
+
+  afterEach(async () => {
+    const { rm } = await import('node:fs/promises');
+    await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  });
+
+  async function writeTempVideo(name: string, size = 8): Promise<string> {
+    const { mkdtempSync } = await import('node:fs');
+    const { writeFile } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'pe-mcp-video-test-'));
+    tempDirs.push(dir);
+    const path = join(dir, name);
+    await writeFile(path, Buffer.alloc(size, 0x00));
+    return path;
+  }
+
+  const youtubeInput = (videoPath: string) => ({
+    provider: 'youtube' as const,
+    videoPath,
+    accountIds: ['chan-1'],
+    title: 'My video',
+    description: 'A description',
+    tags: ['tech', 'ai'],
+    privacyStatus: 'unlisted' as const,
+  });
+
+  it('posts the video as multipart with youtube field names', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await client.publishVideoDirect(youtubeInput(videoPath));
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/upload-content`,
+      expect.objectContaining({ method: 'POST' })
+    );
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.get('provider')).toBe('youtube');
+    expect(formData.get('title')).toBe('My video');
+    expect(formData.get('description')).toBe('A description');
+    expect(formData.get('tags')).toBe('tech,ai');
+    expect(formData.get('privacyStatus')).toBe('unlisted');
+    expect(formData.getAll('accountIds')).toEqual(['chan-1']);
+    const video = formData.get('video');
+    expect(video).toBeInstanceOf(Blob);
+    expect((video as Blob).size).toBe(8);
+  });
+
+  it('maps account ids to the instagram field names', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await client.publishVideoDirect({
+      provider: 'instagram',
+      videoPath,
+      accountIds: ['ig-1', 'ig-2'],
+      caption: 'hello world',
+    });
+
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.get('provider')).toBe('instagram');
+    expect(formData.get('caption')).toBe('hello world');
+    expect(formData.getAll('igAccountIds')).toEqual(['ig-1', 'ig-2']);
+    expect(formData.get('file')).toBeInstanceOf(Blob);
+  });
+
+  it('maps account ids to the bluesky did field name', async () => {
+    const videoPath = await writeTempVideo('clip.mov');
+    await client.publishVideoDirect({
+      provider: 'bluesky',
+      videoPath,
+      accountIds: ['did:plc:abc'],
+      caption: 'hello bluesky',
+    });
+
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.getAll('did')).toEqual(['did:plc:abc']);
+    expect(formData.get('video')).toBeInstanceOf(Blob);
+  });
+
+  it('maps account ids to the linkedin field name', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await client.publishVideoDirect({
+      provider: 'linkedin',
+      videoPath,
+      accountIds: ['urn:li:org:1'],
+      caption: 'hello linkedin',
+    });
+
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.getAll('linkedinAccountIds')).toEqual(['urn:li:org:1']);
+    expect(formData.get('video')).toBeInstanceOf(Blob);
+  });
+
+  it('fails fast on an unknown provider without fetching', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await expect(
+      client.publishVideoDirect({
+        provider: 'tiktok' as 'youtube',
+        videoPath,
+        accountIds: ['acc-1'],
+      })
+    ).rejects.toThrow(/provider/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('fails fast when the video file does not exist', async () => {
+    await expect(client.publishVideoDirect(youtubeInput('/tmp/does-not-exist-pe-mcp.mp4'))).rejects.toThrow(
+      /Failed to read video/
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('fails fast when the video exceeds the 2GB server limit', async () => {
+    const { assertVideoSize } = await import('../client.js');
+    expect(() => assertVideoSize(2 * 1024 * 1024 * 1024 + 1, '/tmp/clip.mp4')).toThrow(/2GB/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('fails fast when the extension is not a supported video type', async () => {
+    const videoPath = await writeTempVideo('clip.avi');
+    await expect(client.publishVideoDirect(youtubeInput(videoPath))).rejects.toThrow(/Unsupported video extension/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('fails fast for youtube when title, description, tags, or privacyStatus are missing', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    const base = youtubeInput(videoPath);
+    for (const field of ['title', 'description', 'tags', 'privacyStatus'] as const) {
+      const input = { ...base, [field]: undefined };
+      await expect(client.publishVideoDirect(input)).rejects.toThrow(new RegExp(`${field} is required for youtube`));
+    }
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('fails fast for instagram, bluesky, and linkedin when caption is missing', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    for (const provider of ['instagram', 'bluesky', 'linkedin'] as const) {
+      await expect(
+        client.publishVideoDirect({ provider, videoPath, accountIds: ['acc-1'] })
+      ).rejects.toThrow(/caption is required/);
+    }
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('fails fast when no account ids are given', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await expect(
+      client.publishVideoDirect({ ...youtubeInput(videoPath), accountIds: [] })
+    ).rejects.toThrow(/At least one account ID/);
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 });

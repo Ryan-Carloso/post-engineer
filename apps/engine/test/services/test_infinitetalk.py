@@ -125,6 +125,74 @@ class TestInfiniteTalkClient(unittest.TestCase):
                             str(Path(temp_dir) / "intro.mp4"),
                         )
 
+    def test_generate_intro_creates_missing_output_parent_dir(self):
+        # The task storage dir can vanish between utils.task_dir() creating
+        # it and the Modal job finishing its (multi-minute) poll, e.g. a
+        # cleanup between stage retries. The download must recreate it
+        # instead of crashing with FileNotFoundError.
+        submit = requests.Response()
+        submit.status_code = 200
+        submit._content = b'{"job_id":"job-1"}'
+        status = requests.Response()
+        status.status_code = 200
+        status._content = b'{"status":"done"}'
+        download = requests.Response()
+        download.status_code = 200
+        download._content = b"valid-mp4"
+        responses = [submit, status, download]
+
+        def request(*args: object, **kwargs: object) -> requests.Response:
+            return responses.pop(0)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            image_path = Path(temp_dir) / "image.png"
+            audio_path = Path(temp_dir) / "audio.mp3"
+            output_path = Path(temp_dir) / "vanished-task-dir" / "intro.mp4"
+            image_path.write_bytes(b"image")
+            audio_path.write_bytes(b"audio")
+            with patch.object(infinitetalk, "trim_audio") as trim:
+                def fake_trim(
+                    source: str,
+                    target: str,
+                    duration_seconds: float,
+                    padding_seconds: float,
+                ) -> None:
+                    Path(target).write_bytes(b"audio")
+
+                trim.side_effect = fake_trim
+                with patch.object(
+                    infinitetalk, "audio_duration_seconds", return_value=5.0
+                ):
+                    # Since #146 the endpoint URLs and HTTP secret come from
+                    # env vars, not config.toml — only the poll/timeout
+                    # tunables still come from config.
+                    with patch.dict(
+                        os.environ,
+                        {
+                            "INFINITETALK_SUBMIT_URL": "https://modal.test/submit",
+                            "INFINITETALK_STATUS_URL": "https://modal.test/status",
+                            "INFINITETALK_DOWNLOAD_URL": "https://modal.test/download",
+                            "INFINITETALK_HTTP_SECRET": "test-secret",
+                        },
+                    ):
+                        with patch.object(
+                            infinitetalk.config,
+                            "infinitetalk",
+                            {
+                                "poll_interval_seconds": 0,
+                                "timeout_seconds": 1,
+                                "intro_duration_seconds": 5,
+                            },
+                        ):
+                            infinitetalk.generate_intro(
+                                str(image_path),
+                                str(audio_path),
+                                LipSyncQuality.very_good,
+                                str(output_path),
+                                request=request,
+                            )
+            self.assertEqual(output_path.read_bytes(), b"valid-mp4")
+
 
 class TestGenerateIntroTracking(unittest.TestCase):
     def _run_generate_intro(self, responses):
@@ -334,6 +402,50 @@ class TestGenerateIntroCost(unittest.TestCase):
     def test_returns_none_for_non_finite_cost(self):
         _, cost_usd = self._run_with_status(b'{"status":"done","cost_usd":Infinity}')
         self.assertIsNone(cost_usd)
+
+
+class TestTrimAudio(unittest.TestCase):
+    def _capture_ffmpeg_args(self, **kwargs):
+        captured: list[list[str]] = []
+
+        class FakeCompleted:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        def fake_run(argv, **_kwargs):
+            captured.append(list(argv))
+            return FakeCompleted()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            audio_path = str(Path(temp_dir) / "audio.mp3")
+            output_path = str(Path(temp_dir) / "trimmed.mp3")
+            Path(audio_path).write_bytes(b"audio")
+            with (
+                patch.object(infinitetalk.subprocess, "run", side_effect=fake_run),
+                patch("os.path.isfile", return_value=True),
+            ):
+                infinitetalk.trim_audio(audio_path, output_path, **kwargs)
+        return captured[0]
+
+    def test_trim_audio_passes_exactly_one_duration_flag(self):
+        # Regression: a second "-t" silently overrides the first, so the
+        # output length becomes duration + padding instead of the intended
+        # duration (OpenCode review on a24e322).
+        args = self._capture_ffmpeg_args(duration_seconds=5, padding_seconds=0.75)
+        self.assertEqual(args.count("-t"), 1)
+        flag_index = args.index("-t")
+        self.assertEqual(args[flag_index + 1], str(5 + 0.75))
+
+    def test_trim_audio_seeks_before_input_for_start_offset(self):
+        args = self._capture_ffmpeg_args(
+            duration_seconds=2, padding_seconds=0.5, start_seconds=1.5
+        )
+        self.assertLess(args.index("-ss"), args.index("-i"))
+        self.assertEqual(args[args.index("-ss") + 1], "1.5")
+        self.assertEqual(args.count("-t"), 1)
+        flag_index = args.index("-t")
+        self.assertEqual(args[flag_index + 1], str(2 + 0.5))
 
 
 if __name__ == "__main__":

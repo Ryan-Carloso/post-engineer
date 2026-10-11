@@ -1,0 +1,74 @@
+name: file-size
+
+# Ratchet on source-file size: fails when a PR creates a file above the
+# line cap or grows an existing file past it.
+#
+# Diff-based: only files CHANGED in the PR diff are linted. Files already
+# above the cap are grandfathered and may only shrink — any growth past
+# the cap fails (true ratchet, no warning-only loophole).
+#
+# Scope: *.py / *.ts / *.tsx. Exempt: test files (*.test.*, *_test.*,
+# **/tests/**, **/test/**), supabase/migrations/**, lockfiles, *.md.
+#
+# The real cost of large files is slow mutation testing, not the line
+# count itself; this lint is the cheap static proxy of that incentive.
+# Findings become ::error annotations and fail the job.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      base:
+        description: 'Base ref for the diff'
+        required: false
+        default: 'origin/main'
+      head:
+        description: 'Head ref for the diff'
+        required: false
+        default: 'HEAD'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 pinned 2026-09-25
+        with:
+          node-version: '22'
+
+      - name: Unit tests (file-size ratchet)
+        run: node --test .github/scripts/file-size/*.test.mjs
+
+      - name: Run file-size ratchet
+        id: lint
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.sha }}"
+          else
+            base="${{ inputs.base }}"
+            head="${{ inputs.head }}"
+          fi
+          set +e
+          node .github/scripts/file-size/check.mjs --base "$base" --head "$head"
+          code=$?
+          set -e
+          echo "lint_exit=$code" >> "$GITHUB_OUTPUT"
+          echo "file-size lint exited $code (reported as a job failure below)"
+
+      - name: Fail on file-size violations
+        if: always()
+        run: |
+          if [[ "${{ steps.lint.outputs.lint_exit }}" != "0" ]]; then
+            echo "::error::File-size ratchet found violations (see annotations)."
+            exit 1
+          fi
+          echo "File-size ratchet clean."

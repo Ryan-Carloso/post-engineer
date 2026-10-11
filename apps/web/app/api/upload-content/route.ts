@@ -23,21 +23,28 @@ import { withApiErrorReporting } from '@/lib/api-error-reporting';
 //   bluesky:    video, caption, did (repeatable)
 //   linkedin:   video, caption, linkedinAccountIds (repeatable; member id or org URN)
 //   engine:     userId (MONEYPRINT_API_SECRET only — internal publish-back)
-// Auth = Supabase session (UI) OR Authorization: Bearer <MONEYPRINT_API_SECRET>
-// (engine). Per-user rate limit.
+// Auth = Supabase session (UI), personal API key (pe_live_...), or
+// Authorization: Bearer <MONEYPRINT_API_SECRET> (engine). Per-user rate limit.
 //---------------
 
 //---------------
 // resolveUploadUserId — identity source for the upload: Supabase session
-// (logged-in UI user) or the shared MONEYPRINT_API_SECRET (internal engine
-// call, which names the task owner in the form — i.e. the secret may publish
-// on behalf of any user). Any other bearer is rejected.
+// (logged-in UI user), a personal API key (pe_live_...), or the shared
+// MONEYPRINT_API_SECRET (internal engine call, which names the task owner
+// in the form — i.e. the secret may publish on behalf of any user). Any
+// other bearer is rejected.
+// Passing the request to requireSupabaseSession enables its API-key
+// (Bearer / x-api-key) and OAuth branches — the same pattern every other
+// API-key-capable route uses. The engine shared secret is not
+// pe_live_-prefixed, so its bearer falls through those branches to the
+// secretsMatch check below unchanged. API-key callers publish as the key
+// owner: a form userId is only honored on the engine-secret path.
 //---------------
 async function resolveUploadUserId(
   request: NextRequest,
   formData: FormData,
 ): Promise<{ userId: string | null; error: NextResponse | null }> {
-  const session = await requireSupabaseSession();
+  const session = await requireSupabaseSession(request);
   if (session.auth) return { userId: session.auth.userId, error: null };
 
   const apiSecret = process.env.MONEYPRINT_API_SECRET;
@@ -81,15 +88,13 @@ async function postHandler(request: NextRequest) {
       );
     }
 
-    // Rate limit por usuário — usa o perfil por operação conforme o provider.
-    // O loop multi-conta conta como UMA requisição (o teto por conta é a quota
-    // da plataforma destino, não o rate limit local).
+    // Per-user rate limit — uses the per-operation profile for the provider.
+    // The multi-account loop counts as ONE request (the per-account ceiling
+    // is the destination platform's quota, not the local rate limit).
+    // Only YouTube has a dedicated profile; every other provider shares the
+    // instagram-post profile.
     const rateProfile =
-      provider === 'youtube'
-        ? RATE_LIMITS.youtubeUpload
-        : provider === 'bluesky'
-          ? RATE_LIMITS.instagramPost
-          : RATE_LIMITS.instagramPost;
+      provider === 'youtube' ? RATE_LIMITS.youtubeUpload : RATE_LIMITS.instagramPost;
     const limited = await applyRateLimit(request, rateProfile, userId);
     if (limited) return limited;
 

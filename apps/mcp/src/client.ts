@@ -1,8 +1,13 @@
-import { getErrorMessage, ImageTooLargeError, ApiError } from './errors.js';
-import { MAX_LIBRARY_IMAGE_BYTES, MAX_LIBRARY_IMAGE_MB } from './limits.js';
+import { getErrorMessage, ImageTooLargeError, VideoTooLargeError, ApiError } from './errors.js';
+import {
+  MAX_LIBRARY_IMAGE_BYTES,
+  MAX_LIBRARY_IMAGE_MB,
+  MAX_UPLOAD_VIDEO_BYTES,
+  MAX_UPLOAD_VIDEO_GB,
+} from './limits.js';
 
 // Re-exported so existing import sites (`../client.js`) keep working.
-export { MAX_LIBRARY_IMAGE_BYTES, MAX_LIBRARY_IMAGE_MB };
+export { MAX_LIBRARY_IMAGE_BYTES, MAX_LIBRARY_IMAGE_MB, MAX_UPLOAD_VIDEO_BYTES, MAX_UPLOAD_VIDEO_GB };
 import { readFile, stat } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -56,11 +61,18 @@ export interface GeneratePersonaVideosInput {
   instagramAccountIds?: string[];
   linkedinAccountIds?: string[];
   blueskyAccountIds?: string[];
-  /** ISO datetime when the first publish slot may start; naive values are wall-clock in timezone. */
-  startAt: string;
-  /** Daily publish times (HH:MM, 24h). */
-  times: string[];
-  /** IANA timezone for a naive startAt and the times. Defaults to UTC. */
+  /**
+   * Publish mode. 'scheduled' (default) distributes publish slots across
+   * startAt + times; 'asap' publishes each video the moment generation
+   * finishes, with no scheduled time. In 'asap' mode startAt/times must not
+   * be set.
+   */
+  mode?: 'scheduled' | 'asap';
+  /** ISO datetime when the first publish slot may start; naive values are wall-clock in timezone. Required unless mode is 'asap'. */
+  startAt?: string;
+  /** Daily publish times (HH:MM, 24h). Required unless mode is 'asap'. */
+  times?: string[];
+  /** IANA timezone for a naive startAt and the times (display-only in 'asap' mode). Defaults to UTC. */
   timezone?: string;
   options?: {
     faceless?: boolean;
@@ -175,6 +187,61 @@ async function imageFormFile(path: string): Promise<Blob> {
   return new Blob([buffer], { type: mimeType });
 }
 
+/**
+ * Shared size guard for direct-publish videos: the server rejects anything
+ * over 2GB, so fail fast locally before uploading gigabytes. Throws the
+ * typed VideoTooLargeError carrying the full path.
+ */
+export function assertVideoSize(sizeBytes: number, path: string): void {
+  if (sizeBytes > MAX_UPLOAD_VIDEO_BYTES) {
+    throw new VideoTooLargeError(path, sizeBytes);
+  }
+}
+
+function mimeTypeForVideoPath(path: string): string {
+  const extension = extname(path).toLowerCase();
+  if (extension === '.mp4') return 'video/mp4';
+  if (extension === '.mov') return 'video/quicktime';
+  throw new Error(
+    `Unsupported video extension "${extension || '(none)'}": use MP4 or MOV.`,
+  );
+}
+
+async function videoFormFile(path: string): Promise<Blob> {
+  // Validate before uploading: the API rejects the file anyway, so an
+  // oversized or unsupported video fails fast locally instead of wasting an
+  // upload. A stat() pre-check bounds memory before readFile — a multi-GB
+  // file would otherwise load fully into this stdio process. The TOCTOU
+  // window is benign: the authoritative size check still runs on the buffer.
+  // Any failure surfaces with the full path for a consistent, actionable
+  // message. The server re-validates content via magic bytes, so a
+  // mislabeled file still fails server-side.
+  const mimeType = mimeTypeForVideoPath(path);
+  try {
+    const fileStat = await stat(path);
+    assertVideoSize(fileStat.size, path);
+  } catch (error) {
+    // Discriminate by type, not by message text: the typed size error
+    // passes through untouched, while stat failures become the actionable
+    // "Failed to read video" wrapper.
+    if (error instanceof VideoTooLargeError) throw error;
+    throw new Error(`Failed to read video "${path}": ${getErrorMessage(error)}`);
+  }
+  let buffer: Buffer;
+  try {
+    buffer = await readFile(path);
+  } catch (error) {
+    throw new Error(`Failed to read video "${path}": ${getErrorMessage(error)}`);
+  }
+  if (buffer.length === 0) {
+    throw new Error(`Video "${path}" is empty.`);
+  }
+  // The post-read check reuses the shared guard: same limit, same message,
+  // full path — and it covers the (benign) TOCTOU window after stat.
+  assertVideoSize(buffer.length, path);
+  return new Blob([buffer], { type: mimeType });
+}
+
 // Normalize library metadata: trim; empty/whitespace-only values normalize
 // to ''. Both upload paths (the create-persona imageTags/imageDescriptions
 // arrays and the add-persona-image tag/description fields) send '' for empty
@@ -237,6 +304,82 @@ function resolveBaseUrl(override: string | undefined): string {
   // identical: origin drops userinfo, trailing slashes are stripped so
   // `${baseUrl}${path}` never yields `//api/...`.
   return url.origin + url.pathname.replace(/\/+$/, '');
+}
+
+/** Input for publishing a user-provided video directly, without generation. */
+export interface PublishVideoDirectInput {
+  provider: 'youtube' | 'instagram' | 'linkedin' | 'bluesky';
+  /** Local path to the video file (.mp4 or .mov, max 2GB). */
+  videoPath: string;
+  /** Target accounts (channel IDs / IG user IDs / DIDs / LinkedIn member IDs or org URNs). */
+  accountIds: string[];
+  /** YouTube only: required. */
+  title?: string;
+  /** YouTube only: required. */
+  description?: string;
+  /** YouTube only: required, at least one tag. */
+  tags?: string[];
+  /** YouTube only: required. */
+  privacyStatus?: 'public' | 'private' | 'unlisted';
+  /** Instagram/Bluesky/LinkedIn: required. */
+  caption?: string;
+}
+
+/** One per-account outcome from a direct-publish upload. */
+export interface DirectPublishAccountResult {
+  accountId: string;
+  success: boolean;
+  videoId?: string;
+  videoUrl?: string;
+  postId?: string;
+  error?: string;
+}
+
+/** Narrowed POST /api/upload-content response. */
+export interface DirectPublishResult {
+  success: boolean;
+  provider: string;
+  results: DirectPublishAccountResult[];
+  successCount: number;
+  logId: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function narrowDirectPublishAccountResult(value: unknown): DirectPublishAccountResult {
+  if (!isRecord(value) || typeof value.accountId !== 'string' || typeof value.success !== 'boolean') {
+    throw new Error('Malformed direct-publish account result from the API.');
+  }
+  const result: DirectPublishAccountResult = {
+    accountId: value.accountId,
+    success: value.success,
+  };
+  if (typeof value.videoId === 'string') result.videoId = value.videoId;
+  if (typeof value.videoUrl === 'string') result.videoUrl = value.videoUrl;
+  if (typeof value.postId === 'string') result.postId = value.postId;
+  if (typeof value.error === 'string') result.error = value.error;
+  return result;
+}
+
+// A 200 with a malformed body is an error, never a silent success: the agent
+// must not report "published" on a body it can't read.
+function narrowDirectPublishResult(value: unknown): DirectPublishResult {
+  if (!isRecord(value)) {
+    throw new Error('Malformed direct-publish response from the API.');
+  }
+  const resultsRaw = value.results;
+  if (!Array.isArray(resultsRaw)) {
+    throw new Error('Malformed direct-publish response from the API: results is not an array.');
+  }
+  return {
+    success: value.success === true,
+    provider: typeof value.provider === 'string' ? value.provider : 'unknown',
+    results: resultsRaw.map(narrowDirectPublishAccountResult),
+    successCount: typeof value.successCount === 'number' ? value.successCount : 0,
+    logId: typeof value.logId === 'string' ? value.logId : '',
+  };
 }
 
 export class PostEngineerClient {
@@ -482,11 +625,132 @@ export class PostEngineerClient {
     );
   }
 
+  async getSlot(slotId: string): Promise<unknown> {
+    return this.request(
+      `/api/schedule/slots/${encodeURIComponent(slotId)}`,
+      { method: 'GET', headers: this.getHeaders() },
+      'get slot'
+    );
+  }
+
+  async updateSlotTopic(slotId: string, topic: string): Promise<unknown> {
+    // The route 400s on an empty topic — fail fast with the field named
+    // before any fetch goes out. The trimmed value is sent: the server
+    // stores the trimmed topic, so the payload carries exactly what lands.
+    const trimmed = topic.trim();
+    if (trimmed.length === 0) {
+      throw new Error('topic must be a non-empty string.');
+    }
+    return this.request(
+      `/api/schedule/slots/${encodeURIComponent(slotId)}`,
+      {
+        method: 'PATCH',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ topic: trimmed }),
+      },
+      'update slot topic'
+    );
+  }
+
+  async deleteSlot(slotId: string): Promise<unknown> {
+    // Only pending (awaiting) or failed slots are deletable; the server
+    // 409s anything mid-flight or published, and the schedule's last slot.
+    return this.request(
+      `/api/schedule/slots/${encodeURIComponent(slotId)}`,
+      { method: 'DELETE', headers: this.getHeaders() },
+      'delete slot'
+    );
+  }
+
   async getTokenBalance(): Promise<unknown> {
     return this.request(
       '/api/billing/tokens',
       { method: 'GET', headers: this.getHeaders() },
       'get token balance'
+    );
+  }
+
+  async listVideoGenerations(limit?: number): Promise<unknown> {
+    // The server silently falls back to its default on an invalid limit —
+    // fail fast with the field named instead of sending a value the caller
+    // never meant.
+    if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 200)) {
+      throw new Error('limit must be an integer between 1 and 200.');
+    }
+    const query = limit !== undefined ? `?limit=${encodeURIComponent(String(limit))}` : '';
+    return this.request(
+      `/api/persona/video-generations${query}`,
+      { method: 'GET', headers: this.getHeaders() },
+      'list video generations'
+    );
+  }
+
+  async getVideoGeneration(generationId: string): Promise<unknown> {
+    return this.request(
+      `/api/persona/video-generations/${encodeURIComponent(generationId)}`,
+      { method: 'GET', headers: this.getHeaders() },
+      'get video generation'
+    );
+  }
+
+  async listTokenTransactions(limit?: number, offset?: number): Promise<unknown> {
+    // The server silently falls back to its defaults on invalid paging —
+    // fail fast with the field named instead of sending values the caller
+    // never meant.
+    if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 100)) {
+      throw new Error('limit must be an integer between 1 and 100.');
+    }
+    if (offset !== undefined && (!Number.isInteger(offset) || offset < 0)) {
+      throw new Error('offset must be a non-negative integer.');
+    }
+    const params = new URLSearchParams();
+    if (limit !== undefined) params.set('limit', String(limit));
+    if (offset !== undefined) params.set('offset', String(offset));
+    const query = params.size > 0 ? `?${params.toString()}` : '';
+    return this.request(
+      `/api/billing/transactions${query}`,
+      { method: 'GET', headers: this.getHeaders() },
+      'list token transactions'
+    );
+  }
+
+  async getPersonaDeletePreview(personaId: string): Promise<unknown> {
+    return this.request(
+      `/api/persona/delete-preview?personaId=${encodeURIComponent(personaId)}`,
+      { method: 'GET', headers: this.getHeaders() },
+      'get persona delete preview'
+    );
+  }
+
+  async deletePersona(personaId: string): Promise<unknown> {
+    // Destructive and irreversible: the persona, all its schedules, slots,
+    // generated videos, and image library are removed. No token refunds —
+    // prepaid tokens for pending slots are forfeited.
+    return this.request(
+      `/api/persona?personaId=${encodeURIComponent(personaId)}`,
+      { method: 'DELETE', headers: this.getHeaders() },
+      'delete persona'
+    );
+  }
+
+  async disconnectAccount(provider: string, providerAccountId: string): Promise<unknown> {
+    // The route 400s INVALID_PROVIDER / INVALID_PARAMS — fail fast with the
+    // field named before any fetch goes out.
+    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky'];
+    if (!validProviders.includes(provider)) {
+      throw new Error(`provider must be one of: ${validProviders.join(', ')}.`);
+    }
+    if (providerAccountId.trim().length === 0) {
+      throw new Error('providerAccountId must be a non-empty string.');
+    }
+    const params = new URLSearchParams({
+      provider,
+      providerAccountId: providerAccountId.trim(),
+    });
+    return this.request(
+      `/api/account?${params.toString()}`,
+      { method: 'DELETE', headers: this.getHeaders() },
+      'disconnect account'
     );
   }
 
@@ -499,6 +763,17 @@ export class PostEngineerClient {
     if (input.instagramAccountIds !== undefined) accounts.instagram = input.instagramAccountIds;
     if (input.linkedinAccountIds !== undefined) accounts.linkedin = input.linkedinAccountIds;
     if (input.blueskyAccountIds !== undefined) accounts.bluesky = input.blueskyAccountIds;
+    // A stray schedule plan in ASAP mode is a caller bug: the server 400s
+    // ("publishing.schedule must not be set"), so fail fast with the same
+    // rule before any fetch goes out. Conversely, scheduled mode without
+    // a plan would 400 ("publishing.schedule is required").
+    const mode = input.mode ?? 'scheduled';
+    if (mode === 'asap' && (input.startAt !== undefined || input.times !== undefined)) {
+      throw new Error("startAt and times must not be set when mode is 'asap'.");
+    }
+    if (mode === 'scheduled' && (input.startAt === undefined || input.times === undefined)) {
+      throw new Error("startAt and times are required when mode is 'scheduled'.");
+    }
     return this.request(
       '/api/videos/generate-and-schedule',
       {
@@ -511,13 +786,20 @@ export class PostEngineerClient {
           ...(input.personaId !== undefined ? { personaId: input.personaId } : {}),
           topics: input.topics,
           publishing: {
+            mode,
             providers: input.providers,
             accounts,
-            schedule: {
-              startAt: input.startAt,
-              times: input.times,
-              timezone: input.timezone ?? 'UTC',
-            },
+            // ASAP mode carries no schedule plan: the timezone is kept for
+            // display, matching the API contract.
+            ...(mode === 'asap'
+              ? { timezone: input.timezone ?? 'UTC' }
+              : {
+                  schedule: {
+                    startAt: input.startAt,
+                    times: input.times,
+                    timezone: input.timezone ?? 'UTC',
+                  },
+                }),
           },
           options: input.options ?? undefined,
           // A retry without a stable key would generate a second schedule:
@@ -628,5 +910,90 @@ export class PostEngineerClient {
       { method: 'DELETE', headers: this.getHeaders() },
       'delete persona image'
     );
+  }
+
+  async publishVideoDirect(input: PublishVideoDirectInput): Promise<DirectPublishResult> {
+    // Direct publish of a user-provided video — no generation, no schedule.
+    // Mirrors the server-side 400s: provider-specific required fields and
+    // per-provider account-id field names fail fast here, before any fetch.
+    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky'];
+    if (!validProviders.includes(input.provider)) {
+      throw new Error(`provider must be one of: ${validProviders.join(', ')}.`);
+    }
+    if (input.accountIds.length === 0) {
+      throw new Error('At least one account ID is required.');
+    }
+    // Provider-specific required fields, validated before any fetch so the
+    // agent gets a named failure instead of a server 400 after uploading.
+    let title = '';
+    let description = '';
+    let tags: string[] = [];
+    let privacyStatus = '';
+    let caption = '';
+    if (input.provider === 'youtube') {
+      if (input.title === undefined || input.title.trim().length === 0) {
+        throw new Error('title is required for youtube.');
+      }
+      if (input.description === undefined || input.description.trim().length === 0) {
+        throw new Error('description is required for youtube.');
+      }
+      if (input.tags === undefined || input.tags.length === 0) {
+        throw new Error('tags is required for youtube.');
+      }
+      const validPrivacy = ['public', 'private', 'unlisted'];
+      if (input.privacyStatus === undefined || !validPrivacy.includes(input.privacyStatus)) {
+        throw new Error('privacyStatus is required for youtube.');
+      }
+      title = input.title.trim();
+      description = input.description.trim();
+      tags = input.tags;
+      privacyStatus = input.privacyStatus;
+    } else {
+      if (input.caption === undefined || input.caption.trim().length === 0) {
+        throw new Error(`caption is required for ${input.provider}.`);
+      }
+      caption = input.caption.trim();
+    }
+
+    const formData = new FormData();
+    formData.append('provider', input.provider);
+    const videoBlob = await videoFormFile(input.videoPath);
+    const filename = basename(input.videoPath);
+    if (input.provider === 'youtube') {
+      formData.append('video', videoBlob, filename);
+      formData.append('title', title);
+      formData.append('description', description);
+      formData.append('tags', tags.join(','));
+      formData.append('privacyStatus', privacyStatus);
+      for (const accountId of input.accountIds) {
+        formData.append('accountIds', accountId);
+      }
+    } else if (input.provider === 'instagram') {
+      formData.append('file', videoBlob, filename);
+      formData.append('caption', caption);
+      for (const accountId of input.accountIds) {
+        formData.append('igAccountIds', accountId);
+      }
+    } else if (input.provider === 'bluesky') {
+      formData.append('video', videoBlob, filename);
+      formData.append('caption', caption);
+      for (const accountId of input.accountIds) {
+        formData.append('did', accountId);
+      }
+    } else {
+      formData.append('video', videoBlob, filename);
+      formData.append('caption', caption);
+      for (const accountId of input.accountIds) {
+        formData.append('linkedinAccountIds', accountId);
+      }
+    }
+
+    const result: unknown = await this.request(
+      '/api/upload-content',
+      { method: 'POST', headers: this.getHeaders(), body: formData },
+      'publish video direct',
+      UPLOAD_TIMEOUT_MS
+    );
+    return narrowDirectPublishResult(result);
   }
 }
