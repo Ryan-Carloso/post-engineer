@@ -161,6 +161,10 @@ export async function signInWithGitHubAction() {
 - **All code comments are in English. Always.** Never write comments in Portuguese (or any other language) — in code, tests, migrations, or docs-as-comments.
 - When you touch a file, convert any existing non-English comments to English as part of the change.
 
+## Public GitHub content
+
+- **Everything posted publicly on GitHub is in English. Always.** PR titles and bodies, issue titles and bodies, review comments, and any other public text — never Portuguese (2026-10-10, user's call; PR #158's body was fully rewritten from PT to EN). When opening or editing a PR/issue, write and review the body in English before submitting.
+
 ## Next.js version note
 
 This repo pins a specific Next.js version whose APIs and conventions may differ
