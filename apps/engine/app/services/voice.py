@@ -24,6 +24,7 @@ from moviepy.audio.io.AudioFileClip import AudioFileClip
 from openai import OpenAI
 
 from app.config import config
+from app.services.chatterbox_fallback import chatterbox_tts_with_fallback
 from app.utils import utils
 
 _DEFAULT_EDGE_TTS_TIMEOUT_SECONDS = 30.0
@@ -500,9 +501,8 @@ def tts(
             chatterbox_voice = parts[1].strip()
             if chatterbox_voice.endswith(("-Female", "-Male")):
                 chatterbox_voice = chatterbox_voice.rsplit("-", 1)[0]
-            return chatterbox_tts(
-                text, chatterbox_voice, voice_file, voice_rate, voice_volume
-            )
+            return chatterbox_tts_with_fallback(
+                text, chatterbox_voice, voice_file, voice_rate, voice_volume)
         else:
             logger.error(f"Invalid chatterbox voice name format: {voice_name}")
             return None

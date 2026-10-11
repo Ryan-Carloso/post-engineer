@@ -55,6 +55,29 @@
   secret files, and never print secret values in diffs, logs, or comments.
 - New contributors create them from the `*.example` files (see README).
 
+# Infisical (secrets source for `pnpm dev:engine`)
+
+- `pnpm dev:engine` runs `infisical run -- uv run python main.py`: the engine
+  process is started with the secrets injected by the Infisical CLI from the
+  project `post-engineer`, environment `dev`. **It does not start without the
+  Infisical CLI installed, logged in (`infisical login`, or a Machine Identity
+  via `infisical login --method=universal --client-id=... --client-secret=...`
+  for agents/CI), and bound to the project (`infisical init` inside
+  `apps/engine/`).**
+- Environment binding is per-machine and lives in `apps/engine/.infisical.json`
+  (gitignored, never commit it — local dev uses `dev`, the VPS uses `prod`).
+- Injected env vars win over `apps/engine/.env` (`load_dotenv()` does not
+  override existing vars). Do not "fix" config mismatches by editing `.env` —
+  edit the secrets in the Infisical dashboard (or `infisical secrets set ...
+  --env dev`).
+- Never write secret values into the repo, docs, tests, or commit messages —
+  Infisical is the storage; `*.example` files document variable names only.
+- Modal CLI auth comes from the injected `MODAL_TOKEN_ID`/`MODAL_TOKEN_SECRET`:
+  any `modal run|deploy` must run through `infisical run --`, never
+  `modal token set` (which persists the token to `~/.modal.toml`).
+- `pnpm test` / `lint` / `typecheck` / `build` do NOT require Infisical — only
+  starting the engine does.
+
 # Supabase Authentication Rules
 
 ## Social Account Data

@@ -75,3 +75,7 @@ apps/web/supabase/.temp/
 
 # Nx
 .nx/
+
+# Infisical CLI — per-machine project/environment binding (dev vs prod differ).
+# Secrets NEVER live here; run `infisical init` inside apps/engine to create it.
+.infisical.json

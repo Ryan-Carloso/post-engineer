@@ -14,14 +14,14 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/engine",
-        "command": "uv run python main.py"
+        "command": "infisical run -- uv run python main.py"
       }
     },
     "serve": {
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/engine",
-        "command": "uv run python main.py"
+        "command": "infisical run -- uv run python main.py"
       }
     },
     "lint": {
