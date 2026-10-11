@@ -320,8 +320,11 @@ def _build_fastapi_app():
         except KeyError as error:
             # Unknown voice: 404, message is safe (voice names are not secret).
             return JSONResponse(status_code=404, content={"error": str(error.args[0])})
-        except FileNotFoundError as error:
-            return JSONResponse(status_code=500, content={"error": str(error)})
+        except FileNotFoundError:
+            import loguru
+
+            loguru.logger.exception("chatterbox generation failed (file not found)")
+            return JSONResponse(status_code=500, content={"error": "generation failed"})
         except Exception:
             # Log the class only — never the input text or auth material.
             import loguru
