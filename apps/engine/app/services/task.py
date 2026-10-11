@@ -1984,3 +1984,5 @@ def download_persona_voice(task_id: str, voice_audio_url: str) -> str | None:
     except Exception as exc:
         logger.error(f"failed to download persona voice audio, task_id: {task_id}, error: {exc}")
         return None
+# ratchet probe: grandfathered growth line 1 - do not merge
+# ratchet probe: grandfathered growth line 2 - do not merge
