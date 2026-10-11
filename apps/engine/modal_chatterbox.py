@@ -31,6 +31,12 @@ One-time setup:
     uv run modal run modal_chatterbox.py::upload_reference \
         --voice ryan --path /path/to/reference.wav
 
+Build a new voice from an approved recording (scripts/build_voice_reference.py
+drives upload_reference + generate_to_file + put_voices_config for you):
+
+    uv run modal run modal_chatterbox.py::generate_to_file \
+        --voice ryan --text "..." --out sample.wav
+
 Validate, then deploy:
 
     uv run modal run modal_chatterbox.py::validate --voice ryan
@@ -141,6 +147,10 @@ def _load_voices_config() -> dict[str, dict[str, str]]:
     """Parse voices.toml into {name: {reference, language_id}}."""
     import tomllib
 
+    # A warm container mounts a possibly stale snapshot: freshly uploaded
+    # voices (setup entrypoints) are only visible after an explicit reload.
+    VOICES_VOLUME.reload()
+
     with open(VOICES_CONFIG_PATH, "rb") as f:
         raw = tomllib.load(f)
     voices: dict[str, dict[str, str]] = {}
@@ -162,11 +172,13 @@ def _resolve_reference_path(reference: str) -> Path:
 
     The reference comes from our own voices.toml (not the client), but a
     misconfigured absolute path or `../` traversal would silently read
-    arbitrary files — fail loudly instead.
+    arbitrary files — fail loudly instead. References may live in
+    subdirectories (e.g. "ryan/reference.wav"), so containment is checked
+    against the whole subtree, not just the direct parent.
     """
     voices_root = Path(VOICES_DIR).resolve()
     resolved = (voices_root / reference).resolve()
-    if resolved.parent != voices_root:
+    if voices_root not in resolved.parents:
         raise ValueError(f"reference path escapes the voices volume: {reference!r}")
     return resolved
 
@@ -415,6 +427,52 @@ def upload_reference(voice: str, path: str) -> None:
 def put_voices_config(path: str) -> None:
     """Upload voices.toml: modal run modal_chatterbox.py::put_voices_config --path voices.toml"""
     print(write_voices_config.remote(Path(path).read_bytes()))
+
+
+@app.function(
+    image=CHATTERBOX_IMAGE,
+    gpu=GPU,
+    volumes={
+        "/models": MODELS_VOLUME,
+        VOICES_DIR: VOICES_VOLUME,
+    },
+    secrets=[modal.Secret.from_name("chatterbox-http")],
+    timeout=MODEL_TIMEOUT,
+)
+def generate_bytes(voice: str, text: str) -> bytes:
+    """Generate one clip remotely and return the raw audio bytes."""
+    audio_bytes, _media_type = _generate_audio(text, voice, "wav")
+    return audio_bytes
+
+
+@app.local_entrypoint()
+def generate_to_file(voice: str, text: str, out: str) -> None:
+    """Generate audio and save it locally (used by the voice build script).
+
+    modal run modal_chatterbox.py::generate_to_file --voice ryan --text "..." --out out.wav
+    """
+    audio_bytes = generate_bytes.remote(voice, text)
+    Path(out).write_bytes(audio_bytes)
+    print(f"saved {out} ({len(audio_bytes)} bytes)")
+
+
+@app.local_entrypoint()
+def generate_many_to_dir(voice: str, texts_json: str, out_dir: str) -> None:
+    """Generate several clips for one voice inside a single warm container.
+
+    The voice build script passes a JSON file with {"texts": [...]} so all
+    lines share one warm GPU container instead of paying a cold start per
+    line: modal run modal_chatterbox.py::generate_many_to_dir --voice v --texts-json t.json --out-dir d/
+    """
+    import json
+
+    texts = json.loads(Path(texts_json).read_text(encoding="utf-8"))["texts"]
+    out_path = Path(out_dir)
+    out_path.mkdir(parents=True, exist_ok=True)
+    for i, text in enumerate(texts):
+        audio_bytes = generate_bytes.remote(voice, text)
+        (out_path / f"part_{i}.wav").write_bytes(audio_bytes)
+        print(f"saved part_{i}.wav ({len(audio_bytes)} bytes)")
 
 
 @app.local_entrypoint()

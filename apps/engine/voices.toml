@@ -6,3 +6,19 @@
 [ryan]
 reference = "ryan/reference.wav"
 language_id = "pt"
+
+[en_us_female_01]
+reference = "en_us_female_01/reference.wav"
+language_id = "en"
+
+[en_us_female_02]
+reference = "en_us_female_02/reference.wav"
+language_id = "en"
+
+[en_us_female_03]
+reference = "en_us_female_03/reference.wav"
+language_id = "en"
+
+[en_us_female_04]
+reference = "en_us_female_04/reference.wav"
+language_id = "en"
