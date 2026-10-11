@@ -54,3 +54,19 @@ language_id = "pt"
 [pt_br_male_04]
 reference = "pt_br_male_04/reference.wav"
 language_id = "pt"
+
+[en_us_male_02]
+reference = "en_us_male_02/reference.wav"
+language_id = "en"
+
+[en_us_male_03]
+reference = "en_us_male_03/reference.wav"
+language_id = "en"
+
+[en_us_male_04]
+reference = "en_us_male_04/reference.wav"
+language_id = "en"
+
+[en_us_male_01]
+reference = "en_us_male_01/reference.wav"
+language_id = "en"
