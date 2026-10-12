@@ -71,7 +71,7 @@ MAX_CONCURRENT_INPUTS = 2
 
 MODELS_VOLUME = modal.Volume.from_name("chatterbox-models", create_if_missing=True)
 VOICES_VOLUME = modal.Volume.from_name("chatterbox-voices", create_if_missing=True)
-# Shared bearer secret required by every endpoint (mirrors modal_app.py).
+# Shared bearer secret required by every endpoint.
 # Create with: `modal secret create chatterbox-http CHATTERBOX_HTTP_SECRET=...`
 HTTP_SECRET = os.environ.get("CHATTERBOX_HTTP_SECRET")
 

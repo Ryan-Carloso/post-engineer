@@ -34,7 +34,7 @@ script_target_words_max = 110
 # Persistent per-user BGM history database. Keep this on durable storage.
 bgm_history_db = "storage/bgm_history.sqlite3"
 
-# Persona lip-sync intro (InfiniteTalk on GPU).
+# Persona lip-sync intro (LongCat-Video-Avatar 1.5 on GPU).
 # When true (default), jobs that include an inline persona generate the
 # lip-synced persona intro before the main video. When false, the persona
 # contributes only its voice/house voice and the video is rendered as a
@@ -564,15 +564,29 @@ model_id = "chatterbox"
 # Voices exposed by your server; shown in the WebUI dropdown as chatterbox:<name>
 voices = ["default-Female"]
 
-[infinitetalk]
+[longcat]
+# The persona lip-sync model: LongCat-Video-Avatar 1.5 on Modal (modal_longcat.py).
+# This section was `[infinitetalk]`. An existing config.toml that still has the
+# old name is NOT an error — config.longcat reads as {} and every key below falls
+# back to the same default shown here — but the old section becomes dead config,
+# so rename it.
 # The Modal endpoints and bearer secret are ENV VARS, not TOML (they differ
 # per environment — dev and prod use separate Modal accounts):
-#   INFINITETALK_SUBMIT_URL / INFINITETALK_STATUS_URL / INFINITETALK_DOWNLOAD_URL
-#   INFINITETALK_HTTP_SECRET  (must match the secret deployed via:
-#     `modal secret create infinitetalk-http INFINITETALK_HTTP_SECRET=...`)
+#   LONGCAT_SUBMIT_URL / LONGCAT_STATUS_URL / LONGCAT_DOWNLOAD_URL
+#   LONGCAT_HTTP_SECRET  (must match the secret deployed via:
+#     `modal secret create longcat-http LONGCAT_HTTP_SECRET=...`)
+# Clip length is set by --num_segments, not by the audio: the client rounds the
+# segment count UP from the measured speech length (trailing padding excluded, so
+# a narration near a boundary does not buy an extra segment) so a clip never
+# renders shorter than its narration. The surplus is trimmed when it is spliced
+# in. Segment granularity is 3.2s, so a clip can be up to ~3s longer than the
+# narration it covers.
 poll_interval_seconds = 5
 timeout_seconds = 1800
+# Fallback only: both production callers pass an explicit duration (the persona
+# hook window, and the face-fill tail), so this is never used on a real task.
 intro_duration_seconds = 5
+
 [bgm]
 # Automatic BGM selection uses only tracks explicitly listed in this catalog.
 catalog_file = "resource/songs/catalog.toml"

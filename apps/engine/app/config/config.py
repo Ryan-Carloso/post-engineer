@@ -154,7 +154,7 @@ def save_config():
         _cfg["siliconflow"] = siliconflow
         _cfg["elevenlabs"] = elevenlabs
         _cfg["chatterbox"] = chatterbox
-        _cfg["infinitetalk"] = infinitetalk
+        _cfg["longcat"] = longcat
         _cfg["ui"] = ui
         f.write(toml.dumps(_cfg))
 
@@ -167,7 +167,7 @@ azure = _cfg.get("azure", {})
 siliconflow = _cfg.get("siliconflow", {})
 elevenlabs = _cfg.get("elevenlabs", {})
 chatterbox = _cfg.get("chatterbox", {})
-infinitetalk = _cfg.get("infinitetalk", {})
+longcat = _cfg.get("longcat", {})
 bgm = _cfg.get("bgm", {})
 ui = _cfg.get(
     "ui",
