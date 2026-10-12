@@ -71,6 +71,16 @@ _warned = False
 _attempted = False
 
 
+def _get_environment() -> str:
+    """Deployment tag for PostHog: 'production' only when APP_ENV says so.
+
+    The engine has no NODE_ENV convention (that belongs to the web/MCP);
+    APP_ENV=production is set in the committed docker-compose.yml used by
+    the VPS deploy. Unset anywhere else (local dev, CI) means 'development'.
+    """
+    return "production" if os.environ.get("APP_ENV") == "production" else "development"
+
+
 # Exact property names exempt from key-name redaction. "token" is a
 # substring of _SECRET_KEY_PATTERN (to catch *_token secrets), so without
 # this exemption the legitimate ai_request token-usage counters would be
@@ -149,6 +159,11 @@ def track_event(event_name: str, properties: dict[str, Any] | None = None) -> No
         if client is None:
             return
         props = _scrub_secrets(dict(properties or {}))
+        # Origin tags: assigned after scrubbing and after any caller-supplied
+        # values, so they can never be redacted or overridden — the origin of
+        # an event is a pipeline fact, not caller input.
+        props["source"] = "engine"
+        props["environment"] = _get_environment()
         # Attribute the event to the real user when known so PostHog breaks
         # the funnel down per person; the engine pseudo-person is only the
         # fallback for events without a user (e.g. background jobs).

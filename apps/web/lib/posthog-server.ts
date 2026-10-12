@@ -126,6 +126,31 @@ export interface ServerPostHogClient {
   captureException(error: unknown, properties?: Record<string, unknown>): void;
 }
 
+//---------------
+// Origin tags: every server-side capture carries where it came from
+// (source) and which deployment produced it (environment) so PostHog
+// dashboards can split web-server / web-client / MCP / engine traffic and
+// prod / dev. Injected at toClient — the single choke point — so
+// logger.ts, api-error-reporting.ts, analytics.ts and billing/reconcile.ts
+// all get the tags without touching their call sites. Also shared with
+// the browser path (lib/client-logger.ts) so the environment convention
+// lives in exactly one place.
+//---------------
+
+export type TelemetryEnvironment = 'production' | 'development';
+
+export function getTelemetryEnvironment(): TelemetryEnvironment {
+  return process.env.NODE_ENV === 'production' ? 'production' : 'development';
+}
+
+const TELEMETRY_SOURCE = 'web-server';
+
+function withOriginTags(properties?: Record<string, unknown>): Record<string, unknown> {
+  // Ours win over caller-supplied values: the origin of an event is a
+  // pipeline fact, not caller input, so it can never be spoofed away.
+  return { ...properties, source: TELEMETRY_SOURCE, environment: getTelemetryEnvironment() };
+}
+
 function toClient(sdk: PostHogNodeClient): ServerPostHogClient {
   // posthog-node v5 never flushes on its own (see the note in loadSdk):
   // every capture must be followed by an explicit flush or the event is
@@ -137,13 +162,19 @@ function toClient(sdk: PostHogNodeClient): ServerPostHogClient {
   };
   return {
     capture: (event, properties) => {
-      captureAndFlush(() => sdk.capture({ distinctId: SERVER_DISTINCT_ID, event, properties }));
+      captureAndFlush(() =>
+        sdk.capture({ distinctId: SERVER_DISTINCT_ID, event, properties: withOriginTags(properties) }),
+      );
     },
     captureAs: (distinctId, event, properties) => {
-      captureAndFlush(() => sdk.capture({ distinctId, event, properties }));
+      captureAndFlush(() =>
+        sdk.capture({ distinctId, event, properties: withOriginTags(properties) }),
+      );
     },
     captureException: (error, properties) => {
-      captureAndFlush(() => sdk.captureException(error, SERVER_DISTINCT_ID, properties));
+      captureAndFlush(() =>
+        sdk.captureException(error, SERVER_DISTINCT_ID, withOriginTags(properties)),
+      );
     },
   };
 }

@@ -105,7 +105,10 @@ export function trackEvent(eventName: string, properties?: Record<string, unknow
         posthog.capture({
           distinctId: 'post-engineer-mcp',
           event: eventName,
-          properties: props,
+          // Origin tags: ours win over caller-supplied values — the origin
+          // of an event is a pipeline fact, not caller input, so it can
+          // never be spoofed away.
+          properties: { ...props, source: 'mcp', environment: getEnvironment() },
         });
       } catch {
         // Telemetry must never break the MCP server.
@@ -114,6 +117,16 @@ export function trackEvent(eventName: string, properties?: Record<string, unknow
   } catch {
     // Telemetry must never break the MCP server.
   }
+}
+
+//---------------
+// Deployment tag for PostHog: 'production' only when NODE_ENV says so.
+// The MCP is a local stdio tool; NODE_ENV is unset in normal use, so
+// MCP events report 'development' — which is what they are.
+//---------------
+
+function getEnvironment(): 'production' | 'development' {
+  return process.env['NODE_ENV'] === 'production' ? 'production' : 'development';
 }
 
 //---------------
