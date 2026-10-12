@@ -49,11 +49,6 @@ export function markApiErrorReported(response: object): void {
   reportedResponses.add(response);
 }
 
-function isProduction(): boolean {
-  // Read at call time (like logger.ts) so tests can stub NODE_ENV.
-  return process.env.NODE_ENV === 'production';
-}
-
 interface ErrorBody {
   code?: unknown;
   errorId?: unknown;
@@ -101,8 +96,9 @@ async function reportApiIssue(
   getUserId?: ApiErrorReportingOptions['getUserId'],
 ): Promise<void> {
   try {
-    // Keep dev/test noise out of PostHog (same convention as logger.ts).
-    if (!isProduction()) return;
+    // Tag-and-send (same convention as logger.ts): dev/test events flow
+    // with environment: 'development' so the pipeline is validated daily;
+    // dashboards filter prod on the tag.
     const client = getPostHogServer();
     if (!client) return;
 
@@ -138,8 +134,9 @@ async function reportApiSuccess(
   getUserId?: ApiErrorReportingOptions['getUserId'],
 ): Promise<void> {
   try {
-    // Keep dev/test noise out of PostHog (same convention as logger.ts).
-    if (!isProduction()) return;
+    // Tag-and-send (same convention as logger.ts): dev/test events flow
+    // with environment: 'development' so the pipeline is validated daily;
+    // dashboards filter prod on the tag.
     const client = getPostHogServer();
     if (!client) return;
     const userId = await resolveUserId(request, getUserId);

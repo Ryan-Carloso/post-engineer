@@ -210,3 +210,56 @@ def test_warm_client_invokes_get_client():
     with mock.patch.object(analytics, "_get_client") as get_client:
         analytics.warm_client()
     get_client.assert_called_once_with()
+
+
+def test_track_event_tags_source_and_environment():
+    # Every engine capture carries where it came from (source) and which
+    # deployment produced it (environment) so PostHog dashboards can split
+    # engine / web-server / web-client / MCP traffic and prod / dev.
+    with mock.patch.dict(os.environ, {"POSTHOG_API_KEY": "phc_test_key"}):
+        with mock.patch("posthog.Posthog") as mock_cls:
+            instance = mock_cls.return_value
+            analytics.track_event("video_generation_started", {"slotId": "s1"})
+            instance.capture.assert_called_once()
+            props = instance.capture.call_args.kwargs["properties"]
+            assert props["source"] == "engine"
+            assert props["environment"] == "development"
+            # Caller properties survive alongside the tags.
+            assert props["slotId"] == "s1"
+
+
+def test_track_event_tags_environment_production_when_app_env_production():
+    with mock.patch.dict(
+        os.environ, {"POSTHOG_API_KEY": "phc_test_key", "APP_ENV": "production"}
+    ):
+        with mock.patch("posthog.Posthog") as mock_cls:
+            instance = mock_cls.return_value
+            analytics.track_event("video_generated", {})
+            props = instance.capture.call_args.kwargs["properties"]
+            assert props["source"] == "engine"
+            assert props["environment"] == "production"
+
+
+def test_track_ai_request_carries_origin_tags():
+    # track_ai_request delegates to track_event, so it inherits the tags —
+    # pin it so a future bypass of track_event cannot silently drop them.
+    with mock.patch.dict(os.environ, {"POSTHOG_API_KEY": "phc_test_key"}):
+        with mock.patch("posthog.Posthog") as mock_cls:
+            instance = mock_cls.return_value
+            analytics.track_ai_request({"backend": "llm", "success": True})
+            instance.capture.assert_called_once()
+            props = instance.capture.call_args.kwargs["properties"]
+            assert props["source"] == "engine"
+            assert props["environment"] == "development"
+
+
+def test_track_event_caller_properties_cannot_override_origin_tags():
+    with mock.patch.dict(os.environ, {"POSTHOG_API_KEY": "phc_test_key"}):
+        with mock.patch("posthog.Posthog") as mock_cls:
+            instance = mock_cls.return_value
+            analytics.track_event(
+                "video_generated", {"source": "spoofed", "environment": "production"}
+            )
+            props = instance.capture.call_args.kwargs["properties"]
+            assert props["source"] == "engine"
+            assert props["environment"] == "development"

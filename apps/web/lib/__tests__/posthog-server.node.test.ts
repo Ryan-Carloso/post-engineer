@@ -173,3 +173,115 @@ describe('capture delivery (posthog-node v5 has no automatic flush)', () => {
     expect(source).not.toMatch(/flushAt\s*:/);
   });
 });
+
+describe('telemetry origin tags (source + environment)', () => {
+  // Every server-side capture must carry where it came from (source) and
+  // which deployment produced it (environment) so PostHog dashboards can
+  // split MCP / web-server / web-client / engine traffic and prod / dev.
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    __resetPostHogServerForTests();
+    process.env = { ...originalEnv };
+    delete process.env.NEXT_PUBLIC_POSTHOG_KEY;
+    delete process.env.NEXT_PUBLIC_POSTHOG_HOST;
+    process.env.POSTHOG_API_KEY = 'phc_test_key';
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    __resetPostHogServerForTests();
+    vi.restoreAllMocks();
+  });
+
+  it('tags capture() with source web-server and the runtime environment', async () => {
+    const { PostHog } = await import('posthog-node');
+    const captureSpy = vi.spyOn(PostHog.prototype, 'capture');
+    const client = getPostHogServer();
+    expect(client).not.toBeNull();
+
+    client?.capture('server_success', { route: 'GET /api/version', status: 200 });
+
+    await vi.waitFor(() => expect(captureSpy).toHaveBeenCalled());
+    const args = captureSpy.mock.calls[0][0] as {
+      properties?: Record<string, unknown>;
+    };
+    expect(args.properties).toMatchObject({
+      source: 'web-server',
+      environment: 'development',
+    });
+    // Caller properties survive alongside the tags.
+    expect(args.properties).toMatchObject({ route: 'GET /api/version', status: 200 });
+  });
+
+  it('tags captureAs() with source web-server', async () => {
+    const { PostHog } = await import('posthog-node');
+    const captureSpy = vi.spyOn(PostHog.prototype, 'capture');
+    const client = getPostHogServer();
+
+    client?.captureAs('user-123', 'refund_issued', { amount: 1 });
+
+    await vi.waitFor(() => expect(captureSpy).toHaveBeenCalled());
+    const args = captureSpy.mock.calls[0][0] as {
+      distinctId: string;
+      properties?: Record<string, unknown>;
+    };
+    expect(args.distinctId).toBe('user-123');
+    expect(args.properties).toMatchObject({ source: 'web-server', environment: 'development' });
+  });
+
+  it('tags captureException() with source web-server', async () => {
+    const { PostHog } = await import('posthog-node');
+    const captureSpy = vi.spyOn(PostHog.prototype, 'captureException');
+    const client = getPostHogServer();
+
+    client?.captureException(new Error('boom'), { route: 'GET /api/test' });
+
+    await vi.waitFor(() => expect(captureSpy).toHaveBeenCalled());
+    // posthog-node captureException(error, distinctId, properties).
+    const args = captureSpy.mock.calls[0] as unknown as [
+      unknown,
+      string,
+      Record<string, unknown> | undefined,
+    ];
+    expect(args[2]).toMatchObject({
+      source: 'web-server',
+      environment: 'development',
+    });
+  });
+
+  it('reports environment production when NODE_ENV=production', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const { PostHog } = await import('posthog-node');
+    const captureSpy = vi.spyOn(PostHog.prototype, 'capture');
+    const client = getPostHogServer();
+
+    client?.capture('server_success', { route: 'GET /api/version', status: 200 });
+
+    await vi.waitFor(() => expect(captureSpy).toHaveBeenCalled());
+    const args = captureSpy.mock.calls[0][0] as {
+      properties?: Record<string, unknown>;
+    };
+    expect(args.properties).toMatchObject({
+      source: 'web-server',
+      environment: 'production',
+    });
+    vi.unstubAllEnvs();
+  });
+
+  it('caller properties cannot strip or override the origin tags', async () => {
+    const { PostHog } = await import('posthog-node');
+    const captureSpy = vi.spyOn(PostHog.prototype, 'capture');
+    const client = getPostHogServer();
+
+    client?.capture('server_success', { source: 'spoofed', environment: 'production' });
+
+    await vi.waitFor(() => expect(captureSpy).toHaveBeenCalled());
+    const args = captureSpy.mock.calls[0][0] as {
+      properties?: Record<string, unknown>;
+    };
+    expect(args.properties?.['source']).toBe('web-server');
+    expect(args.properties?.['environment']).toBe('development');
+  });
+});
