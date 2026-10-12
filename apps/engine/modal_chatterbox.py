@@ -100,6 +100,9 @@ CHATTERBOX_IMAGE = (
         # from a pinned master commit instead (V3 lives only on master).
         "chatterbox-tts @ git+https://github.com/resemble-ai/chatterbox.git@5de7a54aa4e5e2baadb0182dde554908b48b85c2",
         "fastapi[standard]",
+        # The speech handler imports loguru at request time; without it every
+        # /v1/audio/speech call returned 500 "No module named 'loguru'".
+        "loguru",
     )
     .env(
         {

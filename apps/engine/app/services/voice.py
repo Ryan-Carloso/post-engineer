@@ -28,9 +28,10 @@ from app.utils import utils
 
 _DEFAULT_EDGE_TTS_TIMEOUT_SECONDS = 30.0
 # Edge-tts voice used when the Chatterbox provider fails (fallback chain).
-# Must exist in app/services/data/azure_voices.json; male pt-BR to match the
-# first Chatterbox house voice ("ryan").
-_DEFAULT_CHATTERBOX_FALLBACK_VOICE = "pt-BR-AntonioNeural"
+# Must exist in app/services/data/azure_voices.json. Empty by default: the
+# pipeline speaks with cloned Chatterbox voices, so a Chatterbox outage must
+# fail the task rather than silently substitute a different voice.
+_DEFAULT_CHATTERBOX_FALLBACK_VOICE = ""
 _MIMO_DEFAULT_BASE_URL = "https://api.xiaomimimo.com/v1"
 _MIMO_DEFAULT_TTS_MODEL = "mimo-v2.5-tts"
 NO_VOICE_NAME = "no-voice"
@@ -1423,11 +1424,13 @@ def get_chatterbox_fallback_voice() -> str:
     Configured via ``[chatterbox] fallback_voice`` in config.toml. An empty
     value explicitly disables the fallback (Chatterbox failures then surface
     as normal TTS failures).
+
+    The default is deliberately EMPTY, not the historical pt-BR-AntonioNeural:
+    the pipeline now runs on cloned Chatterbox voices, so an outage must fail
+    loudly instead of shipping an unrelated Azure voice into a published video.
+    Set ``fallback_voice`` in config.toml to opt back into the edge-tts path.
     """
-    voice = str(
-        config.chatterbox.get("fallback_voice", _DEFAULT_CHATTERBOX_FALLBACK_VOICE)
-        or ""
-    ).strip()
+    voice = str(config.chatterbox.get("fallback_voice", "") or "").strip()
     return voice
 
 

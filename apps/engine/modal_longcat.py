@@ -74,8 +74,9 @@ from fastapi.responses import JSONResponse, Response
 from modal_longcat_gpu import (
     AVATAR_WEIGHTS_DIR,
     BASE_WEIGHTS_DIR,
-    GPU,
-    GPU_RATE_USD_S,
+    GPU_PREFERENCE,
+    active_gpu_name,
+    rate_for_active_gpu as _rate,
     LONGCAT_AVATAR_REPO,
     LONGCAT_BASE_REPO,
     LONGCAT_IMAGE,
@@ -199,7 +200,31 @@ async def _write_job_status_async(
     await JOB_STATUS.put.aio(job_id, record)
 
 
-app = modal.App("moneyprint-longcat")
+# One Modal app per GPU candidate, so an H100 deployment and an A100 deployment
+# can sit side by side and be tested without one clobbering the other's URLs.
+# Modal derives the endpoint host from this name, so it has to differ per GPU.
+_GPU_SLUG = os.environ.get("LONGCAT_GPU", "").lower().replace("-80gb", "80")
+app = modal.App(f"moneyprint-longcat-{_GPU_SLUG}" if _GPU_SLUG else "moneyprint-longcat")
+
+# The three HTTP endpoints only authenticate, touch a Modal Dict and move MP4
+# bytes -- none of that needs the ~20GB torch/flash-attn GPU image. Running them
+# on LONGCAT_IMAGE meant every submit/status call paid that image's cold start,
+# so with the client's 120s submit timeout a fresh container never answered.
+_HERE = Path(__file__).resolve().parent
+LONGCAT_API_IMAGE = (
+    modal.Image.debian_slim(python_version="3.11")
+    .pip_install("fastapi[standard]", "loguru")
+    # modal_longcat.py imports modal_longcat_gpu at module scope, so both
+    # modules must exist in every image that hosts this one -- including the
+    # slim API image, whose endpoints never call the renderer.
+    .add_local_file(_HERE / "modal_longcat_gpu.py", "/root/modal_longcat_gpu.py", copy=True)
+    # _MODAL_APP_NAME is read at module scope, which Modal evaluates when it
+    # hydrates this module INSIDE the container -- a deploy-time shell variable
+    # is not visible there, so every endpoint crash-looped with
+    # "LONGCAT_MODAL_APP_NAME is not set". Baking it into both images is what
+    # makes it reach the runtime.
+    .env({"LONGCAT_MODAL_APP_NAME": _MODAL_APP_NAME})
+)
 
 
 @app.function(
@@ -229,7 +254,7 @@ def download_weights() -> str:
 
 @app.cls(
     image=LONGCAT_IMAGE,
-    gpu=GPU,
+    gpu=GPU_PREFERENCE,
     volumes={WEIGHTS_DIR: WEIGHTS_VOLUME, "/results": RESULTS_VOLUME},
     secrets=[modal.Secret.from_name("huggingface")],
     timeout=14400,
@@ -308,8 +333,12 @@ class GenerateAvatar:
                     "resolution": resolution,
                     "num_segments": num_segments,
                     "timings": timings,
-                    "cost_usd": round(job_gpu_s * GPU_RATE_USD_S, 4),
-                    "container_cost_usd": round(uptime_s * GPU_RATE_USD_S, 4),
+                    # Priced on the GPU the container ACTUALLY got. With a
+                    # fallback list that is not always the first preference,
+                    # and Modal bills each card at its own rate.
+                    "gpu": active_gpu_name() or GPU_PREFERENCE[0],
+                    "cost_usd": round(job_gpu_s * _rate(), 4),
+                    "container_cost_usd": round(uptime_s * _rate(), 4),
                     "progress": 100,
                     "phase": "complete",
                 },
@@ -321,11 +350,11 @@ class GenerateAvatar:
 
 
 @app.function(
-    image=LONGCAT_IMAGE,
+    image=LONGCAT_API_IMAGE,
     timeout=120,
     secrets=[modal.Secret.from_name("longcat-http")],
 )
-@modal.fastapi_endpoint(method="POST", label="longcat-http-server-submit")
+@modal.fastapi_endpoint(method="POST", label=f"longcat-http-server-submit{_GPU_SLUG}")
 async def submit_generation(
     request: Request,
     image: UploadFile = File(...),
@@ -404,11 +433,11 @@ async def submit_generation(
 
 
 @app.function(
-    image=LONGCAT_IMAGE,
+    image=LONGCAT_API_IMAGE,
     timeout=120,
     secrets=[modal.Secret.from_name("longcat-http")],
 )
-@modal.fastapi_endpoint(method="POST", label="longcat-http-server-status")
+@modal.fastapi_endpoint(method="POST", label=f"longcat-http-server-status{_GPU_SLUG}")
 async def job_status(request: Request, job_id: str = Form(...)) -> JSONResponse:
     """Return the current status for a queued generation."""
     auth_error = _auth_error()
@@ -430,12 +459,12 @@ async def job_status(request: Request, job_id: str = Form(...)) -> JSONResponse:
 
 
 @app.function(
-    image=LONGCAT_IMAGE,
+    image=LONGCAT_API_IMAGE,
     volumes={"/results": RESULTS_VOLUME},
     timeout=120,
     secrets=[modal.Secret.from_name("longcat-http")],
 )
-@modal.fastapi_endpoint(method="POST", label="longcat-http-server-download")
+@modal.fastapi_endpoint(method="POST", label=f"longcat-http-server-download{_GPU_SLUG}")
 async def download_result(request: Request, job_id: str = Form(...)) -> Response:
     """Download a completed MP4 from persistent storage."""
     auth_error = _auth_error()

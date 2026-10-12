@@ -11,6 +11,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+
 from unittest.mock import patch
 
 import requests
@@ -445,6 +446,100 @@ class ModalSourceMixin:
         )
 
 
+class TestGpuFallbackList(ModalSourceMixin, unittest.TestCase):
+    """The renderer asks for a PREFERRED LIST, so capacity shortages can't stall a video."""
+
+    def test_app_requests_a_list_not_a_single_card(self):
+        # A bare gpu="H100" leaves the job queued indefinitely when that card
+        # has no capacity; a list lets Modal fall back.
+        source = self._modal_source()
+        self.assertIn("gpu=GPU_PREFERENCE", source)
+        self.assertNotIn("gpu=GPU,", source)
+
+    def test_preference_list_leads_with_the_cheapest_proven_card(self):
+        from modal_longcat_gpu import GPU_PREFERENCE
+
+        # H100 measured ~1.5x cheaper per render than A100 despite A100's
+        # 37% cheaper rate, so it must be preferred.
+        self.assertEqual(GPU_PREFERENCE[0], "H100")
+
+    def test_preference_only_lists_cards_the_model_fits_on(self):
+        from modal_longcat_gpu import GPU_PREFERENCE, GPU_RATES
+
+        for gpu in GPU_PREFERENCE:
+            with self.subTest(gpu=gpu):
+                self.assertIn(gpu, GPU_RATES)
+                self.assertNotIn("L40S", gpu)
+
+    def test_cost_is_priced_on_the_gpu_that_actually_ran(self):
+        # With a fallback list the card is not known ahead of time, so pricing
+        # on the first preference would mis-report every H200 fallback.
+        source = self._modal_source()
+        self.assertIn("active_gpu_name()", source)
+        self.assertIn("rate_for_active_gpu", source)
+
+    def test_fallback_ordering_is_only_effective_when_it_is_ordered(self):
+        # Modal honours list order; an unsorted set would silently randomise
+        # which card we pay for.
+        from modal_longcat_gpu import GPU_PREFERENCE
+
+        self.assertEqual(GPU_PREFERENCE, sorted(GPU_PREFERENCE, key=GPU_PREFERENCE.index))
+
+
+class TestActiveGpuDetection(unittest.TestCase):
+    """Map torch's device name back onto a priced card."""
+
+    def _detect(self, reported):
+        import modal_longcat_gpu as gpu_mod
+
+        class _FakeCuda:
+            @staticmethod
+            def is_available():
+                return True
+
+            @staticmethod
+            def get_device_name(_index):
+                return reported
+
+        class _FakeTorch:
+            cuda = _FakeCuda
+
+        with unittest.mock.patch.dict(
+            "sys.modules", {"torch": _FakeTorch}
+        ):
+            return gpu_mod.active_gpu_name()
+
+    def test_maps_common_device_names_back_to_priced_cards(self):
+        for reported, expected in (
+            ("NVIDIA H100 80GB HBM3", "H100"),
+            ("NVIDIA H200", "H200"),
+            ("NVIDIA A100-SXM4-80GB", "A100-80GB"),
+        ):
+            with self.subTest(reported=reported):
+                self.assertEqual(self._detect(reported), expected)
+
+    def test_unknown_device_name_is_reported_verbatim_not_guessed(self):
+        # A card we have no rate for must surface as-is. "NVIDIA B200" contains
+        # "200", so a naive substring test would price it as an H200.
+        self.assertEqual(self._detect("NVIDIA B200"), "NVIDIA B200")
+
+    def test_rate_falls_back_to_preference_when_detection_fails(self):
+        import modal_longcat_gpu as gpu_mod
+
+        class _NoCuda:
+            @staticmethod
+            def is_available():
+                return False
+
+        class _FakeTorch:
+            cuda = _NoCuda
+
+        with unittest.mock.patch.dict("sys.modules", {"torch": _FakeTorch}):
+            self.assertEqual(
+                gpu_mod.rate_for_active_gpu(), gpu_mod.GPU_RATES[gpu_mod.GPU_PREFERENCE[0]]
+            )
+
+
 class TestGpuRateSync(ModalSourceMixin, unittest.TestCase):
     """Pin the price the client reports against the price Modal actually bills.
 
@@ -454,19 +549,27 @@ class TestGpuRateSync(ModalSourceMixin, unittest.TestCase):
 
     def test_h200_rate_literal_matches_the_rate_table(self):
         rate = longcat.GPU_RATES_USD_S["H200"]
-        self.assertIn(f"GPU_RATE_USD_S = {rate}", self._modal_source())
+        self.assertIn(f'"H200": {rate}', self._modal_source())
 
-    def test_rate_table_only_prices_a_gpu_the_app_can_run_on(self):
-        # A rate for hardware the app never requests is a second thing to keep
-        # honest for no benefit.
+    def test_every_priced_gpu_is_accepted_by_the_app(self):
+        # The app reads LONGCAT_GPU and rejects anything outside GPU_RATES, so
+        # the client table and the app's table must name the same cards.
         source = self._modal_source()
-        self.assertIn(f'GPU = "{list(longcat.GPU_RATES_USD_S)[0]}"', source)
-        self.assertEqual(list(longcat.GPU_RATES_USD_S), ["H200"])
+        for gpu, rate in longcat.GPU_RATES_USD_S.items():
+            with self.subTest(gpu=gpu):
+                self.assertIn(f'"{gpu}": {rate}', source)
+
+    def test_rate_table_covers_only_gpus_that_fit_the_weights(self):
+        # 48GB (L40S) OOMs on this model; only >=80GB cards may be priced.
+        for gpu in longcat.GPU_RATES_USD_S:
+            with self.subTest(gpu=gpu):
+                self.assertNotEqual(gpu, "L40S")
+                self.assertNotIn("40GB", gpu)
 
     def test_production_rate_literal_is_pinned_not_trusted(self):
         # Guards the sync test above: if the module constant is renamed the
         # comparison must fail loudly rather than pass by omission.
-        self.assertIn("GPU_RATE_USD_S = 0.001261", self._modal_source())
+        self.assertIn('"H200": 0.001261', self._modal_source())
 
 
 class TestModalAppContractSync(ModalSourceMixin, unittest.TestCase):
