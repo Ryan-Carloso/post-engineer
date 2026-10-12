@@ -77,7 +77,11 @@ INTRO_PADDING_SECONDS: Final[float] = 0.2
 # `cost_usd` field Modal reports on the completed job. It is the client-side
 # anchor the sync tests compare against the deployed app's own literal (see
 # TestGpuRateSync), which is why it is not dead code. Do not "clean it up".
-GPU_RATES_USD_S: Final[dict[str, float]] = {"H200": 0.001261}
+GPU_RATES_USD_S: Final[dict[str, float]] = {
+    "H200": 0.001261,
+    "H100": 0.001097,
+    "A100-80GB": 0.000694,
+}
 
 # LipSyncQuality -> the resolution the Modal endpoint renders. "ok" is the
 # benchmarked 480p path; "very_good" renders 720p. Anything else is a caller
