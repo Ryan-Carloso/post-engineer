@@ -315,7 +315,7 @@ class TestPersonaHookBoundary:
 
 class TestPersonaLipsyncGate:
     """lipsync_enabled=False keeps the persona voice but skips the
-    InfiniteTalk intro entirely (no GPU work)."""
+    LongCat intro entirely (no GPU work)."""
 
     def test_persona_with_default_lipsync_is_active(self):
         assert task_service.persona_lipsync_active(_params(voice_id="calm")) is True
@@ -632,9 +632,9 @@ class TestFaceFillBestEffort:
             "task_dir": patch.object(
                 task_service.utils, "task_dir", return_value=str(tmp_path)
             ),
-            "trim": patch.object(task_service.infinitetalk, "trim_audio"),
+            "trim": patch.object(task_service.longcat, "trim_audio"),
             "intro": patch.object(
-                task_service.infinitetalk, "generate_intro"
+                task_service.longcat, "generate_intro"
             ),
             "splice": patch.object(
                 task_service.video,
@@ -674,12 +674,12 @@ class TestFaceFillBestEffort:
         log_error.assert_called_once()
 
     def test_modal_failure_keeps_the_intro_only_video(self, tmp_path):
-        from app.services.infinitetalk import InfiniteTalkError
+        from app.services.longcat import LongCatError
 
         failure = patch.object(
-            task_service.infinitetalk,
+            task_service.longcat,
             "generate_intro",
-            side_effect=InfiniteTalkError("InfiniteTalk job timed out"),
+            side_effect=LongCatError("LongCat job timed out"),
         )
         result, log_error = self._run(tmp_path, intro=failure)
         assert result == "intro-only.mp4"
@@ -699,13 +699,13 @@ class TestFaceFillBestEffort:
         log_error.assert_called_once()
 
     def test_logged_error_is_sanitized_and_bounded(self, tmp_path):
-        from app.services.infinitetalk import InfiniteTalkError
+        from app.services.longcat import LongCatError
 
         secret = "Bearer super-secret-token"
         failure = patch.object(
-            task_service.infinitetalk,
+            task_service.longcat,
             "generate_intro",
-            side_effect=InfiniteTalkError(f"submit failed with {secret}"),
+            side_effect=LongCatError(f"submit failed with {secret}"),
         )
         _, log_error = self._run(tmp_path, intro=failure)
         message = log_error.call_args.args[0]
@@ -714,7 +714,7 @@ class TestFaceFillBestEffort:
 
 
 class TestLipsyncCeilingGuard:
-    """The hook window constant could be edited past the InfiniteTalk GPU
+    """The hook window constant could be edited past the LongCat segment
     ceiling; prepare_persona_lipsync_video rejects it at runtime instead of
     rendering an oversized intro."""
 

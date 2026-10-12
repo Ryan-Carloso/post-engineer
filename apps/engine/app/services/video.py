@@ -558,7 +558,7 @@ def _run_ffmpeg_bounded(
     Run one ffmpeg command with a hard timeout and a loud failure.
 
     Every local encode needs a deadline: a wedged ffmpeg otherwise leaves the
-    task `running` forever, because the InfiniteTalk timeout only bounds the
+    task `running` forever, because the LongCat timeout only bounds the
     REMOTE job, not this process. The timeout raises TimeoutExpired for the
     caller to classify; a non-zero exit becomes a RuntimeError carrying
     ffmpeg's own stderr, which is the only useful diagnostic here.
@@ -601,7 +601,7 @@ def replace_video_intro_with_lipsync(
         "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
                f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1",
         "-an", "-c:v", _get_effective_video_codec(),
-        # Force the pipeline fps: InfiniteTalk intros arrive at 25fps and a
+        # Force the pipeline fps: LongCat avatar-v1.5 renders at 25fps and a
         # stream-copied 30fps tail would balloon the concat timeline by the
         # timebase ratio (measured +5.4s on a 27s video).
         "-r", str(fps),
@@ -660,7 +660,7 @@ def replace_video_intro_with_lipsync(
             delete_files([intro_file, tail_file])
     except subprocess.TimeoutExpired as exc:
         # Without this the task stayed `running` forever on a wedged ffmpeg:
-        # the InfiniteTalk timeout only covers the remote job, not this local
+        # the LongCat timeout only covers the remote job, not this local
         # encode. Same class as _fail_task's other loud, bounded waits.
         raise RuntimeError(
             f"lip-sync concat timed out after {_LIPSYNC_CONCAT_TIMEOUT_SECONDS}s"
@@ -712,7 +712,7 @@ def replace_video_outro_with_lipsync(
         "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
                f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1",
         "-an", "-c:v", _get_effective_video_codec(),
-        # Force the pipeline fps: InfiniteTalk intros arrive at 25fps and a
+        # Force the pipeline fps: LongCat avatar-v1.5 renders at 25fps and a
         # stream-copied 30fps tail would balloon the concat timeline by the
         # timebase ratio (measured +5.4s on a 27s video).
         "-r", str(fps),

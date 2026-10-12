@@ -58,7 +58,7 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
             patch("requests.get", return_value=response or _FakeImageResponse()),
             patch.object(tm.subtitle, "file_to_subtitles", return_value=[]),
             patch.object(tm, "persona_hook_end_seconds", return_value=1.0),
-            patch.object(tm.infinitetalk, "generate_intro", return_value=("intro.mp4", 0.05)),
+            patch.object(tm.longcat, "generate_intro", return_value=("intro.mp4", 0.05)),
             patch.object(
                 tm.video, "replace_video_intro_with_lipsync", return_value="final.mp4"
             ),
@@ -77,19 +77,19 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
         )
 
     def test_rejects_private_ip_image_url(self):
-        with self.assertRaises(tm.infinitetalk.InfiniteTalkError):
+        with self.assertRaises(tm.longcat.LongCatError):
             self._run("http://169.254.169.254/secret.png")
         self.assertEqual(os.listdir(self.tmp), [])
 
     def test_rejects_hostname_resolving_to_private_ip(self):
-        with self.assertRaises(tm.infinitetalk.InfiniteTalkError):
+        with self.assertRaises(tm.longcat.LongCatError):
             self._run(
                 "https://avatar.internal.test/pic.png", resolved_ips=("10.1.2.3",)
             )
         self.assertEqual(os.listdir(self.tmp), [])
 
     def test_rejects_non_image_content_type(self):
-        with self.assertRaises(tm.infinitetalk.InfiniteTalkError):
+        with self.assertRaises(tm.longcat.LongCatError):
             self._run(
                 "https://cdn.example.com/pic",
                 response=_FakeImageResponse(content_type="text/html"),

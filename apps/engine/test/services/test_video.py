@@ -1500,7 +1500,7 @@ class TestLipSyncConcat(unittest.TestCase):
     def test_encode_is_bounded_by_a_timeout(self):
         """
         Without a timeout a wedged ffmpeg leaves the task `running` forever —
-        the engine's own InfiniteTalk timeout does not cover local encodes.
+        the engine's own LongCat timeout does not cover local encodes.
         """
         _, captured = self._run_with_capture()
         self.assertTrue(captured["commands"], "expected at least one ffmpeg invocation")
