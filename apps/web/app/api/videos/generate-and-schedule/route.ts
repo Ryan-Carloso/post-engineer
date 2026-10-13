@@ -105,6 +105,7 @@ const OptionsSchema = z
     // The rest of a persona's editorial definition, for a post created
     // WITHOUT one (migration 012). With a persona these still override it.
     videoAspect: z.enum(['9:16', '16:9']).optional(),
+    videoLayout: z.enum(['standard', 'react']).optional(),
     paragraphNumber: z.number().int().min(1).max(10).optional(),
     language: z.string().optional(),
     niche: z.string().optional(),
@@ -245,6 +246,9 @@ interface ValidatedInput {
   webhookUrl?: string;
   voiceId?: string;
   videoAspect?: '9:16' | '16:9';
+  /** 'standard' = the avatar fills the frame; 'react' = the frame splits,
+   *  avatar on top and b-roll below. Absent means standard. */
+  videoLayout?: 'standard' | 'react';
   paragraphNumber?: number;
   language?: string;
   niche?: string;
@@ -595,6 +599,7 @@ interface PersonaPrep {
   scriptPrompt: string | null;
   language: string | null;
   videoAspect: string | null;
+  videoLayout: string | null;
   paragraphNumber: number | null;
   photoRequired: boolean;
 }
@@ -620,6 +625,7 @@ async function preparePost(
     voiceId?: string;
     scriptPrompt?: string;
     videoAspect?: '9:16' | '16:9';
+    videoLayout?: 'standard' | 'react';
     paragraphNumber?: number;
     language?: string;
     niche?: string;
@@ -643,6 +649,7 @@ function resolvePostWithoutPersona(opts: {
   voiceId?: string;
   scriptPrompt?: string;
   videoAspect?: '9:16' | '16:9';
+  videoLayout?: 'standard' | 'react';
   paragraphNumber?: number;
   language?: string;
   niche?: string;
@@ -663,6 +670,7 @@ function resolvePostWithoutPersona(opts: {
     scriptPrompt: opts.scriptPrompt ?? null,
     language: opts.language ?? null,
     videoAspect: opts.videoAspect ?? null,
+    videoLayout: opts.videoLayout ?? null,
     paragraphNumber: opts.paragraphNumber ?? null,
     photoRequired: false,
   };
@@ -684,6 +692,7 @@ async function preparePersona(
     voiceId?: string;
     scriptPrompt?: string;
     videoAspect?: '9:16' | '16:9';
+    videoLayout?: 'standard' | 'react';
     paragraphNumber?: number;
     language?: string;
     niche?: string;
@@ -692,7 +701,7 @@ async function preparePersona(
   const { data: persona, error: personaError } = await supabase
     .from('personas')
     .select(
-      'id, name, photo_path, avatar_url, voice_id, voice_audio_path, language, video_aspect, script_prompt, paragraph_number, niche, face_quality',
+      'id, name, photo_path, avatar_url, voice_id, voice_audio_path, language, video_aspect, video_layout, script_prompt, paragraph_number, niche, face_quality',
     )
     .eq('id', personaId)
     .eq('user_id', userId)
@@ -759,6 +768,9 @@ async function preparePersona(
     scriptPrompt: opts.scriptPrompt ?? ((persona.script_prompt as string | null) ?? null),
     language: opts.language ?? language,
     videoAspect: opts.videoAspect ?? ((persona.video_aspect as string | null) ?? null),
+    // Layout is snapshotted like aspect: a persona edited after this moment
+    // must not rewrite how this post was composed.
+    videoLayout: opts.videoLayout ?? ((persona.video_layout as string | null) ?? null),
     paragraphNumber: opts.paragraphNumber ?? paragraphNumber,
     // Every persona is faced, so a post WITH the face must resolve one; only a
     // faceless post may proceed without any image.
@@ -920,6 +932,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     voiceId: validatedOptions.voiceId,
     scriptPrompt: validatedOptions.scriptPrompt,
     videoAspect: validatedOptions.videoAspect,
+    videoLayout: validatedOptions.videoLayout,
     paragraphNumber: validatedOptions.paragraphNumber,
     language: validatedOptions.language,
     niche: validatedOptions.niche,
@@ -1140,6 +1153,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     post_niche: prep.niche,
     post_language: prep.language,
     post_video_aspect: prep.videoAspect,
+    post_video_layout: prep.videoLayout,
     post_paragraph_number: prep.paragraphNumber,
     post_face_quality: prep.faceQuality,
   });
@@ -1343,6 +1357,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         voice_audio_url: prep.voiceAudioUrl,
         language: prep.language,
         video_aspect: prep.videoAspect,
+        video_layout: prep.videoLayout,
         script_prompt: prep.scriptPrompt,
         paragraph_number: prep.paragraphNumber,
         niche: prep.niche,

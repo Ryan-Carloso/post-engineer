@@ -161,6 +161,7 @@ export interface PersonaRecord {
   voiceAudioUrl?: string;
   language?: string;
   videoAspect?: string;
+  videoLayout?: string;
   scriptPrompt?: string;
   paragraphNumber?: number;
   niche?: string;
@@ -1107,6 +1108,7 @@ export interface SlotDetailPayload {
     language: string | null;
     voiceId: string | null;
     videoAspect: string | null;
+    videoLayout: string | null;
     niche: string | null;
     paragraphNumber: number | null;
     faceQuality: string | null;
@@ -1178,6 +1180,7 @@ function narrowGeneration(value: unknown): SlotDetailPayload['generation'] {
     language: null,
     voiceId: null,
     videoAspect: null,
+    videoLayout: null,
     niche: null,
     paragraphNumber: null,
     faceQuality: null,
@@ -1194,6 +1197,7 @@ function narrowGeneration(value: unknown): SlotDetailPayload['generation'] {
     language: text('language'),
     voiceId: text('voiceId'),
     videoAspect: text('videoAspect'),
+    videoLayout: text('videoLayout'),
     niche: text('niche'),
     paragraphNumber:
       typeof paragraphNumber === 'number' && Number.isFinite(paragraphNumber)

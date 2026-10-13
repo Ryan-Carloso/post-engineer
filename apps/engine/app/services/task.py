@@ -1293,11 +1293,12 @@ def prepare_persona_lipsync_video(
     )
     output_path = path.join(task_dir, f"combined-lipsync-{index}.mp4")
     return (
-        video.replace_video_intro_with_lipsync(
+        video.compose_lipsync_layout(
             background_video,
             lipsync_path,
             output_path,
             duration=hook_duration,
+            layout=params.video_layout.value,
         ),
         intro_cost_usd,
     )

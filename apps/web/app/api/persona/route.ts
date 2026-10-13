@@ -11,6 +11,7 @@ import {
   validateVoiceSource,
   photoExtensionOf,
   VALID_VIDEO_ASPECTS,
+  VIDEO_LAYOUTS,
 } from '@/lib/persona-schema';
 import {
   addLibraryImages,
@@ -174,6 +175,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       voice_id: body.values.voiceId,
       language: body.values.language,
       video_aspect: body.values.videoAspect,
+      video_layout: body.values.videoLayout,
       script_prompt: body.values.scriptPrompt,
       paragraph_number: body.values.paragraphNumber,
       niche: body.values.niche,
@@ -441,6 +443,7 @@ async function patchHandler(request: Request): Promise<NextResponse> {
 
   if (patch.language !== null) updates.language = patch.language;
   if (patch.videoAspect !== null) updates.video_aspect = patch.videoAspect;
+  if (patch.videoLayout !== null) updates.video_layout = patch.videoLayout;
   if (patch.scriptPrompt !== null) updates.script_prompt = patch.scriptPrompt;
   if (patch.paragraphNumber !== null) updates.paragraph_number = patch.paragraphNumber;
   if (patch.niche !== null) updates.niche = patch.niche;
@@ -480,6 +483,7 @@ interface PersonaPatchBody {
   voiceId: string | null;
   language: string | null;
   videoAspect: string | null;
+  videoLayout: string | null;
   scriptPrompt: string | null;
   paragraphNumber: number | null;
   niche: string | null;
@@ -514,6 +518,10 @@ async function parsePatchBody(request: Request): Promise<ParsePatchResult> {
   if (videoAspect !== null && !VALID_VIDEO_ASPECTS.includes(videoAspect as (typeof VALID_VIDEO_ASPECTS)[number])) {
     return { ok: false, error: `Invalid videoAspect: ${videoAspect}. Use one of ${VALID_VIDEO_ASPECTS.join(', ')}.` };
   }
+  const videoLayout = optionalString(formData.get('videoLayout'));
+  if (videoLayout !== null && !VIDEO_LAYOUTS.includes(videoLayout as (typeof VIDEO_LAYOUTS)[number])) {
+    return { ok: false, error: `Invalid videoLayout: ${videoLayout}. Use one of ${VIDEO_LAYOUTS.join(', ')}.` };
+  }
   const scriptPrompt = optionalString(formData.get('scriptPrompt'));
   const niche = optionalString(formData.get('niche'));
   if (niche !== null && niche.length > 300) {
@@ -539,6 +547,7 @@ async function parsePatchBody(request: Request): Promise<ParsePatchResult> {
       voiceId,
       language,
       videoAspect,
+      videoLayout,
       scriptPrompt,
       paragraphNumber,
       niche,
