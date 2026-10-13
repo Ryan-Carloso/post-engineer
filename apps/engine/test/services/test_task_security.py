@@ -120,7 +120,7 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
     def test_house_face_without_web_base_url_fails_with_a_clear_reason(self):
         with (
             patch.dict(os.environ, {"MPT_UPLOAD_API_BASE_URL": ""}),
-            self.assertRaises(tm.infinitetalk.InfiniteTalkError) as ctx,
+            self.assertRaises(tm.longcat.LongCatError) as ctx,
         ):
             self._run("/caracter-samples/file-3.png")
         self.assertIn("MPT_UPLOAD_API_BASE_URL", str(ctx.exception))
@@ -129,7 +129,7 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
     def test_other_relative_paths_are_not_resolved(self):
         with (
             patch.dict(os.environ, {"MPT_UPLOAD_API_BASE_URL": "https://web.example.com"}),
-            self.assertRaises(tm.infinitetalk.InfiniteTalkError),
+            self.assertRaises(tm.longcat.LongCatError),
         ):
             self._run("/api/admin/secret.png")
         self.started[2].assert_not_called()
