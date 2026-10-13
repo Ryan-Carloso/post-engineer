@@ -229,7 +229,9 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
       body: { error: 'voices down' },
     }).as('getVoicesError');
 
-    visitPersona('/persona');
+    // The 500 intercept answers the voices request, so the base
+    // getVoices alias never fires — wait for the error alias instead.
+    cy.visit('/persona', { onBeforeLoad: stubFormAudio });
     cy.wait('@getVoicesError');
 
     cy.contains('Não foi possível carregar as vozes').should('be.visible');
