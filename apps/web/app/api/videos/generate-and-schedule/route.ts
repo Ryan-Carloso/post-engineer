@@ -56,6 +56,7 @@ import { resolveIdempotency } from '@/lib/idempotency';
 import { VALID_SCHEDULE_PROVIDERS } from '@/app/api/schedule/route';
 import { trackApiEvent } from '@/lib/analytics';
 import { logger } from '@/lib/logger';
+import { ensureEngineImageUrl } from '@/lib/engine-image-url';
 import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 const ROUTE = 'POST /api/videos/generate-and-schedule';
@@ -1343,7 +1344,22 @@ async function postHandler(request: Request): Promise<NextResponse> {
           photoUrl = libraryUrl;
           if (!requestedImageId) pickedImageId = selection.image.id;
         } else {
-          photoUrl = prep.avatarUrl ?? (await signedUrl(supabase, prep.photoPath)) ?? undefined;
+          // A house character is stored as a relative path to our own static
+          // asset. The engine fetches the image over HTTP behind an SSRF guard
+          // that rejects loopback, so a relative path — and even an origin-
+          // prefixed one in local dev — cannot be downloaded. Re-host it in
+          // the personas bucket first.
+          const hosted = await ensureEngineImageUrl(prep.avatarUrl, {
+            supabase,
+            userId,
+            origin: new URL(request.url).origin,
+          }).catch((error: unknown) => {
+            throw new SlotDispatchError(
+              'photo_resolve_failed',
+              error instanceof Error ? error.message : 'The chosen character could not be loaded.',
+            );
+          });
+          photoUrl = hosted ?? (await signedUrl(supabase, prep.photoPath)) ?? undefined;
         }
         if (!photoUrl && prep.photoRequired) {
           throw new SlotDispatchError('photo_missing', 'Persona photo could not be loaded. Please try again.');
