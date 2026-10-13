@@ -26,7 +26,7 @@ from app.services import (
     upload_post,
 )
 from app.services import state as sm
-from app.services import task_publish
+from app.services import persona_image, task_publish
 from app.services import task_webhook
 from app.services.bgm_history import history_repository
 from app.services.analytics import scrub_secret_values, track_event
@@ -1318,11 +1318,11 @@ def prepare_persona_lipsync_video(
     else:
         # SSRF-safe download: public-address check on every redirect hop,
         # streamed body with a 20 MB cap, and image/* content-type required.
-        # Rejections are surfaced as InfiniteTalkError so the lipsync intro
-        # is skipped the same way other download failures are.
+        # Rejections raise InfiniteTalkError and fail the task: the post was
+        # priced with the face, so it never renders without the intro.
         try:
             ssrf.download_public_file(
-                image_url,
+                persona_image.resolve_persona_image_url(image_url),
                 image_path,
                 what="persona image",
                 max_bytes=_PERSONA_IMAGE_MAX_BYTES,
@@ -1676,7 +1676,8 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         if type(params.video_concat_mode) is str:
             params.video_concat_mode = VideoConcatMode(params.video_concat_mode)
 
-        # 6. Generate final videos
+        # 6. Generate final videos (marked first: a crash reports stage=render)
+        _mark("render")
         final_video_paths, combined_video_paths, intro_cost_usd = generate_final_videos(
             task_id,
             params,
@@ -1686,7 +1687,6 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             video_script,
             music_mood,
         )
-        _mark("render")
 
         if not final_video_paths:
             _fail_task(task_id, "failed to generate final videos", params, stage="render")

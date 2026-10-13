@@ -3,7 +3,7 @@
 #
 # Secrets come from .env next to this file (never committed):
 #   MONEYPRINT_API_SECRET                     -> shared auth secret (web proxy + publish-back)
-#   MPT_UPLOAD_API_BASE_URL                   -> public engine URL
+#   MPT_UPLOAD_API_BASE_URL                   -> public web URL (publish-back, house faces)
 #
 # config.toml (no real secrets) is mounted read-only from ./config.toml.
 

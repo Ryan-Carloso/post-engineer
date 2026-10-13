@@ -998,6 +998,43 @@ class TestPublishFailureDiscordAlert(unittest.TestCase):
         _, props = failed_calls[0][0]
         self.assertEqual(props["stage"], "publish")
 
+    def test_render_crash_funnel_event_carries_render_stage(self):
+        # Route-level pin for the _mark("render") wiring in start(): the
+        # render mark happens before generate_final_videos, so a crash
+        # inside it reports stage="render" instead of "music_mood".
+        params = VideoParams(
+            video_subject="Lisbon trams",
+            video_materials=[{"provider": "local", "url": "x", "duration": 1}],
+        )
+        tm._failed_event_emitted_tasks.clear()
+        try:
+            with (
+                patch.object(tm.sm.state, "update_task"),
+                patch.object(tm, "send_discord"),
+                patch.object(tm, "generate_script", return_value="script"),
+                patch.object(tm, "save_script_data"),
+                patch.object(tm, "generate_audio", return_value=("audio.mp3", 10.0, None)),
+                patch.object(tm, "generate_subtitle", return_value="sub.srt"),
+                patch.object(tm, "get_video_materials", return_value=["v.mp4"]),
+                patch.object(tm.video, "get_available_music_moods", return_value=[]),
+                patch.object(tm.llm, "generate_music_mood", return_value="chill"),
+                patch.object(
+                    tm,
+                    "generate_final_videos",
+                    side_effect=tm.infinitetalk.InfiniteTalkError("persona image rejected"),
+                ),
+                patch.object(tm.video_storage, "require_r2_configuration"),
+                patch.object(tm, "cleanup_task_intermediates"),
+                patch.object(tm, "track_event") as track,
+            ):
+                tm.start(task_id="task-render-stage", params=params)
+        finally:
+            tm._failed_event_emitted_tasks.clear()
+        failed_calls = [c for c in track.call_args_list if c[0][0] == "video_generation_failed"]
+        self.assertEqual(len(failed_calls), 1)
+        _, props = failed_calls[0][0]
+        self.assertEqual(props["stage"], "render")
+
 
 class TestStartR2Requirement(unittest.TestCase):
     """start() fails fast when video generation needs R2 but it is unconfigured."""
