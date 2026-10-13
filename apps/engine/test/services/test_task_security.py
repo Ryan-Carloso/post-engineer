@@ -63,8 +63,8 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
                 tm.video, "replace_video_intro_with_lipsync", return_value="final.mp4"
             ),
         ]
+        self.started = [p.start() for p in patches]
         for p in patches:
-            p.start()
             self.addCleanup(p.stop)
         return tm.prepare_persona_lipsync_video(
             "task-1",
@@ -104,6 +104,35 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
         self.assertEqual(len(files), 1)
         self.assertTrue(files[0].startswith("persona"))
         self.assertGreater(os.path.getsize(os.path.join(self.tmp, files[0])), 0)
+
+    def test_resolves_house_face_path_against_the_web_base_url(self):
+        # The web persona picker stores house faces as a path relative to the
+        # web app; the engine fetches them from the web's public URL.
+        with patch.dict(os.environ, {"MPT_UPLOAD_API_BASE_URL": "https://web.example.com/"}):
+            result, _ = self._run("/caracter-samples/file-3.png")
+        self.assertEqual(result, "final.mp4")
+        requests_get = self.started[2]
+        self.assertEqual(
+            requests_get.call_args.args[0],
+            "https://web.example.com/caracter-samples/file-3.png",
+        )
+
+    def test_house_face_without_web_base_url_fails_with_a_clear_reason(self):
+        with (
+            patch.dict(os.environ, {"MPT_UPLOAD_API_BASE_URL": ""}),
+            self.assertRaises(tm.infinitetalk.InfiniteTalkError) as ctx,
+        ):
+            self._run("/caracter-samples/file-3.png")
+        self.assertIn("MPT_UPLOAD_API_BASE_URL", str(ctx.exception))
+        self.started[2].assert_not_called()
+
+    def test_other_relative_paths_are_not_resolved(self):
+        with (
+            patch.dict(os.environ, {"MPT_UPLOAD_API_BASE_URL": "https://web.example.com"}),
+            self.assertRaises(tm.infinitetalk.InfiniteTalkError),
+        ):
+            self._run("/api/admin/secret.png")
+        self.started[2].assert_not_called()
 
 
 class TestResolveCustomAudioFile(unittest.TestCase):
