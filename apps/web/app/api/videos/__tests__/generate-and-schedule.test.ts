@@ -54,6 +54,22 @@ vi.mock('@/lib/persona-images', async (importOriginal) => {
   };
 });
 
+vi.mock('@/lib/engine-image-url', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/engine-image-url')>();
+  return {
+    ...actual,
+    // Faithful routing of the real helper: absolute/data URLs pass through,
+    // empty input resolves to nothing, a relative site path is re-hosted.
+    // The fetch + bucket upload are the part that cannot run in a unit test.
+    ensureEngineImageUrl: vi.fn(async (url: string | null | undefined) => {
+      const candidate = typeof url === 'string' ? url.trim() : '';
+      if (candidate.length === 0) return undefined;
+      if (candidate.startsWith('data:image/') || /^https?:\/\//i.test(candidate)) return candidate;
+      return 'https://cdn.example/hosted.png';
+    }),
+  };
+});
+
 import { POST } from '../generate-and-schedule/route';
 import { getPostHogServer } from '@/lib/posthog-server';
 import { requireSupabaseSession } from '@/lib/request-auth';
@@ -63,6 +79,7 @@ import { isPersonaAllowed } from '@/lib/api-keys';
 import { startEngineVideoTask, recordGenerationStart, recordGenerationUpdate } from '@/lib/generation/video-generation';
 import { checkCustomAudioUrl } from '@/lib/generation/custom-audio';
 import { resolveVideoImage, recordRecentImageId } from '@/lib/persona-images';
+import { ensureEngineImageUrl } from '@/lib/engine-image-url';
 import { trackApiEvent } from '@/lib/analytics';
 import { IDEMPOTENCY_NAMESPACE, deterministicUuid } from '@/lib/idempotency';
 import { logger } from '@/lib/logger';
@@ -1649,6 +1666,20 @@ describe('POST /api/videos/generate-and-schedule', () => {
         persona: { photo_url?: string };
       };
       expect(payload.persona.photo_url).toBe('https://cdn.example/signed');
+    });
+
+    it('re-hosts a relative house-character avatar so the engine can fetch it', async () => {
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, avatar_url: '/caracter-samples/file-3.png', photo_path: null } });
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+      expect(vi.mocked(ensureEngineImageUrl)).toHaveBeenCalledWith(
+        '/caracter-samples/file-3.png',
+        expect.objectContaining({ userId: USER_ID }),
+      );
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as {
+        persona: { photo_url?: string };
+      };
+      expect(payload.persona.photo_url).toBe('https://cdn.example/hosted.png');
     });
 
     it('falls back to "Persona" when the persona row has no name', async () => {
