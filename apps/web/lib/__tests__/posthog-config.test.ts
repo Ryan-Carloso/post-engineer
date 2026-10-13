@@ -235,4 +235,34 @@ describe('server client host validation', () => {
       host: 'https://posthog.internal.example:8000',
     });
   });
+
+  // Plaintext http to a REMOTE host would ship telemetry (including the API
+  // key in the request path) unencrypted. The house rule for user/server
+  // fetch targets in this repo is "HTTPS or loopback only" — http is allowed
+  // only for loopback, so a local self-hosted PostHog still works.
+  it.each([
+    ['a remote http host', 'http://posthog.internal.example:8000'],
+    ['a bare-IP http host', 'http://10.0.0.5:8000'],
+  ])('rejects %s', async (_label, host) => {
+    process.env.POSTHOG_API_KEY = 'phc_test_key';
+    process.env.NEXT_PUBLIC_POSTHOG_HOST = host;
+    const { getPostHogServer, flushPostHog } = await import('@/lib/posthog-server');
+    getPostHogServer();
+    await flushPostHog();
+    expect(ctorArgs).toHaveLength(1);
+    expect(ctorArgs[0]?.[1]).toMatchObject({ host: DEFAULT_POSTHOG_HOST });
+  });
+
+  it.each(['http://localhost:8000', 'http://127.0.0.1:8000', 'http://[::1]:8000'])(
+    'still allows the loopback host %s',
+    async (host) => {
+      process.env.POSTHOG_API_KEY = 'phc_test_key';
+      process.env.NEXT_PUBLIC_POSTHOG_HOST = host;
+      const { getPostHogServer, flushPostHog } = await import('@/lib/posthog-server');
+      getPostHogServer();
+      await flushPostHog();
+      expect(ctorArgs).toHaveLength(1);
+      expect(ctorArgs[0]?.[1]).toMatchObject({ host });
+    },
+  );
 });

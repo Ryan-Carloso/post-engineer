@@ -11,6 +11,17 @@
 
 export const DEFAULT_POSTHOG_HOST = 'https://eu.i.posthog.com';
 
+// Hosts where plaintext http is acceptable: a local self-hosted PostHog.
+// Node's `new URL(...).hostname` KEEPS the brackets on an IPv6 literal
+// ('[::1]', verified against node 22/24), so both spellings are listed
+// rather than relying on normalization that does not happen.
+const LOOPBACK_HOSTNAMES: ReadonlySet<string> = new Set([
+  'localhost',
+  '127.0.0.1',
+  '::1',
+  '[::1]',
+]);
+
 //---------------
 // Resolve the configured ingest host, refusing anything that is not an
 // http(s) URL.
@@ -53,7 +64,20 @@ export function resolveHost(
   if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
     warn(
       `[posthog] NEXT_PUBLIC_POSTHOG_HOST uses the unsupported scheme "${parsed.protocol}" — ` +
-        'falling back to the default ingest host. It must be an http(s) ingest URL, NOT a project API key.',
+        'falling back to the default ingest host. It must be an https:// ingest URL, NOT a project API key.',
+    );
+    return DEFAULT_POSTHOG_HOST;
+  }
+
+  // HTTPS or loopback only — the house rule for outbound targets in this repo.
+  // Plaintext http to a remote host would ship telemetry (and the API key in
+  // the request path) unencrypted; loopback is exempt so a self-hoster can
+  // still run PostHog locally over http.
+  if (parsed.protocol === 'http:' && !LOOPBACK_HOSTNAMES.has(parsed.hostname)) {
+    warn(
+      '[posthog] NEXT_PUBLIC_POSTHOG_HOST uses plaintext http on a remote host — ' +
+        'falling back to the default ingest host. Use https:// (plain http is allowed only ' +
+        'for localhost/127.0.0.1/[::1]).',
     );
     return DEFAULT_POSTHOG_HOST;
   }

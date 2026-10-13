@@ -93,4 +93,16 @@ describe('instrumentation-client PostHog host', () => {
     await loadClient('https://posthog.internal.example:8000');
     expect(lastApiHost()).toBe('https://posthog.internal.example:8000');
   });
+
+  // "HTTPS or loopback only" — plaintext http to a remote host would send
+  // telemetry unencrypted. Loopback stays allowed for a local self-hoster.
+  it('rejects a remote http host', async () => {
+    await loadClient('http://posthog.internal.example:8000');
+    expect(lastApiHost()).toBe(DEFAULT_POSTHOG_HOST);
+  });
+
+  it('still allows a loopback http host', async () => {
+    await loadClient('http://localhost:8000');
+    expect(lastApiHost()).toBe('http://localhost:8000');
+  });
 });
