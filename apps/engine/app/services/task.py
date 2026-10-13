@@ -541,11 +541,15 @@ _PERSONA_HOOK_MAX_RETRIES = 2
 # and tunable knobs reopen those failure modes (hooks over the GPU ceiling,
 # tails that eat the hook). Stock adhesion uses the offline token-overlap
 # judge; weak terms never enter the download queue.
-PERSONA_HOOK_MIN_SECONDS = 3.0
+PERSONA_HOOK_MIN_SECONDS = 8.0
 PERSONA_HOOK_MAX_SECONDS = 12.0
-PERSONA_HOOK_TARGET_WORDS_MIN = 8
-PERSONA_HOOK_TARGET_WORDS_MAX = 28
-PERSONA_LIPSYNC_MAX_SECONDS = 15.0
+PERSONA_HOOK_TARGET_WORDS_MIN = 20
+PERSONA_HOOK_TARGET_WORDS_MAX = 30
+# The GPU ceiling, not the product ceiling: LongCat's MAX_SEGMENTS=5 renders
+# 16.52s (longcat.clip_seconds), but a 5-segment render died inside the Modal
+# container with no Python traceback (SIGKILL) on the first real run. 12s is
+# the highest segment count observed to survive there.
+PERSONA_LIPSYNC_MAX_SECONDS = 12.0
 FACE_FILL_MIN_SECONDS = 5.0
 FACE_FILL_MAX_SECONDS = 8.0
 PERSONA_SELECTIVE_STOCK_MIN_SCORE = 0.3
@@ -645,8 +649,34 @@ def _ensure_persona_hook_fits(
         audio_file, audio_duration, sub_maker = generate_audio(task_id, params, video_script)
         if not audio_file:
             return video_script, None, None, None, subtitle_path
+        # The retry rewrites the script, so the existing subtitle describes a
+        # script that no longer exists. `generate_subtitle` only falls back to
+        # whisper when the file is ABSENT (its os.path.exists gate), so leaving
+        # it behind makes the edge path write nothing, skips the fallback, and
+        # hands the stale timings back for a hook that is not in them.
+        _discard_stale_subtitle(subtitle_path)
         subtitle_path = generate_subtitle(task_id, params, video_script, sub_maker, audio_file)
     raise AssertionError("unreachable: hook retry loop always returns or raises")
+
+
+def _discard_stale_subtitle(subtitle_path: str) -> None:
+    """Delete a subtitle that no longer matches the script it was cut from.
+
+    Best-effort on purpose: a missing file is already the state we want, and a
+    locked file must not fail the retry — the regenerated subtitle simply
+    overwrites it.
+    """
+    if not subtitle_path:
+        return
+    try:
+        os.remove(subtitle_path)
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        logger.warning(
+            f"could not remove the stale subtitle {subtitle_path}: {exc}; "
+            "the regenerated subtitle may be skipped by the whisper fallback"
+        )
 
 
 def generate_script(task_id, params):
