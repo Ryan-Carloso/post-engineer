@@ -45,6 +45,10 @@ describe('logClientError', () => {
     expect(props).toMatchObject({
       message: 'React render error (global-error boundary)',
       digest: 'abc',
+      // Origin tags: dashboards split web-client from web-server/MCP/engine
+      // and prod from dev. NODE_ENV is 'test' under vitest -> development.
+      source: 'web-client',
+      environment: 'development',
     });
   });
 

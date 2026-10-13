@@ -3,6 +3,10 @@
 # "chatterbox:<name>") to its reference sample and Chatterbox language code.
 # Reference paths are relative to /voices and must not escape it.
 
+[ryan]
+reference = "ryan/reference.wav"
+language_id = "pt"
+
 [en_us_female_01]
 reference = "en_us_female_01/reference.wav"
 language_id = "en"
@@ -66,7 +70,3 @@ language_id = "en"
 [en_us_male_01]
 reference = "en_us_male_01/reference.wav"
 language_id = "en"
-
-[ryan]
-reference = "ryan/reference.wav"
-language_id = "pt"

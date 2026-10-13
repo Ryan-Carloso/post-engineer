@@ -138,7 +138,7 @@ describe('withApiErrorReporting', () => {
     expect(client.captureException).not.toHaveBeenCalled();
   });
 
-  it('does not report a 2xx outside production', async () => {
+  it('reports a 2xx outside production (tag-and-send: dev events validate the pipeline daily)', async () => {
     vi.stubEnv('NODE_ENV', 'test');
     const wrapped = withApiErrorReporting(
       'GET /api/test',
@@ -148,8 +148,9 @@ describe('withApiErrorReporting', () => {
     const res = await wrapped(getRequest());
 
     expect(res.status).toBe(200);
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(client.capture).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
+    const [event] = client.capture.mock.calls[0] as [string, Record<string, unknown>];
+    expect(event).toBe('server_success');
     expect(client.captureException).not.toHaveBeenCalled();
   });
 
@@ -360,7 +361,7 @@ describe('withApiErrorReporting', () => {
     expect(client.captureException).not.toHaveBeenCalled();
   });
 
-  it('does not report a 5xx outside production (dev/test noise stays out of PostHog)', async () => {
+  it('reports a 5xx outside production (tag-and-send: dev events validate the pipeline daily)', async () => {
     vi.stubEnv('NODE_ENV', 'test');
     const wrapped = withApiErrorReporting(
       'GET /api/test',
@@ -370,11 +371,10 @@ describe('withApiErrorReporting', () => {
     const res = await wrapped(getRequest());
 
     expect(res.status).toBe(500);
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(client.captureException).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(client.captureException).toHaveBeenCalledTimes(1));
   });
 
-  it('does not warn on a 4xx outside production (dev/test noise stays out of PostHog)', async () => {
+  it('warns on a 4xx outside production (tag-and-send: dev events validate the pipeline daily)', async () => {
     vi.stubEnv('NODE_ENV', 'test');
     const wrapped = withApiErrorReporting(
       'GET /api/test',
@@ -384,8 +384,9 @@ describe('withApiErrorReporting', () => {
     const res = await wrapped(getRequest());
 
     expect(res.status).toBe(404);
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(client.capture).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
+    const [event] = client.capture.mock.calls[0] as [string, Record<string, unknown>];
+    expect(event).toBe('server_warning');
     expect(client.captureException).not.toHaveBeenCalled();
   });
 

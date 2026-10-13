@@ -1,23 +1,16 @@
 //---------------
 // Central application logger.
 //
-// Development/test: console only.
-// Production: errors and warnings are also reported to PostHog
-// (error tracking + analytics) so handled failures show up there,
-// not only in Vercel logs. info/debug stay console-only in every
-// environment to keep PostHog free of noise.
+// Every environment: errors and warnings are also reported to PostHog
+// (error tracking + analytics) with source/environment origin tags
+// (injected by lib/posthog-server.ts) so dashboards can filter prod.
+// Dev events flow deliberately — they validate the telemetry pipeline
+// daily (a silently dead pipeline once cost a week of data). info/debug
+// stay console-only in every environment to keep PostHog free of noise.
 //---------------
 
 import { getPostHogServer } from './posthog-server';
 import { scrubSecrets, redactCredentialFragments } from './scrub';
-
-//---------------
-// Environment routing (read at call time so tests can stub it)
-//---------------
-
-function isProduction(): boolean {
-  return process.env.NODE_ENV === 'production';
-}
 
 //---------------
 // Supabase/PostgREST failures arrive as plain objects
@@ -83,7 +76,6 @@ function sanitizeReportBody(value: unknown): unknown {
 //---------------
 
 function reportErrorToPostHog(message: string, cause: unknown, metadata?: Record<string, unknown>, logId?: string): void {
-  if (!isProduction()) return;
   try {
     const client = getPostHogServer();
     if (!client) return;
@@ -116,7 +108,6 @@ function reportErrorToPostHog(message: string, cause: unknown, metadata?: Record
 }
 
 function reportWarningToPostHog(message: string, metadata?: Record<string, unknown>, logId?: string): void {
-  if (!isProduction()) return;
   try {
     const client = getPostHogServer();
     if (!client) return;

@@ -125,6 +125,44 @@ describe('trackEvent', () => {
     expect(mockCapture).toHaveBeenCalledTimes(2);
   });
 
+
+  it('tags every capture with source mcp and environment', async () => {
+    vi.stubEnv('POSTHOG_API_KEY', 'phc_test_key');
+    trackEvent('mcp_tool_called', { toolName: 'generate_video' });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(mockCapture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'mcp_tool_called',
+        properties: expect.objectContaining({
+          toolName: 'generate_video',
+          source: 'mcp',
+          environment: 'development',
+        }),
+      }),
+    );
+  });
+
+  it('tags environment production when NODE_ENV=production', async () => {
+    vi.stubEnv('POSTHOG_API_KEY', 'phc_test_key');
+    vi.stubEnv('NODE_ENV', 'production');
+    trackEvent('mcp_tool_called', { toolName: 'x' });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(mockCapture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        properties: expect.objectContaining({ source: 'mcp', environment: 'production' }),
+      }),
+    );
+  });
+
+  it('caller properties cannot strip or override the origin tags', async () => {
+    vi.stubEnv('POSTHOG_API_KEY', 'phc_test_key');
+    trackEvent('mcp_tool_called', { source: 'spoofed', environment: 'production' });
+    await new Promise((resolve) => setImmediate(resolve));
+    const args = mockCapture.mock.calls[0][0] as { properties: Record<string, unknown> };
+    expect(args.properties['source']).toBe('mcp');
+    expect(args.properties['environment']).toBe('development');
+  });
+
   it('warns only once when POSTHOG_API_KEY is missing', async () => {
     vi.stubEnv('POSTHOG_API_KEY', '');
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});

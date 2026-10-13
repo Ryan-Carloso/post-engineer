@@ -50,6 +50,7 @@ interface PostHogNodeClient {
     distinctId: string,
     properties?: Record<string, unknown>,
   ): void;
+  flush(): Promise<void>;
   shutdownAsync(): Promise<void>;
 }
 
@@ -87,12 +88,15 @@ function loadSdk(): Promise<PostHogNodeClient | null> {
         // client chunk, failing the build on node:fs / node:os / node:path.
         // With it, Node resolves the SDK natively at runtime on the server.
         const { PostHog } = await import(/* webpackIgnore: true */ 'posthog-node');
+        // NOTE: posthog-node v5 has no automatic background flush. `flushAt`
+        // was a v3/v4 option (silently ignored by v5), `flushInterval` is
+        // accepted but never scheduled, and the debounced flush requires the
+        // serverless `waitUntil` option. Without an explicit flush, captured
+        // events sit in the in-memory queue forever — this is why zero
+        // server_success events ever reached PostHog. Delivery is handled by
+        // toClient below, which flushes after every capture.
         return new PostHog(config.key, {
           host: config.host,
-          // Serverless (Vercel): best-effort immediate flush. flushAt: 1
-          // starts an async flush on every capture, but the function can
-          // freeze after the response before the network write lands.
-          flushAt: 1,
         }) as unknown as PostHogNodeClient;
       } catch {
         warnOnce('[posthog] Failed to initialize PostHog client — telemetry disabled');
@@ -122,16 +126,55 @@ export interface ServerPostHogClient {
   captureException(error: unknown, properties?: Record<string, unknown>): void;
 }
 
+//---------------
+// Origin tags: every server-side capture carries where it came from
+// (source) and which deployment produced it (environment) so PostHog
+// dashboards can split web-server / web-client / MCP / engine traffic and
+// prod / dev. Injected at toClient — the single choke point — so
+// logger.ts, api-error-reporting.ts, analytics.ts and billing/reconcile.ts
+// all get the tags without touching their call sites. Also shared with
+// the browser path (lib/client-logger.ts) so the environment convention
+// lives in exactly one place.
+//---------------
+
+export type TelemetryEnvironment = 'production' | 'development';
+
+export function getTelemetryEnvironment(): TelemetryEnvironment {
+  return process.env.NODE_ENV === 'production' ? 'production' : 'development';
+}
+
+const TELEMETRY_SOURCE = 'web-server';
+
+function withOriginTags(properties?: Record<string, unknown>): Record<string, unknown> {
+  // Ours win over caller-supplied values: the origin of an event is a
+  // pipeline fact, not caller input, so it can never be spoofed away.
+  return { ...properties, source: TELEMETRY_SOURCE, environment: getTelemetryEnvironment() };
+}
+
 function toClient(sdk: PostHogNodeClient): ServerPostHogClient {
+  // posthog-node v5 never flushes on its own (see the note in loadSdk):
+  // every capture must be followed by an explicit flush or the event is
+  // never delivered. Fire-and-forget so a slow PostHog never blocks the
+  // request path; failures are swallowed — telemetry must never break it.
+  const captureAndFlush = (send: () => void): void => {
+    send();
+    void sdk.flush().catch(() => {});
+  };
   return {
     capture: (event, properties) => {
-      sdk.capture({ distinctId: SERVER_DISTINCT_ID, event, properties });
+      captureAndFlush(() =>
+        sdk.capture({ distinctId: SERVER_DISTINCT_ID, event, properties: withOriginTags(properties) }),
+      );
     },
     captureAs: (distinctId, event, properties) => {
-      sdk.capture({ distinctId, event, properties });
+      captureAndFlush(() =>
+        sdk.capture({ distinctId, event, properties: withOriginTags(properties) }),
+      );
     },
     captureException: (error, properties) => {
-      sdk.captureException(error, SERVER_DISTINCT_ID, properties);
+      captureAndFlush(() =>
+        sdk.captureException(error, SERVER_DISTINCT_ID, withOriginTags(properties)),
+      );
     },
   };
 }

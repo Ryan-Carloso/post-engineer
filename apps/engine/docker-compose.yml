@@ -23,6 +23,10 @@ services:
       MPT_STATE_BACKEND: supabase
       MPT_STORAGE_DIR: /app/storage
       TZ: UTC
+      # PostHog environment tag for engine events ('production' here; local
+      # runs leave APP_ENV unset and report 'development'). Read by
+      # app/services/analytics.py; dashboards split prod/dev on it.
+      APP_ENV: production
       # Build metadata reported by GET /version and /health. Injected at
       # deploy time: the VPS deploy generates them from the commit being
       # deployed (VERSION=MAJOR.MINOR.PR, PR_NUMBER/BUILD=that PR,

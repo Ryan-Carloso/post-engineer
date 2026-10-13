@@ -71,9 +71,9 @@ MAX_CONCURRENT_INPUTS = 2
 
 MODELS_VOLUME = modal.Volume.from_name("chatterbox-models", create_if_missing=True)
 VOICES_VOLUME = modal.Volume.from_name("chatterbox-voices", create_if_missing=True)
-# Shared bearer secret required by every endpoint.
+# Shared bearer secret required by every endpoint (mirrors modal_app.py).
 # Create with: `modal secret create chatterbox-http CHATTERBOX_HTTP_SECRET=...`
-HTTP_SECRET = os.environ.get("CHATTERBOX_HTTP_SECRET", "")
+HTTP_SECRET = os.environ.get("CHATTERBOX_HTTP_SECRET")
 
 VOICES_DIR = "/voices"
 VOICES_CONFIG_PATH = "/voices/voices.toml"
@@ -286,7 +286,10 @@ def _build_fastapi_app():
         if auth is not None:
             return auth
 
-        content_length = int(request.headers.get("content-length", "0") or 0)
+        try:
+            content_length = int(request.headers.get("content-length", "0") or 0)
+        except ValueError:
+            return JSONResponse(status_code=400, content={"error": "invalid content-length"})
         if content_length > MAX_BODY_BYTES:
             return JSONResponse(status_code=413, content={"error": "request too large"})
 
@@ -323,8 +326,11 @@ def _build_fastapi_app():
         except KeyError as error:
             # Unknown voice: 404, message is safe (voice names are not secret).
             return JSONResponse(status_code=404, content={"error": str(error.args[0])})
-        except FileNotFoundError as error:
-            return JSONResponse(status_code=500, content={"error": str(error)})
+        except FileNotFoundError:
+            import loguru
+
+            loguru.logger.exception("chatterbox generation failed (file not found)")
+            return JSONResponse(status_code=500, content={"error": "generation failed"})
         except Exception:
             # Log the class only — never the input text or auth material.
             import loguru

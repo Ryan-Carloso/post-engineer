@@ -102,8 +102,11 @@ describe('logger', () => {
 });
 
 //---------------
-// logger — production routing: dev/test go to console only,
-// production errors/warnings also go to PostHog
+// logger — environment routing: every environment reports to PostHog now.
+// The old isProduction() gate is gone (tag-and-send): dev/test events flow
+// with environment: 'development' so the telemetry pipeline is validated
+// daily, and dashboards filter prod by the tag. Console output is unchanged
+// in every environment.
 //---------------
 
 describe('logger production routing', () => {
@@ -151,10 +154,16 @@ describe('logger production routing', () => {
     expect(console.error).toHaveBeenCalled();
   });
 
-  it('non-production error() never touches PostHog', () => {
+  it('non-production error() reports too, tagged environment: development (tag-and-send, no gating)', () => {
+    // Regression guard for the old isProduction() cut: dev events must flow
+    // so a dead telemetry pipeline cannot go unnoticed for days. The
+    // origin tags themselves are injected by posthog-server's client, not
+    // the mocked one here — this test pins the reporting behavior only.
     vi.stubEnv('NODE_ENV', 'test');
     logger.error('insert failed', new Error('x'));
-    expect(capture).not.toHaveBeenCalled();
+    expect(capture).toHaveBeenCalledTimes(1);
+    const [event] = capture.mock.calls[0] as [string, Record<string, unknown>];
+    expect(event).toBe('$exception');
     expect(console.error).toHaveBeenCalled();
   });
 
@@ -186,10 +195,13 @@ describe('logger production routing', () => {
     expect(console.warn).toHaveBeenCalled();
   });
 
-  it('non-production warn() does not touch PostHog', () => {
+  it('non-production warn() reports too, tagged environment: development (tag-and-send, no gating)', () => {
     vi.stubEnv('NODE_ENV', 'development');
     logger.warn('price changed');
-    expect(capture).not.toHaveBeenCalled();
+    expect(capture).toHaveBeenCalledTimes(1);
+    const [event, props] = capture.mock.calls[0] as [string, Record<string, unknown>];
+    expect(event).toBe('server_warning');
+    expect(props).toMatchObject({ message: 'price changed' });
     expect(console.warn).toHaveBeenCalled();
   });
 
