@@ -134,3 +134,105 @@ describe('server client host resolution', () => {
     expect(ctorArgs[0]?.[1]).toMatchObject({ host: 'https://eu.i.posthog.com' });
   });
 });
+
+//---------------
+// Production incident (2026-10-13): NEXT_PUBLIC_POSTHOG_HOST was set to a
+// project API key (phc_...) instead of an ingest URL. posthog-node accepts
+// any string at construction — it does NOT validate the host — so the client
+// was built fine and every capture failed at flush() time with
+// "Network error while fetching PostHog". Combined with the memoized
+// sdkPromise, one bad boot disabled server telemetry for the whole process
+// lifetime while /api/version still reported posthogConfigured: true.
+//
+// These tests pin the guard: a non-URL host is rejected up front, loudly,
+// and the default ingest host is used instead.
+//---------------
+describe('server client host validation', () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    __resetPostHogServerForTests();
+    ctorArgs.length = 0;
+    process.env = { ...originalEnv };
+    delete process.env.POSTHOG_API_KEY;
+    delete process.env.NEXT_PUBLIC_POSTHOG_KEY;
+    delete process.env.NEXT_PUBLIC_POSTHOG_HOST;
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    __resetPostHogServerForTests();
+    vi.restoreAllMocks();
+  });
+
+  // A structurally valid PostHog project API key, of the shape that was
+  // misconfigured in production. The literal is a FAKE (this repo is public):
+  // the point is the `phc_` prefix and key-like body, not the real value.
+  const misconfiguredHost = 'phc_notARealProjectKey0000000000000000000000000';
+
+  it('rejects a project API key used as NEXT_PUBLIC_POSTHOG_HOST', async () => {
+    process.env.POSTHOG_API_KEY = 'phc_test_key';
+    process.env.NEXT_PUBLIC_POSTHOG_HOST = misconfiguredHost;
+    const { getPostHogServer, flushPostHog } = await import('@/lib/posthog-server');
+    getPostHogServer();
+    await flushPostHog();
+    expect(ctorArgs).toHaveLength(1);
+    expect(ctorArgs[0]?.[1]).toMatchObject({ host: DEFAULT_POSTHOG_HOST });
+  });
+
+  it('warns loudly when the host is not an http(s) URL', async () => {
+    process.env.POSTHOG_API_KEY = 'phc_test_key';
+    process.env.NEXT_PUBLIC_POSTHOG_HOST = misconfiguredHost;
+    const { getPostHogServer, flushPostHog } = await import('@/lib/posthog-server');
+    getPostHogServer();
+    await flushPostHog();
+    const warnings = vi
+      .mocked(console.warn)
+      .mock.calls.map((call) => String(call[0]))
+      .join('\n');
+    expect(warnings).toContain('NEXT_PUBLIC_POSTHOG_HOST');
+    // The warning must not echo the value itself: the misconfigured value
+    // IS a credential in this incident's shape.
+    expect(warnings).not.toContain(misconfiguredHost);
+  });
+
+  it('never logs the rejected host value, whatever it is', async () => {
+    process.env.POSTHOG_API_KEY = 'phc_test_key';
+    process.env.NEXT_PUBLIC_POSTHOG_HOST = 'not-a-url-at-all';
+    const { getPostHogServer, flushPostHog } = await import('@/lib/posthog-server');
+    getPostHogServer();
+    await flushPostHog();
+    const warnings = vi
+      .mocked(console.warn)
+      .mock.calls.map((call) => call.map(String).join(' '))
+      .join('\n');
+    expect(warnings).not.toContain('not-a-url-at-all');
+  });
+
+  it.each([
+    ['a bare host without scheme', 'eu.i.posthog.com'],
+    ['a scheme-less string with a path', 'eu.i.posthog.com/batch'],
+    ['a non-http scheme', 'javascript:alert(1)'],
+  ])('rejects %s', async (_label, host) => {
+    process.env.POSTHOG_API_KEY = 'phc_test_key';
+    process.env.NEXT_PUBLIC_POSTHOG_HOST = host;
+    const { getPostHogServer, flushPostHog } = await import('@/lib/posthog-server');
+    getPostHogServer();
+    await flushPostHog();
+    expect(ctorArgs).toHaveLength(1);
+    expect(ctorArgs[0]?.[1]).toMatchObject({ host: DEFAULT_POSTHOG_HOST });
+  });
+
+  it('still honors a valid custom self-hosted URL', async () => {
+    process.env.POSTHOG_API_KEY = 'phc_test_key';
+    process.env.NEXT_PUBLIC_POSTHOG_HOST = 'https://posthog.internal.example:8000';
+    const { getPostHogServer, flushPostHog } = await import('@/lib/posthog-server');
+    getPostHogServer();
+    await flushPostHog();
+    expect(ctorArgs).toHaveLength(1);
+    expect(ctorArgs[0]?.[1]).toMatchObject({
+      host: 'https://posthog.internal.example:8000',
+    });
+  });
+});

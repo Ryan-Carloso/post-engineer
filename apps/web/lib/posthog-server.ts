@@ -72,8 +72,45 @@ function getConfig(): { key: string; host: string } | null {
     warnOnce('[posthog] POSTHOG_API_KEY / NEXT_PUBLIC_POSTHOG_KEY not set — PostHog telemetry disabled');
     return null;
   }
-  const host = process.env.NEXT_PUBLIC_POSTHOG_HOST ?? DEFAULT_POSTHOG_HOST;
-  return { key, host };
+  return { key, host: resolveHost() };
+}
+
+//---------------
+// Resolve the ingest host, refusing anything that is not an http(s) URL.
+//
+// posthog-node accepts ANY string as `host` and only discovers the problem
+// when a capture is flushed ("Network error while fetching PostHog"). In
+// production (2026-10-13) NEXT_PUBLIC_POSTHOG_HOST was set to a project API
+// key (phc_...) instead of an ingest URL: the client constructed fine, every
+// flush failed, and — because loadSdk memoizes sdkPromise — one bad boot
+// disabled server telemetry for the whole process lifetime while
+// /api/version still reported posthogConfigured: true. The misconfigured
+// value is itself a credential, so it is never echoed into the warning.
+//---------------
+function resolveHost(): string {
+  const host = process.env.NEXT_PUBLIC_POSTHOG_HOST;
+  // Empty string is the documented "unset" case (the .env.example ships an
+  // empty value), so it falls through to the default rather than warning.
+  if (host === undefined || host === '') return DEFAULT_POSTHOG_HOST;
+  let parsed: URL;
+  try {
+    parsed = new URL(host);
+  } catch {
+    warnOnce(
+      '[posthog] NEXT_PUBLIC_POSTHOG_HOST is not a valid URL — falling back to the default ingest host. ' +
+        'It must be an https:// ingest URL (e.g. https://eu.i.posthog.com), NOT a project API key.',
+    );
+    return DEFAULT_POSTHOG_HOST;
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    warnOnce(
+      `[posthog] NEXT_PUBLIC_POSTHOG_HOST uses the unsupported scheme "${parsed.protocol}" — ` +
+        'falling back to the default ingest host. It must be an http(s) ingest URL, NOT a project API key.',
+    );
+    return DEFAULT_POSTHOG_HOST;
+  }
+  // Normalize so the SDK never receives a trailing-slash/port-less variant.
+  return host;
 }
 
 function loadSdk(): Promise<PostHogNodeClient | null> {
@@ -98,8 +135,18 @@ function loadSdk(): Promise<PostHogNodeClient | null> {
         return new PostHog(config.key, {
           host: config.host,
         }) as unknown as PostHogNodeClient;
-      } catch {
-        warnOnce('[posthog] Failed to initialize PostHog client — telemetry disabled');
+      } catch (error: unknown) {
+        // Log the actual cause, not just "it failed": the bare `catch {}` that
+        // shipped here is why the bad NEXT_PUBLIC_POSTHOG_HOST above took a
+        // full day to find — the log said "failed to initialize" and nothing
+        // else, while every event silently vanished. Only the error NAME and
+        // message are logged; the config object (which holds the API key) is
+        // deliberately never included.
+        warnOnce(
+          `[posthog] Failed to initialize PostHog client — telemetry disabled (${
+            error instanceof Error ? `${error.name}: ${error.message}` : 'unknown error'
+          })`,
+        );
         return null;
       }
     })();
