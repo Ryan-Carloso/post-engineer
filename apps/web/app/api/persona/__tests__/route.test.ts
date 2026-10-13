@@ -551,6 +551,17 @@ describe('POST /api/persona', () => {
     expect(body.error).toContain('videoAspect');
   });
 
+  it('creates a persona with a react videoLayout: video_layout is stored', async () => {
+    const { inserted } = mockSupabase();
+
+    const res = await POST(
+      formRequest({ name: 'Ana', voiceId: 'voz-1', videoLayout: 'react' }, [photo()]),
+    );
+
+    expect(res.status).toBe(200);
+    expect(inserted[0]).toMatchObject({ video_layout: 'react' });
+  });
+
   it('cria persona com nicho', async () => {
     const { inserted } = mockSupabase();
 
@@ -834,6 +845,25 @@ describe('PATCH /api/persona', () => {
     expect(res.status).toBe(200);
     expect(body.success).toBe(true);
     expect(updated[0]).toMatchObject({ name: 'Novo Nome' });
+  });
+
+  it('updates the videoLayout', async () => {
+    const { updated } = mockSupabaseForPatch();
+
+    const res = await PATCH(patchRequest('persona-uuid-1', { videoLayout: 'react' }));
+
+    expect(res.status).toBe(200);
+    expect(updated[0]).toMatchObject({ video_layout: 'react' });
+  });
+
+  it('returns 400 with an invalid videoLayout', async () => {
+    mockSupabaseForPatch();
+
+    const res = await PATCH(patchRequest('persona-uuid-1', { videoLayout: 'cinematic' }));
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('videoLayout');
   });
 
   it('nova foto substitui a antiga: sobe arquivo novo e remove o antigo', async () => {
