@@ -575,13 +575,124 @@ def _run_ffmpeg_bounded(
     return result
 
 
+LAYOUT_STANDARD = "standard"
+LAYOUT_REACT = "react"
+VIDEO_LAYOUTS = frozenset({LAYOUT_STANDARD, LAYOUT_REACT})
+
+# Divider drawn on the seam between the persona and the b-roll in the react
+# layout. Without it the two blocks read as two videos stapled together; a 2px
+# line at the seam reads as one frame. Sized in output pixels so it stays the
+# same visual weight at any resolution.
+REACT_DIVIDER_PX = 4
+REACT_DIVIDER_COLOR = "white@0.85"
+
+
+def _react_split_filter(width: int, height: int) -> str:
+    """Filter graph for the react layout: persona on top, b-roll below.
+
+    The persona block scales by WIDTH and is cropped from the top edge, so it
+    keeps head and shoulders and drops the torso — the least valuable part of
+    the frame. The opposite (contain to fit) leaves ~370px of empty bar down
+    each side of a 1080-wide block.
+
+    Both halves are cropped to the same size because ``vstack`` requires
+    identical widths; half of an odd height would be rejected by the encoder.
+    """
+    half = height // 2
+    divider_y = half - REACT_DIVIDER_PX // 2
+    return (
+        # b-roll (input 0) fills the lower block, cover-fit then centre-crop.
+        f"[0:v]scale={width}:{half}:force_original_aspect_ratio=increase,"
+        f"crop={width}:{half},setsar=1[broll];"
+        # persona (input 1): scale by width, crop the torso off the bottom.
+        f"[1:v]scale={width}:-2,crop={width}:{half},setsar=1[avatar];"
+        f"[avatar][broll]vstack=inputs=2[stacked];"
+        f"[stacked]drawbox=x=0:y={divider_y}:w={width}:h={REACT_DIVIDER_PX}"
+        f":color={REACT_DIVIDER_COLOR}:t=fill[vout]"
+    )
+
+
+def _build_lipsync_intro_command(
+    background_video: str,
+    lipsync_video: str,
+    intro_file: str,
+    width: int,
+    height: int,
+    duration: float,
+    layout: str,
+) -> list[str]:
+    """ffmpeg argv for the hook segment only.
+
+    Inputs are ordered background (0) then lipsync (1) for BOTH layouts, so
+    the ``-map`` for audio never depends on which layout is running.
+    """
+    if layout == LAYOUT_REACT:
+        command = [
+            utils.get_ffmpeg_binary(), "-y",
+            "-i", background_video,
+            "-i", lipsync_video,
+            "-t", str(duration),
+            "-filter_complex", _react_split_filter(width, height),
+            # Video from the filter output; audio from INPUT 1 (the persona).
+            # A Pexels b-roll clip carries its own audio, so mapping 0:a?
+            # buries the narration under stock footage sound.
+            "-map", "[vout]",
+            "-map", "1:a",
+        ]
+    else:
+        command = [
+            utils.get_ffmpeg_binary(), "-y", "-i", lipsync_video,
+            "-t", str(duration),
+            "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
+                   f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1",
+            # The standard intro drops audio entirely: this segment REPLACES
+            # the background's first seconds, and the background's own audio is
+            # re-muxed later from the source timeline.
+            "-an",
+        ]
+    return command + [
+        "-c:v", _get_effective_video_codec(),
+        # Force the pipeline fps: LongCat avatar-v1.5 renders at 25fps and a
+        # stream-copied 30fps tail would balloon the concat timeline by the
+        # timebase ratio (measured +5.4s on a 27s video).
+        "-r", str(fps),
+        "-preset", _get_configured_video_preset(),
+        "-pix_fmt", "yuv420p", intro_file,
+    ]
+
+
 def replace_video_intro_with_lipsync(
     background_video: str,
     lipsync_video: str,
     output_file: str,
     duration: float = 5,
+    layout: str = LAYOUT_STANDARD,
 ) -> str:
-    """Replace the beginning of a background video with a talking avatar."""
+    """Replace the beginning of a background video with a talking avatar.
+
+    ``layout`` picks how the avatar meets the b-roll during the hook:
+
+    ``standard``
+        The avatar fills the frame (scale + pad). The b-roll's first
+        ``duration`` seconds are replaced outright.
+    ``react``
+        The frame is split in half: the avatar on top, the b-roll below.
+        Same splice, different intro encode.
+
+    Both layouts share everything after the intro encode — the tail is
+    stream-copied either way — so the only difference is the single filter
+    that renders the hook. That is deliberate: the tail stream-copy is what
+    keeps this cheap, and duplicating it per layout would risk the two paths
+    drifting apart.
+    """
+    if layout not in VIDEO_LAYOUTS:
+        # Fail loud. A typo must never degrade to the default silently: the
+        # user picked a layout and would get a different video without any
+        # signal that their choice was dropped.
+        raise ValueError(
+            f"unknown lipsync layout {layout!r}; expected one of "
+            f"{', '.join(sorted(VIDEO_LAYOUTS))}"
+        )
     source = _open_video_clip_quietly(background_video)
     width, height = source.w, source.h
     source.close()
@@ -595,21 +706,17 @@ def replace_video_intro_with_lipsync(
     # cost being removed. Encoding the intro alone and then joining the two
     # files with the concat DEMUXER lets the tail be stream-copied.
     intro_file = f"{os.path.splitext(output_file)[0]}-intro-encoded.mp4"
-    intro_command = [
-        utils.get_ffmpeg_binary(), "-y", "-i", lipsync_video,
-        "-t", str(duration),
-        "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
-               f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1",
-        "-an", "-c:v", _get_effective_video_codec(),
-        # Force the pipeline fps: LongCat avatar-v1.5 renders at 25fps and a
-        # stream-copied 30fps tail would balloon the concat timeline by the
-        # timebase ratio (measured +5.4s on a 27s video).
-        "-r", str(fps),
-        "-preset", _get_configured_video_preset(),
-        "-pix_fmt", "yuv420p", intro_file,
-    ]
+    intro_command = _build_lipsync_intro_command(
+        background_video=background_video,
+        lipsync_video=lipsync_video,
+        intro_file=intro_file,
+        width=width,
+        height=height,
+        duration=duration,
+        layout=layout,
+    )
     logger.info(
-        f"splicing {duration}s lip-sync intro onto {os.path.basename(background_video)}"
+        f"{layout} lipsync: {duration}s onto {os.path.basename(background_video)}"
     )
     try:
         _run_ffmpeg_bounded(
@@ -669,6 +776,29 @@ def replace_video_intro_with_lipsync(
         f"lip-sync concat completed: {os.path.basename(output_file)}"
     )
     return output_file
+
+
+def compose_lipsync_layout(
+    background_video: str,
+    lipsync_video: str,
+    output_file: str,
+    duration: float,
+    layout: str,
+) -> str:
+    """Render the persona hook using the requested layout.
+
+    Thin, named entry point so callers read the intent ("compose this layout")
+    instead of carrying a layout string into a function named "replace intro".
+    ``replace_video_intro_with_lipsync`` already does the work and validates
+    the layout, so this only forwards.
+    """
+    return replace_video_intro_with_lipsync(
+        background_video=background_video,
+        lipsync_video=lipsync_video,
+        output_file=output_file,
+        duration=duration,
+        layout=layout,
+    )
 
 
 def video_duration_seconds(video_path: str) -> float:

@@ -130,6 +130,7 @@ function buildGenerationFacts(
     post_language: string | null;
     post_voice_id: string | null;
     post_video_aspect: string | null;
+    post_video_layout: string | null;
     post_niche: string | null;
     post_paragraph_number: number | null;
     post_face_quality: string | null;
@@ -139,6 +140,7 @@ function buildGenerationFacts(
   language: string | null;
   voiceId: string | null;
   videoAspect: string | null;
+  videoLayout: string | null;
   niche: string | null;
   paragraphNumber: number | null;
   faceQuality: string | null;
@@ -152,10 +154,17 @@ function buildGenerationFacts(
   const language = scheduleRow.post_language ?? null;
   const voiceId = scheduleRow.post_voice_id ?? null;
   const videoAspect = scheduleRow.post_video_aspect ?? null;
+  // NULL for schedules created before migration 018. It is NOT normalized to
+  // 'standard' here: this surface is a faithful read of the snapshot (like
+  // every sibling above), and the engine is the single place that turns a
+  // missing layout into a render decision.
+  const videoLayout = scheduleRow.post_video_layout ?? null;
   const niche = scheduleRow.post_niche ?? null;
   const paragraphNumber = scheduleRow.post_paragraph_number ?? null;
   const faceQuality = scheduleRow.post_face_quality ?? null;
-  return { faceless, language, voiceId, videoAspect, niche, paragraphNumber, faceQuality };
+  return {
+    faceless, language, voiceId, videoAspect, videoLayout, niche, paragraphNumber, faceQuality,
+  };
 }
 
 //---------------
@@ -218,7 +227,7 @@ async function getHandler(
 
   const { data: schedule, error: scheduleError } = await supabase
     .from('schedules')
-    .select('id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, timezone, post_language, post_voice_id, post_video_aspect, post_niche, post_paragraph_number, post_face_quality, publish_mode')
+    .select('id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, timezone, post_language, post_voice_id, post_video_aspect, post_video_layout, post_niche, post_paragraph_number, post_face_quality, publish_mode')
     .eq('id', row.schedule_id)
     .eq('user_id', auth.userId)
     .maybeSingle();
@@ -248,6 +257,9 @@ async function getHandler(
     post_language: string | null;
     post_voice_id: string | null;
     post_video_aspect: string | null;
+    // Migration 018. NULL for schedules created before it; standard is
+    // what those rows rendered as, so the fallback below is not a guess.
+    post_video_layout: string | null;
     post_niche: string | null;
     post_paragraph_number: number | null;
     post_face_quality: string | null;
