@@ -26,7 +26,7 @@ from app.services import (
     upload_post,
 )
 from app.services import state as sm
-from app.services import task_publish
+from app.services import persona_image, task_publish
 from app.services import task_webhook
 from app.services.bgm_history import history_repository
 from app.services.analytics import scrub_secret_values, track_event
@@ -1285,27 +1285,6 @@ def archive_final_videos(
             _update_task(task_id, video_storage_error=object_path)
 
 
-# House faces from the web persona picker are stored as a path relative to
-# the web app (apps/web/public/caracter-samples/file-N.png).
-_HOUSE_FACE_PATH = re.compile(r"/caracter-samples/file-\d+\.png")
-
-
-def resolve_persona_image_url(image_url: str) -> str:
-    """Return an absolute URL for a house-face path; other values unchanged.
-
-    MPT_UPLOAD_API_BASE_URL is the web's public URL (the publish-back
-    target), which also serves the house-face PNGs.
-    """
-    if not _HOUSE_FACE_PATH.fullmatch(image_url):
-        return image_url
-    base_url = os.getenv(task_publish.BASE_URL_ENV)
-    if not base_url:
-        raise infinitetalk.InfiniteTalkError(
-            f"{task_publish.BASE_URL_ENV} is required to load the house face {image_url}"
-        )
-    return f"{base_url.rstrip('/')}{image_url}"
-
-
 def prepare_persona_lipsync_video(
     task_id: str,
     params: VideoParams,
@@ -1339,12 +1318,11 @@ def prepare_persona_lipsync_video(
     else:
         # SSRF-safe download: public-address check on every redirect hop,
         # streamed body with a 20 MB cap, and image/* content-type required.
-        # Rejections are surfaced as InfiniteTalkError and fail the task: the
-        # post was priced with the persona's face, so it is never silently
-        # rendered without the intro.
+        # Rejections raise InfiniteTalkError and fail the task: the post was
+        # priced with the face, so it never renders without the intro.
         try:
             ssrf.download_public_file(
-                resolve_persona_image_url(image_url),
+                persona_image.resolve_persona_image_url(image_url),
                 image_path,
                 what="persona image",
                 max_bytes=_PERSONA_IMAGE_MAX_BYTES,
@@ -1698,8 +1676,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         if type(params.video_concat_mode) is str:
             params.video_concat_mode = VideoConcatMode(params.video_concat_mode)
 
-        # 6. Generate final videos. Marked before the call (like publish) so
-        # a crash inside the render reports stage=render, not music_mood.
+        # 6. Generate final videos (marked first: a crash reports stage=render)
         _mark("render")
         final_video_paths, combined_video_paths, intro_cost_usd = generate_final_videos(
             task_id,
