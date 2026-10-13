@@ -6,16 +6,13 @@ A persona arrives inline on the job payload (stateless) and resolves to:
 - photo/avatar ref for the video material (passed through for the pipeline)
 """
 
-import shutil
 
 import pytest
 from unittest.mock import patch
 from pydantic import ValidationError
 
-from app.utils import utils
 from app.models.schema import PersonaParams, VideoParams
 from app.services import task as task_service
-from app.services import persona as persona_service
 from app.services import video as video_service
 from app.services.task import (
     generate_script,
@@ -130,98 +127,8 @@ class TestResolvePersonaAudio:
         assert voice_audio == "https://supabase.test/signed/voz.mp3"
 
 
-class TestGenerateAudioLanguageResolution:
-    def test_generate_audio_speaks_the_video_language_voice(self):
-        """End-to-end composition of the two resolution steps: the raw house
-        voice id from resolve_persona_audio must be resolved to the video
-        language's Neural voice by resolve_house_voice_name before TTS.
-        Reordering the two functions (or expanding the id early) makes this
-        red while each unit test in isolation still passes — it pins the
-        composition, not the units.
-        """
-        params = _params(name="Ana", voice_id="energetic")
-        params.video_language = "pt-BR"
-        sub_maker = object()
-        task_id = "task-ptbr-voice"
-        try:
-            with (
-                patch.object(
-                    task_service.voice, "tts", return_value=sub_maker
-                ) as tts,
-                patch.object(
-                    task_service.voice, "get_audio_duration", return_value=46
-                ),
-            ):
-                audio_file, audio_duration, returned = task_service.generate_audio(
-                    task_id, params, "Rosto humano."
-                )
-        finally:
-            shutil.rmtree(utils.task_dir(task_id), ignore_errors=True)
-
-        # Assert against the catalog, never a hardcoded voice name: the test
-        # stays valid if the voice catalog changes.
-        assert (
-            tts.call_args.kwargs["voice_name"]
-            == persona_service.PERSONA_SAMPLE_VOICES["energetic"]["pt"]
-        )
-        assert audio_duration == 46
-        assert returned is sub_maker
 
 
-class TestGenerateAudioHouseVoiceStyle:
-    """The house voice personality (rate/pitch) the preview sample is
-    synthesized with must reach the pipeline TTS: 'energetic' is previewed
-    at 1.2x/+5Hz but the delivered video was narrated flat at 1.0x."""
-
-    def _tts_kwargs(self, params, task_id):
-        sub_maker = object()
-        try:
-            with (
-                patch.object(
-                    task_service.voice, "tts", return_value=sub_maker
-                ) as tts,
-                patch.object(
-                    task_service.voice, "get_audio_duration", return_value=46
-                ),
-            ):
-                task_service.generate_audio(task_id, params, "Rosto humano.")
-        finally:
-            shutil.rmtree(utils.task_dir(task_id), ignore_errors=True)
-        return tts.call_args.kwargs
-
-    def test_house_voice_rate_and_pitch_reach_the_tts(self):
-        params = _params(name="Ana", voice_id="calm")
-        params.video_language = "pt-BR"
-
-        kwargs = self._tts_kwargs(params, "task-style-calm")
-
-        # Assert against the catalog, never hardcoded literals.
-        assert kwargs["voice_rate"] == pytest.approx(
-            persona_service.HOUSE_VOICE_STYLES["calm"]["rate"]
-        )
-        assert (
-            kwargs["voice_pitch"]
-            == persona_service.HOUSE_VOICE_STYLES["calm"]["pitch"]
-        )
-
-    def test_request_rate_scales_the_house_style(self):
-        params = _params(name="Ana", voice_id="calm")
-        params.video_language = "pt-BR"
-        params.voice_rate = 1.2
-
-        kwargs = self._tts_kwargs(params, "task-style-scaled")
-
-        expected = 1.2 * persona_service.HOUSE_VOICE_STYLES["calm"]["rate"]
-        assert kwargs["voice_rate"] == pytest.approx(expected)
-
-    def test_non_house_voice_keeps_the_request_rate_and_no_pitch(self):
-        params = _params(name="Ana", voice_id="en-US-JennyNeural")
-        params.video_language = "pt-BR"
-
-        kwargs = self._tts_kwargs(params, "task-style-custom")
-
-        assert kwargs["voice_rate"] == pytest.approx(params.voice_rate)
-        assert kwargs["voice_pitch"] == ""
 
 
 class TestPersonaHookBoundary:

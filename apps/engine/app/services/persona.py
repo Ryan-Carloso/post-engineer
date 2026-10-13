@@ -5,13 +5,9 @@ database (Supabase). This module only validates and normalizes the
 persona payload that arrives inline on a video job.
 """
 
-import os
-import tempfile
 from typing import Any, Optional
 
-from loguru import logger
 
-from app.services.task import HOUSE_VOICE_NAMES
 from app.services import voice as voice_service
 
 # Short Instagram/TikTok-style video hook used for the house voice
@@ -116,29 +112,8 @@ HOUSE_VOICE_LANGUAGE_ALIASES: dict[str, str] = {
 }
 
 
-def is_house_voice_id(voice_name: str | None) -> bool:
-    """True when voice_name is a house voice id (calm/energetic/...)."""
-    return (voice_name or "").strip().lower() in {v["id"] for v in HOUSE_VOICES}
 
 
-def resolve_house_voice_name(voice_name: str, language: str | None) -> str:
-    """Resolve a house voice id to the Neural voice for the video's language.
-
-    Already qualified names (e.g. ``pt-BR-FranciscaNeural``) pass through
-    unchanged. Unknown/missing language falls back to the legacy en-US map
-    (HOUSE_VOICE_NAMES); if that map doesn't have the id either, returns
-    the original name.
-    """
-    voice_id = (voice_name or "").strip().lower()
-    if not is_house_voice_id(voice_id):
-        return voice_name
-    lang_key = HOUSE_VOICE_LANGUAGE_ALIASES.get((language or "").strip().lower(), "")
-    if lang_key:
-        try:
-            return str(sample_config_for(voice_id, lang_key)["voice"])
-        except PersonaValidationError:
-            pass
-    return HOUSE_VOICE_NAMES.get(voice_id, voice_name)
 
 
 # Bounds for the composed TTS rate. Kept coupled with the voice_rate field
@@ -149,30 +124,8 @@ VOICE_RATE_MIN = 0.1
 VOICE_RATE_MAX = 5.0
 
 
-def house_voice_style(voice_name: str | None) -> dict[str, str | float]:
-    """Rate/pitch personality for a house voice id; {} for anything else.
-
-    The preview samples are already synthesized with these values
-    (sample_config_for); the video pipeline must apply the same so the
-    delivered narration matches the preview the user heard.
-    """
-    voice_id = (voice_name or "").strip().lower()
-    if not is_house_voice_id(voice_id):
-        return {}
-    return dict(HOUSE_VOICE_STYLES[voice_id])
 
 
-def compose_voice_rate(
-    request_rate: float | None, style: dict[str, str | float]
-) -> float:
-    """Compose the request rate with the house voice style rate.
-
-    The request rate is a multiplier on the house style (1.0 keeps the
-    style); the product is clamped to the schema's voice_rate bounds.
-    """
-    base = request_rate if request_rate is not None else 1.0
-    style_rate = float(style.get("rate", 1.0))
-    return min(VOICE_RATE_MAX, max(VOICE_RATE_MIN, base * style_rate))
 
 
 class PersonaValidationError(Exception):
@@ -180,81 +133,22 @@ class PersonaValidationError(Exception):
 
 
 def get_house_voices() -> list[dict[str, Any]]:
-    return list(HOUSE_VOICES)
+    """The voice catalog the UI offers.
 
-
-def get_sample_languages() -> list[dict[str, str]]:
-    return [
-        {"code": code, "label": spec["label"]}
-        for code, spec in SAMPLE_LANGUAGE_VOICES.items()
-    ]
-
-
-def sample_config_for(voice_id: str, language: str) -> dict[str, Any]:
-    """Return the sample config (voice + rate) for a house voice/language.
-
-    Each house voice has its own edge-tts voice and personality rate, so
-    calm and energetic sound distinct from each other.
+    These are the Chatterbox voices configured under ``[chatterbox] voices``,
+    emitted provider-qualified (``chatterbox:ryan``). That is deliberate: the
+    id is what gets stored on the persona and handed straight to
+    ``voice.tts``, which routes on the prefix. There is no house-voice layer
+    left to map ids onto Azure names, and a voice the pipeline cannot reach
+    is a voice the picker must not show.
     """
-    persona_voices = PERSONA_SAMPLE_VOICES.get(voice_id) or {}
-    voice = persona_voices.get(language)
-    if not voice:
-        raise PersonaValidationError(
-            f"no sample voice configured for {voice_id}/{language}"
-        )
-    return {
-        "voice": voice,
-        "rate": HOUSE_VOICE_STYLES[voice_id]["rate"],
-        "pitch": HOUSE_VOICE_STYLES[voice_id]["pitch"],
-    }
+    return [{"id": voice_id} for voice_id in voice_service.get_chatterbox_voices()]
 
 
-def synthesize_voice_sample(voice_id: str, language: str = "pt") -> Optional[bytes]:
-    """Return a short TTS sample for a house voice in the given language.
-
-    Samples are synthesized once and cached in memory: repeated requests
-    for the same (voice, language) pair reuse the same audio bytes.
-    Raises PersonaValidationError for unknown house voice ids or
-    unsupported languages.
-    """
-    voice_name = HOUSE_VOICE_NAMES.get(voice_id)
-    if not voice_name:
-        raise PersonaValidationError(f"unknown house voice: {voice_id}")
-
-    language_spec = SAMPLE_LANGUAGE_VOICES.get(language)
-    if not language_spec:
-        raise PersonaValidationError(f"unsupported sample language: {language}")
 
 
-    cache_key = (voice_id, language)
-    cached = _voice_sample_cache.get(cache_key)
-    if cached is not None:
-        return cached
 
-    text = VOICE_SAMPLE_TEXTS.get(language, VOICE_SAMPLE_TEXTS["pt"])
-    tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
-    tmp.close()
-    voice_file = tmp.name
-    try:
-        sample = sample_config_for(voice_id, language)
-        voice_service.tts(
-            text,
-            sample["voice"],
-            sample["rate"],
-            voice_file,
-            voice_pitch=sample["pitch"],
-        )
-        if not os.path.exists(voice_file) or os.path.getsize(voice_file) == 0:
-            logger.error(f"voice sample synthesis produced no audio: {voice_id}")
-            return None
-        with open(voice_file, "rb") as f:
-            audio = f.read()
-    finally:
-        if os.path.exists(voice_file):
-            os.remove(voice_file)
 
-    _voice_sample_cache[cache_key] = audio
-    return audio
 
 
 def _require_exactly_one(

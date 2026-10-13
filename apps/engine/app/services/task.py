@@ -33,13 +33,6 @@ from app.services.analytics import scrub_secret_values, track_event
 from app.services.notify import safe_reason, send_discord, task_failed_msg
 from app.utils import file_security, ssrf, utils
 
-HOUSE_VOICE_NAMES: dict[str, str] = {
-    "calm": "en-US-JennyNeural-Female",
-    "energetic": "en-US-GuyNeural-Male",
-    "young": "en-US-AriaNeural-Female",
-    "deep": "en-US-DavisNeural-Male",
-}
-
 #---------------
 # Remote material sources, always used in cascade with per-task shuffled
 # order: the starting source is drawn at random (variety across videos)
@@ -984,35 +977,11 @@ def generate_audio(task_id, params, video_script):
     if not custom_audio_file:
         logger.info("no custom audio file provided, using TTS to generate audio.")
         audio_file = path.join(utils.task_dir(task_id), "audio.mp3")
-        # House voice ids (calm/energetic/...) can arrive directly in
-        # voice_name — faceless/debug flow, no inline persona. Resolve
-        # to the video language's Neural voice before TTS; without this
-        # edge-tts rejects with "Invalid voice" and the job fails.
-        from app.services.persona import (
-            compose_voice_rate,
-            house_voice_style,
-            resolve_house_voice_name,
-        )
-
-        # House voices carry a personality (rate/pitch) the preview sample
-        # already used; the pipeline ignored it, so 'energetic' was previewed
-        # at 1.2x/+5Hz but delivered flat at 1.0x. The request rate scales
-        # the house style (nobody sends voice_rate today, so the style wins).
-        # The style is read from the RAW id, before the language resolution
-        # below turns it into a qualified voice name.
-        # voice_pitch is only honored on the azure v1 / edge-tts path
-        # (voice.py); other providers ignore it.
-        style = house_voice_style(persona_voice_name)
-        persona_voice_name = resolve_house_voice_name(
-            persona_voice_name, getattr(params, "video_language", "")
-        )
         # Fail fast when nothing resolved to a usable voice name. An empty
         # voice_name (or an empty-string persona voice_id, which the
         # PersonaParams validator counts as a voice but the resolver treats
-        # as absent) would otherwise reach edge-tts, which rejects it as
-        # "Invalid voice ''." after burning its retries, and the job dies
-        # with the cryptic "failed to generate audio: voice/subtitle
-        # mismatch" instead of a readable reason.
+        # as absent) would otherwise reach the provider and burn its retries
+        # before dying with a cryptic "voice/subtitle mismatch".
         if not (persona_voice_name or "").strip():
             _fail_task(
                 task_id,
@@ -1023,15 +992,18 @@ def generate_audio(task_id, params, video_script):
             )
             logger.error(
                 f"no voice configured for TTS, task_id: {task_id} "
-                "(empty voice name after persona/house-voice resolution)"
+                "(empty voice name)"
             )
             return None, None, None
+        # The voice id goes straight to voice.tts, which routes it to
+        # ElevenLabs (`elevenlabs:<id>`) or Chatterbox (`chatterbox:<name>`)
+        # and fails loudly on anything else. There is no house-voice
+        # resolution step left: the catalog is the provider's own voice list.
         sub_maker = voice.tts(
             text=video_script,
             voice_name=voice.parse_voice_name(persona_voice_name),
-            voice_rate=compose_voice_rate(params.voice_rate, style),
+            voice_rate=params.voice_rate if params.voice_rate is not None else 1.0,
             voice_file=audio_file,
-            voice_pitch=str(style.get("pitch", "")),
         )
         if sub_maker is None:
             _fail_task(task_id, "failed to generate audio: voice/subtitle mismatch", params, stage="audio")

@@ -487,17 +487,6 @@ compute_type = "int8"
 # http = "http://10.10.1.10:3128"
 # https = "http://10.10.1.10:1080"
 
-[azure]
-# Azure Speech API Key
-# Get your API key at https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/SpeechServices
-speech_key = ""
-speech_region = ""
-
-[siliconflow]
-# SiliconFlow API Key
-# Get your API key at https://siliconflow.cn
-api_key = ""
-
 [elevenlabs]
 # ElevenLabs API Key
 # Get your API key at https://elevenlabs.io/app/settings/api-keys
@@ -574,10 +563,6 @@ api_key = ""
 model_id = "chatterbox"
 # Voices exposed by your server; shown in the WebUI dropdown as chatterbox:<name>
 voices = ["default-Female"]
-# Edge-tts voice used when the Chatterbox server fails (automatic fallback).
-# Must exist in app/services/data/azure_voices.json. Set to "" to disable the
-# fallback and let Chatterbox failures fail the TTS step normally.
-fallback_voice = "pt-BR-AntonioNeural"
 
 [longcat]
 # The persona lip-sync model: LongCat-Video-Avatar 1.5 on Modal (modal_longcat.py).
