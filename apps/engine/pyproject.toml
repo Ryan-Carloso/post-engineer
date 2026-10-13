@@ -153,10 +153,17 @@ source_paths = [
 only_mutate = []
 # Files the test run needs inside mutants/, beyond mutmut's defaults
 # (test/, pyproject.toml, uv.lock, ...).
+# - modal_longcat.py / modal_longcat_gpu.py: the LongCat source-scan tests
+#   (test_longcat.py, test_longcat_vocal_patch.py) read both files and
+#   import modal_longcat_gpu. Without these copies every engine mutation
+#   shard fails with FileNotFoundError / ImportError on the first modal
+#   test, since the mutants/ working copy holds only app/ + test/.
 also_copy = [
     "config.example.toml",
     "cli.py",
     "main.py",
+    "modal_longcat.py",
+    "modal_longcat_gpu.py",
 ]
 # Test exclusions for mutmut runs (these still run in the main engine CI job):
 # - test_mypy_config.py pins the CI workflow file layout (.github/workflows/),
