@@ -115,17 +115,12 @@ const PersonaPageContent = () => {
     methods.setValue('niche', persona.niche ?? '');
   }, [editingPersona, methods]);
 
-  // The error page must NOT subscribe to these queries itself: mounting it
-  // would add a second observer, and refetchOnMount would refetch the
-  // errored query, flipping it back to pending and unmounting the error
-  // page — an infinite mount/refetch loop that never shows the error.
-  // The retry closure lives here, on the queries this component owns.
+  // The error page must NOT subscribe to these queries: mounting it adds a
+  // second observer, refetchOnMount refetches the errored query, and the
+  // error page unmounts again — an infinite loop. Retry lives here instead.
   const retryFailedQueries = async (): Promise<void> => {
-    const requests: Array<Promise<unknown>> = [];
-    if (voicesQuery.isError) requests.push(voicesQuery.refetch());
-    if (sampleLanguagesQuery.isError) requests.push(sampleLanguagesQuery.refetch());
-    if (personasQuery.isError) requests.push(personasQuery.refetch());
-    await Promise.all(requests);
+    const failed = [voicesQuery, sampleLanguagesQuery, personasQuery].filter((query) => query.isError);
+    await Promise.all(failed.map((query) => query.refetch()));
   };
 
   if (voicesQuery.isError || sampleLanguagesQuery.isError || personasQuery.isError) {
@@ -215,13 +210,9 @@ const PersonaFormSync = () => {
 //---------------
 // PersonaPageError explains the unavailable dependency and offers recovery.
 //---------------
-const PersonaPageError = ({
-  onRetry,
-  isRetrying,
-}: {
-  onRetry: () => Promise<void>;
-  isRetrying: boolean;
-}) => {
+type PersonaPageErrorProps = { onRetry: () => Promise<void>; isRetrying: boolean };
+
+const PersonaPageError = ({ onRetry, isRetrying }: PersonaPageErrorProps) => {
   const { t } = useI18n();
 
   return (
