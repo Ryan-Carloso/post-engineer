@@ -180,10 +180,10 @@ class TestPersonaHookBoundary:
         assert result == "Hook is complete.\n\nDetails follow."
         assert generate.call_count == 3
         initial_prompt = generate.call_args_list[0].kwargs["video_script_prompt"]
-        assert "3 to 12 seconds" in initial_prompt
-        assert "8 to 28 words" in initial_prompt
-        assert generate.call_args_list[1].kwargs["target_words_min"] == 8
-        assert generate.call_args_list[1].kwargs["target_words_max"] == 28
+        assert "8 to 12 seconds" in initial_prompt
+        assert "20 to 30 words" in initial_prompt
+        assert generate.call_args_list[1].kwargs["target_words_min"] == 20
+        assert generate.call_args_list[1].kwargs["target_words_max"] == 30
         assert generate.call_args_list[2].kwargs["target_words_min"] == 72
         assert generate.call_args_list[2].kwargs["target_words_max"] == 94
 
@@ -268,13 +268,21 @@ class TestPersonaHookGate:
 class TestPersonaHookRetry:
     """An overshooting persona hook must be regenerated, not fail the task.
 
-    The engine appends its own hook instruction ("8 to 12 words, 3 to 6
+    The engine appends its own hook instruction ("20 to 37 words, 8 to 16
     seconds") to the user's prompt, so LLM variance can still produce a
-    hook the TTS speaks in >6s. Regenerating a shorter hook (plus its
+    hook the TTS speaks in >16s. Regenerating a shorter hook (plus its
     audio/subtitles) is cheaper than failing the whole task.
     """
 
-    _LONG_HOOK = "This is a much longer hook paragraph written for testing purposes here today"
+    # An overshooting hook is LONG by construction: the regeneration cap is
+    # clamped to [words_min, words_max], so a 13-word fixture would floor at
+    # words_min and stop being shorter than what it replaced.
+    _LONG_HOOK = (
+        "This is a much longer hook paragraph written purely for testing "
+        "purposes, dragging on well past the sixteen second ceiling that the "
+        "engine enforces, with plenty of extra words that no sane script "
+        "would ever place inside a single opening paragraph"
+    )
     _BODY = "The rest of the video script body goes here."
 
     def _script(self, hook):
@@ -300,10 +308,65 @@ class TestPersonaHookRetry:
             )
         return result, gen_hook, gen_audio, gen_sub
 
+    def test_retry_discards_the_stale_subtitle_before_regenerating(self, tmp_path):
+        """A regenerated hook must not reuse the previous script's subtitle.
+
+        `generate_subtitle` only falls back to whisper when the file is
+        ABSENT — its `os.path.exists(subtitle_path)` gate. The retry rewrites
+        the script and the audio but used to leave the old .srt on disk, so
+        the edge path wrote nothing, the whisper fallback was skipped, and the
+        stale timings were read against the new script. The hook of the new
+        script is not in them: "could not locate hook paragraph in subtitle
+        timestamps", and the task died there.
+        """
+        from app.services.task import _ensure_persona_hook_fits
+
+        params = _params(name="Ana", voice_id="calm")
+        script = self._script(self._LONG_HOOK)
+        subtitle_file = tmp_path / "subtitle.srt"
+        subtitle_file.write_text("1\n00:00:00,000 --> 00:00:18,000\nstale\n", encoding="utf-8")
+
+        observed: list[bool] = []
+
+        def generate_subtitle_for_new_script(*_args, **_kwargs):
+            observed.append(subtitle_file.exists())
+            return str(subtitle_file)
+
+        with (
+            patch.object(
+                task_service.subtitle,
+                "file_to_subtitles",
+                side_effect=[
+                    self._subs(self._LONG_HOOK + ".", 18.0),
+                    self._subs("Short hook here.", 10.0),
+                ],
+            ),
+            patch.object(task_service.llm, "generate_script", return_value="Short hook here."),
+            patch.object(task_service, "generate_audio", return_value=("audio2.mp3", 30, object())),
+            patch.object(
+                task_service, "generate_subtitle", side_effect=generate_subtitle_for_new_script
+            ),
+        ):
+            _ensure_persona_hook_fits(
+                "task-1",
+                params,
+                script,
+                "audio.mp3",
+                40,
+                object(),
+                str(subtitle_file),
+            )
+
+        assert observed, "the retry never regenerated the subtitle"
+        assert observed[0] is False, (
+            "the stale subtitle from the previous script was still on disk when "
+            "the new one was generated, so the whisper fallback was skipped"
+        )
+
     def test_hook_within_window_passes_without_regeneration(self):
         params = _params(name="Ana", voice_id="calm")
         script = self._script(self._LONG_HOOK)
-        subs = self._subs(self._LONG_HOOK + ".", 5.0)
+        subs = self._subs(self._LONG_HOOK + ".", 9.0)
 
         result, gen_hook, gen_audio, _ = self._run_guard(params, script, [subs])
 
@@ -314,8 +377,8 @@ class TestPersonaHookRetry:
     def test_overshooting_hook_is_regenerated_with_shorter_audio(self):
         params = _params(name="Ana", voice_id="calm")
         script = self._script(self._LONG_HOOK)
-        overshoot = self._subs(self._LONG_HOOK + ".", 14.0)
-        fixed = self._subs("Short hook here.", 5.0)
+        overshoot = self._subs(self._LONG_HOOK + ".", 18.0)
+        fixed = self._subs("Short hook here.", 10.0)
 
         (new_script, audio_file, _, _, _), gen_hook, gen_audio, gen_sub = self._run_guard(
             params, script, [overshoot, fixed]
@@ -333,9 +396,9 @@ class TestPersonaHookRetry:
     def test_retry_exhausted_raises_the_hook_error(self):
         params = _params(name="Ana", voice_id="calm")
         script = self._script(self._LONG_HOOK)
-        overshoot = self._subs(self._LONG_HOOK + ".", 14.0)
+        overshoot = self._subs(self._LONG_HOOK + ".", 18.0)
 
-        with pytest.raises(ValueError, match="between 3 and 12 seconds"):
+        with pytest.raises(ValueError, match="between 8 and 12 seconds"):
             self._run_guard(
                 params,
                 script,
@@ -380,11 +443,11 @@ class TestPersonaPacingConstants:
     """Persona pacing is product-fixed in task.py — no config knobs."""
 
     def test_constants_are_the_approved_product_values(self):
-        assert task_service.PERSONA_HOOK_MIN_SECONDS == 3.0
+        assert task_service.PERSONA_HOOK_MIN_SECONDS == 8.0
         assert task_service.PERSONA_HOOK_MAX_SECONDS == 12.0
-        assert task_service.PERSONA_HOOK_TARGET_WORDS_MIN == 8
-        assert task_service.PERSONA_HOOK_TARGET_WORDS_MAX == 28
-        assert task_service.PERSONA_LIPSYNC_MAX_SECONDS == 15.0
+        assert task_service.PERSONA_HOOK_TARGET_WORDS_MIN == 20
+        assert task_service.PERSONA_HOOK_TARGET_WORDS_MAX == 30
+        assert task_service.PERSONA_LIPSYNC_MAX_SECONDS == 12.0
         assert task_service.FACE_FILL_MIN_SECONDS == 5.0
         assert task_service.FACE_FILL_MAX_SECONDS == 8.0
         assert task_service.PERSONA_SELECTIVE_STOCK_MIN_SCORE == 0.3
@@ -629,7 +692,7 @@ class TestLipsyncCeilingGuard:
         import base64 as b64
 
         monkeypatch.setattr(
-            task_service, "persona_hook_end_seconds", lambda *a, **k: 16.0
+            task_service, "persona_hook_end_seconds", lambda *a, **k: 17.0
         )
         monkeypatch.setattr(task_service.utils, "task_dir", lambda _tid: str(tmp_path))
         monkeypatch.setattr(
