@@ -1,5 +1,5 @@
 import posthog from "posthog-js";
-import { DEFAULT_POSTHOG_HOST } from "./lib/posthog-config";
+import { resolveHost } from "./lib/posthog-config";
 
 //---------------
 // PostHog — client/browser telemetry (error tracking, analytics,
@@ -19,7 +19,14 @@ if (!key) {
   );
 } else {
   posthog.init(key, {
-    api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST ?? DEFAULT_POSTHOG_HOST,
+    // Validated, not passed through: posthog-js accepts any string as
+    // api_host and only fails later at send time. The same guard the server
+    // SDK uses, so a project API key misconfigured as the host cannot
+    // silently disable browser telemetry either (production incident,
+    // 2026-10-13 — see lib/posthog-config.ts).
+    api_host: resolveHost(process.env.NEXT_PUBLIC_POSTHOG_HOST, (message) =>
+      console.warn(message),
+    ),
     // Error tracking: capture unhandled exceptions automatically.
     capture_exceptions: true,
   });

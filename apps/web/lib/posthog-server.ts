@@ -26,7 +26,7 @@
 // reporting instead of throwing.
 //---------------
 
-import { DEFAULT_POSTHOG_HOST } from './posthog-config';
+import { resolveHost } from './posthog-config';
 
 // Server-side events have no user session: attribute them to the API
 // server itself. Per-user attribution happens client-side.
@@ -72,8 +72,12 @@ function getConfig(): { key: string; host: string } | null {
     warnOnce('[posthog] POSTHOG_API_KEY / NEXT_PUBLIC_POSTHOG_KEY not set — PostHog telemetry disabled');
     return null;
   }
-  const host = process.env.NEXT_PUBLIC_POSTHOG_HOST ?? DEFAULT_POSTHOG_HOST;
-  return { key, host };
+  return {
+    key,
+    // Shared with the browser client (instrumentation-client.ts) so one bad
+    // NEXT_PUBLIC_POSTHOG_HOST cannot break only the server path.
+    host: resolveHost(process.env.NEXT_PUBLIC_POSTHOG_HOST, warnOnce),
+  };
 }
 
 function loadSdk(): Promise<PostHogNodeClient | null> {
@@ -98,8 +102,18 @@ function loadSdk(): Promise<PostHogNodeClient | null> {
         return new PostHog(config.key, {
           host: config.host,
         }) as unknown as PostHogNodeClient;
-      } catch {
-        warnOnce('[posthog] Failed to initialize PostHog client — telemetry disabled');
+      } catch (error: unknown) {
+        // Log the actual cause, not just "it failed": the bare `catch {}` that
+        // shipped here is why the bad NEXT_PUBLIC_POSTHOG_HOST above took a
+        // full day to find — the log said "failed to initialize" and nothing
+        // else, while every event silently vanished. Only the error NAME and
+        // message are logged; the config object (which holds the API key) is
+        // deliberately never included.
+        warnOnce(
+          `[posthog] Failed to initialize PostHog client — telemetry disabled (${
+            error instanceof Error ? `${error.name}: ${error.message}` : 'unknown error'
+          })`,
+        );
         return null;
       }
     })();
