@@ -472,7 +472,7 @@ export class PostEngineerClient {
     }
     formData.set('name', input.name);
     formData.set('avatarUrl', input.avatarUrl);
-    formData.set('voiceId', input.voiceId ?? 'alloy');
+    formData.set('voiceId', input.voiceId ?? 'chatterbox:ryan');
     formData.set('language', input.language ?? 'en-US');
     formData.set('videoAspect', input.videoAspect ?? '9:16');
     if (input.scriptPrompt !== undefined) formData.set('scriptPrompt', input.scriptPrompt);

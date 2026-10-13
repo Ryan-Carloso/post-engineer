@@ -104,9 +104,12 @@ function createWrapper() {
   return Wrapper;
 }
 
+// The engine's Chatterbox catalog, provider-qualified. The picker shows the
+// bare name (the `chatterbox:` prefix and underscores stripped), which is what
+// the assertions below click on.
 const VOICES = [
-  { id: 'calm' },
-  { id: 'energetic' },
+  { id: 'chatterbox:ryan' },
+  { id: 'chatterbox:en_us_female_01' },
 ];
 
 const YOUTUBE_ACCOUNTS: AccountData[] = [
@@ -306,17 +309,17 @@ describe('app/(main)/persona/page — PersonaPage', () => {
 
   it('lista as vozes da casa para escolha', () => {
     render(<PersonaPage />, { wrapper: createWrapper() });
-    expect(screen.getByText('persona.voiceCalm')).toBeTruthy();
-    expect(screen.getByText('persona.voiceEnergetic')).toBeTruthy();
+    expect(screen.getByText('ryan')).toBeTruthy();
+    expect(screen.getByText('en us female 01')).toBeTruthy();
   });
 
   it('escolher uma voz marca a opção como selecionada', async () => {
     const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });
 
-    await user.click(screen.getByText('persona.voiceEnergetic'));
+    await user.click(screen.getByText('en us female 01'));
 
-    expect(usePersonaStore.getState().voiceId).toBe('energetic');
+    expect(usePersonaStore.getState().voiceId).toBe('chatterbox:en_us_female_01');
   });
 
   it('submit sem nome mostra erro de validação', async () => {
@@ -345,7 +348,7 @@ describe('app/(main)/persona/page — PersonaPage', () => {
     });
     const formData = vi.mocked(createPersona).mock.calls[0][0] as FormData;
     expect(formData.get('name')).toBe('Zé Persona');
-    expect(formData.get('voiceId')).toBe('calm');
+    expect(formData.get('voiceId')).toBe('chatterbox:ryan');
     expect(formData.get('videoAspect')).toBe('9:16');
     expect(await screen.findByText('persona.created')).toBeTruthy();
     // Creating a persona lands on the personas list, where the user sees
@@ -463,7 +466,7 @@ describe('app/(main)/persona/page — PersonaPage', () => {
 async function preencherFormularioValido(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'persona.characterLabel 1' }));
   await user.type(screen.getByLabelText('persona.name'), 'Zé Persona');
-  await user.click(screen.getByText('persona.voiceCalm'));
+  await user.click(screen.getByText('ryan'));
 }
 
 describe('app/(main)/persona/page — persona enxuta (sem schedule)', () => {
@@ -522,7 +525,7 @@ describe('app/(main)/persona/page — modo edição (mesma página do create)', 
     id: 'p-9',
     name: 'Persona editada',
     avatarUrl: '/caracter-samples/file-3.png',
-    voiceId: 'calm',
+    voiceId: 'chatterbox:ryan',
     videoAspect: '9:16',
     scriptPrompt: '',
     niche: '',
@@ -711,10 +714,10 @@ describe('app/(main)/persona/page — modo edição (mesma página do create)', 
     expect(screen.getByTestId('sample-language')).toHaveValue('es');
     // …but the user's manual choice wins.
     await user.selectOptions(screen.getByTestId('sample-language'), 'pt-br');
-    await user.click(screen.getByRole('button', { name: 'persona.voiceCalm' }));
+    await user.click(screen.getByRole('button', { name: 'ryan' }));
 
     expect(created).toHaveLength(1);
-    expect(created[0].url).toBe('/voice-samples/calm-pt-br.mp3');
+    expect(created[0].url).toBe('/voice-samples/chatterbox%3Aryan-pt-br.mp3');
     vi.unstubAllGlobals();
   });
 });
@@ -734,10 +737,10 @@ describe('app/(main)/persona/page — sample language', () => {
     render(<PersonaPage />, { wrapper: createWrapper() });
 
     await user.selectOptions(screen.getByTestId('sample-language'), 'en-uk');
-    await user.click(screen.getByRole('button', { name: 'persona.voiceCalm' }));
+    await user.click(screen.getByRole('button', { name: 'ryan' }));
 
     expect(created).toHaveLength(1);
-    expect(created[0].url).toBe('/voice-samples/calm-en-uk.mp3');
+    expect(created[0].url).toBe('/voice-samples/chatterbox%3Aryan-en-uk.mp3');
     vi.unstubAllGlobals();
   });
 

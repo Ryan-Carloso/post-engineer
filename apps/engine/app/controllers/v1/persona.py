@@ -7,7 +7,7 @@ GET  /api/v1/personas/voices  — house voice catalog
 from typing import Optional
 
 from fastapi import APIRouter
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.controllers.v1.base import new_router
@@ -62,7 +62,11 @@ def list_house_voices_endpoint():
     summary="Languages available for voice samples",
 )
 def list_sample_languages_endpoint():
-    return BaseResponse(body=persona_service.get_sample_languages())
+    # Voice previews died with the per-language house voices: Chatterbox is
+    # zero-shot cloning with a single voice list, so there is no per-language
+    # sample matrix to expose. Answer with the one language the voices speak
+    # instead of failing, so the UI's language picker keeps working.
+    return BaseResponse(body=[{"code": "en", "label": "English"}])
 
 
 @persona_router.get(
@@ -70,21 +74,17 @@ def list_sample_languages_endpoint():
     summary="Short TTS sample for a house voice (audio/mpeg)",
 )
 def voice_sample_endpoint(voice_id: str, language: str = "pt"):
-    try:
-        audio = persona_service.synthesize_voice_sample(voice_id, language=language)
-    except persona_service.PersonaValidationError as e:
-        return JSONResponse(
-            status_code=400,
-            content=utils.get_response(status=400, message=str(e)),
-        )
-    if audio is None:
-        return JSONResponse(
-            status_code=502,
-            content=utils.get_response(
-                status=502, message="voice sample synthesis failed"
-            ),
-        )
-    return Response(content=audio, media_type="audio/mpeg")
+    # Explicit 501, not a silent degradation: the preview used to come from the
+    # Azure house-voice matrix, which no longer exists. Returning silence or a
+    # redirect would let the UI render a "sample" the user never asked for.
+    return JSONResponse(
+        status_code=501,
+        content=utils.get_response(
+            status=501,
+            message="voice previews are unavailable: the voice catalog no longer "
+            "maps per-language samples",
+        ),
+    )
 
 
 router.include_router(persona_router)

@@ -21,7 +21,6 @@ import { useI18n } from '@/lib/i18n/provider';
 import { PersonaTokensSection } from './persona-tokens';
 import { PersonaImageLibrarySection, mapPersonaImageWarnings } from './persona-image-library';
 import { scrollToErrorField } from '@/lib/scroll-to-error';
-import type { TranslationKey } from '@/lib/i18n';
 import { DEFAULT_PERSONA_FACE_IDS } from '@/lib/persona-faces';
 import {
   AlertIcon,
@@ -36,12 +35,12 @@ import {
   INPUT_CLASS,
 } from '@/lib/ui';
 
-const VOICE_LABEL: Record<string, TranslationKey> = {
-  calm: 'persona.voiceCalm',
-  energetic: 'persona.voiceEnergetic',
-  young: 'persona.voiceYoung',
-  deep: 'persona.voiceDeep',
-};
+// Voice ids come from the engine's Chatterbox catalog and are
+// provider-qualified (`chatterbox:ryan`). There is no house-voice map any
+// more, and no label fallback: a voice with no label must show its raw id, not
+// borrow another voice's name — that fallback used to render every unknown id
+// as "Voz feminina calma".
+const voiceLabel = (voiceId: string): string => voiceId.replace(/^chatterbox:/, '').replace(/_/g, ' ');
 
 export default function PersonaPage() {
   return (
@@ -672,7 +671,7 @@ const PersonaHouseVoicePicker = ({ personaLanguage }: { personaLanguage?: string
                 <MicIcon />
               </span>
               <span className="min-w-0 flex-1 truncate text-sm font-medium text-neutral-900">
-                {t(VOICE_LABEL[voice.id] ?? 'persona.voiceCalm')}
+                {voiceLabel(voice.id)}
               </span>
               {isActive && (
                 <span className="text-accent">
