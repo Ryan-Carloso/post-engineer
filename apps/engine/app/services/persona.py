@@ -34,41 +34,6 @@ SAMPLE_LANGUAGE_VOICES: dict[str, dict[str, str]] = {
     "fr": {"label": "Français"},
 }
 
-# Per-persona sample config: each house voice gets its OWN edge-tts voice
-# per language (when more than one exists for the gender/accent) plus a
-# rate that matches its personality (calm = slower, energetic = faster).
-# Voices must exist in app/services/data/azure_voices.json.
-PERSONA_SAMPLE_VOICES: dict[str, dict[str, str]] = {
-    "calm": {
-        "pt": "pt-BR-FranciscaNeural",
-        "en-us": "en-US-JennyNeural",
-        "en-uk": "en-GB-SoniaNeural",
-        "es": "es-ES-ElviraNeural",
-        "fr": "fr-FR-DeniseNeural",
-    },
-    "young": {
-        "pt": "pt-BR-ThalitaMultilingualNeural",
-        "en-us": "en-US-AriaNeural",
-        "en-uk": "en-GB-LibbyNeural",
-        "es": "es-ES-XimenaNeural",
-        "fr": "fr-FR-EloiseNeural",
-    },
-    "energetic": {
-        "pt": "pt-BR-AntonioNeural",
-        "en-us": "en-US-GuyNeural",
-        "en-uk": "en-GB-RyanNeural",
-        "es": "es-ES-AlvaroNeural",
-        "fr": "fr-FR-HenriNeural",
-    },
-    "deep": {
-        "pt": "pt-BR-AntonioNeural",
-        "en-us": "en-US-EricNeural",
-        "en-uk": "en-GB-ThomasNeural",
-        "es": "es-ES-AlvaroNeural",
-        "fr": "fr-FR-HenriNeural",
-    },
-}
-
 # Rate (speed multiplier) and pitch matching each house voice personality.
 # deep is "low/deep": pitch lowered so it sounds distinct from energetic when
 # the two share a locale's only male voice.
