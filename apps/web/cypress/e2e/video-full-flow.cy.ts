@@ -18,7 +18,7 @@ const PERSONA = {
   id: 'persona-e2e-1',
   name: 'Maya E2E',
   createdAt: new Date().toISOString(),
-  voiceId: 'calm',
+  voiceId: 'chatterbox:ryan',
   videoAspect: '9:16',
   faceMixPercent: 0,
   faceQuality: 'ok',
@@ -141,7 +141,7 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
     // Persona page dependencies.
     cy.intercept('GET', '/api/persona/voices', {
       statusCode: 200,
-      body: { voices: [{ id: 'calm' }, { id: 'energetic' }] },
+      body: { voices: [{ id: 'chatterbox:ryan' }, { id: 'chatterbox:en_us_female_01' }] },
     });
     cy.intercept('GET', '/api/persona/voice-sample-languages', {
       statusCode: 200,
@@ -192,7 +192,7 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
     // Real UI: name, a character from the carousel, a house voice.
     cy.get('#persona-name').type(PERSONA.name);
     cy.get('button[aria-label="Escolha um personagem 1"]').click();
-    cy.contains('button', 'Voz feminina calma').click();
+    cy.contains('button', 'ryan').click();
 
     cy.contains('button', 'Criar persona').click();
     cy.wait('@createPersona');
