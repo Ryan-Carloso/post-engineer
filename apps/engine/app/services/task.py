@@ -31,6 +31,7 @@ from app.services import task_webhook
 from app.services.persona_hook import (
     _discard_stale_subtitle,
     _find_hook_end_seconds,
+    _limit_generated_script,
     persona_hook_end_seconds,
 )
 from app.services.bgm_history import history_repository
@@ -443,20 +444,6 @@ def _fail_task(
         # The alert never went out (network blip, webhook misconfigured):
         # release the reservation so a later failure notice re-alerts.
         _release_failure_alert(task_id)
-
-
-def _limit_generated_script(script: str) -> str:
-    """Keep generated speech inside the configured character budget."""
-    limit = int(config.app.get("max_video_script_characters", 700))
-    normalized = re.sub(r"[ \t]+", " ", script.strip())
-    if len(normalized) <= limit:
-        return normalized
-    candidate = normalized[:limit]
-    sentence_end = max(candidate.rfind(mark) for mark in ".!?。！？")
-    if sentence_end >= 0:
-        return candidate[: sentence_end + 1].strip()
-    word_end = candidate.rfind(" ")
-    return candidate[:word_end if word_end > 0 else limit].strip()
 
 
 def persona_lipsync_active(params: VideoParams) -> bool:
