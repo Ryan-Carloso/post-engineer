@@ -28,6 +28,11 @@ from app.services import (
 from app.services import state as sm
 from app.services import persona_image, task_publish
 from app.services import task_webhook
+from app.services.persona_hook import (
+    _discard_stale_subtitle,
+    _find_hook_end_seconds,
+    persona_hook_end_seconds,
+)
 from app.services.bgm_history import history_repository
 from app.services.analytics import scrub_secret_values, track_event
 from app.services.notify import safe_reason, send_discord, task_failed_msg
@@ -469,67 +474,6 @@ def persona_lipsync_active(params: VideoParams) -> bool:
     return persona.photo_url is not None or persona.avatar_url is not None
 
 
-def _find_hook_end_seconds(
-    video_script: str,
-    subtitles: Sequence[tuple[int, str, str]],
-) -> float:
-    """Return the raw subtitle end boundary of the first script paragraph.
-
-    Raises ValueError for structural problems (fewer than two paragraphs,
-    hook without terminal punctuation, hook not found in the subtitles).
-    The 3-6s window check lives in persona_hook_end_seconds so callers that
-    need the raw measurement (e.g. the hook retry) can decide for themselves.
-    """
-    paragraphs = [
-        paragraph.strip()
-        for paragraph in re.split(r"\n\s*\n", video_script.strip())
-        if paragraph.strip()
-    ]
-    if len(paragraphs) < 2:
-        raise ValueError("persona script must contain at least two paragraphs")
-    if not re.search(r"[.!?。！？]$", paragraphs[0]):
-        raise ValueError("persona hook must end with terminal punctuation")
-
-    def normalize(text: str) -> str:
-        return re.sub(r"[^\w]+", "", text.casefold())
-
-    hook = normalize(paragraphs[0])
-    spoken = ""
-    for _, timing, text in subtitles:
-        match = re.search(
-            r"\d+:\d+:\d+[,\.]\d+\s*-->\s*(\d+):(\d+):(\d+)[,\.](\d+)",
-            timing,
-        )
-        if match is None:
-            continue
-        spoken += normalize(text)
-        if hook and hook in spoken:
-            return (
-                int(match.group(1)) * 3600
-                + int(match.group(2)) * 60
-                + int(match.group(3))
-                + int(match.group(4)) / 1000
-            )
-
-    raise ValueError("could not locate hook paragraph in subtitle timestamps")
-
-
-def persona_hook_end_seconds(
-    video_script: str,
-    subtitles: Sequence[tuple[int, str, str]],
-    minimum_seconds: float = 3.0,
-    maximum_seconds: float = 6.0,
-) -> float:
-    """Return the subtitle boundary that completes the first script paragraph."""
-    end_seconds = _find_hook_end_seconds(video_script, subtitles)
-    if not minimum_seconds <= end_seconds <= maximum_seconds:
-        raise ValueError(
-            f"persona hook must end between {minimum_seconds:g} and "
-            f"{maximum_seconds:g} seconds, got {end_seconds:g}"
-        )
-    return end_seconds
-
-
 # Regeneration attempts for an overshooting persona hook before the task
 # fails. Each attempt costs one LLM call plus one TTS call; the hook prompt
 # already targets the configured window, so retries should be rare.
@@ -657,26 +601,6 @@ def _ensure_persona_hook_fits(
         _discard_stale_subtitle(subtitle_path)
         subtitle_path = generate_subtitle(task_id, params, video_script, sub_maker, audio_file)
     raise AssertionError("unreachable: hook retry loop always returns or raises")
-
-
-def _discard_stale_subtitle(subtitle_path: str) -> None:
-    """Delete a subtitle that no longer matches the script it was cut from.
-
-    Best-effort on purpose: a missing file is already the state we want, and a
-    locked file must not fail the retry — the regenerated subtitle simply
-    overwrites it.
-    """
-    if not subtitle_path:
-        return
-    try:
-        os.remove(subtitle_path)
-    except FileNotFoundError:
-        return
-    except OSError as exc:
-        logger.warning(
-            f"could not remove the stale subtitle {subtitle_path}: {exc}; "
-            "the regenerated subtitle may be skipped by the whisper fallback"
-        )
 
 
 def generate_script(task_id, params):
