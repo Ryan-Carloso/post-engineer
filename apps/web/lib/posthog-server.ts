@@ -26,7 +26,7 @@
 // reporting instead of throwing.
 //---------------
 
-import { DEFAULT_POSTHOG_HOST } from './posthog-config';
+import { resolveHost } from './posthog-config';
 
 // Server-side events have no user session: attribute them to the API
 // server itself. Per-user attribution happens client-side.
@@ -72,45 +72,12 @@ function getConfig(): { key: string; host: string } | null {
     warnOnce('[posthog] POSTHOG_API_KEY / NEXT_PUBLIC_POSTHOG_KEY not set — PostHog telemetry disabled');
     return null;
   }
-  return { key, host: resolveHost() };
-}
-
-//---------------
-// Resolve the ingest host, refusing anything that is not an http(s) URL.
-//
-// posthog-node accepts ANY string as `host` and only discovers the problem
-// when a capture is flushed ("Network error while fetching PostHog"). In
-// production (2026-10-13) NEXT_PUBLIC_POSTHOG_HOST was set to a project API
-// key (phc_...) instead of an ingest URL: the client constructed fine, every
-// flush failed, and — because loadSdk memoizes sdkPromise — one bad boot
-// disabled server telemetry for the whole process lifetime while
-// /api/version still reported posthogConfigured: true. The misconfigured
-// value is itself a credential, so it is never echoed into the warning.
-//---------------
-function resolveHost(): string {
-  const host = process.env.NEXT_PUBLIC_POSTHOG_HOST;
-  // Empty string is the documented "unset" case (the .env.example ships an
-  // empty value), so it falls through to the default rather than warning.
-  if (host === undefined || host === '') return DEFAULT_POSTHOG_HOST;
-  let parsed: URL;
-  try {
-    parsed = new URL(host);
-  } catch {
-    warnOnce(
-      '[posthog] NEXT_PUBLIC_POSTHOG_HOST is not a valid URL — falling back to the default ingest host. ' +
-        'It must be an https:// ingest URL (e.g. https://eu.i.posthog.com), NOT a project API key.',
-    );
-    return DEFAULT_POSTHOG_HOST;
-  }
-  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-    warnOnce(
-      `[posthog] NEXT_PUBLIC_POSTHOG_HOST uses the unsupported scheme "${parsed.protocol}" — ` +
-        'falling back to the default ingest host. It must be an http(s) ingest URL, NOT a project API key.',
-    );
-    return DEFAULT_POSTHOG_HOST;
-  }
-  // Normalize so the SDK never receives a trailing-slash/port-less variant.
-  return host;
+  return {
+    key,
+    // Shared with the browser client (instrumentation-client.ts) so one bad
+    // NEXT_PUBLIC_POSTHOG_HOST cannot break only the server path.
+    host: resolveHost(process.env.NEXT_PUBLIC_POSTHOG_HOST, warnOnce),
+  };
 }
 
 function loadSdk(): Promise<PostHogNodeClient | null> {
