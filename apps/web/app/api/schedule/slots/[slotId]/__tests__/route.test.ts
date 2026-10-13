@@ -738,6 +738,10 @@ describe('GET /api/schedule/slots/[slotId] generation facts', () => {
     post_language: 'pt-BR',
     post_voice_id: 'ana_neural',
     post_video_aspect: '9:16',
+    // 'react' and not the default 'standard': this fixture must prove a
+    // real layout flows through, which 'standard' could not distinguish from
+    // the NULL fallback below.
+    post_video_layout: 'react',
     post_niche: 'cooking',
     post_paragraph_number: 5,
     post_face_quality: 'high',
@@ -779,6 +783,7 @@ describe('GET /api/schedule/slots/[slotId] generation facts', () => {
       language: 'pt-BR',
       voiceId: 'ana_neural',
       videoAspect: '9:16',
+      videoLayout: 'react',
       niche: 'cooking',
       paragraphNumber: 5,
       faceQuality: 'high',
@@ -805,6 +810,7 @@ describe('GET /api/schedule/slots/[slotId] generation facts', () => {
       language: null,
       voiceId: null,
       videoAspect: null,
+      videoLayout: null,
       niche: null,
       paragraphNumber: null,
       faceQuality: null,

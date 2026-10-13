@@ -390,6 +390,19 @@ describe('app/(main)/persona/page — PersonaPage', () => {
     expect(formData.get('scriptPrompt')).toBe('Storytelling forte');
   });
 
+  it('creation sends the chosen layout (persona on top, b-roll below)', async () => {
+    const user = userEvent.setup();
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await preencherFormularioValido(user);
+    await user.click(screen.getByRole('button', { name: 'personas.layoutReact' }));
+    await user.click(screen.getByText('persona.submit'));
+
+    await waitFor(() => expect(createPersona).toHaveBeenCalledTimes(1));
+    const formData = vi.mocked(createPersona).mock.calls[0][0] as FormData;
+    expect(formData.get('videoLayout')).toBe('react');
+  });
+
   it('criação usa o idioma do app como default do roteiro e cai para inglês', async () => {
     const user = userEvent.setup();
     const mockSetLocale = vi.fn();
@@ -554,6 +567,53 @@ describe('app/(main)/persona/page — modo edição (mesma página do create)', 
     expect(screen.getByText('personas.editTitle')).toBeTruthy();
     expect(screen.getByText('personas.editSubtitle')).toBeTruthy();
     expect(screen.queryByText('persona.title')).toBeNull();
+  });
+
+  //---------------
+  // Opening layout round-trip. The column is nullable (migration 018), so an
+  // older persona has no layout at all — the editor must show the default and
+  // send it, never drop the field on an unrelated save.
+  //---------------
+  it('in edit mode the saved layout shows selected and is sent back on save', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useUpdatePersonaMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    const user = userEvent.setup();
+    searchParams.value = new URLSearchParams('edit=p-9');
+    vi.mocked(usePersonaListQuery).mockReturnValue({
+      data: [{ ...EDIT_PERSONA, videoLayout: 'react' }],
+      isLoading: false,
+    } as never);
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'personas.layoutReact' })).toHaveAttribute('aria-pressed', 'true'),
+    );
+    await user.click(screen.getByRole('button', { name: 'personas.save' }));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    const formData = mutateAsync.mock.calls[0][0].formData as FormData;
+    expect(formData.get('videoLayout')).toBe('react');
+  });
+
+  it('in edit mode a persona with no saved layout shows the default and sends it', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useUpdatePersonaMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    const user = userEvent.setup();
+    searchParams.value = new URLSearchParams('edit=p-9');
+    vi.mocked(usePersonaListQuery).mockReturnValue({
+      data: [{ ...EDIT_PERSONA, videoLayout: undefined }],
+      isLoading: false,
+    } as never);
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'personas.layoutStandard' })).toHaveAttribute('aria-pressed', 'true'),
+    );
+    await user.click(screen.getByRole('button', { name: 'personas.save' }));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    const formData = mutateAsync.mock.calls[0][0].formData as FormData;
+    expect(formData.get('videoLayout')).toBe('standard');
   });
 
   it('submit em edição usa a mutation de update (não o POST de criação)', async () => {

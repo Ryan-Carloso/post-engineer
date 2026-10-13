@@ -4,10 +4,17 @@ import {
   MAX_LIBRARY_IMAGE_MB,
   MAX_UPLOAD_VIDEO_BYTES,
   MAX_UPLOAD_VIDEO_GB,
+  VIDEO_LAYOUTS,
 } from './limits.js';
 
 // Re-exported so existing import sites (`../client.js`) keep working.
-export { MAX_LIBRARY_IMAGE_BYTES, MAX_LIBRARY_IMAGE_MB, MAX_UPLOAD_VIDEO_BYTES, MAX_UPLOAD_VIDEO_GB };
+export {
+  MAX_LIBRARY_IMAGE_BYTES,
+  MAX_LIBRARY_IMAGE_MB,
+  MAX_UPLOAD_VIDEO_BYTES,
+  MAX_UPLOAD_VIDEO_GB,
+  VIDEO_LAYOUTS,
+};
 import { readFile, stat } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -29,6 +36,13 @@ export interface PersonaLibraryImageInput {
   description?: string;
 }
 
+/**
+ * How the persona hook is composed with the b-roll. Mirrors the server's
+ * accepted values so an unknown layout is a compile error here rather than
+ * a 400 from the API.
+ */
+export type VideoLayout = (typeof VIDEO_LAYOUTS)[number];
+
 export interface CreatePersonaInput {
   name: string;
   /** REQUIRED — every persona has a face. */
@@ -36,6 +50,7 @@ export interface CreatePersonaInput {
   voiceId?: string;
   language?: string;
   videoAspect?: '9:16' | '16:9';
+  videoLayout?: VideoLayout;
   scriptPrompt?: string;
   paragraphNumber?: number;
   niche?: string;
@@ -83,6 +98,7 @@ export interface GeneratePersonaVideosInput {
     voiceId?: string;
     webhookUrl?: string;
     videoAspect?: '9:16' | '16:9';
+    videoLayout?: VideoLayout;
     paragraphNumber?: number;
     language?: string;
     niche?: string;
@@ -98,6 +114,7 @@ export interface UpdatePersonaInput {
   voiceId?: string;
   language?: string;
   videoAspect?: '9:16' | '16:9';
+  videoLayout?: VideoLayout;
   scriptPrompt?: string;
   paragraphNumber?: number;
   niche?: string;
@@ -475,6 +492,7 @@ export class PostEngineerClient {
     formData.set('voiceId', input.voiceId ?? 'chatterbox:ryan');
     formData.set('language', input.language ?? 'en-US');
     formData.set('videoAspect', input.videoAspect ?? '9:16');
+    formData.set('videoLayout', input.videoLayout ?? 'standard');
     if (input.scriptPrompt !== undefined) formData.set('scriptPrompt', input.scriptPrompt);
     formData.set('paragraphNumber', String(input.paragraphNumber ?? 1));
     formData.set('niche', input.niche ?? 'General');
@@ -553,6 +571,9 @@ export class PostEngineerClient {
     if (input.voiceId !== undefined) formData.set('voiceId', input.voiceId);
     if (input.language !== undefined) formData.set('language', input.language);
     if (input.videoAspect !== undefined) formData.set('videoAspect', input.videoAspect);
+    // Sent only when provided: an update must not rewrite an untouched
+    // field with a default the caller never chose.
+    if (input.videoLayout !== undefined) formData.set('videoLayout', input.videoLayout);
     if (input.scriptPrompt !== undefined) formData.set('scriptPrompt', input.scriptPrompt);
     if (input.paragraphNumber !== undefined) formData.set('paragraphNumber', String(input.paragraphNumber));
     if (input.niche !== undefined) formData.set('niche', input.niche);

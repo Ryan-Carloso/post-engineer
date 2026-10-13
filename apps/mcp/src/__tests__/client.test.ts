@@ -63,6 +63,73 @@ describe('PostEngineerClient', () => {
     expect(result).toEqual(mockResponse);
   });
 
+  it('createPersona defaults the hook layout to standard', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+    });
+
+    await client.createPersona({
+      name: 'No Layout',
+      avatarUrl: 'https://example.com/avatar.png',
+    });
+
+    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
+    const formData = request?.body as FormData;
+    // Sent explicitly rather than omitted: the persona row's layout column
+    // would otherwise be NULL and every reader would need its own fallback.
+    expect(formData.get('videoLayout')).toBe('standard');
+  });
+
+  it('createPersona forwards an explicit react layout', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+    });
+
+    await client.createPersona({
+      name: 'Reacts',
+      avatarUrl: 'https://example.com/avatar.png',
+      videoLayout: 'react',
+    });
+
+    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
+    const formData = request?.body as FormData;
+    expect(formData.get('videoLayout')).toBe('react');
+  });
+
+  it('updatePersona omits the layout when the caller does not provide one', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+    });
+
+    await client.updatePersona({ personaId: 'p-1', name: 'Renamed' });
+
+    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
+    const formData = request?.body as FormData;
+    // An update must never rewrite an untouched field with a default the
+    // caller did not choose — that would silently revert a saved 'react'.
+    expect(formData.has('videoLayout')).toBe(false);
+  });
+
+  it('updatePersona sends the layout when provided', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+    });
+
+    await client.updatePersona({ personaId: 'p-1', videoLayout: 'react' });
+
+    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
+    const formData = request?.body as FormData;
+    expect(formData.get('videoLayout')).toBe('react');
+  });
+
   it.each([undefined, null, ''])(
     'createPersona rejects %p avatarUrl before any fetch',
     async (avatarUrl) => {
