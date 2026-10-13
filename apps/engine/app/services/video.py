@@ -39,6 +39,12 @@ from app.models.schema import (
 )
 from app.services.utils import video_effects
 from app.utils import file_security, utils
+from app.services.lipsync_layout import (
+    LAYOUT_STANDARD,
+    VIDEO_LAYOUTS,
+    _build_lipsync_intro_command,
+)
+from app.services.subtitle_text import wrap_text
 
 DEFAULT_SUBTITLE_FONT = "BeVietnamPro-Medium.ttf"
 
@@ -575,92 +581,6 @@ def _run_ffmpeg_bounded(
     return result
 
 
-LAYOUT_STANDARD = "standard"
-LAYOUT_REACT = "react"
-VIDEO_LAYOUTS = frozenset({LAYOUT_STANDARD, LAYOUT_REACT})
-
-# Divider drawn on the seam between the persona and the b-roll in the react
-# layout. Without it the two blocks read as two videos stapled together; a 2px
-# line at the seam reads as one frame. Sized in output pixels so it stays the
-# same visual weight at any resolution.
-REACT_DIVIDER_PX = 4
-REACT_DIVIDER_COLOR = "white@0.85"
-
-
-def _react_split_filter(width: int, height: int) -> str:
-    """Filter graph for the react layout: persona on top, b-roll below.
-
-    The persona block scales by WIDTH and is cropped from the top edge, so it
-    keeps head and shoulders and drops the torso — the least valuable part of
-    the frame. The opposite (contain to fit) leaves ~370px of empty bar down
-    each side of a 1080-wide block.
-
-    Both halves are cropped to the same size because ``vstack`` requires
-    identical widths; half of an odd height would be rejected by the encoder.
-    """
-    half = height // 2
-    divider_y = half - REACT_DIVIDER_PX // 2
-    return (
-        # b-roll (input 0) fills the lower block, cover-fit then centre-crop.
-        f"[0:v]scale={width}:{half}:force_original_aspect_ratio=increase,"
-        f"crop={width}:{half},setsar=1[broll];"
-        # persona (input 1): scale by width, crop the torso off the bottom.
-        f"[1:v]scale={width}:-2,crop={width}:{half},setsar=1[avatar];"
-        f"[avatar][broll]vstack=inputs=2[stacked];"
-        f"[stacked]drawbox=x=0:y={divider_y}:w={width}:h={REACT_DIVIDER_PX}"
-        f":color={REACT_DIVIDER_COLOR}:t=fill[vout]"
-    )
-
-
-def _build_lipsync_intro_command(
-    background_video: str,
-    lipsync_video: str,
-    intro_file: str,
-    width: int,
-    height: int,
-    duration: float,
-    layout: str,
-) -> list[str]:
-    """ffmpeg argv for the hook segment only.
-
-    Inputs are ordered background (0) then lipsync (1) for BOTH layouts, so
-    the ``-map`` for audio never depends on which layout is running.
-    """
-    if layout == LAYOUT_REACT:
-        command = [
-            utils.get_ffmpeg_binary(), "-y",
-            "-i", background_video,
-            "-i", lipsync_video,
-            "-t", str(duration),
-            "-filter_complex", _react_split_filter(width, height),
-            # Video from the filter output; audio from INPUT 1 (the persona).
-            # A Pexels b-roll clip carries its own audio, so mapping 0:a?
-            # buries the narration under stock footage sound.
-            "-map", "[vout]",
-            "-map", "1:a",
-        ]
-    else:
-        command = [
-            utils.get_ffmpeg_binary(), "-y", "-i", lipsync_video,
-            "-t", str(duration),
-            "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
-                   f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1",
-            # The standard intro drops audio entirely: this segment REPLACES
-            # the background's first seconds, and the background's own audio is
-            # re-muxed later from the source timeline.
-            "-an",
-        ]
-    return command + [
-        "-c:v", _get_effective_video_codec(),
-        # Force the pipeline fps: LongCat avatar-v1.5 renders at 25fps and a
-        # stream-copied 30fps tail would balloon the concat timeline by the
-        # timebase ratio (measured +5.4s on a 27s video).
-        "-r", str(fps),
-        "-preset", _get_configured_video_preset(),
-        "-pix_fmt", "yuv420p", intro_file,
-    ]
-
-
 def replace_video_intro_with_lipsync(
     background_video: str,
     lipsync_video: str,
@@ -714,6 +634,9 @@ def replace_video_intro_with_lipsync(
         height=height,
         duration=duration,
         layout=layout,
+        codec=_get_effective_video_codec(),
+        preset=_get_configured_video_preset(),
+        fps=fps,
     )
     logger.info(
         f"{layout} lipsync: {duration}s onto {os.path.basename(background_video)}"
@@ -1621,95 +1544,6 @@ def combine_videos(
             
     logger.info("video combining completed")
     return combined_video_path
-
-
-def wrap_text(text, max_width, font="Arial", fontsize=60):
-    # Subtitle wrapping must happen before the real TextClip is created, or
-    # MoviePy will size the render area from the raw text. Measure width with
-    # PIL at the current font/size so every line stays within the usable
-    # video width — large sizes or long CJK sentences would otherwise
-    # overflow the frame.
-    font = ImageFont.truetype(font, fontsize)
-    max_width = int(max_width)
-
-    def get_text_size(inner_text):
-        inner_text = inner_text.strip()
-        if not inner_text:
-            return 0, fontsize
-        left, top, right, bottom = font.getbbox(inner_text)
-        return right - left, bottom - top
-
-    width, height = get_text_size(text)
-    if width <= max_width:
-        return text, height
-
-    def split_long_token(token):
-        # When a single token is already too wide (common with spaceless CJK
-        # sentences or very long English words), fall back to per-character
-        # splitting. The key rule: when a candidate goes over width, commit
-        # the last still-valid line first, then start the next line with the
-        # current character — never push the over-wide character back onto
-        # the previous line.
-        lines = []
-        current = ""
-        for char in token:
-            candidate = f"{current}{char}"
-            candidate_width, _ = get_text_size(candidate)
-            if candidate_width <= max_width or not current:
-                current = candidate
-                continue
-            lines.append(current)
-            current = char
-        if current:
-            lines.append(current)
-        return lines
-
-    lines = []
-    current = ""
-    words = text.split(" ")
-    for word in words:
-        candidate = f"{current} {word}".strip() if current else word
-        candidate_width, _ = get_text_size(candidate)
-        if candidate_width <= max_width:
-            current = candidate
-            continue
-
-        if current:
-            lines.append(current)
-
-        word_width, _ = get_text_size(word)
-        if word_width <= max_width:
-            current = word
-        else:
-            lines.extend(split_long_token(word))
-            current = ""
-
-    if current:
-        lines.append(current)
-
-    line_start_punctuation = "，。！？；：、,.!?;:)]}）】》」』”’"
-    for index in range(1, len(lines)):
-        # When a long CJK sentence is split per character, a trailing period,
-        # comma, or other closing punctuation can land alone on the next
-        # line, stretching the subtitle background abnormally — like a stray
-        # dot hanging under the text. Without redesigning the wrap algorithm,
-        # move the previous line's last character in front of the punctuation
-        # line so the mark follows its text. Covers common CJK and English
-        # closing punctuation.
-        if not lines[index] or lines[index][0] not in line_start_punctuation:
-            continue
-        if len(lines[index - 1]) <= 1:
-            continue
-
-        candidate = f"{lines[index - 1][-1]}{lines[index]}"
-        candidate_width, _ = get_text_size(candidate)
-        if candidate_width <= max_width:
-            lines[index] = candidate
-            lines[index - 1] = lines[index - 1][:-1]
-
-    result = "\n".join(line.strip() for line in lines if line.strip()).strip()
-    height = len(lines) * height
-    return result, height
 
 
 def _hex_to_rgb(color: str) -> tuple[int, int, int]:
