@@ -115,8 +115,21 @@ const PersonaPageContent = () => {
     methods.setValue('niche', persona.niche ?? '');
   }, [editingPersona, methods]);
 
+  // The error page must NOT subscribe to these queries itself: mounting it
+  // would add a second observer, and refetchOnMount would refetch the
+  // errored query, flipping it back to pending and unmounting the error
+  // page — an infinite mount/refetch loop that never shows the error.
+  // The retry closure lives here, on the queries this component owns.
+  const retryFailedQueries = async (): Promise<void> => {
+    const requests: Array<Promise<unknown>> = [];
+    if (voicesQuery.isError) requests.push(voicesQuery.refetch());
+    if (sampleLanguagesQuery.isError) requests.push(sampleLanguagesQuery.refetch());
+    if (personasQuery.isError) requests.push(personasQuery.refetch());
+    await Promise.all(requests);
+  };
+
   if (voicesQuery.isError || sampleLanguagesQuery.isError || personasQuery.isError) {
-    return <PersonaPageError />;
+    return <PersonaPageError onRetry={retryFailedQueries} isRetrying={voicesQuery.isFetching} />;
   }
 
   if (
@@ -202,19 +215,14 @@ const PersonaFormSync = () => {
 //---------------
 // PersonaPageError explains the unavailable dependency and offers recovery.
 //---------------
-const PersonaPageError = () => {
+const PersonaPageError = ({
+  onRetry,
+  isRetrying,
+}: {
+  onRetry: () => Promise<void>;
+  isRetrying: boolean;
+}) => {
   const { t } = useI18n();
-  const personasQuery = usePersonaListQuery();
-  const voicesQuery = useVoicesQuery();
-  const sampleLanguagesQuery = useVoiceSampleLanguagesQuery();
-
-  const retry = async (): Promise<void> => {
-    const requests: Array<Promise<unknown>> = [];
-    if (voicesQuery.isError) requests.push(voicesQuery.refetch());
-    if (sampleLanguagesQuery.isError) requests.push(sampleLanguagesQuery.refetch());
-    if (personasQuery.isError) requests.push(personasQuery.refetch());
-    await Promise.all(requests);
-  };
 
   return (
     <main className="flex min-h-[calc(100vh-10rem)] items-center justify-center py-8">
@@ -233,11 +241,11 @@ const PersonaPageError = () => {
         </p>
         <button
           type="button"
-          disabled={voicesQuery.isFetching}
-          onClick={() => void retry()}
+          disabled={isRetrying}
+          onClick={() => void onRetry()}
           className="mt-7 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {voicesQuery.isFetching && <SpinnerIcon />}
+          {isRetrying && <SpinnerIcon />}
           {t('persona.tryAgain')}
         </button>
       </section>
