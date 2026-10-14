@@ -42,7 +42,7 @@ RUN useradd --create-home --uid 10001 engine \
 USER engine
 
 # config.toml is mounted at runtime (contains no secrets in the image).
-# Required env (Supabase, upload API, InfiniteTalk endpoint) is injected by
+# Required env (Supabase, upload API, LongCat endpoint) is injected by
 # docker-compose; the app fails explicitly when something mandatory is absent.
 ENV MPT_STORAGE_DIR=/app/storage
 
