@@ -71,8 +71,8 @@ class _FakeStore:
         self.refunded.append((user_id, generation_id, reason))
         return True
 
-    def refund_batch_tokens(self, user_id, generation_id, refund_key, amount, reason):
-        self.refund_batch_calls.append((user_id, generation_id, refund_key, amount, reason))
+    def refund_batch_tokens(self, user_id, generation_id, refund_key, amount, reason, engine_task_id=None):
+        self.refund_batch_calls.append((user_id, generation_id, refund_key, amount, reason, engine_task_id))
         return True
 
     def claim_ready_slot(self, slot_id):
@@ -301,7 +301,12 @@ class BatchScheduleTests(unittest.TestCase):
         store = _FakeStore()
         store.pending_slots = lambda now: [slot]
         store.refund_batch_calls = []
-        store.refund_batch_tokens = lambda *args: store.refund_batch_calls.append(args) or True
+        store.refund_batch_tokens = (
+            lambda *args, **kwargs: store.refund_batch_calls.append(
+                args + (kwargs.get("engine_task_id"),)
+            )
+            or True
+        )
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
@@ -314,12 +319,76 @@ class BatchScheduleTests(unittest.TestCase):
         # One prepaid video refunded under the batch generation id; the rest
         # of the batch charge is untouched.
         self.assertEqual(len(store.refund_batch_calls), 1)
-        user_id, batch_gen_id, refund_key, amount, _reason = store.refund_batch_calls[0]
+        user_id, batch_gen_id, refund_key, amount, _reason, _task_id = store.refund_batch_calls[0]
         self.assertEqual(user_id, "user-1")
         self.assertEqual(batch_gen_id, "batch:sched-batch-1")
         self.assertIn("slot-batch-1", refund_key)
         self.assertEqual(amount, 2)  # face_mix 50% @ ok = ceil(0.5*2 + 0.5*1) = 2
         self.assertEqual(store.updates[0][1]["status"], "failed")
+
+    def test_generate_dispatch_failure_emits_refund_issued_on_landed_refund(self):
+        # Dispatch failures refund too, and the event must carry the
+        # allocated (never-dispatched) task id so the ledger row links back.
+        import uuid
+
+        from app.services.fill_schedule import support as support_module
+
+        slot = self._batch_slot()
+        store = _FakeStore()
+        store.pending_slots = lambda now: [slot]
+        refund_kwargs = {}
+
+        def fake_refund(*args, **kwargs):
+            refund_kwargs.update(kwargs)
+            return True
+
+        store.refund_batch_tokens = fake_refund
+        scheduler = self._scheduler(store)
+        scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
+
+        with patch.object(support_module, "track_event") as track:
+            with patch.object(
+                scheduler.generator, "_dispatch_generation",
+                side_effect=RuntimeError("dispatch down"),
+            ):
+                scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+
+        expected_task_id = str(uuid.uuid5(uuid.NAMESPACE_URL, "fill-schedule:slot-batch-1"))
+        self.assertEqual(refund_kwargs.get("engine_task_id"), expected_task_id)
+        refund_calls = [
+            c for c in track.call_args_list if c[0][0] == "refund_issued"
+        ]
+        self.assertEqual(len(refund_calls), 1)
+        _, props = refund_calls[0][0]
+        self.assertEqual(props["kind"], "batch_slot")
+        self.assertEqual(props["user_id"], "user-1")
+        self.assertEqual(props["amount"], 2)
+        self.assertEqual(props["reason"], "Batch generation could not be dispatched")
+        self.assertEqual(props["batch_generation_id"], "batch:sched-batch-1")
+        self.assertEqual(props["slot_id"], "slot-batch-1")
+        self.assertEqual(props["engine_task_id"], expected_task_id)
+
+    def test_generate_dispatch_failure_no_refund_issued_when_not_refunded(self):
+        from app.services.fill_schedule import support as support_module
+
+        slot = self._batch_slot()
+        store = _FakeStore()
+        store.pending_slots = lambda now: [slot]
+        store.refund_batch_tokens = lambda *args, **kwargs: False
+        scheduler = self._scheduler(store)
+        scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
+
+        with patch.object(support_module, "track_event") as track:
+            with patch.object(
+                scheduler.generator, "_dispatch_generation",
+                side_effect=RuntimeError("dispatch down"),
+            ):
+                scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+
+        refund_calls = [
+            c for c in track.call_args_list if c[0][0] == "refund_issued"
+        ]
+        self.assertEqual(refund_calls, [])
 
 
 
@@ -757,12 +826,120 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
         self.assertEqual(store.updates[0][1]["status"], "failed")
         self.assertEqual(len(store.refund_batch_calls), 1)
-        user_id, generation_id, refund_key, amount, _reason = store.refund_batch_calls[0]
+        user_id, generation_id, refund_key, amount, _reason, _task_id = store.refund_batch_calls[0]
         self.assertEqual(user_id, "user-1")
         self.assertEqual(generation_id, "batch:sched-b1")
         self.assertEqual(refund_key, "batch:sched-b1:slot:slot-b1")
         self.assertEqual(amount, 1)
         self.assertEqual(store.refunded, [])
+
+    def test_failed_slot_emits_refund_issued_on_landed_refund(self):
+        # The reconciler's refund used to be silent: tokens came back but no
+        # PostHog event marked it. refund_issued must fire exactly once per
+        # landed refund, carrying the failed task id for the ledger row.
+        from app.services.fill_schedule import support as support_module
+
+        slot = {
+            "id": "slot-b1",
+            "user_id": "user-1",
+            "task_id": "t-b1",
+            "faceless": True,
+            "schedules": {
+                "id": "sched-b1",
+                "user_id": "user-1",
+                "personas": {"face_quality": "ok"},
+            },
+        }
+        store = _FakeStore()
+        store.generating_slots = lambda: [slot]
+        state = MagicMock()
+        state.get_task.return_value = {"state": -1, "error": "gpu exploded"}
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=state, publish_video=MagicMock()
+        )
+        with patch.object(support_module, "track_event") as track:
+            self.assertEqual(
+                scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1
+            )
+        refund_calls = [
+            c for c in track.call_args_list if c[0][0] == "refund_issued"
+        ]
+        self.assertEqual(len(refund_calls), 1)
+        _, props = refund_calls[0][0]
+        self.assertEqual(props["kind"], "batch_slot")
+        self.assertEqual(props["user_id"], "user-1")
+        self.assertEqual(props["amount"], 1)
+        self.assertEqual(props["reason"], "Batch generation failed")
+        self.assertEqual(props["batch_generation_id"], "batch:sched-b1")
+        self.assertEqual(props["slot_id"], "slot-b1")
+        self.assertEqual(props["engine_task_id"], "t-b1")
+        # The RPC carries the failed task id so the ledger row links back.
+        self.assertEqual(store.refund_batch_calls[0][5], "t-b1")
+
+    def test_failed_slot_no_refund_issued_when_rpc_reports_not_refunded(self):
+        # refunded=false means idempotent no-op (already refunded): firing
+        # the event again would double-count the refund in dashboards.
+        from app.services.fill_schedule import support as support_module
+
+        slot = {
+            "id": "slot-b1",
+            "user_id": "user-1",
+            "task_id": "t-b1",
+            "faceless": True,
+            "schedules": {
+                "id": "sched-b1",
+                "user_id": "user-1",
+                "personas": {"face_quality": "ok"},
+            },
+        }
+        store = _FakeStore()
+        store.generating_slots = lambda: [slot]
+        store.refund_batch_tokens = lambda *a, **k: False
+        state = MagicMock()
+        state.get_task.return_value = {"state": -1, "error": "gpu exploded"}
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=state, publish_video=MagicMock()
+        )
+        with patch.object(support_module, "track_event") as track:
+            self.assertEqual(
+                scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1
+            )
+        refund_calls = [
+            c for c in track.call_args_list if c[0][0] == "refund_issued"
+        ]
+        self.assertEqual(refund_calls, [])
+
+    def test_failed_slot_no_refund_issued_when_rpc_raises(self):
+        # Telemetry must never invent a refund: when the RPC itself blows
+        # up, no event fires (the tick's run_once isolates the stage).
+        from app.services.fill_schedule import support as support_module
+
+        slot = {
+            "id": "slot-b1",
+            "user_id": "user-1",
+            "task_id": "t-b1",
+            "faceless": True,
+            "schedules": {
+                "id": "sched-b1",
+                "user_id": "user-1",
+                "personas": {"face_quality": "ok"},
+            },
+        }
+        store = _FakeStore()
+        store.generating_slots = lambda: [slot]
+        store.refund_batch_tokens = MagicMock(side_effect=RuntimeError("rpc down"))
+        state = MagicMock()
+        state.get_task.return_value = {"state": -1, "error": "gpu exploded"}
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=state, publish_video=MagicMock()
+        )
+        with patch.object(support_module, "track_event") as track:
+            with self.assertRaises(RuntimeError):
+                scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        refund_calls = [
+            c for c in track.call_args_list if c[0][0] == "refund_issued"
+        ]
+        self.assertEqual(refund_calls, [])
 
     def test_failed_batch_task_without_user_id_still_marks_failed(self):
         slot = {
@@ -1059,13 +1236,82 @@ class PublishRetryLimitTests(unittest.TestCase):
         self.assertEqual(store.updates[0][1]["status"], "failed")
         self.assertEqual(store.updates[0][1]["publish_attempts"], 3)
         self.assertEqual(len(store.refund_batch_calls), 1)
-        user_id, generation_id, refund_key, amount, reason = store.refund_batch_calls[0]
+        user_id, generation_id, refund_key, amount, reason, _task_id = store.refund_batch_calls[0]
         self.assertEqual(user_id, "user-1")
         self.assertEqual(generation_id, "batch:sched-1")
         self.assertEqual(refund_key, "batch:sched-1:slot:slot-1:publish")
         # Faceless posts are priced at the faceless rate.
         self.assertEqual(amount, 1)
         self.assertIn("3 attempts", reason)
+
+    def test_final_failure_emits_refund_issued_on_landed_refund(self):
+        # Publish failures refund too. The event fires only when the RPC
+        # reports refunded=true, and carries the generation task id.
+        from app.services.fill_schedule import support as support_module
+        from app.services.upload_publisher import PublishError
+
+        store = _FakeStore()
+        store.ready_due_slots = lambda now: [self._slot(publish_attempts=2)]
+        refund_kwargs = {}
+
+        def fake_refund(*args, **kwargs):
+            refund_kwargs.update(kwargs)
+            return True
+
+        store.refund_batch_tokens = fake_refund
+        state = MagicMock()
+        state.get_task.return_value = {
+            "state": 1, "videos": [self.video_path],
+            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+        }
+        publish = MagicMock(side_effect=PublishError("boom"))
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=state, publish_video=publish,
+        )
+        scheduler.publisher.base_url = "https://post-engineer.com"
+        scheduler.publisher.api_secret = "secret"
+        with patch.object(support_module, "track_event") as track:
+            published = scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
+        self.assertEqual(published, 0)
+        self.assertEqual(refund_kwargs.get("engine_task_id"), "t-1")
+        refund_calls = [
+            c for c in track.call_args_list if c[0][0] == "refund_issued"
+        ]
+        self.assertEqual(len(refund_calls), 1)
+        _, props = refund_calls[0][0]
+        self.assertEqual(props["kind"], "batch_slot")
+        self.assertEqual(props["user_id"], "user-1")
+        self.assertEqual(props["amount"], 1)
+        self.assertIn("3 attempts", props["reason"])
+        self.assertEqual(props["batch_generation_id"], "batch:sched-1")
+        self.assertEqual(props["slot_id"], "slot-1")
+        self.assertEqual(props["engine_task_id"], "t-1")
+
+    def test_final_failure_no_refund_issued_when_not_refunded(self):
+        from app.services.fill_schedule import support as support_module
+        from app.services.upload_publisher import PublishError
+
+        store = _FakeStore()
+        store.ready_due_slots = lambda now: [self._slot(publish_attempts=2)]
+        store.refund_batch_tokens = lambda *args, **kwargs: False
+        state = MagicMock()
+        state.get_task.return_value = {
+            "state": 1, "videos": [self.video_path],
+            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+        }
+        publish = MagicMock(side_effect=PublishError("boom"))
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=state, publish_video=publish,
+        )
+        scheduler.publisher.base_url = "https://post-engineer.com"
+        scheduler.publisher.api_secret = "secret"
+        with patch.object(support_module, "track_event") as track:
+            published = scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
+        self.assertEqual(published, 0)
+        refund_calls = [
+            c for c in track.call_args_list if c[0][0] == "refund_issued"
+        ]
+        self.assertEqual(refund_calls, [])
 
     def test_missing_r2_archive_marks_slot_failed_and_refunds_token(self):
         # A video generated before the R2 archive flow can never publish:
@@ -1148,7 +1394,7 @@ class PublishRetryLimitTests(unittest.TestCase):
         store = _FakeStore()
         store.ready_due_slots = lambda now: [self._slot(publish_attempts=2)]
 
-        def soft_fail(user_id, generation_id, refund_key, amount, reason):
+        def soft_fail(user_id, generation_id, refund_key, amount, reason, engine_task_id=None):
             store.refund_batch_calls.append(
                 (user_id, generation_id, refund_key, amount, reason)
             )

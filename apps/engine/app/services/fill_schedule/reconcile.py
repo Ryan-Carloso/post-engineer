@@ -18,6 +18,7 @@ from app.services.fill_schedule.support import (
     slot_faceless,
     slot_user_id,
     token_cost,
+    track_refund_issued,
 )
 
 
@@ -88,13 +89,30 @@ class BatchReconciler:
                             str(identity.get("face_quality") or "ok"),
                         )
                         batch_generation_id = f"batch:{schedule['id']}"
-                        self.store.refund_batch_tokens(
+                        engine_task_id = (
+                            str(slot["task_id"]) if slot.get("task_id") else None
+                        )
+                        refunded = self.store.refund_batch_tokens(
                             user_id,
                             batch_generation_id,
                             f"{batch_generation_id}:slot:{slot['id']}",
                             cost,
                             "Batch generation failed",
+                            engine_task_id=engine_task_id,
                         )
+                        # The RPC is idempotent: a False answer means this slot
+                        # was already refunded (or had nothing to refund), so
+                        # refund_issued fires only on a landed refund — never
+                        # optimistically, or dashboards double-count it.
+                        if refunded:
+                            track_refund_issued(
+                                user_id=user_id,
+                                amount=cost,
+                                reason="Batch generation failed",
+                                batch_generation_id=batch_generation_id,
+                                slot_id=str(slot["id"]),
+                                engine_task_id=engine_task_id,
+                            )
                 else:
                     logger.error(
                         "fill_schedule: cannot refund failed batch slot without user_id",

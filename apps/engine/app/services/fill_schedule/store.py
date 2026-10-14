@@ -228,8 +228,15 @@ class ScheduleStore:
         refund_key: str,
         amount: int,
         reason: str,
+        engine_task_id: str | None = None,
     ) -> bool:
-        """Refund one prepaid video of a batch (see rpc/refund_batch_tokens)."""
+        """Refund one prepaid video of a batch (see rpc/refund_batch_tokens).
+
+        engine_task_id links the refund ledger row to the failed engine task
+        (token_transactions.engine_task_id, migration 018); None when the
+        task never reached the engine (dispatch failure still records the
+        allocated id, so callers should always pass one when they have it).
+        """
         result = self._request(
             "POST",
             "rpc/refund_batch_tokens",
@@ -239,6 +246,7 @@ class ScheduleStore:
                 "p_refund_key": refund_key,
                 "p_amount": amount,
                 "p_reason": reason,
+                "p_engine_task_id": engine_task_id,
             },
             headers=self._headers,
         )
