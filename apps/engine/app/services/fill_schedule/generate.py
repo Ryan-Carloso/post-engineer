@@ -107,6 +107,12 @@ class BatchGenerator:
                 video_subject=topic,
                 persona=build_persona_params(identity, self.store, faceless),
                 video_aspect=identity.get("video_aspect") or "9:16",
+                # Layout resolves through post_identity() like every other
+                # editorial field: snapshot first, persona embed second. The
+                # `or "standard"` covers both a NULL snapshot (schedule created
+                # before migration 018) and a NULL persona column, which is
+                # the behaviour every existing video already has.
+                video_layout=identity.get("video_layout") or "standard",
                 video_script_prompt=identity.get("script_prompt") or "",
                 # Snapshot (post_language) already resolved by post_identity();
                 # without this the prompt carries no "- language:" line and

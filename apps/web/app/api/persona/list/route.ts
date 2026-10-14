@@ -27,7 +27,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
   let query = supabase
     .from('personas')
     .select(
-      'id, name, photo_path, avatar_url, voice_id, voice_audio_path, created_at, language, video_aspect, script_prompt, paragraph_number, niche, face_quality',
+      'id, name, photo_path, avatar_url, voice_id, voice_audio_path, created_at, language, video_aspect, video_layout, script_prompt, paragraph_number, niche, face_quality',
     )
     .eq('user_id', auth.userId);
 
@@ -62,6 +62,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
       voiceAudioUrl: await signedUrl(supabase, record.voice_audio_path as string | null),
       language: (record.language as string | null) ?? undefined,
       videoAspect: (record.video_aspect as string | null) ?? undefined,
+      videoLayout: (record.video_layout as string | null) ?? undefined,
       scriptPrompt: (record.script_prompt as string | null) ?? undefined,
       paragraphNumber: (record.paragraph_number as number | null) ?? undefined,
       niche: (record.niche as string | null) ?? undefined,

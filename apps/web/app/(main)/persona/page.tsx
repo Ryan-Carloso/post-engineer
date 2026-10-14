@@ -20,6 +20,8 @@ import { personaFormSchema } from '@/lib/persona-schema';
 import { useI18n } from '@/lib/i18n/provider';
 import { PersonaTokensSection } from './persona-tokens';
 import { PersonaImageLibrarySection, mapPersonaImageWarnings } from './persona-image-library';
+import { PersonaPreferencesSection } from './persona-preferences-section';
+import { InlineFieldError, SectionDivider } from './persona-section-parts';
 import { scrollToErrorField } from '@/lib/scroll-to-error';
 import { DEFAULT_PERSONA_FACE_IDS } from '@/lib/persona-faces';
 import {
@@ -28,7 +30,6 @@ import {
   SparklesIcon,
   ImageIcon,
   MicIcon,
-  SECTION_LABEL_CLASS,
   SpinnerIcon,
   UploadIcon,
   formatFileSize,
@@ -107,6 +108,9 @@ const PersonaPageContent = () => {
     store.setStoredPhotoUrl(persona.photoUrl ?? null);
     store.setVoiceId(persona.voiceId ?? null);
     store.setVideoAspect(persona.videoAspect ?? '9:16');
+    // The column is nullable (migration 018), so a persona created before the
+    // layout existed has none — fall back to what every older video rendered.
+    store.setVideoLayout(persona.videoLayout ?? 'standard');
     store.setScriptPrompt(persona.scriptPrompt ?? '');
     store.setNiche(persona.niche ?? '');
     store.setResult(null);
@@ -686,69 +690,6 @@ const PersonaHouseVoicePicker = ({ personaLanguage }: { personaLanguage?: string
 };
 
 //---------------
-// PersonaPreferencesSection — optional persona content defaults
-//---------------
-const PersonaPreferencesSection = () => {
-  const videoAspect = usePersonaStore((s) => s.videoAspect);
-  const result = usePersonaStore((s) => s.result);
-  const { t } = useI18n();
-  const { register, formState: { errors } } = useFormContext();
-  return (
-    <section>
-      <SectionDivider label={t('personas.preferencesLabel')} />
-      <div className="mt-4 space-y-5 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
-        <fieldset>
-          <legend className="text-sm font-semibold text-neutral-800">{t('personas.aspectLabel')}</legend>
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {['9:16', '16:9', '1:1'].map((aspect) => {
-              const isSelected = videoAspect === aspect;
-              return (
-                <button
-                  key={aspect}
-                  type="button"
-                  aria-pressed={isSelected}
-                  onClick={() => usePersonaStore.getState().setVideoAspect(aspect)}
-                  className={`flex min-h-14 items-center justify-center rounded-xl border px-4 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-                    isSelected
-                      ? 'border-accent bg-red-50 text-accent ring-2 ring-accent/10'
-                      : 'border-neutral-200 bg-neutral-50 text-neutral-700 hover:border-neutral-400 hover:bg-white'
-                  }`}
-                >
-                  {aspect}
-                </button>
-              );
-            })}
-          </div>
-        </fieldset>
-        <label className="block text-sm font-semibold text-neutral-800">
-          {t('personas.nicheLabel')}
-          <input
-            type="text"
-            className={INPUT_CLASS}
-            placeholder={t('personas.nichePlaceholder')}
-            data-testid="persona-niche"
-            {...register('niche')}
-          />
-          {errors.niche ? (
-            <span role="alert" className="mt-1 block text-sm font-normal text-red-600">{t('personas.nicheMaxError')}</span>
-          ) : null}
-        </label>
-        <label className="block text-sm font-semibold text-neutral-800" data-error-field="script">
-          {t('personas.scriptLabel')}
-          <textarea className={`${INPUT_CLASS} min-h-28 resize-y`} placeholder={t('personas.scriptPlaceholder')} {...register('scriptPrompt')} />
-          {errors.scriptPrompt ? (
-            <span role="alert" className="mt-1 block text-sm font-normal text-red-600">{t('personas.scriptMaxError')}</span>
-          ) : null}
-        </label>
-        {result && !result.success && result.error === 'prompt_rejected' ? (
-          <InlineFieldError message={t('persona.errPromptRejected')} />
-        ) : null}
-      </div>
-    </section>
-  );
-};
-
-//---------------
 // PersonaSubmit — persona validation and submit (create/edit).
 // Create: POST /api/persona (persona alone). Success → /posts, the app's
 // home, so the user lands where the results are.
@@ -801,6 +742,7 @@ const PersonaSubmit = ({ editId }: { editId: string | null }) => {
         if (state.avatarUrl) formData.append('avatarUrl', state.avatarUrl);
         if (state.voiceId) formData.append('voiceId', state.voiceId);
         if (state.videoAspect) formData.append('videoAspect', state.videoAspect);
+        if (state.videoLayout) formData.append('videoLayout', state.videoLayout);
         if (state.scriptPrompt.trim()) formData.append('scriptPrompt', state.scriptPrompt.trim());
         if (state.niche.trim()) formData.append('niche', state.niche.trim());
         const result = await updateMutation.mutateAsync({ personaId, formData });
@@ -964,23 +906,6 @@ const PersonaErrorDialog = () => {
     </div>
   );
 };
-
-//---------------
-// InlineFieldError — validation error next to the invalid field.
-//---------------
-const InlineFieldError = ({ message }: { message: string }) => (
-  <p role="alert" className="mt-2 text-sm font-medium text-red-700">{message}</p>
-);
-
-//---------------
-// SectionDivider — divider with label
-//---------------
-const SectionDivider = ({ label }: { label: string }) => (
-  <div className="flex items-center gap-3">
-    <span className={SECTION_LABEL_CLASS}>{label}</span>
-    <span className="h-px flex-1 bg-neutral-200" />
-  </div>
-);
 
 //---------------
 // getCharacterIndex — finds the saved avatar in the carousel without scrolling it.

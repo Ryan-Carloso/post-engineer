@@ -181,6 +181,23 @@ describe('usePersonaStore', () => {
     expect(formData.get('video_subject')).toBe('finanças');
   });
 
+  it('setVideoLayout updates the layout and buildPersonaFormData sends it', () => {
+    const s = usePersonaStore.getState();
+    s.setVideoLayout('react');
+
+    expect(usePersonaStore.getState().videoLayout).toBe('react');
+    const formData = usePersonaStore.getState().buildPersonaFormData();
+    expect(formData.get('videoLayout')).toBe('react');
+  });
+
+  it('buildPersonaFormData omits videoLayout when it is empty', () => {
+    const s = usePersonaStore.getState();
+    s.setVideoLayout('');
+
+    const formData = usePersonaStore.getState().buildPersonaFormData();
+    expect(formData.has('videoLayout')).toBe(false);
+  });
+
   //---------------
   // Scheduling has no screen of its own, so the persona store keeps no
   // scheduling state. These keys are pinned so a future scheduling form

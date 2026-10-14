@@ -40,6 +40,7 @@ import {
 import { validateScheduleWindow } from '@/lib/schedule-window';
 import { isValidTimezone } from '@/lib/timezone';
 import { computeVideoTokens, toFiniteNumber, type FaceQuality } from '@/lib/tokens';
+import { resolvePostWithoutPersona, type PersonaPrep } from './persona-prep';
 import {
   buildJobPayload,
   hasNonEmptyString,
@@ -56,6 +57,7 @@ import { resolveIdempotency } from '@/lib/idempotency';
 import { VALID_SCHEDULE_PROVIDERS } from '@/app/api/schedule/route';
 import { trackApiEvent } from '@/lib/analytics';
 import { logger } from '@/lib/logger';
+import { ensureEngineImageUrl } from '@/lib/engine-image-url';
 import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 const ROUTE = 'POST /api/videos/generate-and-schedule';
@@ -105,6 +107,7 @@ const OptionsSchema = z
     // The rest of a persona's editorial definition, for a post created
     // WITHOUT one (migration 012). With a persona these still override it.
     videoAspect: z.enum(['9:16', '16:9']).optional(),
+    videoLayout: z.enum(['standard', 'react']).optional(),
     paragraphNumber: z.number().int().min(1).max(10).optional(),
     language: z.string().optional(),
     niche: z.string().optional(),
@@ -245,6 +248,9 @@ interface ValidatedInput {
   webhookUrl?: string;
   voiceId?: string;
   videoAspect?: '9:16' | '16:9';
+  /** 'standard' = the avatar fills the frame; 'react' = the frame splits,
+   *  avatar on top and b-roll below. Absent means standard. */
+  videoLayout?: 'standard' | 'react';
   paragraphNumber?: number;
   language?: string;
   niche?: string;
@@ -582,22 +588,6 @@ async function validateAccounts(
   return accountIds;
 }
 
-interface PersonaPrep {
-  personaName: string;
-  /** Per-post "no face" choice (options.faceless). */
-  faceless: boolean;
-  faceQuality: FaceQuality;
-  voiceAudioUrl?: string;
-  voiceIdValue?: string;
-  avatarUrl: string | null;
-  photoPath: string | null;
-  niche: string | null;
-  scriptPrompt: string | null;
-  language: string | null;
-  videoAspect: string | null;
-  paragraphNumber: number | null;
-  photoRequired: boolean;
-}
 
 /**
  * Resolve what the video needs: the persona's editorial definition (voice,
@@ -620,6 +610,7 @@ async function preparePost(
     voiceId?: string;
     scriptPrompt?: string;
     videoAspect?: '9:16' | '16:9';
+    videoLayout?: 'standard' | 'react';
     paragraphNumber?: number;
     language?: string;
     niche?: string;
@@ -631,42 +622,6 @@ async function preparePost(
   return preparePersona(supabase, userId, personaId, opts);
 }
 
-//---------------
-// resolvePostWithoutPersona — a faceless post defined entirely by the
-// request. Everything the engine reads off a persona is supplied here and
-// snapshotted; the caller already refused a persona-less post that is not
-// faceless or that carries no voice.
-//---------------
-function resolvePostWithoutPersona(opts: {
-  faceless: boolean;
-  audioUrl?: string;
-  voiceId?: string;
-  scriptPrompt?: string;
-  videoAspect?: '9:16' | '16:9';
-  paragraphNumber?: number;
-  language?: string;
-  niche?: string;
-}): PersonaPrep {
-  return {
-    // The display name for the notification; a persona-less post has no
-    // persona name, so it is identified by its own shape.
-    personaName: 'Post',
-    faceless: true,
-    // No persona to price: a faceless post ignores face quality, and this is
-    // the same value the engine's token_cost reads off the snapshot.
-    faceQuality: 'ok',
-    voiceAudioUrl: opts.audioUrl,
-    voiceIdValue: opts.voiceId,
-    avatarUrl: null,
-    photoPath: null,
-    niche: opts.niche ?? null,
-    scriptPrompt: opts.scriptPrompt ?? null,
-    language: opts.language ?? null,
-    videoAspect: opts.videoAspect ?? null,
-    paragraphNumber: opts.paragraphNumber ?? null,
-    photoRequired: false,
-  };
-}
 
 /**
  * Load the persona (ownership enforced: service-role bypasses RLS, so the
@@ -684,6 +639,7 @@ async function preparePersona(
     voiceId?: string;
     scriptPrompt?: string;
     videoAspect?: '9:16' | '16:9';
+    videoLayout?: 'standard' | 'react';
     paragraphNumber?: number;
     language?: string;
     niche?: string;
@@ -692,7 +648,7 @@ async function preparePersona(
   const { data: persona, error: personaError } = await supabase
     .from('personas')
     .select(
-      'id, name, photo_path, avatar_url, voice_id, voice_audio_path, language, video_aspect, script_prompt, paragraph_number, niche, face_quality',
+      'id, name, photo_path, avatar_url, voice_id, voice_audio_path, language, video_aspect, video_layout, script_prompt, paragraph_number, niche, face_quality',
     )
     .eq('id', personaId)
     .eq('user_id', userId)
@@ -759,6 +715,9 @@ async function preparePersona(
     scriptPrompt: opts.scriptPrompt ?? ((persona.script_prompt as string | null) ?? null),
     language: opts.language ?? language,
     videoAspect: opts.videoAspect ?? ((persona.video_aspect as string | null) ?? null),
+    // Layout is snapshotted like aspect: a persona edited after this moment
+    // must not rewrite how this post was composed.
+    videoLayout: opts.videoLayout ?? ((persona.video_layout as string | null) ?? null),
     paragraphNumber: opts.paragraphNumber ?? paragraphNumber,
     // Every persona is faced, so a post WITH the face must resolve one; only a
     // faceless post may proceed without any image.
@@ -920,6 +879,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     voiceId: validatedOptions.voiceId,
     scriptPrompt: validatedOptions.scriptPrompt,
     videoAspect: validatedOptions.videoAspect,
+    videoLayout: validatedOptions.videoLayout,
     paragraphNumber: validatedOptions.paragraphNumber,
     language: validatedOptions.language,
     niche: validatedOptions.niche,
@@ -1140,6 +1100,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     post_niche: prep.niche,
     post_language: prep.language,
     post_video_aspect: prep.videoAspect,
+    post_video_layout: prep.videoLayout,
     post_paragraph_number: prep.paragraphNumber,
     post_face_quality: prep.faceQuality,
   });
@@ -1329,7 +1290,22 @@ async function postHandler(request: Request): Promise<NextResponse> {
           photoUrl = libraryUrl;
           if (!requestedImageId) pickedImageId = selection.image.id;
         } else {
-          photoUrl = prep.avatarUrl ?? (await signedUrl(supabase, prep.photoPath)) ?? undefined;
+          // A house character is stored as a relative path to our own static
+          // asset. The engine fetches the image over HTTP behind an SSRF guard
+          // that rejects loopback, so a relative path — and even an origin-
+          // prefixed one in local dev — cannot be downloaded. Re-host it in
+          // the personas bucket first.
+          const hosted = await ensureEngineImageUrl(prep.avatarUrl, {
+            supabase,
+            userId,
+            origin: new URL(request.url).origin,
+          }).catch((error: unknown) => {
+            throw new SlotDispatchError(
+              'photo_resolve_failed',
+              error instanceof Error ? error.message : 'The chosen character could not be loaded.',
+            );
+          });
+          photoUrl = hosted ?? (await signedUrl(supabase, prep.photoPath)) ?? undefined;
         }
         if (!photoUrl && prep.photoRequired) {
           throw new SlotDispatchError('photo_missing', 'Persona photo could not be loaded. Please try again.');
@@ -1343,6 +1319,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         voice_audio_url: prep.voiceAudioUrl,
         language: prep.language,
         video_aspect: prep.videoAspect,
+        video_layout: prep.videoLayout,
         script_prompt: prep.scriptPrompt,
         paragraph_number: prep.paragraphNumber,
         niche: prep.niche,

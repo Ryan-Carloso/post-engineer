@@ -11,6 +11,7 @@ from app.models.schema import (
     AudioRequest,
     SubtitleRequest,
     VideoAspect,
+    VideoLayout,
     VideoParams,
     VideoTermsParams,
 )
@@ -25,6 +26,16 @@ class TestVideoAspect(unittest.TestCase):
     def test_to_resolution_rejects_unsupported_value(self):
         with self.assertRaises(ValueError):
             VideoAspect.to_resolution("4:5")
+
+
+class TestVideoLayout(unittest.TestCase):
+    def test_values_lists_both_layouts(self):
+        self.assertEqual(VideoLayout.values(), ["standard", "react"])
+
+    def test_video_params_default_is_standard(self):
+        self.assertEqual(
+            VideoParams(video_subject="test").video_layout, VideoLayout.standard
+        )
 
 
 class TestVideoParamsLipsyncEnabled(unittest.TestCase):
