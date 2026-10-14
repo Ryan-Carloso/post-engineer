@@ -7,11 +7,35 @@
 
 ## Workflow rules
 
+- **An agent never touches production.** No `deploy.sh`, no container
+  restart/rebuild, no env edit on the VPS, no `docker exec` into a prod
+  container to change state. Merge the PR, report the exact deploy step,
+  and let a human run it. A prod incident is still diagnosed read-only:
+  `docker logs`, `docker inspect`, `git show origin/main:...` and read-only
+  `curl` are fine; mutating the deployment is not. If the user explicitly
+  authorizes a deploy in that message, that authorization covers that one
+  run — it is not standing permission for later turns.
+- **Always work in a `git worktree`, never a shared checkout.** An agent
+  editing `/home/administrator/post-enginner-repos/post-engineer` directly
+  strands the user's own branch state on whatever branch was checked out
+  (observed 2026-10-13: the checkout sat on a stale agent branch while
+  `origin/main` moved ahead). Create a worktree per task
+  (`git worktree add /tmp/opencode/wt-<slug> -b <branch> origin/main`) and
+  reset it onto `origin/main` before starting, so it is never based on a
+  stale ref.
 - Never push directly to `main` — always open a PR.
 - TDD by default: every code change (features, fixes, refactors) ships with
   new or updated tests, and the relevant suite is green before committing.
 - Keep PRs small and focused; CI must be green and review threads resolved
   before merge.
+- **A merged PR is not deployed.** Merging to `main` does NOT ship: the VPS
+  runs `deploy.sh` manually, so `.deploy-state` (in the private
+  `post-enginner-repos` repo) can trail `origin/main` by many PRs. After
+  merging anything a prod incident depends on, compare `.deploy-state`
+  against `origin/main` and say explicitly that a deploy is still pending.
+  On 2026-10-13 the PostHog fix (#173 + the secrets repo #15) was merged
+  and still did not reach prod ~13h later — prod served commit `03daebe4`
+  with `web 03daebe4` in `.deploy-state` while `main` was at `bad83d5`.
 - **Look at the UI you changed.** A green test suite says nothing about layout:
   after editing anything under `apps/web`, load the `preview-ui` skill
   (`.opencode/skills/preview-ui/SKILL.md`) and verify the screen in the running
@@ -43,6 +67,24 @@
     suites exercise the same code path.
 
 # Env Files Policy (NEVER commit real secrets)
+
+- **A credential pasted into the wrong variable fails silently, not loudly.**
+  On 2026-10-01 `chore: key` (814dc81) pasted the PostHog project key into
+  `NEXT_PUBLIC_POSTHOG_HOST` in the private secrets repo. Nothing errored:
+  `posthog-js`/`posthog-node` accept any string as the host, so the client
+  constructed fine and every capture only failed later at send time. Prod
+  lost server telemetry for 11 days while `/api/version` kept reporting
+  `posthogConfigured: true`. When adding or moving a secret, check the
+  value's SHAPE against the variable's meaning — a `phc_` key is never a
+  host, and a host is never a key.
+- **A config flag that only checks presence is not health.** `posthogConfigured`
+  (and any "is it set?" boolean) stays `true` through a total delivery
+  failure. Any externally-readable status must reflect a real signal, or the
+  comment must say outright that it only proves the variable exists.
+- **Validation belongs at the boundary that accepts the value.** Both PostHog
+  SDKs take an unvalidated host; `resolveHost` in `lib/posthog-config.ts`
+  guards both the server and browser paths. Prefer that over trusting the
+  env file.
 
 - Real env files (`apps/web/.env`, `apps/engine/.env`,
   `apps/engine/config.toml`) are gitignored and are NEVER committed.
