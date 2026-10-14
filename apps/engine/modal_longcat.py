@@ -43,14 +43,14 @@ separate accounts, so this runs in both):
 
 MIGRATING from InfiniteTalk: the app is now `moneyprint-longcat` (was
 `moneyprint-infinitetalk`), so redeploying changes the endpoint URLs, and every
-INFINITETALK_* env var is now LONGCAT_*. Rename them in Infisical (env=dev and
-env=prod) and in apps/engine/.env in the same rollout as deploying this build;
-there is no fallback for the old names, by design.
+INFINITETALK_* env var is now LONGCAT_*. Rename them in apps/engine/.env (dev)
+and in the production deployment env in the same rollout as deploying this
+build; there is no fallback for the old names, by design.
 
 The deploy output prints the submit/status/download URLs. The engine reads
 them from LONGCAT_SUBMIT_URL / LONGCAT_STATUS_URL / LONGCAT_DOWNLOAD_URL, and
 builds the status/download URLs from LONGCAT_MODAL_APP_NAME. Set them in
-apps/engine/.env (dev) and in Infisical under env=prod (prod).
+apps/engine/.env (dev) and in the production deployment env (prod).
 """
 
 from __future__ import annotations
