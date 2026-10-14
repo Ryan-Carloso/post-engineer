@@ -1942,6 +1942,13 @@ Follow these so the same issues don't come back:
   file you touched.** Sibling comments referencing a deleted path send
   future readers hunting for code that isn't there. Grep the concept
   name across the repo after any deletion.
+- **Adding a provider (or any enumerated alternative) must update every
+  enumeration of the set.** The Fish Audio PR unstaled a "two remaining
+  providers" invariant living in three places: the dispatcher error
+  message, a structural test (`test_tts_providers.py`), and routing
+  comments in `task.py`. When the set changes, `grep -rn` the old
+  count/name repo-wide — comments, docstrings, tests, and user-facing
+  error copy.
 - **A dead i18n key in one namespace hints at dead keys in others.**
   `home.oneOff` being dead led to `fillSchedule.oneOff*` (form fields
   from the removed flow) — verify zero usages before deleting, and keep
