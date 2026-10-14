@@ -826,7 +826,7 @@ class TestVoiceCommon(unittest.TestCase):
 
     def test_populate_blank_text_yields_no_subtitles(self):
         sub_maker = voice_common.populate_legacy_submaker_with_full_text(
-            voice_common.SubMaker(), "   ", 5.0
+            vs.SubMaker(), "   ", 5.0
         )
         self.assertEqual(sub_maker.subs, [])
         self.assertEqual(sub_maker.offset, [])
@@ -834,7 +834,7 @@ class TestVoiceCommon(unittest.TestCase):
     def test_populate_punctuation_only_text_keeps_whole_text(self):
         # no sentence boundaries: the whole text becomes one fragment
         sub_maker = voice_common.populate_legacy_submaker_with_full_text(
-            voice_common.SubMaker(), "...", 5.0
+            vs.SubMaker(), "...", 5.0
         )
         self.assertEqual(sub_maker.subs, ["..."])
         self.assertEqual(sub_maker.offset, [(0, 50000000)])

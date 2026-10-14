@@ -13,7 +13,6 @@ from moviepy.video.tools import subtitles
 
 from app.config import config
 from app.services.voice_common import (
-    SubMaker,
     ensure_file_path_exists,
     populate_legacy_submaker_with_full_text,
     preprocess_text_for_tts,
@@ -30,6 +29,26 @@ _NO_VOICE_ALIASES = {NO_VOICE_NAME, "none"}
 # 100-nanosecond units per second. The subtitle timeline predates every TTS
 # provider and `mktimestamp` is integer-based on it.
 SUB_TIME_UNITS_PER_SECOND = 10000000
+
+
+class SubMaker:
+    """Subtitle carrier returned by ``tts``.
+
+    This was ``edge_tts.SubMaker``, which the engine used both as an edge-tts
+    transport handle and — via its ``subs``/``offset`` attributes — as the
+    timeline ``create_subtitle`` aggregates into an SRT. edge_tts is gone; the
+    timeline stays because Chatterbox returns one of these.
+
+    ``subs`` holds the spoken fragments and ``offset`` their (start, end)
+    positions in 100-nanosecond units, index-aligned. Chatterbox has no
+    word-level boundaries, so the fragments are filled by
+    ``populate_legacy_submaker_with_full_text``: one fragment per sentence,
+    timed proportionally across the audio duration.
+    """
+
+    def __init__(self) -> None:
+        self.subs: list[str] = []
+        self.offset: list[tuple[int, int]] = []
 
 
 def mktimestamp(time_unit: float) -> str:

@@ -1,36 +1,25 @@
 """Shared voice-service helpers.
 
-Leaf module: ``SubMaker`` (the subtitle carrier every TTS provider returns),
-the text preprocessing shared by all providers, and the file/subtitle
-utilities. Imported by both ``app.services.voice`` (the dispatcher) and the
-per-provider modules (e.g. ``app.services.voice_fishaudio``) so neither side
-needs to reach across the other — no import cycles.
+Leaf module: the text preprocessing, file utilities and subtitle-filling
+logic shared by all TTS providers. Imported by both ``app.services.voice``
+(the dispatcher) and the per-provider modules (e.g.
+``app.services.voice_fishaudio``) so neither side needs to reach across the
+other — no import cycles.
+
+``SubMaker`` itself stays defined in ``app.services.voice``: the structural
+test ``test_submaker_is_a_local_class_not_the_edge_package`` pins it there
+(it must remain our local class, never the edge-tts package's). It is
+referenced here only under ``TYPE_CHECKING`` for annotations.
 """
 
 import os
 import re
+from typing import TYPE_CHECKING
 
 from app.utils import utils
 
-
-class SubMaker:
-    """Subtitle carrier returned by ``tts``.
-
-    This was ``edge_tts.SubMaker``, which the engine used both as an edge-tts
-    transport handle and — via its ``subs``/``offset`` attributes — as the
-    timeline ``create_subtitle`` aggregates into an SRT. edge_tts is gone; the
-    timeline stays because Chatterbox returns one of these.
-
-    ``subs`` holds the spoken fragments and ``offset`` their (start, end)
-    positions in 100-nanosecond units, index-aligned. Chatterbox has no
-    word-level boundaries, so the fragments are filled by
-    ``populate_legacy_submaker_with_full_text``: one fragment per sentence,
-    timed proportionally across the audio duration.
-    """
-
-    def __init__(self) -> None:
-        self.subs: list[str] = []
-        self.offset: list[tuple[int, int]] = []
+if TYPE_CHECKING:
+    from app.services.voice import SubMaker
 
 
 def preprocess_text_for_tts(text: str) -> str:
@@ -113,8 +102,8 @@ def ensure_file_path_exists(file_path: str) -> None:
 
 
 def populate_legacy_submaker_with_full_text(
-    sub_maker: SubMaker, text: str, audio_duration_seconds: float
-) -> SubMaker:
+    sub_maker: "SubMaker", text: str, audio_duration_seconds: float
+) -> "SubMaker":
     """Fill the `subs/offset` subtitle structure from the full text.
 
     Chatterbox returns no word-level boundaries, so the subtitle timeline

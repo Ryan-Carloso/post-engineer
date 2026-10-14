@@ -10,15 +10,19 @@ voice dispatcher stays within the file-size ratchet. Shared helpers come
 from the leaf module ``app.services.voice_common`` — no import cycles.
 """
 
-from typing import Union
+from typing import TYPE_CHECKING, Union
 
 import requests
 from loguru import logger
 from moviepy.audio.io.AudioFileClip import AudioFileClip
 
 from app.config import config
+
+if TYPE_CHECKING:
+    # Only for annotations: SubMaker is pinned to app.services.voice (see
+    # the local import inside fishaudio_tts), so this never runs at runtime.
+    from app.services.voice import SubMaker
 from app.services.voice_common import (
-    SubMaker,
     ensure_file_path_exists,
     populate_legacy_submaker_with_full_text,
     preprocess_text_for_tts,
@@ -69,7 +73,7 @@ def fishaudio_tts(
     voice_rate: float = 1.0,
     voice_volume: float = 1.0,
     model_id: str = "",
-) -> Union[SubMaker, None]:
+) -> Union["SubMaker", None]:
     """Generate speech with the Fish Audio hosted TTS API.
 
     Fish Audio exposes TTS at POST /v1/tts with the synthesis model in a
@@ -81,6 +85,11 @@ def fishaudio_tts(
     timestamps, so the subtitle path falls back to the full-text SubMaker.
     For tighter subtitle sync set ``subtitle_provider = "whisper"``.
     """
+    # Local import: SubMaker is pinned to app.services.voice by the
+    # structural test test_submaker_is_a_local_class_not_the_edge_package,
+    # and voice.py imports this module — a top-level import would be
+    # circular. At call time voice.py is fully initialized.
+    from app.services.voice import SubMaker
     text = (text or "").strip()
     if not text:
         logger.error("Fish Audio TTS text is empty")
