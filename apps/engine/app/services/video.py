@@ -590,7 +590,8 @@ def replace_video_intro_with_lipsync(
 ) -> str:
     """Replace the beginning of a background video with a talking avatar.
 
-    ``layout`` picks how the avatar meets the b-roll during the hook:
+    ``layout`` picks how the avatar meets the b-roll during the hook.
+    The default is ``standard``, matching ``VideoParams.video_layout``.
 
     ``standard``
         The avatar fills the frame (scale + pad). The b-roll's first
