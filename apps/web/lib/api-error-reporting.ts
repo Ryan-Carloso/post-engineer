@@ -10,10 +10,14 @@
 //   structured error code (when the JSON body carries one), the
 //   client-facing errorId (for correlation with user reports), and the
 //   user id when the caller provides one via options.getUserId.
-// - 4xx (including 401/403) -> a server_warning event (same split
-//   apiErrorResponse uses).
-// - 2xx -> a server_success event (plain event, never an $exception),
-//   with the user id when the route opted in via options.getUserId.
+// - 4xx (including 401/403) -> a warning event named after the route's
+//   semantic name + `_rejected` (e.g. `persona_created_rejected`), falling
+//   back to the generic `server_warning` for unmapped labels.
+// - 2xx -> a plain success event (never an $exception) named after the
+//   route's semantic name (e.g. `billing_transactions_fetched`, see
+//   api-telemetry-names.ts), falling back to the generic
+//   `server_success` for unmapped labels, with the user id when the
+//   route opted in via options.getUserId.
 //
 // Reporting is fire-and-forget: it never throws and never mutates the
 // response the client receives. Thrown handler errors are deliberately
@@ -27,6 +31,7 @@
 //---------------
 
 import { getPostHogServer } from './posthog-server';
+import { rejectionEventName, successEventName } from './api-telemetry-names';
 import { scrubSecrets } from './scrub';
 
 export interface ApiErrorReportingOptions {
@@ -118,9 +123,12 @@ async function reportApiIssue(
     if (status >= 500) {
       client.captureException(new Error(message), scrubSecrets(properties));
     } else {
-      // 4xx are warnings, not errors: the same event name logger.warn
-      // uses, so warnings from every path share one PostHog stream.
-      client.capture('server_warning', scrubSecrets({ message, ...properties }));
+      // 4xx are warnings, not errors. The event carries the route's
+      // semantic name + `_rejected` (see api-telemetry-names.ts); unmapped
+      // labels fall back to the generic server_warning. Telemetry must
+      // never break on a missing entry.
+      const event = rejectionEventName(route) ?? 'server_warning';
+      client.capture(event, scrubSecrets({ message, ...properties }));
     }
   } catch {
     // Telemetry must never break the request path.
@@ -143,8 +151,10 @@ async function reportApiSuccess(
     const properties: Record<string, unknown> = { route, status };
     if (userId !== undefined) properties.userId = userId;
     // Plain event, never an $exception. No body read — success bodies are
-    // large and varied; route+status is the signal.
-    client.capture('server_success', properties);
+    // large and varied; route+status is the signal. The event name is the
+    // route's semantic name when mapped (see api-telemetry-names.ts);
+    // unmapped labels fall back to the generic server_success.
+    client.capture(successEventName(route) ?? 'server_success', properties);
   } catch {
     // Telemetry must never break the request path.
   }
@@ -153,9 +163,9 @@ async function reportApiSuccess(
 /**
  * Wrap a Next.js App Router route handler so every API response is visible
  * in PostHog: 5xx via error tracking ($exception), 4xx (including 401/403)
- * as warnings (server_warning), 2xx as plain success events
- * (server_success, with the user id when the route opted in via
- * options.getUserId). The wrapped handler keeps the original call shape —
+ * as warnings named `<semantic_name>_rejected`, 2xx as plain success events
+ * named after the route's semantic name (see api-telemetry-names.ts),
+ * with the user id when the route opted in via options.getUserId. The wrapped handler keeps the original call shape —
  * the request stays optional when the handler declares it optional (or
  * takes none at all), plain Request and NextRequest both typecheck, and
  * extra args such as the route-params context pass through. The handler's

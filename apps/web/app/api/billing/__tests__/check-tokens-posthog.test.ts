@@ -1,7 +1,7 @@
 //---------------
 // Route-level proof: handled 5xx responses from a real API route reach
 // PostHog via withApiErrorReporting ($exception), and the 401 arrives as
-// a server_warning (never an $exception).
+// the route's semantic `<name>_rejected` event (never an $exception).
 // Uses POST /api/billing/check-tokens because its 500 path (missing
 // MONEYPRINT_API_SECRET) is deterministic without touching a database.
 //---------------
@@ -83,7 +83,7 @@ describe('POST /api/billing/check-tokens (PostHog 5xx reporting)', () => {
     });
   });
 
-  it('reports the 401 as a server_warning (never an $exception)', async () => {
+  it('reports the 401 as tokens_checked_rejected (never an $exception)', async () => {
     const res = await POST(postRequest({ 'x-engine-secret': 'wrong' }));
 
     expect(res.status).toBe(401);
@@ -92,7 +92,7 @@ describe('POST /api/billing/check-tokens (PostHog 5xx reporting)', () => {
       string,
       Record<string, unknown>,
     ];
-    expect(event).toBe('server_warning');
+    expect(event).toBe('tokens_checked_rejected');
     expect(properties).toMatchObject({
       route: 'POST /api/billing/check-tokens',
       status: 401,
