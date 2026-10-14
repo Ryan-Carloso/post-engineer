@@ -21,7 +21,6 @@ import { useI18n } from '@/lib/i18n/provider';
 import { PersonaTokensSection } from './persona-tokens';
 import { PersonaImageLibrarySection, mapPersonaImageWarnings } from './persona-image-library';
 import { scrollToErrorField } from '@/lib/scroll-to-error';
-import type { TranslationKey } from '@/lib/i18n';
 import { DEFAULT_PERSONA_FACE_IDS } from '@/lib/persona-faces';
 import {
   AlertIcon,
@@ -36,12 +35,12 @@ import {
   INPUT_CLASS,
 } from '@/lib/ui';
 
-const VOICE_LABEL: Record<string, TranslationKey> = {
-  calm: 'persona.voiceCalm',
-  energetic: 'persona.voiceEnergetic',
-  young: 'persona.voiceYoung',
-  deep: 'persona.voiceDeep',
-};
+// Voice ids come from the engine's Chatterbox catalog and are
+// provider-qualified (`chatterbox:ryan`). There is no house-voice map any
+// more, and no label fallback: a voice with no label must show its raw id, not
+// borrow another voice's name — that fallback used to render every unknown id
+// as "Voz feminina calma".
+const voiceLabel = (voiceId: string): string => voiceId.replace(/^chatterbox:/, '').replace(/_/g, ' ');
 
 export default function PersonaPage() {
   return (
@@ -116,8 +115,16 @@ const PersonaPageContent = () => {
     methods.setValue('niche', persona.niche ?? '');
   }, [editingPersona, methods]);
 
+  // The error page must NOT subscribe to these queries: mounting it adds a
+  // second observer, refetchOnMount refetches the errored query, and the
+  // error page unmounts again — an infinite loop. Retry lives here instead.
+  const retryFailedQueries = async (): Promise<void> => {
+    const failed = [voicesQuery, sampleLanguagesQuery, personasQuery].filter((query) => query.isError);
+    await Promise.all(failed.map((query) => query.refetch()));
+  };
+
   if (voicesQuery.isError || sampleLanguagesQuery.isError || personasQuery.isError) {
-    return <PersonaPageError />;
+    return <PersonaPageError onRetry={retryFailedQueries} isRetrying={voicesQuery.isFetching} />;
   }
 
   if (
@@ -203,19 +210,10 @@ const PersonaFormSync = () => {
 //---------------
 // PersonaPageError explains the unavailable dependency and offers recovery.
 //---------------
-const PersonaPageError = () => {
-  const { t } = useI18n();
-  const personasQuery = usePersonaListQuery();
-  const voicesQuery = useVoicesQuery();
-  const sampleLanguagesQuery = useVoiceSampleLanguagesQuery();
+type PersonaPageErrorProps = { onRetry: () => Promise<void>; isRetrying: boolean };
 
-  const retry = async (): Promise<void> => {
-    const requests: Array<Promise<unknown>> = [];
-    if (voicesQuery.isError) requests.push(voicesQuery.refetch());
-    if (sampleLanguagesQuery.isError) requests.push(sampleLanguagesQuery.refetch());
-    if (personasQuery.isError) requests.push(personasQuery.refetch());
-    await Promise.all(requests);
-  };
+const PersonaPageError = ({ onRetry, isRetrying }: PersonaPageErrorProps) => {
+  const { t } = useI18n();
 
   return (
     <main className="flex min-h-[calc(100vh-10rem)] items-center justify-center py-8">
@@ -234,11 +232,11 @@ const PersonaPageError = () => {
         </p>
         <button
           type="button"
-          disabled={voicesQuery.isFetching}
-          onClick={() => void retry()}
+          disabled={isRetrying}
+          onClick={() => void onRetry()}
           className="mt-7 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {voicesQuery.isFetching && <SpinnerIcon />}
+          {isRetrying && <SpinnerIcon />}
           {t('persona.tryAgain')}
         </button>
       </section>
@@ -672,7 +670,7 @@ const PersonaHouseVoicePicker = ({ personaLanguage }: { personaLanguage?: string
                 <MicIcon />
               </span>
               <span className="min-w-0 flex-1 truncate text-sm font-medium text-neutral-900">
-                {t(VOICE_LABEL[voice.id] ?? 'persona.voiceCalm')}
+                {voiceLabel(voice.id)}
               </span>
               {isActive && (
                 <span className="text-accent">

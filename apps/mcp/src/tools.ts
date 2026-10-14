@@ -35,7 +35,7 @@ export const CreatePersonaShape = {
     .describe(
       'REQUIRED. Public URL to the persona avatar image (use list_faces for stock face URLs). Every persona has a face; "no face" is chosen per video with generate_persona_videos options.faceless.',
     ),
-  voiceId: z.string().default('alloy').describe('Voice ID to use (e.g. alloy, echo)'),
+  voiceId: z.string().default('chatterbox:ryan').describe('Voice ID to use (see list_voices)'),
   language: z.string().default('en-US').describe('Language code (e.g. pt-BR, en-US)'),
   videoAspect: z.enum(['9:16', '16:9']).default('9:16').describe('Video aspect ratio'),
   scriptPrompt: z.string().optional().default('').describe('System prompt instructions for video scripts'),
