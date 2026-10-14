@@ -1020,7 +1020,7 @@ class TestPublishFailureDiscordAlert(unittest.TestCase):
                 patch.object(
                     tm,
                     "generate_final_videos",
-                    side_effect=tm.infinitetalk.InfiniteTalkError("persona image rejected"),
+                    side_effect=tm.longcat.LongCatError("persona image rejected"),
                 ),
                 patch.object(tm.video_storage, "require_r2_configuration"),
                 patch.object(tm, "cleanup_task_intermediates"),

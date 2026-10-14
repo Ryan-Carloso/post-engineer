@@ -71,7 +71,7 @@ MAX_CONCURRENT_INPUTS = 2
 
 MODELS_VOLUME = modal.Volume.from_name("chatterbox-models", create_if_missing=True)
 VOICES_VOLUME = modal.Volume.from_name("chatterbox-voices", create_if_missing=True)
-# Shared bearer secret required by every endpoint (mirrors modal_app.py).
+# Shared bearer secret required by every endpoint.
 # Create with: `modal secret create chatterbox-http CHATTERBOX_HTTP_SECRET=...`
 HTTP_SECRET = os.environ.get("CHATTERBOX_HTTP_SECRET")
 
@@ -100,6 +100,9 @@ CHATTERBOX_IMAGE = (
         # from a pinned master commit instead (V3 lives only on master).
         "chatterbox-tts @ git+https://github.com/resemble-ai/chatterbox.git@5de7a54aa4e5e2baadb0182dde554908b48b85c2",
         "fastapi[standard]",
+        # The speech handler imports loguru at request time; without it every
+        # /v1/audio/speech call returned 500 "No module named 'loguru'".
+        "loguru",
     )
     .env(
         {

@@ -24,6 +24,8 @@ secrets/
 private/
 debug/
 debug_*.py
+# Local benchmark inputs/outputs (reference photo, voice sample, rendered MP4s).
+bench-work/
 test_*.py
 !test/services/test_*.py
 !test/controllers/test_*.py

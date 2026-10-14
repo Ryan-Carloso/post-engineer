@@ -70,7 +70,15 @@ apps/web/supabase/.temp/
 .codegraph/
 *.db
 *.sqlite3
-# Rota de API do debug mode (não é a pasta debug/ local)
+# Rendered GPU-benchmark artifacts: sample MP4s and their JSON reports.
+# Local diagnostics only — the numbers that matter live in the reports the
+# benchmark writes under apps/engine/bench-work/.
+# Anchored to the repo root on purpose: an unanchored `debug/` would also match
+# any future `.../debug/` SOURCE directory (e.g. an API route of that name) and
+# silently make it untrackable.
+# (apps/engine/.gitignore keeps its own engine-scoped `debug/` entry.)
+/debug/
+/bench-work/
 .playwright-mcp/
 
 # Nx

@@ -1,5 +1,5 @@
 # Engine CPU on the VPS — ffmpeg/TTS/render only (no GPU).
-# InfiniteTalk/H200 stays on Modal and is reached over HTTP.
+# LongCat/H200 stays on Modal and is reached over HTTP.
 #
 # Secrets come from .env next to this file (never committed):
 #   MONEYPRINT_API_SECRET                     -> shared auth secret (web proxy + publish-back)
