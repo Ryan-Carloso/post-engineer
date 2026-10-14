@@ -524,3 +524,74 @@ describe('withApiErrorReporting', () => {
     expect(properties).toMatchObject({ errorId: 'log-123' });
   });
 });
+
+describe('withApiErrorReporting semantic event names', () => {
+  it('emits the semantic name (not server_success) for a 2xx on a mapped route', async () => {
+    const wrapped = withApiErrorReporting(
+      'GET /api/billing/transactions',
+      async () => NextResponse.json({ transactions: [] }),
+    );
+
+    const res = await wrapped(getRequest());
+
+    expect(res.status).toBe(200);
+    await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
+    const [event, properties] = client.capture.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(event).toBe('billing_transactions_fetched');
+    // route + status stay in the properties: dashboards grouping by route
+    // keep working through the cut-over.
+    expect(properties).toMatchObject({
+      route: 'GET /api/billing/transactions',
+      status: 200,
+    });
+    expect(client.captureException).not.toHaveBeenCalled();
+  });
+
+  it('emits the semantic name + _rejected (not server_warning) for a 4xx on a mapped route', async () => {
+    const wrapped = withApiErrorReporting(
+      'POST /api/persona',
+      async () => NextResponse.json({ error: 'bad input' }, { status: 400 }),
+    );
+
+    const res = await wrapped(getRequest());
+
+    expect(res.status).toBe(400);
+    await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
+    const [event, properties] = client.capture.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(event).toBe('persona_created_rejected');
+    expect(properties).toMatchObject({ route: 'POST /api/persona', status: 400 });
+    expect(client.captureException).not.toHaveBeenCalled();
+  });
+
+  it('falls back to server_success for a 2xx on an unmapped label (telemetry never breaks)', async () => {
+    const wrapped = withApiErrorReporting(
+      'GET /api/not-in-the-table',
+      async () => NextResponse.json({ ok: true }),
+    );
+
+    await wrapped(getRequest());
+
+    await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
+    const [event] = client.capture.mock.calls[0] as [string];
+    expect(event).toBe('server_success');
+  });
+
+  it('falls back to server_warning for a 4xx on an unmapped label (telemetry never breaks)', async () => {
+    const wrapped = withApiErrorReporting(
+      'GET /api/not-in-the-table',
+      async () => NextResponse.json({ error: 'x' }, { status: 404 }),
+    );
+
+    await wrapped(getRequest());
+
+    await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
+    const [event] = client.capture.mock.calls[0] as [string];
+    expect(event).toBe('server_warning');
+  });
+});
