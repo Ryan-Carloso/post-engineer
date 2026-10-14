@@ -26,6 +26,7 @@ from app.services.fill_schedule.support import (
     slot_faceless,
     slot_user_id,
     token_cost,
+    track_refund_issued,
 )
 
 
@@ -272,6 +273,9 @@ class BatchPublisher:
                     str(identity.get("face_quality") or "ok"),
                 )
                 batch_generation_id = f"batch:{schedule_id}"
+                engine_task_id = (
+                    str(slot["task_id"]) if slot.get("task_id") else None
+                )
                 try:
                     refunded = self.store.refund_batch_tokens(
                         user_id,
@@ -279,6 +283,7 @@ class BatchPublisher:
                         f"{batch_generation_id}:slot:{slot['id']}:publish",
                         cost,
                         refund_reason,
+                        engine_task_id=engine_task_id,
                     )
                 except Exception as exc:  # noqa: BLE001 — refund is best-effort here
                     logger.error(
@@ -286,6 +291,17 @@ class BatchPublisher:
                         f"slot {slot['id']}: {exc}"
                     )
                 else:
+                    # Fire refund_issued only on a landed refund — never
+                    # optimistically (see reconcile.py).
+                    if refunded:
+                        track_refund_issued(
+                            user_id=user_id,
+                            amount=cost,
+                            reason=refund_reason,
+                            batch_generation_id=batch_generation_id,
+                            slot_id=str(slot["id"]),
+                            engine_task_id=engine_task_id,
+                        )
                     # The RPC answered but the charge was NOT refunded: a
                     # soft failure. Log loudly (billing rule) and keep the
                     # tick running — the slot is already terminal.

@@ -6,6 +6,7 @@ from typing import Any
 
 from loguru import logger
 
+from app.services.analytics import track_event
 from app.services.fill_schedule.store import ScheduleStore
 
 
@@ -166,3 +167,48 @@ def build_persona_params(
     elif persona.get("voice_audio_path"):
         params["voice_audio_url"] = store.signed_url("personas", persona["voice_audio_path"])
     return params
+
+
+def track_refund_issued(
+    *,
+    user_id: str,
+    amount: int,
+    reason: str,
+    batch_generation_id: str,
+    slot_id: str,
+    engine_task_id: str | None,
+) -> None:
+    """Emit ``refund_issued`` to PostHog for a landed batch-slot refund.
+
+    Mirrors the web's trackRefundIssued (apps/web/lib/billing/reconcile.ts):
+    same event name so dashboards unify across the engine reconciler and the
+    web cron, with ``kind="batch_slot"`` distinguishing this path. Callers
+    must invoke this ONLY after the refund RPC reports refunded=true — never
+    optimistically (same rule as the web's recordTerminalFailure): the RPC is
+    idempotent, so a ``false`` answer means "already refunded" and firing the
+    event again would double-count the refund.
+
+    The token count travels as ``amount``, not ``tokens``: the engine's
+    ``_scrub_secrets`` redacts every key containing "token"
+    (``_SECRET_KEY_PATTERN`` in app/services/analytics.py), which would erase
+    the audit value of the event. Every value here is a typed store output
+    (uuids, ints, fixed reason literals) — no secrets can reach this call.
+
+    Telemetry must never break the tick: ``track_event`` itself never raises,
+    and this wrapper guards the call anyway.
+    """
+    try:
+        track_event(
+            "refund_issued",
+            {
+                "kind": "batch_slot",
+                "user_id": user_id,
+                "amount": amount,
+                "reason": reason,
+                "batch_generation_id": batch_generation_id,
+                "slot_id": slot_id,
+                "engine_task_id": engine_task_id,
+            },
+        )
+    except Exception:  # noqa: BLE001 - telemetry must never break the tick
+        logger.warning("fill_schedule: refund_issued telemetry failed")

@@ -27,6 +27,7 @@ from app.services.fill_schedule.support import (
     slot_faceless,
     slot_user_id,
     token_cost,
+    track_refund_issued,
     voice_for,
 )
 
@@ -150,13 +151,26 @@ class BatchGenerator:
             except Exception:
                 # Refund just this video's prepaid cost; the id keeps the
                 # other videos' charges intact.
-                self.store.refund_batch_tokens(
+                refunded = self.store.refund_batch_tokens(
                     user_id,
                     generation_id,
                     f"{generation_id}:slot:{slot['id']}",
                     cost,
                     "Batch generation could not be dispatched",
+                    engine_task_id=task_id,
                 )
+                # Fire refund_issued only on a landed refund (see reconcile.py
+                # for why never optimistically). The task never reached the
+                # engine, but the allocated id still links the ledger row.
+                if refunded:
+                    track_refund_issued(
+                        user_id=user_id,
+                        amount=cost,
+                        reason="Batch generation could not be dispatched",
+                        batch_generation_id=generation_id,
+                        slot_id=str(slot["id"]),
+                        engine_task_id=task_id,
+                    )
                 raise
             self.store.update_slot(
                 slot["id"], status=SLOT_GENERATING, topic=topic, task_id=task_id
