@@ -995,11 +995,10 @@ def generate_audio(task_id, params, video_script):
                 "(empty voice name)"
             )
             return None, None, None
-        # The voice id goes straight to voice.tts, which routes it to
-        # ElevenLabs (`elevenlabs:<id>`), Chatterbox (`chatterbox:<name>`) or
-        # Fish Audio (`fishaudio:<id>`) and fails loudly on anything else.
-        # There is no house-voice resolution step left: the catalog is the
-        # provider's own voice list.
+        # The voice id goes straight to voice.tts, which routes it to ElevenLabs
+        # (`elevenlabs:<id>`), Chatterbox (`chatterbox:<name>`) or Fish Audio
+        # (`fishaudio:<id>`) and fails loudly on anything else. There is no
+        # house-voice resolution step left: the catalog is the provider's own voice list.
         sub_maker = voice.tts(
             text=video_script,
             voice_name=voice.parse_voice_name(persona_voice_name),
