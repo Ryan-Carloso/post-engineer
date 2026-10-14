@@ -16,8 +16,8 @@ from app.models import const
 from app.models.schema import VideoConcatMode, VideoParams
 from app.services import (
     llm,
+    longcat,
     material,
-    infinitetalk,
     subtitle,
     twelvelabs,
     video,
@@ -28,6 +28,11 @@ from app.services import (
 from app.services import state as sm
 from app.services import persona_image, task_publish
 from app.services import task_webhook
+from app.services.persona_hook import (
+    _discard_stale_subtitle,
+    _find_hook_end_seconds,
+    persona_hook_end_seconds,
+)
 from app.services.bgm_history import history_repository
 from app.services.analytics import scrub_secret_values, track_event
 from app.services.notify import safe_reason, send_discord, task_failed_msg
@@ -469,67 +474,6 @@ def persona_lipsync_active(params: VideoParams) -> bool:
     return persona.photo_url is not None or persona.avatar_url is not None
 
 
-def _find_hook_end_seconds(
-    video_script: str,
-    subtitles: Sequence[tuple[int, str, str]],
-) -> float:
-    """Return the raw subtitle end boundary of the first script paragraph.
-
-    Raises ValueError for structural problems (fewer than two paragraphs,
-    hook without terminal punctuation, hook not found in the subtitles).
-    The 3-6s window check lives in persona_hook_end_seconds so callers that
-    need the raw measurement (e.g. the hook retry) can decide for themselves.
-    """
-    paragraphs = [
-        paragraph.strip()
-        for paragraph in re.split(r"\n\s*\n", video_script.strip())
-        if paragraph.strip()
-    ]
-    if len(paragraphs) < 2:
-        raise ValueError("persona script must contain at least two paragraphs")
-    if not re.search(r"[.!?。！？]$", paragraphs[0]):
-        raise ValueError("persona hook must end with terminal punctuation")
-
-    def normalize(text: str) -> str:
-        return re.sub(r"[^\w]+", "", text.casefold())
-
-    hook = normalize(paragraphs[0])
-    spoken = ""
-    for _, timing, text in subtitles:
-        match = re.search(
-            r"\d+:\d+:\d+[,\.]\d+\s*-->\s*(\d+):(\d+):(\d+)[,\.](\d+)",
-            timing,
-        )
-        if match is None:
-            continue
-        spoken += normalize(text)
-        if hook and hook in spoken:
-            return (
-                int(match.group(1)) * 3600
-                + int(match.group(2)) * 60
-                + int(match.group(3))
-                + int(match.group(4)) / 1000
-            )
-
-    raise ValueError("could not locate hook paragraph in subtitle timestamps")
-
-
-def persona_hook_end_seconds(
-    video_script: str,
-    subtitles: Sequence[tuple[int, str, str]],
-    minimum_seconds: float = 3.0,
-    maximum_seconds: float = 6.0,
-) -> float:
-    """Return the subtitle boundary that completes the first script paragraph."""
-    end_seconds = _find_hook_end_seconds(video_script, subtitles)
-    if not minimum_seconds <= end_seconds <= maximum_seconds:
-        raise ValueError(
-            f"persona hook must end between {minimum_seconds:g} and "
-            f"{maximum_seconds:g} seconds, got {end_seconds:g}"
-        )
-    return end_seconds
-
-
 # Regeneration attempts for an overshooting persona hook before the task
 # fails. Each attempt costs one LLM call plus one TTS call; the hook prompt
 # already targets the configured window, so retries should be rare.
@@ -541,11 +485,15 @@ _PERSONA_HOOK_MAX_RETRIES = 2
 # and tunable knobs reopen those failure modes (hooks over the GPU ceiling,
 # tails that eat the hook). Stock adhesion uses the offline token-overlap
 # judge; weak terms never enter the download queue.
-PERSONA_HOOK_MIN_SECONDS = 3.0
+PERSONA_HOOK_MIN_SECONDS = 8.0
 PERSONA_HOOK_MAX_SECONDS = 12.0
-PERSONA_HOOK_TARGET_WORDS_MIN = 8
-PERSONA_HOOK_TARGET_WORDS_MAX = 28
-PERSONA_LIPSYNC_MAX_SECONDS = 15.0
+PERSONA_HOOK_TARGET_WORDS_MIN = 20
+PERSONA_HOOK_TARGET_WORDS_MAX = 30
+# The GPU ceiling, not the product ceiling: LongCat's MAX_SEGMENTS=5 renders
+# 16.52s (longcat.clip_seconds), but a 5-segment render died inside the Modal
+# container with no Python traceback (SIGKILL) on the first real run. 12s is
+# the highest segment count observed to survive there.
+PERSONA_LIPSYNC_MAX_SECONDS = 12.0
 FACE_FILL_MIN_SECONDS = 5.0
 FACE_FILL_MAX_SECONDS = 8.0
 PERSONA_SELECTIVE_STOCK_MIN_SCORE = 0.3
@@ -645,6 +593,12 @@ def _ensure_persona_hook_fits(
         audio_file, audio_duration, sub_maker = generate_audio(task_id, params, video_script)
         if not audio_file:
             return video_script, None, None, None, subtitle_path
+        # The retry rewrites the script, so the existing subtitle describes a
+        # script that no longer exists. `generate_subtitle` only falls back to
+        # whisper when the file is ABSENT (its os.path.exists gate), so leaving
+        # it behind makes the edge path write nothing, skips the fallback, and
+        # hands the stale timings back for a hook that is not in them.
+        _discard_stale_subtitle(subtitle_path)
         subtitle_path = generate_subtitle(task_id, params, video_script, sub_maker, audio_file)
     raise AssertionError("unreachable: hook retry loop always returns or raises")
 
@@ -1180,7 +1134,7 @@ def generate_final_videos(
         # stock never has to fill the tail. Best-effort — ANY failure
         # (Modal down, unreadable file) degrades to the intro-only video;
         # the residual cost is that a slow Modal backend can hold the task
-        # for up to the infinitetalk timeout before the fallback fires.
+        # for up to the LongCat timeout before the fallback fires.
         video_for_render = _apply_persona_face_fill(
             task_id=task_id,
             params=params,
@@ -1273,10 +1227,10 @@ def prepare_persona_lipsync_video(
     """
     persona = params.persona
     if persona is None:
-        raise infinitetalk.InfiniteTalkError("lip sync requires a persona")
+        raise longcat.LongCatError("lip sync requires a persona")
     image_url = persona.avatar_url or persona.photo_url
     if not image_url:
-        raise infinitetalk.InfiniteTalkError("lip sync requires a persona image")
+        raise longcat.LongCatError("lip sync requires a persona image")
 
     task_dir = utils.task_dir(task_id)
     image_path = path.join(task_dir, "persona-lipsync-image.png")
@@ -1286,11 +1240,11 @@ def prepare_persona_lipsync_video(
             with open(image_path, "wb") as image_file:
                 image_file.write(base64.b64decode(encoded))
         except (IndexError, ValueError) as exc:
-            raise infinitetalk.InfiniteTalkError("invalid persona image data URI") from exc
+            raise longcat.LongCatError("invalid persona image data URI") from exc
     else:
         # SSRF-safe download: public-address check on every redirect hop,
         # streamed body with a 20 MB cap, and image/* content-type required.
-        # Rejections raise InfiniteTalkError and fail the task: the post was
+        # Rejections raise LongCatError and fail the task: the post was
         # priced with the face, so it never renders without the intro.
         try:
             ssrf.download_public_file(
@@ -1303,11 +1257,11 @@ def prepare_persona_lipsync_video(
                 tls_verify=config.app.get("tls_verify", True),
             )
         except ssrf.UnsafeUrlError as exc:
-            raise infinitetalk.InfiniteTalkError(
+            raise longcat.LongCatError(
                 f"persona image download rejected: {exc}"
             ) from exc
         except OSError as exc:
-            raise infinitetalk.InfiniteTalkError(
+            raise longcat.LongCatError(
                 f"persona image download failed: {exc}"
             ) from exc
 
@@ -1320,7 +1274,7 @@ def prepare_persona_lipsync_video(
     )
     # Explicit GPU-ceiling guard: persona_hook_end_seconds only knows the
     # hook window, so a future PERSONA_HOOK_MAX_SECONDS edit past the
-    # InfiniteTalk cost ceiling fails here instead of rendering oversized
+    # LongCat segment ceiling fails here instead of rendering oversized
     # intros (the constant pair is pinned by
     # test_hook_constants_stay_inside_the_gpu_ceiling; this is the runtime
     # counterpart).
@@ -1330,7 +1284,7 @@ def prepare_persona_lipsync_video(
             f"{hook_duration:g}s, max {PERSONA_LIPSYNC_MAX_SECONDS:g}s"
         )
     lipsync_path = path.join(task_dir, f"lipsync-intro-{index}.mp4")
-    _, intro_cost_usd = infinitetalk.generate_intro(
+    _, intro_cost_usd = longcat.generate_intro(
         image_path=image_path,
         audio_path=audio_file,
         quality=params.video_quality,
@@ -1410,7 +1364,7 @@ def _apply_persona_face_fill(
 
     Experimental face-fill: after the intro splice, the last subtitle-
     bounded segment of the VIDEO timeline is re-rendered as a second
-    InfiniteTalk segment and spliced over the background tail. The slot is
+    LongCat segment and spliced over the background tail. The slot is
     cut on the video timeline (not the audio's) so the muxed voiceover —
     which starts at video second 0 — stays lip-synced. When the tail window
     can't be derived the video is returned untouched. EVERY failure is
@@ -1418,7 +1372,7 @@ def _apply_persona_face_fill(
     exists, so a face-fill problem (Modal down, unreadable file, ffmpeg
     error) must degrade to the intro-only video, never fail the task.
     The accepted trade-off: a slow Modal backend can still hold the task
-    for up to the configured infinitetalk timeout before the fallback
+    for up to the configured LongCat timeout before the fallback
     kicks in — no separate timeout knob is added (product-fixed pacing).
     """
     try:
@@ -1460,7 +1414,7 @@ def _build_persona_face_fill(
         logger.warning("face-fill skipped: persona image not found on disk")
         return None
     tail_audio = path.join(task_dir, f"tail-audio-{index}.mp3")
-    infinitetalk.trim_audio(
+    longcat.trim_audio(
         audio_file,
         tail_audio,
         duration_seconds=tail_seconds,
@@ -1468,7 +1422,7 @@ def _build_persona_face_fill(
         start_seconds=tail_start,
     )
     lipsync_path = path.join(task_dir, f"lipsync-outro-{index}.mp4")
-    infinitetalk.generate_intro(
+    longcat.generate_intro(
         image_path=image_path,
         audio_path=tail_audio,
         quality=params.video_quality,
@@ -1567,7 +1521,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             limited_audio_file = path.join(
                 utils.task_dir(task_id), "audio-limited.mp3"
             )
-            infinitetalk.trim_audio(
+            longcat.trim_audio(
                 audio_file,
                 limited_audio_file,
                 duration_seconds=max_duration,
