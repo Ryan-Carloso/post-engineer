@@ -343,8 +343,8 @@ class TestVoiceService(unittest.TestCase):
             },
         ), patch.object(
             vs.requests, "post", side_effect=_fake_post
-        ) as post, patch.object(
-            vs, "AudioFileClip", return_value=_FakeClip()
+        ) as post, patch(
+            "app.services.voice_providers.AudioFileClip", return_value=_FakeClip()
         ):
             voice_file = str(Path(tmp_dir) / "chatterbox.mp3")
             result = vs.chatterbox_tts(
@@ -739,8 +739,8 @@ class TestElevenLabsVoice(unittest.TestCase):
         self.assertEqual(result, [])
 
     @patch("app.services.voice.requests.post")
-    @patch("app.services.voice.AudioFileClip")
-    @patch("app.services.voice.config")
+    @patch("app.services.voice_providers.AudioFileClip")
+    @patch("app.services.voice_providers.config")
     def test_elevenlabs_tts_success(self, mock_config, mock_clip_cls, mock_post):
         mock_config.elevenlabs.get.return_value = "fake-api-key"
         mock_post.return_value.status_code = 200
@@ -762,14 +762,14 @@ class TestElevenLabsVoice(unittest.TestCase):
             if os.path.exists(out_path):
                 os.remove(out_path)
 
-    @patch("app.services.voice.config")
+    @patch("app.services.voice_providers.config")
     def test_elevenlabs_tts_no_api_key(self, mock_config):
         mock_config.elevenlabs.get.return_value = ""
         result = vs.elevenlabs_tts("Hello", "abc123", "/tmp/test.mp3")
         self.assertIsNone(result.sub_maker)
         self.assertIn("API key", result.error or "")
 
-    @patch("app.services.voice.config")
+    @patch("app.services.voice_providers.config")
     def test_elevenlabs_tts_empty_text(self, mock_config):
         mock_config.elevenlabs.get.return_value = "fake-key"
         result = vs.elevenlabs_tts("  ", "abc123", "/tmp/test.mp3")

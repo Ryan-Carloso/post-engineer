@@ -960,18 +960,11 @@ def generate_audio(task_id, params, video_script):
             voice_file=audio_file,
         )
         if not result.ok:
-            # Report the real TTS failure cause (unknown voice, bad provider
-            # credentials, network error...) instead of the generic mismatch
-            # string — it reaches the stored task error and the PostHog
-            # `video_generation_failed` reason via _fail_task.
+            # Forward the real TTS failure cause to _fail_task (stored error + PostHog reason).
             reason = result.error or "unknown TTS failure"
             _fail_task(task_id, f"failed to generate audio: {reason}", params, stage="audio")
-            logger.error(
-                f"failed to generate audio: {reason}. "
-                "Check that the voice name matches 'elevenlabs:<id>' or "
-                "'chatterbox:<name>', that the provider API key is "
-                "configured, and that the network can reach the TTS provider."
-            )
+            logger.error(f"failed to generate audio: {reason} "
+                         "(check voice name, provider API key, network)")
             return None, None, None
         sub_maker = result.sub_maker
         audio_duration = math.ceil(voice.get_audio_duration(sub_maker))
