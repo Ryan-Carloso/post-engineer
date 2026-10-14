@@ -123,10 +123,10 @@ async function reportApiIssue(
     if (status >= 500) {
       client.captureException(new Error(message), scrubSecrets(properties));
     } else {
-      // 4xx are warnings, not errors: the semantic event name keeps the
-      // same warning stream logger.warn uses, so warnings from every path
-      // share one PostHog stream. Unmapped labels fall back to the generic
-      // server_warning — telemetry must never break on a missing entry.
+      // 4xx are warnings, not errors. The event carries the route's
+      // semantic name + `_rejected` (see api-telemetry-names.ts); unmapped
+      // labels fall back to the generic server_warning. Telemetry must
+      // never break on a missing entry.
       const event = rejectionEventName(route) ?? 'server_warning';
       client.capture(event, scrubSecrets({ message, ...properties }));
     }

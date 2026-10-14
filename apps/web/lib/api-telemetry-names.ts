@@ -72,6 +72,7 @@ export const API_TELEMETRY_NAMES = {
   'POST /api/persona/avatar': 'persona_avatar_uploaded',
   'POST /api/persona/images': 'persona_image_added',
   'POST /api/upload-content': 'content_uploaded',
+  'POST /api/videos/generate-and-schedule': 'generate_and_schedule_started',
 } as const;
 
 // 2xx event name for a route label, or undefined when the label is not
