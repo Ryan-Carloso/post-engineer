@@ -4,12 +4,13 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 # add project root to python path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.services import task as tm
+from app.services import voice as vs
 from app.models.schema import MaterialInfo, PersonaParams, VideoParams
 from app.utils import utils
 
@@ -728,6 +729,68 @@ class TestGenerateAudioMissingVoice(unittest.TestCase):
         kwargs = update_task.call_args.kwargs
         self.assertEqual(kwargs.get("state"), tm.const.TASK_STATE_FAILED)
         self.assertIn("no voice", str(kwargs.get("error", "")).lower())
+
+
+class TestGenerateAudioTtsFailureReason(unittest.TestCase):
+    """The real TTS failure cause reaches _fail_task, not the generic string.
+
+    Issue #181: every audio-stage failure surfaced as "failed to generate
+    audio: voice/subtitle mismatch" because tts() returned None without a
+    reason. These pin that the specific reason reaches the stored task
+    error and the PostHog video_generation_failed reason.
+    """
+
+    def _run(self, tts_result, task_id):
+        params = VideoParams(
+            video_subject="reason propagation",
+            video_script="",
+            voice_name="elevenlabs:bad-id",
+        )
+        with (
+            patch.object(tm.voice, "tts", return_value=tts_result) as tts,
+            patch.object(tm.sm.state, "update_task") as update_task,
+            patch.object(tm, "track_event") as track,
+            patch.object(tm, "send_discord"),
+        ):
+            result = tm.generate_audio(task_id, params, "script")
+        return result, tts, update_task, track
+
+    def test_specific_tts_reason_reaches_stored_task_error(self):
+        (audio_file, audio_duration, sub_maker), tts, update_task, track = (
+            self._run(
+                vs.TtsResult(error="unknown voice 'bad-id'"),
+                "task-tts-reason-stored",
+            )
+        )
+
+        self.assertIsNone(audio_file)
+        self.assertIsNone(audio_duration)
+        self.assertIsNone(sub_maker)
+        tts.assert_called_once()
+        update_task.assert_called_once()
+        kwargs = update_task.call_args.kwargs
+        self.assertEqual(kwargs.get("state"), tm.const.TASK_STATE_FAILED)
+        error = str(kwargs.get("error", ""))
+        self.assertIn("unknown voice 'bad-id'", error)
+        self.assertNotIn("voice/subtitle mismatch", error)
+
+    def test_specific_tts_reason_reaches_posthog_failure_event(self):
+        reason = "ElevenLabs TTS request rejected (status 401, unauthorized)"
+        (audio_file, audio_duration, sub_maker), tts, update_task, track = (
+            self._run(
+                vs.TtsResult(error=reason),
+                "task-tts-reason-event",
+            )
+        )
+
+        self.assertIsNone(audio_file)
+        self.assertIsNone(audio_duration)
+        self.assertIsNone(sub_maker)
+        track.assert_called_once_with("video_generation_failed", ANY)
+        _, props = track.call_args[0]
+        self.assertEqual(props.get("stage"), "audio")
+        self.assertIn("status 401", str(props.get("reason", "")))
+        self.assertNotIn("voice/subtitle mismatch", str(props.get("reason", "")))
 
 
 class TestFailTaskDiscordDedupe(unittest.TestCase):

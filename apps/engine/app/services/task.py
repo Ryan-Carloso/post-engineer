@@ -953,21 +953,20 @@ def generate_audio(task_id, params, video_script):
         # ElevenLabs (`elevenlabs:<id>`) or Chatterbox (`chatterbox:<name>`)
         # and fails loudly on anything else. There is no house-voice
         # resolution step left: the catalog is the provider's own voice list.
-        sub_maker = voice.tts(
+        result = voice.tts(
             text=video_script,
             voice_name=voice.parse_voice_name(persona_voice_name),
             voice_rate=params.voice_rate if params.voice_rate is not None else 1.0,
             voice_file=audio_file,
         )
-        if sub_maker is None:
-            _fail_task(task_id, "failed to generate audio: voice/subtitle mismatch", params, stage="audio")
-            logger.error(
-                """failed to generate audio:
-1. check if the language of the voice matches the language of the video script.
-2. check if the network is available. If you are in China, it is recommended to use a VPN and enable the global traffic mode.
-            """.strip()
-            )
+        if not result.ok:
+            # Forward the real TTS failure cause to _fail_task (stored error + PostHog reason).
+            reason = result.error or "unknown TTS failure"
+            _fail_task(task_id, f"failed to generate audio: {reason}", params, stage="audio")
+            logger.error(f"failed to generate audio: {reason} "
+                         "(check voice name, provider API key, network)")
             return None, None, None
+        sub_maker = result.sub_maker
         audio_duration = math.ceil(voice.get_audio_duration(sub_maker))
         if audio_duration == 0:
             _fail_task(task_id, "failed to get audio duration", params, stage="audio")

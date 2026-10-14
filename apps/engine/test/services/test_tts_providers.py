@@ -25,6 +25,7 @@ import pytest
 
 APP = Path(__file__).resolve().parents[2] / "app"
 VOICE = APP / "services" / "voice.py"
+VOICE_PROVIDERS = APP / "services" / "voice_providers.py"
 
 # Symbols that belong to a removed provider. Each one is a function or guard
 # that only existed to reach that provider.
@@ -111,10 +112,10 @@ class TestNoEdgeTts:
 
 class TestRemainingProviders:
     def test_submaker_is_a_local_class_not_the_edge_package(self):
-        tree = ast.parse(VOICE.read_text(encoding="utf-8"))
+        tree = ast.parse(VOICE_PROVIDERS.read_text(encoding="utf-8"))
         classes = {node.name for node in tree.body if isinstance(node, ast.ClassDef)}
         assert "SubMaker" in classes, (
-            "SubMaker must be defined locally in voice.py — it is the subtitle "
+            "SubMaker must be defined locally in voice_providers.py — it is the subtitle "
             "carrier tts() returns"
         )
 

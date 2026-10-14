@@ -69,9 +69,11 @@ class TestVoiceService(unittest.TestCase):
 
     def test_no_voice_tts_generates_silent_audio_and_subtitle_timeline(self):
         """
-        无配音模式不调用任何外部 TTS provider，只生成静音音频作为时间轴占位。
-        这里 mock FFmpeg，验证请求参数、输出文件和 legacy 字幕结构都符合后续
-        视频合成链路的预期。
+        No-voice mode never calls an external TTS provider — it only
+        generates silent audio as a timeline placeholder. This mocks
+        FFmpeg and verifies the request args, the output file, and the
+        legacy subtitle structure all match what the downstream video
+        assembly expects.
         """
 
         def fake_run(command, capture_output, text, check):
@@ -86,7 +88,7 @@ class TestVoiceService(unittest.TestCase):
             return_value="/tmp/fake-ffmpeg",
         ), patch.object(vs.subprocess, "run", side_effect=fake_run):
             voice_file = str(Path(tmp_dir) / "silent.mp3")
-            sub_maker = vs.tts(
+            result = vs.tts(
                 text="第一句话。Second sentence.",
                 voice_name=vs.NO_VOICE_NAME,
                 voice_rate=1.0,
@@ -95,6 +97,8 @@ class TestVoiceService(unittest.TestCase):
 
             self.assertEqual(Path(voice_file).read_bytes(), b"fake-silent-mp3")
 
+        self.assertIsNone(result.error)
+        sub_maker = result.sub_maker
         self.assertIsNotNone(sub_maker)
         self.assertEqual(getattr(sub_maker, "subs", []), ["第一句话", "Second sentence"])
         self.assertEqual(len(getattr(sub_maker, "offset", [])), 2)
@@ -102,8 +106,9 @@ class TestVoiceService(unittest.TestCase):
 
     def test_no_voice_alias_none_is_supported_temporarily(self):
         """
-        兼容 PR #981 曾使用过的 none sentinel，避免少量直接调用 API 的用户
-        升级后立即失效。新 UI 和新代码仍统一使用 no-voice。
+        Keeps the `none` sentinel (used on PR #981's branch) working for a
+        while, so the few direct API callers don't break immediately on
+        upgrade. The new UI and new code consistently use `no-voice`.
         """
         self.assertTrue(vs.is_no_voice("none"))
         self.assertTrue(vs.is_no_voice(vs.NO_VOICE_NAME))
@@ -111,8 +116,10 @@ class TestVoiceService(unittest.TestCase):
 
     def test_no_voice_duration_estimates_non_ascii_languages(self):
         """
-        无配音没有真实 TTS 音频，只能根据脚本文字估算阅读时间。俄语、阿拉伯语、
-        日文假名、韩文等非 ASCII 文本也必须参与估算，不能都落到最短 3 秒。
+        No-voice mode has no real TTS audio, so reading time can only be
+        estimated from the script text. Russian, Arabic, Japanese kana,
+        Korean and other non-ASCII text must contribute to the estimate —
+        nothing may silently collapse to the 3-second minimum.
         """
         russian_text = (
             "Это длинный тестовый сценарий без озвучки. "
@@ -125,8 +132,10 @@ class TestVoiceService(unittest.TestCase):
 
     def test_generate_silent_audio_rejects_missing_output_file(self):
         """
-        即使 FFmpeg 进程返回成功，也要确认输出文件真实存在且非空。这样可以把
-        异常收敛在 TTS 阶段，而不是拖到后续视频合成阶段才暴露。
+        Even when the FFmpeg process reports success, confirm the output
+        file actually exists and is non-empty. That way the failure
+        surfaces at the TTS stage instead of only surfacing later in
+        video assembly.
         """
         with tempfile.TemporaryDirectory() as tmp_dir, patch.object(
             vs.utils,
@@ -155,7 +164,8 @@ class TestVoiceService(unittest.TestCase):
             voice_file="/tmp/empty-voice.mp3",
         )
 
-        self.assertIsNone(result)
+        self.assertIsNone(result.sub_maker)
+        self.assertIn("unknown voice", result.error or "")
 
     def test_unknown_voice_name_fails_loud(self):
         """
@@ -178,16 +188,19 @@ class TestVoiceService(unittest.TestCase):
                     voice_rate=1.0,
                     voice_file="/tmp/unknown-voice.mp3",
                 )
-                self.assertIsNone(result)
+                self.assertIsNone(result.sub_maker)
+                self.assertIn("unknown voice", result.error or "")
+
 
     @unittest.skipUnless(
         RUN_INTEGRATION_TESTS,
         "MPT_RUN_INTEGRATION_TESTS not set",
     )
     def test_siliconflow(self):
-        # SiliconFlow 的 API Key 存在 [siliconflow].api_key 中，运行时代码也是从
-        # config.siliconflow 读取；这里必须使用同一配置源，避免正确配置凭据时
-        # 测试仍然被误跳过。
+        # The SiliconFlow API key lives in [siliconflow].api_key; the
+        # runtime code reads the same config source. This must use that
+        # same source so the test is not wrongly skipped when credentials
+        # are configured correctly.
         if not vs.config.siliconflow.get("api_key"):
             self.skipTest("siliconflow_api_key is not configured")
 
@@ -198,10 +211,10 @@ class TestVoiceService(unittest.TestCase):
             parts = voice_name.split(":")
             if len(parts) >= 3:
                 model = parts[1]
-                # 移除性别后缀，例如 "alex-Male" -> "alex"
+                # Strip the gender suffix, e.g. "alex-Male" -> "alex"
                 voice_with_gender = parts[2]
                 voice = voice_with_gender.split("-")[0]
-                # 构建完整的voice参数，格式为 "model:voice"
+                # Build the full voice argument in the "model:voice" format
                 full_voice = f"{model}:{voice}"
                 voice_file = f"{temp_dir}/tts-siliconflow-{voice}.mp3"
                 subtitle_file = f"{temp_dir}/tts-siliconflow-{voice}.srt"
@@ -330,11 +343,11 @@ class TestVoiceService(unittest.TestCase):
             },
         ), patch.object(
             vs.requests, "post", side_effect=_fake_post
-        ) as post, patch.object(
-            vs, "AudioFileClip", return_value=_FakeClip()
+        ) as post, patch(
+            "app.services.voice_providers.AudioFileClip", return_value=_FakeClip()
         ):
             voice_file = str(Path(tmp_dir) / "chatterbox.mp3")
-            sub_maker = vs.chatterbox_tts(
+            result = vs.chatterbox_tts(
                 text="Hello world. Second sentence.",
                 voice="default",
                 voice_file=voice_file,
@@ -355,6 +368,8 @@ class TestVoiceService(unittest.TestCase):
         # volume is intentionally not part of the OpenAI speech payload
         self.assertNotIn("volume", captured["json"])
         self.assertEqual(generated_audio, b"RIFF-fake-wav")
+        self.assertIsNone(result.error)
+        sub_maker = result.sub_maker
         self.assertIsNotNone(sub_maker)
         self.assertTrue(getattr(sub_maker, "subs", []))
 
@@ -366,11 +381,13 @@ class TestVoiceService(unittest.TestCase):
             result = vs.chatterbox_tts(
                 text="hi", voice="default", voice_file="unused.mp3"
             )
-        self.assertIsNone(result)
+        self.assertIsNone(result.sub_maker)
+        self.assertIn("base_url", result.error or "")
         post.assert_not_called()
 
-    def test_chatterbox_tts_returns_none_on_http_error(self):
-        """A non-200 response is retried up to 3 times, then fails to None."""
+    def test_chatterbox_tts_reports_reason_on_http_error(self):
+        """A non-200 response is retried up to 3 times, then reports the
+        last status as the failure reason."""
 
         class _FakeResponse:
             status_code = 500
@@ -386,7 +403,8 @@ class TestVoiceService(unittest.TestCase):
             result = vs.chatterbox_tts(
                 text="hi", voice="default", voice_file=voice_file
             )
-        self.assertIsNone(result)
+        self.assertIsNone(result.sub_maker)
+        self.assertIn("500", result.error or "")
         self.assertEqual(post.call_count, 3)
 
 
@@ -416,9 +434,11 @@ class TestVoiceService(unittest.TestCase):
 
     def test_script_split_keeps_thousand_separator_comma(self):
         """
-        Edge TTS 会把 "1,000 years" 作为连续文本返回。脚本断句时不能把
-        数字中间的英文逗号当成句子边界，否则字幕聚合会出现 issue #894
-        里的 sub_items 数量少于 script_lines，并错误回退 Whisper。
+        Edge TTS returns "1,000 years" as continuous text. When splitting
+        the script into sentences, the comma inside the number must not be
+        treated as a sentence boundary, otherwise subtitle aggregation
+        ends up with fewer sub_items than script_lines (issue #894) and
+        wrongly falls back to Whisper.
         """
         text = (
             "It takes about 1,000 years for a single drop of water to finish "
@@ -438,8 +458,9 @@ class TestVoiceService(unittest.TestCase):
 
     def test_script_split_supports_arabic_punctuation(self):
         """
-        阿拉伯语脚本常用 ، ؛ ؟ 作为自然断句标点。断句阶段必须识别这些
-        标点，否则 edge-tts cue 的停顿边界和脚本行边界会错位。
+        Arabic scripts commonly use ، ؛ ؟ as natural sentence punctuation.
+        The splitting stage must recognize them, otherwise edge-tts cue
+        pause boundaries and script line boundaries drift apart.
         """
         text = "مرحبا بالعالم، كيف حالك؟ هذا اختبار؛ يعمل بشكل جيد."
 
@@ -455,8 +476,9 @@ class TestVoiceService(unittest.TestCase):
 
     def test_match_script_line_normalizes_arabic_letter_forms(self):
         """
-        edge-tts 可能把阿拉伯语中的不同字母形态归一化，或返回带变音符号、
-        Tatweel 的 cue 文本。匹配时应容错，但最终字幕仍保留原始脚本文案。
+        edge-tts may normalize different Arabic letter forms or return cue
+        text with diacritics/Tatweel. Matching should tolerate that, but
+        the final subtitle keeps the original script text.
         """
         script_lines = ["أهلاً وسهلاً بك في المدرسة"]
 
@@ -471,9 +493,10 @@ class TestVoiceService(unittest.TestCase):
 
     def test_create_subtitle_ignores_markdown_separator_lines(self):
         """
-        用户手动脚本可能包含 `---` 这类 Markdown 分隔符。TTS 不会朗读
-        这些符号行，字幕聚合也不应把它们当成目标字幕行，否则后续真实
-        字幕会卡住并回退到 Whisper。
+        A hand-written script may contain Markdown separators like `---`.
+        TTS does not speak those symbol lines, and subtitle aggregation
+        must not treat them as target subtitle lines — otherwise later
+        real subtitles stall and fall back to Whisper.
         """
         text = "第一段\n---\n第二段"
         sub_maker = _sub_maker(["第一段", "第二段"], 0.8, 1.8)
@@ -495,8 +518,9 @@ class TestVoiceService(unittest.TestCase):
 
     def test_create_subtitle_ignores_markdown_underscore_marks(self):
         """
-        `_` 常被用户用作 Markdown 强调标记，但 TTS 返回的 cue 通常不包含
-        这些格式符。匹配时应忽略 `_`，避免生成空字幕或回退到 Whisper。
+        `_` is often used as a Markdown emphasis marker, but TTS-returned
+        cues usually don't contain those format characters. Matching should
+        ignore `_` to avoid empty subtitles or a Whisper fallback.
         """
         text = "这是_a_测试。"
         sub_maker = _sub_maker(["这是a测试"], 0.8)
@@ -526,7 +550,109 @@ if __name__ == "__main__":
     unittest.main() 
 
 
+class TestTtsFailureReasons(unittest.TestCase):
+    """Every TTS failure path reports its real cause, not a generic string.
 
+    Issue #181: the audio stage always failed with
+    "failed to generate audio: voice/subtitle mismatch" because tts()
+    returned None without saying why. Each test pins one failure path to
+    its specific reason.
+    """
+
+    def test_unknown_voice_name_reports_unknown_voice_reason(self):
+        result = vs.tts(
+            text="hello",
+            voice_name="pt-BR-FranciscaNeural",
+            voice_rate=1.0,
+            voice_file="/tmp/unknown-voice-reason.mp3",
+        )
+
+        self.assertIsNone(result.sub_maker)
+        self.assertIsNotNone(result.error)
+        self.assertIn("unknown voice", result.error)
+        self.assertNotIn("voice/subtitle mismatch", result.error)
+
+    def test_malformed_elevenlabs_voice_name_reports_format_reason(self):
+        result = vs.tts(
+            text="hello",
+            voice_name="elevenlabs:",
+            voice_rate=1.0,
+            voice_file="/tmp/malformed-elevenlabs.mp3",
+        )
+
+        self.assertIsNone(result.sub_maker)
+        self.assertIn("invalid ElevenLabs voice name", result.error or "")
+        self.assertNotIn("voice/subtitle mismatch", result.error or "")
+
+    def test_malformed_chatterbox_voice_name_reports_format_reason(self):
+        result = vs.tts(
+            text="hello",
+            voice_name="chatterbox:",
+            voice_rate=1.0,
+            voice_file="/tmp/malformed-chatterbox.mp3",
+        )
+
+        self.assertIsNone(result.sub_maker)
+        self.assertIn("invalid Chatterbox voice name", result.error or "")
+        self.assertNotIn("voice/subtitle mismatch", result.error or "")
+
+    def test_elevenlabs_unauthorized_reports_provider_cause(self):
+        unauthorized = SimpleNamespace(
+            status_code=401,
+            text='{"detail": {"status": "unauthorized"}}',
+            json=lambda: {"detail": {"status": "unauthorized"}},
+        )
+        with (
+            patch.object(vs.config, "elevenlabs", {"api_key": "test-key"}),
+            patch.object(vs.requests, "post", return_value=unauthorized),
+        ):
+            result = vs.tts(
+                text="hello",
+                voice_name="elevenlabs:some-voice-id",
+                voice_rate=1.0,
+                voice_file="/tmp/elevenlabs-401.mp3",
+            )
+
+        self.assertIsNone(result.sub_maker)
+        self.assertIn("401", result.error or "")
+        self.assertNotIn("voice/subtitle mismatch", result.error or "")
+
+    def test_chatterbox_network_failure_reports_network_cause(self):
+        with (
+            patch.object(
+                vs.config,
+                "chatterbox",
+                {"base_url": "http://127.0.0.1:9", "api_key": ""},
+            ),
+            patch.object(
+                vs.requests,
+                "post",
+                side_effect=vs.requests.ConnectionError("connection refused"),
+            ),
+        ):
+            result = vs.tts(
+                text="hello",
+                voice_name="chatterbox:test-voice",
+                voice_rate=1.0,
+                voice_file="/tmp/chatterbox-network.mp3",
+            )
+
+        self.assertIsNone(result.sub_maker)
+        self.assertIn("connection refused", result.error or "")
+        self.assertNotIn("voice/subtitle mismatch", result.error or "")
+
+    def test_no_voice_silent_audio_failure_reports_silent_audio_reason(self):
+        with patch.object(vs, "generate_silent_audio", return_value=False):
+            result = vs.tts(
+                text="hello",
+                voice_name=vs.NO_VOICE_NAME,
+                voice_rate=1.0,
+                voice_file="/tmp/no-voice-failure.mp3",
+            )
+
+        self.assertIsNone(result.sub_maker)
+        self.assertIn("silent audio", result.error or "")
+        self.assertNotIn("voice/subtitle mismatch", result.error or "")
 
 class TestGetAudioDuration(unittest.TestCase):
     """get_audio_duration must accept any audio file, not just .mp3.
@@ -613,8 +739,8 @@ class TestElevenLabsVoice(unittest.TestCase):
         self.assertEqual(result, [])
 
     @patch("app.services.voice.requests.post")
-    @patch("app.services.voice.AudioFileClip")
-    @patch("app.services.voice.config")
+    @patch("app.services.voice_providers.AudioFileClip")
+    @patch("app.services.voice_providers.config")
     def test_elevenlabs_tts_success(self, mock_config, mock_clip_cls, mock_post):
         mock_config.elevenlabs.get.return_value = "fake-api-key"
         mock_post.return_value.status_code = 200
@@ -627,21 +753,25 @@ class TestElevenLabsVoice(unittest.TestCase):
 
         try:
             result = vs.elevenlabs_tts("Hello world", "abc123", out_path)
-            self.assertIsNotNone(result)
-            self.assertTrue(hasattr(result, "subs"))
-            self.assertTrue(hasattr(result, "offset"))
+            self.assertIsNone(result.error)
+            sub_maker = result.sub_maker
+            self.assertIsNotNone(sub_maker)
+            self.assertTrue(hasattr(sub_maker, "subs"))
+            self.assertTrue(hasattr(sub_maker, "offset"))
         finally:
             if os.path.exists(out_path):
                 os.remove(out_path)
 
-    @patch("app.services.voice.config")
+    @patch("app.services.voice_providers.config")
     def test_elevenlabs_tts_no_api_key(self, mock_config):
         mock_config.elevenlabs.get.return_value = ""
         result = vs.elevenlabs_tts("Hello", "abc123", "/tmp/test.mp3")
-        self.assertIsNone(result)
+        self.assertIsNone(result.sub_maker)
+        self.assertIn("API key", result.error or "")
 
-    @patch("app.services.voice.config")
+    @patch("app.services.voice_providers.config")
     def test_elevenlabs_tts_empty_text(self, mock_config):
         mock_config.elevenlabs.get.return_value = "fake-key"
         result = vs.elevenlabs_tts("  ", "abc123", "/tmp/test.mp3")
-        self.assertIsNone(result)
+        self.assertIsNone(result.sub_maker)
+        self.assertIn("empty", result.error or "")
