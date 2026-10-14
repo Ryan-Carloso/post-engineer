@@ -13,6 +13,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.utils import utils
 from app.services import voice as vs
+from app.services import voice_common
+from app.services import voice_fishaudio
 
 temp_dir = utils.storage_dir("temp")
 
@@ -663,9 +665,9 @@ class TestFishAudioVoice(unittest.TestCase):
         self.assertFalse(vs.is_fishaudio_voice(None))
 
     def test_get_fishaudio_voices_empty_api_key(self):
-        self.assertEqual(vs.get_fishaudio_voices(""), [])
+        self.assertEqual(voice_fishaudio.get_fishaudio_voices(""), [])
 
-    @patch("app.services.voice.requests.get")
+    @patch("app.services.voice_fishaudio.requests.get")
     def test_get_fishaudio_voices_success(self, mock_get):
         mock_get.return_value.status_code = 200
         mock_get.return_value.json.return_value = {
@@ -678,7 +680,7 @@ class TestFishAudioVoice(unittest.TestCase):
                 {"_id": "ghi789", "title": "Singer", "type": "svc", "state": "trained"},
             ],
         }
-        result = vs.get_fishaudio_voices("fake-api-key")
+        result = voice_fishaudio.get_fishaudio_voices("fake-api-key")
         self.assertEqual(result, ["fishaudio:abc123:Narrator"])
         mock_get.assert_called_once()
         call = mock_get.call_args
@@ -688,22 +690,22 @@ class TestFishAudioVoice(unittest.TestCase):
         )
         self.assertEqual(call.kwargs["params"]["self"], "true")
 
-    @patch("app.services.voice.requests.get")
+    @patch("app.services.voice_fishaudio.requests.get")
     def test_get_fishaudio_voices_http_error(self, mock_get):
         mock_get.return_value.status_code = 401
         mock_get.return_value.text = "Unauthorized"
-        self.assertEqual(vs.get_fishaudio_voices("bad-key"), [])
+        self.assertEqual(voice_fishaudio.get_fishaudio_voices("bad-key"), [])
 
-    @patch("app.services.voice.requests.get")
+    @patch("app.services.voice_fishaudio.requests.get")
     def test_get_fishaudio_voices_network_error(self, mock_get):
         import requests as req_lib
 
         mock_get.side_effect = req_lib.exceptions.ConnectionError("timeout")
-        self.assertEqual(vs.get_fishaudio_voices("fake-key"), [])
+        self.assertEqual(voice_fishaudio.get_fishaudio_voices("fake-key"), [])
 
-    @patch("app.services.voice.requests.post")
-    @patch("app.services.voice.AudioFileClip")
-    @patch("app.services.voice.config")
+    @patch("app.services.voice_fishaudio.requests.post")
+    @patch("app.services.voice_fishaudio.AudioFileClip")
+    @patch("app.services.voice_fishaudio.config")
     def test_fishaudio_tts_success(self, mock_config, mock_clip_cls, mock_post):
         def _cfg_get(key, default=""):
             return {"api_key": "fake-api-key", "model_id": "drama-3"}.get(key, default)
@@ -749,18 +751,18 @@ class TestFishAudioVoice(unittest.TestCase):
         self.assertEqual(captured["json"]["reference_id"], "abc123")
         self.assertEqual(captured["json"]["format"], "mp3")
 
-    @patch("app.services.voice.config")
+    @patch("app.services.voice_fishaudio.config")
     def test_fishaudio_tts_no_api_key(self, mock_config):
         mock_config.fishaudio.get.return_value = ""
         self.assertIsNone(vs.fishaudio_tts("Hello", "abc123", "/tmp/test.mp3"))
 
-    @patch("app.services.voice.config")
+    @patch("app.services.voice_fishaudio.config")
     def test_fishaudio_tts_empty_text(self, mock_config):
         mock_config.fishaudio.get.return_value = "fake-key"
         self.assertIsNone(vs.fishaudio_tts("  ", "abc123", "/tmp/test.mp3"))
 
-    @patch("app.services.voice.requests.post")
-    @patch("app.services.voice.config")
+    @patch("app.services.voice_fishaudio.requests.post")
+    @patch("app.services.voice_fishaudio.config")
     def test_fishaudio_tts_non_retryable_401(self, mock_config, mock_post):
         mock_config.fishaudio.get.side_effect = (
             lambda k, d="": {"api_key": "bad-key", "model_id": "drama-3"}.get(k, d)
@@ -770,6 +772,30 @@ class TestFishAudioVoice(unittest.TestCase):
         self.assertIsNone(vs.fishaudio_tts("Hello", "abc123", "/tmp/test.mp3"))
         # auth failures must not be retried
         mock_post.assert_called_once()
+
+    @patch("app.services.voice_fishaudio.requests.post")
+    @patch("app.services.voice_fishaudio.config")
+    def test_fishaudio_tts_retryable_500_retries_three_times(self, mock_config, mock_post):
+        mock_config.fishaudio.get.side_effect = (
+            lambda k, d="": {"api_key": "fake-key", "model_id": "drama-3"}.get(k, d)
+        )
+        mock_post.return_value.status_code = 500
+        mock_post.return_value.text = "Internal Server Error"
+        self.assertIsNone(vs.fishaudio_tts("Hello", "abc123", "/tmp/test.mp3"))
+        # retryable failures are retried, not failed fast
+        self.assertEqual(mock_post.call_count, 3)
+
+    @patch("app.services.voice_fishaudio.requests.post")
+    @patch("app.services.voice_fishaudio.config")
+    def test_fishaudio_tts_network_error_retries_three_times(self, mock_config, mock_post):
+        import requests as req_lib
+
+        mock_config.fishaudio.get.side_effect = (
+            lambda k, d="": {"api_key": "fake-key", "model_id": "drama-3"}.get(k, d)
+        )
+        mock_post.side_effect = req_lib.exceptions.ConnectionError("timeout")
+        self.assertIsNone(vs.fishaudio_tts("Hello", "abc123", "/tmp/test.mp3"))
+        self.assertEqual(mock_post.call_count, 3)
 
     @patch("app.services.voice.fishaudio_tts")
     def test_tts_dispatches_fishaudio(self, mock_fish):
@@ -782,3 +808,33 @@ class TestFishAudioVoice(unittest.TestCase):
 
     def test_tts_invalid_fishaudio_format(self):
         self.assertIsNone(vs.tts("Hello", "fishaudio:", 1.0, "/tmp/x.mp3"))
+
+
+class TestVoiceCommon(unittest.TestCase):
+    """Shared voice helpers (app.services.voice_common)."""
+
+    def test_preprocess_empty_text(self):
+        self.assertEqual(voice_common.preprocess_text_for_tts(""), "")
+
+    def test_preprocess_protects_abbreviations(self):
+        # abbreviation periods survive the placeholder round-trip with
+        # their original capitalization intact
+        self.assertEqual(
+            voice_common.preprocess_text_for_tts("fale com o sr. silva, etc. ok"),
+            "fale com o sr. silva, etc. ok",
+        )
+
+    def test_populate_blank_text_yields_no_subtitles(self):
+        sub_maker = voice_common.populate_legacy_submaker_with_full_text(
+            voice_common.SubMaker(), "   ", 5.0
+        )
+        self.assertEqual(sub_maker.subs, [])
+        self.assertEqual(sub_maker.offset, [])
+
+    def test_populate_punctuation_only_text_keeps_whole_text(self):
+        # no sentence boundaries: the whole text becomes one fragment
+        sub_maker = voice_common.populate_legacy_submaker_with_full_text(
+            voice_common.SubMaker(), "...", 5.0
+        )
+        self.assertEqual(sub_maker.subs, ["..."])
+        self.assertEqual(sub_maker.offset, [(0, 50000000)])

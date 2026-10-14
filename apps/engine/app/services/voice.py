@@ -12,6 +12,13 @@ from moviepy.audio.io.AudioFileClip import AudioFileClip
 from moviepy.video.tools import subtitles
 
 from app.config import config
+from app.services.voice_common import (
+    SubMaker,
+    ensure_file_path_exists,
+    populate_legacy_submaker_with_full_text,
+    preprocess_text_for_tts,
+)
+from app.services.voice_fishaudio import fishaudio_tts, is_fishaudio_voice
 from app.utils import utils
 
 NO_VOICE_NAME = "no-voice"
@@ -23,99 +30,6 @@ _NO_VOICE_ALIASES = {NO_VOICE_NAME, "none"}
 # 100-nanosecond units per second. The subtitle timeline predates every TTS
 # provider and `mktimestamp` is integer-based on it.
 SUB_TIME_UNITS_PER_SECOND = 10000000
-
-
-class SubMaker:
-    """Subtitle carrier returned by ``tts``.
-
-    This was ``edge_tts.SubMaker``, which the engine used both as an edge-tts
-    transport handle and — via its ``subs``/``offset`` attributes — as the
-    timeline ``create_subtitle`` aggregates into an SRT. edge_tts is gone; the
-    timeline stays because Chatterbox returns one of these.
-
-    ``subs`` holds the spoken fragments and ``offset`` their (start, end)
-    positions in 100-nanosecond units, index-aligned. Chatterbox has no
-    word-level boundaries, so the fragments are filled by
-    ``populate_legacy_submaker_with_full_text``: one fragment per sentence,
-    timed proportionally across the audio duration.
-    """
-
-    def __init__(self) -> None:
-        self.subs: list[str] = []
-        self.offset: list[tuple[int, int]] = []
-
-
-def _preprocess_text_for_tts(text: str) -> str:
-    """
-    Preprocess text before sending it to TTS to avoid punctuation being
-    spoken aloud.
-
-    Removes periods that Portuguese voices read as "ponto" ("period"),
-    while keeping other pause punctuation (commas, exclamation and
-    question marks).
-
-    Args:
-        text: Original text with punctuation
-
-    Returns:
-        Preprocessed text without problematic periods
-    """
-    if not text:
-        return text
-
-    # Remove periods that are not abbreviations.
-    # Protects common abbreviations by keeping their periods.
-    processed = text
-
-    # Common abbreviations (Portuguese and English) that must keep the
-    # period - format: (regex_pattern, replacement_text)
-    abbreviations = [
-        # Portuguese titles
-        (r'\bsr\.', 'Sr.'), (r'\bSr\.', 'Sr.'),
-        (r'\bsra\.', 'Sra.'), (r'\bSra\.', 'Sra.'),
-        (r'\bdra\.', 'Dra.'), (r'\bDra\.', 'Dra.'),
-        (r'\bdr\.', 'Dr.'), (r'\bDr\.', 'Dr.'),
-        (r'\bprof\.', 'Prof.'), (r'\bProf\.', 'Prof.'),
-        (r'\beng\.', 'Eng.'), (r'\bEng\.', 'Eng.'),
-        # Common abbreviations
-        (r'\betc\.', 'etc.'),
-        (r'\bvs\.', 'vs.'), (r'\bVs\.', 'vs.'),
-        (r'\bex\.', 'ex.'), (r'\bEx\.', 'ex.'),
-        (r'\bno\.', 'nº.'), (r'\bNo\.', 'Nº.'),
-        (r'\bpág\.', 'pág.'), (r'\bp\.', 'p.'),
-        # Emails and URLs
-        (r'\b[\w\.-]+@[\w\.-]+\.com\b', None),  # Emails ending in .com
-        (r'\b[\w\.-]+@[\w\.-]+\.br\b', None),   # Emails ending in .br
-        (r'\b[\w\.-]+@[\w\.-]+\.gov\b', None),  # Emails ending in .gov
-    ]
-
-    # First, temporarily protect abbreviations
-    protected_abbrs = []
-    for i, (pattern, replacement) in enumerate(abbreviations):
-        placeholder = f"__ABBREV_{i}__"
-        # Find all matches and replace them
-        matches = list(re.finditer(pattern, processed, flags=re.IGNORECASE))
-        for match in reversed(matches):  # Reverse to keep positions correct
-            # Use the original match text to preserve capitalization
-            original_text = match.group(0)
-            protected_abbrs.append((placeholder, original_text))
-            processed = processed[:match.start()] + placeholder + processed[match.end():]
-
-    # Preserve sentence punctuation. Providers receive the user's text as
-    # written; stripping periods changes meaning and breaks subtitle alignment.
-    processed = re.sub(r'\s+', ' ', processed).strip()
-
-    # Restore abbreviations
-    for placeholder, original_text in protected_abbrs:
-        processed = processed.replace(placeholder, original_text)
-
-    return processed
-
-
-def _configure_pydub_ffmpeg(audio_segment_cls):
-    configured_ffmpeg = utils.get_ffmpeg_binary()
-    if configured_ffmpeg:
-        audio_segment_cls.converter = configured_ffmpeg
 
 
 def mktimestamp(time_unit: float) -> str:
@@ -155,39 +69,6 @@ def get_elevenlabs_voices(api_key: str) -> list[str]:
         return []
 
 
-def get_fishaudio_voices(api_key: str) -> list[str]:
-    """List the caller's own trained Fish Audio TTS voices.
-
-    Voices are Fish Audio "models" of type "tts"; the ``_id`` is the
-    ``reference_id`` the /v1/tts endpoint expects. Only ``trained`` models
-    are listed — a voice still training cannot synthesize yet.
-    """
-    if not api_key:
-        return []
-    try:
-        url = "https://api.fish.audio/model"
-        params = {"self": "true", "page_size": 100, "page_number": 1}
-        headers = {"Authorization": f"Bearer {api_key}"}
-        response = requests.get(url, params=params, headers=headers, timeout=10)
-        if response.status_code != 200:
-            logger.warning(
-                f"Fish Audio voices fetch failed with status {response.status_code}: {response.text}"
-            )
-            return []
-        items = response.json().get("items", [])
-        return [
-            f"fishaudio:{v['_id']}:{v['title']}"
-            for v in items
-            if v.get("_id")
-            and v.get("title")
-            and v.get("type") == "tts"
-            and v.get("state") == "trained"
-        ]
-    except Exception as e:
-        logger.warning(f"Fish Audio voices fetch failed: {str(e)}")
-        return []
-
-
 def get_chatterbox_voices() -> list[str]:
     """Return the configured Chatterbox voices.
 
@@ -222,13 +103,8 @@ def is_elevenlabs_voice(voice_name: str) -> bool:
     return (voice_name or "").startswith("elevenlabs:")
 
 
-
 def is_chatterbox_voice(voice_name: str) -> bool:
     return (voice_name or "").startswith("chatterbox:")
-
-
-def is_fishaudio_voice(voice_name: str) -> bool:
-    return (voice_name or "").startswith("fishaudio:")
 
 
 def is_no_voice(voice_name: str | None) -> bool:
@@ -379,102 +255,19 @@ def tts(
         if len(parts) < 2 or not parts[1].strip():
             logger.error(f"Invalid fishaudio voice name format: {voice_name}")
             return None
-        return fishaudio_tts(
-            text, parts[1].strip(), voice_file, voice_rate, voice_volume
-        )
+        return fishaudio_tts(text, parts[1].strip(), voice_file, voice_rate, voice_volume)
 
-    # Chatterbox, ElevenLabs and Fish Audio are the only providers. An
-    # unrecognised voice id used to fall through to `azure_tts_v1(...)`,
-    # which turned every typo into a silent edge-tts request that failed as
-    # if it were a network problem. Fail loud instead: the caller picked a
-    # voice that no longer exists.
+    # Only Chatterbox, ElevenLabs and Fish Audio exist — fail loud on anything
+    # else (an unrecognised id used to fall through to edge-tts and surface as
+    # a network problem instead).
     logger.error(
-        f"unknown voice: {voice_name!r}. Providers are ElevenLabs "
-        "(`elevenlabs:<id>`), Chatterbox (`chatterbox:<name>`) and Fish Audio "
-        f"(`fishaudio:<id>`); use the explicit {NO_VOICE_NAME!r} sentinel for silence."
+        f"unknown voice: {voice_name!r}. Providers: elevenlabs:<id>, "
+        "chatterbox:<name>, fishaudio:<id>; "
+        f"use {NO_VOICE_NAME!r} for silence."
     )
     return None
 
 
-def ensure_file_path_exists(file_path: str) -> None:
-    """Make sure the output file's directory exists.
-
-    This is a standalone safety net: the writers below open the target file
-    directly, so a missing directory would fail on the local file path and
-    mask the real outcome.
-    """
-    dir_path = os.path.dirname(file_path)
-    if dir_path:
-        os.makedirs(dir_path, exist_ok=True)
-
-
-def populate_legacy_submaker_with_full_text(
-    sub_maker: SubMaker, text: str, audio_duration_seconds: float
-) -> SubMaker:
-    """Fill the `subs/offset` subtitle structure from the full text.
-
-    Chatterbox returns no word-level boundaries, so the subtitle timeline
-    has to be estimated: split the script into sentences and distribute
-    the duration proportionally by character count. That lets
-    `create_subtitle` match script sentences line by line instead of
-    falling back to Whisper because the full text never matches.
-
-    Args:
-        sub_maker: object to write the subtitle data into
-        text: original script text
-        audio_duration_seconds: total audio duration, in seconds
-
-    Returns:
-        The SubMaker with subtitle data filled in.
-    """
-    # Clear old values so a caller reusing the object does not stack stale data.
-    sub_maker.subs = []
-    sub_maker.offset = []
-
-    normalized_text = (text or "").strip()
-    if not normalized_text:
-        return sub_maker
-
-    audio_duration_100ns = max(int(audio_duration_seconds * 10000000), 1)
-
-    # Paths without word-level boundaries still reuse the project's original
-    # "split by punctuation + distribute duration by character count"
-    # strategy. That lets create_subtitle() match script sentences and
-    # avoids falling back to Whisper again.
-    sentences = utils.split_string_by_punctuations(normalized_text)
-    if not sentences:
-        sentences = [normalized_text]
-
-    total_chars = sum(len(sentence) for sentence in sentences)
-    if total_chars <= 0:
-        sub_maker.subs.append(normalized_text)
-        sub_maker.offset.append((0, audio_duration_100ns))
-        return sub_maker
-
-    current_offset = 0
-    for index, sentence in enumerate(sentences):
-        cleaned_sentence = sentence.strip()
-        if not cleaned_sentence:
-            continue
-
-        # Earlier sentences get a duration proportional to their character
-        # count; the last sentence absorbs the remaining duration so integer
-        # rounding never loses total duration or ends subtitles before the audio.
-        if index == len(sentences) - 1:
-            sentence_end = audio_duration_100ns
-        else:
-            sentence_chars = len(cleaned_sentence)
-            sentence_duration = max(
-                int(audio_duration_100ns * (sentence_chars / total_chars)),
-                1,
-            )
-            sentence_end = min(current_offset + sentence_duration, audio_duration_100ns)
-
-        sub_maker.subs.append(cleaned_sentence)
-        sub_maker.offset.append((current_offset, sentence_end))
-        current_offset = sentence_end
-
-    return sub_maker
 def elevenlabs_tts(
     text: str,
     voice_id: str,
@@ -489,7 +282,7 @@ def elevenlabs_tts(
         return None
 
     # Preprocess text to avoid TTS reading "ponto" ("period") in Portuguese
-    text = _preprocess_text_for_tts(text)
+    text = preprocess_text_for_tts(text)
     api_key = config.elevenlabs.get("api_key", "")
     if not api_key:
         logger.error("ElevenLabs API key is not set")
@@ -566,8 +359,6 @@ def elevenlabs_tts(
     return None
 
 
-
-
 def chatterbox_tts(
     text: str,
     voice: str,
@@ -595,7 +386,7 @@ def chatterbox_tts(
         return None
 
     # Preprocess text to avoid TTS reading "ponto" ("period") in Portuguese
-    text = _preprocess_text_for_tts(text)
+    text = preprocess_text_for_tts(text)
     base_url = (config.chatterbox.get("base_url", "") or "").strip().rstrip("/")
     if not base_url:
         logger.error(
@@ -653,101 +444,6 @@ def chatterbox_tts(
             )
         except Exception as e:
             logger.error(f"chatterbox tts failed: {str(e)}")
-
-    return None
-
-
-def fishaudio_tts(
-    text: str,
-    voice_id: str,
-    voice_file: str,
-    voice_rate: float = 1.0,
-    voice_volume: float = 1.0,
-    model_id: str = "",
-) -> Union[SubMaker, None]:
-    """Generate speech with the Fish Audio hosted TTS API.
-
-    Fish Audio exposes TTS at POST /v1/tts with the synthesis model in a
-    ``model`` header (``drama-3`` by default) and ``reference_id`` picking
-    one of the caller's own trained voice models. Configure
-    ``[fishaudio] api_key`` in config.toml.
-
-    Like ElevenLabs and Chatterbox, Fish Audio returns no word-level
-    timestamps, so the subtitle path falls back to the full-text SubMaker.
-    For tighter subtitle sync set ``subtitle_provider = "whisper"``.
-    """
-    text = (text or "").strip()
-    if not text:
-        logger.error("Fish Audio TTS text is empty")
-        return None
-
-    # Preprocess text to avoid TTS reading "ponto" ("period") in Portuguese
-    text = _preprocess_text_for_tts(text)
-    api_key = config.fishaudio.get("api_key", "")
-    if not api_key:
-        logger.error("Fish Audio API key is not set")
-        return None
-
-    if not model_id:
-        model_id = config.fishaudio.get("model_id", "drama-3")
-
-    url = "https://api.fish.audio/v1/tts"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-        "model": model_id,
-    }
-    payload = {
-        "text": text,
-        "reference_id": voice_id,
-        "format": "mp3",
-        "mp3_bitrate": 128,
-        "normalize": True,
-        "latency": "normal",
-    }
-    # voice_rate / voice_volume are accepted for parity with the other TTS
-    # providers but are intentionally not sent: the Fish Audio /v1/tts
-    # contract has no speed or volume fields. Adjust loudness in
-    # post-processing instead.
-
-    # Errors where retrying will never help (auth/access/validation failures).
-    _NON_RETRYABLE_CODES = {401, 403, 422}
-
-    for i in range(3):
-        try:
-            logger.info(f"start fishaudio tts, voice_id: {voice_id}, try: {i + 1}")
-            ensure_file_path_exists(voice_file)
-
-            response = requests.post(url, json=payload, headers=headers, timeout=120)
-            if response.status_code != 200:
-                if response.status_code in _NON_RETRYABLE_CODES:
-                    logger.error(
-                        f"Fish Audio TTS failed (non-retryable) — voice_id: {voice_id}, "
-                        f"status: {response.status_code}, error: {response.text[:200]}. "
-                        "Please check the API key and the voice id."
-                    )
-                    return None
-                logger.error(
-                    f"fishaudio tts failed with status {response.status_code}: {response.text[:200]}"
-                )
-                continue
-
-            with open(voice_file, "wb") as f:
-                f.write(response.content)
-
-            audio_clip = AudioFileClip(voice_file)
-            audio_duration = audio_clip.duration
-            audio_clip.close()
-
-            sub_maker = SubMaker()
-            logger.success(f"fishaudio tts succeeded: {voice_file}")
-            return populate_legacy_submaker_with_full_text(
-                sub_maker=sub_maker,
-                text=text,
-                audio_duration_seconds=audio_duration,
-            )
-        except Exception as e:
-            logger.error(f"fishaudio tts failed: {str(e)}")
 
     return None
 
