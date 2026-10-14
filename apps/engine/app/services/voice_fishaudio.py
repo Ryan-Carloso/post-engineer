@@ -17,6 +17,7 @@ from loguru import logger
 from moviepy.audio.io.AudioFileClip import AudioFileClip
 
 from app.config import config
+from app.services.analytics import scrub_secret_values
 
 if TYPE_CHECKING:
     # Only for annotations: SubMaker is pinned to app.services.voice (see
@@ -45,7 +46,7 @@ def get_fishaudio_voices(api_key: str) -> list[str]:
         response = requests.get(url, params=params, headers=headers, timeout=10)
         if response.status_code != 200:
             logger.warning(
-                f"Fish Audio voices fetch failed with status {response.status_code}: {response.text[:200]}"
+                f"Fish Audio voices fetch failed with status {response.status_code}: {scrub_secret_values(response.text)[:200]}"
             )
             return []
         items = response.json().get("items", [])
@@ -134,15 +135,18 @@ def fishaudio_tts(
 
             response = requests.post(url, json=payload, headers=headers, timeout=120)
             if response.status_code != 200:
+                # Scrub before truncating: a cut landing mid-secret would
+                # leave a fragment the scrubber can no longer match.
+                error_text = scrub_secret_values(response.text)[:200]
                 if response.status_code in _NON_RETRYABLE_CODES:
                     logger.error(
                         f"Fish Audio TTS failed (non-retryable) — voice_id: {voice_id}, "
-                        f"status: {response.status_code}, error: {response.text[:200]}. "
+                        f"status: {response.status_code}, error: {error_text}. "
                         "Please check the API key and the voice id."
                     )
                     return None
                 logger.error(
-                    f"fishaudio tts failed with status {response.status_code}: {response.text[:200]}"
+                    f"fishaudio tts failed with status {response.status_code}: {error_text}"
                 )
                 continue
 

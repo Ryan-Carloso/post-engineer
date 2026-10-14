@@ -1,4 +1,4 @@
-"""Only ElevenLabs and Chatterbox remain as TTS providers.
+"""ElevenLabs, Chatterbox and Fish Audio are the TTS providers.
 
 edge_tts was the Azure v1 transport and the Chatterbox fallback; ElevenLabs,
 SiliconFlow, Gemini, MiMo and Azure v2 were the other providers. All of them are
@@ -38,7 +38,7 @@ REMOVED_SYMBOLS = [
     "_stream_edge_tts_sync_with_timeout",
     "get_edge_tts_timeout_seconds",
     "_build_subtitle_items_from_edge_cues",
-    # other providers (ElevenLabs stays: it is one of the two)
+    # other providers (ElevenLabs stays: it is one of the three)
     "siliconflow_tts",
     "gemini_tts",
     "mimo_tts",
@@ -132,7 +132,7 @@ class TestRemainingProviders:
             "azure_voices.json is unreachable now that both Azure providers are gone"
         )
 
-    def test_tts_only_dispatches_the_two_remaining_providers(self):
+    def test_tts_only_dispatches_the_remaining_providers(self):
         """An unknown voice must fail loudly, not fall through to a provider.
 
         The old final line was `return azure_tts_v1(...)`: any id the catalog
@@ -153,10 +153,11 @@ class TestRemainingProviders:
             for child in ast.walk(tts_node)
             if isinstance(child, ast.Call) and isinstance(child.func, ast.Name)
         }
-        assert {"chatterbox_tts", "elevenlabs_tts"} <= called
+        assert {"chatterbox_tts", "elevenlabs_tts", "fishaudio_tts"} <= called
         assert "is_no_voice" in called
         assert "is_chatterbox_voice" in called
         assert "is_elevenlabs_voice" in called
+        assert "is_fishaudio_voice" in called
         removed = called & {
             "azure_tts_v1",
             "azure_tts_v2",

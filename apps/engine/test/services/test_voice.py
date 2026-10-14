@@ -797,6 +797,27 @@ class TestFishAudioVoice(unittest.TestCase):
         self.assertIsNone(vs.fishaudio_tts("Hello", "abc123", "/tmp/test.mp3"))
         self.assertEqual(mock_post.call_count, 3)
 
+    @patch("app.services.voice_fishaudio.requests.post")
+    @patch("app.services.voice_fishaudio.config")
+    def test_fishaudio_tts_error_body_scrubbed_before_log(self, mock_config, mock_post):
+        from loguru import logger
+
+        mock_config.fishaudio.get.side_effect = (
+            lambda k, d="": {"api_key": "fake-key", "model_id": "drama-3"}.get(k, d)
+        )
+        mock_post.return_value.status_code = 401
+        mock_post.return_value.text = "Unauthorized for Bearer leaked-secret-token"
+        records = []
+        handler_id = logger.add(lambda message: records.append(str(message)), level="ERROR")
+        try:
+            self.assertIsNone(vs.fishaudio_tts("Hello", "abc123", "/tmp/test.mp3"))
+        finally:
+            logger.remove(handler_id)
+        self.assertTrue(records, "expected the auth failure to be logged")
+        logged = "\n".join(records)
+        self.assertNotIn("leaked-secret-token", logged)
+        self.assertIn("[redacted]", logged)
+
     @patch("app.services.voice.fishaudio_tts")
     def test_tts_dispatches_fishaudio(self, mock_fish):
         mock_fish.return_value = "submaker"
