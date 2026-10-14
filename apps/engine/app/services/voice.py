@@ -3,6 +3,7 @@ import os
 import re
 import subprocess
 import unicodedata
+from dataclasses import dataclass
 from typing import Union
 from xml.sax.saxutils import unescape
 
@@ -12,6 +13,7 @@ from moviepy.audio.io.AudioFileClip import AudioFileClip
 from moviepy.video.tools import subtitles
 
 from app.config import config
+from app.services.analytics import scrub_secret_values
 from app.utils import utils
 
 NO_VOICE_NAME = "no-voice"
@@ -43,6 +45,25 @@ class SubMaker:
     def __init__(self) -> None:
         self.subs: list[str] = []
         self.offset: list[tuple[int, int]] = []
+
+
+@dataclass
+class TtsResult:
+    """Outcome of a TTS request.
+
+    `sub_maker` carries the subtitle timeline on success; `error` carries a
+    short, sanitized reason on failure (safe for the task error, the logs,
+    and the PostHog `video_generation_failed` reason). Exactly one of the
+    two is set.
+    """
+
+    sub_maker: SubMaker | None = None
+    error: str | None = None
+
+    @property
+    def ok(self) -> bool:
+        """Whether the request produced audio."""
+        return self.sub_maker is not None and self.error is None
 
 
 def _preprocess_text_for_tts(text: str) -> str:
@@ -300,17 +321,26 @@ def tts(
     voice_file: str,
     voice_volume: float = 1.0,
     voice_pitch: str = "",
-) -> Union[SubMaker, None]:
+) -> TtsResult:
+    """Synthesize speech and return the outcome with the failure reason.
+
+    Every failure path returns a TtsResult carrying a specific, sanitized
+    `error` instead of None — the caller forwards it to the task failure
+    so the PostHog `video_generation_failed` event names the real cause
+    instead of a generic "voice/subtitle mismatch".
+    """
     if is_no_voice(voice_name):
         duration_seconds = estimate_no_voice_duration(text)
         if not generate_silent_audio(duration_seconds, voice_file):
-            return None
+            return TtsResult(error="silent audio generation failed (no-voice mode)")
 
         sub_maker = SubMaker()
-        return populate_legacy_submaker_with_full_text(
-            sub_maker=sub_maker,
-            text=text,
-            audio_duration_seconds=duration_seconds,
+        return TtsResult(
+            sub_maker=populate_legacy_submaker_with_full_text(
+                sub_maker=sub_maker,
+                text=text,
+                audio_duration_seconds=duration_seconds,
+            )
         )
 
     if is_elevenlabs_voice(voice_name):
@@ -321,14 +351,18 @@ def tts(
                 text, parts[1].strip(), voice_file, voice_rate, voice_volume
             )
         logger.error(f"Invalid elevenlabs voice name format: {voice_name}")
-        return None
+        return TtsResult(
+            error="invalid ElevenLabs voice name (expected 'elevenlabs:<voice_id>')"
+        )
     if is_chatterbox_voice(voice_name):
         # Format: chatterbox:<voice>, optionally with a display-only
         # -Female/-Male suffix.
         parts = voice_name.split(":", 1)
         if len(parts) < 2 or not parts[1].strip():
             logger.error(f"Invalid chatterbox voice name format: {voice_name}")
-            return None
+            return TtsResult(
+                error="invalid Chatterbox voice name (expected 'chatterbox:<name>')"
+            )
         chatterbox_voice = parts[1].strip()
         if chatterbox_voice.endswith(("-Female", "-Male")):
             chatterbox_voice = chatterbox_voice.rsplit("-", 1)[0]
@@ -346,7 +380,13 @@ def tts(
         "(`elevenlabs:<id>`) and Chatterbox (`chatterbox:<name>`); use the "
         f"explicit {NO_VOICE_NAME!r} sentinel for silence."
     )
-    return None
+    return TtsResult(
+        error=(
+            f"unknown voice {voice_name!r}; providers are ElevenLabs "
+            f"('elevenlabs:<id>') and Chatterbox ('chatterbox:<name>'); "
+            f"use {NO_VOICE_NAME!r} for silence"
+        )
+    )
 
 
 def ensure_file_path_exists(file_path: str) -> None:
@@ -435,18 +475,18 @@ def elevenlabs_tts(
     voice_rate: float = 1.0,
     voice_volume: float = 1.0,
     model_id: str = "",
-) -> Union[SubMaker, None]:
+) -> TtsResult:
     text = (text or "").strip()
     if not text:
         logger.error("ElevenLabs TTS text is empty")
-        return None
+        return TtsResult(error="ElevenLabs TTS failed: text is empty")
 
     # Preprocess text to avoid TTS reading "ponto" ("period") in Portuguese
     text = _preprocess_text_for_tts(text)
     api_key = config.elevenlabs.get("api_key", "")
     if not api_key:
         logger.error("ElevenLabs API key is not set")
-        return None
+        return TtsResult(error="ElevenLabs TTS failed: API key is not set")
 
     if not model_id:
         model_id = config.elevenlabs.get("model_id", "eleven_multilingual_v2")
@@ -471,6 +511,7 @@ def elevenlabs_tts(
     _NON_RETRYABLE_CODES = {401, 403, 422}
     _NON_RETRYABLE_STATUSES = {"voice_disabled", "voice_access_denied", "unauthorized"}
 
+    last_error: str | None = None
     for i in range(3):
         try:
             logger.info(f"start elevenlabs tts, voice_id: {voice_id}, try: {i + 1}")
@@ -487,13 +528,21 @@ def elevenlabs_tts(
                     pass
 
                 if response.status_code in _NON_RETRYABLE_CODES or error_status in _NON_RETRYABLE_STATUSES:
+                    reason = (
+                        f"ElevenLabs TTS request rejected (status {response.status_code}"
+                        f"{', ' + error_status if error_status else ''}): "
+                        # Scrub before the 200-cut: a cut landing mid-secret
+                        # defeats the scrubber and leaks the raw remainder.
+                        f"{scrub_secret_values(response.text)[:200]}"
+                    )
                     logger.error(
                         f"ElevenLabs TTS failed (non-retryable) — voice_id: {voice_id}, "
                         f"status: {response.status_code}, error: {error_status or response.text[:200]}. "
                         "Please select a different ElevenLabs voice."
                     )
-                    return None
+                    return TtsResult(error=reason)
 
+                last_error = f"status {response.status_code}"
                 logger.error(
                     f"elevenlabs tts failed with status {response.status_code}: {response.text[:200]}"
                 )
@@ -508,15 +557,20 @@ def elevenlabs_tts(
 
             sub_maker = SubMaker()
             logger.success(f"elevenlabs tts succeeded: {voice_file}")
-            return populate_legacy_submaker_with_full_text(
-                sub_maker=sub_maker,
-                text=text,
-                audio_duration_seconds=audio_duration,
+            return TtsResult(
+                sub_maker=populate_legacy_submaker_with_full_text(
+                    sub_maker=sub_maker,
+                    text=text,
+                    audio_duration_seconds=audio_duration,
+                )
             )
         except Exception as e:
+            last_error = scrub_secret_values(str(e))[:200]
             logger.error(f"elevenlabs tts failed: {str(e)}")
 
-    return None
+    return TtsResult(
+        error=f"ElevenLabs TTS failed after 3 attempts ({last_error or 'unknown error'})"
+    )
 
 
 
@@ -528,7 +582,7 @@ def chatterbox_tts(
     voice_rate: float = 1.0,
     voice_volume: float = 1.0,
     model_id: str = "",
-) -> Union[SubMaker, None]:
+) -> TtsResult:
     """Generate speech with a self-hosted Chatterbox TTS server.
 
     Chatterbox (Resemble AI, MIT) is an open-source, locally hosted TTS model
@@ -545,7 +599,7 @@ def chatterbox_tts(
     text = (text or "").strip()
     if not text:
         logger.error("Chatterbox TTS text is empty")
-        return None
+        return TtsResult(error="Chatterbox TTS failed: text is empty")
 
     # Preprocess text to avoid TTS reading "ponto" ("period") in Portuguese
     text = _preprocess_text_for_tts(text)
@@ -554,7 +608,7 @@ def chatterbox_tts(
         logger.error(
             "Chatterbox base_url is not set, please configure [chatterbox] base_url in config.toml"
         )
-        return None
+        return TtsResult(error="Chatterbox TTS failed: base_url is not set")
 
     api_key = config.chatterbox.get("api_key", "")
     if not model_id:
@@ -578,6 +632,7 @@ def chatterbox_tts(
     # field, so Chatterbox servers ignore it. Adjust loudness via voice_rate
     # (speed) or in post-processing instead.
 
+    last_error: str | None = None
     for i in range(3):
         try:
             logger.info(f"start chatterbox tts, voice: {voice}, try: {i + 1}")
@@ -585,6 +640,7 @@ def chatterbox_tts(
 
             response = requests.post(url, json=payload, headers=headers, timeout=120)
             if response.status_code != 200:
+                last_error = f"status {response.status_code}"
                 logger.error(
                     f"chatterbox tts failed with status {response.status_code}: {response.text[:200]}"
                 )
@@ -599,15 +655,22 @@ def chatterbox_tts(
 
             sub_maker = SubMaker()
             logger.success(f"chatterbox tts succeeded: {voice_file}")
-            return populate_legacy_submaker_with_full_text(
-                sub_maker=sub_maker,
-                text=text,
-                audio_duration_seconds=audio_duration,
+            return TtsResult(
+                sub_maker=populate_legacy_submaker_with_full_text(
+                    sub_maker=sub_maker,
+                    text=text,
+                    audio_duration_seconds=audio_duration,
+                )
             )
         except Exception as e:
+            # Scrub before the 200-cut: a cut landing mid-secret defeats the
+            # scrubber and leaks the raw remainder.
+            last_error = scrub_secret_values(str(e))[:200]
             logger.error(f"chatterbox tts failed: {str(e)}")
 
-    return None
+    return TtsResult(
+        error=f"Chatterbox TTS failed after 3 attempts ({last_error or 'unknown error'})"
+    )
 
 
 def _format_text(text: str) -> str:
