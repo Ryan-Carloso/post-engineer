@@ -155,6 +155,39 @@ def get_elevenlabs_voices(api_key: str) -> list[str]:
         return []
 
 
+def get_fishaudio_voices(api_key: str) -> list[str]:
+    """List the caller's own trained Fish Audio TTS voices.
+
+    Voices are Fish Audio "models" of type "tts"; the ``_id`` is the
+    ``reference_id`` the /v1/tts endpoint expects. Only ``trained`` models
+    are listed — a voice still training cannot synthesize yet.
+    """
+    if not api_key:
+        return []
+    try:
+        url = "https://api.fish.audio/model"
+        params = {"self": "true", "page_size": 100, "page_number": 1}
+        headers = {"Authorization": f"Bearer {api_key}"}
+        response = requests.get(url, params=params, headers=headers, timeout=10)
+        if response.status_code != 200:
+            logger.warning(
+                f"Fish Audio voices fetch failed with status {response.status_code}: {response.text}"
+            )
+            return []
+        items = response.json().get("items", [])
+        return [
+            f"fishaudio:{v['_id']}:{v['title']}"
+            for v in items
+            if v.get("_id")
+            and v.get("title")
+            and v.get("type") == "tts"
+            and v.get("state") == "trained"
+        ]
+    except Exception as e:
+        logger.warning(f"Fish Audio voices fetch failed: {str(e)}")
+        return []
+
+
 def get_chatterbox_voices() -> list[str]:
     """Return the configured Chatterbox voices.
 
@@ -192,6 +225,10 @@ def is_elevenlabs_voice(voice_name: str) -> bool:
 
 def is_chatterbox_voice(voice_name: str) -> bool:
     return (voice_name or "").startswith("chatterbox:")
+
+
+def is_fishaudio_voice(voice_name: str) -> bool:
+    return (voice_name or "").startswith("fishaudio:")
 
 
 def is_no_voice(voice_name: str | None) -> bool:
@@ -335,16 +372,26 @@ def tts(
         return chatterbox_tts(
             text, chatterbox_voice, voice_file, voice_rate, voice_volume
         )
+    if is_fishaudio_voice(voice_name):
+        # Format: fishaudio:<voice_id>, optionally with a display-only
+        # :<title> suffix as emitted by get_fishaudio_voices.
+        parts = voice_name.split(":", 2)
+        if len(parts) < 2 or not parts[1].strip():
+            logger.error(f"Invalid fishaudio voice name format: {voice_name}")
+            return None
+        return fishaudio_tts(
+            text, parts[1].strip(), voice_file, voice_rate, voice_volume
+        )
 
-    # Chatterbox and ElevenLabs are the only providers. An unrecognised voice
-    # id used to fall through to `azure_tts_v1(...)`, which turned every typo
-    # into a silent edge-tts request that failed as if it were a network
-    # problem. Fail loud instead: the caller picked a voice that no longer
-    # exists.
+    # Chatterbox, ElevenLabs and Fish Audio are the only providers. An
+    # unrecognised voice id used to fall through to `azure_tts_v1(...)`,
+    # which turned every typo into a silent edge-tts request that failed as
+    # if it were a network problem. Fail loud instead: the caller picked a
+    # voice that no longer exists.
     logger.error(
         f"unknown voice: {voice_name!r}. Providers are ElevenLabs "
-        "(`elevenlabs:<id>`) and Chatterbox (`chatterbox:<name>`); use the "
-        f"explicit {NO_VOICE_NAME!r} sentinel for silence."
+        "(`elevenlabs:<id>`), Chatterbox (`chatterbox:<name>`) and Fish Audio "
+        f"(`fishaudio:<id>`); use the explicit {NO_VOICE_NAME!r} sentinel for silence."
     )
     return None
 
@@ -606,6 +653,101 @@ def chatterbox_tts(
             )
         except Exception as e:
             logger.error(f"chatterbox tts failed: {str(e)}")
+
+    return None
+
+
+def fishaudio_tts(
+    text: str,
+    voice_id: str,
+    voice_file: str,
+    voice_rate: float = 1.0,
+    voice_volume: float = 1.0,
+    model_id: str = "",
+) -> Union[SubMaker, None]:
+    """Generate speech with the Fish Audio hosted TTS API.
+
+    Fish Audio exposes TTS at POST /v1/tts with the synthesis model in a
+    ``model`` header (``drama-3`` by default) and ``reference_id`` picking
+    one of the caller's own trained voice models. Configure
+    ``[fishaudio] api_key`` in config.toml.
+
+    Like ElevenLabs and Chatterbox, Fish Audio returns no word-level
+    timestamps, so the subtitle path falls back to the full-text SubMaker.
+    For tighter subtitle sync set ``subtitle_provider = "whisper"``.
+    """
+    text = (text or "").strip()
+    if not text:
+        logger.error("Fish Audio TTS text is empty")
+        return None
+
+    # Preprocess text to avoid TTS reading "ponto" ("period") in Portuguese
+    text = _preprocess_text_for_tts(text)
+    api_key = config.fishaudio.get("api_key", "")
+    if not api_key:
+        logger.error("Fish Audio API key is not set")
+        return None
+
+    if not model_id:
+        model_id = config.fishaudio.get("model_id", "drama-3")
+
+    url = "https://api.fish.audio/v1/tts"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "model": model_id,
+    }
+    payload = {
+        "text": text,
+        "reference_id": voice_id,
+        "format": "mp3",
+        "mp3_bitrate": 128,
+        "normalize": True,
+        "latency": "normal",
+    }
+    # voice_rate / voice_volume are accepted for parity with the other TTS
+    # providers but are intentionally not sent: the Fish Audio /v1/tts
+    # contract has no speed or volume fields. Adjust loudness in
+    # post-processing instead.
+
+    # Errors where retrying will never help (auth/access/validation failures).
+    _NON_RETRYABLE_CODES = {401, 403, 422}
+
+    for i in range(3):
+        try:
+            logger.info(f"start fishaudio tts, voice_id: {voice_id}, try: {i + 1}")
+            ensure_file_path_exists(voice_file)
+
+            response = requests.post(url, json=payload, headers=headers, timeout=120)
+            if response.status_code != 200:
+                if response.status_code in _NON_RETRYABLE_CODES:
+                    logger.error(
+                        f"Fish Audio TTS failed (non-retryable) — voice_id: {voice_id}, "
+                        f"status: {response.status_code}, error: {response.text[:200]}. "
+                        "Please check the API key and the voice id."
+                    )
+                    return None
+                logger.error(
+                    f"fishaudio tts failed with status {response.status_code}: {response.text[:200]}"
+                )
+                continue
+
+            with open(voice_file, "wb") as f:
+                f.write(response.content)
+
+            audio_clip = AudioFileClip(voice_file)
+            audio_duration = audio_clip.duration
+            audio_clip.close()
+
+            sub_maker = SubMaker()
+            logger.success(f"fishaudio tts succeeded: {voice_file}")
+            return populate_legacy_submaker_with_full_text(
+                sub_maker=sub_maker,
+                text=text,
+                audio_duration_seconds=audio_duration,
+            )
+        except Exception as e:
+            logger.error(f"fishaudio tts failed: {str(e)}")
 
     return None
 

@@ -645,3 +645,140 @@ class TestElevenLabsVoice(unittest.TestCase):
         mock_config.elevenlabs.get.return_value = "fake-key"
         result = vs.elevenlabs_tts("  ", "abc123", "/tmp/test.mp3")
         self.assertIsNone(result)
+
+
+class TestFishAudioVoice(unittest.TestCase):
+    """Fish Audio TTS provider (API-key based, like ElevenLabs)."""
+
+    def test_is_fishaudio_voice_true(self):
+        self.assertTrue(vs.is_fishaudio_voice("fishaudio:abc123:Narrator"))
+        self.assertTrue(vs.is_fishaudio_voice("fishaudio:abc123"))
+
+    def test_is_fishaudio_voice_false(self):
+        self.assertFalse(vs.is_fishaudio_voice("elevenlabs:abc:Rachel"))
+        self.assertFalse(vs.is_fishaudio_voice("chatterbox:default"))
+        self.assertFalse(vs.is_fishaudio_voice(""))
+
+    def test_is_fishaudio_voice_none(self):
+        self.assertFalse(vs.is_fishaudio_voice(None))
+
+    def test_get_fishaudio_voices_empty_api_key(self):
+        self.assertEqual(vs.get_fishaudio_voices(""), [])
+
+    @patch("app.services.voice.requests.get")
+    def test_get_fishaudio_voices_success(self, mock_get):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {
+            "total": 3,
+            "items": [
+                {"_id": "abc123", "title": "Narrator", "type": "tts", "state": "trained"},
+                # still training: not usable yet
+                {"_id": "def456", "title": "WIP", "type": "tts", "state": "training"},
+                # SVC models are not TTS voices
+                {"_id": "ghi789", "title": "Singer", "type": "svc", "state": "trained"},
+            ],
+        }
+        result = vs.get_fishaudio_voices("fake-api-key")
+        self.assertEqual(result, ["fishaudio:abc123:Narrator"])
+        mock_get.assert_called_once()
+        call = mock_get.call_args
+        self.assertEqual(call.args[0], "https://api.fish.audio/model")
+        self.assertEqual(
+            call.kwargs["headers"]["Authorization"], "Bearer fake-api-key"
+        )
+        self.assertEqual(call.kwargs["params"]["self"], "true")
+
+    @patch("app.services.voice.requests.get")
+    def test_get_fishaudio_voices_http_error(self, mock_get):
+        mock_get.return_value.status_code = 401
+        mock_get.return_value.text = "Unauthorized"
+        self.assertEqual(vs.get_fishaudio_voices("bad-key"), [])
+
+    @patch("app.services.voice.requests.get")
+    def test_get_fishaudio_voices_network_error(self, mock_get):
+        import requests as req_lib
+
+        mock_get.side_effect = req_lib.exceptions.ConnectionError("timeout")
+        self.assertEqual(vs.get_fishaudio_voices("fake-key"), [])
+
+    @patch("app.services.voice.requests.post")
+    @patch("app.services.voice.AudioFileClip")
+    @patch("app.services.voice.config")
+    def test_fishaudio_tts_success(self, mock_config, mock_clip_cls, mock_post):
+        def _cfg_get(key, default=""):
+            return {"api_key": "fake-api-key", "model_id": "drama-3"}.get(key, default)
+
+        mock_config.fishaudio.get.side_effect = _cfg_get
+        mock_clip_cls.return_value.duration = 3.0
+        mock_clip_cls.return_value.close = lambda: None
+
+        captured = {}
+
+        class _FakeResponse:
+            status_code = 200
+            content = b"fake-mp3-bytes"
+            text = ""
+
+        def _fake_post(url, json=None, headers=None, timeout=None):
+            captured["url"] = url
+            captured["json"] = json
+            captured["headers"] = headers
+            return _FakeResponse()
+
+        mock_post.side_effect = _fake_post
+
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+            out_path = f.name
+
+        try:
+            result = vs.fishaudio_tts("Hello world", "abc123", out_path)
+            self.assertIsNotNone(result)
+            self.assertTrue(hasattr(result, "subs"))
+            self.assertTrue(hasattr(result, "offset"))
+        finally:
+            if os.path.exists(out_path):
+                os.remove(out_path)
+
+        self.assertEqual(captured["url"], "https://api.fish.audio/v1/tts")
+        self.assertEqual(
+            captured["headers"]["Authorization"], "Bearer fake-api-key"
+        )
+        # the model travels in a header, not in the JSON body
+        self.assertEqual(captured["headers"]["model"], "drama-3")
+        self.assertEqual(captured["json"]["text"], "Hello world")
+        self.assertEqual(captured["json"]["reference_id"], "abc123")
+        self.assertEqual(captured["json"]["format"], "mp3")
+
+    @patch("app.services.voice.config")
+    def test_fishaudio_tts_no_api_key(self, mock_config):
+        mock_config.fishaudio.get.return_value = ""
+        self.assertIsNone(vs.fishaudio_tts("Hello", "abc123", "/tmp/test.mp3"))
+
+    @patch("app.services.voice.config")
+    def test_fishaudio_tts_empty_text(self, mock_config):
+        mock_config.fishaudio.get.return_value = "fake-key"
+        self.assertIsNone(vs.fishaudio_tts("  ", "abc123", "/tmp/test.mp3"))
+
+    @patch("app.services.voice.requests.post")
+    @patch("app.services.voice.config")
+    def test_fishaudio_tts_non_retryable_401(self, mock_config, mock_post):
+        mock_config.fishaudio.get.side_effect = (
+            lambda k, d="": {"api_key": "bad-key", "model_id": "drama-3"}.get(k, d)
+        )
+        mock_post.return_value.status_code = 401
+        mock_post.return_value.text = "Unauthorized"
+        self.assertIsNone(vs.fishaudio_tts("Hello", "abc123", "/tmp/test.mp3"))
+        # auth failures must not be retried
+        mock_post.assert_called_once()
+
+    @patch("app.services.voice.fishaudio_tts")
+    def test_tts_dispatches_fishaudio(self, mock_fish):
+        mock_fish.return_value = "submaker"
+        result = vs.tts("Hello", "fishaudio:abc123:Narrator", 1.0, "/tmp/x.mp3")
+        self.assertEqual(result, "submaker")
+        mock_fish.assert_called_once()
+        # the display title is stripped; only the voice id reaches the provider
+        self.assertEqual(mock_fish.call_args.args[1], "abc123")
+
+    def test_tts_invalid_fishaudio_format(self):
+        self.assertIsNone(vs.tts("Hello", "fishaudio:", 1.0, "/tmp/x.mp3"))

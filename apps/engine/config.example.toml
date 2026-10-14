@@ -564,6 +564,16 @@ model_id = "chatterbox"
 # Voices exposed by your server; shown in the WebUI dropdown as chatterbox:<name>
 voices = ["default-Female"]
 
+[fishaudio]
+# Fish Audio API key — get one at https://fish.audio (API Keys page).
+# Enables the fishaudio:<voice_id> TTS provider alongside ElevenLabs and
+# Chatterbox. Voices are your own trained TTS models: the voice id is the
+# model's _id (see GET https://api.fish.audio/model), used as
+# fishaudio:<id> in voice_name.
+api_key = ""
+# Synthesis model: drama-3 | s2.1-pro | s2-pro
+model_id = "drama-3"
+
 [infinitetalk]
 # The Modal endpoints and bearer secret are ENV VARS, not TOML (they differ
 # per environment — dev and prod use separate Modal accounts):
