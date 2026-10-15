@@ -525,6 +525,69 @@ describe('withApiErrorReporting', () => {
   });
 });
 
+describe('withApiErrorReporting reportSuccess opt-out', () => {
+  it('suppresses the 2xx success event when reportSuccess is false', async () => {
+    const wrapped = withApiErrorReporting(
+      'GET /api/persona/video-status/[taskId]',
+      async () => NextResponse.json({ status: 'processing' }),
+      { reportSuccess: false },
+    );
+
+    const res = await wrapped(getRequest());
+
+    // The response itself is untouched — only the telemetry is silenced.
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ status: 'processing' });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(client.capture).not.toHaveBeenCalled();
+    expect(client.captureException).not.toHaveBeenCalled();
+  });
+
+  it('still emits the 2xx success event when reportSuccess is explicitly true', async () => {
+    const wrapped = withApiErrorReporting(
+      'GET /api/test',
+      async () => NextResponse.json({ ok: true }),
+      { reportSuccess: true },
+    );
+
+    await wrapped(getRequest());
+
+    await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
+    const [event] = client.capture.mock.calls[0] as [string];
+    expect(event).toBe('server_success');
+  });
+
+  it('still reports a 4xx warning when reportSuccess is false', async () => {
+    const wrapped = withApiErrorReporting(
+      'GET /api/persona/video-status/[taskId]',
+      async () => NextResponse.json({ error: 'nope' }, { status: 404 }),
+      { reportSuccess: false },
+    );
+
+    const res = await wrapped(getRequest());
+
+    expect(res.status).toBe(404);
+    await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
+    const [event] = client.capture.mock.calls[0] as [string];
+    // Semantic name for this mapped route (see api-telemetry-names.ts).
+    expect(event).toBe('video_status_fetched_rejected');
+    expect(client.captureException).not.toHaveBeenCalled();
+  });
+
+  it('still reports a 5xx via $exception when reportSuccess is false', async () => {
+    const wrapped = withApiErrorReporting(
+      'GET /api/persona/video-status/[taskId]',
+      async () => NextResponse.json({ error: 'boom' }, { status: 500 }),
+      { reportSuccess: false },
+    );
+
+    const res = await wrapped(getRequest());
+
+    expect(res.status).toBe(500);
+    await vi.waitFor(() => expect(client.captureException).toHaveBeenCalledTimes(1));
+  });
+});
+
 describe('withApiErrorReporting semantic event names', () => {
   it('emits the semantic name (not server_success) for a 2xx on a mapped route', async () => {
     const wrapped = withApiErrorReporting(
