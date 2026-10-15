@@ -91,3 +91,68 @@ def test_publish_tracking_context_prefers_slot_user_id():
         {"id": "sched-2", "user_id": "user-sched"},
     )
     assert context["user_id"] == "user-slot"
+
+
+class _FakeReconcileStore:
+    """Minimal ScheduleStore double: one canned slot list, records updates."""
+
+    def __init__(self, slots):
+        self._slots = slots
+        self.updated = []
+
+    def generating_slots(self):
+        return self._slots
+
+    def update_slot(self, slot_id, **fields):
+        self.updated.append((slot_id, fields))
+
+
+class _FakeTaskState:
+    def __init__(self, tasks):
+        self._tasks = tasks
+
+    def get_task(self, task_id):
+        return self._tasks.get(task_id)
+
+
+def _run_reconciler(slot, task_row):
+    """Run one BatchReconciler tick; return the tracked video_generated props."""
+    from datetime import datetime
+    from unittest.mock import patch
+
+    from app.models import const
+
+    store = _FakeReconcileStore([slot])
+    reconciler = rec_module.BatchReconciler(store, _FakeTaskState({"task-1": task_row}))
+    with patch.object(rec_module, "track_event") as track:
+        reconciler.run(datetime.now())
+    assert track.call_count == 1, "expected one video_generated event"
+    name, props = track.call_args[0]
+    assert name == "video_generated"
+    assert const.TASK_STATE_COMPLETE == task_row["state"]
+    return props
+
+
+def test_reconcile_attaches_cost_missing_reason_for_batch():
+    """Batch video_generated carries cost_missing_reason when the row has no cost."""
+    from app.models import const
+
+    slot = {"id": "slot-1", "task_id": "task-1", "schedules": {}}
+    task_row = {
+        "state": const.TASK_STATE_COMPLETE,
+        "cost_missing_reason": "intro_no_cost_reported",
+    }
+    props = _run_reconciler(slot, task_row)
+    assert props["cost_missing_reason"] == "intro_no_cost_reported"
+    assert "cost_usd" not in props
+
+
+def test_reconcile_prefers_cost_usd_over_reason_for_batch():
+    """When the row has a real cost, the reason stays off the batch event."""
+    from app.models import const
+
+    slot = {"id": "slot-1", "task_id": "task-1", "schedules": {}}
+    task_row = {"state": const.TASK_STATE_COMPLETE, "cost_usd": 0.05}
+    props = _run_reconciler(slot, task_row)
+    assert props["cost_usd"] == 0.05
+    assert "cost_missing_reason" not in props

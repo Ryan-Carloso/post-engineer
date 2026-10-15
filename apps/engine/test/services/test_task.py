@@ -11,6 +11,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.services import task as tm
 from app.services import voice as vs
+from app.services.intro_cost import IntroCostReport, completion_cost_kwargs
+from app.services import intro_cost as intro_cost_module
 from app.models.schema import MaterialInfo, PersonaParams, VideoParams
 from app.utils import utils
 
@@ -835,6 +837,93 @@ class TestFailTaskDiscordDedupe(unittest.TestCase):
         kwargs = update_task.call_args.kwargs
         self.assertEqual(kwargs.get("state"), tm.const.TASK_STATE_FAILED)
         self.assertEqual(kwargs.get("music_mood"), "pending")
+
+
+class TestCompletionCostKwargs(unittest.TestCase):
+    """completion_cost_kwargs: a completed task reports cost_usd or WHY not.
+
+    The three cases must stay distinguishable on the video_generated event
+    and the persisted task row: cost reported, intro ran but the backend
+    reported no cost (warning, needs attention), no intro ran (expected).
+    """
+
+    def test_cost_present_returns_cost_usd_without_warning(self):
+        intro = IntroCostReport(ran=True, cost_usd=0.05, job_id="job-1")
+        with patch.object(intro_cost_module.logger, "warning") as warn:
+            kwargs = completion_cost_kwargs("task-1", intro)
+        self.assertEqual(kwargs, {"cost_usd": 0.05})
+        warn.assert_not_called()
+
+    def test_intro_ran_without_cost_returns_reason_and_warns(self):
+        intro = IntroCostReport(ran=True, cost_usd=None, job_id="job-9")
+        with patch.object(intro_cost_module.logger, "warning") as warn:
+            kwargs = completion_cost_kwargs("task-7", intro)
+        self.assertEqual(kwargs, {"cost_missing_reason": "intro_no_cost_reported"})
+        warn.assert_called_once()
+        message = warn.call_args.args[0]
+        self.assertIn("task-7", message)
+        self.assertIn("job-9", message)
+
+    def test_no_intro_returns_no_intro_reason_silently(self):
+        intro = IntroCostReport(ran=False, cost_usd=None, job_id=None)
+        with patch.object(intro_cost_module.logger, "warning") as warn:
+            kwargs = completion_cost_kwargs("task-8", intro)
+        self.assertEqual(kwargs, {"cost_missing_reason": "no_intro"})
+        warn.assert_not_called()
+
+
+class TestCompleteTaskCostReason(unittest.TestCase):
+    """video_generated carries cost_usd or cost_missing_reason, never both."""
+
+    def _complete(self, task_id, **kwargs):
+        params = VideoParams(video_subject="t")
+        with (
+            patch.object(tm.sm.state, "update_task"),
+            patch.object(tm.sm.state, "get_task", return_value={"flow": "direct"}),
+            patch.object(tm, "track_event") as track_event,
+            patch.object(tm.task_webhook, "notify_terminal_task"),
+        ):
+            tm._complete_task(task_id, params, **kwargs)
+        return track_event
+
+    def test_cost_usd_attached_without_reason(self):
+        track = self._complete("t1", cost_usd=0.05)
+        track.assert_called_once()
+        name, props = track.call_args[0]
+        self.assertEqual(name, "video_generated")
+        self.assertEqual(props["cost_usd"], 0.05)
+        self.assertNotIn("cost_missing_reason", props)
+
+    def test_no_intro_reason_attached_without_cost(self):
+        track = self._complete("t2", cost_missing_reason="no_intro")
+        name, props = track.call_args[0]
+        self.assertEqual(name, "video_generated")
+        self.assertNotIn("cost_usd", props)
+        self.assertEqual(props["cost_missing_reason"], "no_intro")
+
+    def test_intro_no_cost_reported_reason_attached(self):
+        track = self._complete("t3", cost_missing_reason="intro_no_cost_reported")
+        _, props = track.call_args[0]
+        self.assertEqual(props["cost_missing_reason"], "intro_no_cost_reported")
+
+    def test_unknown_reason_is_dropped(self):
+        track = self._complete("t4", cost_missing_reason="bogus")
+        _, props = track.call_args[0]
+        self.assertNotIn("cost_usd", props)
+        self.assertNotIn("cost_missing_reason", props)
+
+    def test_reason_is_persisted_on_the_task_row(self):
+        # The batch reconciler reads the row, so the reason must be stored.
+        params = VideoParams(video_subject="t")
+        with (
+            patch.object(tm.sm.state, "update_task") as update_task,
+            patch.object(tm.sm.state, "get_task", return_value={"flow": "direct"}),
+            patch.object(tm, "track_event"),
+            patch.object(tm.task_webhook, "notify_terminal_task"),
+        ):
+            tm._complete_task("t5", params, cost_missing_reason="no_intro")
+        kwargs = update_task.call_args.kwargs
+        self.assertEqual(kwargs.get("cost_missing_reason"), "no_intro")
 
 
 class TestFailTaskDiscordRetry(unittest.TestCase):

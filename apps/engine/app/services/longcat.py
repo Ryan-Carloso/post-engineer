@@ -271,14 +271,15 @@ def generate_intro(
     output_path: str,
     request: Request = requests.request,
     duration_seconds: float | None = None,
-) -> tuple[str, float | None]:
+) -> tuple[str, float | None, str]:
     """Generate and download the persona intro using a fixed quality preset.
 
-    Returns (output_path, cost_usd): the Modal GPU cost in USD reported on
-    the completed job, or None when the job reports no cost. Tracked as one
-    ai_request event (backend=modal): the Modal job id, duration, and
-    sanitized error when it fails. The job id is captured even when the job
-    fails after submit, so post-submit failures stay correlatable in PostHog.
+    Returns (output_path, cost_usd, job_id): the Modal GPU cost in USD
+    reported on the completed job (None when the job reports no cost) and
+    the Modal job id. Tracked as one ai_request event (backend=modal): the
+    Modal job id, duration, cost when reported, and sanitized error when it
+    fails. The job id is captured even when the job fails after submit, so
+    post-submit failures stay correlatable in PostHog.
     """
     # Validate the quality up front so an unsupported preset fails before the
     # audio is trimmed, rather than after a paid submit. The resolution itself
@@ -311,17 +312,21 @@ def generate_intro(
             }
         )
         raise
-    track_ai_request(
-        {
-            "backend": "modal",
-            "operation": "generate_intro",
-            "job_id": job_id,
-            "duration_ms": int((time.monotonic() - start) * 1000),
-            "success": True,
-            "error": "",
-        }
-    )
-    return output_path, cost_usd
+    success_props: dict[str, object] = {
+        "backend": "modal",
+        "operation": "generate_intro",
+        "job_id": job_id,
+        "duration_ms": int((time.monotonic() - start) * 1000),
+        "success": True,
+        "error": "",
+    }
+    if cost_usd is not None:
+        # Private unit-economics metric: PostHog only, never in API
+        # responses. Attached here so cost visibility does not depend on
+        # the full pipeline finishing.
+        success_props["cost_usd"] = cost_usd
+    track_ai_request(success_props)
+    return output_path, cost_usd, job_id
 
 
 def _generate_intro_impl(
