@@ -12,42 +12,13 @@ from openai.types.chat import ChatCompletion
 
 from app.config import config
 from app.services.analytics import scrub_secret_values, track_ai_request
+from app.services.llm_providers import validate_llm_provider
 from app.utils import secret_redaction
 
 _max_retries = 5
 _DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 _DEFAULT_POLLINATIONS_MODEL = "openai-fast"
 _DEPRECATED_GEMINI_MODELS = {"gemini-pro", "gemini-1.0-pro"}
-# Single source of truth for every llm_provider value the engine can
-# dispatch. The fail-fast guard in _generate_response_inner and its error
-# message both read from here so they cannot drift apart; a test pins the
-# dispatch chain to exactly this set.
-SUPPORTED_LLM_PROVIDERS = (
-    "g4f",
-    "moonshot",
-    "ollama",
-    "openai",
-    "aihubmix",
-    "aimlapi",
-    "oneapi",
-    "azure",
-    "gemini",
-    "grok",
-    "groq",
-    "qwen",
-    "cloudflare",
-    "minimax",
-    "evolink",
-    "mimo",
-    "volcengine",
-    "zai",
-    "openrouter",
-    "openrouter_free",
-    "modelscope",
-    "ernie",
-    "pollinations",
-    "litellm",
-)
 MIN_SCRIPT_PARAGRAPH_NUMBER = 1
 MAX_SCRIPT_PARAGRAPH_NUMBER = 10
 MAX_SCRIPT_PROMPT_LENGTH = 2000
@@ -361,17 +332,9 @@ def _generate_response_inner(
     Returns (text, usage) where usage may carry prompt/completion/total
     tokens and, when the provider reports it (OpenRouter), cost_usd.
     Usage is {} when unavailable."""
-    # Fail fast on a misspelled or unsupported provider name before any
-    # dispatch runs. Without this guard an unknown name fell through every
-    # branch, left api_key unbound, and surfaced as the cryptic
-    # UnboundLocalError "cannot access local variable 'api_key'...".
-    # Raised before the try block so the clear ValueError reaches the
-    # caller unwrapped.
-    if llm_provider not in SUPPORTED_LLM_PROVIDERS:
-        raise ValueError(
-            f"unknown llm_provider: {llm_provider!r}; "
-            f"supported providers: {', '.join(SUPPORTED_LLM_PROVIDERS)}"
-        )
+    # Fail fast before dispatch: validate_llm_provider raises the clear
+    # ValueError itself so it reaches the caller unwrapped by the try below.
+    validate_llm_provider(llm_provider)
     try:
         content = ""
         logger.info(f"llm provider: {llm_provider}")

@@ -13,6 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.services import llm
+from app.services.llm_providers import SUPPORTED_LLM_PROVIDERS
 
 
 class TestUnknownLlmProvider(unittest.TestCase):
@@ -22,7 +23,7 @@ class TestUnknownLlmProvider(unittest.TestCase):
             llm._generate_response_inner("Say hello", "omnirout")
         message = str(ctx.exception)
         self.assertIn("supported providers:", message)
-        for provider in llm.SUPPORTED_LLM_PROVIDERS:
+        for provider in SUPPORTED_LLM_PROVIDERS:
             self.assertIn(provider, message)
 
     def test_unknown_provider_never_raises_unbound_local_error(self):
@@ -42,4 +43,4 @@ class TestUnknownLlmProvider(unittest.TestCase):
         """
         source = inspect.getsource(llm._generate_response_inner)
         dispatched = set(re.findall(r'llm_provider == "([\w]+)"', source))
-        self.assertEqual(dispatched, set(llm.SUPPORTED_LLM_PROVIDERS))
+        self.assertEqual(dispatched, set(SUPPORTED_LLM_PROVIDERS))
