@@ -32,7 +32,7 @@ import requests
 
 from app.config import config
 from app.models.schema import LipSyncQuality
-from app.services.analytics import scrub_secret_values, track_ai_request
+from app.services.analytics import scrub_error_text, track_ai_request
 
 
 class LongCatError(RuntimeError):
@@ -308,7 +308,7 @@ def generate_intro(
                 "job_id": job_ids[0] if job_ids else "",
                 "duration_ms": int((time.monotonic() - start) * 1000),
                 "success": False,
-                "error": scrub_secret_values(str(e))[:500],
+                "error": scrub_error_text(str(e)),
             }
         )
         raise

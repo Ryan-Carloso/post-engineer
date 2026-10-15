@@ -263,3 +263,64 @@ def test_track_event_caller_properties_cannot_override_origin_tags():
             props = instance.capture.call_args.kwargs["properties"]
             assert props["source"] == "engine"
             assert props["environment"] == "development"
+
+
+def _ffmpeg_style_error(home: str) -> str:
+    banner = "\n".join(
+        f"ffmpeg version 6.1 Copyright (c) 2000-2023 banner line {i}"
+        for i in range(40)
+    )
+    return (
+        banner
+        + f"\nInput #0, mov,mp4,m4a,3gp,3g2,mj2, from '{home}/videos/input.mp4':"
+        + "\n[mp4 @ 0x7f8b1c00] Could not write header: Permission denied"
+        + f"\nError opening output file {home}/videos/output.mp4."
+    )
+
+
+def test_scrub_error_text_keeps_diagnostic_tail_of_multiline_tool_error():
+    home = os.path.expanduser("~")
+    result = analytics.scrub_error_text(_ffmpeg_style_error(home), max_chars=200)
+    # The diagnostic tail survives...
+    assert "Error opening output file" in result
+    assert "Could not write header" in result
+    # ...while the head banner noise is dropped.
+    assert "banner line 20" not in result
+    assert "banner line 39" not in result
+    # The first line (what failed) is kept as context.
+    assert result.startswith("ffmpeg version 6.1")
+
+
+def test_scrub_error_text_removes_home_directory_paths():
+    home = os.path.expanduser("~")
+    result = analytics.scrub_error_text(
+        f"failed to generate audio: file not found: {home}/voices/clone.wav"
+    )
+    assert home not in result
+    assert "<home>/clone.wav" in result
+
+
+def test_scrub_error_text_collapses_unknown_absolute_paths():
+    result = analytics.scrub_error_text(
+        "boom: /var/lib/modal/output.mp4 missing"
+    )
+    assert "/var/lib/modal" not in result
+    assert "<path>/output.mp4" in result
+
+
+def test_scrub_error_text_still_redacts_secrets():
+    result = analytics.scrub_error_text('request failed {"api_key": "sk-secret-123"}')
+    assert "sk-secret-123" not in result
+    assert "api_key" in result
+
+
+def test_scrub_error_text_leaves_short_single_line_unchanged():
+    text = "Connection failed: timeout after 30s"
+    assert analytics.scrub_error_text(text) == text
+
+
+def test_scrub_error_text_keeps_tail_of_long_single_line():
+    text = "x" * 600 + "final diagnostic detail"
+    result = analytics.scrub_error_text(text, max_chars=100)
+    assert result.endswith("final diagnostic detail")
+    assert len(result) <= 100

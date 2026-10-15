@@ -25,6 +25,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import tempfile
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -58,6 +59,77 @@ def scrub_secret_values(text: str) -> str:
         sep = "=" if m.group(1) else " "
         return f"{key}{sep}[redacted]"
     return _SECRET_VALUE_PATTERN.sub(_replace, text)
+
+
+# Placeholders for machine-local roots in analytics error text.
+_HOME_PLACEHOLDER = "<home>"
+_STORAGE_PLACEHOLDER = "<storage>"
+_PATH_PLACEHOLDER = "<path>"
+
+# Matches absolute Unix paths. The negative lookbehind keeps URL schemes
+# (https://host/...) intact — the slashes after ':' never match — and
+# protects the <home>/, <storage>/, <path>/ placeholders this module
+# inserts, whose slashes follow '>'.
+_ABSOLUTE_PATH_PATTERN = re.compile(r"(?<![\w:/<>])(?:/[\w.\-~]+)+")
+
+# Marks where the middle of a truncated multi-line error was dropped.
+_TRUNCATION_MARKER = "\n…\n"
+
+
+def _replace_local_roots(text: str) -> str:
+    """Swap machine-specific path roots for placeholders.
+
+    The home directory becomes <home> and the local working-files root
+    (tempfile.gettempdir()) becomes <storage>; subdirectories under them
+    collapse to just the file name. Any other absolute path (e.g. from a
+    Modal worker's filesystem) becomes <path>/basename, so no machine
+    layout from any host reaches analytics.
+    """
+    roots: list[tuple[str, str]] = []
+    home = os.path.expanduser("~")
+    if home and home != "/":
+        roots.append((home, _HOME_PLACEHOLDER))
+    storage = tempfile.gettempdir()
+    if storage and storage != "/" and storage != home:
+        roots.append((storage, _STORAGE_PLACEHOLDER))
+    # Longest root first so nested roots replace correctly.
+    for root, placeholder in sorted(roots, key=lambda item: -len(item[0])):
+        text = text.replace(root, placeholder)
+    # <home>/a/b/file.mp4 -> <home>/file.mp4 (same for <storage>).
+    text = re.sub(
+        r"(<home>|<storage>)(?:/[^\s\"'/<>]+)+/([^\s\"'/<>]+)",
+        r"\1/\2",
+        text,
+    )
+    # Backstop for absolute paths from any other machine.
+    return _ABSOLUTE_PATH_PATTERN.sub(
+        lambda m: f"{_PATH_PLACEHOLDER}/{m.group(0).rsplit('/', 1)[-1]}",
+        text,
+    )
+
+
+def scrub_error_text(text: str, max_chars: int = 500) -> str:
+    """Prepare free-text error output for analytics properties.
+
+    Applies the existing secret scrubbing, replaces machine-local paths
+    with placeholders (keeping only the file name), and — for multi-line
+    tool output — keeps the first line (what failed) plus the LAST
+    max_chars characters (the diagnostic detail) instead of the first
+    max_chars characters (usually banner noise). Short single-line errors
+    are returned unchanged.
+    """
+    if not text:
+        return ""
+    cleaned = _replace_local_roots(scrub_secret_values(text))
+    if len(cleaned) <= max_chars:
+        return cleaned
+    first_line = cleaned.split("\n", 1)[0]
+    tail_budget = max_chars - len(first_line) - len(_TRUNCATION_MARKER)
+    if tail_budget <= 0:
+        # Single long line (or a very long first line): the diagnostic
+        # detail lives at the end, so keep the tail.
+        return cleaned[-max_chars:]
+    return first_line + _TRUNCATION_MARKER + cleaned[-tail_budget:]
 
 # Default PostHog ingest host. Change this constant if you self-host
 # PostHog — every telemetry path in the engine reads it as the fallback
@@ -194,7 +266,7 @@ def track_ai_request(properties: dict[str, Any]) -> None:
     error. track_event redacts whole properties whose KEY names a secret
     as a backstop and never raises — free-text fields (error,
     response_preview) must be scrubbed by the caller first, which the
-    llm/modal paths do via scrub_secret_values.
+    llm/modal paths do via scrub_error_text.
     """
     track_event("ai_request", properties)
 

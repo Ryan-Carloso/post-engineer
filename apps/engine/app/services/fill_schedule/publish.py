@@ -11,7 +11,7 @@ from loguru import logger
 from app.services import notify as notify_module
 from app.services import upload_publisher
 from app.services import video_storage
-from app.services.analytics import scrub_secret_values, track_event
+from app.services.analytics import scrub_error_text, track_event
 from app.services.fill_schedule.constants import (
     MAX_PUBLISH_ATTEMPTS,
     SLOT_FAILED,
@@ -202,10 +202,12 @@ class BatchPublisher:
                     "video_publish_failed",
                     {
                         **_publish_tracking_context(slot, schedule),
-                        # Scrub the full message before truncating: a cut
-                        # landing mid-key would leave a fragment the
-                        # key-anchored pattern can no longer match.
-                        "reason": scrub_secret_values(str(exc))[:200],
+                        # Keep the diagnostic tail and strip local paths:
+                        # scrub_error_text scrubs the full message before
+                        # truncating, so a cut landing mid-key cannot leave
+                        # a fragment the key-anchored pattern can no longer
+                        # match.
+                        "reason": scrub_error_text(str(exc), max_chars=200),
                         "retryable": attempts < MAX_PUBLISH_ATTEMPTS,
                         "attempts": attempts,
                     },
@@ -251,7 +253,7 @@ class BatchPublisher:
                     **_publish_tracking_context(slot, schedule),
                     # Same scrub-then-truncate convention as the exception
                     # path: the reason is client-visible in the error column.
-                    "reason": scrub_secret_values(error)[:200],
+                    "reason": scrub_error_text(error, max_chars=200),
                     "retryable": False,
                 },
             )
@@ -317,10 +319,11 @@ class BatchPublisher:
                 "user_id/schedule_id",
                 slot_id=slot.get("id"),
             )
-        # The error column is client-visible: scrub before storing.
+        # The error column is client-visible: scrub before storing, keep
+        # the diagnostic tail and strip local paths.
         fields: dict[str, Any] = {
             "status": SLOT_FAILED,
-            "error": scrub_secret_values(error)[:200],
+            "error": scrub_error_text(error, max_chars=200),
         }
         if attempts is not None:
             fields["publish_attempts"] = attempts
