@@ -1,9 +1,10 @@
 """Operator-private task fields are never exposed through the API.
 
-cost_usd (the Modal GPU cost, tracked for PostHog unit economics) is
-persisted on the task row, but GET /api/v1/tasks and
-GET /api/v1/tasks/{task_id} must strip it: the web forwards task bodies
-to browsers wholesale, and the cost is the operator's private metric.
+cost_usd (the Modal GPU cost, tracked for PostHog unit economics) and
+cost_missing_reason (why video_generated carries no cost_usd) are persisted
+on the task row, but GET /api/v1/tasks and GET /api/v1/tasks/{task_id} must
+strip them: the web forwards task bodies to browsers wholesale, and both
+are the operator's private metrics.
 """
 
 import sys
@@ -36,6 +37,7 @@ class TaskPrivacyTests(unittest.TestCase):
             state=const.TASK_STATE_COMPLETE,
             progress=100,
             cost_usd=0.1,
+            cost_missing_reason="no_intro",
             videos=["/tmp/final.mp4"],
         )
 
@@ -48,6 +50,7 @@ class TaskPrivacyTests(unittest.TestCase):
         )
         body = response["body"]
         self.assertNotIn("cost_usd", body)
+        self.assertNotIn("cost_missing_reason", body)
         # Everything else still comes through.
         self.assertEqual(body["task_id"], self.task_id)
         self.assertEqual(body["state"], const.TASK_STATE_COMPLETE)
@@ -60,13 +63,16 @@ class TaskPrivacyTests(unittest.TestCase):
         # global count assertion would be order-dependent.
         task = next(t for t in tasks if t["task_id"] == self.task_id)
         self.assertNotIn("cost_usd", task)
+        self.assertNotIn("cost_missing_reason", task)
 
     def test_public_task_view_returns_a_copy(self):
-        task = {"task_id": "t", "cost_usd": 0.1}
+        task = {"task_id": "t", "cost_usd": 0.1, "cost_missing_reason": "no_intro"}
         view = video_controller._public_task_view(task)
         self.assertNotIn("cost_usd", view)
+        self.assertNotIn("cost_missing_reason", view)
         # The stored row is untouched.
         self.assertIn("cost_usd", task)
+        self.assertIn("cost_missing_reason", task)
 
 
 if __name__ == "__main__":
