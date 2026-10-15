@@ -299,15 +299,13 @@ class TestLiteLLMProvider(unittest.TestCase):
 
     def test_unknown_provider_raises_clear_error(self):
         """
-        A provider name matching no branch must fail with a clear error
-        naming the provider. Without this guard api_key stayed unbound and
-        surfaced as the cryptic UnboundLocalError "cannot access local
-        variable 'api_key'..." seen in production. _generate_response_inner
-        wraps inner errors in LLMResponseError, so that is what the caller
-        sees.
+        A provider name matching no branch must fail fast with a ValueError
+        naming the provider and listing the supported ones. The guard runs
+        before the dispatch chain, so the cryptic UnboundLocalError
+        "cannot access local variable 'api_key'..." can never surface.
         """
         with self.assertRaisesRegex(
-            llm.LLMResponseError, "unsupported llm provider: not-a-provider"
+            ValueError, "unknown llm_provider: 'not-a-provider'"
         ):
             llm._generate_response_inner("Say hello", "not-a-provider")
 

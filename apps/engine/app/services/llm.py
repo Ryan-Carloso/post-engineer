@@ -12,6 +12,7 @@ from openai.types.chat import ChatCompletion
 
 from app.config import config
 from app.services.analytics import scrub_secret_values, track_ai_request
+from app.services.llm_providers import validate_llm_provider
 from app.utils import secret_redaction
 
 _max_retries = 5
@@ -331,6 +332,9 @@ def _generate_response_inner(
     Returns (text, usage) where usage may carry prompt/completion/total
     tokens and, when the provider reports it (OpenRouter), cost_usd.
     Usage is {} when unavailable."""
+    # Fail fast before dispatch: validate_llm_provider raises the clear
+    # ValueError itself so it reaches the caller unwrapped by the try below.
+    validate_llm_provider(llm_provider)
     try:
         content = ""
         logger.info(f"llm provider: {llm_provider}")
@@ -590,12 +594,6 @@ def _generate_response_inner(
 
             elif llm_provider == "litellm":
                 model_name = config.app.get("litellm_model_name")
-
-            else:
-                # Unknown provider names (e.g. a typo in config.toml) used to
-                # leave api_key unbound and surface as a cryptic
-                # UnboundLocalError. Fail fast with a clear message instead.
-                raise ValueError(f"unsupported llm provider: {llm_provider}")
 
             if llm_provider not in ["pollinations", "ollama", "litellm"]:  # Skip validation for providers that don't require API key
                 if not api_key:
