@@ -11,6 +11,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.services import task as tm
 from app.services import voice as vs
+from app.services.intro_cost import IntroCostReport, completion_cost_kwargs
+from app.services import intro_cost as intro_cost_module
 from app.models.schema import MaterialInfo, PersonaParams, VideoParams
 from app.utils import utils
 
@@ -838,7 +840,7 @@ class TestFailTaskDiscordDedupe(unittest.TestCase):
 
 
 class TestCompletionCostKwargs(unittest.TestCase):
-    """_completion_cost_kwargs: a completed task reports cost_usd or WHY not.
+    """completion_cost_kwargs: a completed task reports cost_usd or WHY not.
 
     The three cases must stay distinguishable on the video_generated event
     and the persisted task row: cost reported, intro ran but the backend
@@ -846,16 +848,16 @@ class TestCompletionCostKwargs(unittest.TestCase):
     """
 
     def test_cost_present_returns_cost_usd_without_warning(self):
-        intro = tm.IntroCostReport(ran=True, cost_usd=0.05, job_id="job-1")
-        with patch.object(tm.logger, "warning") as warn:
-            kwargs = tm._completion_cost_kwargs("task-1", intro)
+        intro = IntroCostReport(ran=True, cost_usd=0.05, job_id="job-1")
+        with patch.object(intro_cost_module.logger, "warning") as warn:
+            kwargs = completion_cost_kwargs("task-1", intro)
         self.assertEqual(kwargs, {"cost_usd": 0.05})
         warn.assert_not_called()
 
     def test_intro_ran_without_cost_returns_reason_and_warns(self):
-        intro = tm.IntroCostReport(ran=True, cost_usd=None, job_id="job-9")
-        with patch.object(tm.logger, "warning") as warn:
-            kwargs = tm._completion_cost_kwargs("task-7", intro)
+        intro = IntroCostReport(ran=True, cost_usd=None, job_id="job-9")
+        with patch.object(intro_cost_module.logger, "warning") as warn:
+            kwargs = completion_cost_kwargs("task-7", intro)
         self.assertEqual(kwargs, {"cost_missing_reason": "intro_no_cost_reported"})
         warn.assert_called_once()
         message = warn.call_args.args[0]
@@ -863,9 +865,9 @@ class TestCompletionCostKwargs(unittest.TestCase):
         self.assertIn("job-9", message)
 
     def test_no_intro_returns_no_intro_reason_silently(self):
-        intro = tm.IntroCostReport(ran=False, cost_usd=None, job_id=None)
-        with patch.object(tm.logger, "warning") as warn:
-            kwargs = tm._completion_cost_kwargs("task-8", intro)
+        intro = IntroCostReport(ran=False, cost_usd=None, job_id=None)
+        with patch.object(intro_cost_module.logger, "warning") as warn:
+            kwargs = completion_cost_kwargs("task-8", intro)
         self.assertEqual(kwargs, {"cost_missing_reason": "no_intro"})
         warn.assert_not_called()
 

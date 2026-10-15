@@ -40,11 +40,10 @@ from app.services import task as tm
 from app.services import video_storage
 from app.utils import file_security, upload_limits, utils
 
-# Operator-private task fields: persisted on the task row for server-side
-# use (e.g. cost_usd for PostHog unit economics, and cost_missing_reason for
-# why a video_generated event carries no cost) but never exposed through
-# the API. The web forwards task bodies to browsers wholesale, so every
-# endpoint that serializes a task must strip these via _public_task_view.
+# Operator-private task fields (cost_usd, cost_missing_reason): persisted
+# on the task row for server-side PostHog unit economics, but never
+# exposed through the API. The web forwards task bodies to browsers
+# wholesale — strip via _public_task_view on every serializing endpoint.
 PRIVATE_TASK_FIELDS = frozenset({"cost_usd", "cost_missing_reason"})
 
 

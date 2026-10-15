@@ -12,7 +12,7 @@ from app.services.fill_schedule.constants import (
     SLOT_READY,
 )
 from app.services.analytics import scrub_secret_values, track_event
-from app.services.task import COST_MISSING_REASONS
+from app.services.intro_cost import cost_event_props
 from app.services.fill_schedule.store import ScheduleStore
 from app.services.fill_schedule.support import (
     post_identity,
@@ -43,10 +43,6 @@ class BatchReconciler:
             if task.get("state") == const.TASK_STATE_COMPLETE:
                 self.store.update_slot(slot["id"], status=SLOT_READY)
                 updated += 1
-                # GPU cost (USD) is calculated by the Modal app and persisted
-                # flat on the task row by the task pipeline. Include it for
-                # unit-economics tracking. Never in API responses — PostHog
-                # dashboard only (the API layer strips it).
                 properties: dict[str, object] = {
                     "task_id": str(slot["task_id"]),
                     "flow": "batch",
@@ -56,15 +52,11 @@ class BatchReconciler:
                 slot_user = slot_user_id(slot)
                 if slot_user is not None:
                     properties["user_id"] = slot_user
-                cost = task.get("cost_usd")
-                if isinstance(cost, (int, float)) and not isinstance(cost, bool):
-                    properties["cost_usd"] = float(cost)
-                else:
-                    # No cost: say why, so "no intro" and "intro reported
-                    # nothing" never look identical in PostHog.
-                    reason = task.get("cost_missing_reason")
-                    if reason in COST_MISSING_REASONS:
-                        properties["cost_missing_reason"] = reason
+                # GPU cost (USD) is calculated by the Modal app and persisted
+                # flat on the task row by the task pipeline. Include it for
+                # unit-economics tracking (or the reason it is missing).
+                # Never in API responses — PostHog dashboard only.
+                properties.update(cost_event_props(task))
                 track_event("video_generated", properties)
             elif task.get("state") == const.TASK_STATE_FAILED:
                 user_id = slot_user_id(slot)
