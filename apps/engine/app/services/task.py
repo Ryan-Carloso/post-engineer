@@ -7,7 +7,7 @@ from collections import deque
 from os import path
 from threading import Lock
 import time
-from typing import Sequence
+from typing import NamedTuple, Sequence
 
 from loguru import logger
 
@@ -246,6 +246,29 @@ def _first_http_url(paths: object) -> str | None:
 _progress_milestones: dict[str, int] = {}
 
 
+class IntroCostReport(NamedTuple):
+    """Cost outcome of the persona lip-sync intro step.
+
+    ran: True when the intro step executed. cost_usd: the Modal GPU cost in
+    USD reported by the completed job (None when the job reported no cost).
+    job_id: the Modal job id (None when the intro never ran).
+    """
+
+    ran: bool
+    cost_usd: float | None
+    job_id: str | None
+
+
+# Why a completed video's video_generated event carries no cost_usd.
+# Operator-private (PostHog only, stripped from every API response):
+# "no_intro" = the video legitimately had no intro step;
+# "intro_no_cost_reported" = the intro ran but the GPU backend reported no
+# cost (needs attention — the metric pipeline may be broken).
+COST_MISSING_NO_INTRO = "no_intro"
+COST_MISSING_NO_COST_REPORTED = "intro_no_cost_reported"
+COST_MISSING_REASONS = frozenset({COST_MISSING_NO_INTRO, COST_MISSING_NO_COST_REPORTED})
+
+
 def _task_tracking_context(task_id: str) -> dict[str, object]:
     """task_id/user_id/flow/pipeline props shared by every lifecycle event,
     plus optional identity props (persona_id/slot_id/schedule_id) when the
@@ -341,6 +364,30 @@ def _update_task(task_id: str, **kwargs: object) -> None:
     _progress_milestones[task_id] = milestone
 
 
+def _completion_cost_kwargs(
+    task_id: str, intro: IntroCostReport
+) -> dict[str, object]:
+    """Cost telemetry kwargs for a completed task.
+
+    Returns {"cost_usd": ...} when the intro reported a GPU cost; otherwise
+    {"cost_missing_reason": ...} so the video_generated event (and the
+    persisted task row the batch reconciler reads) records WHY the cost is
+    missing: "no_intro" when the video legitimately had no intro step,
+    "intro_no_cost_reported" when the intro ran but the backend reported no
+    cost. The latter also logs a warning with the task and job ids — a
+    silent gap there means the metric pipeline needs attention.
+    """
+    if intro.cost_usd is not None:
+        return {"cost_usd": intro.cost_usd}
+    reason = COST_MISSING_NO_COST_REPORTED if intro.ran else COST_MISSING_NO_INTRO
+    if intro.ran:
+        logger.warning(
+            f"task {task_id} intro finished but the GPU backend reported "
+            f"no cost (job_id={intro.job_id})"
+        )
+    return {"cost_missing_reason": reason}
+
+
 def _complete_task(
     task_id: str,
     params: VideoParams,
@@ -366,6 +413,12 @@ def _complete_task(
         # strips it from every response so users never see it.
         if isinstance(cost, (int, float)) and not isinstance(cost, bool):
             context["cost_usd"] = float(cost)
+        else:
+            # No cost: say why, so "no intro" and "intro reported nothing"
+            # never look identical in PostHog.
+            reason = kwargs.get("cost_missing_reason")
+            if reason in COST_MISSING_REASONS:
+                context["cost_missing_reason"] = reason
         track_event("video_generated", context)
     task_webhook.notify_terminal_task(
         task_id,
@@ -1080,16 +1133,17 @@ def get_video_materials(task_id, params, video_terms, audio_duration):
 
 def generate_final_videos(
     task_id, params, downloaded_videos, audio_file, subtitle_path, video_script, music_mood
-) -> tuple[list[str], list[str], float | None]:
+) -> tuple[list[str], list[str], IntroCostReport]:
     """Assemble the final videos.
 
-    Returns (final_video_paths, combined_video_paths, intro_cost_usd): the
-    Modal GPU cost in USD for the persona lip-sync intro, or None when no
-    intro ran or the job reported no cost.
+    Returns (final_video_paths, combined_video_paths, intro_report): the
+    intro cost outcome — whether the persona lip-sync intro ran, the Modal
+    GPU cost it reported (None when the job reported no cost), and the job
+    id for correlation.
     """
     final_video_paths = []
     combined_video_paths = []
-    intro_cost_usd: float | None = None
+    intro_report = IntroCostReport(ran=False, cost_usd=None, job_id=None)
     # Single output per task. match_materials_to_script forces sequential
     # concatenation (stable, explainable timeline); otherwise, respects the
     # configured concat mode.
@@ -1120,7 +1174,7 @@ def generate_final_videos(
     video_for_render = combined_video_path
     if persona_lipsync_active(params):
         logger.info("generating persona lip-sync intro")
-        video_for_render, intro_cost_usd = prepare_persona_lipsync_video(
+        video_for_render, intro_cost_usd, intro_job_id = prepare_persona_lipsync_video(
             task_id=task_id,
             params=params,
             audio_file=audio_file,
@@ -1128,6 +1182,9 @@ def generate_final_videos(
             index=1,
             video_script=video_script,
             subtitle_path=subtitle_path,
+        )
+        intro_report = IntroCostReport(
+            ran=True, cost_usd=intro_cost_usd, job_id=intro_job_id
         )
         # Experimental face-fill: close the video on the persona so weak
         # stock never has to fill the tail. Best-effort — ANY failure
@@ -1164,7 +1221,7 @@ def generate_final_videos(
     final_video_paths.append(final_video_path)
     combined_video_paths.append(combined_video_path)
 
-    return final_video_paths, combined_video_paths, intro_cost_usd
+    return final_video_paths, combined_video_paths, intro_report
 
 
 def archive_final_videos(
@@ -1218,11 +1275,12 @@ def prepare_persona_lipsync_video(
     index: int,
     video_script: str,
     subtitle_path: str,
-) -> tuple[str, float | None]:
+) -> tuple[str, float | None, str | None]:
     """Generate the persona intro through a complete hook paragraph.
 
-    Returns (output_path, intro_cost_usd): the Modal GPU cost in USD for the
-    intro, or None when the job reports no cost.
+    Returns (output_path, intro_cost_usd, intro_job_id): the Modal GPU cost
+    in USD for the intro (None when the job reports no cost) and the Modal
+    job id for correlation.
     """
     persona = params.persona
     if persona is None:
@@ -1283,7 +1341,7 @@ def prepare_persona_lipsync_video(
             f"{hook_duration:g}s, max {PERSONA_LIPSYNC_MAX_SECONDS:g}s"
         )
     lipsync_path = path.join(task_dir, f"lipsync-intro-{index}.mp4")
-    _, intro_cost_usd = longcat.generate_intro(
+    _, intro_cost_usd, intro_job_id = longcat.generate_intro(
         image_path=image_path,
         audio_path=audio_file,
         quality=params.video_quality,
@@ -1299,6 +1357,7 @@ def prepare_persona_lipsync_video(
             duration=hook_duration,
         ),
         intro_cost_usd,
+        intro_job_id,
     )
 
 
@@ -1603,7 +1662,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
 
         # 6. Generate final videos (marked first: a crash reports stage=render)
         _mark("render")
-        final_video_paths, combined_video_paths, intro_cost_usd = generate_final_videos(
+        final_video_paths, combined_video_paths, intro_report = generate_final_videos(
             task_id,
             params,
             downloaded_videos,
@@ -1689,12 +1748,12 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             "music_mood": music_mood,
             "cross_post_results": cross_post_results if cross_post_results else None,
         }
-        if intro_cost_usd is not None:
-            # Private unit-economics metric: persisted on the task row so the
-            # batch reconciler can attach it to the PostHog video_generated
-            # event. The API layer strips it from every response — it is
-            # never visible to users, only in the operator's PostHog.
-            kwargs["cost_usd"] = intro_cost_usd
+        # Private unit-economics metric: persisted on the task row so the
+        # batch reconciler can attach it to the PostHog video_generated
+        # event (or record WHY it is missing). The API layer strips it from
+        # every response — it is never visible to users, only in the
+        # operator's PostHog.
+        kwargs.update(_completion_cost_kwargs(task_id, intro_report))
         _complete_task(
             task_id, params,
             video_url=_first_http_url(final_video_paths),

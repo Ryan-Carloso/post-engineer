@@ -354,25 +354,29 @@ class TestGenerateIntroCost(unittest.TestCase):
                     )
 
     def test_returns_cost_usd_from_done_payload(self):
-        _, cost_usd = self._run_with_status(b'{"status":"done","cost_usd":0.1234}')
+        _, cost_usd, _ = self._run_with_status(b'{"status":"done","cost_usd":0.1234}')
         self.assertEqual(cost_usd, 0.1234)
+
+    def test_returns_job_id(self):
+        _, _, job_id = self._run_with_status(b'{"status":"done","cost_usd":0.1234}')
+        self.assertEqual(job_id, "job-1")
 
     def test_returns_none_when_cost_absent(self):
         # Unknown, not zero: a missing cost must never read as "free".
-        _, cost_usd = self._run_with_status(b'{"status":"done"}')
+        _, cost_usd, _ = self._run_with_status(b'{"status":"done"}')
         self.assertIsNone(cost_usd)
 
     def test_returns_none_for_non_numeric_cost(self):
-        _, cost_usd = self._run_with_status(b'{"status":"done","cost_usd":"free"}')
+        _, cost_usd, _ = self._run_with_status(b'{"status":"done","cost_usd":"free"}')
         self.assertIsNone(cost_usd)
 
     def test_returns_none_for_boolean_cost(self):
         # bool is an int subclass; True must not become $1.
-        _, cost_usd = self._run_with_status(b'{"status":"done","cost_usd":true}')
+        _, cost_usd, _ = self._run_with_status(b'{"status":"done","cost_usd":true}')
         self.assertIsNone(cost_usd)
 
     def test_returns_none_for_non_finite_cost(self):
-        _, cost_usd = self._run_with_status(b'{"status":"done","cost_usd":Infinity}')
+        _, cost_usd, _ = self._run_with_status(b'{"status":"done","cost_usd":Infinity}')
         self.assertIsNone(cost_usd)
 
 
@@ -426,6 +430,27 @@ class TestGenerateIntroTracking(unittest.TestCase):
         props = track.call_args[0][0]
         self.assertFalse(props["success"])
         self.assertEqual(props["job_id"], "job-1")
+
+    def test_success_tracks_cost_usd_when_reported(self):
+        # Cost visibility must not depend on the full pipeline finishing.
+        status = _response(200, b'{"status":"done","cost_usd":0.07}')
+        with patch.object(longcat, "track_ai_request") as track:
+            self._run([SUBMIT_OK, status, DOWNLOAD_OK])
+
+        track.assert_called_once()
+        props = track.call_args[0][0]
+        self.assertTrue(props["success"])
+        self.assertEqual(props["cost_usd"], 0.07)
+
+    def test_success_omits_cost_usd_when_absent(self):
+        status = _response(200, b'{"status":"done"}')
+        with patch.object(longcat, "track_ai_request") as track:
+            self._run([SUBMIT_OK, status, DOWNLOAD_OK])
+
+        track.assert_called_once()
+        props = track.call_args[0][0]
+        self.assertTrue(props["success"])
+        self.assertNotIn("cost_usd", props)
 
 
 class ModalSourceMixin:

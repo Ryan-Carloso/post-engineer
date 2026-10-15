@@ -12,6 +12,7 @@ from app.services.fill_schedule.constants import (
     SLOT_READY,
 )
 from app.services.analytics import scrub_secret_values, track_event
+from app.services.task import COST_MISSING_REASONS
 from app.services.fill_schedule.store import ScheduleStore
 from app.services.fill_schedule.support import (
     post_identity,
@@ -58,6 +59,12 @@ class BatchReconciler:
                 cost = task.get("cost_usd")
                 if isinstance(cost, (int, float)) and not isinstance(cost, bool):
                     properties["cost_usd"] = float(cost)
+                else:
+                    # No cost: say why, so "no intro" and "intro reported
+                    # nothing" never look identical in PostHog.
+                    reason = task.get("cost_missing_reason")
+                    if reason in COST_MISSING_REASONS:
+                        properties["cost_missing_reason"] = reason
                 track_event("video_generated", properties)
             elif task.get("state") == const.TASK_STATE_FAILED:
                 user_id = slot_user_id(slot)

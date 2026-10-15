@@ -58,7 +58,7 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
             patch("requests.get", return_value=response or _FakeImageResponse()),
             patch.object(tm.subtitle, "file_to_subtitles", return_value=[]),
             patch.object(tm, "persona_hook_end_seconds", return_value=1.0),
-            patch.object(tm.longcat, "generate_intro", return_value=("intro.mp4", 0.05)),
+            patch.object(tm.longcat, "generate_intro", return_value=("intro.mp4", 0.05, "job-1")),
             patch.object(
                 tm.video, "replace_video_intro_with_lipsync", return_value="final.mp4"
             ),
@@ -97,9 +97,10 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
         self.assertEqual(os.listdir(self.tmp), [])
 
     def test_accepts_valid_public_image(self):
-        result, intro_cost_usd = self._run("https://cdn.example.com/avatar.png")
+        result, intro_cost_usd, intro_job_id = self._run("https://cdn.example.com/avatar.png")
         self.assertEqual(result, "final.mp4")
         self.assertEqual(intro_cost_usd, 0.05)
+        self.assertEqual(intro_job_id, "job-1")
         files = os.listdir(self.tmp)
         self.assertEqual(len(files), 1)
         self.assertTrue(files[0].startswith("persona"))
@@ -109,7 +110,7 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
         # The web persona picker stores house faces as a path relative to the
         # web app; the engine fetches them from the web's public URL.
         with patch.dict(os.environ, {"MPT_UPLOAD_API_BASE_URL": "https://web.example.com/"}):
-            result, _ = self._run("/caracter-samples/file-3.png")
+             result, _, _ = self._run("/caracter-samples/file-3.png")
         self.assertEqual(result, "final.mp4")
         requests_get = self.started[2]
         self.assertEqual(
