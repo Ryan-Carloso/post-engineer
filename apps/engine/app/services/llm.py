@@ -18,6 +18,36 @@ _max_retries = 5
 _DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 _DEFAULT_POLLINATIONS_MODEL = "openai-fast"
 _DEPRECATED_GEMINI_MODELS = {"gemini-pro", "gemini-1.0-pro"}
+# Single source of truth for every llm_provider value the engine can
+# dispatch. The fail-fast guard in _generate_response_inner and its error
+# message both read from here so they cannot drift apart; a test pins the
+# dispatch chain to exactly this set.
+SUPPORTED_LLM_PROVIDERS = (
+    "g4f",
+    "moonshot",
+    "ollama",
+    "openai",
+    "aihubmix",
+    "aimlapi",
+    "oneapi",
+    "azure",
+    "gemini",
+    "grok",
+    "groq",
+    "qwen",
+    "cloudflare",
+    "minimax",
+    "evolink",
+    "mimo",
+    "volcengine",
+    "zai",
+    "openrouter",
+    "openrouter_free",
+    "modelscope",
+    "ernie",
+    "pollinations",
+    "litellm",
+)
 MIN_SCRIPT_PARAGRAPH_NUMBER = 1
 MAX_SCRIPT_PARAGRAPH_NUMBER = 10
 MAX_SCRIPT_PROMPT_LENGTH = 2000
@@ -331,6 +361,17 @@ def _generate_response_inner(
     Returns (text, usage) where usage may carry prompt/completion/total
     tokens and, when the provider reports it (OpenRouter), cost_usd.
     Usage is {} when unavailable."""
+    # Fail fast on a misspelled or unsupported provider name before any
+    # dispatch runs. Without this guard an unknown name fell through every
+    # branch, left api_key unbound, and surfaced as the cryptic
+    # UnboundLocalError "cannot access local variable 'api_key'...".
+    # Raised before the try block so the clear ValueError reaches the
+    # caller unwrapped.
+    if llm_provider not in SUPPORTED_LLM_PROVIDERS:
+        raise ValueError(
+            f"unknown llm_provider: {llm_provider!r}; "
+            f"supported providers: {', '.join(SUPPORTED_LLM_PROVIDERS)}"
+        )
     try:
         content = ""
         logger.info(f"llm provider: {llm_provider}")
@@ -590,12 +631,6 @@ def _generate_response_inner(
 
             elif llm_provider == "litellm":
                 model_name = config.app.get("litellm_model_name")
-
-            else:
-                # Unknown provider names (e.g. a typo in config.toml) used to
-                # leave api_key unbound and surface as a cryptic
-                # UnboundLocalError. Fail fast with a clear message instead.
-                raise ValueError(f"unsupported llm provider: {llm_provider}")
 
             if llm_provider not in ["pollinations", "ollama", "litellm"]:  # Skip validation for providers that don't require API key
                 if not api_key:
