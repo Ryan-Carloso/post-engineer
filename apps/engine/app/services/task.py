@@ -420,10 +420,9 @@ def _fail_task(
     if _should_emit_failed_event(task_id):
         context = _task_tracking_context(task_id)
         context["stage"] = failed_stage
-        # Keep the diagnostic tail (not the head banner) and strip local
-        # paths: scrub_error_text scrubs the full message before
-        # truncating, so a cut landing mid-key cannot leave a fragment the
-        # key-anchored pattern can no longer match.
+        # Keep the diagnostic tail and strip local paths; the helper
+        # scrubs the full message before truncating so a mid-key cut
+        # cannot leave a fragment the pattern can no longer match.
         context["reason"] = scrub_error_text(str(error), max_chars=200)
         track_event("video_generation_failed", context)
     # Terminal webhook (at most once per task, deduped inside): a failing
