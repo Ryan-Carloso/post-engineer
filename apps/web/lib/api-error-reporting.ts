@@ -40,6 +40,12 @@ export interface ApiErrorReportingOptions {
   // routes without getUserId pay nothing. Best-effort: a throw or an
   // undefined result just omits the user id.
   getUserId?: (request: Request) => string | undefined | Promise<string | undefined>;
+
+  // Skip the 2xx success event. Default true: every 2xx emits the route's
+  // semantic success name. Set to false on high-frequency polling routes
+  // (e.g. video-status) where each poll is routine noise — 4xx warnings
+  // and 5xx $exceptions are still reported.
+  reportSuccess?: boolean;
 }
 
 // Responses already reported (5xx via logger.error, other 4xx via
@@ -165,7 +171,9 @@ async function reportApiSuccess(
  * in PostHog: 5xx via error tracking ($exception), 4xx (including 401/403)
  * as warnings named `<semantic_name>_rejected`, 2xx as plain success events
  * named after the route's semantic name (see api-telemetry-names.ts),
- * with the user id when the route opted in via options.getUserId. The wrapped handler keeps the original call shape —
+ * with the user id when the route opted in via options.getUserId.
+ * High-frequency polling routes can silence the 2xx event (noise) while
+ * keeping 4xx/5xx reporting via options.reportSuccess: false. The wrapped handler keeps the original call shape —
  * the request stays optional when the handler declares it optional (or
  * takes none at all), plain Request and NextRequest both typecheck, and
  * extra args such as the route-params context pass through. The handler's
@@ -192,7 +200,7 @@ export function withApiErrorReporting(
     // Fire-and-forget: never awaited, never throws, never mutates the response.
     if (status >= 400) {
       void reportApiIssue(route, status, response, request, options?.getUserId);
-    } else if (status >= 200 && status < 300) {
+    } else if (status >= 200 && status < 300 && options?.reportSuccess !== false) {
       void reportApiSuccess(route, status, request, options?.getUserId);
     }
     return response;
