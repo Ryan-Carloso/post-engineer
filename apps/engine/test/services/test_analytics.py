@@ -324,3 +324,13 @@ def test_scrub_error_text_keeps_tail_of_long_single_line():
     result = analytics.scrub_error_text(text, max_chars=100)
     assert result.endswith("final diagnostic detail")
     assert len(result) <= 100
+
+
+def test_scrub_error_text_long_first_line_keeps_tail():
+    # A very long first line exhausts the tail budget: the message
+    # collapses to its last max_chars characters (diagnostic end).
+    text = "B" * 600 + "\nfinal diagnostic detail"
+    result = analytics.scrub_error_text(text, max_chars=100)
+    assert result.endswith("final diagnostic detail")
+    assert len(result) <= 100
+    assert "B" * 100 not in result
