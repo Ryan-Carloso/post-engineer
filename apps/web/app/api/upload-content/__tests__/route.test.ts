@@ -21,6 +21,7 @@ vi.mock('@/lib/api-error-reporting', () => ({
     apiErrorReportingCalls.push(args);
     return args[1];
   },
+  resolveReportingUserId: vi.fn(),
 }));
 
 vi.mock('@/lib/request-auth', () => ({
@@ -252,7 +253,7 @@ describe('POST /api/upload-content', () => {
     // The wrapper runs once at module import; calls are recorded in a plain
     // array because beforeEach's clearAllMocks wipes mock functions.
     expect(apiErrorReportingCalls).toEqual([
-      ['POST /api/upload-content', expect.any(Function)],
+      ['POST /api/upload-content', expect.any(Function), { getUserId: expect.any(Function) }],
     ]);
   });
 
