@@ -112,3 +112,18 @@ class StartPhaseAttributionTests(unittest.TestCase):
         )
         self.assertEqual(len(stages), 1)
         self.assertEqual(stages[0], "script")
+
+    def test_crash_during_audio_phase_reports_audio_stage(self):
+        # terms completes, then generate_audio raises: the failure must say
+        # "audio". This also pins the terms-completion path.
+        params = VideoParams(video_subject="Lisbon trams")
+        stages = self._track_failed_stages(
+            "task-audio-stage",
+            params,
+            generate_script={"return_value": "script"},
+            generate_terms={"return_value": "terms"},
+            save_script_data={},
+            generate_audio={"side_effect": RuntimeError("audio exploded")},
+        )
+        self.assertEqual(len(stages), 1)
+        self.assertEqual(stages[0], "audio")
