@@ -365,6 +365,15 @@ app.mount("/", StaticFiles(directory=public_dir, html=True), name="")
 @app.on_event("shutdown")
 def shutdown_event():
     logger.info("shutdown event")
+    # Stamp a clean shutdown for the boot autopsy: a later boot that finds
+    # no fresh stamp is by construction an unclean death (SIGKILL/OOM).
+    # Never breaks shutdown: the hook is best-effort.
+    try:
+        from app.services import engine_heartbeat
+
+        engine_heartbeat.mark_clean_shutdown()
+    except Exception as exc:  # noqa: BLE001 - shutdown continues regardless
+        logger.warning(f"clean-shutdown stamp failed: {exc}")
 
 
 @app.on_event("startup")
@@ -381,4 +390,15 @@ def startup_event():
     # process that actually serves traffic. No-op when POSTHOG_API_KEY is
     # unset.
     warm_client()
+    # Liveness heartbeat (Supabase row, ~45s) + the PostHog engine_boot
+    # autopsy event: orphan counts from the boot reconcile, time since the
+    # last heartbeat, clean/unclean shutdown, last RSS. Best-effort: a
+    # diagnostics failure must never break startup.
+    try:
+        from app.services import engine_heartbeat
+
+        engine_heartbeat.start_heartbeat_thread()
+        engine_heartbeat.report_boot_event(sm.state)
+    except Exception as exc:  # noqa: BLE001 - startup continues regardless
+        logger.warning(f"engine heartbeat/boot event failed: {exc}")
     start_fill_schedule_scheduler()

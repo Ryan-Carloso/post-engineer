@@ -11,6 +11,7 @@ from loguru import logger
 
 from app.config import config
 from app.models import const
+from app.services import engine_heartbeat
 from app.utils.supabase_retry import build_retrying_session
 
 
@@ -274,6 +275,10 @@ class SupabaseTaskState(BaseState):
         # dropping the other's kwargs. Same role as MemoryState's RLock.
         self._lock = threading.RLock()
         self._verify_table()
+        # Populated by reconcile_orphaned_tasks; read by the boot autopsy
+        # (engine_heartbeat.report_boot_event). Initialized here so it
+        # exists even when reconcile_on_boot=False.
+        self.last_reconcile_stats: dict[str, object] = {}
         if reconcile_on_boot:
             failed = self.reconcile_orphaned_tasks()
             if failed:
@@ -397,6 +402,14 @@ class SupabaseTaskState(BaseState):
             data: dict[str, Any] = (
                 dict(self._safe_data(existing)) if existing else {}
             )
+            if "stage" in kwargs:
+                # Per-phase memory pressure, persisted with the stage mark:
+                # when the next boot triages this row as an orphan, the last
+                # stage's RSS shows what the process was carrying when it
+                # died. Cheap (/proc read); VRAM rides the heartbeat row.
+                rss_mb = engine_heartbeat.current_rss_mb()
+                if rss_mb is not None:
+                    kwargs["stage_rss_mb"] = round(rss_mb, 1)
             data.update(kwargs)
             user_id = kwargs.get("user_id", existing.get("user_id") if existing else None)
             # state/progress are only sent when explicitly passed: a
@@ -475,6 +488,10 @@ class SupabaseTaskState(BaseState):
         The batch is capped (_RECONCILE_BATCH_LIMIT) so a huge backlog after
         a long outage cannot stall boot: leftover rows are drained by later
         boots, and the ordering is idempotent.
+
+        The outcome is recorded on ``self.last_reconcile_stats`` for the
+        boot autopsy (PostHog ``engine_boot`` event): orphan count, orphans
+        by last stage, and how many were failed.
         """
         response = self._request(
             "GET",
@@ -488,6 +505,10 @@ class SupabaseTaskState(BaseState):
                 f"orphan reconcile hit the batch cap ({_RECONCILE_BATCH_LIMIT}); "
                 "remaining rows will be drained by subsequent boots"
             )
+        by_stage: dict[str, int] = {}
+        for row in rows:
+            stage = str(dict(self._safe_data(row)).get("stage") or "unknown")
+            by_stage[stage] = by_stage.get(stage, 0) + 1
         failed = 0
         for index, row in enumerate(rows, start=1):
             if index % _RECONCILE_PROGRESS_EVERY == 0:
@@ -516,6 +537,13 @@ class SupabaseTaskState(BaseState):
                 failed += 1
             except Exception as exc:  # noqa: BLE001 - loud log, next boot retries
                 logger.error(f"failed to reconcile orphaned task {task_id}: {exc}")
+        self.last_reconcile_stats = {
+            "orphans": len(rows),
+            "by_stage": by_stage,
+            "requeued": 0,
+            "completed": 0,
+            "failed": failed,
+        }
         return failed
 
     def _settle_orphan_billing(self, task_id: str) -> None:
