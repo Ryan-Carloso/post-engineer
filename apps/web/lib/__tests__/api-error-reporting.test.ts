@@ -699,7 +699,7 @@ describe('resolveReportingUserId', () => {
       error: null,
     });
 
-    await expect(resolveReportingUserId(getRequest())).resolves.toBe('user-123');
+    await expect(resolveReportingUserId(getRequest())).resolves.toEqual({ userId: 'user-123' });
   });
 
   it('returns the user id for personal API-key callers', async () => {
@@ -708,7 +708,19 @@ describe('resolveReportingUserId', () => {
       error: null,
     });
 
-    await expect(resolveReportingUserId(getRequest())).resolves.toBe('user-456');
+    await expect(resolveReportingUserId(getRequest())).resolves.toEqual({ userId: 'user-456' });
+  });
+
+  it('returns the display name from the session auth when present', async () => {
+    mockRequireSupabaseSession.mockResolvedValue({
+      auth: { userId: 'user-123', accessToken: 'tok', displayName: 'Ryan' },
+      error: null,
+    });
+
+    await expect(resolveReportingUserId(getRequest())).resolves.toEqual({
+      userId: 'user-123',
+      displayName: 'Ryan',
+    });
   });
 
   it('returns undefined when there is no session', async () => {
@@ -724,5 +736,104 @@ describe('resolveReportingUserId', () => {
     mockRequireSupabaseSession.mockRejectedValue(new Error('db down'));
 
     await expect(resolveReportingUserId(getRequest())).resolves.toBeUndefined();
+  });
+});
+
+describe('withApiErrorReporting display-name person property', () => {
+  it('attaches the display name as a person property on a 2xx while the uuid stays the distinct_id', async () => {
+    const wrapped = withApiErrorReporting(
+      'GET /api/test',
+      async () => NextResponse.json({ ok: true }),
+      { getUserId: async () => ({ userId: 'user-123', displayName: 'Ryan' }) },
+    );
+
+    await wrapped(getRequest());
+
+    await vi.waitFor(() => expect(client.captureAs).toHaveBeenCalledTimes(1));
+    const [distinctId, , properties] = client.captureAs.mock.calls[0] as [
+      string,
+      string,
+      Record<string, unknown>,
+    ];
+    // The uuid is the identity (names change and can collide); the name is
+    // only a person property, never the distinct_id.
+    expect(distinctId).toBe('user-123');
+    expect(distinctId).not.toBe('Ryan');
+    expect(properties).toMatchObject({ userId: 'user-123', $set: { name: 'Ryan' } });
+  });
+
+  it('omits the person property on a 2xx when no display name is available', async () => {
+    const wrapped = withApiErrorReporting(
+      'GET /api/test',
+      async () => NextResponse.json({ ok: true }),
+      { getUserId: async () => ({ userId: 'user-123' }) },
+    );
+
+    await wrapped(getRequest());
+
+    await vi.waitFor(() => expect(client.captureAs).toHaveBeenCalledTimes(1));
+    const [, , properties] = client.captureAs.mock.calls[0] as [
+      string,
+      string,
+      Record<string, unknown>,
+    ];
+    expect(properties).toMatchObject({ userId: 'user-123' });
+    expect(properties).not.toHaveProperty('$set');
+  });
+
+  it('attaches the display name as a person property on a 4xx warning', async () => {
+    const wrapped = withApiErrorReporting(
+      'GET /api/test',
+      async () => NextResponse.json({ error: 'x' }, { status: 404 }),
+      { getUserId: async () => ({ userId: 'user-123', displayName: 'Ryan' }) },
+    );
+
+    await wrapped(getRequest());
+
+    await vi.waitFor(() => expect(client.captureAs).toHaveBeenCalledTimes(1));
+    const [distinctId, , properties] = client.captureAs.mock.calls[0] as [
+      string,
+      string,
+      Record<string, unknown>,
+    ];
+    expect(distinctId).toBe('user-123');
+    expect(properties).toMatchObject({ $set: { name: 'Ryan' } });
+  });
+
+  it('attaches the display name as a person property on a 5xx $exception', async () => {
+    const wrapped = withApiErrorReporting(
+      'GET /api/test',
+      async () => NextResponse.json({ error: 'x' }, { status: 500 }),
+      { getUserId: async () => ({ userId: 'user-123', displayName: 'Ryan' }) },
+    );
+
+    await wrapped(getRequest());
+
+    await vi.waitFor(() => expect(client.captureExceptionAs).toHaveBeenCalledTimes(1));
+    const [distinctId, , properties] = client.captureExceptionAs.mock.calls[0] as [
+      string,
+      Error,
+      Record<string, unknown>,
+    ];
+    expect(distinctId).toBe('user-123');
+    expect(properties).toMatchObject({ $set: { name: 'Ryan' } });
+  });
+
+  it('drops a blank display name instead of setting an empty person property', async () => {
+    const wrapped = withApiErrorReporting(
+      'GET /api/test',
+      async () => NextResponse.json({ error: 'x' }, { status: 500 }),
+      { getUserId: async () => ({ userId: 'user-123', displayName: '   ' }) },
+    );
+
+    await wrapped(getRequest());
+
+    await vi.waitFor(() => expect(client.captureExceptionAs).toHaveBeenCalledTimes(1));
+    const [, , properties] = client.captureExceptionAs.mock.calls[0] as [
+      string,
+      Error,
+      Record<string, unknown>,
+    ];
+    expect(properties).not.toHaveProperty('$set');
   });
 });
