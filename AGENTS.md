@@ -2352,6 +2352,10 @@ Five MINORs on the merged funnel, fixed as a follow-up PR with one focused TDD c
 ## Cypress: cy.clock() vs React Query (2026-10-07, PR #122)
 - **Never `cy.clock()` with all timers faked on a page that uses React Query.** Its notifyManager delivers query results through a real `setTimeout(0)` batch — faking setTimeout wedges every query in its loading state forever: the stubbed response arrives (200 in the command log) but the page never leaves the skeleton, and `cy.tick()` never unstick it. Fake only what the test needs: `cy.clock(Date.now(), ['setInterval', 'clearInterval', 'Date'])` keeps a `refetchInterval` controllable via `cy.tick()` while result delivery keeps working.
 
+## ui-coverage-gates mutates the whole changed file, not the diff (2026-10-16, PR #201)
+- The changed-UI-file detector flags API route files as "UI files", and the gate runs Stryker on the ENTIRE file — pre-existing surviving mutants count against the 60% threshold. Touching a route file can flip the gate red on mutants you didn't introduce (route.ts went 55%, needed 60%).
+- Raise the score without scope creep: assert exact log messages (kills StringLiteral/ObjectLiteral mutants on apiErrorResponse calls), assert query-builder args (select/eq/order — kills string/boolean/object mutants on the chain), and pin both sides of conditionals with a positive assertion plus a `not.toHaveBeenCalledWith` negative. The CI mutation report artifact (`mutation-report-web-<PR>`) names every survivor with line + mutator.
+
 ## Stryker bracket escaping lives in mutation.yml too (2026-10-07, PR #125)
 - **The `[[]`/`[]]` single-pass escaping is needed in BOTH Stryker invocations.** PR #123 added it only to ci.yml's ui-coverage-gates; the standalone `mutation.yml` workflow kept passing raw paths, so the first PR touching a bracketed route (`[taskId]/[...path]`) failed `mutation (web)` with zero files matched (verified: minimatch returns false on the unescaped pattern, true on the escaped one). When fixing a Stryker invocation bug, grep every workflow that calls `stryker run --mutate`.
 
