@@ -607,9 +607,7 @@ class SupabaseStateShapeGuardTests(unittest.TestCase):
         # Must not raise; kwargs merge into a fresh dict.
         self.backend.update_task("t-1", progress=50, stage="x")
         payload = self.requests.request.call_args_list[1][1]["json"]
-        self.assertEqual(payload["data"]["stage"], "x")
-        # A stage mark also samples RSS (boot autopsy); it rides along.
-        self.assertGreater(payload["data"]["stage_rss_mb"], 0)
+        self.assertEqual(payload["data"], {"stage": "x"})
 
     def test_reconcile_with_non_dict_data_still_fails_row(self):
         orphans = [{"task_id": "t-1", "data": 42}]
