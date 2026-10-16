@@ -8,6 +8,10 @@ import { z } from 'zod';
 
 export const VALID_VIDEO_ASPECTS = ['9:16', '16:9', '1:1'] as const;
 export const FACE_QUALITIES = ['ok', 'very_good'] as const;
+// How the persona is composed with the b-roll during the hook. Must match
+// the CHECK constraint in supabase/migrations/018 and the engine's
+// VideoLayout enum — persona-video-layout-migration.test.ts pins all three.
+export const VIDEO_LAYOUTS = ['standard', 'react'] as const;
 
 export const PHOTO_EXTENSIONS: Record<string, string> = {
   'image/png': 'png',
@@ -40,6 +44,7 @@ export const personaFormSchema = z.object({
   // (route guard), the debug flow, and persona creation alike.
   language: optionalText(z.string().max(35)),
   videoAspect: optionalText(z.enum(VALID_VIDEO_ASPECTS)),
+  videoLayout: optionalText(z.enum(VIDEO_LAYOUTS)),
   scriptPrompt: optionalText(z.string().max(2000)),
   niche: optionalText(z.string().max(300)),
   paragraphNumber: optionalText(z.coerce.number().int().min(1).max(10)),
@@ -57,6 +62,7 @@ export const personaFormSchema = z.object({
 //---------------
 const FIELD_ERRORS: Record<string, (value: unknown) => string> = {
   videoAspect: (value) => `Invalid videoAspect: ${String(value)}. Use one of ${VALID_VIDEO_ASPECTS.join(', ')}.`,
+  videoLayout: (value) => `Invalid videoLayout: ${String(value)}. Use one of ${VIDEO_LAYOUTS.join(', ')}.`,
   niche: () => 'Invalid niche: use at most 300 characters.',
   scriptPrompt: () => 'Invalid scriptPrompt: use at most 2000 characters.',
   paragraphNumber: () => 'Invalid paragraphNumber: use an integer between 1 and 10.',
@@ -87,6 +93,7 @@ export type ParsedPersonaForm = {
     voiceId: string | null;
     language: string | null;
     videoAspect: string | null;
+    videoLayout: string | null;
     scriptPrompt: string | null;
     paragraphNumber: number | null;
     niche: string | null;
@@ -180,6 +187,7 @@ export function parsePersonaForm(formData: FormData, mode: PersonaFormMode): Par
         voiceId: values.voiceId ?? null,
         language: values.language ?? null,
         videoAspect: values.videoAspect ?? null,
+        videoLayout: values.videoLayout ?? null,
         scriptPrompt: values.scriptPrompt ?? null,
         paragraphNumber: values.paragraphNumber ?? null,
         niche: values.niche ?? null,

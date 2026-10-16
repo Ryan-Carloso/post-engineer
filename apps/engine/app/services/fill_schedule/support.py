@@ -48,6 +48,7 @@ _SNAPSHOT_FIELDS = (
     ("niche", "post_niche"),
     ("language", "post_language"),
     ("video_aspect", "post_video_aspect"),
+    ("video_layout", "post_video_layout"),
     ("paragraph_number", "post_paragraph_number"),
     ("face_quality", "post_face_quality"),
 )

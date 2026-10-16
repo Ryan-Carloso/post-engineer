@@ -208,6 +208,10 @@ interface PersonaFormState {
   storedPhotoUrl: string | null;
   voiceId: string | null;
   videoAspect: string;
+  /** How the persona is composed with the b-roll during the hook.
+   *  'standard' = the avatar fills the frame; 'react' = the frame splits,
+   *  avatar on top and b-roll below. See VIDEO_LAYOUTS in persona-schema. */
+  videoLayout: string;
   scriptPrompt: string;
   niche: string;
   result: CreatePersonaResult | null;
@@ -222,6 +226,7 @@ interface PersonaFormState {
   setStoredPhotoUrl: (url: string | null) => void;
   setVoiceId: (id: string | null) => void;
   setVideoAspect: (value: string) => void;
+  setVideoLayout: (value: string) => void;
   setScriptPrompt: (value: string) => void;
   setNiche: (value: string) => void;
   setResult: (result: CreatePersonaResult | null) => void;
@@ -238,6 +243,7 @@ const initialPersonaState = {
   storedPhotoUrl: null,
   voiceId: null,
   videoAspect: '9:16',
+  videoLayout: 'standard',
   scriptPrompt: '',
   niche: '',
   result: null,
@@ -254,6 +260,7 @@ export const usePersonaStore = create<PersonaFormState>()(
     setStoredPhotoUrl: (storedPhotoUrl) => set({ storedPhotoUrl }),
     setVoiceId: (voiceId) => set({ voiceId }),
     setVideoAspect: (videoAspect) => set({ videoAspect }),
+    setVideoLayout: (videoLayout) => set({ videoLayout }),
     setScriptPrompt: (scriptPrompt) => set({ scriptPrompt }),
     setNiche: (niche) => set({ niche }),
     setResult: (result) => set({ result }),
@@ -276,6 +283,7 @@ export const usePersonaStore = create<PersonaFormState>()(
       }
       if (language) formData.append('language', language);
       if (s.videoAspect) formData.append('videoAspect', s.videoAspect);
+      if (s.videoLayout) formData.append('videoLayout', s.videoLayout);
       if (s.scriptPrompt.trim()) formData.append('scriptPrompt', s.scriptPrompt.trim());
       if (s.niche.trim()) formData.append('niche', s.niche.trim());
       const videoSubject = s.niche.trim() || s.scriptPrompt.trim();

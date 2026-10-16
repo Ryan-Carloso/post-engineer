@@ -12,6 +12,8 @@ from typing import Sequence
 
 from loguru import logger
 
+from app.config import config
+
 
 def _find_hook_end_seconds(
     video_script: str,
@@ -92,3 +94,17 @@ def _discard_stale_subtitle(subtitle_path: str) -> None:
             f"could not remove the stale subtitle {subtitle_path}: {exc}; "
             "the regenerated subtitle may be skipped by the whisper fallback"
         )
+
+
+def _limit_generated_script(script: str) -> str:
+    """Keep generated speech inside the configured character budget."""
+    limit = int(config.app.get("max_video_script_characters", 700))
+    normalized = re.sub(r"[ \t]+", " ", script.strip())
+    if len(normalized) <= limit:
+        return normalized
+    candidate = normalized[:limit]
+    sentence_end = max(candidate.rfind(mark) for mark in ".!?。！？")
+    if sentence_end >= 0:
+        return candidate[: sentence_end + 1].strip()
+    word_end = candidate.rfind(" ")
+    return candidate[: word_end if word_end > 0 else limit].strip()

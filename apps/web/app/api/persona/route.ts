@@ -9,8 +9,6 @@ import {
   parsePersonaForm,
   validateVisualCues,
   validateVoiceSource,
-  photoExtensionOf,
-  VALID_VIDEO_ASPECTS,
 } from '@/lib/persona-schema';
 import {
   addLibraryImages,
@@ -26,6 +24,7 @@ import {
   type LibraryImageInput,
 } from '@/lib/persona-images';
 import { logger } from '@/lib/logger';
+import { parsePatchBody } from './patch-body';
 import { apiErrorResponse } from '@/lib/api-error';
 import { ERROR_CODES } from '@/lib/error-codes';
 import { trackApiEvent } from '@/lib/analytics';
@@ -174,6 +173,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       voice_id: body.values.voiceId,
       language: body.values.language,
       video_aspect: body.values.videoAspect,
+      video_layout: body.values.videoLayout,
       script_prompt: body.values.scriptPrompt,
       paragraph_number: body.values.paragraphNumber,
       niche: body.values.niche,
@@ -441,6 +441,7 @@ async function patchHandler(request: Request): Promise<NextResponse> {
 
   if (patch.language !== null) updates.language = patch.language;
   if (patch.videoAspect !== null) updates.video_aspect = patch.videoAspect;
+  if (patch.videoLayout !== null) updates.video_layout = patch.videoLayout;
   if (patch.scriptPrompt !== null) updates.script_prompt = patch.scriptPrompt;
   if (patch.paragraphNumber !== null) updates.paragraph_number = patch.paragraphNumber;
   if (patch.niche !== null) updates.niche = patch.niche;
@@ -469,82 +470,6 @@ async function patchHandler(request: Request): Promise<NextResponse> {
 }
 
 //---------------
-// parsePatchBody — all fields are optional on edit; returns
-// null for the ones missing from the multipart body.
-//---------------
-interface PersonaPatchBody {
-  name: string | null;
-  photo: File | null;
-  photoExtension: string | null;
-  avatarUrl: string | null;
-  voiceId: string | null;
-  language: string | null;
-  videoAspect: string | null;
-  scriptPrompt: string | null;
-  paragraphNumber: number | null;
-  niche: string | null;
-}
-
-type ParsePatchResult =
-  | { ok: true; value: PersonaPatchBody }
-  | { ok: false; error: string };
-
-async function parsePatchBody(request: Request): Promise<ParsePatchResult> {
-  let formData: FormData;
-  try {
-    formData = await request.formData();
-  } catch {
-    return { ok: false, error: 'Invalid multipart payload.' };
-  }
-
-  const rawName = formData.get('name');
-  const name = typeof rawName === 'string' && rawName.trim().length > 0 ? rawName : null;
-
-  const avatarUrl = optionalString(formData.get('avatarUrl'));
-  const voiceId = optionalString(formData.get('voiceId'));
-
-  const photo = asFile(formData.get('photo'));
-  const photoExtension = photoExtensionOf(photo);
-  if (photo && !photoExtension) {
-    return { ok: false, error: `Unsupported photo format: ${photo.type}` };
-  }
-
-  const language = optionalString(formData.get('language'));
-  const videoAspect = optionalString(formData.get('videoAspect'));
-  if (videoAspect !== null && !VALID_VIDEO_ASPECTS.includes(videoAspect as (typeof VALID_VIDEO_ASPECTS)[number])) {
-    return { ok: false, error: `Invalid videoAspect: ${videoAspect}. Use one of ${VALID_VIDEO_ASPECTS.join(', ')}.` };
-  }
-  const scriptPrompt = optionalString(formData.get('scriptPrompt'));
-  const niche = optionalString(formData.get('niche'));
-  if (niche !== null && niche.length > 300) {
-    return { ok: false, error: 'Invalid niche: use at most 300 characters.' };
-  }
-  const paragraphNumberRaw = optionalString(formData.get('paragraphNumber'));
-  let paragraphNumber: number | null = null;
-  if (paragraphNumberRaw !== null) {
-    const parsedNumber = Number.parseInt(paragraphNumberRaw, 10);
-    if (!Number.isInteger(parsedNumber) || parsedNumber < 1 || parsedNumber > 10) {
-      return { ok: false, error: 'Invalid paragraphNumber: use an integer between 1 and 10.' };
-    }
-    paragraphNumber = parsedNumber;
-  }
-
-  return {
-    ok: true,
-    value: {
-      name,
-      photo,
-      photoExtension,
-      avatarUrl,
-      voiceId,
-      language,
-      videoAspect,
-      scriptPrompt,
-      paragraphNumber,
-      niche,
-    },
-  };
-}
 
 async function deleteHandler(request: Request): Promise<NextResponse> {
   const ROUTE = 'DELETE /api/persona';
@@ -834,14 +759,6 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
   });
 }
 
-function asFile(value: FormDataEntryValue | null): File | null {
-  return isFileLike(value) ? value : null;
-}
-
-function optionalString(value: FormDataEntryValue | null): string | null {
-  if (typeof value !== 'string' || value.trim().length === 0) return null;
-  return value;
-}
 
 //---------------
 // uploadFile — uploads the file to the 'personas' bucket under the user's folder.
