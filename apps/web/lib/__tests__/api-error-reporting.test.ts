@@ -5,7 +5,10 @@
 // (thrown) errors. This wrapper closes the gap for handled responses:
 // 5xx go to PostHog error tracking ($exception), 4xx (including 401/403)
 // go as warnings (server_warning), 2xx go as plain success events
-// (server_success) with the user id when the route opted in via getUserId.
+// (server_success). When the route opts in via getUserId, events are
+// attributed to the real user (PostHog distinct_id) instead of the shared
+// post-engineer-server identity; routes without the opt-in keep the
+// shared identity.
 //---------------
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -15,10 +18,16 @@ vi.mock('@/lib/posthog-server', () => ({
   getPostHogServer: vi.fn(),
 }));
 
+vi.mock('@/lib/request-auth', () => ({
+  requireSupabaseSession: vi.fn(),
+}));
+
 import { getPostHogServer } from '@/lib/posthog-server';
+import { requireSupabaseSession } from '@/lib/request-auth';
 import {
   withApiErrorReporting,
   markApiErrorReported,
+  resolveReportingUserId,
 } from '@/lib/api-error-reporting';
 
 const mockGetPostHogServer = vi.mocked(getPostHogServer);
@@ -28,6 +37,7 @@ function fakeClient() {
     capture: vi.fn(),
     captureAs: vi.fn(),
     captureException: vi.fn(),
+    captureExceptionAs: vi.fn(),
   };
 }
 
@@ -88,7 +98,7 @@ describe('withApiErrorReporting', () => {
     expect(client.captureException).not.toHaveBeenCalled();
   });
 
-  it('includes the user id in a 2xx success event when getUserId resolves', async () => {
+  it('attributes a 2xx to the user (distinct_id) when getUserId resolves', async () => {
     const wrapped = withApiErrorReporting(
       'GET /api/test',
       async () => NextResponse.json({ ok: true }),
@@ -97,13 +107,16 @@ describe('withApiErrorReporting', () => {
 
     await wrapped(getRequest());
 
-    await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
-    const [event, properties] = client.capture.mock.calls[0] as [
+    await vi.waitFor(() => expect(client.captureAs).toHaveBeenCalledTimes(1));
+    const [distinctId, event, properties] = client.captureAs.mock.calls[0] as [
+      string,
       string,
       Record<string, unknown>,
     ];
+    expect(distinctId).toBe('user-123');
     expect(event).toBe('server_success');
     expect(properties).toMatchObject({ userId: 'user-123', status: 200 });
+    expect(client.capture).not.toHaveBeenCalled();
     expect(client.captureException).not.toHaveBeenCalled();
   });
 
@@ -390,7 +403,7 @@ describe('withApiErrorReporting', () => {
     expect(client.captureException).not.toHaveBeenCalled();
   });
 
-  it('includes the user id in a 4xx warning when getUserId resolves', async () => {
+  it('attributes a 4xx warning to the user (distinct_id) when getUserId resolves', async () => {
     const wrapped = withApiErrorReporting(
       'GET /api/test',
       async () => NextResponse.json({ error: 'x' }, { status: 404 }),
@@ -399,13 +412,16 @@ describe('withApiErrorReporting', () => {
 
     await wrapped(getRequest());
 
-    await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
-    const [event, properties] = client.capture.mock.calls[0] as [
+    await vi.waitFor(() => expect(client.captureAs).toHaveBeenCalledTimes(1));
+    const [distinctId, event, properties] = client.captureAs.mock.calls[0] as [
+      string,
       string,
       Record<string, unknown>,
     ];
+    expect(distinctId).toBe('user-123');
     expect(event).toBe('server_warning');
     expect(properties).toMatchObject({ userId: 'user-123', status: 404 });
+    expect(client.capture).not.toHaveBeenCalled();
   });
 
   it('includes the errorId from a 4xx body for correlation', async () => {
@@ -454,19 +470,34 @@ describe('withApiErrorReporting', () => {
     expect(await res.json()).toEqual({ error: 'x' });
   });
 
-  it('includes the user id in properties when getUserId resolves', async () => {
+  it('attributes a 5xx $exception to the user (distinct_id) when getUserId resolves', async () => {
     const wrapped = withApiErrorReporting('GET /api/test', async () => NextResponse.json({ error: 'x' }, { status: 500 }), {
       getUserId: async () => 'user-123',
     });
 
     await wrapped(getRequest());
 
-    await vi.waitFor(() => expect(client.captureException).toHaveBeenCalledTimes(1));
-    const [, properties] = client.captureException.mock.calls[0] as [
+    await vi.waitFor(() => expect(client.captureExceptionAs).toHaveBeenCalledTimes(1));
+    const [distinctId, , properties] = client.captureExceptionAs.mock.calls[0] as [
+      string,
       Error,
       Record<string, unknown>,
     ];
+    expect(distinctId).toBe('user-123');
     expect(properties).toMatchObject({ userId: 'user-123' });
+    expect(client.captureException).not.toHaveBeenCalled();
+  });
+
+  it('reports a 5xx under the shared identity when the route did not opt in via getUserId', async () => {
+    const wrapped = withApiErrorReporting(
+      'GET /api/test',
+      async () => NextResponse.json({ error: 'x' }, { status: 500 }),
+    );
+
+    await wrapped(getRequest());
+
+    await vi.waitFor(() => expect(client.captureException).toHaveBeenCalledTimes(1));
+    expect(client.captureExceptionAs).not.toHaveBeenCalled();
   });
 
   it('still reports when getUserId throws (user id is best-effort)', async () => {
@@ -656,5 +687,42 @@ describe('withApiErrorReporting semantic event names', () => {
     await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
     const [event] = client.capture.mock.calls[0] as [string];
     expect(event).toBe('server_warning');
+  });
+});
+
+describe('resolveReportingUserId', () => {
+  const mockRequireSupabaseSession = vi.mocked(requireSupabaseSession);
+
+  it('returns the stable auth user id from a session', async () => {
+    mockRequireSupabaseSession.mockResolvedValue({
+      auth: { userId: 'user-123', accessToken: 'tok' },
+      error: null,
+    });
+
+    await expect(resolveReportingUserId(getRequest())).resolves.toBe('user-123');
+  });
+
+  it('returns the user id for personal API-key callers', async () => {
+    mockRequireSupabaseSession.mockResolvedValue({
+      auth: { userId: 'user-456', accessToken: 'key', isApiKey: true },
+      error: null,
+    });
+
+    await expect(resolveReportingUserId(getRequest())).resolves.toBe('user-456');
+  });
+
+  it('returns undefined when there is no session', async () => {
+    mockRequireSupabaseSession.mockResolvedValue({
+      auth: null,
+      error: new NextResponse(null, { status: 401 }),
+    });
+
+    await expect(resolveReportingUserId(getRequest())).resolves.toBeUndefined();
+  });
+
+  it('returns undefined when the session lookup throws', async () => {
+    mockRequireSupabaseSession.mockRejectedValue(new Error('db down'));
+
+    await expect(resolveReportingUserId(getRequest())).resolves.toBeUndefined();
   });
 });

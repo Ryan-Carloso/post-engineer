@@ -30,7 +30,7 @@ import { ERROR_CODES } from '@/lib/error-codes';
 import { trackApiEvent } from '@/lib/analytics';
 import { SAFE_TASK_ID } from '@/lib/video-urls';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 // Aggregate budget for the post-delete engine task cleanup (see DELETE):
 // after() has no deadline of its own, so the loop must bound itself.
@@ -790,6 +790,6 @@ export async function uploadFile(
 //---------------
 // 5xx reporting: handled server errors reach PostHog error tracking.
 //---------------
-export const POST = withApiErrorReporting('POST /api/persona', postHandler);
-export const DELETE = withApiErrorReporting('DELETE /api/persona', deleteHandler);
-export const PATCH = withApiErrorReporting('PATCH /api/persona', patchHandler);
+export const POST = withApiErrorReporting('POST /api/persona', postHandler, { getUserId: resolveReportingUserId });
+export const DELETE = withApiErrorReporting('DELETE /api/persona', deleteHandler, { getUserId: resolveReportingUserId });
+export const PATCH = withApiErrorReporting('PATCH /api/persona', patchHandler, { getUserId: resolveReportingUserId });

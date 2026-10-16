@@ -4,7 +4,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { getStripePriceId, isTokenPackId, TOKEN_PACKS, type TokenPackId } from '@/lib/billing';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
-import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 //---------------
 // POST /api/billing/checkout — creates a one-time Checkout Session for a pack.
@@ -157,4 +157,4 @@ async function postHandler(request: Request): Promise<NextResponse> {
 //---------------
 // 5xx reporting: handled server errors reach PostHog error tracking.
 //---------------
-export const POST = withApiErrorReporting('POST /api/billing/checkout', postHandler);
+export const POST = withApiErrorReporting('POST /api/billing/checkout', postHandler, { getUserId: resolveReportingUserId });

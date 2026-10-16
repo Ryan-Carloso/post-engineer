@@ -20,7 +20,7 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@/lib/logger';
-import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 //---------------
 // /api/persona/images — persona image library.
@@ -559,7 +559,7 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
 //---------------
 // 5xx reporting: handled server errors reach PostHog error tracking.
 //---------------
-export const GET = withApiErrorReporting('GET /api/persona/images', getHandler);
-export const POST = withApiErrorReporting('POST /api/persona/images', postHandler);
-export const DELETE = withApiErrorReporting('DELETE /api/persona/images', deleteHandler);
-export const PATCH = withApiErrorReporting('PATCH /api/persona/images', patchHandler);
+export const GET = withApiErrorReporting('GET /api/persona/images', getHandler, { getUserId: resolveReportingUserId });
+export const POST = withApiErrorReporting('POST /api/persona/images', postHandler, { getUserId: resolveReportingUserId });
+export const DELETE = withApiErrorReporting('DELETE /api/persona/images', deleteHandler, { getUserId: resolveReportingUserId });
+export const PATCH = withApiErrorReporting('PATCH /api/persona/images', patchHandler, { getUserId: resolveReportingUserId });

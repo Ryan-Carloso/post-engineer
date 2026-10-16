@@ -4,7 +4,7 @@ import { apiErrorResponse } from '@/lib/api-error';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 import { SAFE_TASK_ID } from '@/lib/video-urls';
-import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 type DownloadContext = {
   params: Promise<{ taskId: string; path: string[] }>;
@@ -190,4 +190,4 @@ function safeDecodeSegment(segment: string): string {
 //---------------
 // 5xx reporting: handled server errors reach PostHog error tracking.
 //---------------
-export const GET = withApiErrorReporting('GET /api/persona/video-download/[taskId]/[...path]', getHandler);
+export const GET = withApiErrorReporting('GET /api/persona/video-download/[taskId]/[...path]', getHandler, { getUserId: resolveReportingUserId });

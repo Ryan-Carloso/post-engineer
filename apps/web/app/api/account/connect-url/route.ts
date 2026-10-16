@@ -12,7 +12,7 @@ import {
   oauthStateRef,
   type OAuthConnectProvider,
 } from '@/lib/oauth-connect';
-import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 //---------------
 // POST /api/account/connect-url — generates the OAuth auth URL to connect
@@ -144,4 +144,4 @@ async function postHandler(request: NextRequest): Promise<NextResponse> {
 //---------------
 // 5xx reporting: handled server errors reach PostHog error tracking.
 //---------------
-export const POST = withApiErrorReporting('POST /api/account/connect-url', postHandler);
+export const POST = withApiErrorReporting('POST /api/account/connect-url', postHandler, { getUserId: resolveReportingUserId });

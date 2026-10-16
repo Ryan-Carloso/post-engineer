@@ -138,6 +138,12 @@ export interface ServerPostHogClient {
    */
   captureAs(distinctId: string, event: string, properties?: Record<string, unknown>): void;
   captureException(error: unknown, properties?: Record<string, unknown>): void;
+  /**
+   * Capture an $exception attributed to a specific user (distinct_id).
+   * Used by withApiErrorReporting when the route resolved the affected
+   * user — the shared service id would hide who hit the error.
+   */
+  captureExceptionAs(distinctId: string, error: unknown, properties?: Record<string, unknown>): void;
 }
 
 //---------------
@@ -190,6 +196,11 @@ function toClient(sdk: PostHogNodeClient): ServerPostHogClient {
         sdk.captureException(error, SERVER_DISTINCT_ID, withOriginTags(properties)),
       );
     },
+    captureExceptionAs: (distinctId, error, properties) => {
+      captureAndFlush(() =>
+        sdk.captureException(error, distinctId, withOriginTags(properties)),
+      );
+    },
   };
 }
 
@@ -222,6 +233,9 @@ export function getPostHogServer(): ServerPostHogClient | null {
     },
     captureException: (error, properties) => {
       pending.push(() => cachedClient?.captureException(error, properties));
+    },
+    captureExceptionAs: (distinctId, error, properties) => {
+      pending.push(() => cachedClient?.captureExceptionAs(distinctId, error, properties));
     },
   };
 

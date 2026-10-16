@@ -12,7 +12,7 @@ import { apiErrorResponse } from '@/lib/api-error';
 import { rewriteVideoUrls, SAFE_TASK_ID } from '@/lib/video-urls';
 import { taskPayload, taskState, extractTaskError } from '@/lib/engine-task-state';
 import { logger } from '@/lib/logger';
-import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 //---------------
 // GET /api/persona/video-status/:taskId — engine status proxy.
@@ -302,4 +302,5 @@ async function resolveGenerationIdByEngineTask(
 export const GET = withApiErrorReporting('GET /api/persona/video-status/[taskId]', getHandler, {
   // Polling route: a success event per poll is noise; 4xx/5xx still report.
   reportSuccess: false,
+  getUserId: resolveReportingUserId,
 });

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 //---------------
 // POST /api/logout — ends the user's Supabase session.
@@ -71,4 +71,4 @@ async function postHandler() {
 //---------------
 // 5xx reporting: handled server errors reach PostHog error tracking.
 //---------------
-export const POST = withApiErrorReporting('POST /api/logout', postHandler);
+export const POST = withApiErrorReporting('POST /api/logout', postHandler, { getUserId: resolveReportingUserId });

@@ -5,7 +5,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { toFiniteNumber } from '@/lib/tokens';
 import type { TokenTransaction } from '@/lib/token-transactions';
 import { logger } from '@/lib/logger';
-import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 //---------------
 // GET /api/billing/transactions — the current user's token ledger,
@@ -129,4 +129,4 @@ async function getHandler(request?: Request): Promise<NextResponse> {
 //---------------
 // 5xx reporting: handled server errors reach PostHog error tracking.
 //---------------
-export const GET = withApiErrorReporting('GET /api/billing/transactions', getHandler);
+export const GET = withApiErrorReporting('GET /api/billing/transactions', getHandler, { getUserId: resolveReportingUserId });
