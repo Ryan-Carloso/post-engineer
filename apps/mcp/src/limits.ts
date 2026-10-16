@@ -27,3 +27,16 @@ export const MAX_UPLOAD_VIDEO_BYTES = 2 * 1024 * 1024 * 1024;
  * can't drift from the enforced bound.
  */
 export const MAX_UPLOAD_VIDEO_GB = MAX_UPLOAD_VIDEO_BYTES / (1024 * 1024 * 1024);
+
+/**
+ * Persona-hook layouts the server accepts, as an inline literal rather than
+ * an enum: it feeds `z.enum(...)`, whose generic argument is a tuple.
+ *
+ * This list is duplicated in `apps/web/lib/persona-schema.ts` (the web zod
+ * enum), in `supabase/migrations/019_personas-video-layout.sql` (the CHECK)
+ * and in the engine's `VideoLayout` (apps/engine/app/models/schema.py).
+ * Nothing shares a module across those four runtimes, so a one-sided edit
+ * would silently teach agents a layout the database rejects at write time --
+ * pinned by `persona-video-layout-sync.test.ts`.
+ */
+export const VIDEO_LAYOUTS = ['standard', 'react'] as const;

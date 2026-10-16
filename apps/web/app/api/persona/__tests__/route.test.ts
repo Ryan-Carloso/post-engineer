@@ -195,15 +195,10 @@ describe('POST /api/persona — toda persona tem rosto', () => {
     // column missing from the payload 500s every call (this PR's 500). Assert
     // both directions so the next column addition fails CI instead of
     // production.
-    const { readFileSync } = await import('node:fs');
+    const { readFileSync, readdirSync } = await import('node:fs');
     const { join } = await import('node:path');
-    const sqlPath = join(
-      findRepoRoot(import.meta.url),
-      'supabase',
-      'migrations',
-      '001_schema.sql',
-    );
-    const sql = readFileSync(sqlPath, 'utf8');
+    const migrationsDir = join(findRepoRoot(import.meta.url), 'supabase', 'migrations');
+    const sql = readFileSync(join(migrationsDir, '001_schema.sql'), 'utf8');
     const tableMatch = sql.match(
       /create table if not exists public\.personas \(([\s\S]*?)\n\);/i,
     );
@@ -222,7 +217,7 @@ describe('POST /api/persona — toda persona tem rosto', () => {
     ]);
     // Column name -> true when the column is NOT NULL with no DEFAULT (the
     // insert MUST supply it) — e.g. `user_id uuid not null` vs
-    // `created_at timestamptz not null default now()`.
+    // `created_at timestam not null default now()`.
     // Assumes one column per physical line: a wrapped definition (e.g. the
     // `default` on its own continuation line) would misparse — fail-closed,
     // but join continuation lines before changing the format.
@@ -244,6 +239,29 @@ describe('POST /api/persona — toda persona tem rosto', () => {
         /\bnot null\b/i.test(definition) ||
         /\bprimary key\b/i.test(definition);
       columns.set(name, notNull && !/\bdefault\b/i.test(definition));
+    }
+    // Columns added AFTER 001 are invisible to a 001-only parse, which would
+    // report every insert key from a later migration as a phantom column —
+    // i.e. this test would fail the moment a migration adds a column, and the
+    // obvious "fix" (editing 001) breaks `supabase db push` for every
+    // self-hoster who already applied it. Migrations are append-only, so the
+    // chain is the truth: union the ALTER TABLE ADD COLUMN statements from
+    // every numbered migration, in apply order.
+    //
+    // Later additions are nullable-or-defaulted by construction here, so they
+    // land as "not required" — which is the direction that matters (a column
+    // the insert omits). A NOT NULL addition without a default would fail at
+    // runtime, and that is caught by migration application in CI, not here.
+    for (const file of readdirSync(migrationsDir).sort()) {
+      if (!file.endsWith('.sql') || file === '001_schema.sql') continue;
+      const later = readFileSync(join(migrationsDir, file), 'utf8');
+      const additions = later.matchAll(
+        /alter\s+table\s+(?:if\s+exists\s+)?public\.personas\s+add\s+column\s+(?:if\s+not\s+exists\s+)?([\w"]+)/gi,
+      );
+      for (const addition of additions) {
+        const name = (addition[1] ?? '').replace(/"/g, '');
+        if (name) columns.set(name, false);
+      }
     }
     // Sentinels: guard against a degraded parse passing vacuously.
     expect(columns.has('recent_image_ids')).toBe(true);
@@ -533,6 +551,17 @@ describe('POST /api/persona', () => {
     expect(body.error).toContain('videoAspect');
   });
 
+  it('creates a persona with a react videoLayout: video_layout is stored', async () => {
+    const { inserted } = mockSupabase();
+
+    const res = await POST(
+      formRequest({ name: 'Ana', voiceId: 'voz-1', videoLayout: 'react' }, [photo()]),
+    );
+
+    expect(res.status).toBe(200);
+    expect(inserted[0]).toMatchObject({ video_layout: 'react' });
+  });
+
   it('cria persona com nicho', async () => {
     const { inserted } = mockSupabase();
 
@@ -816,6 +845,25 @@ describe('PATCH /api/persona', () => {
     expect(res.status).toBe(200);
     expect(body.success).toBe(true);
     expect(updated[0]).toMatchObject({ name: 'Novo Nome' });
+  });
+
+  it('updates the videoLayout', async () => {
+    const { updated } = mockSupabaseForPatch();
+
+    const res = await PATCH(patchRequest('persona-uuid-1', { videoLayout: 'react' }));
+
+    expect(res.status).toBe(200);
+    expect(updated[0]).toMatchObject({ video_layout: 'react' });
+  });
+
+  it('returns 400 with an invalid videoLayout', async () => {
+    mockSupabaseForPatch();
+
+    const res = await PATCH(patchRequest('persona-uuid-1', { videoLayout: 'cinematic' }));
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('videoLayout');
   });
 
   it('nova foto substitui a antiga: sobe arquivo novo e remove o antigo', async () => {

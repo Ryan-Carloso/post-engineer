@@ -139,6 +139,14 @@ Provision the database schema in your Supabase project:
     refund key, total refunds capped at the batch charge, restores the
     free/paid split.
 
+17. `supabase/migrations/019_personas-video-layout.sql` — adds
+    `personas.video_layout` and the matching
+    `schedules.post_video_layout` snapshot (`standard` or `react`, NULL
+    means `standard`, CHECK-pinned): how the persona hook is composed
+    with the b-roll — the avatar filling the frame, or a 50/50 split
+    with the b-roll below. Presentation only; the hook render and its
+    cost are identical either way.
+
 Paste each file into the Supabase Dashboard > SQL Editor and run, in order
 (the numeric prefixes encode the order — always apply the
 lowest number first), or apply them with the Supabase CLI from the repo

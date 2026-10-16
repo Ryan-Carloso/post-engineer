@@ -39,6 +39,12 @@ from app.models.schema import (
 )
 from app.services.utils import video_effects
 from app.utils import file_security, utils
+from app.services.lipsync_layout import (
+    LAYOUT_STANDARD,
+    VIDEO_LAYOUTS,
+    _build_lipsync_intro_command,
+)
+from app.services.subtitle_text import wrap_text
 
 DEFAULT_SUBTITLE_FONT = "BeVietnamPro-Medium.ttf"
 
@@ -580,8 +586,34 @@ def replace_video_intro_with_lipsync(
     lipsync_video: str,
     output_file: str,
     duration: float = 5,
+    layout: str = LAYOUT_STANDARD,
 ) -> str:
-    """Replace the beginning of a background video with a talking avatar."""
+    """Replace the beginning of a background video with a talking avatar.
+
+    ``layout`` picks how the avatar meets the b-roll during the hook.
+    The default is ``standard``, matching ``VideoParams.video_layout``.
+
+    ``standard``
+        The avatar fills the frame (scale + pad). The b-roll's first
+        ``duration`` seconds are replaced outright.
+    ``react``
+        The frame is split in half: the avatar on top, the b-roll below.
+        Same splice, different intro encode.
+
+    Both layouts share everything after the intro encode — the tail is
+    stream-copied either way — so the only difference is the single filter
+    that renders the hook. That is deliberate: the tail stream-copy is what
+    keeps this cheap, and duplicating it per layout would risk the two paths
+    drifting apart.
+    """
+    if layout not in VIDEO_LAYOUTS:
+        # Fail loud. A typo must never degrade to the default silently: the
+        # user picked a layout and would get a different video without any
+        # signal that their choice was dropped.
+        raise ValueError(
+            f"unknown lipsync layout {layout!r}; expected one of "
+            f"{', '.join(sorted(VIDEO_LAYOUTS))}"
+        )
     source = _open_video_clip_quietly(background_video)
     width, height = source.w, source.h
     source.close()
@@ -595,21 +627,20 @@ def replace_video_intro_with_lipsync(
     # cost being removed. Encoding the intro alone and then joining the two
     # files with the concat DEMUXER lets the tail be stream-copied.
     intro_file = f"{os.path.splitext(output_file)[0]}-intro-encoded.mp4"
-    intro_command = [
-        utils.get_ffmpeg_binary(), "-y", "-i", lipsync_video,
-        "-t", str(duration),
-        "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
-               f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1",
-        "-an", "-c:v", _get_effective_video_codec(),
-        # Force the pipeline fps: LongCat avatar-v1.5 renders at 25fps and a
-        # stream-copied 30fps tail would balloon the concat timeline by the
-        # timebase ratio (measured +5.4s on a 27s video).
-        "-r", str(fps),
-        "-preset", _get_configured_video_preset(),
-        "-pix_fmt", "yuv420p", intro_file,
-    ]
+    intro_command = _build_lipsync_intro_command(
+        background_video=background_video,
+        lipsync_video=lipsync_video,
+        intro_file=intro_file,
+        width=width,
+        height=height,
+        duration=duration,
+        layout=layout,
+        codec=_get_effective_video_codec(),
+        preset=_get_configured_video_preset(),
+        fps=fps,
+    )
     logger.info(
-        f"splicing {duration}s lip-sync intro onto {os.path.basename(background_video)}"
+        f"{layout} lipsync: {duration}s onto {os.path.basename(background_video)}"
     )
     try:
         _run_ffmpeg_bounded(
@@ -669,6 +700,29 @@ def replace_video_intro_with_lipsync(
         f"lip-sync concat completed: {os.path.basename(output_file)}"
     )
     return output_file
+
+
+def compose_lipsync_layout(
+    background_video: str,
+    lipsync_video: str,
+    output_file: str,
+    duration: float,
+    layout: str,
+) -> str:
+    """Render the persona hook using the requested layout.
+
+    Thin, named entry point so callers read the intent ("compose this layout")
+    instead of carrying a layout string into a function named "replace intro".
+    ``replace_video_intro_with_lipsync`` already does the work and validates
+    the layout, so this only forwards.
+    """
+    return replace_video_intro_with_lipsync(
+        background_video=background_video,
+        lipsync_video=lipsync_video,
+        output_file=output_file,
+        duration=duration,
+        layout=layout,
+    )
 
 
 def video_duration_seconds(video_path: str) -> float:
@@ -1491,95 +1545,6 @@ def combine_videos(
             
     logger.info("video combining completed")
     return combined_video_path
-
-
-def wrap_text(text, max_width, font="Arial", fontsize=60):
-    # Subtitle wrapping must happen before the real TextClip is created, or
-    # MoviePy will size the render area from the raw text. Measure width with
-    # PIL at the current font/size so every line stays within the usable
-    # video width — large sizes or long CJK sentences would otherwise
-    # overflow the frame.
-    font = ImageFont.truetype(font, fontsize)
-    max_width = int(max_width)
-
-    def get_text_size(inner_text):
-        inner_text = inner_text.strip()
-        if not inner_text:
-            return 0, fontsize
-        left, top, right, bottom = font.getbbox(inner_text)
-        return right - left, bottom - top
-
-    width, height = get_text_size(text)
-    if width <= max_width:
-        return text, height
-
-    def split_long_token(token):
-        # When a single token is already too wide (common with spaceless CJK
-        # sentences or very long English words), fall back to per-character
-        # splitting. The key rule: when a candidate goes over width, commit
-        # the last still-valid line first, then start the next line with the
-        # current character — never push the over-wide character back onto
-        # the previous line.
-        lines = []
-        current = ""
-        for char in token:
-            candidate = f"{current}{char}"
-            candidate_width, _ = get_text_size(candidate)
-            if candidate_width <= max_width or not current:
-                current = candidate
-                continue
-            lines.append(current)
-            current = char
-        if current:
-            lines.append(current)
-        return lines
-
-    lines = []
-    current = ""
-    words = text.split(" ")
-    for word in words:
-        candidate = f"{current} {word}".strip() if current else word
-        candidate_width, _ = get_text_size(candidate)
-        if candidate_width <= max_width:
-            current = candidate
-            continue
-
-        if current:
-            lines.append(current)
-
-        word_width, _ = get_text_size(word)
-        if word_width <= max_width:
-            current = word
-        else:
-            lines.extend(split_long_token(word))
-            current = ""
-
-    if current:
-        lines.append(current)
-
-    line_start_punctuation = "，。！？；：、,.!?;:)]}）】》」』”’"
-    for index in range(1, len(lines)):
-        # When a long CJK sentence is split per character, a trailing period,
-        # comma, or other closing punctuation can land alone on the next
-        # line, stretching the subtitle background abnormally — like a stray
-        # dot hanging under the text. Without redesigning the wrap algorithm,
-        # move the previous line's last character in front of the punctuation
-        # line so the mark follows its text. Covers common CJK and English
-        # closing punctuation.
-        if not lines[index] or lines[index][0] not in line_start_punctuation:
-            continue
-        if len(lines[index - 1]) <= 1:
-            continue
-
-        candidate = f"{lines[index - 1][-1]}{lines[index]}"
-        candidate_width, _ = get_text_size(candidate)
-        if candidate_width <= max_width:
-            lines[index] = candidate
-            lines[index - 1] = lines[index - 1][:-1]
-
-    result = "\n".join(line.strip() for line in lines if line.strip()).strip()
-    height = len(lines) * height
-    return result, height
 
 
 def _hex_to_rgb(color: str) -> tuple[int, int, int]:

@@ -1,4 +1,34 @@
 import { z } from 'zod';
+import {
+  CancelScheduleSchema,
+  CancelScheduleShape,
+  DeleteSlotSchema,
+  DeleteSlotShape,
+  GetSlotSchema,
+  GetSlotShape,
+  ListPostsSchema,
+  ListPostsShape,
+  ListSchedulesSchema,
+  ListSchedulesShape,
+  UpdateSlotTopicSchema,
+  UpdateSlotTopicShape,
+} from './schedule-shapes.js';
+
+// Re-exported so existing import sites (`./tools.js`) keep working.
+export {
+  CancelScheduleSchema,
+  CancelScheduleShape,
+  DeleteSlotSchema,
+  DeleteSlotShape,
+  GetSlotSchema,
+  GetSlotShape,
+  ListPostsSchema,
+  ListPostsShape,
+  ListSchedulesSchema,
+  ListSchedulesShape,
+  UpdateSlotTopicSchema,
+  UpdateSlotTopicShape,
+};
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { PostEngineerClient } from './client.js';
 import {
@@ -7,6 +37,7 @@ import {
   MAX_LIBRARY_TAG_LENGTH,
   MAX_LIBRARY_DESCRIPTION_LENGTH,
   MAX_UPLOAD_VIDEO_GB,
+  VIDEO_LAYOUTS,
 } from './client.js';
 import { getErrorMessage, ApiError } from './errors.js';
 
@@ -38,6 +69,12 @@ export const CreatePersonaShape = {
   voiceId: z.string().default('chatterbox:ryan').describe('Voice ID to use (see list_voices)'),
   language: z.string().default('en-US').describe('Language code (e.g. pt-BR, en-US)'),
   videoAspect: z.enum(['9:16', '16:9']).default('9:16').describe('Video aspect ratio'),
+  videoLayout: z
+    .enum(VIDEO_LAYOUTS)
+    .default('standard')
+    .describe(
+      'How the persona hook is composed with the b-roll: "standard" fills the frame with the avatar, "react" splits it in half (persona on top, b-roll below). Same render cost either way.',
+    ),
   scriptPrompt: z.string().optional().default('').describe('System prompt instructions for video scripts'),
   paragraphNumber: z.number().int().min(1).max(10).default(1).describe('Number of paragraphs'),
   niche: z.string().optional().default('General').describe('Content niche topic'),
@@ -68,6 +105,7 @@ export const UpdatePersonaShape = {
   voiceId: z.string().optional().describe('New voice ID (see list_voices)'),
   language: z.string().optional().describe('New language code (e.g. pt-BR, en-US)'),
   videoAspect: z.enum(['9:16', '16:9']).optional().describe('New video aspect ratio'),
+  videoLayout: z.enum(VIDEO_LAYOUTS).optional().describe('New persona-hook layout (standard or react)'),
   scriptPrompt: z.string().optional().describe('New system prompt instructions for video scripts'),
   paragraphNumber: z.number().int().min(1).max(10).optional().describe('New number of paragraphs'),
   niche: z.string().max(300).optional().describe('New content niche topic'),
@@ -87,54 +125,6 @@ export const ConnectAccountShape = {
 
 export const ConnectAccountSchema = z.object(ConnectAccountShape);
 
-export const ListSchedulesShape = {};
-
-export const ListSchedulesSchema = z.object(ListSchedulesShape);
-
-export const ListPostsShape = {
-  limit: z.number().int().min(1).max(500).default(20).describe('Max number of upcoming and past posts to return (each list). Default 20, max 500.'),
-};
-
-export const ListPostsSchema = z.object(ListPostsShape);
-
-export const CancelScheduleShape = {
-  scheduleId: z.string().min(1, 'scheduleId is required').describe('The ID of the schedule to cancel'),
-};
-
-export const CancelScheduleSchema = z.object(CancelScheduleShape);
-
-export const GetSlotShape = {
-  slotId: z
-    .string()
-    .min(1, 'slotId is required')
-    .describe('The slot ID (the slotId field from list_posts or generate_persona_videos).'),
-};
-
-export const GetSlotSchema = z.object(GetSlotShape);
-
-export const UpdateSlotTopicShape = {
-  slotId: z
-    .string()
-    .min(1, 'slotId is required')
-    .describe('The slot ID (the slotId field from list_posts or generate_persona_videos).'),
-  topic: z
-    .string()
-    .min(1, 'topic is required')
-    .describe('The new topic text for the slot. Only a slot that has not started generating (status pending/awaiting) can be edited; published or mid-flight slots are rejected.'),
-};
-
-export const UpdateSlotTopicSchema = z.object(UpdateSlotTopicShape);
-
-export const DeleteSlotShape = {
-  slotId: z
-    .string()
-    .min(1, 'slotId is required')
-    .describe(
-      'The slot ID to delete. Only pending (awaiting) or failed slots can be deleted; published or mid-flight slots are rejected. The schedule\'s last slot cannot be deleted — delete the whole schedule with cancel_schedule instead.',
-    ),
-};
-
-export const DeleteSlotSchema = z.object(DeleteSlotShape);
 
 export const ListVideoGenerationsShape = {
   limit: z
@@ -307,6 +297,10 @@ export const GeneratePersonaVideosShape = {
       voiceId: z.string().min(1, 'voiceId must be a non-empty string').optional().describe('Voice ID override (see list_voices).'),
       webhookUrl: httpsUrlField('webhookUrl').optional().describe('Callback URL the server POSTs to when each video reaches a terminal state (completed/failed).'),
       videoAspect: z.enum(['9:16', '16:9']).optional().describe('Frame shape. Overrides the persona when one is given; a post without a persona defaults to 9:16.'),
+      videoLayout: z
+        .enum(VIDEO_LAYOUTS)
+        .optional()
+        .describe('How the persona hook is composed with the b-roll. Overrides the persona when one is given; a post without a persona defaults to "standard". Same render cost either way.'),
       paragraphNumber: z.number().int().min(1).max(10).optional().describe('Paragraph count (1-10). Overrides the persona when one is given.'),
       language: z.string().min(1).max(32).optional().describe('Spoken language code, e.g. pt-BR. Overrides the persona when one is given.'),
       niche: z.string().min(1).max(300).optional().describe('Content niche. Overrides the persona when one is given.'),
