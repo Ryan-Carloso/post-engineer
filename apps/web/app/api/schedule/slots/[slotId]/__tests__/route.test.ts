@@ -691,6 +691,12 @@ describe('GET /api/schedule/slots/[slotId]', () => {
       ['post_id', SLOT_ID],
       ['user_id', USER_ID],
     ]);
+    // A clean lookup must not trip the failure branch.
+    const { logger } = await import('@/lib/logger');
+    expect(logger.warn).not.toHaveBeenCalledWith(
+      '[api/schedule/slots] progress history lookup failed',
+      expect.anything(),
+    );
   });
 
   it('defaults progressHistory to [] when nothing was recorded', async () => {
@@ -712,6 +718,7 @@ describe('GET /api/schedule/slots/[slotId]', () => {
   });
 
   it('degrades to [] when the history lookup fails', async () => {
+    const { logger } = await import('@/lib/logger');
     const client = mockSlotsClient({
       slot: SLOT_DETAIL_ROW,
       schedule: SCHEDULE_ROW,
@@ -728,6 +735,12 @@ describe('GET /api/schedule/slots/[slotId]', () => {
     expect(response.status).toBe(200);
     const body = (await response.json()) as { slot: { progressHistory: unknown[] } };
     expect(body.slot.progressHistory).toEqual([]);
+    // The failed lookup is loud: exact message and metadata pin the
+    // historyError branch against mutation.
+    expect(logger.warn).toHaveBeenCalledWith('[api/schedule/slots] progress history lookup failed', {
+      slotId: SLOT_ID,
+      error: { message: 'db down' },
+    });
   });
 });
 
@@ -1096,15 +1109,35 @@ describe('slot id normalization', () => {
     expect(slotIdEqCalls(client, 'scheduled_posts')).toEqual([SLOT_ID]);
     expect(
       client.calls
+        .filter((c) => c.table === 'scheduled_posts' && c.op === 'select')
+        .map((c) => c.args),
+    ).toEqual([['id, schedule_id, slot_at, status, topic, error, published_at, task_id, faceless']]);
+    expect(
+      client.calls
+        .filter((c) => c.table === 'scheduled_posts' && c.op === 'eq')
+        .map((c) => c.args),
+    ).toEqual([
+      ['id', SLOT_ID],
+      ['user_id', USER_ID],
+    ]);
+    expect(
+      client.calls
         .filter((c) => c.table === 'scheduled_post_progress_history' && c.op === 'eq')
         .map((c) => c.args),
     ).toEqual([
       ['post_id', SLOT_ID],
       ['user_id', USER_ID],
     ]);
+    expect(
+      client.calls
+        .filter((c) => c.table === 'scheduled_post_progress_history' && c.op === 'select')
+        .map((c) => c.args),
+    ).toEqual([['progress, stage, recorded_at']]);
+    expect(client.historyChain.order).toHaveBeenCalledWith('recorded_at', { ascending: true });
   });
 
   it('GET 404s a non-uuid id without touching the database', async () => {
+    const { logger } = await import('@/lib/logger');
     const client = mockSlotsClient({});
     mockAuth();
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
@@ -1115,9 +1148,14 @@ describe('slot id normalization', () => {
 
     expect(response.status).toBe(404);
     expect(client.from).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[GET /api/schedule/slots] 404 Slot not found.',
+      expect.objectContaining({ route: 'GET /api/schedule/slots' }),
+    );
   });
 
   it('GET 404s a malformed batch key without touching the database', async () => {
+    const { logger } = await import('@/lib/logger');
     const client = mockSlotsClient({});
     mockAuth();
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
@@ -1129,9 +1167,14 @@ describe('slot id normalization', () => {
 
     expect(response.status).toBe(404);
     expect(client.from).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[GET /api/schedule/slots] 404 Slot not found.',
+      expect.objectContaining({ route: 'GET /api/schedule/slots' }),
+    );
   });
 
   it('DELETE 404s a non-uuid id without touching the database', async () => {
+    const { logger } = await import('@/lib/logger');
     const client = mockSlotsClient({});
     mockAuth();
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
@@ -1141,6 +1184,10 @@ describe('slot id normalization', () => {
     expect(response.status).toBe(404);
     expect(client.from).not.toHaveBeenCalled();
     expect(client.rpc).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[DELETE /api/schedule/slots] 404 Slot not found.',
+      expect.objectContaining({ route: 'DELETE /api/schedule/slots' }),
+    );
   });
 
   it('DELETE resolves a batch key to the slot uuid', async () => {
@@ -1159,6 +1206,7 @@ describe('slot id normalization', () => {
   });
 
   it('PATCH 404s a non-uuid id without touching the database', async () => {
+    const { logger } = await import('@/lib/logger');
     const client = mockSlotsClient({});
     mockAuth();
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
@@ -1167,5 +1215,9 @@ describe('slot id normalization', () => {
 
     expect(response.status).toBe(404);
     expect(client.from).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[PATCH /api/schedule/slots] 404 Slot not found.',
+      expect.objectContaining({ route: 'PATCH /api/schedule/slots' }),
+    );
   });
 });

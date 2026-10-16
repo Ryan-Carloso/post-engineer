@@ -37,4 +37,9 @@ describe('resolveSlotUuid', () => {
     expect(resolveSlotUuid(`x-batch:${SCHEDULE_ID}:slot:${SLOT_ID}`)).toBeNull();
     expect(resolveSlotUuid(`batch:${SCHEDULE_ID}:slot:${SLOT_ID}-extra`)).toBeNull();
   });
+
+  it('does not match a uuid with trailing junk', () => {
+    expect(resolveSlotUuid(`${SLOT_ID}-extra`)).toBeNull();
+    expect(resolveSlotUuid(`${SLOT_ID}x`)).toBeNull();
+  });
 });
