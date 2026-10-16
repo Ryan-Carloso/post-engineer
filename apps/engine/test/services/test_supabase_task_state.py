@@ -833,3 +833,108 @@ class SupabaseStateReconcileBatchTests(unittest.TestCase):
         ]
         self.assertEqual(len(progress), 1)
         self.assertIn(f"{every}/{every}", str(progress[0]))
+
+
+class SupabaseStateOrphanTriageTests(unittest.TestCase):
+    """reconcile_orphaned_tasks routes orphans by stage (orphan_requeue)."""
+
+    def setUp(self):
+        self.requests = MagicMock()
+
+    def _slot_store(self, slot):
+        store = MagicMock()
+        store.get_slot.return_value = slot
+        return store
+
+    def test_batch_orphan_in_generation_stage_requeued_not_failed(self):
+        orphans = [
+            {
+                "task_id": "t-1",
+                "data": {"stage": "audio", "slot_id": "slot-1", "flow": "batch"},
+            }
+        ]
+        backend = _make_state(self.requests)
+        slot_store = self._slot_store(
+            {"id": "slot-1", "status": "generating", "task_id": "t-1"}
+        )
+        self.requests.request.side_effect = [
+            _response(json_data=orphans),  # SELECT non-terminal rows
+            _response(json_data=[]),  # update_task read-modify-write SELECT
+            _response(json_data=[{}]),  # update_task POST
+        ]
+        with patch.object(
+            state_module, "_slot_store_or_none", return_value=slot_store
+        ):
+            failed = backend.reconcile_orphaned_tasks()
+        self.assertEqual(failed, 0)
+        slot_store.update_slot.assert_called_once_with("slot-1", status="pending")
+        # The task was never marked failed.
+        for call in self.requests.request.call_args_list:
+            payload = call[1].get("json") or {}
+            self.assertNotEqual(
+                payload.get("state"), const.TASK_STATE_FAILED
+            )
+
+    def test_publish_orphan_with_results_marked_complete(self):
+        orphans = [
+            {
+                "task_id": "t-2",
+                "data": {
+                    "stage": "publish",
+                    "flow": "direct",
+                    "publish_results": [{"provider": "youtube"}],
+                },
+            }
+        ]
+        backend = _make_state(self.requests)
+        slot_store = self._slot_store(None)
+        self.requests.request.side_effect = [
+            _response(json_data=orphans),  # SELECT non-terminal rows
+            _response(json_data=[]),  # update_task read-modify-write SELECT
+            _response(json_data=[{}]),  # update_task POST (COMPLETE)
+            _response(
+                json_data=[
+                    {"generation_id": "g-1", "status": "processing"}
+                ]
+            ),  # GET video_generations
+            _response(json_data=[{}]),  # PATCH generation completed
+        ]
+        with patch.object(
+            state_module, "_slot_store_or_none", return_value=slot_store
+        ):
+            failed = backend.reconcile_orphaned_tasks()
+        self.assertEqual(failed, 0)
+        posts = [
+            c for c in self.requests.request.call_args_list if c[0][0] == "POST"
+        ]
+        self.assertEqual(posts[0][1]["json"]["state"], const.TASK_STATE_COMPLETE)
+        patches = [
+            c
+            for c in self.requests.request.call_args_list
+            if c[0][0] == "PATCH" and "video_generations" in c[0][1]
+        ]
+        self.assertEqual(len(patches), 1)
+        self.assertEqual(patches[0][1]["json"]["status"], "completed")
+        # No refund RPC on the completion path.
+        rpcs = [
+            c for c in self.requests.request.call_args_list if "/rpc/" in c[0][1]
+        ]
+        self.assertEqual(rpcs, [])
+
+    def test_requeue_falls_back_to_fail_without_slot_store(self):
+        orphans = [
+            {
+                "task_id": "t-1",
+                "data": {"stage": "audio", "slot_id": "slot-1", "flow": "batch"},
+            }
+        ]
+        backend = _make_state(self.requests)
+        self.requests.request.side_effect = [
+            _response(json_data=orphans),  # SELECT non-terminal rows
+            _response(json_data=[]),  # GET video_generations: no row
+            _response(json_data=[{}]),  # PATCH t-1 failed
+        ]
+        with patch.object(state_module, "_slot_store_or_none", return_value=None):
+            with patch.object(state_module.logger, "warning"):
+                failed = backend.reconcile_orphaned_tasks()
+        self.assertEqual(failed, 1)

@@ -38,9 +38,7 @@ def maybe_publish_finished_videos(
     """Publish finished videos when the task carries publish metadata."""
     if params.publish is None:
         return []
-    return publish_task_videos(
-        task_id=task_id, params=params, video_paths=video_paths
-    )
+    return publish_videos(task_id=task_id, publish=params.publish, video_paths=video_paths)
 
 
 def _required_env(name: str) -> str:
@@ -97,7 +95,22 @@ def publish_task_videos(
     params: TaskVideoRequest,
     video_paths: list[str],
 ) -> list[dict[str, object]]:
-    """Publish each final video to every selected provider.
+    """Publish finished videos when the task carries publish metadata."""
+    if params.publish is None:
+        return []
+    return publish_videos(task_id, params.publish, video_paths)
+
+
+def publish_videos(
+    task_id: str,
+    publish: PublishParams,
+    video_paths: list[str],
+) -> list[dict[str, object]]:
+    """Publish finished videos with explicit publish params.
+
+    Split from publish_task_videos so the boot orphan triage can rebuild the
+    publish plan persisted at dispatch (task params are otherwise in-process
+    only) and finish a publish interrupted by a restart.
 
     Results are recorded in the task state under ``publish_results``.
 
@@ -112,7 +125,7 @@ def publish_task_videos(
         logger.info(f"task {task_id} already published, skipping publish step")
         return prior_results
 
-    metadata = to_client_metadata(params.publish)
+    metadata = to_client_metadata(publish)
     if metadata is None:
         return []
 

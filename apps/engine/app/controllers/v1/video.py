@@ -411,6 +411,15 @@ def create_task(
             "params": body.model_dump(),
             "user_id": auth.user_id,
         }
+        # The publish plan is persisted so the boot orphan triage can finish
+        # a publish interrupted by a restart (task params are otherwise
+        # in-process only). PublishParams carries titles/descriptions/
+        # account ids — no secret-shaped fields.
+        publish_params = (
+            body.publish.model_dump(mode="json")
+            if isinstance(body, TaskVideoRequest) and body.publish is not None
+            else None
+        )
         sm.state.update_task(
             task_id, user_id=auth.user_id, flow="direct", pipeline=stop_at,
             # New tasks start at explicit 0/PROCESSING: update_task() only
@@ -423,6 +432,7 @@ def create_task(
             # funnel can be broken down per persona instead of "unknown".
             **_persona_tracking_kwargs(body),
             **_generation_tracking_kwargs(body),
+            **({"publish_params": publish_params} if publish_params is not None else {}),
         )
         # Funnel entry: requested fires from on_accepted once the task is
         # ACCEPTED into the queue — strictly before the worker thread
