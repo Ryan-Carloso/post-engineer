@@ -12,6 +12,7 @@ is skipped, so retries/timeouts never double-post.
 from __future__ import annotations
 
 import os
+from typing import Any
 
 from loguru import logger
 
@@ -28,6 +29,20 @@ SERVICE_KEY_ENV: str = "MONEYPRINT_API_SECRET"
 
 class PublishFailedError(Exception):
     """Raised when publishing a finished video fails permanently."""
+
+
+def dispatch_publish_params(body: object) -> dict[str, Any]:
+    """update_task() kwargs carrying the persisted publish plan.
+
+    Task params are otherwise in-process only, so a restart would lose
+    the publish destination; persisting ``publish_params`` on the task
+    row lets the boot orphan triage finish an interrupted publish
+    (orphan_requeue.complete_publish_orphan). PublishParams carries
+    titles/descriptions/account ids — no secret-shaped fields.
+    """
+    if isinstance(body, TaskVideoRequest) and body.publish is not None:
+        return {"publish_params": body.publish.model_dump(mode="json")}
+    return {}
 
 
 def maybe_publish_finished_videos(

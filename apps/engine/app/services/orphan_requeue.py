@@ -20,6 +20,7 @@ retries it).
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 from typing import Any
 
 from loguru import logger
@@ -58,6 +59,26 @@ GENERATION_STAGES = frozenset(
 # Slot states whose ownership belongs to the tick, never to the triage:
 # failing+refunding one of these would race the scheduler.
 _TICK_OWNED_SLOT_STATES = frozenset({SLOT_PENDING, "ready"})
+
+
+def slot_store_or_none() -> Any | None:
+    """Build the fill-schedule slot store for orphan triage, if configured.
+
+    The engine runs without fill-schedule when the Supabase env is absent;
+    triage then degrades to the historical fail+refund for every orphan.
+    Imported lazily: ScheduleStore never imports app.services.state, but
+    keeping the import here (instead of module top-level) keeps state.py
+    importable in the smallest entry points.
+    """
+    try:
+        from app.services.fill_schedule.store import ScheduleStore
+
+        return ScheduleStore()
+    except RuntimeError as exc:
+        logger.debug(
+            f"orphan triage: slot store unavailable ({exc}); requeue disabled"
+        )
+        return None
 
 
 def classify_orphan(data: dict[str, Any]) -> str:
@@ -116,10 +137,40 @@ def triage_requeue(state: Any, slot_store: Any, task_id: str, data: dict[str, An
     return False
 
 
+def settle_orphan_completed(state: Any, task_id: str) -> None:
+    """Mark the video_generations row completed for a finished orphan.
+
+    Used when the triage has proof of delivery (publish_results): the
+    video shipped, so the generation is completed — never failed, and
+    never refunded. Rows that are already terminal are left alone.
+    """
+    response = state._request(
+        "GET",
+        f"engine_task_id=eq.{state._eq(task_id)}"
+        "&select=generation_id,status"
+        "&order=created_at.asc",
+        table="video_generations",
+    )
+    rows = response.json()
+    if not rows:
+        # Normal for fill_schedule batch tasks (no video_generations row).
+        return
+    gen = rows[0]
+    if gen.get("status") in ("failed", "completed"):
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    state._request(
+        "PATCH",
+        f"generation_id=eq.{state._eq(gen['generation_id'])}",
+        table="video_generations",
+        json={"status": "completed", "completed_at": now, "updated_at": now},
+    )
+
+
 def mark_complete_orphan(state: Any, task_id: str, data: dict[str, Any]) -> None:
     """Backfill COMPLETE for an orphan whose publish already ran."""
     state.update_task(task_id, state=const.TASK_STATE_COMPLETE, progress=100)
-    state._settle_orphan_completed(task_id)
+    settle_orphan_completed(state, task_id)
     track_event(
         "orphan_marked_complete",
         {"task_id": task_id, "flow": str(data.get("flow") or "unknown")},
@@ -171,10 +222,44 @@ def complete_publish_orphan(state: Any, task_id: str, data: dict[str, Any]) -> b
     publish = PublishParams.model_validate(raw_params)
     task_publish.publish_videos(task_id, publish, [os.path.basename(object_path)])
     state.update_task(task_id, state=const.TASK_STATE_COMPLETE, progress=100)
-    state._settle_orphan_completed(task_id)
+    settle_orphan_completed(state, task_id)
     track_event(
         "orphan_publish_completed",
         {"task_id": task_id, "flow": str(data.get("flow") or "unknown")},
     )
     logger.info(f"orphan {task_id}: boot publish completed")
     return True
+
+
+def triage_orphan(
+    state: Any, task_id: str, data: dict[str, Any], slot_store: Any
+) -> bool:
+    """Run the boot triage for one orphaned task.
+
+    Returns True when the orphan was claimed and the caller must NOT
+    fail+refund it: the slot was requeued for the tick, the publish was
+    already complete, the publish finished now, or the publish attempt
+    failed and billing was already settled. Returns False when the
+    caller falls through to the historical fail+refund.
+    """
+    if triage_requeue(state, slot_store, task_id, data):
+        return True
+    decision = classify_orphan(data)
+    if decision == MARK_COMPLETE:
+        mark_complete_orphan(state, task_id, data)
+        return True
+    if decision == COMPLETE_PUBLISH:
+        try:
+            if complete_publish_orphan(state, task_id, data):
+                return True
+        except task_publish.PublishFailedError as exc:
+            # publish_videos already marked the task FAILED with the
+            # real upstream error; settle billing (refund) and report
+            # claimed without overwriting that error.
+            logger.error(f"boot publish failed for orphaned task {task_id}: {exc}")
+            try:
+                state._settle_orphan_billing(task_id)
+            except Exception as settle_exc:  # noqa: BLE001 - loud; next boot retries
+                logger.error(f"failed to settle billing for {task_id}: {settle_exc}")
+            return True
+    return False

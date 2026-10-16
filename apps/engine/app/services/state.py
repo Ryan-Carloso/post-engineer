@@ -229,26 +229,6 @@ class _SupabaseAuthError(RuntimeError):
 _ORPHAN_ERROR_MESSAGE = "engine restarted while the task was still running"
 
 
-def _slot_store_or_none() -> Any | None:
-    """Build the fill-schedule slot store for orphan triage, if configured.
-
-    The engine runs without fill-schedule when the Supabase env is absent;
-    triage then degrades to the historical fail+refund for every orphan.
-    Imported lazily: ScheduleStore never imports app.services.state, but
-    keeping the import here (instead of module top-level) keeps state.py
-    importable in the smallest entry points.
-    """
-    try:
-        from app.services.fill_schedule.store import ScheduleStore
-
-        return ScheduleStore()
-    except RuntimeError as exc:
-        logger.debug(
-            f"orphan triage: slot store unavailable ({exc}); requeue disabled"
-        )
-        return None
-
-
 class SupabaseTaskState(BaseState):
     """PostgREST-backed task state.
 
@@ -476,29 +456,19 @@ class SupabaseTaskState(BaseState):
         """Triage tasks left running across a restart, then settle the rest.
 
         Each orphan is classified by its last persisted stage
-        (app.services.orphan_requeue.classify_orphan):
-
-        - generation stages linked to a batch slot -> the slot goes back to
-          ``pending`` and the next fill-schedule tick re-dispatches it
-          (no billing change: batch slots are prepaid at schedule creation);
-        - stage ``publish`` with ``publish_results`` -> the publish already
-          ran; backfill COMPLETE instead of failing a delivered video;
-        - stage ``publish`` with a video archived in R2 -> finish the
-          publish now (batch: mark complete so the slot publisher posts it
-          at slot time; direct: run the publish step from the plan
-          persisted at dispatch);
-        - anything else -> the historical fail+refund below.
-
-        A per-task failure is logged loudly and never breaks the loop or the
-        boot: the task stays non-terminal and is retried on the next boot.
-        Returns how many rows were failed (requeued/completed orphans are
-        not counted).
+        (app.services.orphan_requeue.classify_orphan): generation stages
+        linked to a batch slot go back to ``pending`` for the next
+        fill-schedule tick, publish-stage orphans with a finished video
+        complete the publish, and everything else keeps the historical
+        fail+refund. A per-task failure is logged loudly and never breaks
+        the loop or the boot: the task stays non-terminal and is retried
+        on the next boot. Returns how many rows were failed
+        (requeued/completed orphans are not counted).
         """
         # Lazy import: orphan_requeue -> task_publish -> app.services.state,
         # so a top-level import would run while this module is still
         # initializing (SupabaseTaskState() is constructed at import time).
         from app.services import orphan_requeue
-        from app.services import task_publish
 
         response = self._request(
             "GET",
@@ -512,7 +482,7 @@ class SupabaseTaskState(BaseState):
                 f"orphan reconcile hit the batch cap ({_RECONCILE_BATCH_LIMIT}); "
                 "remaining rows will be drained by subsequent boots"
             )
-        slot_store = _slot_store_or_none()
+        slot_store = orphan_requeue.slot_store_or_none()
         failed = 0
         for index, row in enumerate(rows, start=1):
             if index % _RECONCILE_PROGRESS_EVERY == 0:
@@ -521,30 +491,8 @@ class SupabaseTaskState(BaseState):
                 )
             task_id = row["task_id"]
             data = dict(self._safe_data(row))
-            if orphan_requeue.triage_requeue(self, slot_store, task_id, data):
+            if orphan_requeue.triage_orphan(self, task_id, data, slot_store):
                 continue
-            decision = orphan_requeue.classify_orphan(data)
-            if decision == orphan_requeue.MARK_COMPLETE:
-                orphan_requeue.mark_complete_orphan(self, task_id, data)
-                continue
-            if decision == orphan_requeue.COMPLETE_PUBLISH:
-                try:
-                    if orphan_requeue.complete_publish_orphan(self, task_id, data):
-                        continue
-                except task_publish.PublishFailedError as exc:
-                    # publish_videos already marked the task FAILED with the
-                    # real upstream error; settle billing (refund) and move
-                    # on without overwriting that error.
-                    logger.error(
-                        f"boot publish failed for orphaned task {task_id}: {exc}"
-                    )
-                    try:
-                        self._settle_orphan_billing(task_id)
-                    except Exception as settle_exc:  # noqa: BLE001 - loud; next boot retries
-                        logger.error(
-                            f"failed to settle billing for {task_id}: {settle_exc}"
-                        )
-                    continue
             try:
                 # Billing first: if the process dies after the settle but
                 # before the task PATCH, the next boot re-selects the still
@@ -644,36 +592,6 @@ class SupabaseTaskState(BaseState):
             table="video_generations",
             json=patch,
         )
-
-    def _settle_orphan_completed(self, task_id: str) -> None:
-        """Mark the video_generations row completed for a finished orphan.
-
-        Used when the triage has proof of delivery (publish_results): the
-        video shipped, so the generation is completed — never failed, and
-        never refunded. Rows that are already terminal are left alone.
-        """
-        response = self._request(
-            "GET",
-            f"engine_task_id=eq.{self._eq(task_id)}"
-            "&select=generation_id,status"
-            "&order=created_at.asc",
-            table="video_generations",
-        )
-        rows = response.json()
-        if not rows:
-            # Normal for fill_schedule batch tasks (no video_generations row).
-            return
-        gen = rows[0]
-        if gen.get("status") in ("failed", "completed"):
-            return
-        now = datetime.now(timezone.utc).isoformat()
-        self._request(
-            "PATCH",
-            f"generation_id=eq.{self._eq(gen['generation_id'])}",
-            table="video_generations",
-            json={"status": "completed", "completed_at": now, "updated_at": now},
-        )
-
 
 def persist_state_update(backend: BaseState, task_id: str, **kwargs: object) -> bool:
     """Write a task-state update that must not be silently lost, retrying once.

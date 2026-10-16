@@ -322,5 +322,43 @@ class PublishParamsConversionTest(unittest.TestCase):
         self.assertIsNone(task_publish.to_client_metadata(None))
 
 
+class DispatchPublishParamsTest(unittest.TestCase):
+    def _body(self, with_publish: bool) -> TaskVideoRequest:
+        return TaskVideoRequest.model_validate(
+            {
+                "video_subject": "s",
+                "publish": (
+                    {
+                        "providers": ["youtube"],
+                        "youtube": {
+                            "title": "t",
+                            "description": "d",
+                            "tags": ["a"],
+                            "privacy_status": "public",
+                            "account_ids": ["acc_1"],
+                        },
+                    }
+                    if with_publish
+                    else None
+                ),
+            }
+        )
+
+    def test_returns_publish_params_kwargs_when_present(self) -> None:
+        kwargs = task_publish.dispatch_publish_params(self._body(with_publish=True))
+        params = kwargs["publish_params"]
+        self.assertIsInstance(params, dict)
+        self.assertEqual(params["providers"], ["youtube"])
+        self.assertEqual(params["youtube"]["account_ids"], ["acc_1"])
+
+    def test_returns_empty_kwargs_without_publish(self) -> None:
+        self.assertEqual(
+            task_publish.dispatch_publish_params(self._body(with_publish=False)), {}
+        )
+
+    def test_returns_empty_kwargs_for_non_dispatch_body(self) -> None:
+        self.assertEqual(task_publish.dispatch_publish_params(object()), {})
+
+
 if __name__ == "__main__":
     unittest.main()

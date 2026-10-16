@@ -16,6 +16,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.models import const
+from app.services import orphan_requeue
 from app.services import state as state_module
 
 ENV = {
@@ -863,7 +864,7 @@ class SupabaseStateOrphanTriageTests(unittest.TestCase):
             _response(json_data=[{}]),  # update_task POST
         ]
         with patch.object(
-            state_module, "_slot_store_or_none", return_value=slot_store
+            orphan_requeue, "slot_store_or_none", return_value=slot_store
         ):
             failed = backend.reconcile_orphaned_tasks()
         self.assertEqual(failed, 0)
@@ -900,7 +901,7 @@ class SupabaseStateOrphanTriageTests(unittest.TestCase):
             _response(json_data=[{}]),  # PATCH generation completed
         ]
         with patch.object(
-            state_module, "_slot_store_or_none", return_value=slot_store
+            orphan_requeue, "slot_store_or_none", return_value=slot_store
         ):
             failed = backend.reconcile_orphaned_tasks()
         self.assertEqual(failed, 0)
@@ -934,7 +935,7 @@ class SupabaseStateOrphanTriageTests(unittest.TestCase):
             _response(json_data=[]),  # GET video_generations: no row
             _response(json_data=[{}]),  # PATCH t-1 failed
         ]
-        with patch.object(state_module, "_slot_store_or_none", return_value=None):
+        with patch.object(orphan_requeue, "slot_store_or_none", return_value=None):
             with patch.object(state_module.logger, "warning"):
                 failed = backend.reconcile_orphaned_tasks()
         self.assertEqual(failed, 1)
