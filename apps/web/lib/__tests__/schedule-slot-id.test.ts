@@ -20,6 +20,19 @@ describe('resolveSlotUuid', () => {
     expect(resolveSlotUuid(`batch:${SCHEDULE_ID}:slot:${SLOT_ID}`)).toBe(SLOT_ID);
   });
 
+  it('decodes a percent-encoded batch key before extracting the slot uuid', () => {
+    // The web UI builds the request path with encodeURIComponent, and the
+    // value can arrive still-encoded (double-encoded upstream) — production
+    // showed the key reaching the handler as batch%3A…%3Aslot%3A….
+    expect(resolveSlotUuid(`batch%3A${SCHEDULE_ID}%3Aslot%3A${SLOT_ID}`)).toBe(SLOT_ID);
+    expect(resolveSlotUuid(`batch%253A${SCHEDULE_ID}%253Aslot%253A${SLOT_ID}`)).toBe(SLOT_ID);
+  });
+
+  it('never throws on a stray percent sign', () => {
+    expect(resolveSlotUuid('100%')).toBeNull();
+    expect(resolveSlotUuid(`batch%${SCHEDULE_ID}:slot:${SLOT_ID}`)).toBeNull();
+  });
+
   it('returns null for garbage that is not a uuid', () => {
     expect(resolveSlotUuid('not-a-uuid')).toBeNull();
     expect(resolveSlotUuid('')).toBeNull();

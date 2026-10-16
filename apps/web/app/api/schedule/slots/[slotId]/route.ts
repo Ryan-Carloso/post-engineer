@@ -9,7 +9,6 @@ import { fetchEnginePublishResults } from '@/lib/engine-tasks';
 import { resolvePublishLinks, type PublishLink } from '@/lib/publish-links';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
-import { withApiErrorReporting } from '@/lib/api-error-reporting';
 import { resolveSlotUuid } from '@/lib/schedule-slot-id';
 import { buildGenerationFacts } from './generation-facts';
 
