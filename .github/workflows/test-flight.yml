@@ -21,8 +21,11 @@ name: test-flight
 #                                    without an explicit persona_id and by
 #                                    the daily monitor.
 #     TEST_FLIGHT_BLUESKY_ACCOUNT_ID / TEST_FLIGHT_INSTAGRAM_ACCOUNT_ID /
-#     TEST_FLIGHT_YOUTUBE_ACCOUNT_ID account ids for the daily monitor
-#                                    (at least one required).
+#     TEST_FLIGHT_YOUTUBE_ACCOUNT_ID account ids for the daily monitor.
+#                                    Optional: when none are configured the
+#                                    flight auto-discovers the key's connected
+#                                    accounts via GET /api/account; explicit
+#                                    ids always win (e.g. Bluesky-only runs).
 #     TEST_FLIGHT_API_BASE_URL       (optional) default https://post-engineer.com.
 #     TEST_FLIGHT_TOPIC              (optional) fixed topic for the daily
 #                                    monitor; when empty it rotates through
@@ -45,15 +48,15 @@ on:
         required: true
         type: string
       bluesky_account_id:
-        description: 'Bluesky account id to post to (optional)'
+        description: 'Bluesky account DID (optional — auto-discovered from the key when omitted)'
         required: false
         type: string
       instagram_account_id:
-        description: 'Instagram account id to post to (optional)'
+        description: 'Instagram account id (optional — auto-discovered from the key when omitted)'
         required: false
         type: string
       youtube_account_id:
-        description: 'YouTube account id to post to (optional)'
+        description: 'YouTube channel id (optional — auto-discovered from the key when omitted)'
         required: false
         type: string
       scheduled_action:
