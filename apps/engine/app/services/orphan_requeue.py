@@ -2,11 +2,15 @@
 
 Historically ``SupabaseTaskState.reconcile_orphaned_tasks`` failed every
 non-terminal orphan and refunded its token. That is correct for genuinely
-dead work, but two cases can recover by themselves:
+dead work, but three cases can recover by themselves:
 
 - an orphan in a generation stage that belongs to a batch slot: the slot
   goes back to ``pending`` and the next fill-schedule tick re-dispatches it.
   Batch slots are prepaid at schedule creation, so no billing change;
+- an orphan in a generation stage with no slot whose full job payload was
+  persisted on the video_generations row (issue #205): the pipeline
+  restarts in place with the stored params — also prepaid, no billing
+  change;
 - an orphan in stage ``publish`` with a finished video archived in R2: the
   publish already ran (``publish_results`` present) or can run now — failing
   it would refund a video that is sitting in storage ready to be posted.
@@ -14,12 +18,13 @@ dead work, but two cases can recover by themselves:
 Everything else keeps the historical fail+refund. All handlers are
 idempotent across boots: a crash between triage and the tick leaves the
 slot ``pending`` (re-triage skips it) or the task non-terminal (re-triage
-retries it).
+retries it, bounded by MAX_AUTO_REQUEUES).
 """
 
 from __future__ import annotations
 
 import os
+import threading
 from datetime import datetime, timezone
 from typing import Any
 
@@ -28,6 +33,7 @@ from pydantic import ValidationError
 
 from app.models import const
 from app.models.publish import PublishParams
+from app.models.schema import TaskVideoRequest
 from app.services import task_publish
 from app.services.analytics import track_event
 from app.services.fill_schedule.constants import (
@@ -156,6 +162,121 @@ def triage_requeue(state: Any, slot_store: Any, task_id: str, data: dict[str, An
     return False
 
 
+def _direct_generation_row(state: Any, task_id: str) -> dict[str, Any] | None:
+    """Fetch the video_generations row backing an orphaned direct task.
+
+    Returns the row when it exists, is non-terminal, and carries the
+    persisted job payload (issue #205). Returns None otherwise — never
+    raises: without a usable row the orphan falls through to fail+refund.
+    """
+    try:
+        response = state._request(
+            "GET",
+            f"engine_task_id=eq.{state._eq(task_id)}"
+            "&select=params,publish_mode,status"
+            "&order=created_at.asc",
+            table="video_generations",
+        )
+        rows = response.json()
+    except Exception as exc:  # noqa: BLE001 - loud; next boot retries via the non-terminal task
+        logger.warning(f"orphan {task_id}: video_generations lookup failed: {exc}")
+        return None
+    if not rows:
+        return None
+    row = rows[0]
+    if not isinstance(row, dict):
+        return None
+    if row.get("status") in ("failed", "completed"):
+        # Already settled (failed+refunded, or proof of delivery marked it
+        # complete): re-dispatching would double-run a finished generation.
+        return None
+    if not isinstance(row.get("params"), dict):
+        # Snapshot-only row (written before issue #205): the real params
+        # died with the old process, so there is nothing to rebuild from.
+        return None
+    return row
+
+
+def triage_redispatch_direct(state: Any, task_id: str, data: dict[str, Any]) -> bool:
+    """Re-dispatch an orphaned direct generation from its persisted params.
+
+    Direct tasks (no slot_id on the row) whose full job payload was
+    persisted on the video_generations row (issue #205) restart in place:
+    the task row goes back to PROCESSING/0 and the pipeline runs again in
+    a daemon thread with the stored payload — the same immediate path the
+    fill-schedule tick uses for due slots. The slot binding
+    (scheduled_posts.task_id) and the video_generations row are untouched,
+    so the tick reconciler advances the slot when the task finishes. No
+    billing change: the generation was prepaid at request time.
+
+    Batch slots stay owned by triage_requeue; non-video pipelines and
+    unvalidatable payloads keep the historical fail+refund.
+
+    Returns True when the orphan was claimed (the caller must NOT
+    fail+refund it).
+    """
+    if data.get("slot_id"):
+        return False
+    if data.get("stage") not in GENERATION_STAGES:
+        return False
+    if (data.get("pipeline") or "video") != "video":
+        # Only full video pipelines are rebuildable: the persisted row
+        # carries a TaskVideoRequest payload.
+        return False
+    row = _direct_generation_row(state, task_id)
+    if row is None:
+        return False
+    requeue_count = int(data.get("requeue_count") or 0) + 1
+    if requeue_count > MAX_AUTO_REQUEUES:
+        logger.warning(
+            f"orphan {task_id}: direct redispatch cap reached "
+            f"({MAX_AUTO_REQUEUES}); leaving for fail+refund"
+        )
+        return False
+    try:
+        request = TaskVideoRequest.model_validate(row["params"])
+    except ValidationError as exc:
+        # Deterministic: the persisted payload can never validate (schema
+        # drift or a corrupt row). Fail+refund instead of retrying it on
+        # every boot forever.
+        logger.error(f"orphan {task_id}: persisted params invalid: {exc}")
+        return False
+    # Lazy import: app.services.task pulls in the pipeline; a top-level
+    # import would run while app.services.state is still initializing
+    # (orphan_requeue itself is imported lazily for the same reason).
+    from app.services import task as tm
+
+    state.update_task(
+        task_id,
+        state=const.TASK_STATE_PROCESSING,
+        progress=0,
+        # The stale stage (e.g. "audio" at 0%) would misreport until the
+        # pipeline re-marks its phases; fresh tasks carry no stage either.
+        stage=None,
+        auto_requeued=True,
+        requeue_count=requeue_count,
+    )
+    thread = threading.Thread(
+        target=tm.start,
+        kwargs={"task_id": task_id, "params": request, "stop_at": "video"},
+        name=f"orphan-redispatch-{task_id}",
+        daemon=True,
+    )
+    thread.start()
+    track_event(
+        "task_auto_requeued",
+        {
+            "task_id": task_id,
+            "flow": "direct",
+            "publish_mode": str(row.get("publish_mode") or "unknown"),
+            "stage": str(data.get("stage") or "unknown"),
+            "requeue_count": requeue_count,
+        },
+    )
+    logger.info(f"orphan {task_id} redispatched from video_generations (attempt {requeue_count})")
+    return True
+
+
 def settle_orphan_completed(state: Any, task_id: str) -> None:
     """Mark the video_generations row completed for a finished orphan.
 
@@ -275,6 +396,8 @@ def triage_orphan(
     caller falls through to the historical fail+refund.
     """
     if triage_requeue(state, slot_store, task_id, data):
+        return True
+    if triage_redispatch_direct(state, task_id, data):
         return True
     decision = classify_orphan(data)
     if decision == MARK_COMPLETE:
