@@ -107,9 +107,17 @@ jobs:
           TEST_FLIGHT_RUN_ID: ${{ github.run_id }}
 
       - name: Notify Discord on failure
-        if: failure() && secrets.TEST_FLIGHT_DISCORD_WEBHOOK_URL != ''
+        if: failure()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.TEST_FLIGHT_DISCORD_WEBHOOK_URL }}
         run: |
           set -euo pipefail
+          # The secrets context is not allowed in `if:` expressions, so the
+          # empty check lives here instead of in the step condition.
+          if [ -z "${DISCORD_WEBHOOK_URL}" ]; then
+            echo 'test-flight: no Discord webhook configured, skipping notification'
+            exit 0
+          fi
           curl -fsS -X POST -H 'content-type: application/json' \
             --data "{\"content\":\"🚨 test-flight FAILED — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
-            "${{ secrets.TEST_FLIGHT_DISCORD_WEBHOOK_URL }}"
+            "${DISCORD_WEBHOOK_URL}"
