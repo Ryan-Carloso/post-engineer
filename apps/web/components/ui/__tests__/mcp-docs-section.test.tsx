@@ -108,7 +108,7 @@ describe('McpDocsSection', () => {
     expect(screen.queryByTestId('mcp-docs-help-cta')).toBeNull();
   });
 
-  it('renders the tools grid with all twenty-eight tools', () => {
+  it('renders the tools grid with all thirty tools', () => {
     render(<McpDocsSection />);
 
     const grid = screen.getByTestId('mcp-tools-grid');
@@ -134,6 +134,8 @@ describe('McpDocsSection', () => {
       'get_video_status',
       'get_video_task_progress',
       'list_social_accounts',
+      'get_persona_publishing_accounts',
+      'set_persona_publishing_accounts',
       'connect_account',
       'list_schedules',
       'list_posts',
@@ -168,6 +170,8 @@ describe('McpDocsSection', () => {
       'apiKeys.toolDescGetVideoStatus',
       'apiKeys.toolDescGetVideoTaskProgress',
       'apiKeys.toolDescListSocialAccounts',
+      'apiKeys.toolDescGetPersonaPublishingAccounts',
+      'apiKeys.toolDescSetPersonaPublishingAccounts',
       'apiKeys.toolDescConnectAccount',
       'apiKeys.toolDescListSchedules',
       'apiKeys.toolDescListPosts',

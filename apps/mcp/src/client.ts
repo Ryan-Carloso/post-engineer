@@ -297,7 +297,7 @@ export class PostEngineerClient {
     this.now = options.now ?? (() => new Date());
   }
 
-  private getHeaders(includeContentType = true): Record<string, string> {
+  getHeaders(includeContentType = true): Record<string, string> {
     const headers: Record<string, string> = {
       Accept: 'application/json',
     };
@@ -308,7 +308,7 @@ export class PostEngineerClient {
     return headers;
   }
 
-  private async request(
+  async request(
     path: string,
     init: RequestInit,
     action: string,

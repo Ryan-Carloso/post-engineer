@@ -40,7 +40,7 @@ import {
 import { validateScheduleWindow } from '@/lib/schedule-window';
 import { isValidTimezone } from '@/lib/timezone';
 import { computeVideoTokens, toFiniteNumber, type FaceQuality } from '@/lib/tokens';
-import { resolvePostWithoutPersona, type PersonaPrep } from './persona-prep';
+import { resolvePostWithoutPersona, resolvePublishingAccounts, type PersonaPrep } from './persona-prep';
 import {
   buildJobPayload,
   hasNonEmptyString,
@@ -887,7 +887,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   if (prep instanceof NextResponse) return prep;
 
   // 5. Providers + social accounts (fail fast: never charge for a bad selection).
-  const accountIds = await validateAccounts(supabase, userId, providers, publishing.accounts ?? {});
+  const accountIds = await validateAccounts(supabase, userId, providers, await resolvePublishingAccounts(supabase, personaId, publishing.accounts));
   if (accountIds instanceof NextResponse) return accountIds;
 
   // Pinned library image: fail fast when the id does not resolve, before
