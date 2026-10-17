@@ -9,6 +9,7 @@ import { fetchEnginePublishResults } from '@/lib/engine-tasks';
 import { resolvePublishLinks, type PublishLink } from '@/lib/publish-links';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import { resolveSlotUuid } from '@/lib/schedule-slot-id';
 import { buildGenerationFacts } from './generation-facts';
 
 //---------------
@@ -142,10 +143,20 @@ async function getHandler(
 
   const { slotId } = await context.params;
 
+  // The param is a scheduled_posts uuid, but callers sometimes send the
+  // engine generation key `batch:<scheduleId>:slot:<slotId>` instead.
+  // Resolve the real slot uuid before any uuid-typed filter — a raw
+  // non-uuid value raises Postgres 22P02 and turns into a 500. Anything
+  // unresolvable is an unknown id: 404, never a database round-trip.
+  const resolvedSlotId = resolveSlotUuid(slotId);
+  if (resolvedSlotId === null) {
+    return apiErrorResponse(404, 'Slot not found.', { route: 'GET /api/schedule/slots' });
+  }
+
   const { data: slot, error: slotError } = await supabase
     .from('scheduled_posts')
     .select('id, schedule_id, slot_at, status, topic, error, published_at, task_id, faceless')
-    .eq('id', slotId)
+    .eq('id', resolvedSlotId)
     .eq('user_id', auth.userId)
     .single();
   if (slotError) {
@@ -253,7 +264,7 @@ async function getHandler(
   const { data: historyRows, error: historyError } = await supabase
     .from('scheduled_post_progress_history')
     .select('progress, stage, recorded_at')
-    .eq('post_id', slotId)
+    .eq('post_id', resolvedSlotId)
     .eq('user_id', auth.userId)
     .order('recorded_at', { ascending: true });
   if (historyError) {
@@ -320,7 +331,14 @@ async function deleteHandler(
 
   const { slotId } = await context.params;
 
-  const owned = await loadOwnedSlot(supabase, slotId, auth.userId);
+  // Same normalization as GET: resolve the real slot uuid before any
+  // uuid-typed lookup, 404 for anything unresolvable.
+  const resolvedSlotId = resolveSlotUuid(slotId);
+  if (resolvedSlotId === null) {
+    return apiErrorResponse(404, 'Slot not found.', { route: 'DELETE /api/schedule/slots' });
+  }
+
+  const owned = await loadOwnedSlot(supabase, resolvedSlotId, auth.userId);
   if ('error' in owned) return owned.error;
   const slot = owned.slot;
 
@@ -397,7 +415,14 @@ async function patchHandler(
 
   const { slotId } = await context.params;
 
-  const owned = await loadOwnedSlot(supabase, slotId, auth.userId);
+  // Same normalization as GET: resolve the real slot uuid before any
+  // uuid-typed lookup, 404 for anything unresolvable.
+  const resolvedSlotId = resolveSlotUuid(slotId);
+  if (resolvedSlotId === null) {
+    return apiErrorResponse(404, 'Slot not found.', { route: 'PATCH /api/schedule/slots' });
+  }
+
+  const owned = await loadOwnedSlot(supabase, resolvedSlotId, auth.userId);
   if ('error' in owned) return owned.error;
   const slot = owned.slot;
 
