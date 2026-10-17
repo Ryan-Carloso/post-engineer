@@ -30,7 +30,6 @@ export interface PersonaPrep {
 // snapshotted; the caller already refused a persona-less post that is not
 // faceless or that carries no voice.
 //---------------
-//---------------
 // resolvePublishingAccounts — which accounts a generate-and-schedule call
 // publishes to. When publishing.accounts is omitted entirely and the post
 // has a persona, fall back to the persona's default publishing accounts
