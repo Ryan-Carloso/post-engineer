@@ -115,16 +115,11 @@ describe('Posts video detail', () => {
       body: { success: true, generations: [] },
     });
 
-    // Detail page: the slot resolves, the generations lookup 404s so the
-    // slot view renders.
-    cy.intercept('GET', `/api/schedule/slots/${DETAIL_SLOT_ID}`, {
+    // Detail page: the unified endpoint resolves the slot.
+    cy.intercept('GET', `/api/posts/${DETAIL_SLOT_ID}`, {
       statusCode: 200,
-      body: detailSlotPayload(),
+      body: { ...detailSlotPayload(), kind: 'slot' },
     }).as('slotDetail');
-    cy.intercept('GET', `/api/persona/video-generations/${DETAIL_SLOT_ID}`, {
-      statusCode: 404,
-      body: { success: false },
-    });
 
     // The finished render, served through the download proxy path. The
     // ',null' encoding suffix is load-bearing: .mp4 is not in Cypress's

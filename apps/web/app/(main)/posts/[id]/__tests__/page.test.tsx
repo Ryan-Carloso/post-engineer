@@ -24,8 +24,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 vi.mock('@/lib/api', () => ({
-  useSlotDetailQuery: vi.fn(),
-  useGenerationDetailQuery: vi.fn(),
+  usePostDetailQuery: vi.fn(),
   useYouTubeAccountsQuery: vi.fn(),
   useInstagramAccountsQuery: vi.fn(),
   useLinkedinAccountsQuery: vi.fn(),
@@ -50,8 +49,7 @@ vi.mock('@/lib/i18n/provider', () => {
 
 import DetailPage from '../page';
 import {
-  useSlotDetailQuery,
-  useGenerationDetailQuery,
+  usePostDetailQuery,
   useYouTubeAccountsQuery,
   useInstagramAccountsQuery,
   useLinkedinAccountsQuery,
@@ -151,6 +149,8 @@ const COMPLETED_GENERATION = {
   tokensRefunded: false,
   createdAt: '2026-09-23T12:00:00.000Z',
   completedAt: '2026-09-23T12:02:00.000Z',
+  progress: 100,
+  stage: null,
 };
 
 function mockQueries(overrides: {
@@ -158,25 +158,28 @@ function mockQueries(overrides: {
   generation?: Record<string, unknown> | null;
   slotLoading?: boolean;
 } = {}) {
-  vi.mocked(useSlotDetailQuery).mockImplementation((id: string) => {
+  vi.mocked(usePostDetailQuery).mockImplementation((id: string) => {
     // The page asks for the route id; 'u1' is the default fixture's id.
-    const isFixtureId = id === ((overrides.slot?.slot as { id?: string })?.id ?? 'u1');
+    const slotPayloadId = ((overrides.slot as { slot?: { id?: string } } | null)?.slot as { id?: string } | undefined)?.id ?? 'u1';
+    const isFixtureId = id === slotPayloadId;
     if (overrides.slotLoading) {
       return { data: undefined, isLoading: true, isError: false, error: null } as never;
     }
+    let data: unknown = null;
+    if (overrides.generation) {
+      data = { kind: 'generation', generation: overrides.generation };
+    } else if (isFixtureId) {
+      data = { kind: 'slot', ...((overrides.slot ?? slotPayload()) as Record<string, unknown>) };
+    } else if (overrides.slot) {
+      data = { kind: 'slot', ...(overrides.slot as Record<string, unknown>) };
+    }
     return {
-      data: isFixtureId ? ((overrides.slot ?? slotPayload()) as never) : ((overrides.slot ?? null) as never),
+      data: data as never,
       isLoading: false,
       isError: false,
       error: null,
     } as never;
   });
-  vi.mocked(useGenerationDetailQuery).mockReturnValue({
-    data: (overrides.generation ?? null) as never,
-    isLoading: false,
-    isError: false,
-    error: null,
-  } as never);
   vi.mocked(useYouTubeAccountsQuery).mockReturnValue({
     data: { authenticated: true, accounts: [{ channelId: 'ch1', channelName: 'Europa Na Estrada' }] },
   } as never);
@@ -373,7 +376,7 @@ describe('PostDetailPage', () => {
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '45');
   });
 
-  // The scheduled refetch on useSlotDetailQuery delivers the status flip —
+  // The scheduled refetch on usePostDetailQuery delivers the status flip —
   // the page must swap the progress UI for the player without a reload.
   it('swaps the progress UI for the player when a refetch flips generating to ready', () => {
     const generating = slotPayload({
@@ -391,8 +394,8 @@ describe('PostDetailPage', () => {
       stage: 'done',
     });
     let current: Record<string, unknown> = generating;
-    vi.mocked(useSlotDetailQuery).mockImplementation(() => ({
-      data: current as never,
+    vi.mocked(usePostDetailQuery).mockImplementation(() => ({
+      data: { kind: 'slot', ...current } as never,
       isLoading: false,
       isError: false,
       error: null,

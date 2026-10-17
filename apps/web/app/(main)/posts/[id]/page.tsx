@@ -5,8 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import {
-  useSlotDetailQuery,
-  useGenerationDetailQuery,
+  usePostDetailQuery,
   useYouTubeAccountsQuery,
   useInstagramAccountsQuery,
   useLinkedinAccountsQuery,
@@ -15,10 +14,12 @@ import {
   useDeleteSlotMutation,
   type ScheduledSlot,
   type SlotDetailPayload,
+  type PostDetail,
   type ProgressHistoryEntry,
 } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import AccountCard from '@/components/account-card';
+import { DetailProgressBar } from './detail-progress-bar';
 import { ExternalLinkIcon } from '@/lib/ui';
 import type { PublishLink } from '@/lib/publish-links';
 import { useI18n } from '@/lib/i18n/provider';
@@ -28,10 +29,9 @@ import type { TranslationKey } from '@/lib/i18n';
 // PostDetailPage (/posts/[id]) — the full-page post detail: big video
 // player when the engine produced one, live progress while generating,
 // topic editing for awaiting slots, delete for awaiting/failed slots.
-// The entity is resolved by id through the detail endpoints
-// (GET /api/schedule/slots/:id and GET /api/persona/video-generations/:id)
-// — never by scanning the history lists, so any post is reachable no
-// matter how deep it sits in the history.
+// The entity is resolved by id through the single unified detail endpoint
+// (GET /api/posts/[id]) — never by scanning the history lists, so any
+// post is reachable no matter how deep it sits in the history.
 //---------------
 
 interface AccountCardData {
@@ -123,12 +123,9 @@ export default function PostDetailPage() {
   const params = useParams();
   const id = typeof params.id === 'string' ? params.id : '';
 
-  // Both lookups run for the id: a scheduled post resolves through the
-  // slots endpoint, a manual generation through the generations one.
-  // A 404 resolves to null (not found); any other failure throws and is
-  // surfaced by the error state.
-  const slotQuery = useSlotDetailQuery(id);
-  const generationQuery = useGenerationDetailQuery(id);
+  // One lookup resolves the id: a scheduled post comes back as a slot,
+  // a direct generation as a generation. A 404 is a genuine miss.
+  const postQuery = usePostDetailQuery(id);
   const youtubeQuery = useYouTubeAccountsQuery();
   const instagramQuery = useInstagramAccountsQuery();
   const linkedinQuery = useLinkedinAccountsQuery();
@@ -167,9 +164,10 @@ export default function PostDetailPage() {
     [youtubeQuery.data, instagramQuery.data, linkedinQuery.data, blueskyQuery.data],
   );
 
-  const slotDetail = slotQuery.data ?? null;
-  const generation = generationQuery.data ?? null;
-  const isLoading = slotQuery.isLoading || generationQuery.isLoading;
+  const post: PostDetail | null = postQuery.data ?? null;
+  const slotDetail = post?.kind === 'slot' ? post : null;
+  const generation = post?.kind === 'generation' ? post.generation : null;
+  const isLoading = postQuery.isLoading;
 
   const accounts: AccountCardData[] = useMemo(() => {
     if (!slotDetail) return [];
@@ -193,19 +191,19 @@ export default function PostDetailPage() {
 
   if (isLoading) return <DetailSkeleton />;
 
-  // Detail fetch failures carry the server's safe message; null results
-  // mean genuinely not found (404 from both endpoints). The raw server
-  // message is never rendered — pt-BR users get the localized copy, and
-  // the English original stays in the server logs for diagnostics.
-  const loadError =
-    (slotQuery.isError ? (slotQuery.error instanceof Error ? slotQuery.error.message : null) : null) ??
-    (generationQuery.isError ? (generationQuery.error instanceof Error ? generationQuery.error.message : null) : null);
+  // Detail fetch failures carry the server's safe message; a null result
+  // means genuinely not found. The raw server message is never rendered —
+  // pt-BR users get the localized copy, and the English original stays in
+  // the server logs for diagnostics.
+  const loadError = postQuery.isError
+    ? (postQuery.error instanceof Error ? postQuery.error.message : null)
+    : null;
   if (loadError) {
     return <DetailNotFound message={t('posts.detailLoadError')} />;
   }
-  if (!slot && !generation) return <DetailNotFound />;
+  if (!post) return <DetailNotFound />;
 
-  if (generation && !slot) {
+  if (post.kind === 'generation' && generation) {
     const videoUrl = generation.status === 'completed' ? videoUrlFor(generation.engineTaskId) : null;
     return (
       <div className="mx-auto max-w-3xl">
@@ -219,10 +217,14 @@ export default function PostDetailPage() {
           <p className="text-sm text-muted-foreground">
             {formatDateTime(generation.createdAt, locale)} · {generation.videoSubject ?? t('posts.unknownTopic')}
           </p>
-          <DetailPlayer
-            src={videoUrl}
-            placeholder={t('posts.coverNoVideo')}
-          />
+          {generation.status === 'pending' && generation.engineTaskId ? (
+            <DetailProgressBar progress={generation.progress} stage={generation.stage} />
+          ) : (
+            <DetailPlayer
+              src={videoUrl}
+              placeholder={t('posts.coverNoVideo')}
+            />
+          )}
           {generation.status === 'failed' && (
             <p className="mt-4 text-sm text-destructive">
               {t(GENERATION_ERROR_KEY[generation.errorCode ?? 'unknown'] ?? 'posts.errorUnknown')}
@@ -618,22 +620,7 @@ export const SlotDetail = ({
       {canWatch && videoUrl ? (
         <DetailPlayer src={videoUrl} placeholder="" />
       ) : slot.status === 'generating' ? (
-        <div className="mt-4 rounded-2xl bg-secondary p-6">
-          <div className="flex items-center justify-between text-sm font-semibold text-[#0d2b45]">
-            <span>{t('posts.videoGenerating')}</span>
-            <span>{slot.progress}%</span>
-          </div>
-          <div
-            role="progressbar"
-            aria-valuenow={slot.progress}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[#dce6ee]"
-          >
-            <div className="h-full rounded-full bg-[#0d2b45] transition-all" style={{ width: `${slot.progress}%` }} />
-          </div>
-          {slot.stage && <p className="mt-2 text-xs text-muted-foreground">{slot.stage}</p>}
-        </div>
+        <DetailProgressBar progress={slot.progress} stage={slot.stage} />
       ) : (
         <DetailPlayer
           src={null}

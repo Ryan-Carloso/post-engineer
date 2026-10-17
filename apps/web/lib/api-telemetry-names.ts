@@ -57,6 +57,7 @@ table['GET /api/persona/video-generations/[generationId]'] = 'video_generation_f
 table['GET /api/persona/video-status/[taskId]'] = 'video_status_fetched';
 table['GET /api/persona/voice-sample-languages'] = 'voice_sample_languages_fetched';
 table['GET /api/persona/voices'] = 'persona_voices_listed';
+table['GET /api/posts/[id]'] = 'post_fetched';
 table['GET /api/schedule'] = 'schedule_fetched';
 table['GET /api/schedule/slots/[slotId]'] = 'schedule_slot_fetched';
 table['GET /api/schedule/status'] = 'schedule_status_fetched';

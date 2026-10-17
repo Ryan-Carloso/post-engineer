@@ -566,7 +566,7 @@ describe('GET /api/schedule/slots/[slotId]', () => {
     expect(body.success).toBe(true);
     expect(body.persona).toBeNull();
     expect(logger.warn).toHaveBeenCalledWith(
-      '[api/schedule/slots] persona lookup failed',
+      '[post-detail] persona lookup failed',
       expect.objectContaining({ code: 'XX000' }),
     );
   });
@@ -736,8 +736,10 @@ describe('GET /api/schedule/slots/[slotId]', () => {
     const body = (await response.json()) as { slot: { progressHistory: unknown[] } };
     expect(body.slot.progressHistory).toEqual([]);
     // The failed lookup is loud: exact message and metadata pin the
-    // historyError branch against mutation.
-    expect(logger.warn).toHaveBeenCalledWith('[api/schedule/slots] progress history lookup failed', {
+    // historyError branch against mutation. The message comes from the
+    // shared getSlotPost builder (used by both the slot route and the
+    // unified /api/posts/[id] endpoint).
+    expect(logger.warn).toHaveBeenCalledWith('[post-detail] progress history lookup failed', {
       slotId: SLOT_ID,
       error: { message: 'db down' },
     });
@@ -1044,7 +1046,7 @@ describe('GET /api/schedule/slots/[slotId] failure logging', () => {
 
     expect(response.status).toBe(500);
     expect(logger.error).toHaveBeenCalledWith(
-      '[api/schedule/slots] schedule lookup failed',
+      '[api/schedule/slots] slot lookup failed',
       expect.objectContaining({ code: 'XX000' }),
     );
   });
