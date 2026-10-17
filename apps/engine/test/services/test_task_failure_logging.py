@@ -255,31 +255,48 @@ class StartCrashStageTests(unittest.TestCase):
             ),
             patch.object(task_service, "send_discord", return_value=True),
             patch.object(task_service, "cleanup_task_intermediates"),
-            patch.object(task_service.video_storage, "require_r2_configuration"),
+            patch.object(
+                task_service.video_storage,
+                "require_r2_configuration",
+                side_effect=RuntimeError("boom")
+                if fail_in == "require_r2_configuration"
+                else None,
+            ),
             _LogCapture() as capture,
         ):
             if fail_in == "generate_script":
                 task_service.start(task_id, params, stop_at="script")
             else:
-                # script succeeds, terms crashes
+                # script succeeds (or the crash happens even earlier),
+                # terms crashes
                 task_service.start(task_id, params, stop_at="video")
         return capture
 
     def test_crash_before_any_phase_logs_stage_start(self):
-        capture = self._run_start_until_crash("generate_script")
+        # require_r2_configuration raises before the script phase begins.
+        capture = self._run_start_until_crash("require_r2_configuration")
         stages = [r["extra"].get("stage") for r in capture.errors()]
         self.assertIn("start", stages)
 
-    def test_crash_after_script_logs_last_completed_phase(self):
-        capture = self._run_start_until_crash("generate_terms")
+    def test_crash_during_script_phase_logs_script_stage(self):
+        # Issue #198: the script phase had started when generate_script
+        # raised, so the failure is a script failure, not "start".
+        capture = self._run_start_until_crash("generate_script")
         stages = [r["extra"].get("stage") for r in capture.errors()]
         self.assertIn("script", stages)
 
+    def test_crash_during_terms_phase_logs_terms_stage(self):
+        # Issue #198: the terms phase had started when generate_terms
+        # raised, so the failure is a terms failure, not "script".
+        capture = self._run_start_until_crash("generate_terms")
+        stages = [r["extra"].get("stage") for r in capture.errors()]
+        self.assertIn("terms", stages)
+
     def test_mark_records_stage_in_task_state(self):
-        # The SSE progress endpoint reads the stage from task state, so
-        # _mark() must persist the last completed phase there. Run a minimal
-        # start(): patch everything after the script phase so start()
-        # returns early at stop_at="script".
+        # The SSE progress endpoint reads the stage from task state, so the
+        # phase tracker must persist the last completed phase there on
+        # complete(). Run a minimal start(): patch everything after the
+        # script phase so start() returns early at stop_at="script".
         params = TaskVideoRequest(video_subject="topic")
         task_id = "stage-task"
         task_service.sm.state.update_task(task_id, user_id="u-1")
