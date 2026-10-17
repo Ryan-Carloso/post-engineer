@@ -34,6 +34,10 @@ import {
   DisconnectAccountShape,
   PublishVideoDirectShape,
 } from '../tools.js';
+import {
+  GetPersonaPublishingAccountsShape,
+  SetPersonaPublishingAccountsShape,
+} from '../tools-publishing-accounts.js';
 import type { PostEngineerClient } from '../client.js';
 
 const mockTrackEvent = vi.fn();
@@ -48,6 +52,8 @@ const EXPECTED_TOOLS = [
   'list_faces',
   'update_persona',
   'list_social_accounts',
+  'get_persona_publishing_accounts',
+  'set_persona_publishing_accounts',
   'connect_account',
   'list_schedules',
   'list_posts',
@@ -180,6 +186,8 @@ describe('registered tool schemas (single source of truth)', () => {
       list_faces: ListFacesShape,
       update_persona: UpdatePersonaShape,
       list_social_accounts: ListSocialAccountsShape,
+      get_persona_publishing_accounts: GetPersonaPublishingAccountsShape,
+      set_persona_publishing_accounts: SetPersonaPublishingAccountsShape,
       connect_account: ConnectAccountShape,
       list_schedules: ListSchedulesShape,
       list_posts: ListPostsShape,
