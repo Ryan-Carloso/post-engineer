@@ -1109,8 +1109,10 @@ class PublishDueTests(unittest.TestCase):
 
     def test_publish_failure_scrubs_full_message_before_truncation(self):
         # The video_publish_failed reason pins scrub-then-truncate like the
-        # other call sites: a short message makes [:200] a no-op, so only a
-        # >200-char secret-bearing message guards against a revert.
+        # other call sites: a short message makes the 200-char cap a no-op,
+        # so only a >200-char secret-bearing message guards against a
+        # revert. scrub_error_text keeps the old contract (scrub the full
+        # message, then truncate) while also keeping the diagnostic tail.
         from app.services import analytics as analytics_module
         from app.services.fill_schedule import publish as pub_module
         from app.services.upload_publisher import PublishError
@@ -1134,8 +1136,8 @@ class PublishDueTests(unittest.TestCase):
             patch.object(pub_module, "track_event") as track,
             patch.object(
                 pub_module,
-                "scrub_secret_values",
-                wraps=analytics_module.scrub_secret_values,
+                "scrub_error_text",
+                wraps=analytics_module.scrub_error_text,
             ) as scrub,
         ):
             published = scheduler.publish_due(
@@ -1143,7 +1145,7 @@ class PublishDueTests(unittest.TestCase):
             )
         self.assertEqual(published, 0)
         # The scrubber received the whole message, not the truncated slice.
-        scrub.assert_called_once_with(str(error))
+        scrub.assert_called_once_with(str(error), max_chars=200)
         failed_calls = [
             c for c in track.call_args_list if c[0][0] == "video_publish_failed"
         ]

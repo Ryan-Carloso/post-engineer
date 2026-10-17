@@ -36,7 +36,7 @@ from app.services.persona_hook import (
     persona_hook_end_seconds,
 )
 from app.services.bgm_history import history_repository
-from app.services.analytics import scrub_secret_values, track_event
+from app.services.analytics import scrub_error_text, scrub_secret_values, track_event
 from app.services.notify import safe_reason, send_discord, task_failed_msg
 from app.utils import file_security, ssrf, utils
 
@@ -421,10 +421,10 @@ def _fail_task(
     if _should_emit_failed_event(task_id):
         context = _task_tracking_context(task_id)
         context["stage"] = failed_stage
-        # Scrub the full message before truncating: a cut landing mid-key
-        # would leave a fragment the key-anchored pattern can no longer
-        # match, leaking the raw remainder into PostHog properties.
-        context["reason"] = scrub_secret_values(str(error))[:200]
+        # Keep the diagnostic tail and strip local paths; the helper
+        # scrubs the full message before truncating so a mid-key cut
+        # cannot leave a fragment the pattern can no longer match.
+        context["reason"] = scrub_error_text(str(error), max_chars=200)
         track_event("video_generation_failed", context)
     # Terminal webhook (at most once per task, deduped inside): a failing
     # delivery only logs, it never changes the task outcome.

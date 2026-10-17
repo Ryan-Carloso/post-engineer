@@ -11,7 +11,7 @@ from openai import AzureOpenAI, OpenAI
 from openai.types.chat import ChatCompletion
 
 from app.config import config
-from app.services.analytics import scrub_secret_values, track_ai_request
+from app.services.analytics import scrub_error_text, scrub_secret_values, track_ai_request
 from app.services.llm_providers import validate_llm_provider
 from app.utils import secret_redaction
 
@@ -275,7 +275,7 @@ def _track_llm_request(
             "fallback_used": fallback_used,
             "duration_ms": duration_ms,
             "success": success,
-            "error": scrub_secret_values(error or "")[:500],
+            "error": scrub_error_text(error or ""),
             "response_chars": len(response_text),
             # Scrub the full text BEFORE truncating: a cut landing mid-key
             # would otherwise leave a secret fragment the pattern can't see.
