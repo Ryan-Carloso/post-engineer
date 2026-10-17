@@ -4,7 +4,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { generateRawApiKey, hashApiKey, extractKeyPrefix } from '@/lib/api-keys';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
-import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 interface CreateKeyBody {
   name?: unknown;
@@ -155,5 +155,5 @@ async function postHandler(request: Request): Promise<NextResponse> {
 //---------------
 // 5xx reporting: handled server errors reach PostHog error tracking.
 //---------------
-export const GET = withApiErrorReporting('GET /api/api-keys', getHandler);
-export const POST = withApiErrorReporting('POST /api/api-keys', postHandler);
+export const GET = withApiErrorReporting('GET /api/api-keys', getHandler, { getUserId: resolveReportingUserId });
+export const POST = withApiErrorReporting('POST /api/api-keys', postHandler, { getUserId: resolveReportingUserId });

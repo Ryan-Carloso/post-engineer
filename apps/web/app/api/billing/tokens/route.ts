@@ -4,13 +4,13 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { toFiniteNumber } from '@/lib/tokens';
 import { logger } from '@/lib/logger';
-import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 //---------------
 // GET /api/billing/tokens — authoritative prepaid wallet balance.
-// Garante o bônus único de 3 tokens grátis (lazy grant) e retorna
-// o total mais o breakdown free (a UI só exibe badge free se > 0).
-// Auth = sessão Supabase (cookie) OU API key pessoal (Bearer/x-api-key, MCP).
+// Grants the one-time 3 free tokens bonus (lazy grant) and returns
+// the total plus the free breakdown (the UI only shows the free badge when > 0).
+// Auth = Supabase session (cookie) OR personal API key (Bearer/x-api-key, MCP).
 //---------------
 
 async function getHandler(request?: Request): Promise<NextResponse> {
@@ -60,4 +60,4 @@ async function getHandler(request?: Request): Promise<NextResponse> {
 //---------------
 // 5xx reporting: handled server errors reach PostHog error tracking.
 //---------------
-export const GET = withApiErrorReporting('GET /api/billing/tokens', getHandler);
+export const GET = withApiErrorReporting('GET /api/billing/tokens', getHandler, { getUserId: resolveReportingUserId });

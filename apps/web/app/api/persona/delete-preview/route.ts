@@ -8,7 +8,7 @@ import { apiErrorResponse } from '@/lib/api-error';
 import { ERROR_CODES } from '@/lib/error-codes';
 import { logger } from '@/lib/logger';
 import { firstDownloadUrl, rewriteVideoUrls, SAFE_TASK_ID } from '@/lib/video-urls';
-import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 //---------------
 // GET /api/persona/delete-preview?personaId= — what deleting the persona
@@ -331,4 +331,4 @@ async function getHandler(request: Request): Promise<NextResponse> {
 //---------------
 // 5xx reporting: handled server errors reach PostHog error tracking.
 //---------------
-export const GET = withApiErrorReporting('GET /api/persona/delete-preview', getHandler);
+export const GET = withApiErrorReporting('GET /api/persona/delete-preview', getHandler, { getUserId: resolveReportingUserId });

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { listDefaultPersonaFaces } from '@/lib/persona-faces';
 import { logger } from '@/lib/logger';
-import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 //---------------
 // GET /api/persona/faces — default house character/face catalog
@@ -53,4 +53,4 @@ async function getHandler(request?: Request): Promise<NextResponse> {
 //---------------
 // 5xx reporting: handled server errors reach PostHog error tracking.
 //---------------
-export const GET = withApiErrorReporting('GET /api/persona/faces', getHandler);
+export const GET = withApiErrorReporting('GET /api/persona/faces', getHandler, { getUserId: resolveReportingUserId });

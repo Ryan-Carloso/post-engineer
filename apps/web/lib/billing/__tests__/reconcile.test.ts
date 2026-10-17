@@ -53,6 +53,7 @@ function mockPostHog() {
     capture: vi.fn(),
     captureAs,
     captureException: vi.fn(),
+    captureExceptionAs: vi.fn(),
   });
 }
 

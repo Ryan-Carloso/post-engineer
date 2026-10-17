@@ -55,6 +55,7 @@ beforeEach(() => {
     capture,
     captureAs: vi.fn(),
     captureException,
+    captureExceptionAs: vi.fn(),
   });
   vi.stubEnv('NODE_ENV', 'production');
   process.env.MONEYPRINT_API_SECRET = 'test-secret';

@@ -3,7 +3,7 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@/lib/logger';
 import { apiErrorResponse } from '@/lib/api-error';
-import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 async function deleteHandler(
   request: Request,
@@ -46,4 +46,4 @@ async function deleteHandler(
 //---------------
 // 5xx reporting: handled server errors reach PostHog error tracking.
 //---------------
-export const DELETE = withApiErrorReporting('DELETE /api/api-keys/[id]', deleteHandler);
+export const DELETE = withApiErrorReporting('DELETE /api/api-keys/[id]', deleteHandler, { getUserId: resolveReportingUserId });

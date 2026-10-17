@@ -58,7 +58,7 @@ import { VALID_SCHEDULE_PROVIDERS } from '@/app/api/schedule/route';
 import { trackApiEvent } from '@/lib/analytics';
 import { logger } from '@/lib/logger';
 import { ensureEngineImageUrl } from '@/lib/engine-image-url';
-import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 const ROUTE = 'POST /api/videos/generate-and-schedule';
 // Shared with the /posts/new form so the UI cap and the API cap can't drift.
@@ -1491,9 +1491,4 @@ async function postHandler(request: Request): Promise<NextResponse> {
 // The user id is resolved lazily, only when a 5xx is actually reported,
 // so the happy path pays nothing.
 //---------------
-export const POST = withApiErrorReporting(ROUTE, postHandler, {
-  getUserId: async (request) => {
-    const { auth } = await requireSupabaseSession(request);
-    return auth?.userId;
-  },
-});
+export const POST = withApiErrorReporting(ROUTE, postHandler, { getUserId: resolveReportingUserId });
