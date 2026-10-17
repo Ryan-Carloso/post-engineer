@@ -159,7 +159,12 @@ async function deleteHandler(
 
   const { slotId } = await context.params;
 
-  const owned = await loadOwnedSlot(supabase, slotId, auth.userId);
+  const resolvedSlotId = resolveSlotUuid(slotId);
+  if (resolvedSlotId === null) {
+    return apiErrorResponse(404, 'Slot not found.', { route: 'DELETE /api/schedule/slots' });
+  }
+
+  const owned = await loadOwnedSlot(supabase, resolvedSlotId, auth.userId);
   if ('error' in owned) return owned.error;
   const slot = owned.slot;
 
@@ -236,7 +241,12 @@ async function patchHandler(
 
   const { slotId } = await context.params;
 
-  const owned = await loadOwnedSlot(supabase, slotId, auth.userId);
+  const resolvedSlotId = resolveSlotUuid(slotId);
+  if (resolvedSlotId === null) {
+    return apiErrorResponse(404, 'Slot not found.', { route: 'PATCH /api/schedule/slots' });
+  }
+
+  const owned = await loadOwnedSlot(supabase, resolvedSlotId, auth.userId);
   if ('error' in owned) return owned.error;
   const slot = owned.slot;
 

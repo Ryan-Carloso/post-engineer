@@ -736,8 +736,10 @@ describe('GET /api/schedule/slots/[slotId]', () => {
     const body = (await response.json()) as { slot: { progressHistory: unknown[] } };
     expect(body.slot.progressHistory).toEqual([]);
     // The failed lookup is loud: exact message and metadata pin the
-    // historyError branch against mutation.
-    expect(logger.warn).toHaveBeenCalledWith('[api/schedule/slots] progress history lookup failed', {
+    // historyError branch against mutation. The message comes from the
+    // shared getSlotPost builder (used by both the slot route and the
+    // unified /api/posts/[id] endpoint).
+    expect(logger.warn).toHaveBeenCalledWith('[post-detail] progress history lookup failed', {
       slotId: SLOT_ID,
       error: { message: 'db down' },
     });
