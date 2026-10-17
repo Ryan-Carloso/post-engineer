@@ -24,6 +24,7 @@ the order — you never need to guess or read docs to know what comes next:
 | 016 | `migrations/016_scheduled-posts-publish-attempts.sql` | `scheduled_posts.publish_attempts` (NOT NULL DEFAULT 0): counts publish attempts per slot so the engine auto-cancels (failed) with a token refund after 3 failures instead of retrying forever |
 | 017 | `migrations/017_refund-batch-tokens.sql` | Create the missing `public.refund_batch_tokens` RPC: per-slot refund of a batch prepaid under `batch:<scheduleId>`. Idempotent per refund key (`token_transactions.reference_id`), total refunds capped at the batch charge, restores the free/paid split, answers `{refunded}` like `refund_generation_tokens`. Both the engine's fill_schedule store and the web's generate-and-schedule route already call it — every call 404'd until this migration |
 | 019 | `migrations/019_personas-video-layout.sql` | `personas.video_layout` + `schedules.post_video_layout` (`standard` / `react`, NULL = `standard`, CHECK-pinned): how the persona hook is composed with the b-roll — the avatar filling the frame, or a 50/50 split with the b-roll below. Presentation only; the hook render and its cost are identical |
+| 020 | `migrations/020_engine-heartbeat.sql` | `engine_heartbeat` (single row, id=1 CHECK-pinned): engine liveness for death diagnosis — pid, uptime, RSS/VRAM rewritten every ~45s, plus `clean_shutdown_at` stamped by the ASGI shutdown hook. The boot reads it for the PostHog `engine_boot` autopsy event |
 
 ## How to apply
 

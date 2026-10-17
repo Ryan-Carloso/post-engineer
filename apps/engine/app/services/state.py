@@ -14,7 +14,6 @@ from app.models import const
 from app.utils.supabase_retry import build_retrying_session
 
 
-# Base class for state management
 class BaseState(ABC):
     @abstractmethod
     def update_task(
@@ -40,7 +39,6 @@ class BaseState(ABC):
         pass
 
 
-# Memory state management
 class MemoryState(BaseState):
     def __init__(self):
         self._tasks = {}
@@ -637,7 +635,9 @@ _redis_password = config.app.get("redis_password", None)
 _state_backend = os.getenv("MPT_STATE_BACKEND", "memory").lower()
 state: BaseState
 if _state_backend == "supabase":
-    state = SupabaseTaskState()
+    from app.services.death_diagnostics import DeathDiagnosticTaskState  # lazy: avoids an import cycle
+
+    state = DeathDiagnosticTaskState()
 elif _enable_redis:
     state = RedisState(
         host=_redis_host, port=_redis_port, db=_redis_db, password=_redis_password
