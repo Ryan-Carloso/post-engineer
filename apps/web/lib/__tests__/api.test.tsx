@@ -508,41 +508,46 @@ describe('api', () => {
   });
 
   //---------------
-  // Detail endpoints — one post per request, so the detail page never
-  // needs to pull the whole history to find a single id. A 404 resolves
-  // to null (not found), other failures throw.
+  //---------------
+  // Unified post detail — one endpoint resolves any post id, so the detail
+  // page never guesses between endpoints. A 404 resolves to null (not
+  // found), other failures throw.
   //---------------
 
-  it('fetchSlotDetail GETs /api/schedule/slots/:id and maps the payload', async () => {
+  it('fetchPostDetail GETs /api/posts/:id and maps a slot payload', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
       success: true,
+      kind: 'slot',
       slot: { id: 'slot-1', scheduleId: 's1', slotAt: '2030-06-01T10:00:00.000Z', status: 'awaiting', topic: 'T', error: null, publishedAt: null, taskId: null, progress: 0, stage: null, retryable: null },
       schedule: { id: 's1', personaId: 'p1', providers: ['youtube'], youtubeAccountIds: ['ch1'], instagramAccountIds: [], linkedinAccountIds: [] },
       persona: { id: 'p1', name: 'Viva Leve' },
     }));
-    const { fetchSlotDetail } = await import('@/lib/api');
-    const detail = await fetchSlotDetail('slot-1');
-    expect(detail?.slot.id).toBe('slot-1');
-    expect(detail?.persona?.name).toBe('Viva Leve');
-    expect(fetch).toHaveBeenCalledWith('/api/schedule/slots/slot-1', expect.objectContaining({ method: 'GET' }));
+    const { fetchPostDetail } = await import('@/lib/api');
+    const detail = await fetchPostDetail('slot-1');
+    expect(detail?.kind).toBe('slot');
+    if (detail?.kind !== 'slot') throw new Error('expected slot');
+    expect(detail.slot.id).toBe('slot-1');
+    expect(detail.persona?.name).toBe('Viva Leve');
+    expect(fetch).toHaveBeenCalledWith('/api/posts/slot-1', expect.objectContaining({ method: 'GET' }));
   });
 
-  it('fetchSlotDetail resolves null on 404 and throws on other failures', async () => {
+  it('fetchPostDetail resolves null on 404 and throws on other failures', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
-      jsonResponse({ success: false, error: 'Slot not found.' }, false, 404),
+      jsonResponse({ success: false, error: 'Post not found.' }, false, 404),
     );
-    const { fetchSlotDetail } = await import('@/lib/api');
-    await expect(fetchSlotDetail('missing')).resolves.toBeNull();
+    const { fetchPostDetail } = await import('@/lib/api');
+    await expect(fetchPostDetail('missing')).resolves.toBeNull();
 
     vi.mocked(fetch).mockResolvedValueOnce(
       jsonResponse({ success: false, error: 'boom' }, false, 500),
     );
-    await expect(fetchSlotDetail('slot-1')).rejects.toThrow('boom');
+    await expect(fetchPostDetail('slot-1')).rejects.toThrow('boom');
   });
 
-  it('fetchSlotDetail carries the published links through', async () => {
+  it('fetchPostDetail carries the published links through', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
       success: true,
+      kind: 'slot',
       slot: {
         id: 'slot-1',
         status: 'published',
@@ -551,16 +556,18 @@ describe('api', () => {
       schedule: { id: 's1' },
       persona: null,
     }));
-    const { fetchSlotDetail } = await import('@/lib/api');
-    const detail = await fetchSlotDetail('slot-1');
-    expect(detail?.slot.publishLinks).toEqual([
+    const { fetchPostDetail } = await import('@/lib/api');
+    const detail = await fetchPostDetail('slot-1');
+    if (detail?.kind !== 'slot') throw new Error('expected slot');
+    expect(detail.slot.publishLinks).toEqual([
       { provider: 'youtube', url: 'https://www.youtube.com/watch?v=abc' },
     ]);
   });
 
-  it('fetchSlotDetail drops publish links with an unknown provider', async () => {
+  it('fetchPostDetail drops publish links with an unknown provider', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
       success: true,
+      kind: 'slot',
       slot: {
         id: 'slot-1',
         status: 'published',
@@ -572,11 +579,12 @@ describe('api', () => {
       schedule: { id: 's1' },
       persona: null,
     }));
-    const { fetchSlotDetail } = await import('@/lib/api');
-    const detail = await fetchSlotDetail('slot-1');
+    const { fetchPostDetail } = await import('@/lib/api');
+    const detail = await fetchPostDetail('slot-1');
+    if (detail?.kind !== 'slot') throw new Error('expected slot');
     // An unknown provider would render its label map as literal
     // "undefined" — it is dropped, not cast.
-    expect(detail?.slot.publishLinks).toEqual([
+    expect(detail.slot.publishLinks).toEqual([
       { provider: 'youtube', url: 'https://www.youtube.com/watch?v=abc' },
     ]);
   });
@@ -584,30 +592,35 @@ describe('api', () => {
   // The payload crosses a network boundary, so a slot that predates this
   // field (or a malformed one) must read as "no links" instead of handing
   // the UI an undefined it would have to guard at every render.
-  it('fetchSlotDetail defaults missing or malformed publishLinks to an empty list', async () => {
+  it('fetchPostDetail defaults missing or malformed publishLinks to an empty list', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
       success: true,
+      kind: 'slot',
       slot: { id: 'slot-1', status: 'published' },
       schedule: { id: 's1' },
       persona: null,
     }));
-    const { fetchSlotDetail } = await import('@/lib/api');
-    const detail = await fetchSlotDetail('slot-1');
-    expect(detail?.slot.publishLinks).toEqual([]);
+    const { fetchPostDetail } = await import('@/lib/api');
+    const detail = await fetchPostDetail('slot-1');
+    if (detail?.kind !== 'slot') throw new Error('expected slot');
+    expect(detail.slot.publishLinks).toEqual([]);
 
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
       success: true,
+      kind: 'slot',
       slot: { id: 'slot-1', publishLinks: 'not-an-array' },
       schedule: { id: 's1' },
       persona: null,
     }));
-    const second = await fetchSlotDetail('slot-1');
-    expect(second?.slot.publishLinks).toEqual([]);
+    const second = await fetchPostDetail('slot-1');
+    if (second?.kind !== 'slot') throw new Error('expected slot');
+    expect(second.slot.publishLinks).toEqual([]);
   });
 
-  it('fetchSlotDetail carries the progress history through and narrows malformed entries', async () => {
+  it('fetchPostDetail carries the progress history through and narrows malformed entries', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
       success: true,
+      kind: 'slot',
       slot: {
         id: 'slot-1',
         status: 'generating',
@@ -623,96 +636,97 @@ describe('api', () => {
       schedule: { id: 's1' },
       persona: null,
     }));
-    const { fetchSlotDetail } = await import('@/lib/api');
-    const detail = await fetchSlotDetail('slot-1');
-    expect(detail?.slot.progressHistory).toEqual([
+    const { fetchPostDetail } = await import('@/lib/api');
+    const detail = await fetchPostDetail('slot-1');
+    if (detail?.kind !== 'slot') throw new Error('expected slot');
+    expect(detail.slot.progressHistory).toEqual([
       { progress: 40, stage: 'subtitle', recordedAt: '2026-10-05T22:10:00.000Z' },
       { progress: 0, stage: 'music_mood', recordedAt: '2026-10-05T22:12:00.000Z' },
       { progress: 50, stage: null, recordedAt: '2026-10-05T22:14:00.000Z' },
     ]);
   });
 
-  it('fetchSlotDetail defaults a missing progressHistory to an empty list', async () => {
+  it('fetchPostDetail defaults a missing progressHistory to an empty list', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
       success: true,
+      kind: 'slot',
       slot: { id: 'slot-1', status: 'awaiting' },
       schedule: { id: 's1' },
       persona: null,
     }));
-    const { fetchSlotDetail } = await import('@/lib/api');
-    const detail = await fetchSlotDetail('slot-1');
-    expect(detail?.slot.progressHistory).toEqual([]);
+    const { fetchPostDetail } = await import('@/lib/api');
+    const detail = await fetchPostDetail('slot-1');
+    if (detail?.kind !== 'slot') throw new Error('expected slot');
+    expect(detail.slot.progressHistory).toEqual([]);
   });
 
-  it('fetchGenerationDetail GETs /api/persona/video-generations/:id, null on 404', async () => {
+  it('fetchPostDetail maps a generation payload with live progress, null on 404', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
       success: true,
-      generation: { id: 'row-1', generationId: 'gen-3', engineTaskId: 'task-3', personaName: 'Viva Leve', videoSubject: 'Launch recap', status: 'completed', errorCode: null, tokensRefunded: false, createdAt: '2026-09-23T12:00:00.000Z', completedAt: '2026-09-23T12:02:00.000Z' },
+      kind: 'generation',
+      generation: { id: 'row-1', generationId: 'gen-3', engineTaskId: 'task-3', personaName: 'Viva Leve', videoSubject: 'Launch recap', status: 'pending', errorCode: null, tokensRefunded: false, createdAt: '2026-09-23T12:00:00.000Z', completedAt: null, progress: 67, stage: 'audio' },
     }));
-    const { fetchGenerationDetail } = await import('@/lib/api');
-    const detail = await fetchGenerationDetail('gen-3');
-    expect(detail?.engineTaskId).toBe('task-3');
-    expect(fetch).toHaveBeenCalledWith('/api/persona/video-generations/gen-3', expect.objectContaining({ method: 'GET' }));
+    const { fetchPostDetail } = await import('@/lib/api');
+    const detail = await fetchPostDetail('gen-3');
+    expect(detail?.kind).toBe('generation');
+    if (detail?.kind !== 'generation') throw new Error('expected generation');
+    expect(detail.generation.engineTaskId).toBe('task-3');
+    expect(detail.generation.progress).toBe(67);
+    expect(detail.generation.stage).toBe('audio');
+    expect(fetch).toHaveBeenCalledWith('/api/posts/gen-3', expect.objectContaining({ method: 'GET' }));
 
     vi.mocked(fetch).mockResolvedValueOnce(
-      jsonResponse({ success: false, error: 'Generation not found.' }, false, 404),
+      jsonResponse({ success: false, error: 'Post not found.' }, false, 404),
     );
-    await expect(fetchGenerationDetail('missing')).resolves.toBeNull();
+    await expect(fetchPostDetail('missing')).resolves.toBeNull();
   });
 
   it('detail queries are keyed by id and disabled without one', async () => {
     vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url === '/api/schedule/slots/slot-1') {
-        return jsonResponse({ success: true, slot: { id: 'slot-1' }, schedule: { id: 's1' }, persona: null });
-      }
-      if (url === '/api/persona/video-generations/gen-3') {
-        return jsonResponse({ success: true, generation: { id: 'row-1', generationId: 'gen-3' } });
+      if (url === '/api/posts/slot-1') {
+        return jsonResponse({ success: true, kind: 'slot', slot: { id: 'slot-1' }, schedule: { id: 's1' }, persona: null });
       }
       return jsonResponse({});
     });
-    const { useSlotDetailQuery, useGenerationDetailQuery } = await import('@/lib/api');
+    const { usePostDetailQuery } = await import('@/lib/api');
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const wrapper = ({ children }: { children: ReactNode }): ReactNode => (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
 
-    const { result: slotResult } = renderHook(() => useSlotDetailQuery('slot-1'), { wrapper });
-    await waitFor(() => expect(slotResult.current.isSuccess).toBe(true));
-    expect(fetch).toHaveBeenCalledWith('/api/schedule/slots/slot-1', expect.anything());
-
-    const { result: genResult } = renderHook(() => useGenerationDetailQuery('gen-3'), { wrapper });
-    await waitFor(() => expect(genResult.current.isSuccess).toBe(true));
-    expect(fetch).toHaveBeenCalledWith('/api/persona/video-generations/gen-3', expect.anything());
+    const { result } = renderHook(() => usePostDetailQuery('slot-1'), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(fetch).toHaveBeenCalledWith('/api/posts/slot-1', expect.anything());
 
     // No id → the query stays idle (the route param can be missing while
     // the page mounts).
-    const { result: idleResult } = renderHook(() => useSlotDetailQuery(''), { wrapper });
+    const { result: idleResult } = renderHook(() => usePostDetailQuery(''), { wrapper });
     expect(idleResult.current.fetchStatus).toBe('idle');
   });
 
-  // Regression pin for the frozen detail page: useSlotDetailQuery was the
+  // Regression pin for the frozen detail page: usePostDetailQuery was the
   // only query on the post detail screen without a refetchInterval, so a
   // user parked on a generating post never saw it flip to ready — and the
   // <video> only renders for ready/publishing/published. Fake timers assert
   // the actual scheduling; a static config assert would not catch a broken
   // interval (and Stryker's 60_000 → 60_001 mutant must die here).
-  it('useSlotDetailQuery refetches the slot every 60s', async () => {
+  it('usePostDetailQuery refetches the post every 60s', async () => {
     vi.useFakeTimers();
     try {
       vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
-        if (String(input) === '/api/schedule/slots/slot-1') {
-          return jsonResponse({ success: true, slot: { id: 'slot-1' }, schedule: { id: 's1' }, persona: null });
+        if (String(input) === '/api/posts/slot-1') {
+          return jsonResponse({ success: true, kind: 'slot', slot: { id: 'slot-1' }, schedule: { id: 's1' }, persona: null });
         }
         return jsonResponse({});
       });
-      const { useSlotDetailQuery } = await import('@/lib/api');
+      const { usePostDetailQuery } = await import('@/lib/api');
       const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
       const wrapper = ({ children }: { children: ReactNode }): ReactNode => (
         <QueryClientProvider client={client}>{children}</QueryClientProvider>
       );
 
-      const { result } = renderHook(() => useSlotDetailQuery('slot-1'), { wrapper });
+      const { result } = renderHook(() => usePostDetailQuery('slot-1'), { wrapper });
       await act(async () => {
         await vi.advanceTimersByTimeAsync(0);
       });
@@ -730,7 +744,7 @@ describe('api', () => {
         await vi.advanceTimersByTimeAsync(1);
       });
       expect(fetch).toHaveBeenCalledTimes(2);
-      expect(fetch).toHaveBeenLastCalledWith('/api/schedule/slots/slot-1', expect.anything());
+      expect(fetch).toHaveBeenLastCalledWith('/api/posts/slot-1', expect.anything());
     } finally {
       vi.useRealTimers();
     }
@@ -739,10 +753,11 @@ describe('api', () => {
   // narrowGeneration — the route always sends every generation key, but the
   // payload crosses the network: a malformed or missing block must narrow
   // to the all-null shape instead of handing the UI an undefined.
-  it('fetchSlotDetail narrows the generation facts from the route payload', async () => {
+  it('fetchPostDetail narrows the generation facts from the route payload', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       jsonResponse({
         success: true,
+        kind: 'slot',
         slot: { id: 'slot-1' },
         schedule: { id: 's1' },
         persona: null,
@@ -757,9 +772,10 @@ describe('api', () => {
         },
       }),
     );
-    const { fetchSlotDetail } = await import('@/lib/api');
-    const payload = await fetchSlotDetail('slot-1');
-    expect(payload?.generation).toEqual({
+    const { fetchPostDetail } = await import('@/lib/api');
+    const payload = await fetchPostDetail('slot-1');
+    if (payload?.kind !== 'slot') throw new Error('expected slot');
+    expect(payload.generation).toEqual({
       faceless: true,
       language: 'pt-BR',
       voiceId: 'ana_neural',
@@ -771,10 +787,11 @@ describe('api', () => {
     });
   });
 
-  it('fetchSlotDetail falls back to null leaves when generation is malformed', async () => {
+  it('fetchPostDetail falls back to null leaves when generation is malformed', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       jsonResponse({
         success: true,
+        kind: 'slot',
         slot: { id: 'slot-1' },
         schedule: { id: 's1' },
         persona: null,
@@ -786,9 +803,10 @@ describe('api', () => {
         },
       }),
     );
-    const { fetchSlotDetail } = await import('@/lib/api');
-    const payload = await fetchSlotDetail('slot-1');
-    expect(payload?.generation).toEqual({
+    const { fetchPostDetail } = await import('@/lib/api');
+    const payload = await fetchPostDetail('slot-1');
+    if (payload?.kind !== 'slot') throw new Error('expected slot');
+    expect(payload.generation).toEqual({
       faceless: false,
       language: null,
       voiceId: null,
@@ -800,18 +818,20 @@ describe('api', () => {
     });
   });
 
-  it('fetchSlotDetail defaults generation when the route omits it', async () => {
+  it('fetchPostDetail defaults generation when the route omits it', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       jsonResponse({
         success: true,
+        kind: 'slot',
         slot: { id: 'slot-1' },
         schedule: { id: 's1' },
         persona: null,
       }),
     );
-    const { fetchSlotDetail } = await import('@/lib/api');
-    const payload = await fetchSlotDetail('slot-1');
-    expect(payload?.generation).toEqual({
+    const { fetchPostDetail } = await import('@/lib/api');
+    const payload = await fetchPostDetail('slot-1');
+    if (payload?.kind !== 'slot') throw new Error('expected slot');
+    expect(payload.generation).toEqual({
       faceless: false,
       language: null,
       voiceId: null,

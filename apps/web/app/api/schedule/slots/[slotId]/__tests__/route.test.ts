@@ -566,7 +566,7 @@ describe('GET /api/schedule/slots/[slotId]', () => {
     expect(body.success).toBe(true);
     expect(body.persona).toBeNull();
     expect(logger.warn).toHaveBeenCalledWith(
-      '[api/schedule/slots] persona lookup failed',
+      '[post-detail] persona lookup failed',
       expect.objectContaining({ code: 'XX000' }),
     );
   });
@@ -1044,7 +1044,7 @@ describe('GET /api/schedule/slots/[slotId] failure logging', () => {
 
     expect(response.status).toBe(500);
     expect(logger.error).toHaveBeenCalledWith(
-      '[api/schedule/slots] schedule lookup failed',
+      '[api/schedule/slots] slot lookup failed',
       expect.objectContaining({ code: 'XX000' }),
     );
   });
