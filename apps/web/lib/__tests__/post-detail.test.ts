@@ -131,6 +131,37 @@ describe('getSlotPost', () => {
     });
     await expect(getSlotPost(supabase, 'slot-1', 'user-1')).rejects.toThrow('db down');
   });
+
+  it('throws when the schedule lookup hits a DB error', async () => {
+    const { supabase } = mockSupabase({
+      scheduled_posts: { data: SLOT_ROW, error: null },
+      schedules: { data: null, error: new Error('db down') },
+    });
+    await expect(getSlotPost(supabase, 'slot-1', 'user-1')).rejects.toThrow('db down');
+  });
+
+  it('degrades to a null persona when the persona lookup 404s', async () => {
+    const { supabase } = mockSupabase({
+      scheduled_posts: { data: SLOT_ROW, error: null },
+      schedules: { data: SCHEDULE_ROW, error: null },
+      personas: { data: null, error: PGRST116 },
+      scheduled_post_progress_history: { data: [], error: null },
+    });
+    const detail = await getSlotPost(supabase, 'slot-1', 'user-1');
+    expect(detail?.persona).toBeNull();
+    expect(detail?.slot.id).toBe('slot-1');
+  });
+
+  it('degrades to an empty history list when the history lookup fails', async () => {
+    const { supabase } = mockSupabase({
+      scheduled_posts: { data: SLOT_ROW, error: null },
+      schedules: { data: SCHEDULE_ROW, error: null },
+      personas: { data: { id: 'persona-1', name: 'Viva Leve' }, error: null },
+      scheduled_post_progress_history: { data: null, error: new Error('db down') },
+    });
+    const detail = await getSlotPost(supabase, 'slot-1', 'user-1');
+    expect(detail?.slot.progressHistory).toEqual([]);
+  });
 });
 
 describe('getGenerationPost', () => {
@@ -157,6 +188,17 @@ describe('getGenerationPost', () => {
     expect(detail?.progress).toBe(0);
     expect(detail?.stage).toBeNull();
     expect(from).toHaveBeenCalledWith('video_generations');
+  });
+
+  it('degrades to 0/null when the engine progress lookup throws', async () => {
+    const { fetchEngineTaskProgress } = await import('../engine-tasks');
+    vi.mocked(fetchEngineTaskProgress).mockRejectedValueOnce(new Error('engine down'));
+    const { supabase } = mockSupabase({
+      video_generations: { data: GENERATION_ROW, error: null },
+    });
+    const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1');
+    expect(detail?.progress).toBe(0);
+    expect(detail?.stage).toBeNull();
   });
 
   it('returns null for an unknown id (PGRST116)', async () => {
