@@ -56,9 +56,7 @@ describe('recordGenerationStart', () => {
       supabase,
       userId: 'user-1',
       generationId: 'gen-1',
-      params,
-      publishMode: 'scheduled',
-      scheduledAt: '2026-10-18T20:00:00.000Z',
+      persistence: { params, mode: 'scheduled', slotAt: '2026-10-18T20:00:00.000Z' },
     });
     expect(from).toHaveBeenCalledWith('video_generations');
     expect(insert).toHaveBeenCalledWith({
@@ -72,6 +70,24 @@ describe('recordGenerationStart', () => {
       scheduled_at: '2026-10-18T20:00:00.000Z',
       status: 'pending',
     });
+  });
+
+  it('stores null scheduled_at for asap posts even when a slot time is passed', async () => {
+    const { supabase, insert } = mockSupabase();
+    const params = { video_subject: 'myth busting' };
+    await recordGenerationStart({
+      supabase,
+      userId: 'user-1',
+      generationId: 'gen-1',
+      persistence: { params, mode: 'asap', slotAt: '2026-10-18T20:00:00.000Z' },
+    });
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        params,
+        publish_mode: 'asap',
+        scheduled_at: null,
+      }),
+    );
   });
 
   it("defaults publish_mode to 'asap' and leaves params/scheduled_at null when omitted", async () => {

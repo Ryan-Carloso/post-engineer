@@ -1342,11 +1342,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         throw new SlotDispatchError('empty_subject', 'Video subject is empty.');
       }
 
-      // History snapshot before dispatch: the row renders even if the
-      // persona is later renamed or deleted. The full engine payload rides
-      // along so the engine's boot triage can rebuild this generation
-      // after a restart (issue #205) — generate-now and scheduled posts
-      // share the one pipeline, distinguished only by publish_mode.
+      // History snapshot (+ full engine payload for the boot rebuild, #205).
       await recordGenerationStart({
         supabase,
         userId,
@@ -1354,9 +1350,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         personaId,
         personaName: prep.personaName,
         videoSubject: topic,
-        params: payload,
-        publishMode: mode,
-        scheduledAt: mode === 'scheduled' ? slot.slot_at : null,
+        persistence: { params: payload, mode, slotAt: slot.slot_at },
       });
 
       const engineTask = await startEngineVideoTask(userId, payload);
