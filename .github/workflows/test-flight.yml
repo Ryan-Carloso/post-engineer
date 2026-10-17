@@ -40,8 +40,8 @@ on:
   workflow_dispatch:
     inputs:
       topic:
-        description: 'Video topic (one line)'
-        required: true
+        description: 'Video topic (optional — rotates through evergreen topics when empty)'
+        required: false
         type: string
       persona_id:
         description: 'Persona UUID (must be in the API key persona scope)'
