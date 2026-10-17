@@ -97,7 +97,7 @@ describe('getSlotPost', () => {
   });
 
   it('returns the full slot detail for the owner', async () => {
-    const { supabase } = mockSupabase({
+    const { supabase, chains } = mockSupabase({
       scheduled_posts: { data: SLOT_ROW, error: null },
       schedules: { data: SCHEDULE_ROW, error: null },
       personas: { data: { id: 'persona-1', name: 'Viva Leve' }, error: null },
@@ -105,6 +105,14 @@ describe('getSlotPost', () => {
     });
     const detail = await getSlotPost(supabase, 'slot-1', 'user-1');
     expect(detail?.slot.id).toBe('slot-1');
+    // Pin the query shape: the select column list is load-bearing for the
+    // camelCase mapping below.
+    expect(chains['scheduled_posts'].select).toHaveBeenCalledWith(
+      'id, schedule_id, slot_at, status, topic, error, published_at, task_id, faceless'
+    );
+    expect(chains['schedules'].select).toHaveBeenCalledWith(
+      'id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, timezone, post_language, post_voice_id, post_video_aspect, post_video_layout, post_niche, post_paragraph_number, post_face_quality, publish_mode'
+    );
     expect(detail?.slot.progress).toBe(42);
     expect(detail?.slot.stage).toBe('video');
     expect(detail?.schedule.publishMode).toBe('scheduled');
@@ -170,7 +178,7 @@ describe('getGenerationPost', () => {
   });
 
   it('returns the generation with live engine progress while running', async () => {
-    const { supabase } = mockSupabase({
+    const { supabase, chains } = mockSupabase({
       video_generations: { data: GENERATION_ROW, error: null },
     });
     const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1');
@@ -178,6 +186,9 @@ describe('getGenerationPost', () => {
     expect(detail?.progress).toBe(67);
     expect(detail?.stage).toBe('audio');
     expect(detail?.tokensRefunded).toBe(false);
+    expect(chains['video_generations'].select).toHaveBeenCalledWith(
+      'id, generation_id, engine_task_id, persona_name, video_subject, status, error_code, tokens_refunded, created_at, completed_at'
+    );
   });
 
   it('returns progress 0 for terminal generations (no engine lookup)', async () => {
