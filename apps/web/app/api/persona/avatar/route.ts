@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 //---------------
-// POST /api/persona/avatar — MOCK do gerador de imagem por IA.
-// Retorna um placeholder em data URL. Provedor real depois.
+// POST /api/persona/avatar — MOCK of the AI image generator.
+// Returns a data-URL placeholder. Real provider later.
 //---------------
 
 const MOCK_AVATAR_URL =
@@ -53,4 +53,4 @@ async function postHandler(request: Request): Promise<NextResponse> {
 //---------------
 // 5xx reporting: handled server errors reach PostHog error tracking.
 //---------------
-export const POST = withApiErrorReporting('POST /api/persona/avatar', postHandler);
+export const POST = withApiErrorReporting('POST /api/persona/avatar', postHandler, { getUserId: resolveReportingUserId });

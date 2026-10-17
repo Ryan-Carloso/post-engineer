@@ -15,6 +15,27 @@ interface SupabaseSessionAuth {
   isOAuth?: boolean;
   keyId?: string;
   personaIds?: string[] | null;
+  // Best-effort display name from the session's user_metadata
+  // (full_name/name/display_name/user_name). Undefined for API-key and
+  // OAuth callers, which carry no user profile.
+  displayName?: string;
+}
+
+// Best-effort display name from a Supabase user_metadata object. OAuth
+// providers populate different keys (Google: full_name/name, GitHub:
+// full_name/user_name), so the common ones are checked in order.
+function displayNameFromUserMetadata(userMetadata: unknown): string | undefined {
+  if (userMetadata === null || typeof userMetadata !== 'object' || Array.isArray(userMetadata)) {
+    return undefined;
+  }
+  const metadata = userMetadata as Record<string, unknown>;
+  for (const key of ['full_name', 'name', 'display_name', 'user_name']) {
+    const value = metadata[key];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return undefined;
 }
 
 export type SupabaseSessionAuthResult =
@@ -82,7 +103,14 @@ export async function requireSupabaseSession(request?: Request): Promise<Supabas
     return unauthorized();
   }
 
-  return { auth: { userId: user.id, accessToken }, error: null };
+  return {
+    auth: {
+      userId: user.id,
+      accessToken,
+      displayName: displayNameFromUserMetadata(user.user_metadata),
+    },
+    error: null,
+  };
 }
 
 //---------------

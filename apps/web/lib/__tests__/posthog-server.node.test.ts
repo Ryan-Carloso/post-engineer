@@ -251,6 +251,27 @@ describe('telemetry origin tags (source + environment)', () => {
     });
   });
 
+  it('captureExceptionAs() attributes the $exception to the given distinct_id', async () => {
+    const { PostHog } = await import('posthog-node');
+    const captureSpy = vi.spyOn(PostHog.prototype, 'captureException');
+    const client = getPostHogServer();
+
+    client?.captureExceptionAs('user-123', new Error('boom'), { route: 'GET /api/test' });
+
+    await vi.waitFor(() => expect(captureSpy).toHaveBeenCalled());
+    // posthog-node captureException(error, distinctId, properties).
+    const args = captureSpy.mock.calls[0] as unknown as [
+      unknown,
+      string,
+      Record<string, unknown> | undefined,
+    ];
+    expect(args[1]).toBe('user-123');
+    expect(args[2]).toMatchObject({
+      source: 'web-server',
+      environment: 'development',
+    });
+  });
+
   it('reports environment production when NODE_ENV=production', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     const { PostHog } = await import('posthog-node');

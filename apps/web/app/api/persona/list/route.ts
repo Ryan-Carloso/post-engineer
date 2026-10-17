@@ -4,7 +4,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { isScopedApiKey } from '@/lib/api-keys';
 import { logger } from '@/lib/logger';
 import { describeImageSource, toSameOriginAssetPath } from '@/lib/image-source';
-import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 //---------------
 // GET /api/persona/list — the logged-in user's personas.
@@ -117,4 +117,4 @@ async function signedUrl(
 //---------------
 // 5xx reporting: handled server errors reach PostHog error tracking.
 //---------------
-export const GET = withApiErrorReporting('GET /api/persona/list', getHandler);
+export const GET = withApiErrorReporting('GET /api/persona/list', getHandler, { getUserId: resolveReportingUserId });

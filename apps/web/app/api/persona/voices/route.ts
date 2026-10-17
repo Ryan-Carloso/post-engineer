@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
 import { logger } from '@/lib/logger';
-import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 //---------------
 // GET /api/persona/voices — proxy of the house voice catalog to
@@ -81,4 +81,4 @@ async function getHandler(request?: Request): Promise<NextResponse> {
 //---------------
 // 5xx reporting: handled server errors reach PostHog error tracking.
 //---------------
-export const GET = withApiErrorReporting('GET /api/persona/voices', getHandler);
+export const GET = withApiErrorReporting('GET /api/persona/voices', getHandler, { getUserId: resolveReportingUserId });

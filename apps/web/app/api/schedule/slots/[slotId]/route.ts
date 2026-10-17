@@ -8,7 +8,7 @@ import { enrichSlot } from '@/lib/schedule-slot-presentation';
 import { fetchEnginePublishResults } from '@/lib/engine-tasks';
 import { resolvePublishLinks, type PublishLink } from '@/lib/publish-links';
 import { logger } from '@/lib/logger';
-import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import { buildGenerationFacts } from './generation-facts';
 
 //---------------
@@ -454,6 +454,6 @@ async function patchHandler(
 //---------------
 // 5xx reporting: handled server errors reach PostHog error tracking.
 //---------------
-export const GET = withApiErrorReporting('GET /api/schedule/slots/[slotId]', getHandler);
-export const DELETE = withApiErrorReporting('DELETE /api/schedule/slots/[slotId]', deleteHandler);
-export const PATCH = withApiErrorReporting('PATCH /api/schedule/slots/[slotId]', patchHandler);
+export const GET = withApiErrorReporting('GET /api/schedule/slots/[slotId]', getHandler, { getUserId: resolveReportingUserId });
+export const DELETE = withApiErrorReporting('DELETE /api/schedule/slots/[slotId]', deleteHandler, { getUserId: resolveReportingUserId });
+export const PATCH = withApiErrorReporting('PATCH /api/schedule/slots/[slotId]', patchHandler, { getUserId: resolveReportingUserId });

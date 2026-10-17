@@ -7,12 +7,12 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { InstagramService } from '@/lib/instagram';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
-import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 //---------------
-// instagramPictureUrlExpired — as URLs de mídia do Instagram CDN são assinadas
-// e expiram (param `oe` = timestamp Unix em hex). Sem essa checagem, a foto de
-// perfil salva no banco deixa de carregar após alguns dias.
+// instagramPictureUrlExpired — Instagram CDN media URLs are signed
+// and expire (param `oe` = Unix timestamp in hex). Without this check,
+// the profile photo saved in the database stops loading after a few days.
 //---------------
 function instagramPictureUrlExpired(url: string): boolean {
   try {
@@ -26,8 +26,9 @@ function instagramPictureUrlExpired(url: string): boolean {
 }
 
 //---------------
-// refreshInstagramAccountPicture — quando a foto de perfil salva expirou,
-// busca o perfil na Graph API com o token da conta e atualiza o metadata.
+// refreshInstagramAccountPicture — when the saved profile photo expired,
+// fetch the profile from the Graph API with the account token and update
+// the metadata.
 // Best-effort: quem chama trata falha (ex.: token revogado) e segue com o
 // registro original.
 //---------------
@@ -79,10 +80,11 @@ async function refreshInstagramAccountPicture(
 }
 
 //---------------
-// GET /api/account — lista todas as contas sociais do usuário logado (SEM tokens).
-// O shape por provider vem do registry (lib/providers/registry.ts); provider
-// desconhecido é descartado com log no servidor (só a linha ruim some, não a lista).
-// Auth = sessão Supabase (cookie) OU API key pessoal (Bearer/x-api-key, MCP).
+// GET /api/account — lists all social accounts of the logged-in user (NO tokens).
+// The per-provider shape comes from the registry (lib/providers/registry.ts);
+// an unknown provider is dropped with a server-side log (only the bad row
+// disappears, not the list).
+// Auth = Supabase session (cookie) OR personal API key (Bearer/x-api-key, MCP).
 //---------------
 async function getHandler(request?: Request) {
   const { auth, error: authError } = await requireSupabaseSession(request);
@@ -123,7 +125,7 @@ async function getHandler(request?: Request) {
       message: 'Accounts retrieved from Supabase',
     });
   } catch (error) {
-    // Mensagem genérica pro client: detalhes internos ficam só no servidor
+    // Generic message for the client: internal details stay server-side only
     logger.error('[ACCOUNT] Erro ao listar contas', error instanceof Error ? error.message : error);
     return NextResponse.json(
       { authenticated: false, accounts: [], message: 'Failed to list accounts.', error: 'LIST_ERROR' },
@@ -133,8 +135,8 @@ async function getHandler(request?: Request) {
 }
 
 //---------------
-// DELETE /api/account — desconecta (remove) uma conta social do usuário logado.
-// Query params: provider (youtube|instagram|bluesky|linkedin) e providerAccountId.
+// DELETE /api/account — disconnects (removes) a social account of the logged-in user.
+// Query params: provider (youtube|instagram|bluesky|linkedin) and providerAccountId.
 // Auth = sessão Supabase (cookie) OU API key pessoal (Bearer/x-api-key, MCP),
 // igual ao GET.
 //---------------
@@ -184,5 +186,5 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
 //---------------
 // 5xx reporting: handled server errors reach PostHog error tracking.
 //---------------
-export const GET = withApiErrorReporting('GET /api/account', getHandler);
-export const DELETE = withApiErrorReporting('DELETE /api/account', deleteHandler);
+export const GET = withApiErrorReporting('GET /api/account', getHandler, { getUserId: resolveReportingUserId });
+export const DELETE = withApiErrorReporting('DELETE /api/account', deleteHandler, { getUserId: resolveReportingUserId });

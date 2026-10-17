@@ -36,7 +36,7 @@ import {
   type SlotEnrichment,
 } from '@/lib/schedule-slot-presentation';
 import { recordProgressHistory, type ProgressSample } from '@/lib/schedule-progress-history';
-import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 //---------------
 // buildQueuePositions — 1-based position of every awaiting+generating
@@ -229,4 +229,4 @@ async function getHandler(request?: Request): Promise<NextResponse> {
 //---------------
 // 5xx reporting: handled server errors reach PostHog error tracking.
 //---------------
-export const GET = withApiErrorReporting('GET /api/schedule/status', getHandler);
+export const GET = withApiErrorReporting('GET /api/schedule/status', getHandler, { getUserId: resolveReportingUserId });

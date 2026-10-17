@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@/lib/logger';
-import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 //---------------
 // Health Check — only verifies that Supabase is reachable.
@@ -34,4 +34,4 @@ async function getHandler() {
 //---------------
 // 5xx reporting: handled server errors reach PostHog error tracking.
 //---------------
-export const GET = withApiErrorReporting('GET /api/health', getHandler);
+export const GET = withApiErrorReporting('GET /api/health', getHandler, { getUserId: resolveReportingUserId });

@@ -99,6 +99,68 @@ describe('requireSupabaseSession', () => {
     expect(result.auth?.userId).toBe('user-cookie-456');
     expect(result.auth?.accessToken).toBe('cookie-session-token');
   });
+
+  it('carries the display name from user_metadata on cookie sessions', async () => {
+    const mockServerClient = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: 'user-cookie-456', user_metadata: { full_name: 'Test User' } } },
+          error: null,
+        }),
+        getSession: vi.fn().mockResolvedValue({
+          data: { session: { access_token: 'cookie-session-token' } },
+          error: null,
+        }),
+      },
+    };
+    vi.mocked(createSupabaseServerClient).mockResolvedValue(mockServerClient as unknown as SupabaseClient);
+
+    const result = await requireSupabaseSession();
+    expect(result.auth?.displayName).toBe('Test User');
+  });
+
+  it('falls back through name keys in user_metadata (full_name, name, display_name, user_name)', async () => {
+    const mockServerClient = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: {
+            user: {
+              id: 'user-cookie-456',
+              user_metadata: { name: 'Plain Name', user_name: 'nick' },
+            },
+          },
+          error: null,
+        }),
+        getSession: vi.fn().mockResolvedValue({
+          data: { session: { access_token: 'cookie-session-token' } },
+          error: null,
+        }),
+      },
+    };
+    vi.mocked(createSupabaseServerClient).mockResolvedValue(mockServerClient as unknown as SupabaseClient);
+
+    const result = await requireSupabaseSession();
+    expect(result.auth?.displayName).toBe('Plain Name');
+  });
+
+  it('leaves displayName undefined when user_metadata carries no name', async () => {
+    const mockServerClient = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: 'user-cookie-456', user_metadata: { avatar_url: 'x' } } },
+          error: null,
+        }),
+        getSession: vi.fn().mockResolvedValue({
+          data: { session: { access_token: 'cookie-session-token' } },
+          error: null,
+        }),
+      },
+    };
+    vi.mocked(createSupabaseServerClient).mockResolvedValue(mockServerClient as unknown as SupabaseClient);
+
+    const result = await requireSupabaseSession();
+    expect(result.auth?.displayName).toBeUndefined();
+  });
 });
 
 describe('requireSupabaseSession with OAuth access tokens', () => {

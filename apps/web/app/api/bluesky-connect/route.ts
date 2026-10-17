@@ -6,7 +6,7 @@ import { encryptTokens } from '@/lib/token-crypto';
 import { BlueskyError, loginToBluesky } from '@/lib/bluesky';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { apiErrorResponse } from '@/lib/api-error';
-import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 //---------------
 // POST /api/bluesky-connect — connects a Bluesky account via app password.
@@ -141,4 +141,4 @@ async function postHandler(request: Request): Promise<NextResponse> {
 //---------------
 // 5xx reporting: handled server errors reach PostHog error tracking.
 //---------------
-export const POST = withApiErrorReporting('POST /api/bluesky-connect', postHandler);
+export const POST = withApiErrorReporting('POST /api/bluesky-connect', postHandler, { getUserId: resolveReportingUserId });

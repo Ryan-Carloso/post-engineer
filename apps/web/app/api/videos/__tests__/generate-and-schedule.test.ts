@@ -1099,21 +1099,24 @@ describe('POST /api/videos/generate-and-schedule', () => {
 
     it('reports the 502 to PostHog with route, code and user id', async () => {
       vi.stubEnv('NODE_ENV', 'production');
-      const captureException = vi.fn();
+      const captureExceptionAs = vi.fn();
       vi.mocked(getPostHogServer).mockReturnValue({
         capture: vi.fn(),
         captureAs: vi.fn(),
-        captureException,
+        captureException: vi.fn(),
+        captureExceptionAs,
       } as never);
       try {
         setup({ ...DEFAULT_CFG, engineFailSubjects: ['Idea 1', 'Idea 2'] });
         const res = await post(baseBody());
         expect(res.status).toBe(502);
-        await vi.waitFor(() => expect(captureException).toHaveBeenCalledTimes(1));
-        const [error, properties] = captureException.mock.calls[0] as [
+        await vi.waitFor(() => expect(captureExceptionAs).toHaveBeenCalledTimes(1));
+        const [distinctId, error, properties] = captureExceptionAs.mock.calls[0] as [
+          string,
           Error,
           Record<string, unknown>,
         ];
+        expect(distinctId).toBe(USER_ID);
         expect(error).toBeInstanceOf(Error);
         expect(properties).toMatchObject({
           route: 'POST /api/videos/generate-and-schedule',
