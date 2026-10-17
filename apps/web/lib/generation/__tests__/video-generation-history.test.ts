@@ -33,6 +33,9 @@ describe('recordGenerationStart', () => {
       persona_id: 'persona-1',
       persona_name: 'Viva Leve',
       video_subject: 'myth busting',
+      params: null,
+      publish_mode: 'asap',
+      scheduled_at: null,
       status: 'pending',
     });
   });
@@ -44,6 +47,43 @@ describe('recordGenerationStart', () => {
       recordGenerationStart({ supabase, userId: 'u', generationId: 'g' }),
     ).resolves.toBeUndefined();
     expect(console.error).toHaveBeenCalled();
+  });
+
+  it('persists the full job payload, publish mode and scheduled time when provided', async () => {
+    const { supabase, from, insert } = mockSupabase();
+    const params = { video_subject: 'myth busting', persona: { name: 'Viva Leve' } };
+    await recordGenerationStart({
+      supabase,
+      userId: 'user-1',
+      generationId: 'gen-1',
+      params,
+      publishMode: 'scheduled',
+      scheduledAt: '2026-10-18T20:00:00.000Z',
+    });
+    expect(from).toHaveBeenCalledWith('video_generations');
+    expect(insert).toHaveBeenCalledWith({
+      user_id: 'user-1',
+      generation_id: 'gen-1',
+      persona_id: null,
+      persona_name: null,
+      video_subject: null,
+      params,
+      publish_mode: 'scheduled',
+      scheduled_at: '2026-10-18T20:00:00.000Z',
+      status: 'pending',
+    });
+  });
+
+  it("defaults publish_mode to 'asap' and leaves params/scheduled_at null when omitted", async () => {
+    const { supabase, insert } = mockSupabase();
+    await recordGenerationStart({ supabase, userId: 'u', generationId: 'g' });
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        params: null,
+        publish_mode: 'asap',
+        scheduled_at: null,
+      }),
+    );
   });
 });
 

@@ -147,6 +147,14 @@ Provision the database schema in your Supabase project:
     with the b-roll below. Presentation only; the hook render and its
     cost are identical either way.
 
+18. `supabase/migrations/021_video-generations-params.sql` — adds
+    `video_generations.params` (JSONB with the full engine job payload),
+    `publish_mode` (`asap`/`scheduled`, CHECK-pinned, default `asap`)
+    and `scheduled_at`: the engine's boot triage rebuilds orphaned
+    direct generations from the row instead of failing them (issue
+    #205), unifying "generate now" and scheduled posts into one
+    pipeline.
+
 Paste each file into the Supabase Dashboard > SQL Editor and run, in order
 (the numeric prefixes encode the order — always apply the
 lowest number first), or apply them with the Supabase CLI from the repo

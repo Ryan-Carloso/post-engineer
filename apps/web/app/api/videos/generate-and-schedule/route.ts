@@ -1343,7 +1343,10 @@ async function postHandler(request: Request): Promise<NextResponse> {
       }
 
       // History snapshot before dispatch: the row renders even if the
-      // persona is later renamed or deleted.
+      // persona is later renamed or deleted. The full engine payload rides
+      // along so the engine's boot triage can rebuild this generation
+      // after a restart (issue #205) — generate-now and scheduled posts
+      // share the one pipeline, distinguished only by publish_mode.
       await recordGenerationStart({
         supabase,
         userId,
@@ -1351,6 +1354,9 @@ async function postHandler(request: Request): Promise<NextResponse> {
         personaId,
         personaName: prep.personaName,
         videoSubject: topic,
+        params: payload,
+        publishMode: mode,
+        scheduledAt: mode === 'scheduled' ? slot.slot_at : null,
       });
 
       const engineTask = await startEngineVideoTask(userId, payload);

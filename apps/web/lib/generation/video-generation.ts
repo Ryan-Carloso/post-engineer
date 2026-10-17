@@ -197,10 +197,21 @@ function extractTaskId(body: unknown): string | undefined {
 export type GenerationHistoryStatus = 'pending' | 'running' | 'completed' | 'failed';
 
 //---------------
+// GENERATION_PUBLISH_MODES — the two pipeline modes, shared with the
+// video_generations.publish_mode CHECK (migration 021). 'asap' ("generate
+// now") posts as soon as the video is ready; 'scheduled' posts at
+// scheduled_at.
+//---------------
+export const GENERATION_PUBLISH_MODES = ['asap', 'scheduled'] as const;
+export type GenerationPublishMode = (typeof GENERATION_PUBLISH_MODES)[number];
+
+//---------------
 // recordGenerationStart — inserts the video_generations row right after the
 // token gate passes. The row is a snapshot (denormalized persona name and
 // subject) so the History page can render it even if the persona is later
-// renamed or deleted. Never throws: history recording must not break the
+// renamed or deleted; the full engine job payload rides along as JSONB so
+// the engine's boot triage can rebuild the generation after a restart
+// (issue #205). Never throws: history recording must not break the
 // generation itself.
 //---------------
 export interface RecordGenerationStartInput {
@@ -210,6 +221,11 @@ export interface RecordGenerationStartInput {
   personaId?: string | null;
   personaName?: string | null;
   videoSubject?: string | null;
+  /** Full engine job payload (buildJobPayload output). Null = snapshot only. */
+  params?: Record<string, unknown> | null;
+  publishMode?: GenerationPublishMode;
+  /** Slot time for scheduled posts; null for asap. */
+  scheduledAt?: string | null;
 }
 
 export async function recordGenerationStart(input: RecordGenerationStartInput): Promise<void> {
@@ -220,6 +236,9 @@ export async function recordGenerationStart(input: RecordGenerationStartInput): 
       persona_id: input.personaId ?? null,
       persona_name: input.personaName ?? null,
       video_subject: input.videoSubject ?? null,
+      params: input.params ?? null,
+      publish_mode: input.publishMode ?? 'asap',
+      scheduled_at: input.scheduledAt ?? null,
       status: 'pending',
     });
     if (error) {
