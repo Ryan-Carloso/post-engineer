@@ -6,7 +6,6 @@ import re
 from collections import deque
 from os import path
 from threading import Lock
-import time
 from typing import Sequence
 
 from loguru import logger
@@ -28,6 +27,7 @@ from app.services import (
 from app.services import state as sm
 from app.services import persona_image, task_publish
 from app.services import task_webhook
+from app.services.pipeline_stage import PhaseTracker
 from app.services.intro_cost import IntroCostReport, completion_cost_kwargs, cost_event_props
 from app.services.persona_hook import (
     _discard_stale_subtitle,
@@ -1429,27 +1429,12 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
     logger.info(f"start task: {task_id}, stop_at: {stop_at}")
     music_mood = "pending"
     final_video_paths: list[str] = []
-    # [TIMING] phase wall-clock markers to find the real bottleneck per task.
-    _phase_start = time.perf_counter()
-    _last_phase = "start"
-
-    def _mark(phase: str) -> None:
-        nonlocal _phase_start, _last_phase
-        now = time.perf_counter()
-        logger.info(
-            f"[TIMING] task={task_id} phase={_last_phase}->{phase} "
-            f"elapsed={now - _phase_start:.1f}s"
-        )
-        _phase_start = now
-        _last_phase = phase
-        # Persist the last completed phase so the progress (SSE) endpoint
-        # and failure logs can report which stage the task is in. A
-        # stage-only update_task() preserves state/progress by contract, so
-        # no read-modify-write is needed here.
-        try:
-            sm.state.update_task(task_id, stage=phase)
-        except Exception:  # noqa: BLE001 — stage tracking must not break the pipeline
-            logger.warning(f"could not persist stage for task {task_id}")
+    # Phase tracking lives in app/services/pipeline_stage.py (this file is
+    # grandfathered and must not grow): the tracker separates the current
+    # phase (failure attribution) from the last completed phase (progress).
+    phases = PhaseTracker(
+        task_id, persist=lambda phase: sm.state.update_task(task_id, stage=phase)
+    )
 
     try:
         if stop_at == "video":
@@ -1458,8 +1443,9 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         track_generation_started(task_id)
 
         # 1. Generate script
+        phases.begin("script")
         video_script = generate_script(task_id, params)
-        _mark("script")
+        phases.complete("script")
         if not video_script or "Error: " in video_script:
             _fail_task(task_id, "failed to generate video script", params, stage="script")
             cleanup_task_intermediates(task_id, ())
@@ -1474,8 +1460,9 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         # 2. Generate terms
         video_terms = ""
         if not params.video_materials:
+            phases.begin("terms")
             video_terms = generate_terms(task_id, params, video_script)
-            _mark("terms")
+            phases.complete("terms")
             if not video_terms:
                 _fail_task(task_id, "failed to generate video terms", params, stage="terms")
                 cleanup_task_intermediates(task_id, ())
@@ -1490,10 +1477,11 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=20)
 
         # 3. Generate audio
+        phases.begin("audio")
         audio_file, audio_duration, sub_maker = generate_audio(
             task_id, params, video_script
         )
-        _mark("audio")
+        phases.complete("audio")
         if not audio_file:
             _fail_task(task_id, "failed to generate audio", params, stage="audio")
             cleanup_task_intermediates(task_id, ())
@@ -1526,10 +1514,11 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             return {"audio_file": audio_file, "audio_duration": audio_duration}
 
         # 4. Generate subtitle
+        phases.begin("subtitle")
         subtitle_path = generate_subtitle(
             task_id, params, video_script, sub_maker, audio_file
         )
-        _mark("subtitle")
+        phases.complete("subtitle")
 
         if stop_at == "subtitle":
             _complete_task(task_id, params, subtitle_path=subtitle_path)
@@ -1561,10 +1550,11 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=40)
 
         # 5. Get video materials
+        phases.begin("materials")
         downloaded_videos = get_video_materials(
             task_id, params, video_terms, audio_duration
         )
-        _mark("materials")
+        phases.complete("materials")
         if not downloaded_videos:
             _fail_task(task_id, "failed to download videos", params, stage="download")
             cleanup_task_intermediates(task_id, ())
@@ -1578,9 +1568,10 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
 
         available_moods = video.get_available_music_moods()
         logger.info(f"available BGM moods for video: {available_moods}")
+        phases.begin("music_mood")
         music_mood = llm.generate_music_mood(video_script, available_moods)
         sm.state.update_task(task_id, music_mood=music_mood)
-        _mark("music_mood")
+        phases.complete("music_mood")
         logger.info(f"music mood selected for video: {music_mood}")
 
         # Only the full video pipeline needs the video concat mode handling;
@@ -1590,7 +1581,8 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             params.video_concat_mode = VideoConcatMode(params.video_concat_mode)
 
         # 6. Generate final videos (marked first: a crash reports stage=render)
-        _mark("render")
+        phases.begin("render")
+        phases.complete("render")
         final_video_paths, combined_video_paths, intro_report = generate_final_videos(
             task_id,
             params,
@@ -1610,7 +1602,8 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         # publishing: local disk is ephemeral, a restart must not lose it.
         archive_final_videos(task_id, final_video_paths, params)
 
-        _mark("publish")
+        phases.begin("publish")
+        phases.complete("publish")
         task_publish.maybe_publish_finished_videos(
             task_id=task_id,
             params=params,
@@ -1705,7 +1698,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         return kwargs
     except Exception as exc:
         logger.exception("task %s crashed", task_id)
-        _fail_task(task_id, safe_reason(exc), params, stage=_last_phase, exc=exc, music_mood=music_mood)
+        _fail_task(task_id, safe_reason(exc), params, stage=phases.current, exc=exc, music_mood=music_mood)
         try:
             cleanup_task_intermediates(task_id, final_video_paths)
         except OSError as cleanup_error:

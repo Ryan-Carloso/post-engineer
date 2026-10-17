@@ -1107,9 +1107,10 @@ class TestPublishFailureDiscordAlert(unittest.TestCase):
         self.assertNotIn("/tmp/", message)
 
     def test_publish_failure_funnel_event_carries_publish_stage(self):
-        # Route-level pin for the _mark("publish") wiring in start(): the
-        # generic handler passes stage=_last_phase to _fail_task, so a
-        # revert of the _mark insertion would surface here as stage="render".
+        # Route-level pin for the phases.begin("publish") wiring in start():
+        # the generic handler passes stage=phases.current to _fail_task, so
+        # a revert of the begin insertion would surface here as
+        # stage="render".
         from app.services.task_publish import PublishFailedError
 
         params = VideoParams(
