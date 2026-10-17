@@ -11,8 +11,6 @@ import {
   ListFacesShape,
   UpdatePersonaShape,
   ListSocialAccountsShape,
-  GetPersonaPublishingAccountsShape,
-  SetPersonaPublishingAccountsShape,
   ConnectAccountShape,
   ListSchedulesShape,
   ListPostsShape,
@@ -36,6 +34,10 @@ import {
   DisconnectAccountShape,
   PublishVideoDirectShape,
 } from '../tools.js';
+import {
+  GetPersonaPublishingAccountsShape,
+  SetPersonaPublishingAccountsShape,
+} from '../tools-publishing-accounts.js';
 import type { PostEngineerClient } from '../client.js';
 
 const mockTrackEvent = vi.fn();

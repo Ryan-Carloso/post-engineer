@@ -59,7 +59,7 @@ function libErrorToResponse(route: string, error: unknown): NextResponse {
 }
 
 interface RouteContext {
-  auth: { userId: string; personaIds: string[] | null | undefined; isApiKey?: boolean; isOAuth?: boolean };
+  auth: { userId: string; personaIds?: string[] | null | undefined; isApiKey?: boolean; isOAuth?: boolean };
   supabase: SupabaseClient;
   personaId: string;
 }

@@ -297,7 +297,7 @@ export class PostEngineerClient {
     this.now = options.now ?? (() => new Date());
   }
 
-  private getHeaders(includeContentType = true): Record<string, string> {
+  getHeaders(includeContentType = true): Record<string, string> {
     const headers: Record<string, string> = {
       Accept: 'application/json',
     };
@@ -308,7 +308,7 @@ export class PostEngineerClient {
     return headers;
   }
 
-  private async request(
+  async request(
     path: string,
     init: RequestInit,
     action: string,
@@ -476,29 +476,6 @@ export class PostEngineerClient {
       '/api/account',
       { method: 'GET', headers: this.getHeaders() },
       'list social accounts'
-    );
-  }
-
-  async getPersonaPublishingAccounts(personaId: string): Promise<unknown> {
-    return this.request(
-      `/api/persona/publishing-accounts?personaId=${encodeURIComponent(personaId)}`,
-      { method: 'GET', headers: this.getHeaders() },
-      'get persona publishing accounts'
-    );
-  }
-
-  async setPersonaPublishingAccounts(
-    personaId: string,
-    accounts: Record<string, string[]>
-  ): Promise<unknown> {
-    return this.request(
-      `/api/persona/publishing-accounts?personaId=${encodeURIComponent(personaId)}`,
-      {
-        method: 'PUT',
-        headers: this.getHeaders(),
-        body: JSON.stringify({ accounts }),
-      },
-      'set persona publishing accounts'
     );
   }
 

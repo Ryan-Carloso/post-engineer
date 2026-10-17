@@ -4,7 +4,7 @@ import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
-import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
+import { FormProvider, useForm, useFormContext } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import Autoplay from 'embla-carousel-autoplay';
 import {
@@ -22,6 +22,7 @@ import { PersonaTokensSection } from './persona-tokens';
 import { PersonaImageLibrarySection, mapPersonaImageWarnings } from './persona-image-library';
 import { PersonaPreferencesSection } from './persona-preferences-section';
 import { PersonaPublishingAccountsSection } from './persona-publishing-accounts-section';
+import { PersonaFormSync } from './persona-form-sync';
 import { InlineFieldError, SectionDivider } from './persona-section-parts';
 import { scrollToErrorField } from '@/lib/scroll-to-error';
 import { DEFAULT_PERSONA_FACE_IDS } from '@/lib/persona-faces';
@@ -180,38 +181,6 @@ const PersonaPageContent = () => {
       </div>
     </FormProvider>
   );
-}
-
-//---------------
-// PersonaFormSync — mirrors RHF fields into the zustand store
-// (only when the field is dirty, so the store is not overwritten
-// on mount or in the edit flow).
-//---------------
-const PersonaFormSync = () => {
-  const { formState: { dirtyFields } } = useFormContext();
-  const name = useWatch({ name: 'name' });
-  const niche = useWatch({ name: 'niche' });
-  const scriptPrompt = useWatch({ name: 'scriptPrompt' });
-
-  useEffect(() => {
-    if (dirtyFields.name && typeof name === 'string') {
-      usePersonaStore.getState().setName(name);
-    }
-  }, [name, dirtyFields.name]);
-
-  useEffect(() => {
-    if (dirtyFields.niche && typeof niche === 'string') {
-      usePersonaStore.getState().setNiche(niche);
-    }
-  }, [niche, dirtyFields.niche]);
-
-  useEffect(() => {
-    if (dirtyFields.scriptPrompt && typeof scriptPrompt === 'string') {
-      usePersonaStore.getState().setScriptPrompt(scriptPrompt);
-    }
-  }, [scriptPrompt, dirtyFields.scriptPrompt]);
-
-  return null;
 }
 
 /* -----------------

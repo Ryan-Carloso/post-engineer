@@ -11,8 +11,6 @@ import {
   handleListFaces,
   handleUpdatePersona,
   handleListSocialAccounts,
-  handleGetPersonaPublishingAccounts,
-  handleSetPersonaPublishingAccounts,
   handleListSchedules,
   handleListPosts,
   handleCancelSchedule,
@@ -28,8 +26,21 @@ import {
   UpdatePersonaImageShape,
   RemovePersonaImageSchema,
 } from '../tools.js';
+import {
+  handleGetPersonaPublishingAccounts,
+  handleSetPersonaPublishingAccounts,
+} from '../tools-publishing-accounts.js';
+import {
+  getPersonaPublishingAccounts,
+  setPersonaPublishingAccounts,
+} from '../client-publishing-accounts.js';
 import type { PostEngineerClient } from '../client.js';
 import type { McpToolResponse } from '../tools.js';
+
+vi.mock('../client-publishing-accounts.js', () => ({
+  getPersonaPublishingAccounts: vi.fn(),
+  setPersonaPublishingAccounts: vi.fn(),
+}));
 
 function textOf(response: McpToolResponse): string {
   const block = response.content[0];
@@ -46,8 +57,6 @@ describe('MCP Tool Handlers', () => {
     listFaces: vi.fn(),
     updatePersona: vi.fn(),
     listSocialAccounts: vi.fn(),
-    getPersonaPublishingAccounts: vi.fn(),
-    setPersonaPublishingAccounts: vi.fn(),
     listSchedules: vi.fn(),
     listPosts: vi.fn(),
     cancelSchedule: vi.fn(),
@@ -143,19 +152,19 @@ describe('MCP Tool Handlers', () => {
   });
 
   it('handleGetPersonaPublishingAccounts returns the persona defaults', async () => {
-    vi.mocked(mockClient.getPersonaPublishingAccounts).mockResolvedValue({
+    vi.mocked(getPersonaPublishingAccounts).mockResolvedValue({
       success: true,
       defaults: { youtube: [], instagram: [], bluesky: ['did:plc:a'], linkedin: [] },
     });
 
     const response = await handleGetPersonaPublishingAccounts(mockClient, { personaId: 'p-1' });
 
-    expect(mockClient.getPersonaPublishingAccounts).toHaveBeenCalledWith('p-1');
+    expect(getPersonaPublishingAccounts).toHaveBeenCalledWith(mockClient, 'p-1');
     expect(textOf(response)).toContain('did:plc:a');
   });
 
   it('handleSetPersonaPublishingAccounts replaces the defaults', async () => {
-    vi.mocked(mockClient.setPersonaPublishingAccounts).mockResolvedValue({
+    vi.mocked(setPersonaPublishingAccounts).mockResolvedValue({
       success: true,
       defaults: { youtube: ['UC-1'], instagram: [], bluesky: [], linkedin: [] },
     });
@@ -165,7 +174,7 @@ describe('MCP Tool Handlers', () => {
       accounts: { youtube: ['UC-1'], bluesky: [] },
     });
 
-    expect(mockClient.setPersonaPublishingAccounts).toHaveBeenCalledWith('p-1', {
+    expect(setPersonaPublishingAccounts).toHaveBeenCalledWith(mockClient, 'p-1', {
       youtube: ['UC-1'],
       bluesky: [],
     });

@@ -2,6 +2,8 @@
 //
 // Extracted from route.ts so the route module stays under the file-size
 // ratchet. PersonaPrep is the snapshot the engine reads at tick time.
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { getPersonaDefaultAccounts } from '@/lib/persona-publishing-accounts';
 import type { FaceQuality } from '@/lib/tokens';
 
 export interface PersonaPrep {
@@ -28,6 +30,28 @@ export interface PersonaPrep {
 // snapshotted; the caller already refused a persona-less post that is not
 // faceless or that carries no voice.
 //---------------
+//---------------
+// resolvePublishingAccounts — which accounts a generate-and-schedule call
+// publishes to. When publishing.accounts is omitted entirely and the post
+// has a persona, fall back to the persona's default publishing accounts
+// (issue #212); explicit accounts always win. With no defaults either,
+// validateAccounts keeps its 400 behavior.
+//
+// Lives here (not in route.ts) so the route module stays under the
+// file-size ratchet.
+//---------------
+export async function resolvePublishingAccounts(
+  supabase: SupabaseClient,
+  personaId: string | null,
+  explicitAccounts: Record<string, string[] | undefined> | undefined,
+): Promise<Record<string, string[] | undefined>> {
+  const accounts = explicitAccounts ?? {};
+  if (Object.keys(accounts).length === 0 && personaId !== null) {
+    return getPersonaDefaultAccounts(supabase, personaId);
+  }
+  return accounts;
+}
+
 export function resolvePostWithoutPersona(opts: {
   faceless: boolean;
   audioUrl?: string;

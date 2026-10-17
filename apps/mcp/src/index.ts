@@ -11,8 +11,6 @@ import {
   ListFacesShape,
   UpdatePersonaShape,
   ListSocialAccountsShape,
-  GetPersonaPublishingAccountsShape,
-  SetPersonaPublishingAccountsShape,
   ConnectAccountShape,
   ListSchedulesShape,
   GetTokenBalanceShape,
@@ -41,8 +39,6 @@ import {
   handleListFaces,
   handleUpdatePersona,
   handleListSocialAccounts,
-  handleGetPersonaPublishingAccounts,
-  handleSetPersonaPublishingAccounts,
   handleConnectAccount,
   handleListSchedules,
   handleListPosts,
@@ -66,6 +62,12 @@ import {
   handleRemovePersonaImage,
   handlePublishVideoDirect,
 } from './tools.js';
+import {
+  GetPersonaPublishingAccountsShape,
+  SetPersonaPublishingAccountsShape,
+  handleGetPersonaPublishingAccounts,
+  handleSetPersonaPublishingAccounts,
+} from './tools-publishing-accounts.js';
 import { trackEvent } from './analytics.js';
 
 //---------------

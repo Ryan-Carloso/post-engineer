@@ -31,6 +31,7 @@ vi.mock('@/lib/api-error-reporting', async (importOriginal) => {
   };
 });
 
+import { NextResponse } from 'next/server';
 import { GET, PUT } from '../publishing-accounts/route';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
@@ -120,9 +121,12 @@ describe('GET /api/persona/publishing-accounts', () => {
   });
 
   it('401s when unauthenticated', async () => {
+    // requireSupabaseSession returns a NextResponse (not a plain Response)
+    // on auth failure, and the route passes it through via `instanceof
+    // NextResponse` — the mock must match the real shape.
     vi.mocked(requireSupabaseSession).mockResolvedValue({
       auth: null,
-      error: new Response(JSON.stringify({ success: false }), { status: 401 }),
+      error: NextResponse.json({ success: false }, { status: 401 }),
     } as never);
     const res = await GET(req('GET'));
     expect(res.status).toBe(401);

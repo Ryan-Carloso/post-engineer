@@ -232,9 +232,6 @@ function httpsUrlField(fieldName: string) {
 // Shared per-provider account-id fields for generate_persona_videos.
 // Defined once so the four provider blocks can't drift apart; the server
 // enforces which providers need accounts, the client only maps them.
-// Since issue #212, omitting all four falls back to the persona's default
-// publishing accounts (set via set_persona_publishing_accounts); explicit
-// ids always win.
 const PublishingAccountIdsShape = {
   youtubeAccountIds: z.array(z.string().min(1)).optional().describe('YouTube channel IDs (the channelId field from list_social_accounts). Required when providers includes youtube, unless the persona has default publishing accounts.'),
   instagramAccountIds: z.array(z.string().min(1)).optional().describe('Instagram account IDs (the igUserId field from list_social_accounts). Required when providers includes instagram, unless the persona has default publishing accounts.'),
@@ -432,52 +429,6 @@ export async function handleListSocialAccounts(
   client: PostEngineerClient
 ): Promise<McpToolResponse> {
   return handleLibraryCall(() => client.listSocialAccounts(), 'listing social accounts');
-}
-
-export const GetPersonaPublishingAccountsShape = {
-  personaId: z
-    .string()
-    .min(1, 'personaId is required')
-    .describe('The persona ID whose default publishing accounts to list.'),
-};
-
-export const GetPersonaPublishingAccountsSchema = z.object(GetPersonaPublishingAccountsShape);
-
-export const SetPersonaPublishingAccountsShape = {
-  personaId: z
-    .string()
-    .min(1, 'personaId is required')
-    .describe('The persona ID whose default publishing accounts to replace.'),
-  accounts: z
-    .record(z.string(), z.array(z.string().min(1)))
-    .describe(
-      'Default publishing accounts per provider, e.g. { youtube: ["UC..."], bluesky: ["did:plc:..."] }. ' +
-        'Replaces the whole set: providers mapped to [] (or omitted) keep no defaults. ' +
-        'Account IDs come from list_social_accounts (channelId / igUserId / providerAccountId / did).'
-    ),
-};
-
-export const SetPersonaPublishingAccountsSchema = z.object(SetPersonaPublishingAccountsShape);
-
-export async function handleGetPersonaPublishingAccounts(
-  client: PostEngineerClient,
-  args: z.infer<typeof GetPersonaPublishingAccountsSchema>
-): Promise<McpToolResponse> {
-  return handleLibraryCall(
-    () => client.getPersonaPublishingAccounts(args.personaId),
-    'getting persona publishing accounts'
-  );
-}
-
-export async function handleSetPersonaPublishingAccounts(
-  client: PostEngineerClient,
-  args: z.infer<typeof SetPersonaPublishingAccountsSchema>
-): Promise<McpToolResponse> {
-  return handleLibraryCall(
-    () => client.setPersonaPublishingAccounts(args.personaId, args.accounts),
-    'setting persona publishing accounts',
-    'Persona publishing accounts updated successfully'
-  );
 }
 
 export async function handleConnectAccount(
@@ -1214,7 +1165,7 @@ export async function handleGetTokenBalance(
  * Older handlers (handleConnectAccount) keep inline
  * try/catch because they pre-validate args before the client call —
  * the wrapper only covers the call itself. */
-async function handleLibraryCall(
+export async function handleLibraryCall(
   clientCall: () => Promise<unknown>,
   errorVerb: string,
   successPrefix?: string,
