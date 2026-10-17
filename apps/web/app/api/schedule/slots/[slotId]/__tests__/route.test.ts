@@ -35,6 +35,12 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 const USER_ID = 'user-1';
 
+// The slot route resolves the URL param into a real slot uuid before it
+// ever reaches PostgREST — fixtures use a genuine uuid for the same
+// reason (a non-uuid param must 404, not 22P02).
+const SLOT_ID = '872827cb-6345-45b8-8153-60924092a648';
+const BATCH_ID = 'aad196b2-380d-560d-a506-d6ee93c980ae';
+
 interface ChainCall {
   table: string;
   op: string;
@@ -156,7 +162,7 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
     mockAuth();
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
-    const response = await deleteSlot('slot-1');
+    const response = await deleteSlot(SLOT_ID);
 
     expect(response.status).toBe(200);    const body = (await response.json()) as { success: boolean };
     expect(body.success).toBe(true);
@@ -176,7 +182,7 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
     mockOAuthAuth();
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
-    const response = await deleteSlot('slot-1');
+    const response = await deleteSlot(SLOT_ID);
 
     expect(response.status).toBe(200);
     expect(createSupabaseServiceClient).toHaveBeenCalled();
@@ -191,7 +197,7 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
     mockAuth();
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
-    const response = await deleteSlot('slot-1');
+    const response = await deleteSlot(SLOT_ID);
 
     expect(response.status).toBe(409);
     expect(client.calls.some((c) => c.op === 'delete')).toBe(false);
@@ -205,7 +211,7 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
     mockAuth();
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
-    const response = await deleteSlot('slot-1');
+    const response = await deleteSlot(SLOT_ID);
 
     expect(response.status).toBe(404);
     expect(client.calls.some((c) => c.op === 'delete')).toBe(false);
@@ -222,7 +228,7 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
     mockAuth();
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
-    const response = await deleteSlot('slot-1');
+    const response = await deleteSlot(SLOT_ID);
 
     expect(response.status).toBe(500);
     expect(logger.error).toHaveBeenCalledWith(
@@ -240,7 +246,7 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
       mockAuth();
       vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
-      const response = await deleteSlot('slot-1');
+      const response = await deleteSlot(SLOT_ID);
 
       expect(response.status).toBe(409);
       expect(client.calls.some((c) => c.op === 'delete')).toBe(false);
@@ -256,7 +262,7 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
     mockAuth();
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
-    const response = await deleteSlot('slot-1');
+    const response = await deleteSlot(SLOT_ID);
 
     expect(response.status).toBe(409);
     expect(client.rpc).toHaveBeenCalledWith('delete_slot_if_not_last', {
@@ -272,7 +278,7 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
     );
     vi.mocked(requireSupabaseSession).mockResolvedValue({ auth: null, error: authError } as never);
 
-    const response = await deleteSlot('slot-1');
+    const response = await deleteSlot(SLOT_ID);
 
     expect(response.status).toBe(401);
   });
@@ -307,7 +313,7 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
     mockAuth();
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
-    const response = await patchSlot('slot-1', { topic: '  Novo tema  ' });
+    const response = await patchSlot(SLOT_ID, { topic: '  Novo tema  ' });
 
     expect(response.status).toBe(200);
     const body = (await response.json()) as { success: boolean; topic: string };
@@ -329,7 +335,7 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
     mockAuth();
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
-    const response = await patchSlot('slot-1', { topic: 'Novo tema' });
+    const response = await patchSlot(SLOT_ID, { topic: 'Novo tema' });
 
     expect(response.status).toBe(409);
   });
@@ -342,7 +348,7 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
     mockOAuthAuth();
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
-    const response = await patchSlot('slot-1', { topic: 'Novo tema' });
+    const response = await patchSlot(SLOT_ID, { topic: 'Novo tema' });
 
     expect(response.status).toBe(200);
     expect(createSupabaseServiceClient).toHaveBeenCalled();
@@ -358,7 +364,7 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
     for (const topic of ['', '   ']) {
-      const response = await patchSlot('slot-1', { topic });
+      const response = await patchSlot(SLOT_ID, { topic });
       expect(response.status).toBe(400);
     }
     expect(client.calls.some((c) => c.op === 'update')).toBe(false);
@@ -372,7 +378,7 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
     mockAuth();
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
-    const response = await patchSlot('slot-1', { topic: 'Novo tema' });
+    const response = await patchSlot(SLOT_ID, { topic: 'Novo tema' });
 
     expect(response.status).toBe(409);
     expect(client.calls.some((c) => c.op === 'update')).toBe(false);
@@ -386,7 +392,7 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
     mockAuth();
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
-    const response = await patchSlot('slot-1', { topic: 'Novo tema' });
+    const response = await patchSlot(SLOT_ID, { topic: 'Novo tema' });
 
     expect(response.status).toBe(404);
     expect(client.calls.some((c) => c.op === 'update')).toBe(false);
@@ -440,7 +446,7 @@ describe('GET /api/schedule/slots/[slotId]', () => {
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
     const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
-      params: Promise.resolve({ slotId: 'slot-1' }),
+      params: Promise.resolve({ slotId: SLOT_ID }),
     });
 
     expect(response.status).toBe(200);
@@ -480,7 +486,7 @@ describe('GET /api/schedule/slots/[slotId]', () => {
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
     const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
-      params: Promise.resolve({ slotId: 'slot-1' }),
+      params: Promise.resolve({ slotId: SLOT_ID }),
     });
 
     expect(response.status).toBe(200);
@@ -502,7 +508,7 @@ describe('GET /api/schedule/slots/[slotId]', () => {
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
     const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
-      params: Promise.resolve({ slotId: 'slot-1' }),
+      params: Promise.resolve({ slotId: SLOT_ID }),
     });
 
     expect(response.status).toBe(200);
@@ -524,7 +530,7 @@ describe('GET /api/schedule/slots/[slotId]', () => {
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
     const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
-      params: Promise.resolve({ slotId: 'slot-1' }),
+      params: Promise.resolve({ slotId: SLOT_ID }),
     });
 
     expect(response.status).toBe(200);
@@ -552,7 +558,7 @@ describe('GET /api/schedule/slots/[slotId]', () => {
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
     const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
-      params: Promise.resolve({ slotId: 'slot-1' }),
+      params: Promise.resolve({ slotId: SLOT_ID }),
     });
 
     expect(response.status).toBe(200);
@@ -575,7 +581,7 @@ describe('GET /api/schedule/slots/[slotId]', () => {
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
     const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
-      params: Promise.resolve({ slotId: 'slot-1' }),
+      params: Promise.resolve({ slotId: SLOT_ID }),
     });
 
     expect(response.status).toBe(200);
@@ -591,7 +597,7 @@ describe('GET /api/schedule/slots/[slotId]', () => {
     mockAuth();
 
     const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
-      params: Promise.resolve({ slotId: 'slot-1' }),
+      params: Promise.resolve({ slotId: SLOT_ID }),
     });
 
     expect(response.status).toBe(429);
@@ -611,7 +617,7 @@ describe('GET /api/schedule/slots/[slotId]', () => {
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
     const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
-      params: Promise.resolve({ slotId: 'slot-1' }),
+      params: Promise.resolve({ slotId: SLOT_ID }),
     });
 
     expect(response.status).toBe(200);
@@ -632,7 +638,7 @@ describe('GET /api/schedule/slots/[slotId]', () => {
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
     const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
-      params: Promise.resolve({ slotId: 'slot-1' }),
+      params: Promise.resolve({ slotId: SLOT_ID }),
     });
 
     expect(response.status).toBe(404);
@@ -648,7 +654,7 @@ describe('GET /api/schedule/slots/[slotId]', () => {
     vi.mocked(requireSupabaseSession).mockResolvedValue({ auth: null, error: authError } as never);
 
     const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
-      params: Promise.resolve({ slotId: 'slot-1' }),
+      params: Promise.resolve({ slotId: SLOT_ID }),
     });
 
     expect(response.status).toBe(401);
@@ -668,7 +674,7 @@ describe('GET /api/schedule/slots/[slotId]', () => {
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
     const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
-      params: Promise.resolve({ slotId: 'slot-1' }),
+      params: Promise.resolve({ slotId: SLOT_ID }),
     });
 
     expect(response.status).toBe(200);
@@ -682,9 +688,15 @@ describe('GET /api/schedule/slots/[slotId]', () => {
     // The history lookup is scoped to the slot and its owner.
     const historyCalls = client.calls.filter((c) => c.table === 'scheduled_post_progress_history');
     expect(historyCalls.filter((c) => c.op === 'eq').map((c) => c.args)).toEqual([
-      ['post_id', 'slot-1'],
+      ['post_id', SLOT_ID],
       ['user_id', USER_ID],
     ]);
+    // A clean lookup must not trip the failure branch.
+    const { logger } = await import('@/lib/logger');
+    expect(logger.warn).not.toHaveBeenCalledWith(
+      '[api/schedule/slots] progress history lookup failed',
+      expect.anything(),
+    );
   });
 
   it('defaults progressHistory to [] when nothing was recorded', async () => {
@@ -697,7 +709,7 @@ describe('GET /api/schedule/slots/[slotId]', () => {
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
     const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
-      params: Promise.resolve({ slotId: 'slot-1' }),
+      params: Promise.resolve({ slotId: SLOT_ID }),
     });
 
     expect(response.status).toBe(200);
@@ -706,6 +718,7 @@ describe('GET /api/schedule/slots/[slotId]', () => {
   });
 
   it('degrades to [] when the history lookup fails', async () => {
+    const { logger } = await import('@/lib/logger');
     const client = mockSlotsClient({
       slot: SLOT_DETAIL_ROW,
       schedule: SCHEDULE_ROW,
@@ -716,12 +729,18 @@ describe('GET /api/schedule/slots/[slotId]', () => {
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
     const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
-      params: Promise.resolve({ slotId: 'slot-1' }),
+      params: Promise.resolve({ slotId: SLOT_ID }),
     });
 
     expect(response.status).toBe(200);
     const body = (await response.json()) as { slot: { progressHistory: unknown[] } };
     expect(body.slot.progressHistory).toEqual([]);
+    // The failed lookup is loud: exact message and metadata pin the
+    // historyError branch against mutation.
+    expect(logger.warn).toHaveBeenCalledWith('[api/schedule/slots] progress history lookup failed', {
+      slotId: SLOT_ID,
+      error: { message: 'db down' },
+    });
   });
 });
 
@@ -762,7 +781,7 @@ describe('GET /api/schedule/slots/[slotId] generation facts', () => {
     });
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
     const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
-      params: Promise.resolve({ slotId: 'slot-1' }),
+      params: Promise.resolve({ slotId: SLOT_ID }),
     });
     expect(response.status).toBe(200);
     const body = (await response.json()) as {
@@ -825,7 +844,7 @@ describe('GET /api/schedule/slots/[slotId] generation facts', () => {
     });
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
     const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
-      params: Promise.resolve({ slotId: 'slot-1' }),
+      params: Promise.resolve({ slotId: SLOT_ID }),
     });
     const body = (await response.json()) as {
       success: boolean;
@@ -874,7 +893,7 @@ describe('GET /api/schedule/slots/[slotId] published links', () => {
 
   async function getBody(): Promise<{ slot: { publishLinks: unknown } }> {
     const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
-      params: Promise.resolve({ slotId: 'slot-1' }),
+      params: Promise.resolve({ slotId: SLOT_ID }),
     });
     expect(response.status).toBe(200);
     return (await response.json()) as { slot: { publishLinks: unknown } };
@@ -992,7 +1011,7 @@ describe('GET /api/schedule/slots/[slotId] failure logging', () => {
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
     const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
-      params: Promise.resolve({ slotId: 'slot-1' }),
+      params: Promise.resolve({ slotId: SLOT_ID }),
     });
 
     expect(response.status).toBe(500);
@@ -1020,7 +1039,7 @@ describe('GET /api/schedule/slots/[slotId] failure logging', () => {
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
     const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
-      params: Promise.resolve({ slotId: 'slot-1' }),
+      params: Promise.resolve({ slotId: SLOT_ID }),
     });
 
     expect(response.status).toBe(500);
@@ -1041,10 +1060,164 @@ describe('GET /api/schedule/slots/[slotId] failure logging', () => {
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
     const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
-      params: Promise.resolve({ slotId: 'slot-1' }),
+      params: Promise.resolve({ slotId: SLOT_ID }),
     });
 
     expect(response.status).toBe(404);
     expect(logger.error).not.toHaveBeenCalled();
+  });
+});
+
+//---------------
+// Slot id normalization — the :slotId param is a scheduled_posts uuid,
+// but callers sometimes send the engine generation key
+// `batch:<scheduleId>:slot:<slotId>` instead. The route resolves the
+// real slot uuid before any uuid-typed PostgREST filter; anything else
+// 404s without touching the database (Postgres 22P02 must never escape
+// as a 500).
+//---------------
+
+describe('slot id normalization', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
+    vi.stubEnv('MONEYPRINT_API_SECRET', 'secret');
+  });
+
+  function slotIdEqCalls(client: { calls: ChainCall[] }, table: string) {
+    return client.calls
+      .filter((c) => c.table === table && c.op === 'eq' && c.args[0] === 'id')
+      .map((c) => c.args[1]);
+  }
+
+  it('GET resolves a batch:<scheduleId>:slot:<slotId> key to the slot uuid', async () => {
+    const client = mockSlotsClient({
+      slot: SLOT_DETAIL_ROW,
+      schedule: SCHEDULE_ROW,
+      persona: { id: 'p1', name: 'Viva Leve' },
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const composite = `batch:${BATCH_ID}:slot:${SLOT_ID}`;
+    const response = await GET(new Request(`https://example.com/api/schedule/slots/${composite}`), {
+      params: Promise.resolve({ slotId: composite }),
+    });
+
+    expect(response.status).toBe(200);
+    // The raw composite value must never reach a uuid-typed filter.
+    expect(slotIdEqCalls(client, 'scheduled_posts')).toEqual([SLOT_ID]);
+    expect(
+      client.calls
+        .filter((c) => c.table === 'scheduled_posts' && c.op === 'select')
+        .map((c) => c.args),
+    ).toEqual([['id, schedule_id, slot_at, status, topic, error, published_at, task_id, faceless']]);
+    expect(
+      client.calls
+        .filter((c) => c.table === 'scheduled_posts' && c.op === 'eq')
+        .map((c) => c.args),
+    ).toEqual([
+      ['id', SLOT_ID],
+      ['user_id', USER_ID],
+    ]);
+    expect(
+      client.calls
+        .filter((c) => c.table === 'scheduled_post_progress_history' && c.op === 'eq')
+        .map((c) => c.args),
+    ).toEqual([
+      ['post_id', SLOT_ID],
+      ['user_id', USER_ID],
+    ]);
+    expect(
+      client.calls
+        .filter((c) => c.table === 'scheduled_post_progress_history' && c.op === 'select')
+        .map((c) => c.args),
+    ).toEqual([['progress, stage, recorded_at']]);
+    expect(client.historyChain.order).toHaveBeenCalledWith('recorded_at', { ascending: true });
+  });
+
+  it('GET 404s a non-uuid id without touching the database', async () => {
+    const { logger } = await import('@/lib/logger');
+    const client = mockSlotsClient({});
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/slots/not-a-uuid'), {
+      params: Promise.resolve({ slotId: 'not-a-uuid' }),
+    });
+
+    expect(response.status).toBe(404);
+    expect(client.from).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[GET /api/schedule/slots] 404 Slot not found.',
+      expect.objectContaining({ route: 'GET /api/schedule/slots' }),
+    );
+  });
+
+  it('GET 404s a malformed batch key without touching the database', async () => {
+    const { logger } = await import('@/lib/logger');
+    const client = mockSlotsClient({});
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const malformed = `batch:${BATCH_ID}:slot:nope`;
+    const response = await GET(new Request(`https://example.com/api/schedule/slots/${malformed}`), {
+      params: Promise.resolve({ slotId: malformed }),
+    });
+
+    expect(response.status).toBe(404);
+    expect(client.from).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[GET /api/schedule/slots] 404 Slot not found.',
+      expect.objectContaining({ route: 'GET /api/schedule/slots' }),
+    );
+  });
+
+  it('DELETE 404s a non-uuid id without touching the database', async () => {
+    const { logger } = await import('@/lib/logger');
+    const client = mockSlotsClient({});
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await deleteSlot('not-a-uuid');
+
+    expect(response.status).toBe(404);
+    expect(client.from).not.toHaveBeenCalled();
+    expect(client.rpc).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[DELETE /api/schedule/slots] 404 Slot not found.',
+      expect.objectContaining({ route: 'DELETE /api/schedule/slots' }),
+    );
+  });
+
+  it('DELETE resolves a batch key to the slot uuid', async () => {
+    const client = mockSlotsClient({
+      slot: { id: SLOT_ID, schedule_id: 's1', status: 'pending', topic: 'T' },
+      schedule: { id: 's1', user_id: USER_ID },
+      rpcResult: 'deleted',
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await deleteSlot(`batch:${BATCH_ID}:slot:${SLOT_ID}`);
+
+    expect(response.status).toBe(200);
+    expect(slotIdEqCalls(client, 'scheduled_posts')).toEqual([SLOT_ID]);
+  });
+
+  it('PATCH 404s a non-uuid id without touching the database', async () => {
+    const { logger } = await import('@/lib/logger');
+    const client = mockSlotsClient({});
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await patchSlot('not-a-uuid', { topic: 'Novo tema' });
+
+    expect(response.status).toBe(404);
+    expect(client.from).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[PATCH /api/schedule/slots] 404 Slot not found.',
+      expect.objectContaining({ route: 'PATCH /api/schedule/slots' }),
+    );
   });
 });
