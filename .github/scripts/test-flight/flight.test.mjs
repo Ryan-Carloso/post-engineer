@@ -23,7 +23,7 @@ import {
 
 function baseEnv(overrides = {}) {
   return {
-    TEST_FLIGHT_API_KEY: 'key-for-tests',
+    TEST_FLIGHT_POST_ENGINEER_API_KEY: 'key-for-tests',
     TEST_FLIGHT_PERSONA_ID: 'persona-uuid',
     TEST_FLIGHT_BLUESKY_ACCOUNT_ID: 'bsky-acct',
     TEST_FLIGHT_INSTAGRAM_ACCOUNT_ID: 'ig-acct',
@@ -52,7 +52,7 @@ describe('resolveConfig', () => {
   });
 
   it('fails when the API key is missing', () => {
-    assert.throws(() => resolveConfig(baseEnv({ TEST_FLIGHT_API_KEY: '' })), FlightError);
+    assert.throws(() => resolveConfig(baseEnv({ TEST_FLIGHT_POST_ENGINEER_API_KEY: '' })), FlightError);
   });
 
   it('fails when the persona id is missing', () => {

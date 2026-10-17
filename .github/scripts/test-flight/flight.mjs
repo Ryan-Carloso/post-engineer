@@ -10,13 +10,14 @@
 //      cancel it (default) or leave it to fire
 //      (TEST_FLIGHT_SCHEDULED_ACTION=leave).
 //
-// Auth is a Post Engineer API key (TEST_FLIGHT_API_KEY) belonging to the
+// Auth is a Post Engineer API key (TEST_FLIGHT_POST_ENGINEER_API_KEY) belonging to the
 // funded test account; the key only ever lives in CI secrets. Account ids
 // arrive via workflow_dispatch inputs (manual flight) or repo Variables
 // (scheduled monitor) — nothing is hardcoded here.
 //
 // Configuration (environment, fail-fast — every missing value is an error):
-//   TEST_FLIGHT_API_KEY            required. API key of the test account.
+//   TEST_FLIGHT_POST_ENGINEER_API_KEY  required. Post Engineer API key of
+//                                  the test account.
 //   TEST_FLIGHT_PERSONA_ID         required. Persona UUID (must be in the
 //                                  key's persona scope).
 //   TEST_FLIGHT_BLUESKY_ACCOUNT_ID / TEST_FLIGHT_INSTAGRAM_ACCOUNT_ID /
@@ -83,7 +84,7 @@ function parsePositiveInt(raw, name, fallback) {
 }
 
 export function resolveConfig(env) {
-  const apiKey = requiredEnv(env, 'TEST_FLIGHT_API_KEY');
+  const apiKey = requiredEnv(env, 'TEST_FLIGHT_POST_ENGINEER_API_KEY');
   const personaId = requiredEnv(env, 'TEST_FLIGHT_PERSONA_ID');
   const accounts = {};
   for (const provider of PROVIDER_ORDER) {

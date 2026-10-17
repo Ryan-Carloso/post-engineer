@@ -11,10 +11,11 @@ name: test-flight
 # Setup (repo Settings > Secrets and variables > Actions) — done once by
 # the repo owner, never hardcoded here, never shared in chat:
 #   Secrets:
-#     TEST_FLIGHT_API_KEY            API key of the funded test account
-#                                    (create at post-engineer.com/api-keys,
-#                                    scoped to the test persona).
-#     TEST_FLIGHT_DISCORD_WEBHOOK_URL (optional) failure alert target.
+#     TEST_FLIGHT_POST_ENGINEER_API_KEY  Post Engineer API key of the funded
+#                                        test account (create at
+#                                        post-engineer.com/api-keys, scoped
+#                                        to the test persona).
+#     TEST_FLIGHT_DISCORD_WEBHOOK_URL    (optional) failure alert target.
 #   Variables:
 #     TEST_FLIGHT_PERSONA_ID         persona UUID used by manual flights
 #                                    without an explicit persona_id and by
@@ -93,7 +94,7 @@ jobs:
         run: node .github/scripts/test-flight/flight.mjs
         env:
           TEST_FLIGHT_API_BASE_URL: ${{ vars.TEST_FLIGHT_API_BASE_URL }}
-          TEST_FLIGHT_API_KEY: ${{ secrets.TEST_FLIGHT_API_KEY }}
+          TEST_FLIGHT_POST_ENGINEER_API_KEY: ${{ secrets.TEST_FLIGHT_POST_ENGINEER_API_KEY }}
           TEST_FLIGHT_PERSONA_ID: ${{ inputs.persona_id || vars.TEST_FLIGHT_PERSONA_ID }}
           TEST_FLIGHT_TOPIC: ${{ inputs.topic || vars.TEST_FLIGHT_TOPIC }}
           TEST_FLIGHT_BLUESKY_ACCOUNT_ID: ${{ inputs.bluesky_account_id || vars.TEST_FLIGHT_BLUESKY_ACCOUNT_ID }}
