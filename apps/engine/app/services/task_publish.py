@@ -12,6 +12,7 @@ is skipped, so retries/timeouts never double-post.
 from __future__ import annotations
 
 import os
+from typing import Any
 
 from loguru import logger
 
@@ -30,6 +31,20 @@ class PublishFailedError(Exception):
     """Raised when publishing a finished video fails permanently."""
 
 
+def dispatch_publish_params(body: object) -> dict[str, Any]:
+    """update_task() kwargs carrying the persisted publish plan.
+
+    Task params are otherwise in-process only, so a restart would lose
+    the publish destination; persisting ``publish_params`` on the task
+    row lets the boot orphan triage finish an interrupted publish
+    (orphan_requeue.complete_publish_orphan). PublishParams carries
+    titles/descriptions/account ids — no secret-shaped fields.
+    """
+    if isinstance(body, TaskVideoRequest) and body.publish is not None:
+        return {"publish_params": body.publish.model_dump(mode="json")}
+    return {}
+
+
 def maybe_publish_finished_videos(
     task_id: str,
     params: TaskVideoRequest,
@@ -38,9 +53,7 @@ def maybe_publish_finished_videos(
     """Publish finished videos when the task carries publish metadata."""
     if params.publish is None:
         return []
-    return publish_task_videos(
-        task_id=task_id, params=params, video_paths=video_paths
-    )
+    return publish_videos(task_id=task_id, publish=params.publish, video_paths=video_paths)
 
 
 def _required_env(name: str) -> str:
@@ -92,12 +105,16 @@ def to_client_metadata(
     )
 
 
-def publish_task_videos(
+def publish_videos(
     task_id: str,
-    params: TaskVideoRequest,
+    publish: PublishParams,
     video_paths: list[str],
 ) -> list[dict[str, object]]:
-    """Publish each final video to every selected provider.
+    """Publish finished videos with explicit publish params.
+
+    Takes the plan persisted at dispatch (task params are otherwise
+    in-process only) so the boot orphan triage can finish a publish
+    interrupted by a restart.
 
     Results are recorded in the task state under ``publish_results``.
 
@@ -112,7 +129,7 @@ def publish_task_videos(
         logger.info(f"task {task_id} already published, skipping publish step")
         return prior_results
 
-    metadata = to_client_metadata(params.publish)
+    metadata = to_client_metadata(publish)
     if metadata is None:
         return []
 

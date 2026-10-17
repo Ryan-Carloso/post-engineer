@@ -35,8 +35,7 @@ from app.models.schema import (
     VideoMaterialUploadResponse,
     VideoMaterialRetrieveResponse
 )
-from app.services import state as sm
-from app.services import task as tm
+from app.services import state as sm, task as tm, task_publish
 from app.services import video_storage
 from app.utils import file_security, upload_limits, utils
 
@@ -423,6 +422,7 @@ def create_task(
             # funnel can be broken down per persona instead of "unknown".
             **_persona_tracking_kwargs(body),
             **_generation_tracking_kwargs(body),
+            **task_publish.dispatch_publish_params(body),
         )
         # Funnel entry: requested fires from on_accepted once the task is
         # ACCEPTED into the queue — strictly before the worker thread

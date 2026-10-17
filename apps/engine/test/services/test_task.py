@@ -1061,7 +1061,7 @@ class TestFailTaskConcurrentDedupe(unittest.TestCase):
 class TestPublishFailureDiscordAlert(unittest.TestCase):
     """A publish failure inside start() reaches the Discord alert path.
 
-    publish_task_videos marks the task FAILED directly, but the raised
+    maybe_publish_finished_videos marks the task FAILED directly, but the raised
     PublishFailedError propagates to start()'s generic exception handler,
     which alerts via _fail_task. This test locks in that wiring — and that
     the alert carries the video basename, not the full local path.
