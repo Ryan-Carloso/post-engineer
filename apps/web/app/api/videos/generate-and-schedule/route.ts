@@ -40,6 +40,7 @@ import {
 import { validateScheduleWindow } from '@/lib/schedule-window';
 import { isValidTimezone } from '@/lib/timezone';
 import { computeVideoTokens, toFiniteNumber, type FaceQuality } from '@/lib/tokens';
+import { getPersonaDefaultAccounts } from '@/lib/persona-publishing-accounts';
 import { resolvePostWithoutPersona, type PersonaPrep } from './persona-prep';
 import {
   buildJobPayload,
@@ -887,7 +888,15 @@ async function postHandler(request: Request): Promise<NextResponse> {
   if (prep instanceof NextResponse) return prep;
 
   // 5. Providers + social accounts (fail fast: never charge for a bad selection).
-  const accountIds = await validateAccounts(supabase, userId, providers, publishing.accounts ?? {});
+  // When publishing.accounts is omitted entirely and the post has a persona,
+  // fall back to the persona's default publishing accounts (issue #212);
+  // explicit accounts always win. With no defaults either, validateAccounts
+  // keeps its current 400 behavior.
+  let publishingAccounts = publishing.accounts ?? {};
+  if (Object.keys(publishingAccounts).length === 0 && personaId !== null) {
+    publishingAccounts = await getPersonaDefaultAccounts(supabase, personaId);
+  }
+  const accountIds = await validateAccounts(supabase, userId, providers, publishingAccounts);
   if (accountIds instanceof NextResponse) return accountIds;
 
   // Pinned library image: fail fast when the id does not resolve, before

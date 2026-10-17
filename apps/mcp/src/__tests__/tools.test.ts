@@ -11,6 +11,8 @@ import {
   handleListFaces,
   handleUpdatePersona,
   handleListSocialAccounts,
+  handleGetPersonaPublishingAccounts,
+  handleSetPersonaPublishingAccounts,
   handleListSchedules,
   handleListPosts,
   handleCancelSchedule,
@@ -44,6 +46,8 @@ describe('MCP Tool Handlers', () => {
     listFaces: vi.fn(),
     updatePersona: vi.fn(),
     listSocialAccounts: vi.fn(),
+    getPersonaPublishingAccounts: vi.fn(),
+    setPersonaPublishingAccounts: vi.fn(),
     listSchedules: vi.fn(),
     listPosts: vi.fn(),
     cancelSchedule: vi.fn(),
@@ -136,6 +140,36 @@ describe('MCP Tool Handlers', () => {
 
     expect(mockClient.listSocialAccounts).toHaveBeenCalledOnce();
     expect(textOf(response)).toContain('chan-1');
+  });
+
+  it('handleGetPersonaPublishingAccounts returns the persona defaults', async () => {
+    vi.mocked(mockClient.getPersonaPublishingAccounts).mockResolvedValue({
+      success: true,
+      defaults: { youtube: [], instagram: [], bluesky: ['did:plc:a'], linkedin: [] },
+    });
+
+    const response = await handleGetPersonaPublishingAccounts(mockClient, { personaId: 'p-1' });
+
+    expect(mockClient.getPersonaPublishingAccounts).toHaveBeenCalledWith('p-1');
+    expect(textOf(response)).toContain('did:plc:a');
+  });
+
+  it('handleSetPersonaPublishingAccounts replaces the defaults', async () => {
+    vi.mocked(mockClient.setPersonaPublishingAccounts).mockResolvedValue({
+      success: true,
+      defaults: { youtube: ['UC-1'], instagram: [], bluesky: [], linkedin: [] },
+    });
+
+    const response = await handleSetPersonaPublishingAccounts(mockClient, {
+      personaId: 'p-1',
+      accounts: { youtube: ['UC-1'], bluesky: [] },
+    });
+
+    expect(mockClient.setPersonaPublishingAccounts).toHaveBeenCalledWith('p-1', {
+      youtube: ['UC-1'],
+      bluesky: [],
+    });
+    expect(textOf(response)).toContain('updated successfully');
   });
 
   it('handleListSchedules returns schedules', async () => {

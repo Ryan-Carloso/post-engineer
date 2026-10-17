@@ -106,6 +106,8 @@ interface DbConfig {
   persona?: Record<string, unknown> | null;
   personaErrorCode?: string;
   socialAccounts?: Array<{ provider: string; provider_account_id: string }>;
+  /** Per-persona default publishing accounts (issue #212). */
+  personaDefaultAccounts?: Array<{ provider: string; provider_account_id: string }>;
   existingScheduleId?: string | null;
   /** publish_mode the mocked schedules row carries (replay envelope test). */
   existingSchedulePublishMode?: 'scheduled' | 'asap';
@@ -262,6 +264,9 @@ function makeClient(cfg: DbConfig): unknown {
             return Promise.resolve({ data: null, error: { code: 'XX000', message: 'db down' } }).then(resolve, reject);
           }
           return Promise.resolve({ data: cfg.socialAccounts ?? [], error: null }).then(resolve, reject);
+        }
+        if (name === 'persona_default_accounts') {
+          return Promise.resolve({ data: cfg.personaDefaultAccounts ?? [], error: null }).then(resolve, reject);
         }
         if (name === 'token_transactions') {
           if (cfg.ledgerError) {
@@ -1340,6 +1345,73 @@ describe('POST /api/videos/generate-and-schedule', () => {
       // The malformed row is skipped; the valid acct-1 still authorizes.
       const res = await post(baseBody());
       expect(res.status).toBe(200);
+    });
+  });
+
+  describe('persona default publishing accounts (issue #212)', () => {
+    const noAccountsBody = () =>
+      baseBody({
+        publishing: {
+          providers: ['youtube'],
+          schedule: { startAt: futureISO(48), times: ['18:00'], timezone: 'Europe/Lisbon' },
+        },
+      });
+
+    it('falls back to the persona defaults when publishing.accounts is omitted', async () => {
+      setup({
+        ...DEFAULT_CFG,
+        socialAccounts: [{ provider: 'youtube', provider_account_id: 'acct-default' }],
+        personaDefaultAccounts: [{ provider: 'youtube', provider_account_id: 'acct-default' }],
+      });
+      const res = await post(noAccountsBody());
+      const json = await res.json();
+      expect(res.status).toBe(200);
+      expect(json.success).toBe(true);
+      const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
+      expect(scheduleRows[0].youtube_account_ids).toEqual(['acct-default']);
+    });
+
+    it('explicit accounts win over the persona defaults', async () => {
+      setup({
+        ...DEFAULT_CFG,
+        socialAccounts: [
+          { provider: 'youtube', provider_account_id: 'acct-1' },
+          { provider: 'youtube', provider_account_id: 'acct-default' },
+        ],
+        personaDefaultAccounts: [{ provider: 'youtube', provider_account_id: 'acct-default' }],
+      });
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+      const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
+      expect(scheduleRows[0].youtube_account_ids).toEqual(['acct-1']);
+    });
+
+    it('keeps the 400 when accounts are omitted and the persona has no defaults', async () => {
+      setup(DEFAULT_CFG);
+      const res = await post(noAccountsBody());
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('INVALID_PROVIDER_ACCOUNT');
+      expect(json.error).toBe('Select at least one youtube account to publish to.');
+    });
+
+    it('does not consult persona defaults for faceless posts without a persona', async () => {
+      setup(DEFAULT_CFG);
+      const res = await post(
+        baseBody({
+          personaId: null,
+          options: { faceless: true },
+          publishing: {
+            providers: ['youtube'],
+            schedule: { startAt: futureISO(48), times: ['18:00'], timezone: 'Europe/Lisbon' },
+          },
+        }),
+      );
+      // Still a 400 (missing accounts) — a null persona never triggers the
+      // defaults lookup. The exact code depends on faceless validation order.
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.success).toBe(false);
     });
   });
 

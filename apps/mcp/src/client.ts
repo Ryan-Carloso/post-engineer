@@ -479,6 +479,29 @@ export class PostEngineerClient {
     );
   }
 
+  async getPersonaPublishingAccounts(personaId: string): Promise<unknown> {
+    return this.request(
+      `/api/persona/publishing-accounts?personaId=${encodeURIComponent(personaId)}`,
+      { method: 'GET', headers: this.getHeaders() },
+      'get persona publishing accounts'
+    );
+  }
+
+  async setPersonaPublishingAccounts(
+    personaId: string,
+    accounts: Record<string, string[]>
+  ): Promise<unknown> {
+    return this.request(
+      `/api/persona/publishing-accounts?personaId=${encodeURIComponent(personaId)}`,
+      {
+        method: 'PUT',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ accounts }),
+      },
+      'set persona publishing accounts'
+    );
+  }
+
   async getOAuthConnectUrl(provider: string): Promise<unknown> {
     return this.request(
       '/api/account/connect-url',
