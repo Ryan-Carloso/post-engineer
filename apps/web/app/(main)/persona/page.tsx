@@ -21,6 +21,7 @@ import { useI18n } from '@/lib/i18n/provider';
 import { PersonaTokensSection } from './persona-tokens';
 import { PersonaImageLibrarySection, mapPersonaImageWarnings } from './persona-image-library';
 import { PersonaPreferencesSection } from './persona-preferences-section';
+import { PersonaPublishingAccountsSection } from './persona-publishing-accounts-section';
 import { InlineFieldError, SectionDivider } from './persona-section-parts';
 import { scrollToErrorField } from '@/lib/scroll-to-error';
 import { DEFAULT_PERSONA_FACE_IDS } from '@/lib/persona-faces';
@@ -167,6 +168,12 @@ const PersonaPageContent = () => {
           <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
             <PersonaPreferencesSection />
           </section>
+          {/* Default publishing accounts need a PERSISTED persona (the API
+              route is keyed by personaId), so the section only renders while
+              editing an existing persona. */}
+          {editingPersonaId ? (
+            <PersonaPublishingAccountsSection personaId={editingPersonaId} />
+          ) : null}
           <PersonaSubmit editId={editId} />
           <PersonaFeedback />
         </div>
