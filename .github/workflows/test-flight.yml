@@ -1,0 +1,123 @@
+name: test-flight
+
+# CI-only end-to-end smoke: generates a REAL video on PROD and publishes it.
+#
+# Triggers: manual (workflow_dispatch) or the daily schedule below.
+# Deliberately NEVER on push / pull_request: each flight spends ~2 tokens
+# from the funded test account and posts publicly to the test social
+# accounts, so it only runs when a human asks for it (or once a day as a
+# prod-health monitor).
+#
+# Setup (repo Settings > Secrets and variables > Actions) — done once by
+# the repo owner, never hardcoded here, never shared in chat:
+#   Secrets:
+#     TEST_FLIGHT_POST_ENGINEER_API_KEY  Post Engineer API key of the funded
+#                                        test account (create at
+#                                        post-engineer.com/api-keys, scoped
+#                                        to the test persona).
+#     TEST_FLIGHT_DISCORD_WEBHOOK_URL    (optional) failure alert target.
+#   Variables (or Secrets — both are accepted as fallback):
+#     TEST_FLIGHT_PERSONA_ID         persona UUID used by manual flights
+#                                    without an explicit persona_id and by
+#                                    the daily monitor.
+#     TEST_FLIGHT_BLUESKY_ACCOUNT_ID / TEST_FLIGHT_INSTAGRAM_ACCOUNT_ID /
+#     TEST_FLIGHT_YOUTUBE_ACCOUNT_ID account ids for the daily monitor.
+#                                    Optional: when none are configured the
+#                                    flight auto-discovers the key's connected
+#                                    accounts via GET /api/account; explicit
+#                                    ids always win (e.g. Bluesky-only runs).
+#     TEST_FLIGHT_API_BASE_URL       (optional) default https://post-engineer.com.
+#     TEST_FLIGHT_TOPIC              (optional) fixed topic for the daily
+#                                    monitor; when empty it rotates through
+#                                    the script's evergreen list.
+#
+# Manual flight: Actions > test-flight > Run workflow — fill topic,
+# persona_id and the account ids to post to. scheduled_action=leave keeps
+# the scheduled-leg slot to fire for real; cancel (default) verifies the
+# slot then removes it.
+
+on:
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: 'Video topic (optional — rotates through evergreen topics when empty)'
+        required: false
+        type: string
+      persona_id:
+        description: 'Persona UUID (must be in the API key persona scope)'
+        required: true
+        type: string
+      bluesky_account_id:
+        description: 'Bluesky account DID (optional — auto-discovered from the key when omitted)'
+        required: false
+        type: string
+      instagram_account_id:
+        description: 'Instagram account id (optional — auto-discovered from the key when omitted)'
+        required: false
+        type: string
+      youtube_account_id:
+        description: 'YouTube channel id (optional — auto-discovered from the key when omitted)'
+        required: false
+        type: string
+      scheduled_action:
+        description: 'What to do with the scheduled-leg slot after verification'
+        required: false
+        default: 'cancel'
+        type: choice
+        options:
+          - cancel
+          - leave
+  schedule:
+    - cron: '0 8 * * *' # daily prod-health monitor, 08:00 UTC
+
+concurrency:
+  group: test-flight
+  cancel-in-progress: false # a running flight is never killed; the next one queues
+
+permissions:
+  contents: read
+
+jobs:
+  flight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90 # video generation takes minutes; polling caps at 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 pinned 2026-09-25
+        with:
+          node-version: '22'
+
+      - name: Unit tests (test-flight script)
+        run: node --test .github/scripts/test-flight/*.test.mjs
+
+      - name: Run test flight
+        run: node .github/scripts/test-flight/flight.mjs
+        env:
+          TEST_FLIGHT_API_BASE_URL: ${{ vars.TEST_FLIGHT_API_BASE_URL }}
+          TEST_FLIGHT_POST_ENGINEER_API_KEY: ${{ secrets.TEST_FLIGHT_POST_ENGINEER_API_KEY }}
+          TEST_FLIGHT_PERSONA_ID: ${{ inputs.persona_id || vars.TEST_FLIGHT_PERSONA_ID || secrets.TEST_FLIGHT_PERSONA_ID }}
+          TEST_FLIGHT_TOPIC: ${{ inputs.topic || vars.TEST_FLIGHT_TOPIC || secrets.TEST_FLIGHT_TOPIC }}
+          TEST_FLIGHT_BLUESKY_ACCOUNT_ID: ${{ inputs.bluesky_account_id || vars.TEST_FLIGHT_BLUESKY_ACCOUNT_ID || secrets.TEST_FLIGHT_BLUESKY_ACCOUNT_ID }}
+          TEST_FLIGHT_INSTAGRAM_ACCOUNT_ID: ${{ inputs.instagram_account_id || vars.TEST_FLIGHT_INSTAGRAM_ACCOUNT_ID || secrets.TEST_FLIGHT_INSTAGRAM_ACCOUNT_ID }}
+          TEST_FLIGHT_YOUTUBE_ACCOUNT_ID: ${{ inputs.youtube_account_id || vars.TEST_FLIGHT_YOUTUBE_ACCOUNT_ID || secrets.TEST_FLIGHT_YOUTUBE_ACCOUNT_ID }}
+          TEST_FLIGHT_SCHEDULED_ACTION: ${{ inputs.scheduled_action }}
+          TEST_FLIGHT_RUN_ID: ${{ github.run_id }}
+
+      - name: Notify Discord on failure
+        if: failure()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.TEST_FLIGHT_DISCORD_WEBHOOK_URL }}
+        run: |
+          set -euo pipefail
+          # The secrets context is not allowed in `if:` expressions, so the
+          # empty check lives here instead of in the step condition.
+          if [ -z "${DISCORD_WEBHOOK_URL}" ]; then
+            echo 'test-flight: no Discord webhook configured, skipping notification'
+            exit 0
+          fi
+          curl -fsS -X POST -H 'content-type: application/json' \
+            --data "{\"content\":\"🚨 test-flight FAILED — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
+            "${DISCORD_WEBHOOK_URL}"
