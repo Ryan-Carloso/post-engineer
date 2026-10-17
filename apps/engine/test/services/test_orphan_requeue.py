@@ -355,5 +355,122 @@ class TriageOrphanTests(unittest.TestCase):
         state.update_task.assert_not_called()
 
 
+class TriageRequeueStageGateTests(unittest.TestCase):
+    def _slot_store(self, slot):
+        store = MagicMock()
+        store.get_slot.return_value = slot
+        return store
+
+    def test_publish_stage_orphan_with_archived_video_not_requeued(self):
+        # A batch orphan whose video was already archived must complete the
+        # publish, not reset the slot to pending for a full regeneration.
+        state = MagicMock()
+        store = self._slot_store({"id": "slot-1", "status": "generating"})
+        data = _task_data(stage="publish", video_storage_path="u/t/v.mp4")
+        with patch.object(orphan_requeue, "track_event"):
+            claimed = orphan_requeue.triage_orphan(state, "t-1", data, store)
+        self.assertTrue(claimed)
+        store.update_slot.assert_not_called()
+        _, kwargs = state.update_task.call_args
+        self.assertEqual(kwargs["state"], const.TASK_STATE_COMPLETE)
+
+    def test_requeue_capped_after_max_attempts(self):
+        state = MagicMock()
+        store = self._slot_store({"id": "slot-1", "status": "generating"})
+        with patch.object(orphan_requeue, "track_event"):
+            claimed = orphan_requeue.triage_orphan(
+                state, "t-1", _task_data(requeue_count=3), store
+            )
+        # A deterministically crashing task must settle (fail+refund) instead
+        # of regenerating on every boot forever.
+        self.assertFalse(claimed)
+        store.update_slot.assert_not_called()
+        state.update_task.assert_not_called()
+
+    def test_requeue_allowed_below_cap(self):
+        state = MagicMock()
+        store = self._slot_store({"id": "slot-1", "status": "generating"})
+        with patch.object(orphan_requeue, "track_event"):
+            claimed = orphan_requeue.triage_orphan(
+                state, "t-1", _task_data(requeue_count=2), store
+            )
+        self.assertTrue(claimed)
+        store.update_slot.assert_called_once_with("slot-1", status="pending")
+        self.assertEqual(state.update_task.call_args[1]["requeue_count"], 3)
+
+
+class SettleBeforeCompleteTests(unittest.TestCase):
+    def test_mark_complete_settles_before_terminal_write(self):
+        state = MagicMock()
+        order = []
+        state.update_task.side_effect = lambda *a, **k: order.append("complete")
+        with (
+            patch.object(orphan_requeue, "track_event"),
+            patch.object(
+                orphan_requeue,
+                "settle_orphan_completed",
+                side_effect=lambda *a, **k: order.append("settle"),
+            ),
+        ):
+            orphan_requeue.mark_complete_orphan(
+                state,
+                "t-1",
+                _task_data(stage="publish", publish_results=[{"provider": "youtube"}]),
+            )
+        # Billing first: a crash between the settle and the terminal write
+        # is re-selected by the next boot; the reverse order would strand
+        # the generation row in processing forever.
+        self.assertEqual(order, ["settle", "complete"])
+
+    def test_complete_publish_settles_before_terminal_write(self):
+        state = MagicMock()
+        order = []
+        state.update_task.side_effect = lambda *a, **k: order.append("complete")
+        data = _task_data(
+            stage="publish",
+            video_storage_path="user123/task-1/final.mp4",
+            publish_params={
+                "providers": ["youtube"],
+                "youtube": {
+                    "title": "t",
+                    "description": "d",
+                    "tags": ["shorts"],
+                    "privacy_status": "public",
+                    "account_ids": ["acc-1"],
+                },
+            },
+        )
+        del data["slot_id"]
+        with (
+            patch.object(orphan_requeue.task_publish, "publish_videos"),
+            patch.object(orphan_requeue, "track_event"),
+            patch.object(
+                orphan_requeue,
+                "settle_orphan_completed",
+                side_effect=lambda *a, **k: order.append("settle"),
+            ),
+        ):
+            orphan_requeue.complete_publish_orphan(state, "t-1", data)
+        self.assertEqual(order, ["settle", "complete"])
+
+
+class InvalidPublishParamsTests(unittest.TestCase):
+    def test_unvalidatable_publish_params_returns_false(self):
+        # A persisted plan that can never validate (schema drift or a
+        # corrupt row) is deterministic: fail+refund instead of retrying
+        # it on every boot forever.
+        state = MagicMock()
+        data = _task_data(
+            stage="publish",
+            video_storage_path="u/t/v.mp4",
+            publish_params={"providers": ["youtube"]},  # youtube metadata missing
+        )
+        del data["slot_id"]
+        with patch.object(orphan_requeue.task_publish, "publish_videos") as pub:
+            done = orphan_requeue.complete_publish_orphan(state, "t-1", data)
+        self.assertFalse(done)
+        pub.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

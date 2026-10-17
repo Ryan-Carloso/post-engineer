@@ -105,17 +105,6 @@ def to_client_metadata(
     )
 
 
-def publish_task_videos(
-    task_id: str,
-    params: TaskVideoRequest,
-    video_paths: list[str],
-) -> list[dict[str, object]]:
-    """Publish finished videos when the task carries publish metadata."""
-    if params.publish is None:
-        return []
-    return publish_videos(task_id, params.publish, video_paths)
-
-
 def publish_videos(
     task_id: str,
     publish: PublishParams,
@@ -123,9 +112,9 @@ def publish_videos(
 ) -> list[dict[str, object]]:
     """Publish finished videos with explicit publish params.
 
-    Split from publish_task_videos so the boot orphan triage can rebuild the
-    publish plan persisted at dispatch (task params are otherwise in-process
-    only) and finish a publish interrupted by a restart.
+    Takes the plan persisted at dispatch (task params are otherwise
+    in-process only) so the boot orphan triage can finish a publish
+    interrupted by a restart.
 
     Results are recorded in the task state under ``publish_results``.
 

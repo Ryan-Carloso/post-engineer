@@ -24,12 +24,17 @@ from datetime import datetime, timezone
 from typing import Any
 
 from loguru import logger
+from pydantic import ValidationError
 
 from app.models import const
 from app.models.publish import PublishParams
 from app.services import task_publish
 from app.services.analytics import track_event
-from app.services.fill_schedule.constants import SLOT_GENERATING, SLOT_PENDING
+from app.services.fill_schedule.constants import (
+    SLOT_GENERATING,
+    SLOT_PENDING,
+    SLOT_READY,
+)
 
 # Decisions returned by classify_orphan().
 REQUEUE = "requeue"
@@ -58,7 +63,13 @@ GENERATION_STAGES = frozenset(
 
 # Slot states whose ownership belongs to the tick, never to the triage:
 # failing+refunding one of these would race the scheduler.
-_TICK_OWNED_SLOT_STATES = frozenset({SLOT_PENDING, "ready"})
+_TICK_OWNED_SLOT_STATES = frozenset({SLOT_PENDING, SLOT_READY})
+
+# After this many boot requeues, a task is assumed to deterministically
+# crash the process (e.g. OOM at render): stop regenerating it on every
+# boot and let the fail+refund path settle it (the batch reconciler fails
+# the slot and refunds the prepaid cost).
+MAX_AUTO_REQUEUES = 3
 
 
 def slot_store_or_none() -> Any | None:
@@ -115,8 +126,16 @@ def triage_requeue(state: Any, slot_store: Any, task_id: str, data: dict[str, An
         return False
     status = slot.get("status")
     if status == SLOT_GENERATING:
-        slot_store.update_slot(slot_id, status=SLOT_PENDING)
+        # Only generation-stage orphans restart from zero. A publish-stage
+        # orphan with a finished video must complete the publish via
+        # classify_orphan below — resetting its slot would discard the
+        # archived video and re-spend the GPU on a full regeneration.
+        if data.get("stage") not in GENERATION_STAGES:
+            return False
         requeue_count = int(data.get("requeue_count") or 0) + 1
+        if requeue_count > MAX_AUTO_REQUEUES:
+            return False
+        slot_store.update_slot(slot_id, status=SLOT_PENDING)
         state.update_task(task_id, auto_requeued=True, requeue_count=requeue_count)
         track_event(
             "task_auto_requeued",
@@ -169,8 +188,13 @@ def settle_orphan_completed(state: Any, task_id: str) -> None:
 
 def mark_complete_orphan(state: Any, task_id: str, data: dict[str, Any]) -> None:
     """Backfill COMPLETE for an orphan whose publish already ran."""
-    state.update_task(task_id, state=const.TASK_STATE_COMPLETE, progress=100)
+    # Billing first: if the process dies after the settle but before the
+    # terminal write, the next boot re-selects the still-non-terminal task
+    # and the idempotent settle skips the already-completed row. The
+    # reverse order would strand the generation row in processing forever
+    # (the boot SELECT excludes terminal rows).
     settle_orphan_completed(state, task_id)
+    state.update_task(task_id, state=const.TASK_STATE_COMPLETE, progress=100)
     track_event(
         "orphan_marked_complete",
         {"task_id": task_id, "flow": str(data.get("flow") or "unknown")},
@@ -219,10 +243,18 @@ def complete_publish_orphan(state: Any, task_id: str, data: dict[str, Any]) -> b
     raw_params = data.get("publish_params")
     if not isinstance(raw_params, dict):
         return False
-    publish = PublishParams.model_validate(raw_params)
+    try:
+        publish = PublishParams.model_validate(raw_params)
+    except ValidationError as exc:
+        # Deterministic: the persisted plan can never validate (schema
+        # drift or a corrupt row). Fail+refund instead of retrying it on
+        # every boot forever.
+        logger.error(f"orphan {task_id}: persisted publish_params invalid: {exc}")
+        return False
     task_publish.publish_videos(task_id, publish, [os.path.basename(object_path)])
-    state.update_task(task_id, state=const.TASK_STATE_COMPLETE, progress=100)
+    # Settle before the terminal write (see mark_complete_orphan).
     settle_orphan_completed(state, task_id)
+    state.update_task(task_id, state=const.TASK_STATE_COMPLETE, progress=100)
     track_event(
         "orphan_publish_completed",
         {"task_id": task_id, "flow": str(data.get("flow") or "unknown")},

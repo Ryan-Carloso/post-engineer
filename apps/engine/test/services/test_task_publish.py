@@ -1,7 +1,6 @@
 """Lifecycle tests for publishing finished task videos through the internal API.
 
-Red-first: defines ``app.services.task_publish.publish_task_videos`` before it
-exists. The engine's own publish_video client is mocked at its boundary; state
+The engine's own publish_video client is mocked at its boundary; state
 effects are asserted through the real MemoryState backend.
 """
 
@@ -17,7 +16,7 @@ from app.services import state as sm
 from app.services import task_publish
 
 
-class PublishTaskVideosTest(unittest.TestCase):
+class MaybePublishFinishedVideosTest(unittest.TestCase):
     def setUp(self) -> None:
         os.environ["MPT_UPLOAD_API_BASE_URL"] = "https://post-engineer.com"
         os.environ["MONEYPRINT_API_SECRET"] = "test-shared-secret"
@@ -60,7 +59,7 @@ class PublishTaskVideosTest(unittest.TestCase):
     def test_missing_base_url_fails_explicitly(self) -> None:
         del os.environ["MPT_UPLOAD_API_BASE_URL"]
         with self.assertRaises(RuntimeError):
-            task_publish.publish_task_videos(
+            task_publish.maybe_publish_finished_videos(
                 task_id="task_1",
                 params=self._request(),
                 video_paths=["/tmp/final.mp4"],
@@ -69,7 +68,7 @@ class PublishTaskVideosTest(unittest.TestCase):
     def test_missing_service_key_fails_explicitly(self) -> None:
         del os.environ["MONEYPRINT_API_SECRET"]
         with self.assertRaises(RuntimeError):
-            task_publish.publish_task_videos(
+            task_publish.maybe_publish_finished_videos(
                 task_id="task_1",
                 params=self._request(),
                 video_paths=["/tmp/final.mp4"],
@@ -78,7 +77,7 @@ class PublishTaskVideosTest(unittest.TestCase):
     def test_missing_task_owner_fails_explicitly(self) -> None:
         self._state.update_task("task_1", user_id=None)
         with self.assertRaises(RuntimeError):
-            task_publish.publish_task_videos(
+            task_publish.maybe_publish_finished_videos(
                 task_id="task_1",
                 params=self._request(),
                 video_paths=["/tmp/final.mp4"],
@@ -88,7 +87,7 @@ class PublishTaskVideosTest(unittest.TestCase):
         self._state.update_task("task_1", video_storage_path=None)
         with patch.object(task_publish.video_storage, "read_final_video_r2") as read_mock:
             with self.assertRaisesRegex(RuntimeError, "no verified R2 video archive"):
-                task_publish.publish_task_videos(
+                task_publish.maybe_publish_finished_videos(
                     task_id="task_1",
                     params=self._request(),
                     video_paths=["/does/not/exist/final.mp4"],
@@ -103,7 +102,7 @@ class PublishTaskVideosTest(unittest.TestCase):
             task_publish.video_storage, "read_final_video_r2"
         ) as read_mock:
             with self.assertRaisesRegex(RuntimeError, "no verified R2 video archive"):
-                task_publish.publish_task_videos(
+                task_publish.maybe_publish_finished_videos(
                     task_id="task_1",
                     params=self._request(),
                     video_paths=["/tmp/final.mp4"],
@@ -121,7 +120,7 @@ class PublishTaskVideosTest(unittest.TestCase):
                 "publish_video",
                 return_value={"success": True},
             ):
-                task_publish.publish_task_videos(
+                task_publish.maybe_publish_finished_videos(
                     task_id="task_1",
                     params=self._request(),
                     video_paths=["/tmp/final.mp4"],
@@ -137,7 +136,7 @@ class PublishTaskVideosTest(unittest.TestCase):
                 "publish_video",
                 return_value={"success": True},
             ) as publish_mock:
-                results = task_publish.publish_task_videos(
+                results = task_publish.maybe_publish_finished_videos(
                     task_id="task_1",
                     params=self._request(),
                     video_paths=[video_file.name],
@@ -168,7 +167,7 @@ class PublishTaskVideosTest(unittest.TestCase):
                 ),
             ):
                 with self.assertRaises(task_publish.PublishFailedError):
-                    task_publish.publish_task_videos(
+                    task_publish.maybe_publish_finished_videos(
                         task_id="task_1",
                         params=self._request(),
                         video_paths=[video_file.name],
@@ -192,7 +191,7 @@ class PublishTaskVideosTest(unittest.TestCase):
                 ),
             ):
                 with self.assertRaises(task_publish.PublishFailedError) as ctx:
-                    task_publish.publish_task_videos(
+                    task_publish.maybe_publish_finished_videos(
                         task_id="task_1",
                         params=self._request(),
                         video_paths=[video_file.name],
@@ -204,7 +203,7 @@ class PublishTaskVideosTest(unittest.TestCase):
     def test_idempotent_skip_when_already_published(self) -> None:
         self._state.update_task("task_1", publish_results=[{"success": True}])
         with patch.object(task_publish.upload_publisher, "publish_video") as publish_mock:
-            results = task_publish.publish_task_videos(
+            results = task_publish.maybe_publish_finished_videos(
                 task_id="task_1",
                 params=self._request(),
                 video_paths=["/tmp/final.mp4"],

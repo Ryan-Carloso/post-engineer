@@ -891,14 +891,14 @@ class SupabaseStateOrphanTriageTests(unittest.TestCase):
         slot_store = self._slot_store(None)
         self.requests.request.side_effect = [
             _response(json_data=orphans),  # SELECT non-terminal rows
-            _response(json_data=[]),  # update_task read-modify-write SELECT
-            _response(json_data=[{}]),  # update_task POST (COMPLETE)
             _response(
                 json_data=[
                     {"generation_id": "g-1", "status": "processing"}
                 ]
-            ),  # GET video_generations
+            ),  # GET video_generations (settle runs before the COMPLETE write)
             _response(json_data=[{}]),  # PATCH generation completed
+            _response(json_data=[]),  # update_task read-modify-write SELECT
+            _response(json_data=[{}]),  # update_task POST (COMPLETE)
         ]
         with patch.object(
             orphan_requeue, "slot_store_or_none", return_value=slot_store
