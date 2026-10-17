@@ -16,6 +16,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.models import const
+from app.services import orphan_requeue
 from app.services import state as state_module
 
 ENV = {
@@ -833,3 +834,141 @@ class SupabaseStateReconcileBatchTests(unittest.TestCase):
         ]
         self.assertEqual(len(progress), 1)
         self.assertIn(f"{every}/{every}", str(progress[0]))
+
+
+class SupabaseStateOrphanTriageTests(unittest.TestCase):
+    """reconcile_orphaned_tasks routes orphans by stage (orphan_requeue)."""
+
+    def setUp(self):
+        self.requests = MagicMock()
+
+    def _slot_store(self, slot):
+        store = MagicMock()
+        store.get_slot.return_value = slot
+        return store
+
+    def test_batch_orphan_in_generation_stage_requeued_not_failed(self):
+        orphans = [
+            {
+                "task_id": "t-1",
+                "data": {"stage": "audio", "slot_id": "slot-1", "flow": "batch"},
+            }
+        ]
+        backend = _make_state(self.requests)
+        slot_store = self._slot_store(
+            {"id": "slot-1", "status": "generating", "task_id": "t-1"}
+        )
+        self.requests.request.side_effect = [
+            _response(json_data=orphans),  # SELECT non-terminal rows
+            _response(json_data=[]),  # update_task read-modify-write SELECT
+            _response(json_data=[{}]),  # update_task POST
+        ]
+        with patch.object(
+            orphan_requeue, "slot_store_or_none", return_value=slot_store
+        ):
+            failed = backend.reconcile_orphaned_tasks()
+        self.assertEqual(failed, 0)
+        slot_store.update_slot.assert_called_once_with("slot-1", status="pending")
+        # The task was never marked failed.
+        for call in self.requests.request.call_args_list:
+            payload = call[1].get("json") or {}
+            self.assertNotEqual(
+                payload.get("state"), const.TASK_STATE_FAILED
+            )
+
+    def test_publish_orphan_with_results_marked_complete(self):
+        orphans = [
+            {
+                "task_id": "t-2",
+                "data": {
+                    "stage": "publish",
+                    "flow": "direct",
+                    "publish_results": [{"provider": "youtube"}],
+                },
+            }
+        ]
+        backend = _make_state(self.requests)
+        slot_store = self._slot_store(None)
+        self.requests.request.side_effect = [
+            _response(json_data=orphans),  # SELECT non-terminal rows
+            _response(
+                json_data=[
+                    {"generation_id": "g-1", "status": "processing"}
+                ]
+            ),  # GET video_generations (settle runs before the COMPLETE write)
+            _response(json_data=[{}]),  # PATCH generation completed
+            _response(json_data=[]),  # update_task read-modify-write SELECT
+            _response(json_data=[{}]),  # update_task POST (COMPLETE)
+        ]
+        with patch.object(
+            orphan_requeue, "slot_store_or_none", return_value=slot_store
+        ):
+            failed = backend.reconcile_orphaned_tasks()
+        self.assertEqual(failed, 0)
+        posts = [
+            c for c in self.requests.request.call_args_list if c[0][0] == "POST"
+        ]
+        self.assertEqual(posts[0][1]["json"]["state"], const.TASK_STATE_COMPLETE)
+        patches = [
+            c
+            for c in self.requests.request.call_args_list
+            if c[0][0] == "PATCH" and "video_generations" in c[0][1]
+        ]
+        self.assertEqual(len(patches), 1)
+        self.assertEqual(patches[0][1]["json"]["status"], "completed")
+        # No refund RPC on the completion path.
+        rpcs = [
+            c for c in self.requests.request.call_args_list if "/rpc/" in c[0][1]
+        ]
+        self.assertEqual(rpcs, [])
+
+    def test_triage_error_leaves_task_for_next_boot(self):
+        orphans = [
+            {"task_id": "t-1", "data": {"stage": "audio", "slot_id": "slot-1"}},
+            {"task_id": "t-2", "data": {"stage": "mystery"}},
+        ]
+        backend = _make_state(self.requests)
+        self.requests.request.side_effect = [
+            _response(json_data=orphans),  # SELECT non-terminal rows
+            # t-2 falls through to fail+refund:
+            _response(json_data=[]),  # GET video_generations: no row
+            _response(json_data=[{}]),  # PATCH t-2 failed
+        ]
+        with (
+            patch.object(orphan_requeue, "slot_store_or_none", return_value=None),
+            patch.object(
+                orphan_requeue,
+                "triage_orphan",
+                side_effect=[RuntimeError("slot store down"), False],
+            ),
+            patch.object(state_module.logger, "error") as log_error,
+        ):
+            failed = backend.reconcile_orphaned_tasks()
+        # t-1 stayed non-terminal (retried on the next boot); only t-2 failed.
+        self.assertEqual(failed, 1)
+        log_error.assert_called_once()
+        failed_patches = [
+            c
+            for c in self.requests.request.call_args_list
+            if c[0][0] == "PATCH"
+            and (c[1].get("json") or {}).get("state") == const.TASK_STATE_FAILED
+        ]
+        self.assertEqual(len(failed_patches), 1)
+
+    def test_requeue_falls_back_to_fail_without_slot_store(self):
+        orphans = [
+            {
+                "task_id": "t-1",
+                "data": {"stage": "audio", "slot_id": "slot-1", "flow": "batch"},
+            }
+        ]
+        backend = _make_state(self.requests)
+        self.requests.request.side_effect = [
+            _response(json_data=orphans),  # SELECT non-terminal rows
+            _response(json_data=[]),  # GET video_generations: no row
+            _response(json_data=[{}]),  # PATCH t-1 failed
+        ]
+        with patch.object(orphan_requeue, "slot_store_or_none", return_value=None):
+            with patch.object(state_module.logger, "warning"):
+                failed = backend.reconcile_orphaned_tasks()
+        self.assertEqual(failed, 1)

@@ -183,6 +183,22 @@ class ScheduleStore:
         )
         return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
 
+    def get_slot(self, slot_id: str) -> dict[str, Any] | None:
+        """Fetch one scheduled_posts row by id (status + task linkage).
+
+        Used by the boot orphan triage to decide whether a requeueable task
+        still has a generating slot to reset.
+        """
+        rows = self._request(
+            "GET",
+            "scheduled_posts",
+            params={"id": f"eq.{slot_id}", "select": "id,status,task_id", "limit": 1},
+        )
+        if not rows:
+            return None
+        row = rows[0]
+        return row if isinstance(row, dict) else None
+
     def update_slot(self, slot_id: str, **fields: Any) -> None:
         self._request(
             "PATCH",

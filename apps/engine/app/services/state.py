@@ -453,29 +453,23 @@ class SupabaseTaskState(BaseState):
         self._request("DELETE", f"task_id=eq.{self._eq(task_id)}")
 
     def reconcile_orphaned_tasks(self) -> int:
-        """Mark tasks left running across a restart as failed, and settle them.
+        """Triage tasks left running across a restart, then settle the rest.
 
-        Their GPU handles died with the old process, so they can (almost)
-        never complete. Each orphan is failed in the task table AND its
-        billing is settled (video_generations marked failed + token refunded
-        via the idempotent refund_generation_tokens RPC) — entirely inside
-        the engine, so an away user still gets their token back without ever
-        opening the web. A per-task failure is logged loudly and never
-        breaks the loop or the boot: the task stays non-terminal and is
-        retried on the next boot. Returns how many rows were failed.
-
-        Billing trade-off (rare, bounded): if a terminal COMPLETE write was
-        lost twice, the terminal webhook still delivered the video, yet the
-        row is non-terminal — this reconcile then marks it failed and refunds
-        the token, so the user keeps the video AND the token. Requires two
-        consecutive write failures plus a restart; accepted over the worse
-        alternative (a delivered-but-unrecorded task silently keeping the
-        token).
-
-        The batch is capped (_RECONCILE_BATCH_LIMIT) so a huge backlog after
-        a long outage cannot stall boot: leftover rows are drained by later
-        boots, and the ordering is idempotent.
+        Each orphan is classified by its last persisted stage
+        (app.services.orphan_requeue.classify_orphan): generation stages
+        linked to a batch slot go back to ``pending`` for the next
+        fill-schedule tick, publish-stage orphans with a finished video
+        complete the publish, and everything else keeps the historical
+        fail+refund. A per-task failure is logged loudly and never breaks
+        the loop or the boot: the task stays non-terminal and is retried
+        on the next boot. Returns how many rows were failed
+        (requeued/completed orphans are not counted).
         """
+        # Lazy import: orphan_requeue -> task_publish -> app.services.state,
+        # so a top-level import would run while this module is still
+        # initializing (SupabaseTaskState() is constructed at import time).
+        from app.services import orphan_requeue
+
         response = self._request(
             "GET",
             "select=task_id,data"
@@ -488,13 +482,21 @@ class SupabaseTaskState(BaseState):
                 f"orphan reconcile hit the batch cap ({_RECONCILE_BATCH_LIMIT}); "
                 "remaining rows will be drained by subsequent boots"
             )
+        slot_store = orphan_requeue.slot_store_or_none()
         failed = 0
         for index, row in enumerate(rows, start=1):
             if index % _RECONCILE_PROGRESS_EVERY == 0:
-                logger.info(
-                    f"orphan reconcile progress: {index}/{len(rows)} rows processed"
-                )
+                logger.info(f"orphan reconcile progress: {index}/{len(rows)} rows processed")
             task_id = row["task_id"]
+            data = dict(self._safe_data(row))
+            try:
+                if orphan_requeue.triage_orphan(self, task_id, data, slot_store):
+                    continue
+            except Exception as exc:  # noqa: BLE001 - loud log, next boot retries
+                # Never degrade to fail+refund: the orphan's state is unknown,
+                # so leave it non-terminal for the next boot to retry.
+                logger.error(f"failed to triage orphaned task {task_id}: {exc}")
+                continue
             try:
                 # Billing first: if the process dies after the settle but
                 # before the task PATCH, the next boot re-selects the still
@@ -502,7 +504,6 @@ class SupabaseTaskState(BaseState):
                 # generation row (idempotent RPC) — a crash can never lose a
                 # refund that the task PATCH already survived.
                 self._settle_orphan_billing(task_id)
-                data = dict(self._safe_data(row))
                 data["error"] = _ORPHAN_ERROR_MESSAGE
                 self._request(
                     "PATCH",
@@ -595,7 +596,6 @@ class SupabaseTaskState(BaseState):
             table="video_generations",
             json=patch,
         )
-
 
 def persist_state_update(backend: BaseState, task_id: str, **kwargs: object) -> bool:
     """Write a task-state update that must not be silently lost, retrying once.
