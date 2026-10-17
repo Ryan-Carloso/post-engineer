@@ -28,7 +28,7 @@ async function getHandler(
   if (authError || !auth) return authError;
   // The detail fans out to the engine for live progress — rate-limit like
   // the other expensive surfaces.
-  const limited = await applyRateLimit(request, RATE_LIMITS.deletePreview, auth.userId);
+  const limited = await applyRateLimit(request, RATE_LIMITS.postDetail, auth.userId);
   if (limited) return limited;
   const supabase =
     auth.isApiKey === true || auth.isOAuth === true
