@@ -330,7 +330,8 @@ class FailTaskTests(unittest.TestCase):
     def test_failed_reason_scrubs_full_message_before_truncation(self):
         # Regression: truncate-then-scrub lets a secret fragmented by the
         # 200-char cut slip past the key-anchored pattern. The scrubber must
-        # see the full message; truncation happens after.
+        # see the full message; truncation happens after. scrub_error_text
+        # keeps that contract while also keeping the diagnostic tail.
         from app.services import analytics as analytics_module
 
         error = "E" * 150 + " api_key=TOPSECRET123 " + "F" * 150
@@ -339,12 +340,12 @@ class FailTaskTests(unittest.TestCase):
             patch.object(tm.task_webhook, "notify_terminal_task"),
             patch.object(tm, "send_discord", return_value=True),
             patch.object(
-                tm, "scrub_secret_values", wraps=analytics_module.scrub_secret_values
+                tm, "scrub_error_text", wraps=analytics_module.scrub_error_text
             ) as scrub,
         ):
             tm._fail_task(self.task_id, error, _params(), stage="audio")
         # The scrubber received the whole message, not the truncated slice.
-        scrub.assert_called_once_with(str(error))
+        scrub.assert_called_once_with(str(error), max_chars=200)
         _, props = track.call_args[0]
         self.assertIn("[redacted]", props["reason"])
         self.assertNotIn("TOPSECRET123", props["reason"])
