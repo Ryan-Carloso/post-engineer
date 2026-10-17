@@ -30,17 +30,8 @@ import {
   handleGetPersonaPublishingAccounts,
   handleSetPersonaPublishingAccounts,
 } from '../tools-publishing-accounts.js';
-import {
-  getPersonaPublishingAccounts,
-  setPersonaPublishingAccounts,
-} from '../client-publishing-accounts.js';
 import type { PostEngineerClient } from '../client.js';
 import type { McpToolResponse } from '../tools.js';
-
-vi.mock('../client-publishing-accounts.js', () => ({
-  getPersonaPublishingAccounts: vi.fn(),
-  setPersonaPublishingAccounts: vi.fn(),
-}));
 
 function textOf(response: McpToolResponse): string {
   const block = response.content[0];
@@ -64,6 +55,8 @@ describe('MCP Tool Handlers', () => {
     getVideoStatus: vi.fn(),
     getOAuthConnectUrl: vi.fn(),
     connectBlueskyAccount: vi.fn(),
+    request: vi.fn(),
+    getHeaders: vi.fn().mockReturnValue({}),
   } as unknown as PostEngineerClient;
 
   it('handleCreatePersona calls client and returns text response', async () => {
@@ -152,19 +145,23 @@ describe('MCP Tool Handlers', () => {
   });
 
   it('handleGetPersonaPublishingAccounts returns the persona defaults', async () => {
-    vi.mocked(getPersonaPublishingAccounts).mockResolvedValue({
+    vi.mocked(mockClient.request).mockResolvedValue({
       success: true,
       defaults: { youtube: [], instagram: [], bluesky: ['did:plc:a'], linkedin: [] },
     });
 
     const response = await handleGetPersonaPublishingAccounts(mockClient, { personaId: 'p-1' });
 
-    expect(getPersonaPublishingAccounts).toHaveBeenCalledWith(mockClient, 'p-1');
+    expect(mockClient.request).toHaveBeenCalledWith(
+      '/api/persona/publishing-accounts?personaId=p-1',
+      { method: 'GET', headers: {} },
+      'get persona publishing accounts',
+    );
     expect(textOf(response)).toContain('did:plc:a');
   });
 
   it('handleSetPersonaPublishingAccounts replaces the defaults', async () => {
-    vi.mocked(setPersonaPublishingAccounts).mockResolvedValue({
+    vi.mocked(mockClient.request).mockResolvedValue({
       success: true,
       defaults: { youtube: ['UC-1'], instagram: [], bluesky: [], linkedin: [] },
     });
@@ -174,10 +171,15 @@ describe('MCP Tool Handlers', () => {
       accounts: { youtube: ['UC-1'], bluesky: [] },
     });
 
-    expect(setPersonaPublishingAccounts).toHaveBeenCalledWith(mockClient, 'p-1', {
-      youtube: ['UC-1'],
-      bluesky: [],
-    });
+    expect(mockClient.request).toHaveBeenCalledWith(
+      '/api/persona/publishing-accounts?personaId=p-1',
+      {
+        method: 'PUT',
+        headers: {},
+        body: JSON.stringify({ accounts: { youtube: ['UC-1'], bluesky: [] } }),
+      },
+      'set persona publishing accounts',
+    );
     expect(textOf(response)).toContain('updated successfully');
   });
 
