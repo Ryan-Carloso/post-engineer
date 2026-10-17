@@ -6,6 +6,7 @@ the next boot (gap since last heartbeat, clean/unclean shutdown, last RSS).
 """
 
 import sys
+import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -14,6 +15,22 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.services import engine_heartbeat
+
+
+def _migration_path(name: str, start: Path | None = None) -> Path | None:
+    """Locate ``supabase/migrations/<name>`` by walking up from ``start``.
+
+    The suite also runs from a relocated ``mutants/`` tree under mutmut, so
+    a fixed number of ``.parent`` hops lands in the wrong place; walk up
+    until a directory containing ``supabase/migrations`` is found instead.
+    """
+    here = (start if start is not None else Path(__file__)).resolve()
+    dirs = [here] if here.is_dir() else []
+    for candidate in (*dirs, *here.parents):
+        found = candidate / "supabase" / "migrations" / name
+        if found.is_file():
+            return found
+    return None
 
 
 def _response(json_data=None):
@@ -197,15 +214,42 @@ class BootEventTests(unittest.TestCase):
             engine_heartbeat.report_boot_event(MagicMock())
 
 
+class MigrationPathTests(unittest.TestCase):
+    def test_finds_migration_from_repo_layout(self):
+        path = _migration_path("020_engine-heartbeat.sql")
+        self.assertIsNotNone(path)
+        self.assertEqual(path.name, "020_engine-heartbeat.sql")
+
+    def test_walks_up_past_mutants_tree(self):
+        # Simulate mutmut's relocated tree: the test file lives under
+        # <root>/apps/engine/mutants/test/services/ while the migration
+        # stays at <root>/supabase/migrations/.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "supabase" / "migrations").mkdir(parents=True)
+            want = root / "supabase" / "migrations" / "020_engine-heartbeat.sql"
+            want.write_text("-- heartbeat")
+            fake_test = (
+                root / "apps" / "engine" / "mutants" / "test" / "services"
+                / "test_engine_heartbeat.py"
+            )
+            fake_test.parent.mkdir(parents=True)
+            self.assertEqual(
+                _migration_path("020_engine-heartbeat.sql", start=fake_test), want
+            )
+
+    def test_returns_none_when_migration_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_test = Path(tmp) / "apps" / "engine" / "mutants" / "test_x.py"
+            self.assertIsNone(
+                _migration_path("020_engine-heartbeat.sql", start=fake_test)
+            )
+
+
 class MigrationSyncTests(unittest.TestCase):
     def test_heartbeat_migration_pins_table(self):
-        path = (
-            Path(__file__).parent.parent.parent.parent.parent
-            / "supabase"
-            / "migrations"
-            / "020_engine-heartbeat.sql"
-        )
-        self.assertTrue(path.exists(), f"missing {path}")
+        path = _migration_path("020_engine-heartbeat.sql")
+        self.assertIsNotNone(path, "missing supabase/migrations/020_engine-heartbeat.sql")
         sql = path.read_text()
         self.assertIn("create table if not exists public.engine_heartbeat", sql)
         self.assertIn("clean_shutdown_at", sql)
