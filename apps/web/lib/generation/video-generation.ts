@@ -197,10 +197,34 @@ function extractTaskId(body: unknown): string | undefined {
 export type GenerationHistoryStatus = 'pending' | 'running' | 'completed' | 'failed';
 
 //---------------
+// GENERATION_PUBLISH_MODES — the two pipeline modes, shared with the
+// video_generations.publish_mode CHECK (migration 021). 'asap' ("generate
+// now") posts as soon as the video is ready; 'scheduled' posts at
+// scheduled_at.
+//---------------
+export const GENERATION_PUBLISH_MODES = ['asap', 'scheduled'] as const;
+export type GenerationPublishMode = (typeof GENERATION_PUBLISH_MODES)[number];
+
+//---------------
+// GenerationPersistence — the video_generations columns that let the
+// engine's boot triage rebuild this generation after a restart (issue
+// #205). The slot time is stored only for scheduled posts; 'asap' posts
+// publish the moment the video is ready, so they carry no scheduled_at.
+//---------------
+export interface GenerationPersistence {
+  /** Full engine job payload, as dispatched. */
+  params: Record<string, unknown>;
+  mode: GenerationPublishMode;
+  slotAt: string;
+}
+
+//---------------
 // recordGenerationStart — inserts the video_generations row right after the
 // token gate passes. The row is a snapshot (denormalized persona name and
 // subject) so the History page can render it even if the persona is later
-// renamed or deleted. Never throws: history recording must not break the
+// renamed or deleted; the full engine job payload rides along as JSONB so
+// the engine's boot triage can rebuild the generation after a restart
+// (issue #205). Never throws: history recording must not break the
 // generation itself.
 //---------------
 export interface RecordGenerationStartInput {
@@ -210,16 +234,22 @@ export interface RecordGenerationStartInput {
   personaId?: string | null;
   personaName?: string | null;
   videoSubject?: string | null;
+  /** Rebuild data for the engine's boot triage. Absent = snapshot only. */
+  persistence?: GenerationPersistence | null;
 }
 
 export async function recordGenerationStart(input: RecordGenerationStartInput): Promise<void> {
   try {
+    const persistence = input.persistence;
     const { error } = await input.supabase.from('video_generations').insert({
       user_id: input.userId,
       generation_id: input.generationId,
       persona_id: input.personaId ?? null,
       persona_name: input.personaName ?? null,
       video_subject: input.videoSubject ?? null,
+      params: persistence?.params ?? null,
+      publish_mode: persistence?.mode ?? 'asap',
+      scheduled_at: persistence && persistence.mode === 'scheduled' ? persistence.slotAt : null,
       status: 'pending',
     });
     if (error) {

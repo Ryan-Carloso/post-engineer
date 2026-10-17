@@ -554,6 +554,36 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(typeof payload.generation_id).toBe('string');
     });
 
+    it('persists the full engine payload, publish mode and slot time on the video_generations row', async () => {
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+      const genInput = vi.mocked(recordGenerationStart).mock.calls[0][0];
+      const enginePayload = vi.mocked(startEngineVideoTask).mock.calls[0][1];
+      const slotRows = inserts['scheduled_posts'] as Array<Record<string, unknown>>;
+      // The exact payload dispatched to the engine is what the boot triage
+      // rebuilds from: same object, not a re-serialization.
+      expect(genInput.persistence?.params).toBe(enginePayload);
+      expect(genInput.persistence).toEqual({
+        params: enginePayload,
+        mode: 'scheduled',
+        slotAt: slotRows[0].slot_at,
+      });
+    });
+
+    it("records mode 'asap' for generate-now posts (slot time stored as null)", async () => {
+      const res = await post(
+        baseBody({ publishing: { mode: 'asap', providers: ['youtube'], accounts: { youtube: ['acct-1'] } } }),
+      );
+      expect(res.status).toBe(200);
+      const genInput = vi.mocked(recordGenerationStart).mock.calls[0][0];
+      const enginePayload = vi.mocked(startEngineVideoTask).mock.calls[0][1];
+      expect(genInput.persistence).toEqual({
+        params: enginePayload,
+        mode: 'asap',
+        slotAt: expect.any(String),
+      });
+    });
+
     it('sends lipsync: false and no persona quality for a faceless post', async () => {
       const res = await post(baseBody({ options: { faceless: true } }));
       expect(res.status).toBe(200);
