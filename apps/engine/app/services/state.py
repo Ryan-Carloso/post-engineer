@@ -486,12 +486,16 @@ class SupabaseTaskState(BaseState):
         failed = 0
         for index, row in enumerate(rows, start=1):
             if index % _RECONCILE_PROGRESS_EVERY == 0:
-                logger.info(
-                    f"orphan reconcile progress: {index}/{len(rows)} rows processed"
-                )
+                logger.info(f"orphan reconcile progress: {index}/{len(rows)} rows processed")
             task_id = row["task_id"]
             data = dict(self._safe_data(row))
-            if orphan_requeue.triage_orphan(self, task_id, data, slot_store):
+            try:
+                if orphan_requeue.triage_orphan(self, task_id, data, slot_store):
+                    continue
+            except Exception as exc:  # noqa: BLE001 - loud log, next boot retries
+                # Never degrade to fail+refund: the orphan's state is unknown,
+                # so leave it non-terminal for the next boot to retry.
+                logger.error(f"failed to triage orphaned task {task_id}: {exc}")
                 continue
             try:
                 # Billing first: if the process dies after the settle but

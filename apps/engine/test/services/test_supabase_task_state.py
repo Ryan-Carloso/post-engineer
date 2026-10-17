@@ -922,6 +922,39 @@ class SupabaseStateOrphanTriageTests(unittest.TestCase):
         ]
         self.assertEqual(rpcs, [])
 
+    def test_triage_error_leaves_task_for_next_boot(self):
+        orphans = [
+            {"task_id": "t-1", "data": {"stage": "audio", "slot_id": "slot-1"}},
+            {"task_id": "t-2", "data": {"stage": "mystery"}},
+        ]
+        backend = _make_state(self.requests)
+        self.requests.request.side_effect = [
+            _response(json_data=orphans),  # SELECT non-terminal rows
+            # t-2 falls through to fail+refund:
+            _response(json_data=[]),  # GET video_generations: no row
+            _response(json_data=[{}]),  # PATCH t-2 failed
+        ]
+        with (
+            patch.object(orphan_requeue, "slot_store_or_none", return_value=None),
+            patch.object(
+                orphan_requeue,
+                "triage_orphan",
+                side_effect=[RuntimeError("slot store down"), False],
+            ),
+            patch.object(state_module.logger, "error") as log_error,
+        ):
+            failed = backend.reconcile_orphaned_tasks()
+        # t-1 stayed non-terminal (retried on the next boot); only t-2 failed.
+        self.assertEqual(failed, 1)
+        log_error.assert_called_once()
+        failed_patches = [
+            c
+            for c in self.requests.request.call_args_list
+            if c[0][0] == "PATCH"
+            and (c[1].get("json") or {}).get("state") == const.TASK_STATE_FAILED
+        ]
+        self.assertEqual(len(failed_patches), 1)
+
     def test_requeue_falls_back_to_fail_without_slot_store(self):
         orphans = [
             {
