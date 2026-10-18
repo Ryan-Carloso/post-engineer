@@ -1,9 +1,9 @@
-"""Persona hook measurement and retry helpers.
+"""Persona hook measurement, retry, and telemetry helpers.
 
 Extracted from app.services.task so the task module stays under the
-file-size ratchet. These helpers only measure where the hook paragraph ends
-in the subtitles and clean up a subtitle invalidated by a hook retry.
-This module imports nothing from app.services, so there is no import cycle.
+file-size ratchet. The app.services imports here are leaf modules (llm,
+analytics) that never import back into the task pipeline, so there is no
+import cycle.
 """
 
 import os
@@ -13,6 +13,20 @@ from typing import Sequence
 from loguru import logger
 
 from app.config import config
+from app.models.schema import VideoParams
+from app.services import llm
+from app.services.analytics import track_event
+
+
+# Product-fixed hook pacing ("always this way"): deliberately NOT
+# config-driven — these values were validated against GPU intro cost and
+# lipsync quality windows, and tunable knobs reopen those failure modes
+# (hooks over the GPU ceiling). Face-fill pacing stays in
+# app/services/task.py.
+PERSONA_HOOK_MIN_SECONDS = 8.0
+PERSONA_HOOK_MAX_SECONDS = 12.0
+PERSONA_HOOK_TARGET_WORDS_MIN = 20
+PERSONA_HOOK_TARGET_WORDS_MAX = 30
 
 
 # A hook that misses the quality window is only a cosmetic miss: the intro
@@ -138,3 +152,62 @@ def _limit_generated_script(script: str) -> str:
         return candidate[: sentence_end + 1].strip()
     word_end = candidate.rfind(" ")
     return candidate[: word_end if word_end > 0 else limit].strip()
+
+
+def _regenerate_fitting_hook(
+    task_id: str, params: VideoParams, video_script: str, measured_seconds: float
+) -> str:
+    """Regenerate only the hook paragraph, sized toward the configured window.
+
+    The rest of the script (body paragraphs) is kept verbatim: only the
+    hook timing was wrong. Emits a persona_hook_retry event per attempt so a
+    retry loop that never converges is diagnosable from PostHog without
+    reaching for VPS logs. Only counts and timings are reported — never the
+    script text, which is user content.
+    """
+    window_min = PERSONA_HOOK_MIN_SECONDS
+    window_max = PERSONA_HOOK_MAX_SECONDS
+    words_min = PERSONA_HOOK_TARGET_WORDS_MIN
+    words_max = PERSONA_HOOK_TARGET_WORDS_MAX
+    paragraphs = [
+        paragraph.strip()
+        for paragraph in re.split(r"\n\s*\n", video_script.strip())
+        if paragraph.strip()
+    ]
+    hook_words = len(paragraphs[0].split())
+    # Aim for the window center: scale the observed word count by the
+    # target/measured ratio, clamped to a sane hook size.
+    if measured_seconds > 0:
+        word_cap = round(hook_words * (window_min + window_max) / 2 / measured_seconds)
+    else:
+        word_cap = (words_min + words_max) // 2
+    word_cap = max(words_min, min(words_max, word_cap))
+    logger.warning(
+        f"persona hook ended at {measured_seconds:g}s ({hook_words} words), "
+        f"outside the {window_min:g}-{window_max:g}s window; regenerating a hook "
+        f"of at most {word_cap} words"
+    )
+    track_event(
+        "persona_hook_retry",
+        {
+            "task_id": task_id,
+            "measured_seconds": round(measured_seconds, 2),
+            "hook_words": hook_words,
+            "word_cap": word_cap,
+        },
+    )
+    hook = llm.generate_script(
+        video_subject=params.video_subject,
+        language=params.video_language,
+        paragraph_number=1,
+        video_script_prompt=(
+            f"{params.video_script_prompt} Return only a standalone hook paragraph: "
+            f"one complete sentence of at most {word_cap} words ending with terminal "
+            f"punctuation, designed to take {window_min:g} to {window_max:g} seconds "
+            "when spoken."
+        ),
+        custom_system_prompt=params.custom_system_prompt,
+        target_words_min=words_min,
+        target_words_max=word_cap,
+    )
+    return _limit_generated_script(f"{hook.strip()}\n\n" + "\n\n".join(paragraphs[1:]))
