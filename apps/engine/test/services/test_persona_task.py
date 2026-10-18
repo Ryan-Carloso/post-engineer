@@ -440,7 +440,7 @@ class TestPersonaHookRetry:
 
 
 class TestPersonaPacingConstants:
-    """Persona pacing is product-fixed in task.py — no config knobs."""
+    """Persona pacing is product-fixed (task.py / persona_hook.py) — no config knobs."""
 
     def test_constants_are_the_approved_product_values(self):
         assert task_service.PERSONA_HOOK_MIN_SECONDS == 8.0
