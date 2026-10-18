@@ -459,3 +459,19 @@ class StartupWarmClientTests(unittest.TestCase):
         ):
             asgi.startup_event()
         # No exception raised; nothing to assert beyond survival.
+
+    def test_startup_event_logs_failed_orphan_count(self):
+        # When the reconcile marks orphans failed, startup logs the count.
+        from unittest.mock import MagicMock
+
+        mock_state = MagicMock()
+        mock_state.reconcile_orphaned_tasks.return_value = 3
+        with (
+            patch("app.asgi.warm_client"),
+            patch("app.asgi.start_fill_schedule_scheduler"),
+            patch("app.services.engine_heartbeat.start_heartbeat_thread"),
+            patch("app.services.engine_heartbeat.report_boot_event"),
+            patch.object(asgi.sm, "state", mock_state),
+        ):
+            asgi.startup_event()
+        mock_state.reconcile_orphaned_tasks.assert_called_once_with()
