@@ -1,9 +1,10 @@
 """Unit tests for .github/scripts/verify-review-grounding.py.
 
 The grounding verifier is the anti-hallucination gate of the opencode-review
-workflow: it drops findings whose file, cited lines, or quoted code do not
-check out against the checkout. These tests pin its behavior so a regex
-regression cannot silently disable the gate.
+workflow. A finding whose quote is in the cited file stays in the main list.
+A finding whose file or lines cannot be matched is posted in full under the
+unverified heading, with the location the model cited and any best-guess
+file. These tests pin that split so a regex regression cannot hide a finding.
 """
 
 from __future__ import annotations
@@ -46,14 +47,24 @@ def repo(tmp_path, monkeypatch):
     return tmp_path
 
 
-def run_main(verifier, monkeypatch, capsys, review_text: str | bytes, tmp_path):
+def run_main(
+    verifier,
+    monkeypatch,
+    capsys,
+    review_text: str | bytes,
+    tmp_path,
+    extra_args: list[str] | None = None,
+):
     src = tmp_path / "review.md"
     dst = tmp_path / "review.verified.md"
     if isinstance(review_text, bytes):
         src.write_bytes(review_text)
     else:
         src.write_text(review_text, encoding="utf-8")
-    monkeypatch.setattr(sys, "argv", ["verify-review-grounding.py", str(src), str(dst)])
+    argv = ["verify-review-grounding.py", str(src), str(dst)]
+    if extra_args:
+        argv.extend(extra_args)
+    monkeypatch.setattr(sys, "argv", argv)
     rc = verifier.main()
     out = capsys.readouterr().out
     return rc, dst.read_text(encoding="utf-8"), out
@@ -110,7 +121,14 @@ def test_quote_missing_from_file_is_not_a_clean_pass(
     assert published.startswith(verifier.NOT_REVIEWED_MARKER)
     assert "Treat this PR as NOT reviewed" in published
     assert "No finding could be grounded" in published
+    assert verifier.UNVERIFIED_SECTION_HEADING in published
     assert "MINOR: magic number" in published
+    # The location line is the model's citation, not a rewritten span.
+    assert "**Location:** apps/web/lib/thing.ts:2\n" in published
+    assert "**Location:** apps/web/lib/thing.ts:2-2" not in published
+    assert "return 99;" in published
+    assert "Some explanation." in published
+    assert "Best guess: `apps/web/lib/thing.ts`" in published
 
 
 def test_nothing_material_review_published_as_is(
@@ -139,9 +157,15 @@ def test_unparseable_findings_format_is_not_published(
     rc, published, _ = run_main(verifier, monkeypatch, capsys, review, tmp_path)
     assert rc == 1
     assert published.startswith(verifier.NOT_REVIEWED_MARKER)
-    assert "## MAJOR: SQL injection" not in published
     assert "Review format error" in published
     assert "Treat this PR as NOT reviewed" in published
+    # The raw finding is posted under the unverified heading. It is not
+    # promoted to a verified `### MAJOR` finding.
+    assert verifier.UNVERIFIED_SECTION_HEADING in published
+    assert "## MAJOR: SQL injection" in published
+    assert "### MAJOR: SQL injection" not in published
+    assert "**Location:** apps/web/lib/thing.ts:2" in published
+    assert "return 42;" in published
 
 
 def test_heading_inside_quoted_fence_does_not_split_finding(
@@ -183,6 +207,8 @@ def test_non_utf8_review_does_not_crash(verifier, repo, tmp_path, monkeypatch, c
     assert rc == 1
     assert isinstance(published, str)
     assert published.startswith(verifier.NOT_REVIEWED_MARKER)
+    assert verifier.UNVERIFIED_SECTION_HEADING in published
+    assert "### MINOR: x" in published
 
 
 def test_parse_location_variants(verifier):
@@ -270,6 +296,10 @@ def test_path_traversal_is_not_a_clean_pass(verifier, tmp_path, monkeypatch, cap
     assert rc == 1
     assert "escapes checkout" in published
     assert published.startswith(verifier.NOT_REVIEWED_MARKER)
+    assert verifier.UNVERIFIED_SECTION_HEADING in published
+    assert "**Location:** ../etc/passwd:1" in published
+    assert "```\nroot\n```" in published
+    assert "Best guess: none" in published
 
 
 def test_partial_drop_stays_green_and_lists_the_drop(
@@ -282,9 +312,140 @@ def test_partial_drop_stays_green_and_lists_the_drop(
     rc, published, _ = run_main(verifier, monkeypatch, capsys, review, tmp_path)
     assert rc == 0
     assert "### MINOR: magic number" in published
-    assert "<details>" in published
+    assert verifier.UNVERIFIED_SECTION_HEADING in published
+    assert "<details>" not in published
     assert "MAJOR: missing file" in published
+    assert "**Location:** nope/missing.py:1-2" in published
+    assert "x = 1" in published
     assert verifier.NOT_REVIEWED_MARKER not in published
+    # The grounded finding stays in the main list, above the unverified section.
+    assert published.index("### MINOR: magic number") < published.index(
+        verifier.UNVERIFIED_SECTION_HEADING
+    )
+    assert published.index(verifier.UNVERIFIED_SECTION_HEADING) < published.index(
+        "### MAJOR: missing file"
+    )
+
+
+def test_clean_cited_path_strips_wrapping_and_line_suffixes(verifier):
+    clean = verifier.clean_cited_path
+    assert clean("`./apps/web/lib/thing.ts:12-34`,") == "apps/web/lib/thing.ts"
+    assert clean("'./apps/web/lib/thing.ts:12'.") == "apps/web/lib/thing.ts"
+    assert clean('"././apps/web/lib/thing.ts:2"') == "apps/web/lib/thing.ts"
+    assert clean("apps/web/lib/thing.ts#L12-L34") == "apps/web/lib/thing.ts"
+    assert clean("`apps/engine/app/services/task_publish.py:61-66`") == (
+        "apps/engine/app/services/task_publish.py"
+    )
+    assert clean("apps/web/lib/thing.ts:12 – 34") == "apps/web/lib/thing.ts"
+
+
+def test_fuzzy_wrapped_path_with_matching_quote_stays_in_the_main_list(
+    verifier, repo, tmp_path, monkeypatch, capsys
+):
+    review = GROUNDED_FINDING.replace(
+        "**Location:** apps/web/lib/thing.ts:2",
+        "**Location:** `./apps/web/lib/thing.ts:2`,",
+    )
+    rc, published, _ = run_main(verifier, monkeypatch, capsys, review, tmp_path)
+    assert rc == 0
+    assert "**Location:** apps/web/lib/thing.ts:2-2" in published
+    assert verifier.UNVERIFIED_SECTION_HEADING not in published
+    assert "### MINOR: magic number" in published
+
+
+def test_basename_match_grounds_the_finding(
+    verifier, repo, tmp_path, monkeypatch, capsys
+):
+    files = tmp_path / "pr-files.txt"
+    files.write_text("apps/web/lib/thing.ts\n", encoding="utf-8")
+    review = GROUNDED_FINDING.replace(
+        "**Location:** apps/web/lib/thing.ts:2",
+        "**Location:** thing.ts:2",
+    )
+    rc, published, _ = run_main(
+        verifier,
+        monkeypatch,
+        capsys,
+        review,
+        tmp_path,
+        extra_args=["--files", str(files)],
+    )
+    assert rc == 0
+    assert "**Location:** apps/web/lib/thing.ts:2-2" in published
+    assert verifier.PATH_RESOLVED_NOTE in published
+    assert "corrected" not in published
+    assert verifier.UNVERIFIED_SECTION_HEADING not in published
+
+
+def test_basename_guess_stays_unverified_when_the_quote_is_absent(
+    verifier, repo, tmp_path, monkeypatch, capsys
+):
+    files = tmp_path / "pr-files.txt"
+    files.write_text("apps/web/lib/thing.ts\n", encoding="utf-8")
+    review = GROUNDED_FINDING.replace(
+        "**Location:** apps/web/lib/thing.ts:2",
+        "**Location:** thing.ts:9",
+    ).replace("return 42;", "return 99;")
+    rc, published, _ = run_main(
+        verifier,
+        monkeypatch,
+        capsys,
+        review,
+        tmp_path,
+        extra_args=["--files", str(files)],
+    )
+    assert rc == 1
+    assert verifier.UNVERIFIED_SECTION_HEADING in published
+    assert "**Location:** thing.ts:9" in published
+    assert "**Location:** apps/web/lib/thing.ts" not in published
+    assert "return 99;" in published
+    assert "Some explanation." in published
+    assert (
+        "Best guess: `apps/web/lib/thing.ts` (unique basename match among changed files)."
+        in published
+    )
+    assert "MINOR: magic number" in published
+
+
+def test_ambiguous_basename_is_not_a_guess(
+    verifier, repo, tmp_path, monkeypatch, capsys
+):
+    files = tmp_path / "pr-files.txt"
+    files.write_text("apps/a/thing.ts\napps/b/thing.ts\n", encoding="utf-8")
+    review = GROUNDED_FINDING.replace(
+        "**Location:** apps/web/lib/thing.ts:2",
+        "**Location:** thing.ts:2",
+    )
+    rc, published, _ = run_main(
+        verifier,
+        monkeypatch,
+        capsys,
+        review,
+        tmp_path,
+        extra_args=["--files", str(files)],
+    )
+    assert rc == 1
+    assert verifier.UNVERIFIED_SECTION_HEADING in published
+    assert "**Location:** thing.ts:2" in published
+    assert "Best guess: none. More than one changed file shares that basename." in published
+    assert "apps/a/thing.ts" not in published
+    assert "apps/b/thing.ts" not in published
+    # The real file contains the quote, but an ambiguous basename must not
+    # promote the finding into the verified list.
+    assert "**Location:** apps/web/lib/thing.ts:2-2" not in published
+
+
+def test_review_prompts_require_english():
+    review_dir = SCRIPTS_DIR.parent / "review"
+    required = "Write the entire review in English."
+    for name in (
+        "review-prompt.md",
+        "verify-prompt.md",
+        "review-checklist.md",
+        "review-instructions.md",
+    ):
+        text = (review_dir / name).read_text(encoding="utf-8")
+        assert required in text, name
 
 
 def _git_show(sha: str, path: str) -> str | None:

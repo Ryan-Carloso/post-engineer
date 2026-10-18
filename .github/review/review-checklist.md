@@ -3,6 +3,8 @@
 Apply each section whose trigger matches the changed files. Each item names
 what to check and where the contract lives. Grep, don't guess.
 
+Write the entire review in English.
+
 ## 1. Telemetry, logs and alerts (engine, web, mcp)
 
 Trigger: any added/changed call to `track_event`, `track_ai_request`,

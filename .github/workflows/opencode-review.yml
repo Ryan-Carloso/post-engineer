@@ -38,9 +38,11 @@ name: opencode-review
 #   drops every finding, the comment keeps pass 1.
 # - Findings are mechanically grounded: verify-review-grounding.py accepts a
 #   backticked Location, re-anchors line numbers from the verbatim quote, and
-#   exits 1 when every finding is dropped. The posted file then starts with
+#   exits 1 when every finding is unverified. Unmatched findings are still
+#   posted, in full, under "Unverified findings — location could not be
+#   matched". The posted file then starts with
 #   `<!-- review-grounding: not-reviewed -->` and the job fails after the
-#   comment is up. A fully dropped review must not look like a clean pass.
+#   comment is up. A fully unverified review must not look like a clean pass.
 # - review-mechanical-checks.py runs outside the LLM and appends a
 #   "Mechanical checks" section: FAIL on duplicate migration numbers or
 #   obvious secrets in the diff, WARN on production files changed without
@@ -457,13 +459,14 @@ jobs:
         if: steps.check.outputs.has_key == 'true' && steps.pass1.outcome == 'success'
         run: |
           set -euo pipefail
-          # Anti-hallucination gate. Exit 1 means every finding was dropped
+          # Anti-hallucination gate. Exit 1 means no finding could be grounded
           # or the format was unparseable; the output then starts with the
-          # not-reviewed marker. Do not fail this step — the comment is
-          # posted first, and the final step fails the job.
+          # not-reviewed marker and still contains the full unverified text.
+          # Do not fail this step — the comment is posted first, and the
+          # final step fails the job.
           set +e
           python3 .github/scripts/verify-review-grounding.py \
-            review.md pass1.md --context pr-context.md
+            review.md pass1.md --context pr-context.md --files pr-files.txt
           status=$?
           set -e
           echo "status=$status" >> "$GITHUB_OUTPUT"
@@ -547,10 +550,10 @@ jobs:
           fi
           set +e
           python3 .github/scripts/verify-review-grounding.py \
-            pass2-raw.md pass2.md --context pr-context.md
+            pass2-raw.md pass2.md --context pr-context.md --files pr-files.txt
           ground_rc=$?
           set -e
-          # An all-dropped pass 2 must not replace a grounded pass 1.
+          # An all-unverified pass 2 must not replace a grounded pass 1.
           if [ "$ground_rc" -ne 0 ] || [ ! -s pass2.md ]; then
             echo "Pass 2 grounding failed; keeping pass 1." >&2
             exit 1
@@ -686,7 +689,7 @@ jobs:
             fail=1
           fi
           if [ -f review.verified.md ] && head -n 1 review.verified.md | grep -q 'review-grounding: not-reviewed'; then
-            echo "Review grounding dropped every finding — treat this PR as NOT reviewed." >&2
+            echo "Review grounding could not match any finding — see the unverified section in the posted comment. Treat this PR as NOT reviewed." >&2
             fail=1
           fi
           if [ ! -f review.verified.md ] && [ "${{ steps.pass1.outcome }}" = "success" ]; then

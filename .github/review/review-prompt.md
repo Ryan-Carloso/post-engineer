@@ -60,6 +60,8 @@ Do not report pure style preferences. Do not invent issues. But **absence of cod
 - `MINOR` — real but low-impact: misleading test or comment, dead mock,
   missing context in telemetry, maintainability debt that will cause bugs.
 
+Write the entire review in English. Headings, findings, explanations, and the verdict line are English.
+
 ## Output format (machine-checked — deviations are dropped)
 
 For each finding:

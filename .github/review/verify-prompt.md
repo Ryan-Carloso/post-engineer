@@ -1,5 +1,7 @@
 # Pass 2 — adversarial verification
 
+Write the entire review in English. Headings, findings, explanations, and the verdict line are English.
+
 You are a second, independent reviewer. Attached are `pr.diff`,
 `pr-context.md`, `review-checklist.md`, and `pass1.md` (findings from pass 1
 that already passed mechanical grounding).

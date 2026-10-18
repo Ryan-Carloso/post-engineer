@@ -171,9 +171,30 @@ def main() -> int:
         "prompt defines the machine-checkable finding format",
         "### SEVERITY:" in prompt and "**Location:**" in prompt,
     )
+    review_dir = prompt_path.parent
+    english = "Write the entire review in English."
+    for name in (
+        "review-prompt.md",
+        "verify-prompt.md",
+        "review-checklist.md",
+        "review-instructions.md",
+    ):
+        check(
+            f"{name} requires English output",
+            english in (review_dir / name).read_text(),
+            "posted review text must be required to be English",
+        )
     check(
         "grounding verifier script invoked in workflow",
         "verify-review-grounding.py" in text,
+    )
+    check(
+        "pass 1 grounding receives the changed-file list",
+        "review.md pass1.md --context pr-context.md --files pr-files.txt" in text,
+    )
+    check(
+        "pass 2 grounding receives the changed-file list",
+        "pass2-raw.md pass2.md --context pr-context.md --files pr-files.txt" in text,
     )
     # Idea C — mechanical checks outside the LLM (replaces the old
     # TDD-coverage prompt bullet).
