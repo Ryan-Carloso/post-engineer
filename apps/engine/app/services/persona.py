@@ -100,14 +100,21 @@ class PersonaValidationError(Exception):
 def get_house_voices() -> list[dict[str, Any]]:
     """The voice catalog the UI offers.
 
-    These are the Chatterbox voices configured under ``[chatterbox] voices``,
-    emitted provider-qualified (``chatterbox:ryan``). That is deliberate: the
-    id is what gets stored on the persona and handed straight to
-    ``voice.tts``, which routes on the prefix. There is no house-voice layer
-    left to map ids onto Azure names, and a voice the pipeline cannot reach
-    is a voice the picker must not show.
+    These are the Chatterbox voices configured under ``[chatterbox] voices``
+    plus, when it is configured, the discovered OpenRouter voices — all
+    emitted provider-qualified (``chatterbox:ryan``,
+    ``openrouter:<model>:<voice>``). That is deliberate: the id is what gets
+    stored on the persona and handed straight to ``voice.tts``, which routes on
+    the prefix. There is no house-voice layer left to map ids onto Azure names,
+    and a voice the pipeline cannot reach is a voice the picker must not show.
+
+    OpenRouter contributes nothing until it is configured (``[openrouter]``
+    with both a key and at least one model); see
+    ``voice.get_openrouter_voices`` for the discovery bounds.
     """
-    return [{"id": voice_id} for voice_id in voice_service.get_chatterbox_voices()]
+    voice_ids = list(voice_service.get_chatterbox_voices())
+    voice_ids.extend(voice_service.get_openrouter_voices())
+    return [{"id": voice_id} for voice_id in voice_ids]
 
 
 

@@ -38,12 +38,60 @@ import {
   INPUT_CLASS,
 } from '@/lib/ui';
 
-// Voice ids come from the engine's Chatterbox catalog and are
-// provider-qualified (`chatterbox:ryan`). There is no house-voice map any
-// more, and no label fallback: a voice with no label must show its raw id, not
-// borrow another voice's name — that fallback used to render every unknown id
-// as "Voz feminina calma".
-const voiceLabel = (voiceId: string): string => voiceId.replace(/^chatterbox:/, '').replace(/_/g, ' ');
+// Voice ids come from the engine's catalog and are provider-qualified:
+// `chatterbox:ryan`, or `openrouter:<model>:<voice>` for the OpenRouter TTS
+// provider. There is no house-voice map any more, and no label fallback: a
+// voice with no label must show its raw id, not borrow another voice's name —
+// that fallback used to render every unknown id as "Voz feminina calma".
+//
+// The underscore-to-space rewrite is Chatterbox-shaped (`en_us_female_01` →
+// "en us female 01") and is deliberately NOT applied to OpenRouter, whose ids
+// are model/voice slugs where an underscore is meaningful: `microsoft/mai-
+// voice-2.1:en-US-Harper:MAI-Voice-2.1` must not become "en US Harper:MAI...".
+// The model stays in the label because two entries can share a voice name and
+// differ only by model.
+const voiceLabel = (voiceId: string): string => {
+  const openrouter = parseOpenrouterVoiceId(voiceId);
+  if (openrouter) {
+    return openrouter.voice;
+  }
+  return voiceId.replace(/^chatterbox:/, '').replace(/_/g, ' ');
+};
+
+//---------------
+// parseOpenrouterVoiceId — `openrouter:<model>:<voice>` split on the FIRST
+// colon, mirroring the engine's parser. The model id contains slashes and some
+// voices contain colons of their own (Azure voice ids carry the model in a
+// suffix, e.g. `en-US-Harper:MAI-Voice-2.1`), so this must agree with
+// voice.parse_openrouter_voice or the picker would show a split the engine
+// never sees.
+//---------------
+function parseOpenrouterVoiceId(voiceId: string): { model: string; voice: string } | null {
+  const remainder = voiceId.startsWith('openrouter:') ? voiceId.slice('openrouter:'.length) : null;
+  if (remainder === null) {
+    return null;
+  }
+  const [model, ...voiceParts] = remainder.split(':');
+  // The voice half is everything after the first colon, not just the second
+  // segment: an Azure voice id carries its own colons.
+  const voice = voiceParts.join(':');
+  if (!model || !voice) {
+    return null;
+  }
+  return { model, voice };
+}
+
+//---------------
+// voiceModelLabel — the model half of an OpenRouter voice id, shown under the
+// voice name. It is not decoration: two models can offer the same voice name
+// (`eve` on Grok, `Kore` on Gemini), and collapsing the label to the voice
+// alone would render two identical rows. Rendered as a second line rather than
+// appended to the name because `model:voice` overflows the card and truncates
+// mid-slug — which is how the two Grok voices became indistinguishable.
+//---------------
+function voiceModelLabel(voiceId: string): string {
+  return parseOpenrouterVoiceId(voiceId)?.model ?? '';
+}
 
 export default function PersonaPage() {
   return (
@@ -635,6 +683,9 @@ const PersonaHouseVoicePicker = ({ personaLanguage }: { personaLanguage?: string
               key={voice.id}
               type="button"
               aria-pressed={isActive}
+              // The raw id is the only complete label: both lines above are
+              // display and the model line is hidden for single-word voices.
+              title={voice.id}
               onClick={() => handlePickVoice(voice.id)}
               className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-colors ${
                 isActive
@@ -649,8 +700,15 @@ const PersonaHouseVoicePicker = ({ personaLanguage }: { personaLanguage?: string
               >
                 <MicIcon />
               </span>
-              <span className="min-w-0 flex-1 truncate text-sm font-medium text-neutral-900">
-                {voiceLabel(voice.id)}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-neutral-900">
+                  {voiceLabel(voice.id)}
+                </span>
+                {voiceModelLabel(voice.id) !== '' && (
+                  <span className="block truncate text-xs text-neutral-500">
+                    {voiceModelLabel(voice.id)}
+                  </span>
+                )}
               </span>
               {isActive && (
                 <span className="text-accent">

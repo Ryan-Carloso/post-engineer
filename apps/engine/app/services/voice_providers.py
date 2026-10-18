@@ -1,10 +1,11 @@
 """TTS provider implementations for the engine.
 
-ElevenLabs (hosted API) and Chatterbox (self-hosted, OpenAI-compatible)
-live here so ``voice.py`` stays the thin dispatch + subtitle layer. The
-shared pieces the providers need (``SubMaker``, the text preprocessor,
-the file-path guard, the legacy subtitle filler, ``TtsResult``) live here
-too; ``voice.py`` re-imports them for the ``tts()`` dispatcher.
+ElevenLabs (hosted API), Chatterbox (self-hosted, OpenAI-compatible) and
+OpenRouter (hosted, multi-vendor OpenAI-compatible) live here so ``voice.py``
+stays the thin dispatch + subtitle layer. The shared pieces the providers need
+(``SubMaker``, the text preprocessor, the file-path guard, the legacy subtitle
+filler, ``TtsResult``) live here too; ``voice.py`` re-imports them for the
+``tts()`` dispatcher.
 """
 
 import os
@@ -18,6 +19,17 @@ from moviepy.audio.io.AudioFileClip import AudioFileClip
 from app.config import config
 from app.services.analytics import scrub_secret_values
 from app.utils import utils
+
+# OpenRouter endpoints. Both are hard infrastructure names: the engine talks to
+# the public OpenRouter API and nowhere else, so a different base would mean a
+# different provider entirely rather than a config tweak.
+OPENROUTER_SPEECH_URL = "https://openrouter.ai/api/v1/audio/speech"
+OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
+
+# Voice ids are provider-qualified; `voice.tts` routes on this prefix.
+# Format: `openrouter:<model>:<voice>` -- OpenRouter voices are per-model, so
+# the id carries both halves.
+OPENROUTER_VOICE_PREFIX = "openrouter:"
 
 
 class SubMaker:
@@ -309,6 +321,136 @@ def elevenlabs_tts(
 
     return TtsResult(
         error=f"ElevenLabs TTS failed after 3 attempts ({last_error or 'unknown error'})"
+    )
+
+
+def openrouter_tts(
+    text: str,
+    model: str,
+    voice: str,
+    voice_file: str,
+    voice_rate: float = 1.0,
+    voice_volume: float = 1.0,
+) -> TtsResult:
+    """Generate speech through OpenRouter's OpenAI-compatible speech API.
+
+    OpenRouter routes one ``OPENROUTER_API_KEY`` to many hosted TTS vendors
+    (OpenAI, Gemini, Mistral, ElevenLabs, Grok, ...) behind a single
+    ``POST /api/v1/audio/speech`` endpoint that is wire-compatible with the
+    OpenAI Audio Speech API.
+
+    Both ``model`` and ``voice`` are required because OpenRouter voices are
+    per-model: ``alloy`` is an OpenAI voice and ``Kore`` a Gemini one, so a
+    voice name alone cannot address a model. That is why the voice id
+    carries both (``openrouter:<model>:<voice>``).
+
+    Like the other providers, no word-level timestamps come back, so the
+    subtitle path falls back to the full-text SubMaker.
+
+    Args:
+        text: the script to speak.
+        model: OpenRouter model id, e.g. ``x-ai/grok-voice-tts-1.0``.
+        voice: a voice the selected model supports.
+        voice_file: destination path for the synthesized audio.
+        voice_rate: playback-speed multiplier. Only sent when it differs from
+            1.0 -- OpenRouter returns a 400 for a non-default ``speed`` on a
+            model with no speed control, and the models API reports an empty
+            ``supported_parameters`` for every speech model, so there is no
+            way to know in advance which ones honour it.
+        voice_volume: accepted for parity with the other providers and
+            intentionally not sent; the speech API has no volume field.
+
+    Returns:
+        TtsResult carrying the subtitle timeline, or a sanitized error.
+    """
+    text = (text or "").strip()
+    if not text:
+        logger.error("OpenRouter TTS text is empty")
+        return TtsResult(error="OpenRouter TTS failed: text is empty")
+
+    text = _preprocess_text_for_tts(text)
+    api_key = config.openrouter.get("api_key", "")
+    if not api_key:
+        logger.error("OpenRouter API key is not set")
+        return TtsResult(error="OpenRouter TTS failed: API key is not set")
+
+    payload = {
+        "model": model,
+        "input": text,
+        "voice": voice,
+        "response_format": "mp3",
+    }
+    if float(voice_rate or 1.0) != 1.0:
+        payload["speed"] = float(voice_rate)
+
+    # Errors where retrying will never help: the model rejected the voice or
+    # the input, the key is wrong, or the model/voice does not exist. Retrying
+    # spends three requests to reach the same answer.
+    _NON_RETRYABLE_CODES = {400, 401, 403, 404, 422}
+
+    last_error: str | None = None
+    for i in range(3):
+        try:
+            logger.info(
+                f"start openrouter tts, model: {model}, voice: {voice}, try: {i + 1}"
+            )
+            ensure_file_path_exists(voice_file)
+
+            response = requests.post(
+                OPENROUTER_SPEECH_URL,
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                timeout=120,
+            )
+            if response.status_code != 200:
+                if response.status_code in _NON_RETRYABLE_CODES:
+                    reason = (
+                        f"OpenRouter TTS request rejected (status {response.status_code}): "
+                        # Scrub before the 200-cut: a cut landing mid-secret
+                        # defeats the scrubber and leaks the raw remainder.
+                        f"{scrub_secret_values(response.text)[:200]}"
+                    )
+                    logger.error(
+                        f"openrouter tts rejected (non-retryable) — model: {model}, "
+                        f"voice: {voice}, status: {response.status_code}. "
+                        "Please select a different OpenRouter voice."
+                    )
+                    return TtsResult(error=reason)
+
+                last_error = f"status {response.status_code}"
+                logger.error(
+                    f"openrouter tts failed with status {response.status_code}: "
+                    f"{scrub_secret_values(response.text)[:200]}"
+                )
+                continue
+
+            with open(voice_file, "wb") as f:
+                f.write(response.content)
+
+            audio_clip = AudioFileClip(voice_file)
+            audio_duration = audio_clip.duration
+            audio_clip.close()
+
+            sub_maker = SubMaker()
+            logger.success(f"openrouter tts succeeded: {voice_file}")
+            return TtsResult(
+                sub_maker=populate_legacy_submaker_with_full_text(
+                    sub_maker=sub_maker,
+                    text=text,
+                    audio_duration_seconds=audio_duration,
+                )
+            )
+        except Exception as e:
+            # Scrub before the 200-cut: a cut landing mid-secret defeats the
+            # scrubber and leaks the raw remainder.
+            last_error = scrub_secret_values(str(e))[:200]
+            logger.error(f"openrouter tts failed: {str(e)}")
+
+    return TtsResult(
+        error=f"OpenRouter TTS failed after 3 attempts ({last_error or 'unknown error'})"
     )
 
 

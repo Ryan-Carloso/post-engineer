@@ -1296,6 +1296,56 @@ describe('app/(main)/persona/page — abas, carrossel e seletor de voz', () => {
     expect(screen.queryByText('xxfoo')).toBeNull();
   });
 
+  it('voz do OpenRouter mostra o nome e o modelo em linhas separadas', () => {
+    // The model must be visible or two entries sharing a voice name render as
+    // identical rows — but appending it to the name overflows the card and
+    // truncates mid-slug, so it gets its own line.
+    vi.mocked(useVoicesQuery).mockReturnValue({
+      data: [
+        { id: 'chatterbox:ryan' },
+        { id: 'openrouter:x-ai/grok-voice-tts-1.0:eve' },
+        { id: 'openrouter:microsoft/mai-voice-2.1:en-US-Harper:MAI-Voice-2.1' },
+      ],
+      isLoading: false,
+    } as never);
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    expect(screen.getByText('eve')).toBeTruthy();
+    expect(screen.getByText('x-ai/grok-voice-tts-1.0')).toBeTruthy();
+    // The Azure voice keeps its own colons — split on the FIRST colon, so the
+    // voice half is `en-US-Harper:MAI-Voice-2.1`, not just `en-US-Harper`.
+    expect(screen.getByText('en-US-Harper:MAI-Voice-2.1')).toBeTruthy();
+    expect(screen.getByText('microsoft/mai-voice-2.1')).toBeTruthy();
+    // Chatterbox is unaffected: no model line, underscores still spaced.
+    expect(screen.getByText('ryan')).toBeTruthy();
+    expect(screen.queryByText('chatterbox:ryan')).toBeNull();
+  });
+
+  it('cada voz do OpenRouter carrega o id bruto no title', () => {
+    // The visible lines are display; the raw id is what gets submitted.
+    vi.mocked(useVoicesQuery).mockReturnValue({
+      data: [{ id: 'openrouter:x-ai/grok-voice-tts-1.0:eve' }],
+      isLoading: false,
+    } as never);
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    expect(
+      screen.getByTitle('openrouter:x-ai/grok-voice-tts-1.0:eve'),
+    ).toBeTruthy();
+  });
+
+  it('prefixo openrouter no meio do id não é removido', () => {
+    vi.mocked(useVoicesQuery).mockReturnValue({
+      data: [{ id: 'xxopenrouter:foo' }, { id: 'chatterbox:ryan' }],
+      isLoading: false,
+    } as never);
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    // The strip is anchored to the start, so an id merely containing the
+    // provider name is left alone.
+    expect(screen.getByText('xxopenrouter:foo')).toBeTruthy();
+  });
+
   it('áudio padrão do sample é pt-br na criação', async () => {
     const created = stubAudio();
     const user = userEvent.setup();

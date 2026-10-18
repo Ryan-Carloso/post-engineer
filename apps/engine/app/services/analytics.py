@@ -44,7 +44,13 @@ _SECRET_KEY_PATTERN = re.compile(
 # config blobs in JSON/dict shape, which the bare pattern missed.
 _SECRET_VALUE_PATTERN = re.compile(
     r"(password|passwd|secret|token|api[-_]?key|credential|private[-_]?key|session)[\"']?\s*[:=]\s*[\"']?([^\s,;\"']+)"
-    r"|(bearer)\s+([^\s,;\"']+)",
+    r"|(bearer)\s+([^\s,;\"']+)"
+    # Hosted-provider keys are self-identifying by prefix (OpenRouter
+    # `sk-or-v1-...`, OpenAI `sk-...`/`sk-proj-...`). They leak with no field
+    # name in sight -- an upstream HTTP error body echoes the rejected key back
+    # verbatim -- so the key-anchored branch above cannot see them. The length
+    # floor keeps ordinary words starting with "sk" ("sketch", "sk-42") intact.
+    r"|\b(sk-(?:or-v1-)?[A-Za-z0-9_-]{20,})",
     re.IGNORECASE,
 )
 
@@ -56,8 +62,11 @@ def scrub_secret_values(text: str) -> str:
     def _replace(m: re.Match[str]) -> str:
         # Group 1/3 is the key name; preserve it, redact the value.
         key = m.group(1) or m.group(3)
+        if key is None:
+            # The bare provider-key branch: no key name to preserve.
+            return _REDACTED
         sep = "=" if m.group(1) else " "
-        return f"{key}{sep}[redacted]"
+        return f"{key}{sep}{_REDACTED}"
     return _SECRET_VALUE_PATTERN.sub(_replace, text)
 
 

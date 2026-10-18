@@ -1,8 +1,8 @@
-"""Only ElevenLabs and Chatterbox remain as TTS providers.
+"""ElevenLabs, Chatterbox and OpenRouter are the TTS providers.
 
 edge_tts was the Azure v1 transport and the Chatterbox fallback; ElevenLabs,
-SiliconFlow, Gemini, MiMo and Azure v2 were the other providers. All of them are
-gone. They were not removed for tidiness:
+SiliconFlow, Gemini, MiMo and Azure v2 were the other providers. All of those
+are gone. They were not removed for tidiness:
 
 * every one of them could only be reached with a voice id the UI never offers
   (the catalog exposed four house voices that resolved to Azure names), and
@@ -10,6 +10,10 @@ gone. They were not removed for tidiness:
   video died at the `audio` stage after three 30s timeouts.
 
 `SubMaker` survives as a local class — the subtitle carrier, not a transport.
+
+Note this file pins what was *removed*, not what OpenRouter does; the audio
+provider map changed when OpenRouter was added and this scan must not be
+widened into "every provider that ever existed".
 
 This is a source scan, not a behaviour test: the guarantee is that a removed
 provider cannot come back through a new call site.
@@ -133,7 +137,7 @@ class TestRemainingProviders:
             "azure_voices.json is unreachable now that both Azure providers are gone"
         )
 
-    def test_tts_only_dispatches_the_two_remaining_providers(self):
+    def test_tts_only_dispatches_the_supported_providers(self):
         """An unknown voice must fail loudly, not fall through to a provider.
 
         The old final line was `return azure_tts_v1(...)`: any id the catalog
@@ -154,10 +158,13 @@ class TestRemainingProviders:
             for child in ast.walk(tts_node)
             if isinstance(child, ast.Call) and isinstance(child.func, ast.Name)
         }
-        assert {"chatterbox_tts", "elevenlabs_tts"} <= called
+        # OpenRouter is a supported provider alongside the two historical ones;
+        # its own behaviour is covered in test_openrouter_tts.py.
+        assert {"chatterbox_tts", "elevenlabs_tts", "openrouter_tts"} <= called
         assert "is_no_voice" in called
         assert "is_chatterbox_voice" in called
         assert "is_elevenlabs_voice" in called
+        assert "is_openrouter_voice" in called
         removed = called & {
             "azure_tts_v1",
             "azure_tts_v2",
