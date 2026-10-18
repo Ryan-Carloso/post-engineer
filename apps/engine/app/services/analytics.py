@@ -19,6 +19,13 @@ carries response_preview, up to 500 chars of truncated model output, so
 LLM responses stay debuggable in PostHog. It is scrubbed of
 credential-shaped fragments (scrub_secret_values) before capture and is
 not a raw request body — prompts are never sent.
+
+Deliberate exception (user-requested, PR #228): the publish_provider_failed
+event carries response_body, up to 500 chars of the upstream provider's
+error response, so publish failures are diagnosable in PostHog from both
+publish paths (task_publish, fill_schedule). It is scrubbed with
+scrub_error_text (secrets + machine-local paths) before capture and never
+reaches Discord or the task error string.
 """
 
 from __future__ import annotations
@@ -230,11 +237,19 @@ def warm_client() -> None:
     _get_client()
 
 
-def track_event(event_name: str, properties: dict[str, Any] | None = None) -> None:
+def track_event(
+    event_name: str,
+    properties: dict[str, Any] | None = None,
+    immediate: bool = False,
+) -> None:
     """Track a product-analytics event.
 
     event_name should be snake_case. properties carries safe context only:
     ids, counts, validated enums — never credentials or raw bodies.
+    Set immediate=True to flush right after capture: the client batches by
+    default, so a lone event (e.g. a publish failure with nothing after it)
+    would otherwise sit in the queue. Leave False on hot paths — flush()
+    blocks until the queue drains.
     """
     try:
         client = _get_client()
@@ -262,6 +277,8 @@ def track_event(event_name: str, properties: dict[str, Any] | None = None) -> No
             event=event_name,
             properties=props,
         )
+        if immediate:
+            client.flush()
     except Exception:  # noqa: BLE001 - telemetry must never break
         pass
 

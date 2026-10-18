@@ -1145,7 +1145,11 @@ class PublishDueTests(unittest.TestCase):
             )
         self.assertEqual(published, 0)
         # The scrubber received the whole message, not the truncated slice.
-        scrub.assert_called_once_with(str(error), max_chars=200)
+        # (scrub is also called once for the publish_provider_failed event's
+        # response_body; filter to the video_publish_failed reason call.)
+        reason_calls = [c for c in scrub.call_args_list if c[1].get("max_chars") == 200]
+        self.assertEqual(len(reason_calls), 1)
+        self.assertEqual(reason_calls[0], ((str(error),), {"max_chars": 200}))
         failed_calls = [
             c for c in track.call_args_list if c[0][0] == "video_publish_failed"
         ]
