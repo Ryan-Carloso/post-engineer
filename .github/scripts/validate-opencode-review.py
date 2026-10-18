@@ -85,7 +85,16 @@ def main() -> int:
     # z.ai Coding Plan provider wiring
     check("z.ai coding endpoint configured", "https://api.z.ai/api/coding/paas/v4" in text)
     check("z.ai standard endpoint configured", "https://api.z.ai/api/paas/v4" in text)
-    check("api key from ZAI_API_KEY env", '"{env:ZAI_API_KEY}"' in text)
+    check(
+        "api key built from env placeholder",
+        '"{env:%s}" % key_var' in text,
+        "provider apiKey must be built as {env:<KEY_VAR>} from the key variable",
+    )
+    check(
+        "providers map to their own key variable",
+        '"ZAI_API_KEY" if "z.ai" in provider["options"]["baseURL"] else "OPENROUTER_API_KEY"' in text,
+        "z.ai providers must use ZAI_API_KEY and OpenRouter must use OPENROUTER_API_KEY",
+    )
     check("no ZHIPU_API_KEY references", "ZHIPU_API_KEY" not in text)
     check("OPENCODE_MODEL default set", "OPENCODE_MODEL: zai-coding-plan/" in text)
     check("z.ai fallback model default set", "ZAI_FREE_MODEL: glm-" in text)
@@ -128,10 +137,6 @@ def main() -> int:
     check(
         "OpenRouter endpoint configured",
         "https://openrouter.ai/api/v1" in text,
-    )
-    check(
-        "OpenRouter api key from env",
-        '"{env:OPENROUTER_API_KEY}"' in text,
     )
     check(
         "OpenRouter provider uses openai-compatible package",

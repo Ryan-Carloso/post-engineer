@@ -235,12 +235,9 @@ jobs:
                   },
                   "models": {model: {"name": model} for model in sorted(models)},
               }
-          # The two "{env:ZAI_API_KEY}" / "{env:OPENROUTER_API_KEY}" forms above
-          # are built with a percent format so both literals stay in this file
-          # for the workflow validator. Rewrite them to the braced form OpenCode
-          # expects. The literals are also spelled out here:
-          _ = "{env:ZAI_API_KEY}"
-          _ = "{env:OPENROUTER_API_KEY}"
+          # apiKey is built as "{env:<KEY_VAR>}" (the braced form OpenCode
+          # expects) from each provider's key variable; the workflow
+          # validator checks this construction directly.
           for provider in providers.values():
               key_var = "ZAI_API_KEY" if "z.ai" in provider["options"]["baseURL"] else "OPENROUTER_API_KEY"
               provider["options"]["apiKey"] = "{env:%s}" % key_var
