@@ -177,6 +177,22 @@ class BatchPublisher:
                     f"fill_schedule: slot {slot['id']} publish failed: {exc}"
                     + (f" | upstream response: {upstream}" if upstream else "")
                 )
+                # PostHog gets the full diagnostic picture (provider, status,
+                # upstream body): unlike Discord, it is our own observability
+                # backend, not a user-facing surface. Mirrors the per-provider
+                # event in app.services.task_publish. `provider` is the
+                # innermost loop variable; it may be unbound if
+                # read_final_video_r2 raised before the loop started.
+                failed_provider = locals().get("provider")
+                track_event(
+                    "publish_provider_failed",
+                    {
+                        **_publish_tracking_context(slot, schedule),
+                        "provider": str(failed_provider) if failed_provider else "unknown",
+                        "status_code": getattr(exc, "status_code", None),
+                        "response_body": (getattr(exc, "response_body", None) or "")[:500],
+                    },
+                )
                 attempts = int(slot.get("publish_attempts") or 0) + 1
                 if attempts >= MAX_PUBLISH_ATTEMPTS:
                     # Bounded retries: auto-cancel the slot and refund the

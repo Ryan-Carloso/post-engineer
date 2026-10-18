@@ -262,6 +262,10 @@ def track_event(event_name: str, properties: dict[str, Any] | None = None) -> No
             event=event_name,
             properties=props,
         )
+        # Flush immediately: the client batches by default, and a lone
+        # event (e.g. a publish failure with nothing after it) would
+        # otherwise sit in the queue instead of reaching PostHog.
+        client.flush()
     except Exception:  # noqa: BLE001 - telemetry must never break
         pass
 

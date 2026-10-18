@@ -86,6 +86,27 @@ def test_track_event_redacts_secrets():
             assert "sk-x" not in str(props)
 
 
+def test_track_event_flushes_after_capture():
+    # The client batches by default; a lone event (e.g. a publish failure)
+    # would sit in the queue. track_event flushes so it arrives immediately.
+    with mock.patch.dict(os.environ, {"POSTHOG_API_KEY": "phc_test_key"}):
+        with mock.patch("posthog.Posthog") as mock_cls:
+            instance = mock_cls.return_value
+            analytics.track_event("publish_provider_failed", {"provider": "youtube"})
+            instance.capture.assert_called_once()
+            instance.flush.assert_called_once()
+
+
+def test_track_event_flush_failure_never_raises():
+    # Telemetry must never break the request path, even if flush throws.
+    with mock.patch.dict(os.environ, {"POSTHOG_API_KEY": "phc_test_key"}):
+        with mock.patch("posthog.Posthog") as mock_cls:
+            instance = mock_cls.return_value
+            instance.flush.side_effect = RuntimeError("flush down")
+            # Must not raise.
+            analytics.track_event("publish_provider_failed", {"provider": "youtube"})
+
+
 def test_track_event_never_raises_on_capture_failure():
     with mock.patch.dict(os.environ, {"POSTHOG_API_KEY": "phc_test_key"}):
         with mock.patch("posthog.Posthog") as mock_cls:
