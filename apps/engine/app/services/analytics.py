@@ -19,6 +19,13 @@ carries response_preview, up to 500 chars of truncated model output, so
 LLM responses stay debuggable in PostHog. It is scrubbed of
 credential-shaped fragments (scrub_secret_values) before capture and is
 not a raw request body — prompts are never sent.
+
+Deliberate exception (user-requested, PR #228): the publish_provider_failed
+event carries response_body, up to 500 chars of the upstream provider's
+error response, so publish failures are diagnosable in PostHog from both
+publish paths (task_publish, fill_schedule). It is scrubbed with
+scrub_error_text (secrets + machine-local paths) before capture and never
+reaches Discord or the task error string.
 """
 
 from __future__ import annotations

@@ -137,9 +137,10 @@ class FillSchedulePublishPostHogTests(TestCase):
         self.assertEqual(len(failed_calls), 1)
         self.assertEqual(len(failed_calls[0][0][1]["response_body"]), 500)
 
-    def test_non_publish_error_still_emits_event_with_unknown_provider(self) -> None:
-        # OSError (e.g. R2 read failure) has no status_code/response_body;
-        # the event still fires with safe defaults.
+    def test_publish_video_oserror_emits_event(self) -> None:
+        # OSError from publish_video (inside the provider loop) has no
+        # status_code/response_body; the event still fires with safe
+        # defaults and the bound provider.
         store = _FakeStore()
         store.ready_due_slots = lambda now: [self._slot()]  # type: ignore[method-assign]
         publish_mock = MagicMock(side_effect=OSError("disk gone"))
@@ -153,6 +154,32 @@ class FillSchedulePublishPostHogTests(TestCase):
         ]
         self.assertEqual(len(failed_calls), 1)
         props = failed_calls[0][0][1]
+        self.assertEqual(props["provider"], "youtube")
+        self.assertIsNone(props["status_code"])
+        self.assertEqual(props["response_body"], "")
+
+    def test_r2_read_failure_emits_event_with_unknown_provider(self) -> None:
+        # read_final_video_r2 raising BEFORE the provider loop is the case
+        # the provider=None initialization guards: the event must fire with
+        # provider="unknown" and the handler must not raise UnboundLocalError.
+        from app.services import video_storage
+
+        store = _FakeStore()
+        store.ready_due_slots = lambda now: [self._slot()]  # type: ignore[method-assign]
+        scheduler = self._scheduler(store, MagicMock())
+        with (
+            patch.object(
+                video_storage, "read_final_video_r2", side_effect=OSError("r2 down")
+            ),
+            patch.object(publish_module, "track_event") as track_mock,
+        ):
+            scheduler.publish_due(datetime(2026, 10, 18, 12, 0, tzinfo=UTC))
+        failed_calls = [
+            c for c in track_mock.call_args_list if c[0][0] == "publish_provider_failed"
+        ]
+        self.assertEqual(len(failed_calls), 1)
+        props = failed_calls[0][0][1]
+        self.assertEqual(props["provider"], "unknown")
         self.assertIsNone(props["status_code"])
         self.assertEqual(props["response_body"], "")
 

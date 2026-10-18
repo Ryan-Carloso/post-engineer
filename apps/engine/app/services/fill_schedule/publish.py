@@ -154,6 +154,10 @@ class BatchPublisher:
                             video_bytes=video_bytes,
                             content_type="video/mp4",
                         )
+                # Past the provider loops: a failure from here on (e.g. the
+                # slot-state PATCH) is not a provider failure — don't let the
+                # last loop value misattribute it.
+                provider = None
                 self.store.update_slot(
                     slot["id"], status=SLOT_PUBLISHED, published_at=now.isoformat()
                 )
@@ -186,7 +190,7 @@ class BatchPublisher:
                 # upstream body): unlike Discord, it is our own observability
                 # backend, not a user-facing surface. Mirrors the per-provider
                 # event in app.services.task_publish. `provider` is the
-                # innermost loop variable; it may be unbound if
+                # innermost loop variable; it is None (never unbound) if
                 # read_final_video_r2 raised before the loop started.
                 track_event(
                     "publish_provider_failed",
