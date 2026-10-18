@@ -116,11 +116,17 @@ def publish_videos(
     in-process only) so the boot orphan triage can finish a publish
     interrupted by a restart.
 
-    Results are recorded in the task state under ``publish_results``.
+    Results are recorded in the task state under ``publish_results`` —
+    one entry per (provider, video) with ``status`` ``"published"`` or
+    ``"failed"``. A provider failure is recorded, not fatal: the loop
+    continues with the remaining providers, so one provider being down
+    never cancels the others.
 
     Raises:
-        PublishFailedError: when the upload API rejects a video. The task state
-            is moved to FAILED with the upstream error preserved.
+        PublishFailedError: when every provider rejected the video. The
+            task state is moved to FAILED with the upstream errors
+            preserved. Partial success (at least one provider published)
+            returns normally.
         RuntimeError: when required configuration is missing.
     """
     existing = sm.state.get_task(task_id) or {}
@@ -176,18 +182,38 @@ def publish_videos(
                     content_type="video/mp4",
                 )
             except upload_publisher.PublishError as exc:
-                # Basename only: the full local path would land in the task
-                # error and (via start()'s generic handler) in the Discord
-                # alert — no need to disclose the server's filesystem layout.
-                # The upstream response body likewise stays out of the error
-                # string (it reaches Discord); it is logged server-side only.
+                # One provider failing must not cancel the others: record
+                # the failure and keep going. Basename only: the full local
+                # path would land in the task error and (via start()'s
+                # generic handler) in the Discord alert — no need to
+                # disclose the server's filesystem layout. The upstream
+                # response body likewise stays out of the error string (it
+                # reaches Discord); it is logged server-side only.
                 error = f"publish failed for {os.path.basename(video_path)}: {exc}"
                 logger.error(f"task {task_id}: {error} | upstream response: {exc.response_body}")
-                sm.persist_state_update(
-                    sm.state, task_id, state=const.TASK_STATE_FAILED, error=error
+                results.append(
+                    {
+                        "provider": provider,
+                        "video": video_path,
+                        "status": "failed",
+                        "error": error,
+                    }
                 )
-                raise PublishFailedError(error) from exc
-            results.append({"provider": provider, "video": video_path, **result})
+                continue
+            results.append(
+                {"provider": provider, "video": video_path, "status": "published", **result}
+            )
+
+    # Partial success is a success: the task completes and the per-provider
+    # results let the UI show which providers published and which failed.
+    # Only when every provider failed does the task itself fail.
+    if not any(r.get("status") == "published" for r in results):
+        failures = "; ".join(str(r.get("error", "unknown")) for r in results)
+        error = f"publish failed for all providers: {failures}"
+        sm.persist_state_update(
+            sm.state, task_id, state=const.TASK_STATE_FAILED, error=error
+        )
+        raise PublishFailedError(error)
 
     sm.persist_state_update(sm.state, task_id, publish_results=results)
     return results
