@@ -33,7 +33,7 @@ from app.services.persona_hook import (
     _discard_stale_subtitle,
     _find_hook_end_seconds,
     _limit_generated_script,
-    persona_hook_end_seconds,
+    resolve_exhausted_hook,
 )
 from app.services.bgm_history import history_repository
 from app.services.analytics import scrub_error_text, scrub_secret_values, track_event
@@ -541,11 +541,12 @@ def _ensure_persona_hook_fits(
 ):
     """Validate the persona hook duration right after subtitles exist.
 
-    The lip-sync intro needs the hook to end inside the configured persona
-    hook window. When TTS generated the audio, an overshooting hook is LLM
-    variance — regenerate a shorter hook (plus its audio/subtitles) instead
-    of failing the whole task. With custom audio the hook timing is fixed by
-    the user's recording, so an overshoot still fails the task as before.
+    The lip-sync intro wants the hook to end inside the configured persona
+    hook window. When TTS generated the audio, a mistimed hook is LLM
+    variance — regenerate a fitting hook (plus its audio/subtitles) instead
+    of failing the whole task, unless it runs past PERSONA_HOOK_HARD_FAIL_SECONDS.
+    With custom audio the hook timing is fixed by the user's recording, so a
+    mistiming still fails the task as before.
 
     Returns the (possibly regenerated) script/audio/subtitle tuple. A
     (None, None, None) audio triple means generate_audio already failed the
@@ -569,10 +570,8 @@ def _ensure_persona_hook_fits(
         if window_min <= end_seconds <= window_max:
             return video_script, audio_file, audio_duration, sub_maker, subtitle_path
         if attempt + 1 >= attempts:
-            raise ValueError(
-                f"persona hook must end between {window_min:g} and "
-                f"{window_max:g} seconds, got {end_seconds:g}"
-            )
+            resolve_exhausted_hook(end_seconds, window_min, window_max, attempts)
+            return video_script, audio_file, audio_duration, sub_maker, subtitle_path
         video_script = _regenerate_fitting_hook(params, video_script, end_seconds)
         audio_file, audio_duration, sub_maker = generate_audio(task_id, params, video_script)
         if not audio_file:
@@ -1251,16 +1250,14 @@ def prepare_persona_lipsync_video(
             ) from exc
 
     subtitles = subtitle.file_to_subtitles(subtitle_path)
-    hook_duration = persona_hook_end_seconds(
-        video_script,
-        subtitles,
-        PERSONA_HOOK_MIN_SECONDS,
-        PERSONA_HOOK_MAX_SECONDS,
-    )
-    # Explicit GPU-ceiling guard: persona_hook_end_seconds only knows the
-    # hook window, so a future PERSONA_HOOK_MAX_SECONDS edit past the
-    # LongCat segment ceiling fails here instead of rendering oversized
-    # intros (the constant pair is pinned by
+    # Measure only: a hook that missed the quality window already shipped
+    # best-effort upstream — re-validating the window here would fail the
+    # video for the same mistiming. The GPU ceiling below still applies.
+    hook_duration = _find_hook_end_seconds(video_script, subtitles)
+    # Explicit GPU-ceiling guard: the hook is measured, not window-checked,
+    # above (a mistimed hook ships best-effort), so an oversized intro still
+    # fails here instead of SIGKILLing inside the Modal container past the
+    # LongCat segment ceiling (the constant pair is pinned by
     # test_hook_constants_stay_inside_the_gpu_ceiling; this is the runtime
     # counterpart).
     if hook_duration > PERSONA_LIPSYNC_MAX_SECONDS:

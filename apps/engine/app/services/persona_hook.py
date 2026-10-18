@@ -15,6 +15,36 @@ from loguru import logger
 from app.config import config
 
 
+# A hook that misses the quality window is only a cosmetic miss: the intro
+# runs shorter or longer than ideal, but the video is still watchable.
+# Failing the whole generation over it punishes the user for LLM variance,
+# so once the retries are exhausted the pipeline ships the best effort
+# instead. Past this duration the intro is structurally broken (it eats the
+# opening and no retry can salvage it), so the task still fails as before.
+PERSONA_HOOK_HARD_FAIL_SECONDS = 15.0
+
+
+def resolve_exhausted_hook(
+    end_seconds: float, window_min: float, window_max: float, attempts: int
+) -> None:
+    """Terminal decision after the persona hook retries are exhausted.
+
+    Raises only when the hook runs past PERSONA_HOOK_HARD_FAIL_SECONDS.
+    Otherwise logs the best-effort shipment and returns, letting the caller
+    proceed with the mistimed hook instead of failing the user's video.
+    """
+    if end_seconds > PERSONA_HOOK_HARD_FAIL_SECONDS:
+        raise ValueError(
+            f"persona hook must end between {window_min:g} and "
+            f"{window_max:g} seconds, got {end_seconds:g}"
+        )
+    logger.warning(
+        f"persona hook ended at {end_seconds:g}s, outside the "
+        f"{window_min:g}-{window_max:g}s window after {attempts} attempts; "
+        "shipping best effort instead of failing the task"
+    )
+
+
 def _find_hook_end_seconds(
     video_script: str,
     subtitles: Sequence[tuple[int, str, str]],
