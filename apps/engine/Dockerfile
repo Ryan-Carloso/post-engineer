@@ -6,7 +6,8 @@ FROM python:3.11-slim-bookworm
 COPY --from=ghcr.io/astral-sh/uv:0.8.24 /uv /uvx /bin/
 
 # System deps: ffmpeg (render/concat), libgomp1 (ctranslate2/faster-whisper),
-# ca-certificates (outbound HTTPS), tzdata (deterministic timezone).
+# ca-certificates (outbound HTTPS), tzdata (deterministic timezone),
+# librsvg2-bin (rsvg-convert rasterizes the private SVG catalog to stills).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         curl \
@@ -14,6 +15,7 @@ RUN apt-get update \
         libgomp1 \
         ca-certificates \
         tzdata \
+        librsvg2-bin \
     && rm -rf /var/lib/apt/lists/*
 
 ENV TZ=UTC \

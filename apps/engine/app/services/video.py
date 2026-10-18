@@ -29,6 +29,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from app.config import config
 from app.models import const
+from app.services import image_material
 from app.services.material import MAX_LETTERBOX_BARS
 from app.models.schema import (
     MaterialInfo,
@@ -1879,55 +1880,6 @@ def generate_video(
     del video_clip
 
 
-# Minimum short edge, in px, for a still used as video material. Below this the
-# zoom would upscale visible softness instead of adding motion.
-_MIN_MATERIAL_EDGE = 480
-
-
-def render_image_file_to_mp4(image_path: str, clip_duration: int = 4) -> str:
-    """Turn a still image into an mp4 clip with a Ken Burns zoom.
-
-    Returns the mp4 path, or "" when the image is unreadable or below the
-    minimum size. Shared by the uploaded-material path and the SVG catalog
-    path so both produce the same clip from the same still.
-    """
-    try:
-        probe = _open_image_clip_with_fallback(image_path)[0]
-    except Exception as exc:
-        logger.warning(f"skip unreadable image: {image_path}, error: {str(exc)}")
-        return ""
-
-    width, height = probe.size[0], probe.size[1]
-    if width < _MIN_MATERIAL_EDGE or height < _MIN_MATERIAL_EDGE:
-        logger.warning(
-            f"low resolution material: {width}x{height}, "
-            f"minimum {_MIN_MATERIAL_EDGE}x{_MIN_MATERIAL_EDGE} required"
-        )
-        close_clip(probe)
-        return ""
-
-    # Release the size-probe handle before building the export clip.
-    close_clip(probe)
-    try:
-        clip = (
-            ImageClip(image_path).with_duration(clip_duration).with_position("center")
-        )
-        # Gradual zoom from the original size up by 3% per second.
-        zoom_clip = clip.resized(
-            lambda t: 1 + (clip_duration * 0.03) * (t / clip.duration)
-        )
-        final_clip = CompositeVideoClip([zoom_clip])
-        video_file = f"{image_path}.mp4"
-        final_clip.write_videofile(video_file, fps=30, logger=None)
-        return video_file
-    except Exception as exc:
-        logger.warning(f"failed to render image clip: {image_path}, error: {str(exc)}")
-        return ""
-    finally:
-        close_clip(clip)
-        close_clip(final_clip)
-
-
 def preprocess_video(materials: List[MaterialInfo], clip_duration=4):
     # The WebUI may pass an empty material list in some re-generation flows;
     # return an empty result directly instead of raising a NoneType error.
@@ -1985,10 +1937,10 @@ def preprocess_video(materials: List[MaterialInfo], clip_duration=4):
         try:
             width = clip.size[0]
             height = clip.size[1]
-            if width < _MIN_MATERIAL_EDGE or height < _MIN_MATERIAL_EDGE:
+            if width < image_material.MIN_MATERIAL_EDGE or height < image_material.MIN_MATERIAL_EDGE:
                 logger.warning(
                     f"low resolution material: {width}x{height}, "
-                    f"minimum {_MIN_MATERIAL_EDGE}x{_MIN_MATERIAL_EDGE} required"
+                    f"minimum {image_material.MIN_MATERIAL_EDGE}x{image_material.MIN_MATERIAL_EDGE} required"
                 )
                 # Release the probe handle right after detecting low
                 # resolution, and don't pass the material on.
@@ -2001,7 +1953,7 @@ def preprocess_video(materials: List[MaterialInfo], clip_duration=4):
                 # release that handle before re-creating the image clip used
                 # for export.
                 close_clip(clip)
-                video_file = render_image_file_to_mp4(
+                video_file = image_material.render_image_file_to_mp4(
                     material_source_path, clip_duration
                 )
                 if not video_file:

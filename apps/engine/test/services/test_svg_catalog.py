@@ -79,8 +79,12 @@ class SvgCatalogTests(unittest.TestCase):
     def _config(self, index_dir=None, assets_root=None, enabled=True):
         values = {
             "svg_catalog_enabled": enabled,
-            "svg_catalog_index_dir": index_dir,
-            "svg_assets_root": assets_root,
+            "svg_catalog_index_dir": index_dir
+            if index_dir is not None
+            else self.index_dir,
+            "svg_assets_root": assets_root
+            if assets_root is not None
+            else self.assets_root,
         }
         patcher = patch.object(svg_catalog.config, "app", values)
         patcher.start()

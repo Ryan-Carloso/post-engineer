@@ -18,7 +18,7 @@ import cv2
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.services import svg_sketch  # noqa: E402
+from app.services import svg_sketch, svg_pencil  # noqa: E402
 
 CANVAS_W, CANVAS_H = 1080, 1920
 PEN_SIZE = 460
@@ -34,7 +34,7 @@ def pencil_sprite():
         svg_path = os.path.join(tmp, "pencil.svg")
         png_path = os.path.join(tmp, "pencil.png")
         with open(svg_path, "w", encoding="utf-8") as handle:
-            handle.write(svg_sketch.build_pencil_svg(output_path=svg_path))
+            handle.write(svg_pencil.build_pencil_svg(output_path=svg_path))
         subprocess.run(["rsvg-convert", "-w", str(PEN_SIZE), "-o", png_path, svg_path], check=True)
         return cv2.imread(png_path, cv2.IMREAD_UNCHANGED)
 
@@ -53,7 +53,7 @@ def main() -> int:
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
 
     sprite = pencil_sprite()
-    tip = svg_sketch.pencil_tip_in_sprite(PEN_SIZE)
+    tip = svg_pencil.pencil_tip_in_sprite(PEN_SIZE)
     frames = svg_sketch.render_sketch_clip(
         svg_path, sprite, tip, svg_sketch.draw_frame_count(), CANVAS_W, CANVAS_H,
         direction=DIAGONAL, angle_offset=PENCIL_FLIP,

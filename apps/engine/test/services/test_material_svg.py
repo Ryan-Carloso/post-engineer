@@ -6,16 +6,16 @@ import unittest
 from unittest.mock import patch
 
 from app.models.schema import MaterialInfo, VideoAspect
-from app.services import material
+from app.services import material, svg_material
 
 
 class SearchVideosSvgTests(unittest.TestCase):
-    @patch("app.services.material.svg_catalog")
+    @patch("app.services.svg_material.svg_catalog")
     def test_disabled_catalog_returns_nothing(self, mock_catalog):
         mock_catalog.is_enabled.return_value = False
-        self.assertEqual(material.search_videos_svg("money", 3), [])
+        self.assertEqual(svg_material.search_videos_svg("money", 3), [])
 
-    @patch("app.services.material.svg_catalog")
+    @patch("app.services.svg_material.svg_catalog")
     def test_maps_catalog_assets_to_material_info(self, mock_catalog):
         mock_catalog.is_enabled.return_value = True
         mock_catalog.search.return_value = [
@@ -29,28 +29,28 @@ class SearchVideosSvgTests(unittest.TestCase):
                 },
             )()
         ]
-        items = material.search_videos_svg("money", 4)
+        items = svg_material.search_videos_svg("money", 4)
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0].provider, "svg")
         self.assertEqual(items[0].url, "/tmp/a.svg")
         self.assertEqual(items[0].duration, 4)
 
-    @patch("app.services.material.svg_catalog")
+    @patch("app.services.svg_material.svg_catalog")
     def test_passes_search_term_and_limit(self, mock_catalog):
         mock_catalog.is_enabled.return_value = True
         mock_catalog.search.return_value = []
-        material.search_videos_svg("money", 4)
+        svg_material.search_videos_svg("money", 4)
         mock_catalog.search.assert_called_once_with("money")
 
 
 class RasterizeSvgTests(unittest.TestCase):
-    @patch("app.services.material.subprocess.run")
+    @patch("app.services.svg_material.subprocess.run")
     def test_calls_rsvg_convert_with_fixed_output_flags(self, mock_run):
         mock_run.return_value = subprocess.CompletedProcess([], 0)
         with patch("os.path.isfile", return_value=True), patch(
             "os.path.getsize", return_value=2048
         ):
-            self.assertTrue(material.rasterize_svg_to_png("/in/a.svg", "/out/a.png"))
+            self.assertTrue(svg_material.rasterize_svg_to_png("/in/a.svg", "/out/a.png"))
         argv = mock_run.call_args[0][0]
         # A repeated output flag makes the LAST one win and silently discards
         # the earlier value, so the argv shape itself is the contract.
@@ -59,42 +59,42 @@ class RasterizeSvgTests(unittest.TestCase):
         self.assertEqual(argv[-2], "/out/a.png")
         self.assertEqual(argv[-1], "/in/a.svg")
 
-    @patch("app.services.material.subprocess.run")
+    @patch("app.services.svg_material.subprocess.run")
     def test_returns_false_on_failure(self, mock_run):
         mock_run.side_effect = subprocess.CalledProcessError(1, "rsvg-convert")
-        self.assertFalse(material.rasterize_svg_to_png("/in/a.svg", "/out/a.png"))
+        self.assertFalse(svg_material.rasterize_svg_to_png("/in/a.svg", "/out/a.png"))
 
-    @patch("app.services.material.subprocess.run")
+    @patch("app.services.svg_material.subprocess.run")
     def test_returns_false_when_binary_missing(self, mock_run):
         mock_run.side_effect = FileNotFoundError()
-        self.assertFalse(material.rasterize_svg_to_png("/in/a.svg", "/out/a.png"))
+        self.assertFalse(svg_material.rasterize_svg_to_png("/in/a.svg", "/out/a.png"))
 
-    @patch("app.services.material.subprocess.run")
+    @patch("app.services.svg_material.subprocess.run")
     def test_returns_false_on_empty_output(self, mock_run):
         mock_run.return_value = subprocess.CompletedProcess([], 0)
         with patch("os.path.isfile", return_value=True), patch(
             "os.path.getsize", return_value=0
         ):
-            self.assertFalse(material.rasterize_svg_to_png("/in/a.svg", "/out/a.png"))
+            self.assertFalse(svg_material.rasterize_svg_to_png("/in/a.svg", "/out/a.png"))
 
 
 class PersistSvgMaterialTests(unittest.TestCase):
     def test_renders_svg_into_an_mp4(self):
         item = MaterialInfo(provider="svg", url="/cat/a.svg", duration=3)
-        with patch.object(material, "rasterize_svg_to_png", return_value=True) as mock_ras, patch(
-            "app.services.video.render_image_file_to_mp4", return_value="/out/a.mp4"
+        with patch.object(svg_material, "rasterize_svg_to_png", return_value=True), patch(
+            "app.services.image_material.render_image_file_to_mp4", return_value="/out/a.mp4"
         ) as mock_render:
-            result = material._persist_svg_item(item, "/save", 3)
+            result = svg_material._persist_svg_item(item, "/save", 3)
         self.assertEqual(result, "/out/a.mp4")
         mock_render.assert_called_once()
         self.assertEqual(mock_render.call_args.kwargs["clip_duration"], 3)
 
     def test_cache_name_is_derived_from_asset_path_and_aspect(self):
         item = MaterialInfo(provider="svg", url="/cat/a.svg", duration=3)
-        with patch.object(material, "rasterize_svg_to_png", return_value=True) as mock_ras, patch(
-            "app.services.video.render_image_file_to_mp4", return_value="/out/a.mp4"
+        with patch.object(svg_material, "rasterize_svg_to_png", return_value=True) as mock_ras, patch(
+            "app.services.image_material.render_image_file_to_mp4", return_value="/out/a.mp4"
         ):
-            material._persist_svg_item(item, "/save", 3, VideoAspect.portrait)
+            svg_material._persist_svg_item(item, "/save", 3, VideoAspect.portrait)
         png_arg = mock_ras.call_args[0][1]
         expected = hashlib.sha256(b"/cat/a.svg|1080x1920").hexdigest()[:16]
         self.assertEqual(os.path.basename(png_arg), f"svg-{expected}.png")
@@ -105,24 +105,24 @@ class PersistSvgMaterialTests(unittest.TestCase):
         item = MaterialInfo(provider="svg", url="/cat/a.svg", duration=3)
         names = []
         for aspect in (VideoAspect.portrait, VideoAspect.square):
-            with patch.object(material, "rasterize_svg_to_png", return_value=True) as mock_ras, patch(
-                "app.services.video.render_image_file_to_mp4", return_value="/out/a.mp4"
+            with patch.object(svg_material, "rasterize_svg_to_png", return_value=True) as mock_ras, patch(
+                "app.services.image_material.render_image_file_to_mp4", return_value="/out/a.mp4"
             ):
-                material._persist_svg_item(item, "/save", 3, aspect)
+                svg_material._persist_svg_item(item, "/save", 3, aspect)
             names.append(os.path.basename(mock_ras.call_args[0][1]))
         self.assertNotEqual(names[0], names[1])
 
     def test_rasterize_failure_returns_empty(self):
         item = MaterialInfo(provider="svg", url="/cat/a.svg", duration=3)
-        with patch.object(material, "rasterize_svg_to_png", return_value=False):
-            self.assertEqual(material._persist_svg_item(item, "/save", 3), "")
+        with patch.object(svg_material, "rasterize_svg_to_png", return_value=False):
+            self.assertEqual(svg_material._persist_svg_item(item, "/save", 3), "")
 
     def test_render_failure_returns_empty(self):
         item = MaterialInfo(provider="svg", url="/cat/a.svg", duration=3)
-        with patch.object(material, "rasterize_svg_to_png", return_value=True), patch(
-            "app.services.video.render_image_file_to_mp4", return_value=""
+        with patch.object(svg_material, "rasterize_svg_to_png", return_value=True), patch(
+            "app.services.image_material.render_image_file_to_mp4", return_value=""
         ):
-            self.assertEqual(material._persist_svg_item(item, "/save", 3), "")
+            self.assertEqual(svg_material._persist_svg_item(item, "/save", 3), "")
 
 
 class SvgRasterizeAspectTests(unittest.TestCase):
@@ -151,7 +151,7 @@ class SvgRasterizeAspectTests(unittest.TestCase):
         png = os.path.join(tmp, "out.png")
         self._make_svg(svg, 600, 600)
         self.assertTrue(
-            material.rasterize_svg_to_png(svg, png, target_width=1080, target_height=1920)
+            svg_material.rasterize_svg_to_png(svg, png, target_width=1080, target_height=1920)
         )
         with Image.open(png) as image:
             self.assertEqual(image.size, (1080, 1920))
@@ -165,7 +165,7 @@ class SvgRasterizeAspectTests(unittest.TestCase):
         svg = os.path.join(tmp, "a.svg")
         png = os.path.join(tmp, "out.png")
         self._make_svg(svg, 600, 600)
-        material.rasterize_svg_to_png(svg, png, target_width=1080, target_height=1080)
+        svg_material.rasterize_svg_to_png(svg, png, target_width=1080, target_height=1080)
         with Image.open(png) as image:
             self.assertEqual(image.size, (1080, 1080))
 
@@ -181,7 +181,7 @@ class SvgRasterizeAspectTests(unittest.TestCase):
         svg = os.path.join(tmp, "wide.svg")
         png = os.path.join(tmp, "out.png")
         self._make_svg(svg, 1600, 400)  # very wide: worst case for portrait
-        material.rasterize_svg_to_png(svg, png, target_width=1080, target_height=1920)
+        svg_material.rasterize_svg_to_png(svg, png, target_width=1080, target_height=1920)
         with Image.open(png) as image:
             clip_w, clip_h = image.size
         target_w, target_h = 1080, 1920
@@ -199,9 +199,9 @@ class SvgRasterizeAspectTests(unittest.TestCase):
         svg = os.path.join(tmp, "a.svg")
         png = os.path.join(tmp, "out.png")
         self._make_svg(svg, 600, 600)
-        material.rasterize_svg_to_png(svg, png)
+        svg_material.rasterize_svg_to_png(svg, png)
         with Image.open(png) as image:
-            self.assertEqual(max(image.size), material._SVG_RASTER_LONG_EDGE)
+            self.assertEqual(max(image.size), svg_material._SVG_RASTER_LONG_EDGE)
 
 
 class ResolveMaterialPathTests(unittest.TestCase):
@@ -209,10 +209,10 @@ class ResolveMaterialPathTests(unittest.TestCase):
 
     def test_svg_branch_never_calls_the_downloader(self):
         item = MaterialInfo(provider="svg", url="/cat/a.svg", duration=3)
-        with patch.object(material, "_persist_svg_item", return_value="/out/a.mp4") as mock_p, patch.object(
+        with patch.object(svg_material, "_persist_svg_item", return_value="/out/a.mp4") as mock_p, patch.object(
             material, "save_video"
-        ) as mock_dl, patch.object(material.face_detect, "video_contains_face") as mock_face:
-            result = material._resolve_material_path(item, "/save", 3, None)
+        ) as mock_dl, patch("app.services.face_detect.video_contains_face") as mock_face:
+            result = svg_material.resolve_material_path(item, "/save", 3, None)
         self.assertEqual(result, "/out/a.mp4")
         mock_dl.assert_not_called()
         # An illustration has no real face; screening it would drop the catalog.
@@ -221,30 +221,28 @@ class ResolveMaterialPathTests(unittest.TestCase):
 
     def test_download_branch_runs_face_detection(self):
         item = MaterialInfo(provider="pexels", url="https://x/v.mp4", duration=3)
-        with patch.object(material, "save_video", return_value="/save/v.mp4"), patch.object(
-            material.face_detect, "video_contains_face", return_value=False
+        with patch.object(material, "save_video", return_value="/save/v.mp4"), patch("app.services.face_detect.video_contains_face", return_value=False
         ) as mock_face:
-            result = material._resolve_material_path(item, "/save", 3, None)
+            result = svg_material.resolve_material_path(item, "/save", 3, None)
         self.assertEqual(result, "/save/v.mp4")
         mock_face.assert_called_once_with("/save/v.mp4", force_exclude=None)
 
     def test_download_branch_drops_face_detected_video(self):
         item = MaterialInfo(provider="pexels", url="https://x/v.mp4", duration=3)
-        with patch.object(material, "save_video", return_value="/save/v.mp4"), patch.object(
-            material.face_detect, "video_contains_face", return_value=True
+        with patch.object(material, "save_video", return_value="/save/v.mp4"), patch("app.services.face_detect.video_contains_face", return_value=True
         ):
-            self.assertEqual(material._resolve_material_path(item, "/save", 3, None), "")
+            self.assertEqual(svg_material.resolve_material_path(item, "/save", 3, None), "")
 
     def test_download_failure_returns_empty(self):
         item = MaterialInfo(provider="pexels", url="https://x/v.mp4", duration=3)
         with patch.object(material, "save_video", return_value=""):
-            self.assertEqual(material._resolve_material_path(item, "/save", 3, None), "")
+            self.assertEqual(svg_material.resolve_material_path(item, "/save", 3, None), "")
 
 
 class BuildSearchVideosSvgRoutingTests(unittest.TestCase):
     def test_svg_is_a_registered_provider(self):
         resolved = material._build_search_videos("svg", None)
-        self.assertIs(resolved, material.search_videos_svg)
+        self.assertIs(resolved, svg_material.search_videos_svg)
 
     def test_source_mix_can_chain_svg(self):
         def fake_svg(*args, **kwargs):
@@ -253,7 +251,7 @@ class BuildSearchVideosSvgRoutingTests(unittest.TestCase):
         def fake_pexels(*args, **kwargs):
             return []
 
-        with patch.object(material, "search_videos_svg", fake_svg), patch.object(
+        with patch.object(svg_material, "search_videos_svg", fake_svg), patch.object(
             material, "search_videos_pexels", fake_pexels
         ):
             resolved = material._build_search_videos("pexels", None, ["svg", "pexels"])

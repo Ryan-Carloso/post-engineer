@@ -1,6 +1,5 @@
 """Tests for the hand-drawn reveal (app/services/svg_sketch.py)."""
 import base64
-import io
 import os
 import subprocess
 import unittest
@@ -9,7 +8,7 @@ import tempfile
 import cv2
 import numpy as np
 
-from app.services import svg_sketch
+from app.services import svg_pencil, svg_sketch
 
 
 def _png_with_rect(text_bgr=(30, 30, 30), size=(200, 200)) -> bytes:
@@ -36,7 +35,7 @@ def _pencil_png(size=460) -> np.ndarray:
         svg = os.path.join(tmp, "p.svg")
         out = os.path.join(tmp, "p.png")
         with open(svg, "w", encoding="utf-8") as handle:
-            handle.write(svg_sketch.build_pencil_svg(output_path=svg))
+            handle.write(svg_pencil.build_pencil_svg(output_path=svg))
         subprocess.run(["rsvg-convert", "-w", str(size), "-o", out, svg], check=True)
         return cv2.imread(out, cv2.IMREAD_UNCHANGED)
 
@@ -109,12 +108,12 @@ class FitArtTests(unittest.TestCase):
 class PencilTests(unittest.TestCase):
     def setUp(self):
         self.png = _pencil_png()
-        self.tip = svg_sketch.pencil_tip_in_sprite(self.png.shape[0])
-        self.pencil = svg_sketch.Pencil(self.png, self.tip)
+        self.tip = svg_pencil.pencil_tip_in_sprite(self.png.shape[0])
+        self.pencil = svg_pencil.Pencil(self.png, self.tip)
 
     def test_rejects_non_rgba_sprite(self):
         with self.assertRaises(ValueError):
-            svg_sketch.Pencil(np.zeros((10, 10, 3), np.uint8), (1, 1))
+            svg_pencil.Pencil(np.zeros((10, 10, 3), np.uint8), (1, 1))
 
     def test_rotation_never_crops_the_barrel(self):
         """The regression: rotating about a tip near the edge sliced the pencil.
@@ -153,8 +152,8 @@ class BlendTests(unittest.TestCase):
         sprite = np.zeros((20, 20, 4), np.uint8)
         sprite[..., :3] = 0
         sprite[..., 3] = 255
-        svg_sketch.blend(canvas, sprite, -10, -10)
-        svg_sketch.blend(canvas, sprite, 95, 95)
+        svg_pencil.blend(canvas, sprite, -10, -10)
+        svg_pencil.blend(canvas, sprite, 95, 95)
         self.assertEqual(canvas.shape, (100, 100, 3))
         self.assertEqual(int(canvas[0, 0, 0]), 0, "top-left corner should be painted")
 
@@ -162,7 +161,7 @@ class BlendTests(unittest.TestCase):
         canvas = np.full((100, 100, 3), 255, np.uint8)
         sprite = np.zeros((20, 20, 4), np.uint8)
         sprite[..., 3] = 255
-        svg_sketch.blend(canvas, sprite, 500, 500)
+        svg_pencil.blend(canvas, sprite, 500, 500)
         self.assertEqual(int(canvas.min()), 255)
 
 
@@ -170,7 +169,7 @@ class StrokeDirectionTests(unittest.TestCase):
     def test_reports_the_leading_edge_and_heading(self):
         xs = np.arange(0, 100, 2)
         ys = np.full_like(xs, 50)
-        sample = svg_sketch.stroke_direction(xs, ys)
+        sample = svg_pencil.stroke_direction(xs, ys)
         self.assertIsNotNone(sample)
         (x, y), angle = sample
         self.assertAlmostEqual(y, 50.0, places=3)
@@ -178,41 +177,41 @@ class StrokeDirectionTests(unittest.TestCase):
         self.assertAlmostEqual(angle, 0.0, delta=2)
 
     def test_returns_none_for_too_few_samples(self):
-        self.assertIsNone(svg_sketch.stroke_direction(np.array([1, 2]), np.array([1, 2])))
+        self.assertIsNone(svg_pencil.stroke_direction(np.array([1, 2]), np.array([1, 2])))
 
     def test_returns_none_for_degenerate_direction(self):
         xs = np.full(30, 7)
         ys = np.full(30, 9)
-        self.assertIsNone(svg_sketch.stroke_direction(xs, ys))
+        self.assertIsNone(svg_pencil.stroke_direction(xs, ys))
 
 
 class PencilFollowerTests(unittest.TestCase):
     def setUp(self):
         self.png = _pencil_png()
-        self.pencil = svg_sketch.Pencil(self.png, svg_sketch.pencil_tip_in_sprite(self.png.shape[0]))
+        self.pencil = svg_pencil.Pencil(self.png, svg_pencil.pencil_tip_in_sprite(self.png.shape[0]))
 
     def test_first_sample_snaps_into_place(self):
-        follower = svg_sketch.PencilFollower(self.pencil)
+        follower = svg_pencil.PencilFollower(self.pencil)
         follower.step(((100.0, 100.0), 30.0))
         self.assertEqual(follower.x, 100.0)
         self.assertEqual(follower.angle, 30.0)
 
     def test_none_sample_leaves_state_untouched(self):
-        follower = svg_sketch.PencilFollower(self.pencil)
+        follower = svg_pencil.PencilFollower(self.pencil)
         follower.step(((50.0, 60.0), 10.0))
         follower.step(None)
         self.assertEqual(follower.x, 50.0)
         self.assertEqual(follower.angle, 10.0)
 
     def test_angle_wraps_across_the_180_boundary(self):
-        follower = svg_sketch.PencilFollower(self.pencil)
+        follower = svg_pencil.PencilFollower(self.pencil)
         follower.step(((0.0, 0.0), 179.0))
         follower.step(((1.0, 1.0), -179.0))
         # A naive subtraction would swing ~358 degrees the wrong way.
         self.assertGreater(follower.angle, 100.0)
 
     def test_position_lags_towards_the_target(self):
-        follower = svg_sketch.PencilFollower(self.pencil)
+        follower = svg_pencil.PencilFollower(self.pencil)
         follower.step(((0.0, 0.0), 0.0))
         follower.step(((100.0, 0.0), 0.0))
         self.assertGreater(follower.x, 0.0)
@@ -220,7 +219,7 @@ class PencilFollowerTests(unittest.TestCase):
 
     def test_draw_before_any_step_is_a_no_op(self):
         canvas = np.full((50, 50, 3), 255, np.uint8)
-        svg_sketch.PencilFollower(self.pencil).draw(canvas)
+        svg_pencil.PencilFollower(self.pencil).draw(canvas)
         self.assertEqual(int(canvas.min()), 255)
 
 
@@ -230,7 +229,7 @@ class RenderFramesTests(unittest.TestCase):
         cv2.rectangle(colour, (40, 40), (260, 160), (20, 20, 20), 6)
         ink = svg_sketch.derive_ink(colour)
         placement = svg_sketch.fit_art(colour, ink, 540, 960)
-        pencil = svg_sketch.Pencil(_pencil_png(), svg_sketch.pencil_tip_in_sprite(460))
+        pencil = svg_pencil.Pencil(_pencil_png(), svg_pencil.pencil_tip_in_sprite(460))
         frames = svg_sketch.render_frames(placement, pencil, 12, 540, 960)
         self.assertEqual(len(frames), 12)
         for frame in frames:
@@ -246,7 +245,7 @@ class RenderFramesTests(unittest.TestCase):
         cv2.rectangle(colour, (40, 40), (260, 160), (20, 20, 20), 6)
         ink = svg_sketch.derive_ink(colour)
         placement = svg_sketch.fit_art(colour, ink, 540, 960)
-        pencil = svg_sketch.Pencil(_pencil_png(), svg_sketch.pencil_tip_in_sprite(460))
+        pencil = svg_pencil.Pencil(_pencil_png(), svg_pencil.pencil_tip_in_sprite(460))
         frames = svg_sketch.render_frames(placement, pencil, 16, 540, 960)
 
         def art_ink(frame):
@@ -260,12 +259,12 @@ class RenderFramesTests(unittest.TestCase):
 
 class BuildPencilSvgTests(unittest.TestCase):
     def test_emits_gradient_and_opaque_eraser(self):
-        markup = svg_sketch.build_pencil_svg(gradient=True)
+        markup = svg_pencil.build_pencil_svg(gradient=True)
         self.assertIn("linearGradient", markup)
         self.assertIn("#ef8a90", markup)
 
     def test_flat_variant_has_no_gradient(self):
-        markup = svg_sketch.build_pencil_svg(gradient=False)
+        markup = svg_pencil.build_pencil_svg(gradient=False)
         self.assertNotIn("linearGradient", markup)
 
 
@@ -276,7 +275,7 @@ class EndToEndTests(unittest.TestCase):
             with open(svg, "w", encoding="utf-8") as handle:
                 handle.write(_svg_embedding(_png_with_rect()))
             frames = svg_sketch.render_sketch_clip(
-                svg, _pencil_png(), svg_sketch.pencil_tip_in_sprite(460), 8, 540, 960
+                svg, _pencil_png(), svg_pencil.pencil_tip_in_sprite(460), 8, 540, 960
             )
             self.assertIsNotNone(frames)
             assert frames is not None
@@ -335,7 +334,7 @@ class DiagonalRevealTests(unittest.TestCase):
         cv2.rectangle(colour, (40, 40), (260, 160), (20, 20, 20), 6)
         ink = svg_sketch.derive_ink(colour)
         placement = svg_sketch.fit_art(colour, ink, 540, 960)
-        pencil = svg_sketch.Pencil(_pencil_png(), svg_sketch.pencil_tip_in_sprite(460))
+        pencil = svg_pencil.Pencil(_pencil_png(), svg_pencil.pencil_tip_in_sprite(460))
         frames = svg_sketch.render_frames(
             placement, pencil, 16, 540, 960, direction=(1.0, 1.0)
         )
@@ -351,7 +350,6 @@ class DiagonalRevealTests(unittest.TestCase):
 
         # The first stroke must sit on the low-projection side, which for a
         # diagonal is the top-left of the artwork.
-        ox, oy = placement.offset_x, placement.offset_y
         h, w = placement.ink.shape[:2]
         top_left = placement.ink[: max(h // 3, 1), : max(w // 3, 1)]
         self.assertGreater(int(top_left.sum()), 0, "fixture must have top-left ink")
@@ -360,9 +358,9 @@ class DiagonalRevealTests(unittest.TestCase):
 
 class PencilFlipTests(unittest.TestCase):
     def test_angle_offset_flips_the_pencil(self):
-        pencil = svg_sketch.Pencil(_pencil_png(), svg_sketch.pencil_tip_in_sprite(460))
-        plain = svg_sketch.PencilFollower(pencil=pencil)
-        flipped = svg_sketch.PencilFollower(pencil=pencil, angle_offset=180.0)
+        pencil = svg_pencil.Pencil(_pencil_png(), svg_pencil.pencil_tip_in_sprite(460))
+        plain = svg_pencil.PencilFollower(pencil=pencil)
+        flipped = svg_pencil.PencilFollower(pencil=pencil, angle_offset=180.0)
         sample = ((120.0, 140.0), 30.0)
         plain.step(sample)
         flipped.step(sample)
@@ -374,7 +372,7 @@ class AttachPencilTests(unittest.TestCase):
     """The pencil is decoupled from frame generation so line art can use it too."""
 
     def setUp(self):
-        self.pencil = svg_sketch.Pencil(_pencil_png(), svg_sketch.pencil_tip_in_sprite(460))
+        self.pencil = svg_pencil.Pencil(_pencil_png(), svg_pencil.pencil_tip_in_sprite(460))
 
     def _frames(self, count, size=(400, 300)):
         return [np.full((size[0], size[1], 3), 252, np.uint8) for _ in range(count)]
@@ -386,7 +384,7 @@ class AttachPencilTests(unittest.TestCase):
         cv2.rectangle(colour, (40, 40), (260, 160), fill, 30)
         ink = svg_sketch.derive_ink(colour)
         placement = svg_sketch.fit_art(colour, ink, 540, 960)
-        pencil = svg_sketch.Pencil(_pencil_png(), svg_sketch.pencil_tip_in_sprite(460))
+        pencil = svg_pencil.Pencil(_pencil_png(), svg_pencil.pencil_tip_in_sprite(460))
 
         def has_fill(frame):
             """Count pixels close to the fill colour, ignoring the pencil.
@@ -410,7 +408,7 @@ class AttachPencilTests(unittest.TestCase):
 
     def test_requires_aligned_inputs(self):
         with self.assertRaises(ValueError):
-            svg_sketch.attach_pencil(self._frames(3), [np.zeros((10, 10), bool)], self.pencil)
+            svg_pencil.attach_pencil(self._frames(3), [np.zeros((10, 10), bool)], self.pencil)
 
     def test_draws_on_every_frame(self):
         frames = self._frames(4)
@@ -419,7 +417,7 @@ class AttachPencilTests(unittest.TestCase):
         # below that the pencil has no pose yet and stays off the canvas.
         for index in range(4):
             masks[index][200, 100 + index * 20 : 130 + index * 20] = True
-        out = svg_sketch.attach_pencil(frames, masks, self.pencil)
+        out = svg_pencil.attach_pencil(frames, masks, self.pencil)
         for frame in out:
             self.assertLess(int(frame.min()), 200, "pencil never appeared")
 
@@ -427,18 +425,18 @@ class AttachPencilTests(unittest.TestCase):
         frames = self._frames(3)
         masks = [np.zeros((400, 300), bool) for _ in range(3)]
         masks[0][200, 100] = True  # a single pixel: no direction, no pencil
-        out = svg_sketch.attach_pencil(frames, masks, self.pencil)
+        out = svg_pencil.attach_pencil(frames, masks, self.pencil)
         self.assertEqual(int(out[0].min()), 252)
 
     def test_tolerates_empty_masks(self):
         masks = [np.zeros((400, 300), bool) for _ in range(3)]
-        out = svg_sketch.attach_pencil(self._frames(3), masks, self.pencil)
+        out = svg_pencil.attach_pencil(self._frames(3), masks, self.pencil)
         self.assertEqual(len(out), 3)
 
     def test_stops_early_when_no_new_ink_arrives(self):
         masks = [np.zeros((400, 300), bool) for _ in range(5)]
         masks[0][200, 100:150] = True  # only the first frame draws anything
-        out = svg_sketch.attach_pencil(self._frames(5), masks, self.pencil)
+        out = svg_pencil.attach_pencil(self._frames(5), masks, self.pencil)
         # With no fresh pixels the follower keeps its last pose, so the pencil
         # must not have wandered off by the end.
         self.assertEqual(out[0].shape, out[-1].shape)

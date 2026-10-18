@@ -20,7 +20,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.services import line_art, svg_draw, svg_sketch  # noqa: E402
+from app.services import line_art, svg_draw, svg_sketch, svg_pencil  # noqa: E402
 
 CANVAS_W, CANVAS_H = 1080, 1920
 PEN_SIZE = 460
@@ -35,12 +35,12 @@ def pencil_sprite():
         svg_path = os.path.join(tmp, "pencil.svg")
         png_path = os.path.join(tmp, "pencil.png")
         with open(svg_path, "w", encoding="utf-8") as handle:
-            handle.write(svg_sketch.build_pencil_svg(output_path=svg_path))
+            handle.write(svg_pencil.build_pencil_svg(output_path=svg_path))
         subprocess.run(
             ["rsvg-convert", "-w", str(PEN_SIZE), "-o", png_path, svg_path], check=True
         )
         sprite = cv2.imread(png_path, cv2.IMREAD_UNCHANGED)
-    return sprite, svg_sketch.pencil_tip_in_sprite(PEN_SIZE, PENCIL_SIZE)
+    return sprite, svg_pencil.pencil_tip_in_sprite(PEN_SIZE, PENCIL_SIZE)
 
 
 def icon_frames(name: str, frame_count: int, width: int):
@@ -101,10 +101,10 @@ def main() -> int:
     os.makedirs(out_dir, exist_ok=True)
 
     sprite, tip = pencil_sprite()
-    pencil = svg_sketch.Pencil(sprite, tip)
+    pencil = svg_pencil.Pencil(sprite, tip)
 
     frames, masks = icon_frames(name, svg_sketch.draw_frame_count(), 700)
-    frames = svg_sketch.attach_pencil(frames, masks, pencil, angle_offset=PENCIL_FLIP)
+    frames = svg_pencil.attach_pencil(frames, masks, pencil, angle_offset=PENCIL_FLIP)
 
     out = os.path.join(out_dir, f"lapis_{name}.mp4")
     svg_sketch.write_clip(frames, out, fps=svg_sketch.DRAW_FPS)

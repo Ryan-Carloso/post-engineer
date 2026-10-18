@@ -1,7 +1,5 @@
-import hashlib
 import os
 import random
-import subprocess
 import threading
 from typing import List
 from urllib.parse import urlencode
@@ -12,15 +10,11 @@ from moviepy.video.io.VideoFileClip import VideoFileClip
 
 from app.config import config
 from app.models.schema import MaterialInfo, VideoAspect, VideoConcatMode
-from app.services import face_detect, svg_catalog
+from app.services import svg_material
 from app.utils import secret_redaction, ssrf, utils
 
 # Cap for cached stock-video downloads (bytes).
 _VIDEO_MAX_BYTES = 200 * 1024 * 1024
-
-# Long edge, in px, used when rasterizing a catalog SVG to a still frame.
-# 1080 matches the renderer's long edge, so the Ken Burns zoom never upsamples.
-_SVG_RASTER_LONG_EDGE = 1080
 
 # Thread-safe counter for API key rotation
 _api_key_counter = 0
@@ -398,187 +392,6 @@ def save_video(video_url: str, save_dir: str = "") -> str:
     return ""
 
 
-def search_videos_svg(
-    search_term: str,
-    minimum_duration: int,
-    video_aspect: VideoAspect = VideoAspect.portrait,
-) -> List[MaterialInfo]:
-    """Look up catalog SVG assets matching a keyword.
-
-    The aspect is unused: a catalog entry is a still image, and the clip is
-    letterboxed to the render size later, when it becomes an mp4.
-    """
-    del video_aspect
-    if not svg_catalog.is_enabled():
-        return []
-    return [
-        MaterialInfo(
-            provider="svg",
-            url=asset.absolute_path,
-            duration=minimum_duration,
-        )
-        for asset in svg_catalog.search(search_term)
-    ]
-
-
-def rasterize_svg_to_png(
-    svg_path: str,
-    output_png: str,
-    target_width: int | None = None,
-    target_height: int | None = None,
-) -> bool:
-    """Render an SVG to a PNG still with librsvg.
-
-    When both target dimensions are given, the artwork is fitted inside a
-    canvas of exactly that size. This is not cosmetic: combine_videos rejects
-    any clip whose aspect leaves more horizontal letterbox than
-    MAX_LETTERBOX_BARS, so a square illustration against a 9:16 frame would be
-    dropped from the timeline with only a warning.
-
-    Each rsvg-convert output flag must appear exactly once: the tool honours
-    the last occurrence of a repeated flag, so a duplicated -o would silently
-    discard the earlier value instead of erroring.
-    """
-    fit_canvas = bool(target_width and target_height)
-
-    if fit_canvas:
-        scale = min(
-            target_width / _SVG_RASTER_LONG_EDGE,
-            target_height / _SVG_RASTER_LONG_EDGE,
-        )
-        render_width = max(1, int(_SVG_RASTER_LONG_EDGE * scale))
-        # rsvg-convert has no height knob with --keep-aspect-ratio, so the
-        # artwork is rendered wide and then fitted by the canvas step below.
-        render_width = min(render_width, max(1, int(target_width)))
-    else:
-        render_width = _SVG_RASTER_LONG_EDGE
-
-    try:
-        subprocess.run(
-            [
-                "rsvg-convert",
-                "-w",
-                str(render_width),
-                "--keep-aspect-ratio",
-                "-o",
-                output_png,
-                svg_path,
-            ],
-            check=True,
-            capture_output=True,
-        )
-    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
-        logger.warning(f"svg rasterize failed for {svg_path}: {exc}")
-        return False
-
-    if not os.path.isfile(output_png) or os.path.getsize(output_png) == 0:
-        return False
-
-    if fit_canvas:
-        try:
-            _fit_onto_canvas(output_png, target_width, target_height)
-        except OSError as exc:
-            logger.warning(f"svg canvas fit failed for {svg_path}: {exc}")
-            return False
-
-    return os.path.isfile(output_png) and os.path.getsize(output_png) > 0
-
-
-def _fit_onto_canvas(png_path: str, width: int, height: int) -> None:
-    """Center the rendered still on a canvas of exactly width x height.
-
-    The fill colour is configurable because the catalog is cartoon artwork that
-    reads as printed art, and black letterbox would look like a bug.
-    """
-    from PIL import Image
-
-    with Image.open(png_path) as image:
-        if image.mode != "RGBA":
-            image = image.convert("RGBA")
-        canvas = Image.new(
-            "RGBA", (int(width), int(height)), _svg_canvas_background()
-        )
-        # Scale down only: upscaling a rasterized still just adds blur.
-        fitted = image.copy()
-        fitted.thumbnail((int(width), int(height)), Image.LANCZOS)
-        offset = (
-            (int(width) - fitted.size[0]) // 2,
-            (int(height) - fitted.size[1]) // 2,
-        )
-        canvas.alpha_composite(fitted, offset)
-        canvas.convert("RGB").save(png_path, format="PNG")
-
-
-def _svg_canvas_background() -> tuple:
-    """Parse the configured canvas colour into an RGBA tuple."""
-    raw = str(config.app.get("svg_canvas_background", "#FFFFFF")).strip() or "#FFFFFF"
-    raw = raw.lstrip("#")
-    if len(raw) == 3:
-        raw = "".join(char * 2 for char in raw)
-    if len(raw) != 6:
-        logger.warning(f"invalid svg_canvas_background={raw!r}, using white")
-        raw = "FFFFFF"
-    return tuple(int(raw[i : i + 2], 16) for i in (0, 2, 4)) + (255,)
-
-
-def _persist_svg_item(
-    item: MaterialInfo,
-    save_dir: str,
-    max_clip_duration: int,
-    video_aspect: VideoAspect = VideoAspect.portrait,
-) -> str:
-    """Rasterize a catalog SVG and turn it into a video clip.
-
-    The still is fitted to the target aspect before rendering, because
-    combine_videos drops a clip whose letterbox exceeds MAX_LETTERBOX_BARS.
-
-    Cached by a digest of the asset path and the aspect: the same asset in two
-    aspects is two different stills.
-    """
-    width, height = video_aspect.to_resolution()
-    digest = hashlib.sha256(
-        f"{item.url}|{width}x{height}".encode("utf-8")
-    ).hexdigest()[:16]
-    png_path = os.path.join(save_dir, f"svg-{digest}.png")
-    if not rasterize_svg_to_png(item.url, png_path, width, height):
-        return ""
-
-    from app.services import video as video_service
-
-    return video_service.render_image_file_to_mp4(
-        png_path, clip_duration=max_clip_duration
-    ) or ""
-
-
-def _resolve_material_path(
-    item: MaterialInfo,
-    save_dir: str,
-    max_clip_duration: int,
-    exclude_faces: bool | None,
-    video_aspect: VideoAspect = VideoAspect.portrait,
-) -> str:
-    """Material to a local video file, or "" when it must be skipped.
-
-    Catalog SVGs are rasterized into a clip; every other provider is
-    downloaded. Face detection runs only on downloaded footage: an illustrated
-    clip has no real face to screen, and the detector would discard most of the
-    cartoon catalog for nothing.
-    """
-    if item.provider == "svg":
-        rendered = _persist_svg_item(item, save_dir, max_clip_duration, video_aspect)
-        if rendered:
-            logger.info(f"svg clip rendered: {rendered}")
-        return rendered
-
-    path = save_video(video_url=item.url, save_dir=save_dir)
-    if not path:
-        return ""
-    if face_detect.video_contains_face(path, force_exclude=exclude_faces):
-        logger.info(f"video discarded (face detected): {path}")
-        return ""
-    return path
-
-
 def _build_search_videos(
     source: str,
     video_aspect: VideoAspect,
@@ -592,7 +405,7 @@ def _build_search_videos(
     provider is only queried when the previous ones returned no material.
     """
     providers = {
-        "svg": search_videos_svg,
+        "svg": svg_material.search_videos_svg,
         "pexels": search_videos_pexels,
         "pixabay": search_videos_pixabay,
         "coverr": search_videos_coverr,
@@ -685,7 +498,7 @@ def download_videos(
     for item in valid_video_items:
         try:
             logger.info(f"downloading video: {item.url}")
-            saved_video_path = _resolve_material_path(
+            saved_video_path = svg_material.resolve_material_path(
                 item,
                 material_directory,
                 max_clip_duration,
@@ -773,7 +586,7 @@ def _download_videos_by_script_order(
                 logger.info(
                     f"downloading ordered video for '{search_term}': {item.url}"
                 )
-                saved_video_path = _resolve_material_path(
+                saved_video_path = svg_material.resolve_material_path(
                     item,
                     material_directory,
                     max_clip_duration,
