@@ -128,6 +128,18 @@ class DeathDiagnosticStateTests(unittest.TestCase):
         self.assertEqual(data["stage"], "audio")
         self.assertNotIn("stage_rss_mb", data)
 
+    def test_construction_does_not_reconcile(self):
+        # The production singleton is built with reconcile_on_boot=False:
+        # constructing the state (import time) must never mark running tasks
+        # as orphans. The real server boot runs the reconcile explicitly in
+        # app.asgi.startup_event. A reconcile here would kill the live
+        # engine's tasks from any stray importing process.
+        with patch.object(
+            DeathDiagnosticTaskState, "reconcile_orphaned_tasks"
+        ) as reconcile:
+            _make_diag_state(self.requests)
+        reconcile.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

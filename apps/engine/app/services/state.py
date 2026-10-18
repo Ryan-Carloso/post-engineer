@@ -637,7 +637,7 @@ state: BaseState
 if _state_backend == "supabase":
     from app.services.death_diagnostics import DeathDiagnosticTaskState  # lazy: avoids an import cycle
 
-    state = DeathDiagnosticTaskState()
+    state = DeathDiagnosticTaskState(reconcile_on_boot=False)  # reconcile runs in asgi.startup_event, not at import
 elif _enable_redis:
     state = RedisState(
         host=_redis_host, port=_redis_port, db=_redis_db, password=_redis_password
