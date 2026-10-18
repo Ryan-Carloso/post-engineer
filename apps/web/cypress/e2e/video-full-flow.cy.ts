@@ -94,7 +94,8 @@ function slotRow(overrides: Record<string, unknown> = {}) {
 }
 
 //---------------
-// slotDetail — the camelCase payload GET /api/schedule/slots/:id returns
+// slotDetail — the camelCase slot payload the unified GET /api/posts/[id]
+// returns for a slot id (kind: 'slot')
 // (SlotDetailPayload), read by the /posts/[id] detail page.
 //---------------
 function slotDetail(status: 'generating' | 'ready', progress: number, stage: string | null) {
@@ -260,9 +261,9 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
     // The success navigation lands on the new post's own page, whose detail
     // query must be stubbed like the later tests do — the create above is
     // stubbed, so no real slot exists for the real backend to return.
-    cy.intercept('GET', `/api/schedule/slots/${SLOT_ID}`, {
+    cy.intercept('GET', `/api/posts/${SLOT_ID}`, {
       statusCode: 200,
-      body: slotDetail('generating', 0, null),
+      body: { ...slotDetail('generating', 0, null), kind: 'slot' },
     }).as('slotDetail');
 
     // From here on the account is connected for this test.
@@ -326,14 +327,10 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
   it('4 — mostra a tela de progresso enquanto o vídeo está sendo gerado', () => {
     // First poll: still generating. The detail endpoint 404s on the
     // generations route, so the slot view is the one rendered.
-    cy.intercept('GET', `/api/schedule/slots/${SLOT_ID}`, {
+    cy.intercept('GET', `/api/posts/${SLOT_ID}`, {
       statusCode: 200,
-      body: slotDetail('generating', 35, 'render'),
+      body: { ...slotDetail('generating', 35, 'render'), kind: 'slot' },
     }).as('slotDetail');
-    cy.intercept('GET', `/api/persona/video-generations/${SLOT_ID}`, {
-      statusCode: 404,
-      body: { success: false },
-    });
 
     cy.visit(`/posts/${SLOT_ID}`);
     cy.wait('@slotDetail');
@@ -347,9 +344,9 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
 
   it('5 — mostra o vídeo quando a geração completa', () => {
     // Later poll: ready with a task id — the mocked engine progress.
-    cy.intercept('GET', `/api/schedule/slots/${SLOT_ID}`, {
+    cy.intercept('GET', `/api/posts/${SLOT_ID}`, {
       statusCode: 200,
-      body: slotDetail('ready', 100, 'done'),
+      body: { ...slotDetail('ready', 100, 'done'), kind: 'slot' },
     }).as('slotDetail');
     cy.intercept('GET', `/api/persona/video-generations/${SLOT_ID}`, {
       statusCode: 404,

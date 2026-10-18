@@ -346,16 +346,16 @@ def _persona_tracking_kwargs(
     return {}
 
 
-def _generation_tracking_kwargs(
+def _tracking_kwargs(
     body: Union[TaskVideoRequest, SubtitleRequest, AudioRequest],
 ) -> dict[str, str]:
-    """generation_id for the task row (read back by the PostHog tracking
-    context). Only TaskVideoRequest carries one; omitted when absent so
-    the row — and the events — stay free of blank props."""
-    generation_id = getattr(body, "generation_id", None)
-    if isinstance(generation_id, str) and generation_id:
-        return {"generation_id": generation_id}
-    return {}
+    """generation_id/slot_id for the task row. Only TaskVideoRequest carries
+    them; omitted when absent so the row stays free of blank props."""
+    return {
+        field: value
+        for field in ("generation_id", "slot_id")
+        if isinstance((value := getattr(body, field, None)), str) and value
+    }
 
 
 def _generation_id_for_task(task_id: str) -> str | None:
@@ -421,7 +421,7 @@ def create_task(
             # failed/generated) read persona_id from the task row, so the
             # funnel can be broken down per persona instead of "unknown".
             **_persona_tracking_kwargs(body),
-            **_generation_tracking_kwargs(body),
+            **_tracking_kwargs(body),
             **task_publish.dispatch_publish_params(body),
         )
         # Funnel entry: requested fires from on_accepted once the task is
@@ -435,7 +435,7 @@ def create_task(
             stop_at=stop_at,
             on_accepted=lambda: tm.track_generation_requested(
                 task_id, user_id=auth.user_id, flow="direct", pipeline=stop_at,
-                **_generation_tracking_kwargs(body),
+                **_tracking_kwargs(body),
             ),
         )
         logger.success(f"Task created: task_id={task_id}")

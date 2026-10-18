@@ -104,6 +104,8 @@ const EXCLUDED_ENDPOINTS: Record<string, string> = {
     'Dashboard engine-task cleanup; MCP polls status but never cancels engine tasks.',
   'GET /api/persona/voice-sample-languages':
     'Dashboard voice-sample UI proxy (session-only); MCP list_voices covers voice listing.',
+  'GET /api/posts/[id]':
+    'Dashboard-only unified post detail (issue #208); MCP get_slot and get_video_generation cover the same data.',
   'GET /api/version': 'Public version endpoint for ops/diagnostics.',
 };
 

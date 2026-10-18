@@ -433,3 +433,54 @@ class StartupWarmClientTests(unittest.TestCase):
             asgi.startup_event()
         warm.assert_called_once_with()
         heartbeat.assert_called_once_with()
+
+    def test_startup_event_runs_orphan_reconcile(self):
+        # The orphan reconcile moved from import time (state.py singleton
+        # construction) to the real server boot: startup_event must call it
+        # on the state backend. A reconcile here is safe — this IS the
+        # server booting, not a stray importing process.
+        from unittest.mock import MagicMock
+
+        mock_state = MagicMock()
+        mock_state.reconcile_orphaned_tasks.return_value = 0
+        with (
+            patch("app.asgi.warm_client"),
+            patch("app.asgi.start_fill_schedule_scheduler"),
+            patch("app.services.engine_heartbeat.start_heartbeat_thread"),
+            patch("app.services.engine_heartbeat.report_boot_event"),
+            patch.object(asgi.sm, "state", mock_state),
+        ):
+            asgi.startup_event()
+        mock_state.reconcile_orphaned_tasks.assert_called_once_with()
+
+    def test_startup_event_skips_reconcile_without_method(self):
+        # Memory/redis backends have no reconcile_orphaned_tasks: the
+        # getattr guard must skip silently instead of raising.
+        from types import SimpleNamespace
+
+        plain_state = SimpleNamespace()
+        with (
+            patch("app.asgi.warm_client"),
+            patch("app.asgi.start_fill_schedule_scheduler"),
+            patch("app.services.engine_heartbeat.start_heartbeat_thread"),
+            patch("app.services.engine_heartbeat.report_boot_event"),
+            patch.object(asgi.sm, "state", plain_state),
+        ):
+            asgi.startup_event()
+        # No exception raised; nothing to assert beyond survival.
+
+    def test_startup_event_logs_failed_orphan_count(self):
+        # When the reconcile marks orphans failed, startup logs the count.
+        from unittest.mock import MagicMock
+
+        mock_state = MagicMock()
+        mock_state.reconcile_orphaned_tasks.return_value = 3
+        with (
+            patch("app.asgi.warm_client"),
+            patch("app.asgi.start_fill_schedule_scheduler"),
+            patch("app.services.engine_heartbeat.start_heartbeat_thread"),
+            patch("app.services.engine_heartbeat.report_boot_event"),
+            patch.object(asgi.sm, "state", mock_state),
+        ):
+            asgi.startup_event()
+        mock_state.reconcile_orphaned_tasks.assert_called_once_with()

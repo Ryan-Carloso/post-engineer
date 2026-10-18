@@ -2,19 +2,26 @@
 
 Historically ``SupabaseTaskState.reconcile_orphaned_tasks`` failed every
 non-terminal orphan and refunded its token. That is correct for genuinely
-dead work, but two cases can recover by themselves:
+dead work, but three cases can recover by themselves:
 
 - an orphan in a generation stage that belongs to a batch slot: the slot
   goes back to ``pending`` and the next fill-schedule tick re-dispatches it.
   Batch slots are prepaid at schedule creation, so no billing change;
+- an orphan in a generation stage with no slot whose full job payload was
+  persisted on the video_generations row (issue #205): direct_redispatch
+  marks the task during this review and restarts the pipeline after boot
+  has published ``app.services.state.state``, through the shared task
+  manager — also prepaid, no billing change;
 - an orphan in stage ``publish`` with a finished video archived in R2: the
   publish already ran (``publish_results`` present) or can run now — failing
   it would refund a video that is sitting in storage ready to be posted.
 
-Everything else keeps the historical fail+refund. All handlers are
+Everything else keeps the historical fail+refund. Batch requeue is
 idempotent across boots: a crash between triage and the tick leaves the
-slot ``pending`` (re-triage skips it) or the task non-terminal (re-triage
-retries it).
+slot ``pending`` (re-triage skips it) or the task non-terminal in a
+generation stage (re-triage retries it, bounded by MAX_AUTO_REQUEUES).
+A direct redispatch clears ``stage``, so a crash before the pipeline
+writes a new generation stage is fail+refunded instead of retried.
 """
 
 from __future__ import annotations
@@ -269,12 +276,20 @@ def triage_orphan(
     """Run the boot triage for one orphaned task.
 
     Returns True when the orphan was claimed and the caller must NOT
-    fail+refund it: the slot was requeued for the tick, the publish was
-    already complete, the publish finished now, or the publish attempt
-    failed and billing was already settled. Returns False when the
-    caller falls through to the historical fail+refund.
+    fail+refund it: the slot was requeued for the tick, a direct
+    generation was marked for restart, the publish was already complete,
+    the publish finished now, or the publish attempt failed and billing
+    was already settled. Returns False when the caller falls through to
+    the historical fail+refund.
     """
     if triage_requeue(state, slot_store, task_id, data):
+        return True
+    # Lazy on purpose: direct_redispatch imports this module's stage
+    # constants, so a top-level import would cycle while this module
+    # is still loading. The import does not pull in the pipeline.
+    from app.services.direct_redispatch import triage_redispatch_direct
+
+    if triage_redispatch_direct(state, task_id, data):
         return True
     decision = classify_orphan(data)
     if decision == MARK_COMPLETE:

@@ -109,11 +109,7 @@ describe('Post details page', () => {
     // occurred". Every other app-page spec does the same.
     cy.loginE2EUser();
 
-    cy.intercept('GET', '/api/persona/video-generations/*', {
-      statusCode: 404,
-      body: { success: false, error: 'Not found' },
-    }).as('generationDetail');
-    cy.intercept('GET', '/api/schedule/slots/*', slotDetailPayload()).as('slotDetail');
+    cy.intercept('GET', '/api/posts/*', { ...slotDetailPayload(), kind: 'slot' }).as('slotDetail');
     cy.intercept('GET', '/api/account', accountsPayload()).as('accounts');
     cy.visit(`/posts/${POST_DETAIL_SLOT_ID}`);
     // The page resolves its entity by id through the detail endpoint —
@@ -230,7 +226,7 @@ describe('Post details page — progress history', () => {
       stage: 'materials',
       progressHistory,
     };
-    cy.intercept('GET', '/api/schedule/slots/*', payload).as('slotDetail');
+    cy.intercept('GET', '/api/posts/*', { ...payload, kind: 'slot' }).as('slotDetail');
     cy.intercept('GET', '/api/account', accountsPayload()).as('accounts');
     cy.visit(`/posts/${POST_DETAIL_SLOT_ID}`);
     cy.wait('@slotDetail');

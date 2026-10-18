@@ -151,7 +151,7 @@ describe('Creating a post', () => {
     cy.intercept('POST', '/api/videos/generate-and-schedule', createPostPayload()).as('createPost');
     // The detail page the create response points at. Defined last so it wins
     // over the catch-all generations intercept for that id.
-    cy.intercept('GET', `/api/schedule/slots/${NEW_POST_SLOT_ID}`, newPostSlotDetailPayload()).as('slotDetail');
+    cy.intercept('GET', `/api/posts/${NEW_POST_SLOT_ID}`, { ...newPostSlotDetailPayload(), kind: 'slot' }).as('slotDetail');
   });
 
   it('opens the new post detail page with its 0% progress', () => {
@@ -210,7 +210,7 @@ describe('Creating a post', () => {
     // wins over the scheduled stub for the same URL.
     const asapDetail = newPostSlotDetailPayload();
     asapDetail.schedule = { ...asapDetail.schedule, publishMode: 'asap' };
-    cy.intercept('GET', `/api/schedule/slots/${NEW_POST_SLOT_ID}`, asapDetail).as('slotDetailAsap');
+    cy.intercept('GET', `/api/posts/${NEW_POST_SLOT_ID}`, { ...asapDetail, kind: 'slot' }).as('slotDetailAsap');
 
     cy.visit('/posts/new');
     cy.wait('@personas');

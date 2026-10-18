@@ -1,12 +1,12 @@
 //---------------
 // Post detail auto-refresh E2E — regression for the frozen detail page:
-// useSlotDetailQuery is the only query on this screen with a
+// usePostDetailQuery is the only query on this screen with a
 // refetchInterval, so a user parked on a generating post must see it flip
-// to ready (and the <video> appear) without a reload. The slot endpoint
-// answers "generating" on the first hit and "ready" from the second on;
-// cy.clock + cy.tick fire the 60s interval without a 60s real wait.
-// The login itself is real (the middleware bounces unauthenticated visits
-// to /landing, so every app-page spec logs in).
+// to ready (and the <video> appear) without a reload. The unified detail
+// endpoint answers "generating" on the first hit and "ready" from the
+// second on; cy.clock + cy.tick fire the 60s interval without a 60s real
+// wait. The login itself is real (the middleware bounces unauthenticated
+// visits to /landing, so every app-page spec logs in).
 //---------------
 
 const SLOT_ID = 'slot-e2e-refetch';
@@ -16,6 +16,7 @@ function slotDetailPayload(status: 'generating' | 'ready') {
   const generating = status === 'generating';
   return {
     success: true,
+    kind: 'slot',
     slot: {
       id: SLOT_ID,
       scheduleId: SCHEDULE_ID,
@@ -83,14 +84,10 @@ describe('Post detail auto-refresh', () => {
     cy.loginE2EUser();
 
     let hits = 0;
-    cy.intercept('GET', '/api/schedule/slots/*', (req) => {
+    cy.intercept('GET', '/api/posts/*', (req) => {
       hits += 1;
       req.reply(slotDetailPayload(hits === 1 ? 'generating' : 'ready'));
     }).as('slotDetail');
-    cy.intercept('GET', '/api/persona/video-generations/*', {
-      statusCode: 404,
-      body: { success: false, error: 'Not found' },
-    });
     cy.intercept('GET', '/api/account', accountsPayload());
     // The <video> src is never a real file in this spec — answer 404 so
     // the player stays quiet instead of hitting the dev server.

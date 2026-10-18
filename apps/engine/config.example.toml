@@ -564,6 +564,42 @@ model_id = "chatterbox"
 # Voices exposed by your server; shown in the WebUI dropdown as chatterbox:<name>
 voices = ["default-Female"]
 
+# OpenRouter TTS (hosted, multi-vendor) #######################################
+# OpenRouter (https://openrouter.ai) routes one API key to many hosted TTS
+# vendors (OpenAI, Gemini, Mistral, ElevenLabs, Grok, Azure, ...) behind a
+# single OpenAI-compatible endpoint: POST /api/v1/audio/speech. Configure a key
+# and at least one model below to enable it; while either is empty the provider
+# is absent from the voice catalog and never appears in the UI picker.
+#
+# `models` is an allowlist of OpenRouter speech model ids, NOT a voice list.
+# The engine then asks the models API which voices each one supports
+# (GET /api/v1/models?output_modalities=speech, field `supported_voices`) and
+# builds ids of the form `openrouter:<model>:<voice>`. The model is part of the
+# id because OpenRouter voices are per-model: `eve` is a Grok voice, `Kore` a
+# Gemini one, and the same name can mean different things per vendor.
+#
+# Pick models deliberately. OpenRouter's whole speech catalog is 35 models and
+# ~824 model/voice pairs, differing in price, language coverage and capability
+# — the engine will not choose one on your behalf. List the models you want,
+# or as many as your picker should offer. Voices are named in each model's page
+# on https://openrouter.ai/models?fmt=chat&output_modalities=speech
+[openrouter]
+# Your OpenRouter key: https://openrouter.ai/keys
+api_key = ""
+# Model ids to offer. Example values: "mistralai/voxtral-mini-tts-2603",
+# "x-ai/grok-voice-tts-1.0", "elevenlabs/eleven-multilingual-v2".
+# Accepts an array or a comma-separated string. Empty disables the provider.
+models = []
+# Voices of a voice-cloning or prompt-driven model (Fish Audio, Seed Audio) are
+# not listed by the models API — those models report `supported_voices: null`.
+# They stay reachable by passing their id directly:
+#   voice_name = "openrouter:fish-audio/s2-pro"
+#
+# Note on speed: OpenRouter returns a 400 when a non-default `speed` is sent to
+# a model with no speed control, and the models API reports no capability flags
+# for speech models. The engine therefore sends `speed` only when the job asks
+# for a rate other than 1.0, which the default never does.
+
 [longcat]
 # The persona lip-sync model: LongCat-Video-Avatar 1.5 on Modal (modal_longcat.py).
 # This section was `[infinitetalk]`. An existing config.toml that still has the

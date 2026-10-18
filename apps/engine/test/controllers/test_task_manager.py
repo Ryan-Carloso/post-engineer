@@ -5,15 +5,22 @@ task is accepted but strictly before the worker thread starts — otherwise
 PostHog timestamps video_generation_started first and the funnel drops
 the conversion. The callback gives that ordering deterministically; these
 tests pin it at the manager level (the controller test pins the wiring).
+
+The concurrency slot is reserved under the manager lock, before the
+worker runs. A burst of add_task calls (boot redispatch) must queue
+behind max_concurrent_tasks instead of all starting at once.
 """
 
 import sys
+import threading
+import time
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.controllers.manager.base_manager import TaskManager, TaskQueueFullError
+from app.controllers.manager.memory_manager import InMemoryTaskManager
 
 
 class ConcreteTaskManager(TaskManager):
@@ -55,6 +62,67 @@ class OnAcceptedTests(unittest.TestCase):
         manager.execute_task = lambda func, *a, **k: executed.append(True)
         manager.add_task(lambda: None)
         self.assertEqual(executed, [True])
+
+    def test_reservation_released_when_spawn_raises(self):
+        manager = ConcreteTaskManager(max_concurrent_tasks=1)
+
+        def boom(*_args, **_kwargs):
+            raise RuntimeError("start failed")
+
+        manager.execute_task = boom
+        with self.assertRaises(RuntimeError):
+            manager.add_task(lambda: None)
+        self.assertEqual(manager.current_tasks, 0)
+
+    def test_reservation_released_when_on_accepted_raises(self):
+        manager = ConcreteTaskManager(max_concurrent_tasks=1)
+        started: list[bool] = []
+        manager.execute_task = lambda *_a, **_k: started.append(True)
+
+        def boom():
+            raise RuntimeError("callback failed")
+
+        with self.assertRaises(RuntimeError):
+            manager.add_task(lambda: None, on_accepted=boom)
+        self.assertEqual(manager.current_tasks, 0)
+        # The worker must not start after the callback rejected the accept.
+        self.assertEqual(started, [])
+
+
+class BurstReservationTests(unittest.TestCase):
+    def test_burst_reserves_one_slot_and_queues_the_rest(self):
+        manager = InMemoryTaskManager(max_concurrent_tasks=1, max_queued_tasks=10)
+        release = threading.Event()
+        entered: list[int] = []
+        lock = threading.Lock()
+
+        def work(index: int) -> None:
+            with lock:
+                entered.append(index)
+            release.wait(2)
+
+        try:
+            for index in range(3):
+                manager.add_task(work, index)
+            # Synchronous: the slot is reserved before add_task returns,
+            # so this does not race the worker.
+            self.assertEqual(manager.current_tasks, 1)
+            self.assertEqual(manager.queue_size(), 2)
+            release.set()
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline:
+                if manager.current_tasks == 0 and manager.queue_size() == 0:
+                    break
+                time.sleep(0.01)
+            else:
+                self.fail(
+                    f"workers did not drain (current={manager.current_tasks}, "
+                    f"queued={manager.queue_size()})"
+                )
+            with lock:
+                self.assertEqual(sorted(entered), [0, 1, 2])
+        finally:
+            release.set()
 
 
 if __name__ == "__main__":

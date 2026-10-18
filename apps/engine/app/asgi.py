@@ -390,11 +390,21 @@ def startup_event():
     # process that actually serves traffic. No-op when POSTHOG_API_KEY is
     # unset.
     warm_client()
+    # Orphan reconcile runs HERE, at real server boot — never at import
+    # time. app.services.state is imported by any process touching the app;
+    # reconciling there would mark the live engine's running tasks as
+    # orphans and fail them. Only the Supabase backend reconciles; the
+    # memory/redis backends have no such method.
     # Liveness heartbeat (Supabase row, ~45s) + the PostHog engine_boot
     # autopsy event: orphan counts from the boot reconcile, time since the
     # last heartbeat, clean/unclean shutdown, last RSS. Best-effort: a
     # diagnostics failure must never break startup.
     try:
+        reconcile = getattr(sm.state, "reconcile_orphaned_tasks", None)
+        if callable(reconcile):
+            failed = reconcile()
+            if failed:
+                logger.info(f"marked {failed} orphaned task(s) failed at boot")
         from app.services import engine_heartbeat
 
         engine_heartbeat.start_heartbeat_thread()
@@ -402,3 +412,14 @@ def startup_event():
     except Exception as exc:  # noqa: BLE001 - startup continues regardless
         logger.warning(f"engine heartbeat/boot event failed: {exc}")
     start_fill_schedule_scheduler()
+    # The reconcile above only marks direct orphans. Start them here,
+    # through the shared task manager (max_concurrent_tasks). The review
+    # must not start tm.start itself: that used to run inside
+    # SupabaseTaskState.__init__, before app.services.state.state was
+    # assigned, and the worker reads that binding.
+    try:
+        from app.services.direct_redispatch import start_pending_direct_redispatches
+
+        start_pending_direct_redispatches()
+    except Exception as exc:  # noqa: BLE001 - startup continues regardless
+        logger.warning(f"direct orphan redispatch failed: {exc}")

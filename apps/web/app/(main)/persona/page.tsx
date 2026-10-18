@@ -23,6 +23,7 @@ import { PersonaImageLibrarySection, mapPersonaImageWarnings } from './persona-i
 import { PersonaPreferencesSection } from './persona-preferences-section';
 import { PersonaPublishingAccountsSection } from './persona-publishing-accounts-section';
 import { PersonaFormSync } from './persona-form-sync';
+import { PersonaHouseVoicePicker } from './voice-picker';
 import { InlineFieldError, SectionDivider } from './persona-section-parts';
 import { scrollToErrorField } from '@/lib/scroll-to-error';
 import { DEFAULT_PERSONA_FACE_IDS } from '@/lib/persona-faces';
@@ -31,19 +32,11 @@ import {
   CheckIcon,
   SparklesIcon,
   ImageIcon,
-  MicIcon,
   SpinnerIcon,
   UploadIcon,
   formatFileSize,
   INPUT_CLASS,
 } from '@/lib/ui';
-
-// Voice ids come from the engine's Chatterbox catalog and are
-// provider-qualified (`chatterbox:ryan`). There is no house-voice map any
-// more, and no label fallback: a voice with no label must show its raw id, not
-// borrow another voice's name — that fallback used to render every unknown id
-// as "Voz feminina calma".
-const voiceLabel = (voiceId: string): string => voiceId.replace(/^chatterbox:/, '').replace(/_/g, ' ');
 
 export default function PersonaPage() {
   return (
@@ -536,132 +529,6 @@ const PersonaVoiceSection = ({ personaLanguage }: { personaLanguage?: string }) 
         <InlineFieldError message={result.error} />
       ) : null}
     </section>
-  );
-};
-
-//---------------
-// matchSampleLanguage — picks the voice sample code closest to the
-// persona language: exact ('es' → 'es') or by prefix ('pt' → 'pt-br').
-// Returns undefined when there is no match.
-//---------------
-const matchSampleLanguage = (
-  personaLanguage: string,
-  samples: Array<{ code: string }>,
-): string | undefined => {
-  const lang = personaLanguage.trim().toLowerCase();
-  if (!lang) return undefined;
-  const codes = samples.map((sample) => sample.code);
-  const exact = codes.find((code) => code.toLowerCase() === lang);
-  if (exact) return exact;
-  return codes.find((code) => {
-    const normalized = code.toLowerCase();
-    return normalized.startsWith(`${lang}-`) || lang.startsWith(`${normalized}-`);
-  });
-};
-
-//---------------
-// PersonaHouseVoicePicker — house voice grid
-//---------------
-const PersonaHouseVoicePicker = ({ personaLanguage }: { personaLanguage?: string }) => {
-  const voicesQuery = useVoicesQuery();
-  const sampleLanguagesQuery = useVoiceSampleLanguagesQuery();
-  const voiceId = usePersonaStore((s) => s.voiceId);
-  // Manual user choice (null = not touched yet): wins over the default.
-  const [sampleLanguage, setSampleLanguage] = useState<string | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const lastPickedVoiceRef = useRef<string | null>(null);
-  const { t } = useI18n();
-
-  const voices = voicesQuery.data ?? [];
-  const matchedSampleLanguage = personaLanguage
-    ? matchSampleLanguage(personaLanguage, sampleLanguagesQuery.data ?? [])
-    : undefined;
-  const effectiveSampleLanguage = sampleLanguage ?? matchedSampleLanguage ?? 'pt-br';
-
-  const playVoiceSample = (pickedVoiceId: string, language: string): void => {
-    audioRef.current?.pause();
-    const audio = new Audio(
-      `/voice-samples/${encodeURIComponent(pickedVoiceId)}-${encodeURIComponent(language)}.mp3`,
-    );
-    audioRef.current = audio;
-    const playResult = audio.play();
-    if (playResult) {
-      void playResult.catch(() => {});
-    }
-  };
-
-  const handlePickVoice = (pickedVoiceId: string) => {
-    usePersonaStore.getState().setVoiceId(pickedVoiceId);
-    lastPickedVoiceRef.current = pickedVoiceId;
-    playVoiceSample(pickedVoiceId, effectiveSampleLanguage);
-  };
-
-  const handleSampleLanguageChange = (language: string) => {
-    setSampleLanguage(language);
-    // Switched language after listening to a sample? Restart the audio in the new language.
-    const lastPickedVoice = lastPickedVoiceRef.current;
-    if (lastPickedVoice) {
-      playVoiceSample(lastPickedVoice, language);
-    }
-  };
-
-  return (
-    <div className="mt-4">
-      <label className="mb-4 block max-w-sm text-sm font-medium text-neutral-700">
-        {t('persona.sampleLanguage')}
-        <span className="relative mt-2 block">
-          <select
-            data-testid="sample-language"
-            value={effectiveSampleLanguage}
-            onChange={(e) => handleSampleLanguageChange(e.target.value)}
-            className="h-12 w-full appearance-none rounded-xl border border-neutral-300 bg-white px-4 pr-11 text-sm font-semibold text-neutral-900 shadow-sm transition-colors hover:border-neutral-400 focus:border-accent focus:ring-4 focus:ring-accent/10 focus:outline-none"
-          >
-            {(sampleLanguagesQuery.data ?? []).map((lang) => (
-              <option key={lang.code} value={lang.code}>
-                {lang.label}
-              </option>
-            ))}
-          </select>
-          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className="pointer-events-none absolute top-1/2 right-4 size-5 -translate-y-1/2 text-neutral-500">
-            <path d="m6 8 4 4 4-4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </span>
-      </label>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {voices.map((voice) => {
-          const isActive = voice.id === voiceId;
-          return (
-            <button
-              key={voice.id}
-              type="button"
-              aria-pressed={isActive}
-              onClick={() => handlePickVoice(voice.id)}
-              className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-colors ${
-                isActive
-                  ? 'border-accent bg-red-50/50'
-                  : 'border-neutral-200 bg-white hover:border-neutral-400'
-              }`}
-            >
-              <span
-                className={`flex size-8 shrink-0 items-center justify-center rounded-full ${
-                  isActive ? 'bg-accent text-white' : 'bg-neutral-100 text-neutral-500'
-                }`}
-              >
-                <MicIcon />
-              </span>
-              <span className="min-w-0 flex-1 truncate text-sm font-medium text-neutral-900">
-                {voiceLabel(voice.id)}
-              </span>
-              {isActive && (
-                <span className="text-accent">
-                  <CheckIcon />
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-    </div>
   );
 };
 

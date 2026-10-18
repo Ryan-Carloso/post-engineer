@@ -12,6 +12,7 @@ from moviepy.audio.io.AudioFileClip import AudioFileClip
 from moviepy.video.tools import subtitles
 
 from app.config import config
+from app.services.openrouter_tts import dispatch_openrouter_tts
 from app.services.voice_providers import (
     SubMaker,
     TtsResult,
@@ -221,13 +222,8 @@ def tts(
     voice_volume: float = 1.0,
     voice_pitch: str = "",
 ) -> TtsResult:
-    """Synthesize speech and return the outcome with the failure reason.
-
-    Every failure path returns a TtsResult carrying a specific, sanitized
-    `error` instead of None — the caller forwards it to the task failure
-    so the PostHog `video_generation_failed` event names the real cause
-    instead of a generic "voice/subtitle mismatch".
-    """
+    """Synthesize speech. Failures return a TtsResult with a specific, sanitized
+    `error` naming the real cause (forwarded to the task failure for PostHog)."""
     if is_no_voice(voice_name):
         duration_seconds = estimate_no_voice_duration(text)
         if not generate_silent_audio(duration_seconds, voice_file):
@@ -268,21 +264,23 @@ def tts(
         return chatterbox_tts(
             text, chatterbox_voice, voice_file, voice_rate, voice_volume
         )
+    routed = dispatch_openrouter_tts(voice_name, text, voice_file, voice_rate, voice_volume)
+    if routed is not None:
+        return routed
 
-    # Chatterbox and ElevenLabs are the only providers. An unrecognised voice
-    # id used to fall through to `azure_tts_v1(...)`, which turned every typo
-    # into a silent edge-tts request that failed as if it were a network
-    # problem. Fail loud instead: the caller picked a voice that no longer
-    # exists.
+    # An unrecognised voice id used to fall through to `azure_tts_v1(...)`, which
+    # turned every typo into a silent edge-tts request that failed as if it were
+    # a network problem. Fail loud instead: the caller picked a voice that no
+    # longer exists.
     logger.error(
-        f"unknown voice: {voice_name!r}. Providers are ElevenLabs "
-        "(`elevenlabs:<id>`) and Chatterbox (`chatterbox:<name>`); use the "
-        f"explicit {NO_VOICE_NAME!r} sentinel for silence."
+        f"unknown voice: {voice_name!r}. Providers are ElevenLabs (`elevenlabs:<id>`), "
+        "Chatterbox (`chatterbox:<name>`) and OpenRouter (`openrouter:<model>:<voice>`); "
+        f"use the explicit {NO_VOICE_NAME!r} sentinel for silence."
     )
     return TtsResult(
         error=(
-            f"unknown voice {voice_name!r}; providers are ElevenLabs "
-            f"('elevenlabs:<id>') and Chatterbox ('chatterbox:<name>'); "
+            f"unknown voice {voice_name!r}; providers are ElevenLabs ('elevenlabs:<id>'), "
+            "Chatterbox ('chatterbox:<name>') and OpenRouter ('openrouter:<model>:<voice>'); "
             f"use {NO_VOICE_NAME!r} for silence"
         )
     )
