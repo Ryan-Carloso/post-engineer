@@ -238,6 +238,22 @@ jobs:
               -- 'apps/engine/app/**/*.py' \
               | sed 's|^apps/engine/||' \
               | jq -R -s -c 'split("\n") | map(select(length > 0))')"
+            # A mutmut runner/version edit does not touch app/**/*.py, so the
+            # shard list above stays empty and the new runner never meets the
+            # suites that crash the fork runner (os.wait KeyError on a child
+            # the heartbeat's nvidia-smi or an ffmpeg test left behind).
+            # When the pyproject diff adds process_isolation or the mutmut
+            # requirement, also shard the files from that failure
+            # (analytics.py, upload_publisher.py, video.py). svg_pencil.py
+            # and svg_sketch.py failed the same way on PR #222; they are not
+            # on main yet, so they cannot be a canary here.
+            if git diff -U0 --diff-filter=ACMR \
+              "origin/${{ github.base_ref }}...HEAD" -- apps/engine/pyproject.toml \
+              | grep -Eq '^\+.*(process_isolation|"mutmut)'; then
+              files_json="$(printf '%s' "$files_json" | jq -c \
+                --argjson extra '["app/services/analytics.py","app/services/upload_publisher.py","app/services/video.py"]' \
+                '$extra + . | unique')"
+            fi
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             if [ -n "${{ inputs.scope }}" ]; then
               cd apps/engine || exit 1
