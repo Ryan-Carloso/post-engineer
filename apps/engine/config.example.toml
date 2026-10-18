@@ -434,6 +434,22 @@ material_directory = ""
 enable_redis = false
 redis_host = "localhost"
 redis_port = 6379
+
+# Private SVG catalog (Doodly bundle). The artwork and its index are licensed
+# and are never committed: they are injected on deploy under resource/svg, and
+# `svg_catalog_enabled` stays false on a checkout without them, so material
+# search falls back to the stock providers instead of failing every render.
+svg_catalog_enabled = false
+svg_catalog_index_dir = "resource/svg/_index"
+svg_assets_root = "resource/svg"
+# "texto" searches the FTS5 index and needs nothing extra. "semantico" /
+# "hibrido" require an ONNX index under <index_dir>/models, which is not built
+# yet: they log a warning and degrade to "texto" rather than failing.
+svg_search_mode = "texto"
+# Fill used for the canvas a catalog still is fitted onto. The artwork is
+# fitted to the target aspect so combine_videos keeps the clip; this only
+# decides what shows in the padding around it.
+svg_canvas_background = "#FFFFFF"
 redis_db = 0
 redis_password = ""
 
