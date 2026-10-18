@@ -146,11 +146,12 @@ describe('persona — layout de abertura real (persona no topo)', () => {
         // failOnStatusCode:false — a 404 while the row is still settling is a
         // normal state to wait out, not a reason to abort the whole poll.
         return cy
-          .request({ url: `/api/schedule/slots/${slotId}`, failOnStatusCode: false, log: false })
+          .request({ url: `/api/posts/${slotId}`, failOnStatusCode: false, log: false })
           .then((response) => {
             const body = (response.body ?? {}) as Record<string, unknown>;
-            const status = String(body.status ?? '');
-            if (status === 'ready' || body.videoUrl || body.videoPath) return body;
+            const slot = (body.slot ?? {}) as Record<string, unknown>;
+            const status = String(slot.status ?? '');
+            if (status === 'ready' || slot.videoUrl || slot.videoPath) return body;
             if (status === 'failed' || status === 'error') {
               throw new Error(`geração falhou: ${JSON.stringify(body).slice(0, 500)}`);
             }
@@ -163,7 +164,8 @@ describe('persona — layout de abertura real (persona no topo)', () => {
       };
       return poll();
     }).should((body) => {
-      expect(body, 'slot finished').to.have.property('status', 'ready');
+      const slot = ((body as Record<string, unknown>).slot ?? {}) as Record<string, unknown>;
+      expect(slot, 'slot finished').to.have.property('status', 'ready');
     });
 
     cy.visit(`/posts/${slotId}`);

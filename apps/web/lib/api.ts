@@ -1029,9 +1029,9 @@ export function useUpdateSlotMutation() {
       updateSlotTopic(slotId, topic),
     onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['fill-schedule-status'] });
-      // The detail page reads ['schedule-slot', slotId] with a 30s staleTime;
+      // The detail page reads ['post-detail', slotId] with a 30s staleTime;
       // invalidate it too so the saved topic shows immediately.
-      void queryClient.invalidateQueries({ queryKey: ['schedule-slot', variables.slotId] });
+      void queryClient.invalidateQueries({ queryKey: ['post-detail', variables.slotId] });
     },
   });
 }
@@ -1098,49 +1098,54 @@ export interface SlotDetailPayload {
   generation: GenerationFacts;
 }
 
+//---------------
+// PostDetail — the unified detail payload from GET /api/posts/[id]: one
+// endpoint resolves any post id, so the page never guesses between the
+// slot and generation endpoints (issue #208). The generation branch now
+// carries live progress like slots do.
+//---------------
+export type PostDetail =
+  | (SlotDetailPayload & { kind: 'slot' })
+  | { kind: 'generation'; generation: VideoGeneration & { progress: number; stage: string | null } };
 
-export async function fetchSlotDetail(slotId: string): Promise<SlotDetailPayload | null> {
-  const response = await fetch(`/api/schedule/slots/${encodeURIComponent(slotId)}`, {
+export async function fetchPostDetail(id: string): Promise<PostDetail | null> {
+  const response = await fetch(`/api/posts/${encodeURIComponent(id)}`, {
     method: 'GET',
   });
   if (response.status === 404) return null;
   if (!response.ok) await throwForBadResponse(response, 'Failed to load post.');
-  const data = await parseJsonBody<{ success: boolean; slot?: Omit<SlotDetailPayload['slot'], 'publishLinks' | 'progressHistory'> & { publishLinks?: unknown; progressHistory?: unknown }; schedule?: SlotDetailPayload['schedule']; persona?: SlotDetailPayload['persona']; generation?: unknown; error?: string }>(response);
+  const data = await parseJsonBody<{ success: boolean; kind?: string; error?: string } & Record<string, unknown>>(response);
   if (!data?.success) throw new Error(data?.error ?? 'Failed to load post.');
-  if (!data.slot || !data.schedule) throw new Error('Failed to load post.');
-  const rawSchedule = data.schedule as SlotDetailPayload['schedule'] & { publishMode?: unknown };
-  return {
-    slot: {
-      ...data.slot,
-      publishLinks: narrowPublishLinks(data.slot.publishLinks),
-      progressHistory: narrowProgressHistory(data.slot.progressHistory),
-    },
-    schedule: {
-      ...data.schedule,
-      publishMode: rawSchedule.publishMode === 'asap' ? 'asap' : 'scheduled',
-    },
-    persona: data.persona ?? null,
-    generation: narrowGeneration(data.generation),
-  };
+  if (data.kind === 'generation') {
+    const record = (typeof data.generation === 'object' && data.generation !== null ? data.generation : {}) as Record<string, unknown>;
+    const progress = typeof record.progress === 'number' ? record.progress : 0;
+    const stage = typeof record.stage === 'string' ? record.stage : null;
+    return { kind: 'generation', generation: { ...(record as unknown as VideoGeneration), progress, stage } };
+  }
+  if (data.kind === 'slot') {
+    const payload = data as unknown as SlotDetailPayload;
+    if (!payload.slot || !payload.schedule) throw new Error('Failed to load post.');
+    const rawSchedule = payload.schedule as SlotDetailPayload['schedule'] & { publishMode?: unknown };
+    return {
+      kind: 'slot',
+      slot: {
+        ...payload.slot,
+        publishLinks: narrowPublishLinks(payload.slot.publishLinks),
+        progressHistory: narrowProgressHistory(payload.slot.progressHistory),
+      },
+      schedule: { ...payload.schedule, publishMode: rawSchedule.publishMode === 'asap' ? 'asap' : 'scheduled' },
+      persona: payload.persona ?? null,
+      generation: narrowGeneration(payload.generation),
+    };
+  }
+  throw new Error('Failed to load post.');
 }
 
-export async function fetchGenerationDetail(generationId: string): Promise<VideoGeneration | null> {
-  const response = await fetch(`/api/persona/video-generations/${encodeURIComponent(generationId)}`, {
-    method: 'GET',
-  });
-  if (response.status === 404) return null;
-  if (!response.ok) await throwForBadResponse(response, 'Failed to load post.');
-  const data = await parseJsonBody<{ success: boolean; generation?: VideoGeneration; error?: string }>(response);
-  if (!data?.success) throw new Error(data?.error ?? 'Failed to load post.');
-  if (!data.generation) throw new Error('Failed to load post.');
-  return data.generation;
-}
-
-export function useSlotDetailQuery(slotId: string) {
-  return useQuery<SlotDetailPayload | null>({
-    queryKey: ['schedule-slot', slotId],
-    queryFn: () => fetchSlotDetail(slotId),
-    enabled: slotId !== '',
+export function usePostDetailQuery(id: string) {
+  return useQuery<PostDetail | null>({
+    queryKey: ['post-detail', id],
+    queryFn: () => fetchPostDetail(id),
+    enabled: id !== '',
     staleTime: 30_000,
     // The detail page shows live generation progress: without this the
     // status freezes on mount (staleTime only gates manual refetches) and
@@ -1390,15 +1395,6 @@ export function seedCreatedPostCaches(
   if (!schedules.some((schedule) => schedule.id === scheduleId)) {
     queryClient.setQueryData(['fill-schedules'], [...schedules, seededSchedule]);
   }
-}
-
-export function useGenerationDetailQuery(generationId: string) {
-  return useQuery<VideoGeneration | null>({
-    queryKey: ['video-generation', generationId],
-    queryFn: () => fetchGenerationDetail(generationId),
-    enabled: generationId !== '',
-    staleTime: 30_000,
-  });
 }
 
 export {

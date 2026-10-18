@@ -4,13 +4,10 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { apiErrorResponse } from '@/lib/api-error';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { enrichSlot } from '@/lib/schedule-slot-presentation';
-import { fetchEnginePublishResults } from '@/lib/engine-tasks';
-import { resolvePublishLinks, type PublishLink } from '@/lib/publish-links';
+import { getSlotPost } from '@/lib/post-detail';
+import { resolveSlotUuid } from '@/lib/schedule-slot-id';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
-import { resolveSlotUuid } from '@/lib/schedule-slot-id';
-import { buildGenerationFacts } from './generation-facts';
 
 //---------------
 // /api/schedule/slots/:slotId — per-slot operations on scheduled posts.
@@ -88,37 +85,6 @@ async function loadOwnedSlot(
 }
 
 //---------------
-// resolveSlotPublishLinks — where the post went, per provider.
-//
-// publish_results only exists in the engine's task record, so a published
-// slot costs one engine round-trip here (single slot, not a list — no N+1).
-// Only a published slot is worth it: nothing earlier has a link yet.
-//
-// Best-effort by design. The post is already loaded and renderable, so a
-// failed lookup degrades to "no links" and logs loudly instead of turning a
-// published post into a 404/500. Never throws.
-//---------------
-async function resolveSlotPublishLinks(
-  row: { status?: unknown; task_id?: unknown },
-  userId: string,
-): Promise<PublishLink[]> {
-  if (row.status !== 'published') return [];
-  const taskId = typeof row.task_id === 'string' ? row.task_id : null;
-  if (taskId === null || taskId.length === 0) return [];
-  try {
-    return resolvePublishLinks(await fetchEnginePublishResults(taskId, userId));
-  } catch (error) {
-    logger.warn('[api/schedule/slots] publish results unavailable', {
-      taskId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return [];
-  }
-}
-
-//---------------
-
-//---------------
 // GET — one post's full detail: the slot row, its schedule (providers +
 // account ids, so clients can resolve the target accounts) and the
 // persona. Presentation follows /api/schedule/status (pending→awaiting,
@@ -153,169 +119,20 @@ async function getHandler(
     return apiErrorResponse(404, 'Slot not found.', { route: 'GET /api/schedule/slots' });
   }
 
-  const { data: slot, error: slotError } = await supabase
-    .from('scheduled_posts')
-    .select('id, schedule_id, slot_at, status, topic, error, published_at, task_id, faceless')
-    .eq('id', resolvedSlotId)
-    .eq('user_id', auth.userId)
-    .single();
-  if (slotError) {
-    // PGRST116 (zero rows) is the only honest 404 — unknown id or another
-    // user's slot. Anything else is a DB failure: log loudly with the real
-    // error and return 500 so callers retry instead of giving up.
-    if ((slotError as { code?: string }).code === 'PGRST116') {
-      return apiErrorResponse(404, 'Slot not found.', { route: 'GET /api/schedule/slots' });
-    }
-    logger.error('[api/schedule/slots] slot lookup failed', slotError);
+  let detail;
+  try {
+    detail = await getSlotPost(supabase, resolvedSlotId, auth.userId);
+  } catch (error) {
+    logger.error('[api/schedule/slots] slot lookup failed', error);
     return apiErrorResponse(500, 'Failed to load post.', {
       route: 'GET /api/schedule/slots',
-      cause: slotError,
+      cause: error,
     });
   }
-  const row = slot as {
-    id: string;
-    schedule_id: string;
-    slot_at: string;
-    status: string;
-    topic: string | null;
-    error: string | null;
-    published_at: string | null;
-    task_id: string | null;
-    // NOT NULL DEFAULT false in the schema (migration 007), but read
-    // defensively: only the literal true counts as faceless.
-    faceless: boolean | null;
-  };
-
-  const { data: schedule, error: scheduleError } = await supabase
-    .from('schedules')
-    .select('id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, timezone, post_language, post_voice_id, post_video_aspect, post_video_layout, post_niche, post_paragraph_number, post_face_quality, publish_mode')
-    .eq('id', row.schedule_id)
-    .eq('user_id', auth.userId)
-    .maybeSingle();
-  // Ownership re-check: the service client (API-key/OAuth callers)
-  // bypasses RLS, so the schedule must belong to the caller.
-  if (scheduleError) {
-    logger.error('[api/schedule/slots] schedule lookup failed', scheduleError);
-    return apiErrorResponse(500, 'Failed to load post.', {
-      route: 'GET /api/schedule/slots',
-      cause: scheduleError,
-    });
-  }
-  const scheduleRow = schedule as {
-    id: string;
-    // NULL for a post created without a persona (migration 012).
-    persona_id: string | null;
-    providers: string[] | null;
-    youtube_account_ids: string[] | null;
-    instagram_account_ids: string[] | null;
-    linkedin_account_ids: string[] | null;
-    bluesky_account_ids: string[] | null;
-    // NOT NULL with a 'UTC' default in the schema — always present.
-    timezone: string;
-    // Creation-time snapshot (migration 012): editing the persona
-    // afterwards cannot rewrite an already-queued video. NULL for schedules
-    // created before that migration.
-    post_language: string | null;
-    post_voice_id: string | null;
-    post_video_aspect: string | null;
-    // Migration 018. NULL for schedules created before it; standard is
-    // what those rows rendered as, so the fallback below is not a guess.
-    post_video_layout: string | null;
-    post_niche: string | null;
-    post_paragraph_number: number | null;
-    post_face_quality: string | null;
-    // Migration 015. Read defensively: only the literal 'asap' counts —
-    // a pre-015 row (or a garbage value) is a scheduled post.
-    publish_mode: string | null;
-  } | null;
-  // Ownership re-check: the service client (API-key/OAuth callers)
-  // bypasses RLS, so the schedule must belong to the caller.
-  if (!scheduleRow) {
+  if (!detail) {
     return apiErrorResponse(404, 'Slot not found.', { route: 'GET /api/schedule/slots' });
   }
-
-  // No persona is a real state (a post created without one, migration 012):
-  // skip the lookup entirely rather than issuing `.eq('id', null)` and
-  // logging a spurious failure on every request.
-  let personaRow: { id: string; name: string } | null = null;
-  if (scheduleRow.persona_id !== null) {
-    const { data: persona, error: personaError } = await supabase
-      .from('personas')
-      .select('id, name')
-      .eq('id', scheduleRow.persona_id)
-      .single();
-    if (personaError && (personaError as { code?: string }).code !== 'PGRST116') {
-      // The persona name is cosmetic on the detail page — a failed lookup
-      // degrades to a null persona, but never silently.
-      logger.warn('[api/schedule/slots] persona lookup failed', {
-        code: personaError.code,
-        message: personaError.message,
-      });
-    }
-    personaRow = persona as { id: string; name: string } | null;
-  }
-
-  const enrichment = await enrichSlot(row, auth.userId);
-  const publishLinks = await resolveSlotPublishLinks(row, auth.userId);
-
-  // Progress history: every observed (progress, stage) transition recorded
-  // by GET /api/schedule/status while the post was live. A failed lookup
-  // degrades to an empty list — the detail still resolves.
-  const { data: historyRows, error: historyError } = await supabase
-    .from('scheduled_post_progress_history')
-    .select('progress, stage, recorded_at')
-    .eq('post_id', resolvedSlotId)
-    .eq('user_id', auth.userId)
-    .order('recorded_at', { ascending: true });
-  if (historyError) {
-    logger.warn('[api/schedule/slots] progress history lookup failed', {
-      slotId,
-      error: historyError,
-    });
-  }
-  const progressHistory = (Array.isArray(historyRows) ? historyRows : []).map(
-    (historyRow: { progress: number; stage: string | null; recorded_at: string }) => ({
-      progress: historyRow.progress,
-      stage: historyRow.stage,
-      recordedAt: historyRow.recorded_at,
-    }),
-  );
-
-  return NextResponse.json({
-    success: true,
-    slot: {
-      id: row.id,
-      scheduleId: row.schedule_id,
-      slotAt: row.slot_at,
-      status: enrichment.status,
-      topic: row.topic,
-      error: row.error,
-      publishedAt: row.published_at,
-      taskId: row.task_id,
-      progress: enrichment.progress,
-      stage: enrichment.stage,
-      retryable: enrichment.retryable,
-      publishLinks,
-      progressHistory,
-      // Queue position is a list concept (position among the schedule's
-      // pending slots); the detail view doesn't render it.
-      queuePosition: null,
-      queueTotal: null,
-    },
-    schedule: {
-      id: scheduleRow.id,
-      personaId: scheduleRow.persona_id,
-      providers: scheduleRow.providers ?? [],
-      youtubeAccountIds: scheduleRow.youtube_account_ids ?? [],
-      instagramAccountIds: scheduleRow.instagram_account_ids ?? [],
-      linkedinAccountIds: scheduleRow.linkedin_account_ids ?? [],
-      blueskyAccountIds: scheduleRow.bluesky_account_ids ?? [],
-      timezone: scheduleRow.timezone,
-      publishMode: scheduleRow.publish_mode === 'asap' ? 'asap' : 'scheduled',
-    },
-    persona: personaRow ? { id: personaRow.id, name: personaRow.name } : null,
-    generation: buildGenerationFacts(row, scheduleRow),
-  });
+  return NextResponse.json({ success: true, ...detail });
 }
 
 async function deleteHandler(
@@ -331,8 +148,11 @@ async function deleteHandler(
 
   const { slotId } = await context.params;
 
-  // Same normalization as GET: resolve the real slot uuid before any
-  // uuid-typed lookup, 404 for anything unresolvable.
+  // The param is a scheduled_posts uuid, but callers sometimes send the
+  // engine generation key `batch:<scheduleId>:slot:<slotId>` (including
+  // percent-encoded). Resolve the real slot uuid before any uuid-typed
+  // filter — a raw non-uuid raises Postgres 22P02 and turns into a 500.
+  // Anything unresolvable is an unknown id: 404, never a database round-trip.
   const resolvedSlotId = resolveSlotUuid(slotId);
   if (resolvedSlotId === null) {
     return apiErrorResponse(404, 'Slot not found.', { route: 'DELETE /api/schedule/slots' });
@@ -415,8 +235,8 @@ async function patchHandler(
 
   const { slotId } = await context.params;
 
-  // Same normalization as GET: resolve the real slot uuid before any
-  // uuid-typed lookup, 404 for anything unresolvable.
+  // Same normalization as DELETE: batch keys and percent-encoded ids
+  // resolve to the slot uuid; anything else 404s before a uuid filter.
   const resolvedSlotId = resolveSlotUuid(slotId);
   if (resolvedSlotId === null) {
     return apiErrorResponse(404, 'Slot not found.', { route: 'PATCH /api/schedule/slots' });
