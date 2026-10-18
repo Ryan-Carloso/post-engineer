@@ -7,13 +7,13 @@
 __pycache__
 
 node_modules
-# VuePress default temporary directory
+# VuePress 默认临时文件目录
 /sites/docs/.vuepress/.temp
-# VuePress default cache directory
+# VuePress 默认缓存目录
 /sites/docs/.vuepress/.cache
-# VuePress default build output directory
+# VuePress 默认构建生成的静态文件目录
 /sites/docs/.vuepress/dist
-# Model directory
+# 模型目录
 /models/
 ./models/*
 
@@ -33,7 +33,6 @@ test_*.py
 !test/utils/test_*.py
 !test/test_modal_cpu_app.py
 !test/test_mypy_config.py
-!test/test_mutmut_runner.py
 !test/test_asgi_health.py
 !test/test_asgi_posthog_sink.py
 !test/test_video_pipeline_e2e.py
