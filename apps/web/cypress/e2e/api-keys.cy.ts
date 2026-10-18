@@ -96,6 +96,10 @@ describe('API Keys — UI & E2E', () => {
     }).as('revokeApiKey');
 
     cy.visit('/api-keys');
+    // A missing session is a 307 to /landing. The keys request never
+    // fires there, and cy.wait then times out with "No request ever
+    // occurred" — assert the page itself so that redirect is the error.
+    cy.location('pathname').should('eq', '/api-keys');
     cy.wait('@getApiKeysWithKey');
 
     cy.get('[data-testid="api-key-row-key-1"]').scrollIntoView().within(() => {
