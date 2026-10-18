@@ -418,9 +418,18 @@ class StartupWarmClientTests(unittest.TestCase):
         # not at controller import time (which also runs under pytest,
         # CLI/webui entry points, and anything else that imports the
         # controller module).
+        # Patch the heartbeat thread: startup_event starts a daemon that
+        # calls nvidia-smi through subprocess.run every 45s and never
+        # stops. mutmut collects worker exits with os.wait() in the same
+        # process after the full stats run, so a leaked thread's child
+        # is reaped as if it were a mutant worker (KeyError, shard exit 1).
         with (
             patch("app.asgi.warm_client") as warm,
             patch("app.asgi.start_fill_schedule_scheduler"),
+            patch(
+                "app.services.engine_heartbeat.start_heartbeat_thread"
+            ) as heartbeat,
         ):
             asgi.startup_event()
         warm.assert_called_once_with()
+        heartbeat.assert_called_once_with()
