@@ -305,11 +305,7 @@ class TaskVideoRequest(VideoParams, BaseModel):
     # traced end-to-end without a database lookup. Never used as the task
     # id itself — the engine keeps minting its own task ids.
     generation_id: Optional[str] = None
-    # Web-side slot id (scheduled_posts.id) for tasks created through the
-    # web API. Persisted on the task row so boot orphan triage
-    # (app.services.orphan_requeue) can requeue web-created tasks exactly
-    # like fill-schedule ones instead of failing them on engine restart.
-    slot_id: Optional[str] = None
+    slot_id: Optional[str] = None  # Web-side slot id; lets boot orphan triage requeue web tasks.
 
     @field_validator("webhook_url")
     @classmethod

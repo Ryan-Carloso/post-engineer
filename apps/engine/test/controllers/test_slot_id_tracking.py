@@ -6,7 +6,7 @@ task orphaned by an engine restart fell through to the historical
 fail+refund even though the auto-requeue machinery (PR #203) existed.
 """
 
-from app.controllers.v1.video import _slot_tracking_kwargs
+from app.controllers.v1.video import _tracking_kwargs
 from app.models.schema import TaskVideoRequest
 
 
@@ -26,12 +26,17 @@ class TestSlotIdSchema:
 
 class TestSlotTrackingKwargs:
     def test_returns_slot_id_when_present(self):
-        assert _slot_tracking_kwargs(_body(slot_id="slot-123")) == {
+        assert _tracking_kwargs(_body(slot_id="slot-123")) == {
             "slot_id": "slot-123"
         }
 
+    def test_returns_both_ids_when_present(self):
+        assert _tracking_kwargs(
+            _body(slot_id="slot-123", generation_id="gen-456")
+        ) == {"slot_id": "slot-123", "generation_id": "gen-456"}
+
     def test_omits_when_absent(self):
-        assert _slot_tracking_kwargs(_body()) == {}
+        assert _tracking_kwargs(_body()) == {}
 
     def test_omits_when_empty(self):
-        assert _slot_tracking_kwargs(_body(slot_id="")) == {}
+        assert _tracking_kwargs(_body(slot_id="")) == {}
