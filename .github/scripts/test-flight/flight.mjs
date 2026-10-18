@@ -59,13 +59,13 @@ export const REQUEST_TIMEOUT_MS = 60 * 1000;
 
 // Evergreen topics for the scheduled monitor (manual flights pass their own).
 export const MONITOR_TOPICS = [
-  'Why small teams ship faster than big companies',
-  'The one productivity habit that actually compounds',
-  'What I learned automating my own video pipeline',
-  'A simple framework for testing business ideas quickly',
-  'Why consistency beats intensity in content creation',
-  'The hidden cost of manual repetitive work',
-  'How to validate an idea before building anything',
+  'Where to eat francesinha in Porto like a local',
+  'The best viewpoints in Porto you can visit for free',
+  'Porto in one day: what to visit first',
+  'Where locals actually eat in Porto (not tourist traps)',
+  'The hidden streets of Porto worth getting lost in',
+  'Port wine cellars in Vila Nova de Gaia: what to know before you go',
+  'Morning in Porto: the perfect riverside walk',
 ];
 
 export class FlightError extends Error {}
