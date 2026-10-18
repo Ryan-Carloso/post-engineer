@@ -62,6 +62,12 @@ import {
   handleRemovePersonaImage,
   handlePublishVideoDirect,
 } from './tools.js';
+import {
+  GetPersonaPublishingAccountsShape,
+  SetPersonaPublishingAccountsShape,
+  handleGetPersonaPublishingAccounts,
+  handleSetPersonaPublishingAccounts,
+} from './tools-publishing-accounts.js';
 import { trackEvent } from './analytics.js';
 
 //---------------
@@ -149,6 +155,24 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
     ListSocialAccountsShape,
     withTracking('list_social_accounts', async () => {
       return handleListSocialAccounts(apiClient);
+    })
+  );
+
+  server.tool(
+    'get_persona_publishing_accounts',
+    "List a persona's default publishing accounts per provider. generate_persona_videos falls back to these when no account IDs are passed; explicit IDs always win.",
+    GetPersonaPublishingAccountsShape,
+    withTracking('get_persona_publishing_accounts', async (args) => {
+      return handleGetPersonaPublishingAccounts(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'set_persona_publishing_accounts',
+    "Replace a persona's default publishing accounts (per provider). Account IDs come from list_social_accounts. Providers mapped to empty arrays keep no defaults.",
+    SetPersonaPublishingAccountsShape,
+    withTracking('set_persona_publishing_accounts', async (args) => {
+      return handleSetPersonaPublishingAccounts(apiClient, args);
     })
   );
 

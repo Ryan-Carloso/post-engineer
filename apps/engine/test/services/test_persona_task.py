@@ -14,9 +14,9 @@ from pydantic import ValidationError
 from app.models.schema import PersonaParams, VideoParams
 from app.services import task as task_service
 from app.services import video as video_service
+from app.services.persona_hook import persona_hook_end_seconds
 from app.services.task import (
     generate_script,
-    persona_hook_end_seconds,
     resolve_persona_audio,
 )
 
@@ -440,7 +440,7 @@ class TestPersonaHookRetry:
 
 
 class TestPersonaPacingConstants:
-    """Persona pacing is product-fixed in task.py — no config knobs."""
+    """Persona pacing is product-fixed (task.py / persona_hook.py) — no config knobs."""
 
     def test_constants_are_the_approved_product_values(self):
         assert task_service.PERSONA_HOOK_MIN_SECONDS == 8.0
@@ -692,7 +692,7 @@ class TestLipsyncCeilingGuard:
         import base64 as b64
 
         monkeypatch.setattr(
-            task_service, "persona_hook_end_seconds", lambda *a, **k: 17.0
+            task_service, "_find_hook_end_seconds", lambda *a, **k: 17.0
         )
         monkeypatch.setattr(task_service.utils, "task_dir", lambda _tid: str(tmp_path))
         monkeypatch.setattr(

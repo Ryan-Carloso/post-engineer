@@ -55,6 +55,8 @@ const ENDPOINT_TOOLS: Record<string, string[]> = {
   'DELETE /api/schedule/slots/[slotId]': ['delete_slot'],
   'GET /api/schedule/status': ['list_posts'],
   'GET /api/persona/delete-preview': ['get_persona_delete_preview'],
+  'GET /api/persona/publishing-accounts': ['get_persona_publishing_accounts'],
+  'PUT /api/persona/publishing-accounts': ['set_persona_publishing_accounts'],
   'DELETE /api/persona': ['delete_persona'],
   'DELETE /api/account': ['disconnect_account'],
   'GET /api/persona/video-generations': ['list_video_generations'],

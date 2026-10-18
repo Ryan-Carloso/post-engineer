@@ -233,10 +233,10 @@ function httpsUrlField(fieldName: string) {
 // Defined once so the four provider blocks can't drift apart; the server
 // enforces which providers need accounts, the client only maps them.
 const PublishingAccountIdsShape = {
-  youtubeAccountIds: z.array(z.string().min(1)).optional().describe('YouTube channel IDs (the channelId field from list_social_accounts). Required when providers includes youtube.'),
-  instagramAccountIds: z.array(z.string().min(1)).optional().describe('Instagram account IDs (the igUserId field from list_social_accounts). Required when providers includes instagram.'),
-  linkedinAccountIds: z.array(z.string().min(1)).optional().describe('LinkedIn account IDs (the providerAccountId field from list_social_accounts). Required when providers includes linkedin.'),
-  blueskyAccountIds: z.array(z.string().min(1)).optional().describe('Bluesky DIDs (the did field from list_social_accounts). Required when providers includes bluesky.'),
+  youtubeAccountIds: z.array(z.string().min(1)).optional().describe('YouTube channel IDs (the channelId field from list_social_accounts). Required when providers includes youtube, unless the persona has default publishing accounts.'),
+  instagramAccountIds: z.array(z.string().min(1)).optional().describe('Instagram account IDs (the igUserId field from list_social_accounts). Required when providers includes instagram, unless the persona has default publishing accounts.'),
+  linkedinAccountIds: z.array(z.string().min(1)).optional().describe('LinkedIn account IDs (the providerAccountId field from list_social_accounts). Required when providers includes linkedin, unless the persona has default publishing accounts.'),
+  blueskyAccountIds: z.array(z.string().min(1)).optional().describe('Bluesky DIDs (the did field from list_social_accounts). Required when providers includes bluesky, unless the persona has default publishing accounts.'),
 };
 
 export const GeneratePersonaVideosShape = {
@@ -1165,7 +1165,7 @@ export async function handleGetTokenBalance(
  * Older handlers (handleConnectAccount) keep inline
  * try/catch because they pre-validate args before the client call —
  * the wrapper only covers the call itself. */
-async function handleLibraryCall(
+export async function handleLibraryCall(
   clientCall: () => Promise<unknown>,
   errorVerb: string,
   successPrefix?: string,
