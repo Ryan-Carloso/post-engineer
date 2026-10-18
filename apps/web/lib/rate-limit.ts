@@ -59,6 +59,9 @@ export const RATE_LIMITS = {
   // Unified post detail: a cheap GET, but polled by the detail page while
   // a video generates — the limit is generous enough for polling.
   postDetail: { name: 'post-detail', limit: 120, windowMs: 60_000 },
+  // Per-persona default publishing accounts: tiny rows, no fan-out. The UI
+  // saves on button click (not per keystroke), so 60/min is generous.
+  publishingAccounts: { name: 'publishing-accounts', limit: 60, windowMs: 60_000 },
 } as const satisfies Record<string, RateLimitProfile>;
 
 //---------------

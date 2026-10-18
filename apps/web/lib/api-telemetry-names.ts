@@ -50,6 +50,7 @@ table['GET /api/persona/delete-preview'] = 'persona_delete_preview_fetched';
 table['GET /api/persona/faces'] = 'persona_faces_listed';
 table['GET /api/persona/images'] = 'persona_images_listed';
 table['GET /api/persona/list'] = 'personas_listed';
+table['GET /api/persona/publishing-accounts'] = 'persona_publishing_accounts_fetched';
 table['GET /api/persona/video-download/[taskId]/[...path]'] = 'video_download_served';
 table['GET /api/persona/video-events/[taskId]'] = 'video_events_fetched';
 table['GET /api/persona/video-generations'] = 'video_generations_listed';
@@ -78,6 +79,7 @@ table['POST /api/persona/avatar'] = 'persona_avatar_uploaded';
 table['POST /api/persona/images'] = 'persona_image_added';
 table['POST /api/upload-content'] = 'content_uploaded';
 table['POST /api/videos/generate-and-schedule'] = 'generate_and_schedule_started';
+table['PUT /api/persona/publishing-accounts'] = 'persona_publishing_accounts_updated';
 
 export const API_TELEMETRY_NAMES: Record<string, string> = table;
 

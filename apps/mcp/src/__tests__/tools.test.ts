@@ -26,6 +26,10 @@ import {
   UpdatePersonaImageShape,
   RemovePersonaImageSchema,
 } from '../tools.js';
+import {
+  handleGetPersonaPublishingAccounts,
+  handleSetPersonaPublishingAccounts,
+} from '../tools-publishing-accounts.js';
 import type { PostEngineerClient } from '../client.js';
 import type { McpToolResponse } from '../tools.js';
 
@@ -51,6 +55,8 @@ describe('MCP Tool Handlers', () => {
     getVideoStatus: vi.fn(),
     getOAuthConnectUrl: vi.fn(),
     connectBlueskyAccount: vi.fn(),
+    request: vi.fn(),
+    getHeaders: vi.fn().mockReturnValue({}),
   } as unknown as PostEngineerClient;
 
   it('handleCreatePersona calls client and returns text response', async () => {
@@ -136,6 +142,45 @@ describe('MCP Tool Handlers', () => {
 
     expect(mockClient.listSocialAccounts).toHaveBeenCalledOnce();
     expect(textOf(response)).toContain('chan-1');
+  });
+
+  it('handleGetPersonaPublishingAccounts returns the persona defaults', async () => {
+    vi.mocked(mockClient.request).mockResolvedValue({
+      success: true,
+      defaults: { youtube: [], instagram: [], bluesky: ['did:plc:a'], linkedin: [] },
+    });
+
+    const response = await handleGetPersonaPublishingAccounts(mockClient, { personaId: 'p-1' });
+
+    expect(mockClient.request).toHaveBeenCalledWith(
+      '/api/persona/publishing-accounts?personaId=p-1',
+      { method: 'GET', headers: {} },
+      'get persona publishing accounts',
+    );
+    expect(textOf(response)).toContain('did:plc:a');
+  });
+
+  it('handleSetPersonaPublishingAccounts replaces the defaults', async () => {
+    vi.mocked(mockClient.request).mockResolvedValue({
+      success: true,
+      defaults: { youtube: ['UC-1'], instagram: [], bluesky: [], linkedin: [] },
+    });
+
+    const response = await handleSetPersonaPublishingAccounts(mockClient, {
+      personaId: 'p-1',
+      accounts: { youtube: ['UC-1'], bluesky: [] },
+    });
+
+    expect(mockClient.request).toHaveBeenCalledWith(
+      '/api/persona/publishing-accounts?personaId=p-1',
+      {
+        method: 'PUT',
+        headers: {},
+        body: JSON.stringify({ accounts: { youtube: ['UC-1'], bluesky: [] } }),
+      },
+      'set persona publishing accounts',
+    );
+    expect(textOf(response)).toContain('updated successfully');
   });
 
   it('handleListSchedules returns schedules', async () => {

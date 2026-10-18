@@ -59,6 +59,7 @@ vi.mock('@/lib/api', () => ({
   useSchedulesQuery: vi.fn(),
   useYouTubeAccountsQuery: vi.fn(),
   useInstagramAccountsQuery: vi.fn(),
+  useBlueskyAccountsQuery: vi.fn(),
   useLinkedinAccountsQuery: vi.fn(),
   usePersonaImagesQuery: vi.fn(() => ({ data: [], isPending: false, isError: false })),
   useUploadPersonaImageMutation: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
@@ -94,9 +95,9 @@ vi.mock('@/lib/i18n/provider', () => {
 });
 
 import PersonaPage from '../page';
-import { useVoicesQuery, useVoiceSampleLanguagesQuery, createPersona, useUpdatePersonaMutation, usePersonaListQuery, useSchedulesQuery, useYouTubeAccountsQuery, useInstagramAccountsQuery, useLinkedinAccountsQuery } from '@/lib/api';
+import { useVoicesQuery, useVoiceSampleLanguagesQuery, createPersona, useUpdatePersonaMutation, usePersonaListQuery, useSchedulesQuery, useYouTubeAccountsQuery, useInstagramAccountsQuery, useBlueskyAccountsQuery, useLinkedinAccountsQuery } from '@/lib/api';
 import type { AccountData, InstagramAccountData } from '@/lib/types';
-import type { LinkedinAccountData } from '@/lib/providers/registry';
+import type { BlueskyAccountData, LinkedinAccountData } from '@/lib/providers/registry';
 import { I18nProvider, useI18n } from '@/lib/i18n/provider';
 import { usePersonaStore } from '@/lib/store';
 import { scrollToErrorField } from '@/lib/scroll-to-error';
@@ -139,6 +140,10 @@ const LINKEDIN_ACCOUNTS: LinkedinAccountData[] = [
   { provider: 'linkedin', recordId: 'li-record', providerAccountId: 'urn:li:person:1', accountName: 'Ryan Pessoa', accountMetadata: { kind: 'member' }, connectedAt: 0, lastUsed: 0 },
 ];
 
+const BLUESKY_ACCOUNTS: BlueskyAccountData[] = [
+  { provider: 'bluesky', recordId: 'bsky-record', did: 'did:plc:test', handle: 'test.bsky.social', connectedAt: 0, lastUsed: 0 },
+];
+
 function mockConnectedAccounts() {
   vi.mocked(useYouTubeAccountsQuery, { partial: true }).mockReturnValue({
     data: { authenticated: true, accounts: YOUTUBE_ACCOUNTS },
@@ -146,6 +151,10 @@ function mockConnectedAccounts() {
   });
   vi.mocked(useInstagramAccountsQuery, { partial: true }).mockReturnValue({
     data: { authenticated: true, accounts: INSTAGRAM_ACCOUNTS },
+    isLoading: false,
+  });
+  vi.mocked(useBlueskyAccountsQuery, { partial: true }).mockReturnValue({
+    data: { authenticated: true, accounts: BLUESKY_ACCOUNTS },
     isLoading: false,
   });
   vi.mocked(useLinkedinAccountsQuery, { partial: true }).mockReturnValue({
@@ -163,6 +172,10 @@ function mockNoAccounts() {
     data: { authenticated: true, accounts: [] },
     isLoading: false,
   });
+  vi.mocked(useBlueskyAccountsQuery, { partial: true }).mockReturnValue({
+    data: { authenticated: true, accounts: [] },
+    isLoading: false,
+  });
   vi.mocked(useLinkedinAccountsQuery, { partial: true }).mockReturnValue({
     data: { authenticated: true, accounts: [] },
     isLoading: false,
@@ -171,6 +184,20 @@ function mockNoAccounts() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // PersonaPublishingAccountsSection loads its defaults via fetch on mount;
+  // stub it to empty defaults so edit-mode renders stay network-free.
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () =>
+        Promise.resolve({
+          success: true,
+          defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [] },
+        }),
+    }),
+  );
   // The photo preview calls URL.createObjectURL on the picked file; the
   // jsdom/vitest Blob shim cannot serialize a test File, so the preview
   // URL is stubbed (the tests assert on the picked file, not the URL).
