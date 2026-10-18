@@ -9,6 +9,15 @@
 //      for a slot ~3h10m out, assert the slot lands where expected, then
 //      cancel it (default) or leave it to fire
 //      (TEST_FLIGHT_SCHEDULED_ACTION=leave).
+//      generate-and-schedule dispatches immediately, so the slot is
+//      `generating` and DELETE /api/schedule/slots/:id refuses it (and
+//      refuses the last slot of a schedule). Cancel is DELETE /api/schedule
+//      with the schedule id from the create response, which removes
+//      unpublished slot rows. The flight only treats the slot as stopped
+//      when a follow-up GET returns 404. Cleanup runs even when the
+//      assertion fails. Do not run this until that cancel is deployed:
+//      an older server leaves the generating slot in place and the post
+//      still goes out ~3h later.
 //
 // Auth is a Post Engineer API key (TEST_FLIGHT_POST_ENGINEER_API_KEY) belonging to the
 // funded test account; the key only ever lives in CI secrets. Account ids
@@ -25,12 +34,13 @@
 //   TEST_FLIGHT_YOUTUBE_ACCOUNT_ID optional. When none is set, the flight
 //                                  discovers the key's connected accounts
 //                                  via GET /api/account.
-//   TEST_FLIGHT_TOPIC              required for manual flights; the scheduled
-//                                  monitor rotates MONITOR_TOPICS when empty.
+//   TEST_FLIGHT_TOPIC              optional. When empty, every flight
+//                                  (manual or scheduled) rotates MONITOR_TOPICS.
 //   TEST_FLIGHT_API_BASE_URL       default https://post-engineer.com.
 //   TEST_FLIGHT_SCHEDULED_ACTION   'cancel' (default) or 'leave'.
-//   TEST_FLIGHT_RUN_ID             idempotency base (the workflow passes
-//                                  github.run_id).
+//   TEST_FLIGHT_RUN_ID             idempotency base. The workflow passes
+//                                  `${github.run_id}-${github.run_attempt}`
+//                                  so a re-run is not treated as a replay.
 //   TEST_FLIGHT_POLL_TIMEOUT_MIN   default 60. TEST_FLIGHT_POLL_INTERVAL_SEC
 //                                  default 30.
 //
@@ -253,10 +263,11 @@ export function buildScheduledPayload({ personaId, topic, accounts, idempotencyK
 // HTTP (the API key never appears in an error message)
 //---------------
 
-async function apiJson(client, path, { method = 'GET', body } = {}) {
+async function apiRequest(client, path, { method = 'GET', body } = {}) {
+  const doFetch = client.fetchFn ?? fetch;
   let res;
   try {
-    res = await fetch(`${client.apiBaseUrl}${path}`, {
+    res = await doFetch(`${client.apiBaseUrl}${path}`, {
       method,
       headers: {
         authorization: `Bearer ${client.apiKey}`,
@@ -277,11 +288,17 @@ async function apiJson(client, path, { method = 'GET', body } = {}) {
   } catch {
     parsed = null;
   }
-  if (!res.ok || parsed === null || parsed.success !== true) {
-    const detail = parsed !== null ? JSON.stringify(parsed).slice(0, 500) : text.slice(0, 200);
-    throw new FlightError(`test-flight: ${method} ${path} -> HTTP ${res.status}: ${detail}`);
+  return { status: res.status, parsed, ok: res.ok };
+}
+
+async function apiJson(client, path, options) {
+  const { method = 'GET' } = options ?? {};
+  const result = await apiRequest(client, path, options);
+  if (!result.ok || result.parsed === null || result.parsed.success !== true) {
+    const detail = result.parsed !== null ? JSON.stringify(result.parsed).slice(0, 500) : '';
+    throw new FlightError(`test-flight: ${method} ${path} -> HTTP ${result.status}: ${detail}`);
   }
-  return parsed;
+  return result.parsed;
 }
 
 //---------------
@@ -317,8 +334,14 @@ export function assertPublishedSlot(slot, providers) {
   return links;
 }
 
+// Statuses a just-created scheduled slot may report. `generating` is the
+// normal one: generate-and-schedule dispatches every slot before it
+// responds. Cancellation is DELETE /api/schedule, not the per-slot DELETE
+// (that route 409s on generating and on the last slot).
+const SCHEDULED_LANDING_STATUSES = new Set(['pending', 'awaiting', 'generating', 'ready']);
+
 export function assertScheduledSlot(slot, target) {
-  if (slot.status === 'failed' || slot.status === 'cancelled') {
+  if (!SCHEDULED_LANDING_STATUSES.has(slot.status)) {
     throw new FlightError(
       `test-flight: scheduled slot ${slot.slotId} ended as '${slot.status}'${slot.error ? `: ${slot.error}` : ''}`,
     );
@@ -363,14 +386,73 @@ export async function waitForPublished(client, slotId, providers, { timeoutMs, i
   }
 }
 
+// DELETE /api/schedule removes unpublished slot rows. A 2xx is not proof:
+// a server that only deletes the schedule row (or 409s) leaves a generating
+// slot that the publisher will post. Only a follow-up GET 404 means the
+// slot is gone. Never `return` from the caller's finally — that would
+// swallow the assertion error this cleanup runs beside.
+async function confirmScheduleCancelled(client, created) {
+  const deletePath = `/api/schedule?id=${encodeURIComponent(created.scheduleId)}`;
+  const deleted = await apiRequest(client, deletePath, { method: 'DELETE' });
+  if (created.slotId === null || created.slotId === undefined) {
+    const ids =
+      deleted.parsed !== null && Array.isArray(deleted.parsed.cancelledSlotIds)
+        ? deleted.parsed.cancelledSlotIds
+        : [];
+    if (!deleted.ok || ids.length === 0) {
+      throw new FlightError(
+        `test-flight: a scheduled post on schedule ${created.scheduleId} may still publish; ` +
+          `DELETE /api/schedule returned HTTP ${deleted.status} and did not report a removed slot. ` +
+          `Remove it before it is due.`,
+      );
+    }
+    return;
+  }
+  const probe = await apiRequest(client, `/api/schedule/slots/${encodeURIComponent(created.slotId)}`);
+  if (probe.status !== 404) {
+    const slot = probe.parsed !== null && probe.parsed.slot !== null && typeof probe.parsed.slot === 'object'
+      ? probe.parsed.slot
+      : {};
+    const status = typeof slot.status === 'string' ? slot.status : 'unknown';
+    const slotAt = typeof slot.slotAt === 'string' ? slot.slotAt : created.slotAt ?? 'unknown';
+    throw new FlightError(
+      `test-flight: scheduled slot ${created.slotId} is still '${status}' at ${slotAt} and CAN still publish. ` +
+        `DELETE /api/schedule?id=${created.scheduleId} returned HTTP ${deleted.status}. ` +
+        `Remove the schedule before ${slotAt}.`,
+    );
+  }
+  if (!deleted.ok) {
+    throw new FlightError(
+      `test-flight: scheduled slot ${created.slotId} is gone and will not publish, ` +
+        `but DELETE /api/schedule did not fully succeed (HTTP ${deleted.status}).`,
+    );
+  }
+  const refunds = deleted.parsed !== null && Array.isArray(deleted.parsed.refunds) ? deleted.parsed.refunds : null;
+  if (refunds !== null) {
+    const unpaid = refunds.filter((item) => item.refunded !== true && item.alreadyRefunded !== true);
+    if (unpaid.length > 0) {
+      const ids = unpaid.map((item) => (typeof item.slotId === 'string' ? item.slotId : 'unknown')).join(', ');
+      throw new FlightError(
+        `test-flight: scheduled slot ${created.slotId} was cancelled and will not publish, ` +
+          `but the prepaid refund did not land for: ${ids}`,
+      );
+    }
+  }
+}
+
 //---------------
 // Main flow
 //---------------
 
-async function main(env = process.env, now = new Date()) {
+export async function runFlight(env = process.env, options = {}) {
+  const now = options.now ?? new Date();
   const cfg = resolveConfig(env);
   const topic = resolveTopic(env, now);
-  const client = { apiBaseUrl: cfg.apiBaseUrl, apiKey: cfg.apiKey };
+  const client = {
+    apiBaseUrl: cfg.apiBaseUrl,
+    apiKey: cfg.apiKey,
+    fetchFn: options.fetchFn,
+  };
   const accounts = await resolveFlightAccounts({ explicit: cfg.accounts, client });
   const providers = Object.keys(accounts);
   const summary = [];
@@ -389,29 +471,68 @@ async function main(env = process.env, now = new Date()) {
   const links = await waitForPublished(client, asapSlot.slotId, providers, {
     timeoutMs: cfg.pollTimeoutMs,
     intervalMs: cfg.pollIntervalMs,
+    sleepFn: options.sleepFn,
+    nowFn: options.nowFn,
   });
   summary.push(`ASAP slot ${asapSlot.slotId} published: ${links.map((link) => `${link.provider}=${link.url}`).join(' ')}`);
 
   console.log('test-flight: leg 2/2 (scheduled)');
   const target = scheduledTarget(now);
-  const scheduledBody = await apiJson(client, '/api/videos/generate-and-schedule', {
-    method: 'POST',
-    body: buildScheduledPayload({
-      personaId: cfg.personaId,
-      topic,
-      accounts,
-      idempotencyKey: `test-flight-${cfg.runId}-scheduled`,
-      schedule: target,
-    }),
-  });
-  const schedSlot = singleSlot(scheduledBody, 'scheduled');
-  assertScheduledSlot(schedSlot, target.target);
-  summary.push(`scheduled slot ${schedSlot.slotId} at ${schedSlot.slotAt}`);
-  if (cfg.scheduledAction === 'cancel') {
-    await apiJson(client, `/api/schedule/slots/${schedSlot.slotId}`, { method: 'DELETE' });
-    summary.push(`scheduled slot ${schedSlot.slotId} cancelled`);
-  } else {
-    summary.push(`scheduled slot ${schedSlot.slotId} left to fire at ${schedSlot.slotAt}`);
+  let created = null;
+  let flightError = null;
+  let cancelNote = null;
+  try {
+    const scheduledBody = await apiJson(client, '/api/videos/generate-and-schedule', {
+      method: 'POST',
+      body: buildScheduledPayload({
+        personaId: cfg.personaId,
+        topic,
+        accounts,
+        idempotencyKey: `test-flight-${cfg.runId}-scheduled`,
+        schedule: target,
+      }),
+    });
+    const scheduleId = scheduledBody.schedule !== null && typeof scheduledBody.schedule === 'object'
+      ? scheduledBody.schedule.id
+      : undefined;
+    if (typeof scheduleId !== 'string' || scheduleId.length === 0) {
+      throw new FlightError(
+        'test-flight: scheduled response has no schedule.id; the post may still publish and this flight cannot cancel it',
+      );
+    }
+    created = { scheduleId, slotId: null, slotAt: null };
+    const schedSlot = singleSlot(scheduledBody, 'scheduled');
+    created.slotId = typeof schedSlot.slotId === 'string' ? schedSlot.slotId : null;
+    created.slotAt = schedSlot.slotAt;
+    assertScheduledSlot(schedSlot, target.target);
+    summary.push(`scheduled slot ${schedSlot.slotId} at ${schedSlot.slotAt}`);
+  } catch (error) {
+    flightError = error instanceof Error ? error : new FlightError(String(error));
+  } finally {
+    if (cfg.scheduledAction === 'cancel' && created !== null) {
+      try {
+        await confirmScheduleCancelled(client, created);
+        const label = created.slotId ?? 'unknown slot';
+        cancelNote =
+          `scheduled slot ${label} cancelled via DELETE /api/schedule?id=${created.scheduleId}; ` +
+          'the slot is gone and will not publish';
+      } catch (cancelError) {
+        const message = cancelError instanceof Error ? cancelError.message : String(cancelError);
+        flightError = flightError ? new FlightError(`${flightError.message}\n${message}`) : cancelError;
+        cancelNote = null;
+      }
+    }
+  }
+  if (flightError) {
+    if (cancelNote !== null) {
+      throw new FlightError(`${flightError.message}\n${cancelNote}`);
+    }
+    throw flightError;
+  }
+  if (cancelNote !== null) {
+    summary.push(cancelNote);
+  } else if (created !== null) {
+    summary.push(`scheduled slot ${created.slotId} left to fire at ${created.slotAt}`);
   }
 
   const lines = ['## test-flight: PASS', '', ...summary.map((line) => `- ${line}`)];
@@ -420,6 +541,11 @@ async function main(env = process.env, now = new Date()) {
     await writeFile(summaryPath, `${lines.join('\n')}\n`, { flag: 'a' });
   }
   for (const line of summary) console.log(`test-flight: ${line}`);
+  return summary;
+}
+
+async function main(env = process.env, now = new Date()) {
+  await runFlight(env, { now });
 }
 
 const invokedAsMain =

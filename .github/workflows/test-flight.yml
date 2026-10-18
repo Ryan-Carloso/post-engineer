@@ -8,18 +8,38 @@ name: test-flight
 # accounts, so it only runs when a human asks for it (or once a day as a
 # prod-health monitor).
 #
-# Setup (repo Settings > Secrets and variables > Actions) — done once by
-# the repo owner, never hardcoded here, never shared in chat:
-#   Secrets:
+# The job runs in the GitHub environment `test-flight`. The prod API key
+# must live there (Settings > Environments > test-flight > Environment
+# secrets), not as a repository secret: a repository secret is readable
+# from any branch via workflow_dispatch. Limit that environment's
+# deployment branches to `main`. TEST_FLIGHT_PERSONA_ID stays a repository
+# variable so the job-level `if` can see it (environment variables are not
+# reliably visible there). Creating the environment and moving the secret
+# are repo settings this file cannot change — see the PR description.
+#
+# The daily cron publishes a real post and spends about two generations
+# (the ASAP post, plus the scheduled video that is cancelled before
+# publish). Do not dispatch this workflow until the web cancel on
+# DELETE /api/schedule (unpublished slot rows removed) is deployed.
+# An older server leaves the generating slot in place and it publishes
+# ~3h later.
+#
+# Setup (repo Settings) — done once by the repo owner, never hardcoded
+# here, never shared in chat:
+#   Environment `test-flight` secrets:
 #     TEST_FLIGHT_POST_ENGINEER_API_KEY  Post Engineer API key of the funded
 #                                        test account (create at
 #                                        post-engineer.com/api-keys, scoped
-#                                        to the test persona).
+#                                        to the test persona). Delete the
+#                                        repository-level copy after copying
+#                                        it here.
 #     TEST_FLIGHT_DISCORD_WEBHOOK_URL    (optional) failure alert target.
-#   Variables (or Secrets — both are accepted as fallback):
+#   Repository variables (or Secrets — both are accepted as fallback):
 #     TEST_FLIGHT_PERSONA_ID         persona UUID used by manual flights
 #                                    without an explicit persona_id and by
-#                                    the daily monitor.
+#                                    the daily monitor. Must stay a
+#                                    repository variable, not only an
+#                                    environment variable.
 #     TEST_FLIGHT_BLUESKY_ACCOUNT_ID / TEST_FLIGHT_INSTAGRAM_ACCOUNT_ID /
 #     TEST_FLIGHT_YOUTUBE_ACCOUNT_ID account ids for the daily monitor.
 #                                    Optional: when none are configured the
@@ -44,8 +64,8 @@ on:
         required: false
         type: string
       persona_id:
-        description: 'Persona UUID (must be in the API key persona scope)'
-        required: true
+        description: 'Persona UUID (optional — empty uses the TEST_FLIGHT_PERSONA_ID repository variable; must be in the API key persona scope)'
+        required: false
         type: string
       bluesky_account_id:
         description: 'Bluesky account DID (optional — auto-discovered from the key when omitted)'
@@ -79,6 +99,14 @@ permissions:
 
 jobs:
   flight:
+    # Scheduled runs skip until the persona variable exists. Manual
+    # dispatch still runs: the caller can pass persona_id. The variable
+    # must stay a repository variable — environment vars are not reliably
+    # visible to this job-level `if`.
+    if: github.event_name != 'schedule' || vars.TEST_FLIGHT_PERSONA_ID != ''
+    # Prod API key lives in this environment. Deployment branches should
+    # be limited to main (repo setting; see the file header).
+    environment: test-flight
     runs-on: ubuntu-latest
     timeout-minutes: 90 # video generation takes minutes; polling caps at 60
     steps:
@@ -104,7 +132,7 @@ jobs:
           TEST_FLIGHT_INSTAGRAM_ACCOUNT_ID: ${{ inputs.instagram_account_id || vars.TEST_FLIGHT_INSTAGRAM_ACCOUNT_ID || secrets.TEST_FLIGHT_INSTAGRAM_ACCOUNT_ID }}
           TEST_FLIGHT_YOUTUBE_ACCOUNT_ID: ${{ inputs.youtube_account_id || vars.TEST_FLIGHT_YOUTUBE_ACCOUNT_ID || secrets.TEST_FLIGHT_YOUTUBE_ACCOUNT_ID }}
           TEST_FLIGHT_SCHEDULED_ACTION: ${{ inputs.scheduled_action }}
-          TEST_FLIGHT_RUN_ID: ${{ github.run_id }}
+          TEST_FLIGHT_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Notify Discord on failure
         if: failure()

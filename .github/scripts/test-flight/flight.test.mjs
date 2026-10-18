@@ -4,6 +4,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import {
   FlightError,
   MONITOR_TOPICS,
@@ -17,6 +21,7 @@ import {
   resolveFlightAccounts,
   resolveTopic,
   rotateTopic,
+  runFlight,
   scheduledTarget,
   singleSlot,
   waitForPublished,
@@ -334,29 +339,42 @@ describe('assertPublishedSlot', () => {
 });
 
 describe('assertScheduledSlot', () => {
-  it('accepts a slot landing near the target', () => {
+  it('accepts a generating slot landing near the target', () => {
     const target = new Date('2026-10-17T13:10:00Z');
     assert.doesNotThrow(() =>
-      assertScheduledSlot({ slotId: 's2', status: 'scheduled', slotAt: '2026-10-17T13:12:00Z' }, target),
+      assertScheduledSlot({ slotId: 's2', status: 'generating', slotAt: '2026-10-17T13:12:00Z' }, target),
     );
+  });
+
+  it('accepts the other create-response statuses', () => {
+    const target = new Date('2026-10-17T13:10:00Z');
+    for (const status of ['pending', 'awaiting', 'ready']) {
+      assert.doesNotThrow(() =>
+        assertScheduledSlot({ slotId: 's2', status, slotAt: '2026-10-17T13:10:00Z' }, target),
+      );
+    }
   });
 
   it('rejects a slot landing far from the target', () => {
     const target = new Date('2026-10-17T13:10:00Z');
     assert.throws(
-      () => assertScheduledSlot({ slotId: 's2', status: 'scheduled', slotAt: '2026-10-18T13:10:00Z' }, target),
+      () => assertScheduledSlot({ slotId: 's2', status: 'generating', slotAt: '2026-10-18T13:10:00Z' }, target),
       /exceeds 10m/,
     );
   });
 
-  it('rejects failed slots and unparsable slotAt', () => {
+  it('rejects failed slots, unknown statuses, and unparsable slotAt', () => {
     const target = new Date('2026-10-17T13:10:00Z');
     assert.throws(
       () => assertScheduledSlot({ slotId: 's2', status: 'failed', slotAt: '2026-10-17T13:10:00Z' }, target),
       /ended as 'failed'/,
     );
     assert.throws(
-      () => assertScheduledSlot({ slotId: 's2', status: 'scheduled', slotAt: 'not-a-date' }, target),
+      () => assertScheduledSlot({ slotId: 's2', status: 'scheduled', slotAt: '2026-10-17T13:10:00Z' }, target),
+      /ended as 'scheduled'/,
+    );
+    assert.throws(
+      () => assertScheduledSlot({ slotId: 's2', status: 'generating', slotAt: 'not-a-date' }, target),
       /unparsable slotAt/,
     );
   });
@@ -417,5 +435,276 @@ describe('waitForPublished', () => {
       }),
       /timed out/,
     );
+  });
+});
+
+function jsonResponse(status, body) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    async text() {
+      return body === null ? '' : JSON.stringify(body);
+    },
+  };
+}
+
+describe('runFlight', () => {
+  const now = new Date('2026-10-18T10:00:00Z');
+  const target = scheduledTarget(now);
+
+  function flightEnv(overrides = {}) {
+    return baseEnv({
+      TEST_FLIGHT_API_BASE_URL: 'https://post-engineer.test',
+      TEST_FLIGHT_RUN_ID: '99-2',
+      TEST_FLIGHT_TOPIC: 'Porto riverside',
+      TEST_FLIGHT_POLL_TIMEOUT_MIN: '1',
+      TEST_FLIGHT_POLL_INTERVAL_SEC: '1',
+      ...overrides,
+    });
+  }
+
+  function publishedSlot(slotId) {
+    return {
+      success: true,
+      slot: {
+        slotId,
+        status: 'published',
+        publishLinks: PROVIDER_ORDER.map((provider) => ({ provider, url: `https://${provider}/p` })),
+      },
+    };
+  }
+
+  function installFetch(routes) {
+    const calls = [];
+    const fetchFn = async (url, init = {}) => {
+      const method = init.method ?? 'GET';
+      let body = null;
+      if (typeof init.body === 'string' && init.body !== '') {
+        body = JSON.parse(init.body);
+      }
+      calls.push({ method, url, body });
+      const matched = routes.find((route) => route.method === method && url.endsWith(route.path));
+      if (!matched) {
+        return jsonResponse(500, { success: false, error: `unhandled ${method} ${url}` });
+      }
+      return matched.respond({ url, body, calls });
+    };
+    return { calls, fetchFn };
+  }
+
+  function happyRoutes({ scheduledSlotAt, deleteStatus = 200, deleteBody, probeStatus = 404, probeBody = null, scheduledBody }) {
+    const slotAt = scheduledSlotAt ?? target.target.toISOString();
+    const created = scheduledBody ?? {
+      success: true,
+      schedule: { id: 'sch-sched', mode: 'scheduled' },
+      slots: [{ slotId: 'slot-sched', slotAt, status: 'generating', taskId: 'task-sched' }],
+    };
+    const cancelled = deleteBody ?? {
+      success: true,
+      cancelledSlotIds: ['slot-sched'],
+      refunds: [{ slotId: 'slot-sched', refunded: true, alreadyRefunded: false }],
+    };
+    return [
+      {
+        method: 'POST',
+        path: '/api/videos/generate-and-schedule',
+        respond({ body }) {
+          if (body.publishing.mode === 'asap') {
+            return jsonResponse(200, {
+              success: true,
+              schedule: { id: 'sch-asap', mode: 'asap' },
+              slots: [{ slotId: 'slot-asap', status: 'generating' }],
+            });
+          }
+          return jsonResponse(200, created);
+        },
+      },
+      {
+        method: 'GET',
+        path: '/api/schedule/slots/slot-asap',
+        respond() {
+          return jsonResponse(200, publishedSlot('slot-asap'));
+        },
+      },
+      {
+        method: 'DELETE',
+        path: '/api/schedule?id=sch-sched',
+        respond() {
+          return jsonResponse(deleteStatus, cancelled);
+        },
+      },
+      {
+        method: 'GET',
+        path: '/api/schedule/slots/slot-sched',
+        respond() {
+          return jsonResponse(probeStatus, probeBody);
+        },
+      },
+    ];
+  }
+
+  it('cancels the scheduled leg at schedule level and requires the slot to be gone', async () => {
+    const { calls, fetchFn } = installFetch(happyRoutes({}));
+    const summary = await runFlight(flightEnv(), { now, fetchFn, sleepFn: async () => {}, nowFn: () => now.getTime() });
+    const methods = calls.map((call) => `${call.method} ${call.url}`);
+    assert.equal(methods.some((line) => line.includes('/api/schedule/slots/slot-sched') && line.startsWith('DELETE')), false);
+    assert.equal(methods.includes('DELETE https://post-engineer.test/api/schedule?id=sch-sched'), true);
+    assert.equal(methods.includes('GET https://post-engineer.test/api/schedule/slots/slot-sched'), true);
+    const scheduledPost = calls.find((call) => call.method === 'POST' && call.body?.publishing?.mode === 'scheduled');
+    assert.equal(scheduledPost.body.idempotencyKey, 'test-flight-99-2-scheduled');
+    const asapPost = calls.find((call) => call.method === 'POST' && call.body?.publishing?.mode === 'asap');
+    assert.equal(asapPost.body.idempotencyKey, 'test-flight-99-2-asap');
+    assert.equal(summary.some((line) => line.includes('will not publish')), true);
+  });
+
+  it('still cancels when the slot time assertion fails', async () => {
+    const { calls, fetchFn } = installFetch(
+      happyRoutes({ scheduledSlotAt: '2026-10-19T10:00:00.000Z' }),
+    );
+    await assert.rejects(
+      runFlight(flightEnv(), { now, fetchFn, sleepFn: async () => {}, nowFn: () => now.getTime() }),
+      (error) => {
+        assert.match(error.message, /exceeds 10m/);
+        assert.match(error.message, /will not publish/);
+        return true;
+      },
+    );
+    assert.equal(
+      calls.some((call) => call.method === 'DELETE' && call.url.endsWith('/api/schedule?id=sch-sched')),
+      true,
+    );
+  });
+
+  it('does not cancel when the scheduled action is leave', async () => {
+    const { calls, fetchFn } = installFetch(happyRoutes({}));
+    const summary = await runFlight(flightEnv({ TEST_FLIGHT_SCHEDULED_ACTION: 'leave' }), {
+      now,
+      fetchFn,
+      sleepFn: async () => {},
+      nowFn: () => now.getTime(),
+    });
+    assert.equal(calls.some((call) => call.method === 'DELETE'), false);
+    assert.equal(summary.some((line) => line.includes('left to fire')), true);
+  });
+
+  it('fails when the slot is still generating after the schedule delete', async () => {
+    const { fetchFn } = installFetch(
+      happyRoutes({
+        probeStatus: 200,
+        probeBody: {
+          success: true,
+          slot: { id: 'slot-sched', status: 'generating', slotAt: target.target.toISOString() },
+        },
+      }),
+    );
+    await assert.rejects(
+      runFlight(flightEnv(), { now, fetchFn, sleepFn: async () => {}, nowFn: () => now.getTime() }),
+      /CAN still publish/,
+    );
+  });
+
+  it('fails when the slot is gone but the prepaid refund did not land', async () => {
+    const { fetchFn } = installFetch(
+      happyRoutes({
+        deleteBody: {
+          success: true,
+          cancelledSlotIds: ['slot-sched'],
+          refunds: [{ slotId: 'slot-sched', refunded: false, alreadyRefunded: false }],
+        },
+      }),
+    );
+    await assert.rejects(
+      runFlight(flightEnv(), { now, fetchFn, sleepFn: async () => {}, nowFn: () => now.getTime() }),
+      /prepaid refund did not land/,
+    );
+  });
+
+  it('accepts an already-refunded slot', async () => {
+    const { fetchFn } = installFetch(
+      happyRoutes({
+        deleteBody: {
+          success: true,
+          cancelledSlotIds: ['slot-sched'],
+          refunds: [{ slotId: 'slot-sched', refunded: false, alreadyRefunded: true }],
+        },
+      }),
+    );
+    const summary = await runFlight(flightEnv(), { now, fetchFn, sleepFn: async () => {}, nowFn: () => now.getTime() });
+    assert.equal(summary.some((line) => line.includes('will not publish')), true);
+  });
+
+  it('refuses to claim a cancel when the create response has no schedule id', async () => {
+    const { calls, fetchFn } = installFetch(
+      happyRoutes({
+        scheduledBody: {
+          success: true,
+          slots: [{ slotId: 'slot-sched', slotAt: target.target.toISOString(), status: 'generating' }],
+        },
+      }),
+    );
+    await assert.rejects(
+      runFlight(flightEnv(), { now, fetchFn, sleepFn: async () => {}, nowFn: () => now.getTime() }),
+      /schedule\.id/,
+    );
+    assert.equal(calls.some((call) => call.method === 'DELETE'), false);
+  });
+
+  it('does not invent a cancel failure when the scheduled create itself fails', async () => {
+    const { calls, fetchFn } = installFetch([
+      {
+        method: 'POST',
+        path: '/api/videos/generate-and-schedule',
+        respond({ body }) {
+          if (body.publishing.mode === 'asap') {
+            return jsonResponse(200, {
+              success: true,
+              schedule: { id: 'sch-asap' },
+              slots: [{ slotId: 'slot-asap', status: 'generating' }],
+            });
+          }
+          return jsonResponse(500, { success: false, error: 'engine down' });
+        },
+      },
+      {
+        method: 'GET',
+        path: '/api/schedule/slots/slot-asap',
+        respond() {
+          return jsonResponse(200, publishedSlot('slot-asap'));
+        },
+      },
+    ]);
+    await assert.rejects(
+      runFlight(flightEnv(), { now, fetchFn, sleepFn: async () => {}, nowFn: () => now.getTime() }),
+      (error) => {
+        assert.match(error.message, /engine down/);
+        assert.doesNotMatch(error.message, /may still publish/);
+        return true;
+      },
+    );
+    assert.equal(calls.some((call) => call.method === 'DELETE'), false);
+  });
+});
+
+describe('test-flight workflow pins', () => {
+  const workflow = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'workflows', 'test-flight.yml'),
+    'utf8',
+  );
+
+  it('runs in the test-flight environment and keys retries by run attempt', () => {
+    assert.equal(workflow.includes('environment: test-flight'), true);
+    assert.equal(workflow.includes('${{ github.run_id }}-${{ github.run_attempt }}'), true);
+    assert.equal(
+      workflow.includes("github.event_name != 'schedule' || vars.TEST_FLIGHT_PERSONA_ID != ''"),
+      true,
+    );
+  });
+
+  it('leaves persona_id and topic optional so the variable default works', () => {
+    const topicBlock = workflow.slice(workflow.indexOf('topic:'), workflow.indexOf('persona_id:'));
+    const personaBlock = workflow.slice(workflow.indexOf('persona_id:'), workflow.indexOf('bluesky_account_id:'));
+    assert.equal(topicBlock.includes('required: false'), true);
+    assert.equal(personaBlock.includes('required: false'), true);
+    assert.equal(personaBlock.includes('required: true'), false);
   });
 });
