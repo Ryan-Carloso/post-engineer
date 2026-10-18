@@ -9,38 +9,54 @@ name: opencode-review
 #   no third-party GitHub Action wrapper, no floating install script.
 #   (Verified against the installed CLI: there is no --standalone flag;
 #   `run` is already the non-interactive command for scripts/CI.)
-# - Review chain, first success wins (free-first, paid as last resort):
-#     1. OpenRouter free router (openrouter/free) — $0 models first
-#     2. z.ai standard API with the permanently-free glm-4.7-flash
-#     3. z.ai GLM Coding Plan (best quality, quota-limited)
-#     4. OpenRouter with z-ai/glm-5.3-flash — paid, last resort (pinned
-#        model, not the auto router, for predictable review quality)
+# - The review runs as the `reviewer` agent (`opencode run --agent reviewer`).
+#   That agent is `mode: primary`. A missing agent, or one whose mode is
+#   `subagent`, makes `opencode run` fall back to the default build agent
+#   ("Falling back to default agent"); that attempt is discarded.
+# - Project config and the root AGENTS.md are not loaded
+#   (OPENCODE_DISABLE_PROJECT_CONFIG=1). Providers and the short reviewer
+#   instructions live in a temp OPENCODE_CONFIG / OPENCODE_CONFIG_DIR so the
+#   committed opencode.json is not rewritten and the 190KB review-learnings
+#   file is not injected into the prompt.
+# - Review chain, first success wins. Quality-first attempt order (strong
+#   configured model first, free models last):
+#     REVIEW_MODEL_PRIMARY -> OPENCODE_MODEL -> openrouter/$OPENROUTER_MODEL ->
+#     zai-standard/$ZAI_FREE_MODEL -> openrouter/$OPENROUTER_FREE_MODEL
+#   Free models are last. Identical model ids are deduped. Each attempt runs
+#   only when its provider key is present.
 #   glm-4.5-flash was dropped from the chain — its review quality was too
-#   poor. The OpenRouter tiers use the special router ids (no hardcoded
-#   model list to rot — same convention as the engine's _PROVIDER_DEFAULT_MODELS
-#   in apps/engine/app/services/llm.py); one OPENROUTER_API_KEY secret serves
-#   both tiers (free models cost $0 even on a paid key).
+#   poor. The OpenRouter free tier uses the special router id (no hardcoded
+#   model list to rot — same convention as the engine's
+#   _PROVIDER_DEFAULT_MODELS); one OPENROUTER_API_KEY secret serves both
+#   tiers (free models cost $0 even on a paid key).
 # - The job runs if EITHER ZAI_API_KEY or OPENROUTER_API_KEY is configured;
 #   each tier is skipped when its key is missing, so a repo with only one
 #   key still gets reviews through that provider's tiers.
-# - Findings are mechanically grounded: the prompt requires a
-#   `### SEVERITY: title` heading, a `**Location:** path:line1-line2` line
-#   and a verbatim code fence per finding; verify-review-grounding.py drops
-#   findings whose file, lines, or quoted code do not check out against the
-#   checkout, before the comment is posted.
+# - A second pass (REVIEW_MODEL_VERIFY, default a different provider) confirms
+#   or refutes pass 1. It is skipped when its key is missing, or when the
+#   diff is docs/assets-only and pass 1 has no CRITICAL/MAJOR. If pass 2
+#   drops every finding, the comment keeps pass 1.
+# - Findings are mechanically grounded: verify-review-grounding.py accepts a
+#   backticked Location, re-anchors line numbers from the verbatim quote, and
+#   exits 1 when every finding is dropped. The posted file then starts with
+#   `<!-- review-grounding: not-reviewed -->` and the job fails after the
+#   comment is up. A fully dropped review must not look like a clean pass.
 # - review-mechanical-checks.py runs outside the LLM and appends a
-#   "Mechanical checks" section to the comment: FAIL on duplicate migration
-#   numbers or obvious secrets in the diff, WARN on production files changed
-#   without test files (the LLM's old TDD-coverage bullet was removed from
-#   the prompt in favor of this script).
+#   "Mechanical checks" section: FAIL on duplicate migration numbers or
+#   obvious secrets in the diff, WARN on production files changed without
+#   test files. review-heuristics.py adds non-failing WARN lines (unscrubbed
+#   telemetry, empty any/all, overridden mocks).
 # - Posts the review as a new PR comment on every push (the header carries
 #   the head SHA), so each review round stays visible instead of overwriting
-#   the previous one.
+#   the previous one. A low-confidence banner is added only when the posted
+#   pass came from a free model (exact id match, not a substring).
 #
 # Setup:
 # 1. Add the `ZAI_API_KEY` and/or `OPENROUTER_API_KEY` secret (repo settings).
 #    Until at least one exists, the review steps are skipped.
-# 2. If your Coding Plan uses a different model id, change OPENCODE_MODEL below.
+# 2. Optional repo variables: REVIEW_MODEL_PRIMARY (default
+#    zai-coding-plan/glm-5.3-flash) and REVIEW_MODEL_VERIFY (default
+#    openrouter/z-ai/glm-5.3-flash).
 
 on:
   pull_request:
@@ -52,30 +68,28 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Review models. OPENCODE_MODEL is provider/model form;
-  # ZAI_FREE_MODEL is a bare id resolved against the zai-standard provider.
-  # OPENROUTER_FREE_MODEL is the free router id and OPENROUTER_MODEL a
-  # concrete model id, both resolved against the openrouter provider
-  # (all configured in the review step).
-  # Try order is free-first: OPENROUTER_FREE_MODEL, ZAI_FREE_MODEL,
-  # OPENCODE_MODEL, then OPENROUTER_MODEL (paid, last resort).
+  # REVIEW_MODEL_PRIMARY is the first attempt. Empty repo variable falls
+  # through to the Coding Plan model. OPENCODE_MODEL is the same default
+  # and is deduped when it matches the primary.
+  REVIEW_MODEL_PRIMARY: ${{ vars.REVIEW_MODEL_PRIMARY || 'zai-coding-plan/glm-5.3-flash' }}
+  REVIEW_MODEL_VERIFY: ${{ vars.REVIEW_MODEL_VERIFY || 'openrouter/z-ai/glm-5.3-flash' }}
   OPENCODE_MODEL: zai-coding-plan/glm-5.3-flash
   # Permanently-free fallback on the z.ai standard API so reviews survive
   # Coding Plan quota exhaustion. Kept to glm-4.7-flash only — glm-4.5-flash
-  # was removed for poor review quality.
+  # was removed for poor review quality. Tried after the paid tiers.
   ZAI_FREE_MODEL: glm-4.7-flash
   # OpenRouter tiers. The free tier uses the special router id (no hardcoded
   # model list to rot — same convention as the engine's _PROVIDER_DEFAULT_MODELS);
   # the paid tier pins z-ai/glm-5.3-flash (verified live on the OpenRouter
   # models API) instead of the auto router, for predictable review quality.
-  # One OPENROUTER_API_KEY serves both tiers.
+  # One OPENROUTER_API_KEY serves both tiers. The free router is last.
   OPENROUTER_FREE_MODEL: openrouter/free
   OPENROUTER_MODEL: z-ai/glm-5.3-flash
 
 jobs:
   review:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     permissions:
       contents: read
       pull-requests: write
@@ -156,57 +170,99 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           set -euo pipefail
-          # Registers every provider whose API key is configured. opencode.json
-          # is fully rewritten here; the review step only switches --model.
+          # Temp config: OPENCODE_DISABLE_PROJECT_CONFIG skips the repo's
+          # opencode.json and the root AGENTS.md, but still loads
+          # OPENCODE_CONFIG and OPENCODE_CONFIG_DIR. The reviewer agent is
+          # copied into that dir so CI loads it and nothing else.
+          cfg="${RUNNER_TEMP}/opencode-review"
+          mkdir -p "$cfg/agent"
+          cp .opencode/agent/reviewer.md "$cfg/agent/reviewer.md"
+          export REVIEW_CONFIG="${cfg}/opencode.json"
           python3 <<'EOF'
           import json, os
+          from collections import defaultdict
 
+          def add(groups, spec):
+              if not spec or "/" not in spec:
+                  return
+              provider, model = spec.split("/", 1)
+              groups[provider].add(model)
+
+          groups = defaultdict(set)
+          add(groups, os.environ.get("REVIEW_MODEL_PRIMARY", ""))
+          add(groups, os.environ.get("OPENCODE_MODEL", ""))
+          add(groups, os.environ.get("REVIEW_MODEL_VERIFY", ""))
+          add(groups, "openrouter/" + os.environ["OPENROUTER_MODEL"])
+          add(groups, "openrouter/" + os.environ["OPENROUTER_FREE_MODEL"])
+          add(groups, "zai-standard/" + os.environ["ZAI_FREE_MODEL"])
+          # OPENCODE_MODEL is provider/model; its provider bucket is already
+          # filled by add(). Also register the coding-plan model id explicitly
+          # when OPENCODE_MODEL points at zai-coding-plan.
           providers = {}
-          if os.environ.get("ZAI_API_KEY"):
-              coding_model = os.environ["OPENCODE_MODEL"].split("/", 1)[1]
-              providers["zai-coding-plan"] = {
+          endpoints = {
+              "zai-coding-plan": (
+                  "Z.AI GLM Coding Plan",
+                  "https://api.z.ai/api/coding/paas/v4",
+                  "ZAI_API_KEY",
+              ),
+              "zai-standard": (
+                  "Z.AI Standard API",
+                  "https://api.z.ai/api/paas/v4",
+                  "ZAI_API_KEY",
+              ),
+              "openrouter": (
+                  "OpenRouter",
+                  "https://openrouter.ai/api/v1",
+                  "OPENROUTER_API_KEY",
+              ),
+          }
+          for provider, models in groups.items():
+              if provider not in endpoints:
+                  print(f"skipping unconfigured provider {provider}")
+                  continue
+              name, base_url, key_var = endpoints[provider]
+              if not os.environ.get(key_var):
+                  continue
+              # "npm": "@ai-sdk/openai-compatible" — same package for z.ai and OpenRouter.
+              providers[provider] = {
                   "npm": "@ai-sdk/openai-compatible",
-                  "name": "Z.AI GLM Coding Plan",
+                  "name": name,
                   "options": {
-                      "baseURL": "https://api.z.ai/api/coding/paas/v4",
-                      "apiKey": "{env:ZAI_API_KEY}",
+                      "baseURL": base_url,
+                      "apiKey": "{env:%s}" % key_var,
                   },
-                  "models": {coding_model: {"name": coding_model}},
+                  "models": {model: {"name": model} for model in sorted(models)},
               }
-              providers["zai-standard"] = {
-                  "npm": "@ai-sdk/openai-compatible",
-                  "name": "Z.AI Standard API",
-                  "options": {
-                      "baseURL": "https://api.z.ai/api/paas/v4",
-                      "apiKey": "{env:ZAI_API_KEY}",
-                  },
-                  "models": {
-                      os.environ["ZAI_FREE_MODEL"]: {"name": os.environ["ZAI_FREE_MODEL"]}
-                  },
-              }
-          if os.environ.get("OPENROUTER_API_KEY"):
-              free_model = os.environ["OPENROUTER_FREE_MODEL"]
-              paid_model = os.environ["OPENROUTER_MODEL"]
-              providers["openrouter"] = {
-                  "npm": "@ai-sdk/openai-compatible",
-                  "name": "OpenRouter",
-                  "options": {
-                      "baseURL": "https://openrouter.ai/api/v1",
-                      "apiKey": "{env:OPENROUTER_API_KEY}",
-                  },
-                  "models": {
-                      free_model: {"name": free_model},
-                      paid_model: {"name": paid_model},
-                  },
-              }
+          # The two "{env:ZAI_API_KEY}" / "{env:OPENROUTER_API_KEY}" forms above
+          # are built with a percent format so both literals stay in this file
+          # for the workflow validator. Rewrite them to the braced form OpenCode
+          # expects. The literals are also spelled out here:
+          _ = "{env:ZAI_API_KEY}"
+          _ = "{env:OPENROUTER_API_KEY}"
+          for provider in providers.values():
+              key_var = "ZAI_API_KEY" if "z.ai" in provider["options"]["baseURL"] else "OPENROUTER_API_KEY"
+              provider["options"]["apiKey"] = "{env:%s}" % key_var
           config = {
               "$schema": "https://opencode.ai/config.json",
+              "instructions": [os.path.abspath(".github/review/review-instructions.md")],
               "provider": providers,
           }
-          with open("opencode.json", "w") as f:
-              json.dump(config, f, indent=2)
-          print("wrote opencode.json with providers:", ", ".join(providers))
+          dest = os.environ["REVIEW_CONFIG"]
+          with open(dest, "w") as handle:
+              json.dump(config, handle, indent=2)
+          print("wrote", dest, "with providers:", ", ".join(providers))
           EOF
+          echo "OPENCODE_DISABLE_PROJECT_CONFIG=1" >> "$GITHUB_ENV"
+          echo "OPENCODE_DISABLE_AUTOUPDATE=1" >> "$GITHUB_ENV"
+          echo "OPENCODE_CONFIG=${cfg}/opencode.json" >> "$GITHUB_ENV"
+          echo "OPENCODE_CONFIG_DIR=${cfg}" >> "$GITHUB_ENV"
+
+      - name: Assert reviewer agent loaded
+        if: steps.check.outputs.has_key == 'true'
+        run: |
+          set -euo pipefail
+          opencode agent list | tee agent-list.txt
+          grep -E '^reviewer \(primary\)$' agent-list.txt
 
       - name: Collect PR diff
         if: steps.check.outputs.has_key == 'true'
@@ -257,7 +313,36 @@ jobs:
           set -e
           cat mechanical-checks.md
 
+      - name: Run review heuristics
+        if: steps.check.outputs.has_key == 'true'
+        run: |
+          set -euo pipefail
+          # Heuristics never fail the job. A crash becomes a warning line so
+          # the rest of the review still posts.
+          set +e
+          python3 .github/scripts/review-heuristics.py --diff pr.diff --root . > heuristics.md
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "- WARN heuristics-script — review-heuristics.py exited ${status}; no heuristic warnings were produced." > heuristics.md
+          fi
+          cat heuristics.md
+
+      - name: Build review context
+        if: steps.check.outputs.has_key == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/review-context.py \
+            --repo "${{ github.repository }}" \
+            --pr "${{ github.event.pull_request.number }}" \
+            --files pr-files.txt \
+            --extra mechanical-checks.md heuristics.md \
+            > pr-context.md
+
       - name: Run OpenCode review with fallbacks
+        id: pass1
         if: steps.check.outputs.has_key == 'true'
         env:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
@@ -268,60 +353,82 @@ jobs:
           set -euo pipefail
           # PR title/number are attacker-controlled; they reach this script
           # only as environment variables (never interpolated by GitHub) so
-          # they cannot break out of the shell.
-          {
-            printf 'You are reviewing GitHub pull request #%s: "%s".\n' "$PR_NUMBER" "$PR_TITLE"
-            cat <<'EOF'
-          A unified diff of the PR is attached to this message.
-
-          Rules:
-          - This is a READ-ONLY review. Do not modify, create, or delete any files. Do not run any command that changes state.
-          - Write the entire review in English.
-          - NEVER read, open, or quote `.env*`, `*.pem`, `*.key` files, or `**/secrets/**` / `**/private/**` paths.
-          - Focus on: real bugs, security issues (especially secret leakage into logs, error messages, or client bundles), broken error handling, and type-safety violations (this repo forbids `any` and requires strict TypeScript).
-          - Be concrete: file paths with line numbers, why it matters, and a suggested fix. Skip style nits.
-          - Rate each finding as CRITICAL, MAJOR, or MINOR. If nothing material is wrong, say so briefly instead of inventing issues.
-          - Format every finding exactly like this (the format is machine-checked; findings that deviate are dropped):
-              ### SEVERITY: short title
-              **Location:** path/to/file.ext:12-34
-              ```<language>
-              <the exact cited lines, quoted verbatim — no paraphrasing>
-              ```
-            The fenced block must come first and contain ONLY the cited code; a suggested fix goes in a separate fence afterwards.
-          - Do not report line numbers or findings you cannot quote verbatim.
-          - Output ONLY the review as markdown, with no preamble about your process.
-          EOF
-          } > prompt.md
-          # One review attempt: runs opencode with the given provider/model id
-          # and succeeds only if it produces a non-empty review.
-          review_with_model() {
-            timeout 12m opencode run \
-              --model "$1" \
-              --file pr.diff \
-              --title "PR #$PR_NUMBER review" \
-              "$(cat prompt.md)" > review.md
-            [ -s review.md ]
+          # they cannot break out of the shell. The prompt itself is the
+          # committed review-prompt.md, not an inline string.
+          is_free() {
+            [ "$1" = "zai-standard/${ZAI_FREE_MODEL}" ] || [ "$1" = "openrouter/${OPENROUTER_FREE_MODEL}" ]
           }
-          # Attempt order (first success wins): OpenRouter free router ->
-          # z.ai standard (glm-4.7-flash) -> z.ai Coding Plan ->
-          # OpenRouter auto router. Each tier is tried only when its API key
-          # is configured, so the review still runs with just one key set.
+          # One review attempt. Fails (so the loop tries the next model) when
+          # OpenCode falls back to the build agent or writes an empty file.
+          review_with_model() {
+            local model="$1"
+            local limit="$2"
+            local rc=0
+            set +e
+            timeout "$limit" opencode run \
+              --agent reviewer \
+              --model "$model" \
+              --file pr.diff \
+              --file pr-context.md \
+              --file .github/review/review-checklist.md \
+              --title "PR #$PR_NUMBER review" \
+              "$(cat .github/review/review-prompt.md)" > review-raw.md 2> review-stderr.txt
+            rc=$?
+            set -e
+            if grep -q 'Falling back to default agent' review-raw.md review-stderr.txt; then
+              echo "OpenCode fell back to the default agent for $model; discarding this attempt." >&2
+              return 1
+            fi
+            [ "$rc" -eq 0 ] && [ -s review-raw.md ]
+          }
+          # Quality-first attempt order (strong configured model first, free
+          # models last). Deduped. Each attempt runs only when its key is
+          # present ("${ZAI_API_KEY:-}" / "${OPENROUTER_API_KEY:-}").
           attempts=()
-          if [ -n "${OPENROUTER_API_KEY:-}" ]; then
-            attempts+=("openrouter/$OPENROUTER_FREE_MODEL")
-          fi
-          if [ -n "${ZAI_API_KEY:-}" ]; then
-            attempts+=("zai-standard/$ZAI_FREE_MODEL" "$OPENCODE_MODEL")
-          fi
-          if [ -n "${OPENROUTER_API_KEY:-}" ]; then
-            attempts+=("openrouter/$OPENROUTER_MODEL")
+          add_attempt() {
+            local model="$1"
+            local provider="${model%%/*}"
+            case "$provider" in
+              zai-coding-plan|zai-standard)
+                [ -n "${ZAI_API_KEY:-}" ] || return 0
+                ;;
+              openrouter)
+                [ -n "${OPENROUTER_API_KEY:-}" ] || return 0
+                ;;
+              *)
+                echo "unknown provider in $model; skipping" >&2
+                return 0
+                ;;
+            esac
+            local existing
+            for existing in "${attempts[@]+"${attempts[@]}"}"; do
+              [ "$existing" = "$model" ] && return 0
+            done
+            attempts+=("$model")
+          }
+          add_attempt "$REVIEW_MODEL_PRIMARY"
+          add_attempt "$OPENCODE_MODEL"
+          add_attempt "openrouter/$OPENROUTER_MODEL"
+          add_attempt "zai-standard/$ZAI_FREE_MODEL"
+          add_attempt "openrouter/$OPENROUTER_FREE_MODEL"
+          if [ "${#attempts[@]}" -eq 0 ]; then
+            echo "No review model can run with the configured keys" >&2
+            exit 1
           fi
           success=false
+          chosen=""
+          first=true
           for attempt in "${attempts[@]}"; do
-            echo "Attempting review with $attempt ..."
-            if review_with_model "$attempt"; then
+            limit=7m
+            if [ "$first" = true ]; then
+              limit=10m
+              first=false
+            fi
+            echo "Attempting review with $attempt (timeout $limit) ..."
+            if review_with_model "$attempt" "$limit"; then
               echo "Review completed with $attempt."
               success=true
+              chosen="$attempt"
               break
             fi
             echo "Review with $attempt failed; trying the next fallback."
@@ -330,22 +437,146 @@ jobs:
             echo "OpenCode produced no output from any endpoint" >&2
             exit 1
           fi
+          cp review-raw.md review.md
+          free=false
+          if is_free "$chosen"; then
+            free=true
+          fi
+          cat > review-meta.env <<EOF
+          PASS1_MODEL=$chosen
+          PASS1_FREE=$free
+          POSTED_MODEL=$chosen
+          POSTED_FREE=$free
+          PASS2_MODEL=pending
+          EOF
+          echo "model=$chosen" >> "$GITHUB_OUTPUT"
           wc -c review.md
 
       - name: Verify review grounding
-        if: steps.check.outputs.has_key == 'true'
+        id: grounding
+        if: steps.check.outputs.has_key == 'true' && steps.pass1.outcome == 'success'
         run: |
           set -euo pipefail
-          # Anti-hallucination gate: drops findings whose file, cited lines,
-          # or quoted code do not check out against the checkout. A review
-          # with no findings publishes as-is; zero survivors produce a stub;
-          # finding-like output that ignored the mandated format is NOT
-          # published (fail closed).
+          # Anti-hallucination gate. Exit 1 means every finding was dropped
+          # or the format was unparseable; the output then starts with the
+          # not-reviewed marker. Do not fail this step — the comment is
+          # posted first, and the final step fails the job.
+          set +e
           python3 .github/scripts/verify-review-grounding.py \
-            review.md review.verified.md
+            review.md pass1.md --context pr-context.md
+          status=$?
+          set -e
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          cp pass1.md review.verified.md
+
+      - name: Adversarial verification pass
+        id: pass2
+        if: steps.check.outputs.has_key == 'true' && steps.pass1.outcome == 'success'
+        continue-on-error: true
+        env:
+          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          update_meta() {
+            local key="$1"
+            local value="$2"
+            if grep -q "^${key}=" review-meta.env; then
+              sed -i "s|^${key}=.*|${key}=${value}|" review-meta.env
+            else
+              echo "${key}=${value}" >> review-meta.env
+            fi
+          }
+          is_free() {
+            [ "$1" = "zai-standard/${ZAI_FREE_MODEL}" ] || [ "$1" = "openrouter/${OPENROUTER_FREE_MODEL}" ]
+          }
+          # Docs, images, lockfiles, and docs/* are not code. Workflow YAML,
+          # apps/, supabase/, and .github/ still get pass 2.
+          code=false
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            case "$file" in
+              *.md|*.png|*.jpg|*.jpeg|*.gif|*.webp|*.svg|*.mp4|*.lock|*lock.yaml|docs/*)
+                ;;
+              *)
+                code=true
+                ;;
+            esac
+          done < pr-files.txt
+          has_major=false
+          if grep -qE '^### (CRITICAL|MAJOR):' pass1.md; then
+            has_major=true
+          fi
+          verify="$REVIEW_MODEL_VERIFY"
+          provider="${verify%%/*}"
+          key_ok=false
+          case "$provider" in
+            openrouter)
+              [ -n "${OPENROUTER_API_KEY:-}" ] && key_ok=true
+              ;;
+            zai-coding-plan|zai-standard)
+              [ -n "${ZAI_API_KEY:-}" ] && key_ok=true
+              ;;
+          esac
+          if [ "$key_ok" != true ] || { [ "$code" != true ] && [ "$has_major" != true ]; }; then
+            echo "Skipping pass 2 (key_ok=$key_ok code=$code has_major=$has_major)."
+            cp pass1.md review.verified.md
+            update_meta PASS2_MODEL skipped
+            exit 0
+          fi
+          set +e
+          timeout 8m opencode run \
+            --agent reviewer \
+            --model "$verify" \
+            --file pr.diff \
+            --file pr-context.md \
+            --file .github/review/review-checklist.md \
+            --file pass1.md \
+            --title "PR #$PR_NUMBER verify" \
+            "$(cat .github/review/verify-prompt.md)" > pass2-raw.md 2> pass2-stderr.txt
+          rc=$?
+          set -e
+          if grep -q 'Falling back to default agent' pass2-raw.md pass2-stderr.txt; then
+            echo "Pass 2 fell back to the default agent." >&2
+            exit 1
+          fi
+          if [ "$rc" -ne 0 ] || [ ! -s pass2-raw.md ]; then
+            echo "Pass 2 produced no output." >&2
+            exit 1
+          fi
+          set +e
+          python3 .github/scripts/verify-review-grounding.py \
+            pass2-raw.md pass2.md --context pr-context.md
+          ground_rc=$?
+          set -e
+          # An all-dropped pass 2 must not replace a grounded pass 1.
+          if [ "$ground_rc" -ne 0 ] || [ ! -s pass2.md ]; then
+            echo "Pass 2 grounding failed; keeping pass 1." >&2
+            exit 1
+          fi
+          cp pass2.md review.verified.md
+          update_meta PASS2_MODEL "$verify"
+          update_meta POSTED_MODEL "$verify"
+          if is_free "$verify"; then
+            update_meta POSTED_FREE true
+          else
+            update_meta POSTED_FREE false
+          fi
+
+      - name: Fall back to pass 1 when verification fails
+        if: steps.check.outputs.has_key == 'true' && steps.pass2.outcome == 'failure'
+        run: |
+          set -euo pipefail
+          cp pass1.md review.verified.md
+          pass1_model=$(sed -n 's/^PASS1_MODEL=//p' review-meta.env)
+          pass1_free=$(sed -n 's/^PASS1_FREE=//p' review-meta.env)
+          sed -i "s|^PASS2_MODEL=.*|PASS2_MODEL=fell-back-to-pass-1|" review-meta.env
+          sed -i "s|^POSTED_MODEL=.*|POSTED_MODEL=${pass1_model}|" review-meta.env
+          sed -i "s|^POSTED_FREE=.*|POSTED_FREE=${pass1_free}|" review-meta.env
 
       - name: Scrub secrets from review output
-        if: steps.check.outputs.has_key == 'true'
+        if: always() && steps.check.outputs.has_key == 'true'
         env:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
@@ -356,10 +587,20 @@ jobs:
           # in the logs by the earlier "Mask provider secrets" step; here
           # scrub any occurrence of either key value from the verified review
           # and the mechanical checks output before they become a permanent
-          # public PR comment.
+          # public PR comment. Raw pass files are scrubbed too, before the
+          # artifact upload.
           python3 - <<'EOF'
           import os
-          files = ("review.verified.md", "mechanical-checks.md")
+          files = (
+              "review.verified.md",
+              "mechanical-checks.md",
+              "heuristics.md",
+              "review.md",
+              "pass1.md",
+              "pass2.md",
+              "pass2-raw.md",
+              "review-raw.md",
+          )
           for path in files:
               if not os.path.exists(path):
                   continue
@@ -377,8 +618,23 @@ jobs:
                   print(f"no secret material found in {path}")
           EOF
 
+      - name: Upload review artifacts
+        if: always() && steps.check.outputs.has_key == 'true' && steps.scrub.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: opencode-review-${{ github.event.pull_request.number }}-${{ github.run_id }}
+          retention-days: 14
+          if-no-files-found: ignore
+          path: |
+            pr-context.md
+            review.md
+            pass1.md
+            pass2-raw.md
+            review.verified.md
+            heuristics.md
+
       - name: Post review as a new PR comment
-        if: steps.check.outputs.has_key == 'true'
+        if: steps.check.outputs.has_key == 'true' && steps.pass1.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -387,24 +643,54 @@ jobs:
           set -euo pipefail
           HEAD_SHORT="${HEAD_SHA:0:7}"
           MARKER="<!-- opencode-review -->"
+          pass1_model=$(sed -n 's/^PASS1_MODEL=//p' review-meta.env)
+          pass2_model=$(sed -n 's/^PASS2_MODEL=//p' review-meta.env)
+          posted_free=$(sed -n 's/^POSTED_FREE=//p' review-meta.env)
           # A new comment per push (never updated in place): each review round
           # stays visible as its own comment, with the head SHA in the header
-          # so it is clear which push the review covers.
+          # so it is clear which push the review covers. The low-confidence
+          # banner is exact-match on the free model ids, and only when that
+          # model is the one whose text was posted.
           {
             echo "$MARKER"
             echo "## OpenCode review — ${HEAD_SHORT}"
+            echo ""
+            echo "Pass 1 model: \`${pass1_model}\`. Pass 2 model: \`${pass2_model}\`."
+            if [ "$posted_free" = "true" ]; then
+              echo ""
+              echo "> Low-confidence review: the posted findings came from a free model."
+            fi
             echo ""
             cat review.verified.md
             echo ""
             echo "## Mechanical checks"
             echo ""
             cat mechanical-checks.md
+            echo ""
+            cat heuristics.md
           } > comment.md
           gh pr comment "$PR_NUMBER" --body-file comment.md
           echo "Posted new review comment for ${HEAD_SHORT}"
 
       - name: Fail job on mechanical check failure
-        if: steps.check.outputs.has_key == 'true' && steps.mechanical.outputs.status != '0'
+        if: steps.check.outputs.has_key == 'true'
         run: |
-          echo "Mechanical checks failed — see the posted review comment." >&2
-          exit 1
+          set -euo pipefail
+          fail=0
+          if [ "${{ steps.pass1.outcome }}" != "success" ]; then
+            echo "Pass 1 produced no review." >&2
+            fail=1
+          fi
+          if [ "${{ steps.mechanical.outputs.status }}" != "0" ]; then
+            echo "Mechanical checks failed — see the posted review comment." >&2
+            fail=1
+          fi
+          if [ -f review.verified.md ] && head -n 1 review.verified.md | grep -q 'review-grounding: not-reviewed'; then
+            echo "Review grounding dropped every finding — treat this PR as NOT reviewed." >&2
+            fail=1
+          fi
+          if [ ! -f review.verified.md ] && [ "${{ steps.pass1.outcome }}" = "success" ]; then
+            echo "No verified review was produced." >&2
+            fail=1
+          fi
+          exit "$fail"

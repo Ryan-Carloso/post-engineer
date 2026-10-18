@@ -6,10 +6,10 @@ Run: python3 .github/scripts/validate-opencode-review.py
 Guards the design decisions of the OpenCode review workflow:
 - direct `opencode run` (verified against the installed CLI: there is no
   --standalone flag), no third-party wrapper
-- review chain (free-first, paid last resort): OpenRouter free router
-  (openrouter/free) -> z.ai standard (glm-4.7-flash) -> z.ai Coding Plan ->
-  OpenRouter paid pinned to z-ai/glm-5.3-flash; glm-4.5-flash was dropped
-  from the chain
+- review chain (quality-first, free models last): REVIEW_MODEL_PRIMARY ->
+  OPENCODE_MODEL -> OpenRouter paid (z-ai/glm-5.3-flash) -> z.ai standard
+  (glm-4.7-flash) -> OpenRouter free router (openrouter/free);
+  glm-4.5-flash was dropped from the chain
 - OpenRouter free tier uses the special router id (no hardcoded model list
   to rot — same convention as the engine's _PROVIDER_DEFAULT_MODELS), one
   OPENROUTER_API_KEY serving both tiers
@@ -138,34 +138,38 @@ def main() -> int:
         text.count('"npm": "@ai-sdk/openai-compatible"') >= 2,
         "the openrouter provider must use the same npm package as z.ai",
     )
+    # Quality-first: the paid/configured models are registered before either
+    # free model. The free router is the last add_attempt.
+    primary_at = text.find('add_attempt "$REVIEW_MODEL_PRIMARY"')
+    opencode_at = text.find('add_attempt "$OPENCODE_MODEL"')
+    paid_at = text.find('add_attempt "openrouter/$OPENROUTER_MODEL"')
+    zai_free_at = text.find('add_attempt "zai-standard/$ZAI_FREE_MODEL"')
+    free_router_at = text.find('add_attempt "openrouter/$OPENROUTER_FREE_MODEL"')
     check(
-        "attempt order documented: openrouter free -> 4.7 -> coding plan -> openrouter paid",
-        all(
-            marker in text
-            for marker in (
-                "OpenRouter free router ->",
-                "z.ai standard (glm-4.7-flash) -> z.ai Coding Plan ->",
-                "OpenRouter auto router",
-            )
-        ),
-        "the review step comments must pin the four-tier attempt order",
+        "free models are last in the attempt list",
+        0 <= primary_at < opencode_at < paid_at < zai_free_at < free_router_at,
+        "attempt order must be primary, coding plan, openrouter paid, "
+        "zai free, openrouter free",
     )
 
-    # Idea A — grounded findings: the prompt forces a machine-checkable
-    # format (### SEVERITY heading, **Location:** line, verbatim code fence)
-    # and verify-review-grounding.py drops ungrounded findings before posting.
+    # The machine-checked finding format lives in the prompt file, not in
+    # the workflow. Absence of a guard is a finding: the prompt must not
+    # tell the model to skip issues it cannot quote.
+    prompt_path = Path(__file__).resolve().parent.parent / "review" / "review-prompt.md"
+    prompt = prompt_path.read_text()
     check(
         "prompt requires verbatim code quotes",
-        "quote verbatim" in text,
+        "verbatim" in prompt,
         "each finding must quote its cited code verbatim",
     )
     check(
-        "prompt forbids unquotable findings",
-        "cannot quote verbatim" in text,
+        "prompt treats a missing guard as a finding",
+        "absence of code is a finding" in prompt and "cannot quote verbatim" not in prompt,
+        "do not tell the model to drop findings it cannot quote",
     )
     check(
         "prompt defines the machine-checkable finding format",
-        "### SEVERITY:" in text and "**Location:**" in text,
+        "### SEVERITY:" in prompt and "**Location:**" in prompt,
     )
     check(
         "grounding verifier script invoked in workflow",
@@ -285,6 +289,56 @@ def main() -> int:
         "review script unit tests run in CI",
         "pytest .github/scripts/tests" in ci_path.read_text(),
         "the review-workflows job must run the script unit tests",
+    )
+
+    # Reviewer agent, grounding failure, and the scripts that feed the model.
+    check("review runs with the reviewer agent", "--agent reviewer" in text)
+    check(
+        "project config and root AGENTS.md are not loaded",
+        "OPENCODE_DISABLE_PROJECT_CONFIG=1" in text,
+    )
+    check(
+        "reviewer instructions file is referenced",
+        "review-instructions.md" in text,
+    )
+    check(
+        "primary model comes from a repo variable",
+        "vars.REVIEW_MODEL_PRIMARY" in text,
+    )
+    check("heuristic script invoked", "review-heuristics.py" in text)
+    check("review context script invoked", "review-context.py" in text)
+    check(
+        "fully dropped review fails the job after the comment is posted",
+        "review-grounding: not-reviewed" in text
+        and text.index("Post review as a new PR comment")
+        < text.index("Fail job on mechanical check failure")
+        and "review-grounding: not-reviewed"
+        in text[text.index("Fail job on mechanical check failure") :],
+    )
+    upload_uses = [item for item in uses if item.startswith("actions/upload-artifact@")]
+    check(
+        "upload-artifact pinned to a commit SHA",
+        len(upload_uses) == 1
+        and re.fullmatch(r"actions/upload-artifact@[0-9a-f]{40}", upload_uses[0]) is not None,
+        f"upload uses={upload_uses}",
+    )
+    check(
+        "upload-artifact is not a floating tag",
+        not any(item.startswith("actions/upload-artifact@v") for item in uses),
+    )
+
+    root = Path(__file__).resolve().parent.parent.parent
+    agent_text = (root / ".opencode" / "agent" / "reviewer.md").read_text()
+    frontmatter = agent_text.split("---", 2)[1]
+    check(
+        "reviewer agent mode is primary",
+        re.search(r"^mode:\s*primary\s*$", frontmatter, re.M) is not None
+        and "subagent" not in frontmatter,
+    )
+    check(
+        "reviewer denies edit and bash",
+        re.search(r"^  edit:\s*deny\s*$", agent_text, re.M) is not None
+        and re.search(r"^  bash:\s*deny\s*$", agent_text, re.M) is not None,
     )
 
     print()
