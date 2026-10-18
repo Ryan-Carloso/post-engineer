@@ -358,6 +358,18 @@ def _generation_tracking_kwargs(
     return {}
 
 
+def _slot_tracking_kwargs(
+    body: Union[TaskVideoRequest, SubtitleRequest, AudioRequest],
+) -> dict[str, str]:
+    """slot_id for the task row (read back by boot orphan triage). Only
+    TaskVideoRequest carries one; omitted when absent so the row stays
+    free of blank props."""
+    slot_id = getattr(body, "slot_id", None)
+    if isinstance(slot_id, str) and slot_id:
+        return {"slot_id": slot_id}
+    return {}
+
+
 def _generation_id_for_task(task_id: str) -> str | None:
     """Best-effort: resolve the web generation_id for an engine task id.
 
@@ -422,6 +434,7 @@ def create_task(
             # funnel can be broken down per persona instead of "unknown".
             **_persona_tracking_kwargs(body),
             **_generation_tracking_kwargs(body),
+            **_slot_tracking_kwargs(body),
             **task_publish.dispatch_publish_params(body),
         )
         # Funnel entry: requested fires from on_accepted once the task is

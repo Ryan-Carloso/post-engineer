@@ -1333,6 +1333,10 @@ async function postHandler(request: Request): Promise<NextResponse> {
         // events (requested/progress/failed/404) can be joined back to the
         // video_generations row without a database lookup.
         generation_id: slotGenerationId,
+        // The slot id travels to the engine so boot orphan triage can
+        // requeue this task (reset the slot to pending) instead of failing
+        // it when the engine restarts mid-generation.
+        slot_id: slot.id,
         // The per-post "no face" choice reaches the engine as lipsync: the
         // engine's persona_lipsync_active also returns false when no visual is
         // attached, and a faceless job carries no photo_url.

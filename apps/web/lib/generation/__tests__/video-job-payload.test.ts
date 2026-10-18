@@ -54,6 +54,16 @@ describe('buildJobPayload — request allowlist', () => {
     expect(payload).not.toHaveProperty('junk_field');
   });
 
+  it('forwards slot_id so boot orphan triage can requeue web-created tasks', () => {
+    const payload = buildJobPayload(persona(), {
+      video_subject: 'myth busting',
+      generation_id: 'gen-1',
+      slot_id: 'slot-123',
+    });
+    expect(payload.slot_id).toBe('slot-123');
+    expect(payload.generation_id).toBe('gen-1');
+  });
+
   it('warns once with the dropped key names, capped at ten', () => {
     buildJobPayload(persona(), { a: 1, b: 2, c: 3 });
     expect(warn).toHaveBeenCalledTimes(1);

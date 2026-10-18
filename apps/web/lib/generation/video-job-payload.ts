@@ -46,6 +46,10 @@ const REQUEST_FORWARD_FIELDS: ReadonlyArray<string> = [
   // it as the web-side correlation id); it must survive the allowlist so
   // the engine can tag its PostHog events with it.
   'generation_id',
+  // slot_id is a first-class engine field (TaskVideoRequest carries it as
+  // the web-side slot id); it must survive the allowlist so boot orphan
+  // triage can requeue web-created tasks on engine restart.
+  'slot_id',
 ];
 
 export interface JobPersona {
