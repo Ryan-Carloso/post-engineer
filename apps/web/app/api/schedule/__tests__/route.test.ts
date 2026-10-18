@@ -177,7 +177,10 @@ function mockSupabase(handlers: {
                 if (handlers.slotDeleteError) return { error: handlers.slotDeleteError };
                 if (col === 'status' && Array.isArray(vals)) {
                   const drop = new Set(vals.map((value) => String(value)));
-                  liveSlots = liveSlots.filter((row) => !drop.has(String(row.status)));
+                  liveSlots = liveSlots.filter((row) => {
+                    if (typeof row !== 'object' || row === null) return true;
+                    return !drop.has(String(row.status));
+                  });
                 }
                 return { error: null };
               }),
@@ -352,6 +355,25 @@ describe('/api/schedule', () => {
     const res = await DELETE(new Request('http://localhost/api/schedule'));
     expect(res.status).toBe(400);
   });
+
+  it('GET returns 500 when the list query fails', async () => {
+    mockSupabase({ list: { data: null, error: { message: 'list down' } } });
+    const res = await GET();
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('Failed to list schedules.');
+  });
+
+  it('DELETE returns the auth error without touching the schedule', async () => {
+    const db = mockSupabase({});
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: null,
+      error: NextResponse.json({ success: false }, { status: 401 }),
+    });
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+    expect(res.status).toBe(401);
+    expect(db.deleteCalls).toEqual([]);
+  });
 });
 
 describe('/api/schedule persona scoping (scoped API keys)', () => {
@@ -460,6 +482,18 @@ describe('/api/schedule persona scoping (scoped API keys)', () => {
     });
     const res = await DELETE(new Request('http://localhost/api/schedule?id=s-missing', { method: 'DELETE' }));
     expect(res.status).toBe(404);
+  });
+
+  it('DELETE returns 500 when the scope lookup fails for a reason other than not found', async () => {
+    const db = mockSupabase({
+      current: { data: null, error: { code: '57014', message: 'timeout' } },
+    });
+    vi.mocked(requireSupabaseSession).mockResolvedValue(SCOPED_AUTH as never);
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1', { method: 'DELETE' }));
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('Failed to fetch schedule.');
+    expect(db.deleteCalls).toEqual([]);
   });
 });
 
@@ -647,6 +681,42 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
     expect(res.status).toBe(200);
     expect(refundCalls(db).map((params) => params.p_amount)).toEqual([2]);
     expect(refundCalls(db).map((params) => params.p_batch_generation_id)).toEqual(['batch:s-orphan']);
+  });
+
+  it('skips slot rows that cannot be read and still refunds the readable ones', async () => {
+    const db = mockSupabase({
+      scheduleSlots: [
+        null,
+        { id: '', status: 'generating', faceless: false, task_id: 'task-empty' },
+        { id: 'slot-bad-status', faceless: false, task_id: 'task-x' },
+        { id: 'slot-bad-task', status: 'generating', faceless: false, task_id: 12 },
+        { id: 'slot-good', status: 'ready', faceless: 'yes', task_id: 'task-good' },
+      ],
+    });
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { cancelledSlotIds: string[] };
+    expect(body.cancelledSlotIds).toEqual(['slot-good']);
+    expect(refundCalls(db).map((params) => params.p_amount)).toEqual([2]);
+    expect(logger.error).toHaveBeenCalledWith(
+      '[api/schedule] cancel skipped a slot row that could not be read',
+      expect.objectContaining({ scheduleId: 's-1', userId: USER_ID }),
+    );
+  });
+
+  it('logs an RPC refund error and still deletes the schedule', async () => {
+    const db = mockSupabase({
+      scheduleSlots: [{ id: 'slot-g', status: 'generating', faceless: false, task_id: 'task-g' }],
+      rpc: { refundBatch: { data: null, error: { message: 'rpc down' } } },
+    });
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+    expect(res.status).toBe(200);
+    expect(logger.error).toHaveBeenCalledWith(
+      '[api/schedule] cancel refund failed',
+      { message: 'rpc down' },
+      expect.objectContaining({ scheduleId: 's-1', slotId: 'slot-g', userId: USER_ID }),
+    );
+    expect(db.deleteCalls.map((call) => call.table)).toContain('schedules');
   });
 
   it('reports a schedule-row delete failure after the slots are already gone', async () => {
