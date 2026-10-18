@@ -10,6 +10,7 @@ import os
 import sqlite3
 import tempfile
 import unittest
+from contextlib import contextmanager
 from unittest.mock import patch
 
 from botocore.exceptions import ClientError
@@ -276,6 +277,57 @@ class SvgSearchModeTests(unittest.TestCase):
         with patch.object(svg_catalog, "_semantic_models_available", return_value=False):
             with patch.object(svg_catalog.config, "app", {"svg_search_mode": "texto"}):
                 self.assertEqual(svg_catalog._search_mode(), "texto")
+
+
+class R2ClientCredentialTests(unittest.TestCase):
+    """The R2 client builder never leaks credential values.
+
+    A missing account id fails fast with a message that names the variable,
+    not its value; the key id and secret are passed to boto3 but never appear
+    in any error text or log line this module produces.
+    """
+
+    @staticmethod
+    @contextmanager
+    def _isolated_environ(overrides):
+        # Same mutmut-safe pattern as test_video_storage._isolated_environ:
+        # behave like patch.dict(clear=True) without wiping MUTANT_UNDER_TEST.
+        sentinel = os.environ.get("MUTANT_UNDER_TEST")
+        with patch.dict(os.environ, overrides, clear=True):
+            if sentinel is not None:
+                os.environ["MUTANT_UNDER_TEST"] = sentinel
+            yield
+
+    def test_missing_account_id_raises_without_credential_values(self):
+        key_id = "AKIAIOSFODNN7EXAMPLE"
+        secret = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+        with self._isolated_environ(
+            {"R2_ACCESS_KEY_ID": key_id, "R2_SECRET_ACCESS_KEY": secret}
+        ):
+            with self.assertRaises(ValueError) as ctx:
+                svg_catalog._r2_client()
+        message = str(ctx.exception)
+        self.assertNotIn(key_id, message)
+        self.assertNotIn(secret, message)
+        self.assertIn("R2_ACCOUNT_ID", message)
+
+    def test_client_points_at_the_account_r2_endpoint(self):
+        import boto3
+
+        with patch.dict(
+            os.environ,
+            {
+                "R2_ACCOUNT_ID": "acct123",
+                "R2_ACCESS_KEY_ID": "k",
+                "R2_SECRET_ACCESS_KEY": "s",
+            },
+        ), patch.object(boto3, "client") as mock_client:
+            svg_catalog._r2_client()
+        _, kwargs = mock_client.call_args
+        self.assertEqual(
+            kwargs["endpoint_url"], "https://acct123.r2.cloudflarestorage.com"
+        )
+        self.assertEqual(kwargs["region_name"], "auto")
 
 
 if __name__ == "__main__":

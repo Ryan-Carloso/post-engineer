@@ -3,7 +3,7 @@ import hashlib
 import os
 import subprocess
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from app.models.schema import MaterialInfo, VideoAspect
 from app.services import material, svg_material
@@ -285,6 +285,51 @@ class BuildSearchVideosSvgRoutingTests(unittest.TestCase):
         ):
             resolved = material._build_search_videos("pexels", None, ["svg", "pexels"])
             self.assertEqual(resolved("money", 3), [])
+
+
+class RenderImageFileToMp4ErrorTests(unittest.TestCase):
+    """The still-to-clip error paths return "" instead of raising.
+
+    These pin the cleanup contract: the finally block must tolerate a clip
+    that was never constructed (the original UnboundLocalError), so an
+    unreadable image can never crash the material phase.
+    """
+
+    @patch("app.services.video._open_image_clip_with_fallback")
+    def test_unreadable_image_returns_empty(self, mock_open):
+        from app.services import image_material
+
+        mock_open.side_effect = OSError("no such file")
+        self.assertEqual(image_material.render_image_file_to_mp4("/nope.png"), "")
+
+    @patch("app.services.video._open_image_clip_with_fallback")
+    @patch("app.services.video.close_clip")
+    def test_tiny_image_returns_empty(self, mock_close, mock_open):
+        from app.services import image_material
+
+        probe = Mock()
+        probe.size = (100, 100)
+        mock_open.return_value = (probe,)
+        self.assertEqual(image_material.render_image_file_to_mp4("/tiny.png"), "")
+        mock_close.assert_called_with(probe)
+
+    @patch("app.services.image_material.ImageClip")
+    @patch("app.services.video._open_image_clip_with_fallback")
+    @patch("app.services.video.close_clip")
+    def test_clip_construction_failure_returns_empty(
+        self, mock_close, mock_open, mock_clip_class
+    ):
+        from app.services import image_material
+
+        probe = Mock()
+        probe.size = (800, 600)
+        mock_open.return_value = (probe,)
+        # ImageClip raises before assignment: the finally block must not
+        # raise UnboundLocalError for the unbound `clip`/`final_clip` names.
+        mock_clip_class.side_effect = RuntimeError("broken image")
+        self.assertEqual(image_material.render_image_file_to_mp4("/bad.png"), "")
+        # The probe handle is still released.
+        mock_close.assert_any_call(probe)
 
 
 if __name__ == "__main__":

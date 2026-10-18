@@ -84,6 +84,12 @@ def is_enabled() -> bool:
 
     Opt-in and off by default: without the flag there is no SVG. When the flag
     is on, the R2 prefix is required and a missing one raises (fail fast).
+
+    Raises:
+        ValueError: when ``svg_catalog_enabled`` is true but ``svg_r2_prefix``
+            is not set. This is deliberate: a deployment that opts into SVG
+            without pointing at a catalog must fail loudly, never silently
+            fall back to the stock providers.
     """
     if not _config_bool("svg_catalog_enabled", False):
         return False
