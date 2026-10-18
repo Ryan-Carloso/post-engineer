@@ -136,6 +136,11 @@ class BatchPublisher:
                     "video refunded",
                 )
                 continue
+            # Initialized before the try: the except handler below reads it
+            # to attribute the publish_provider_failed event. Without this,
+            # a failure in read_final_video_r2 would leave a stale value
+            # from a previous slot's loop.
+            provider: str | None = None
             try:
                 video_bytes = video_storage.read_final_video_r2(object_path)
                 for video_path in videos:
@@ -183,15 +188,17 @@ class BatchPublisher:
                 # event in app.services.task_publish. `provider` is the
                 # innermost loop variable; it may be unbound if
                 # read_final_video_r2 raised before the loop started.
-                failed_provider = locals().get("provider")
                 track_event(
                     "publish_provider_failed",
                     {
                         **_publish_tracking_context(slot, schedule),
-                        "provider": str(failed_provider) if failed_provider else "unknown",
+                        "provider": str(provider) if provider else "unknown",
                         "status_code": getattr(exc, "status_code", None),
-                        "response_body": (getattr(exc, "response_body", None) or "")[:500],
+                        "response_body": scrub_error_text(
+                            getattr(exc, "response_body", None) or "", max_chars=500
+                        ),
                     },
+                    immediate=True,
                 )
                 attempts = int(slot.get("publish_attempts") or 0) + 1
                 if attempts >= MAX_PUBLISH_ATTEMPTS:

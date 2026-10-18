@@ -86,25 +86,42 @@ def test_track_event_redacts_secrets():
             assert "sk-x" not in str(props)
 
 
-def test_track_event_flushes_after_capture():
-    # The client batches by default; a lone event (e.g. a publish failure)
-    # would sit in the queue. track_event flushes so it arrives immediately.
+def test_track_event_does_not_flush_by_default():
+    # Hot paths stay batched: flush() blocks until the queue drains, so it
+    # is opt-in via immediate=True only.
     with mock.patch.dict(os.environ, {"POSTHOG_API_KEY": "phc_test_key"}):
         with mock.patch("posthog.Posthog") as mock_cls:
             instance = mock_cls.return_value
-            analytics.track_event("publish_provider_failed", {"provider": "youtube"})
+            analytics.track_event("video_progress", {"percent": 50})
+            instance.capture.assert_called_once()
+            instance.flush.assert_not_called()
+
+
+def test_track_event_flushes_when_immediate():
+    # A lone event (e.g. a publish failure with nothing after it) would sit
+    # in the client's batch queue; immediate=True flushes it right away.
+    with mock.patch.dict(os.environ, {"POSTHOG_API_KEY": "phc_test_key"}):
+        with mock.patch("posthog.Posthog") as mock_cls:
+            instance = mock_cls.return_value
+            analytics.track_event(
+                "publish_provider_failed", {"provider": "youtube"}, immediate=True
+            )
             instance.capture.assert_called_once()
             instance.flush.assert_called_once()
 
 
 def test_track_event_flush_failure_never_raises():
     # Telemetry must never break the request path, even if flush throws.
+    # The event was still captured before the flush attempt.
     with mock.patch.dict(os.environ, {"POSTHOG_API_KEY": "phc_test_key"}):
         with mock.patch("posthog.Posthog") as mock_cls:
             instance = mock_cls.return_value
             instance.flush.side_effect = RuntimeError("flush down")
             # Must not raise.
-            analytics.track_event("publish_provider_failed", {"provider": "youtube"})
+            analytics.track_event(
+                "publish_provider_failed", {"provider": "youtube"}, immediate=True
+            )
+            instance.capture.assert_called_once()
 
 
 def test_track_event_never_raises_on_capture_failure():

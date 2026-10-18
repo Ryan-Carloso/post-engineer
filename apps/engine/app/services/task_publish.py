@@ -33,7 +33,7 @@ from app.models.schema import TaskVideoRequest
 from app.services import state as sm
 from app.services import upload_publisher
 from app.services import video_storage
-from app.services.analytics import track_event
+from app.services.analytics import scrub_error_text, track_event
 from app.services.notify import partial_publish_msg, send_discord
 
 BASE_URL_ENV: str = "MPT_UPLOAD_API_BASE_URL"
@@ -227,8 +227,11 @@ def publish_videos(
                         "user_id": owner,
                         "provider": provider,
                         "status_code": exc.status_code,
-                        "response_body": (exc.response_body or "")[:500],
+                        "response_body": scrub_error_text(
+                            exc.response_body or "", max_chars=500
+                        ),
                     },
+                    immediate=True,
                 )
                 results.append(
                     {

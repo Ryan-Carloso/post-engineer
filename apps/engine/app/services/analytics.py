@@ -230,11 +230,19 @@ def warm_client() -> None:
     _get_client()
 
 
-def track_event(event_name: str, properties: dict[str, Any] | None = None) -> None:
+def track_event(
+    event_name: str,
+    properties: dict[str, Any] | None = None,
+    immediate: bool = False,
+) -> None:
     """Track a product-analytics event.
 
     event_name should be snake_case. properties carries safe context only:
     ids, counts, validated enums — never credentials or raw bodies.
+    Set immediate=True to flush right after capture: the client batches by
+    default, so a lone event (e.g. a publish failure with nothing after it)
+    would otherwise sit in the queue. Leave False on hot paths — flush()
+    blocks until the queue drains.
     """
     try:
         client = _get_client()
@@ -262,10 +270,8 @@ def track_event(event_name: str, properties: dict[str, Any] | None = None) -> No
             event=event_name,
             properties=props,
         )
-        # Flush immediately: the client batches by default, and a lone
-        # event (e.g. a publish failure with nothing after it) would
-        # otherwise sit in the queue instead of reaching PostHog.
-        client.flush()
+        if immediate:
+            client.flush()
     except Exception:  # noqa: BLE001 - telemetry must never break
         pass
 
