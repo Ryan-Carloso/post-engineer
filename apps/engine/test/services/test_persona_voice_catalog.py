@@ -25,7 +25,7 @@ class TestHouseVoiceCatalog(unittest.TestCase):
             persona_service.voice_service, "get_chatterbox_voices", return_value=CHATTERBOX_VOICES
         ):
             with patch.object(
-                persona_service.voice_service, "get_openrouter_voices", return_value=[]
+                persona_service, "get_openrouter_voices", return_value=[]
             ):
                 result = persona_service.get_house_voices()
 
@@ -36,7 +36,7 @@ class TestHouseVoiceCatalog(unittest.TestCase):
             persona_service.voice_service, "get_chatterbox_voices", return_value=CHATTERBOX_VOICES
         ):
             with patch.object(
-                persona_service.voice_service, "get_openrouter_voices", return_value=OPENROUTER_VOICES
+                persona_service, "get_openrouter_voices", return_value=OPENROUTER_VOICES
             ):
                 result = persona_service.get_house_voices()
 
@@ -50,7 +50,7 @@ class TestHouseVoiceCatalog(unittest.TestCase):
             persona_service.voice_service, "get_chatterbox_voices", return_value=[]
         ):
             with patch.object(
-                persona_service.voice_service, "get_openrouter_voices", return_value=OPENROUTER_VOICES
+                persona_service, "get_openrouter_voices", return_value=OPENROUTER_VOICES
             ):
                 result = persona_service.get_house_voices()
 
@@ -63,7 +63,7 @@ class TestHouseVoiceCatalog(unittest.TestCase):
             persona_service.voice_service, "get_chatterbox_voices", return_value=CHATTERBOX_VOICES
         ):
             with patch.object(
-                persona_service.voice_service, "get_openrouter_voices", return_value=OPENROUTER_VOICES
+                persona_service, "get_openrouter_voices", return_value=OPENROUTER_VOICES
             ):
                 result = persona_service.get_house_voices()
 
@@ -74,12 +74,15 @@ class TestHouseVoiceCatalog(unittest.TestCase):
         """A models-API outage must degrade to Chatterbox, not to an empty
         picker: an empty catalog looks like the operator has no voices at all,
         and the UI cannot tell "none configured" from "temporarily unreachable"."""
-        voices = persona_service.voice_service
-        with patch.object(voices.config, "openrouter", {"api_key": "or-key", "models": ["x-ai/grok-voice-tts-1.0"]}):
-            voices._openrouter_voice_cache.clear()
-            with patch("app.services.voice.requests.get") as mock_get:
+        from app.services import openrouter_tts as or_tts
+
+        with patch.object(or_tts.config, "openrouter", {"api_key": "or-key", "models": ["x-ai/grok-voice-tts-1.0"]}):
+            or_tts._openrouter_voice_cache.clear()
+            with patch("app.services.openrouter_tts.requests.get") as mock_get:
                 mock_get.side_effect = RuntimeError("boom")
-                with patch.object(voices, "get_chatterbox_voices", return_value=CHATTERBOX_VOICES):
+                with patch.object(
+                    persona_service.voice_service, "get_chatterbox_voices", return_value=CHATTERBOX_VOICES
+                ):
                     result = persona_service.get_house_voices()
 
         self.assertEqual(result, [{"id": voice} for voice in CHATTERBOX_VOICES])

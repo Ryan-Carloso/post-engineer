@@ -30,6 +30,7 @@ import pytest
 APP = Path(__file__).resolve().parents[2] / "app"
 VOICE = APP / "services" / "voice.py"
 VOICE_PROVIDERS = APP / "services" / "voice_providers.py"
+OPENROUTER_TTS = APP / "services" / "openrouter_tts.py"
 
 # Symbols that belong to a removed provider. Each one is a function or guard
 # that only existed to reach that provider.
@@ -158,13 +159,13 @@ class TestRemainingProviders:
             for child in ast.walk(tts_node)
             if isinstance(child, ast.Call) and isinstance(child.func, ast.Name)
         }
-        # OpenRouter is a supported provider alongside the two historical ones;
-        # its own behaviour is covered in test_openrouter_tts.py.
-        assert {"chatterbox_tts", "elevenlabs_tts", "openrouter_tts"} <= called
+        # OpenRouter dispatch lives in app/services/openrouter_tts.py so voice.py
+        # stays under the file-size cap; tts() keeps a single call into it and
+        # the provider behaviour is covered in test_openrouter_tts.py.
+        assert {"chatterbox_tts", "elevenlabs_tts", "dispatch_openrouter_tts"} <= called
         assert "is_no_voice" in called
         assert "is_chatterbox_voice" in called
         assert "is_elevenlabs_voice" in called
-        assert "is_openrouter_voice" in called
         removed = called & {
             "azure_tts_v1",
             "azure_tts_v2",
@@ -174,3 +175,19 @@ class TestRemainingProviders:
             "chatterbox_edge_tts_fallback",
         }
         assert removed == set(), f"tts() still dispatches to {sorted(removed)}"
+
+    def test_openrouter_dispatcher_reaches_the_provider(self):
+        """The thin dispatch in tts() is only honest if the dispatcher it calls
+        actually reaches openrouter_tts."""
+        tree = ast.parse(OPENROUTER_TTS.read_text(encoding="utf-8"))
+        dispatch_node = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "dispatch_openrouter_tts"
+        )
+        called = {
+            child.func.id
+            for child in ast.walk(dispatch_node)
+            if isinstance(child, ast.Call) and isinstance(child.func, ast.Name)
+        }
+        assert "openrouter_tts" in called

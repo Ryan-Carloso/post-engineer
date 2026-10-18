@@ -12,15 +12,13 @@ from moviepy.audio.io.AudioFileClip import AudioFileClip
 from moviepy.video.tools import subtitles
 
 from app.config import config
+from app.services.openrouter_tts import dispatch_openrouter_tts
 from app.services.voice_providers import (
-    OPENROUTER_MODELS_URL,
-    OPENROUTER_VOICE_PREFIX,
     SubMaker,
     TtsResult,
     chatterbox_tts,
     elevenlabs_tts,
     ensure_file_path_exists,
-    openrouter_tts,
     populate_legacy_submaker_with_full_text,
 )
 from app.utils import utils
@@ -115,159 +113,6 @@ def is_elevenlabs_voice(voice_name: str) -> bool:
 
 def is_chatterbox_voice(voice_name: str) -> bool:
     return (voice_name or "").startswith("chatterbox:")
-
-
-def is_openrouter_voice(voice_name: str | None) -> bool:
-    return (voice_name or "").startswith(OPENROUTER_VOICE_PREFIX)
-
-
-def parse_openrouter_voice(voice_name: str) -> tuple[str, str] | None:
-    """Split ``openrouter:<model>:<voice>`` into its two halves.
-
-    The FIRST colon after the provider prefix separates the model from the
-    voice. That is forced by the catalog: 202 of the ~824 speech voices carry a
-    colon of their own (Azure voice ids put the model in a suffix, e.g.
-    ``en-US-Harper:MAI-Voice-2.1``), so a last-colon split would corrupt every
-    one of them.
-
-    The trade-off is a model id containing a colon, which is only OpenRouter's
-    ``:free`` router variant. None of those models publish ``supported_voices``,
-    so they never reach the picker. Returns ``None`` when either half is missing.
-    """
-    if not is_openrouter_voice(voice_name):
-        return None
-    remainder = voice_name[len(OPENROUTER_VOICE_PREFIX):]
-    model, separator, voice = remainder.partition(":")
-    if not separator or not model.strip() or not voice.strip():
-        return None
-    return model.strip(), voice.strip()
-
-
-def openrouter_voice_label(voice_id: str) -> str:
-    """The human-facing part of an OpenRouter voice id.
-
-    The model is kept in the label on purpose: two entries differing only by
-    voice name (``eve`` on Grok, ``Kore`` on Gemini) would otherwise render as
-    two identical rows in the picker.
-    """
-    if not is_openrouter_voice(voice_id):
-        return voice_id
-    return voice_id[len(OPENROUTER_VOICE_PREFIX):]
-
-
-def _configured_openrouter_models() -> list[str]:
-    """The model ids the operator opted into, normalised.
-
-    Accepts a TOML array or a comma-separated string (same tolerance as
-    ``[chatterbox] voices``). An empty list means the provider is not
-    configured, which is what keeps it out of the picker.
-    """
-    models = config.openrouter.get("models", []) or []
-    if isinstance(models, str):
-        models = [part.strip() for part in models.split(",") if part.strip()]
-    result: list[str] = []
-    for model in models:
-        cleaned = str(model).strip()
-        if cleaned and cleaned not in result:
-            result.append(cleaned)
-    return result
-
-
-# Discovered catalogs, keyed by (api_key, models) so a config change is a new
-# key rather than a stale answer. That also means tests need no reset hook.
-_openrouter_voice_cache: dict[tuple[str, tuple[str, ...]], list[str]] = {}
-
-
-def get_openrouter_voices() -> list[str]:
-    """Discover the OpenRouter voices offered to the UI.
-
-    Returns provider-qualified ids (``openrouter:<model>:<voice>``) for the
-    models under ``[openrouter] models``, fetched from the models API. Two
-    deliberate bounds:
-
-    * the models are the operator's choice. OpenRouter's speech catalog is 35
-      models and ~824 model/voice pairs, which no picker should render -- and
-      the models differ in price, language coverage and capability, so the
-      engine must not pick one on the operator's behalf;
-    * an unconfigured provider (no key, or no models) returns ``[]`` and makes
-      no network call at all, which is what keeps it out of the catalog
-      entirely.
-
-    A model with ``supported_voices: null`` (the voice-cloning and prompt-driven
-    ones) is skipped with a warning: it has no voice list to offer, though it
-    stays reachable by passing its id directly.
-    """
-    api_key = config.openrouter.get("api_key", "") or ""
-    models = _configured_openrouter_models()
-    if not api_key or not models:
-        return []
-
-    cache_key = (api_key, tuple(models))
-    cached = _openrouter_voice_cache.get(cache_key)
-    if cached is not None:
-        return cached
-
-    try:
-        response = requests.get(
-            OPENROUTER_MODELS_URL,
-            # Without this filter the payload is every OpenRouter model.
-            params={"output_modalities": "speech"},
-            headers={"Authorization": f"Bearer {api_key}"},
-            timeout=15,
-        )
-        if response.status_code != 200:
-            logger.warning(
-                f"OpenRouter voices fetch failed with status {response.status_code}: "
-                f"{response.text[:200]}"
-            )
-            return []
-        payload = response.json()
-    except Exception as e:
-        logger.warning(f"OpenRouter voices fetch failed: {str(e)}")
-        return []
-
-    entries = payload.get("data") if isinstance(payload, dict) else None
-    if not isinstance(entries, list):
-        logger.warning("OpenRouter voices fetch returned an unexpected payload shape")
-        return []
-
-    # Index model id -> voices, narrowing every entry: one malformed model must
-    # not discard the real voices beside it.
-    voices_by_model: dict[str, list[str]] = {}
-    for entry in entries:
-        if not isinstance(entry, dict):
-            continue
-        model_id = entry.get("id")
-        supported = entry.get("supported_voices")
-        if not isinstance(model_id, str) or not model_id.strip():
-            continue
-        if not isinstance(supported, list):
-            continue
-        voices = [
-            str(voice).strip()
-            for voice in supported
-            if isinstance(voice, str) and voice.strip()
-        ]
-        # Preserve order, drop duplicates.
-        voices_by_model[model_id] = list(dict.fromkeys(voices))
-
-    voices: list[str] = []
-    for model in models:
-        model_voices = voices_by_model.get(model)
-        if not model_voices:
-            # A typo'd id is far likelier than a model that genuinely lists no
-            # voices, and a silently empty picker hides the typo.
-            logger.warning(
-                f"OpenRouter model {model!r} is not a speech model with voices; "
-                "check [openrouter] models in config.toml"
-            )
-            continue
-        voices.extend(
-            f"{OPENROUTER_VOICE_PREFIX}{model}:{voice}" for voice in model_voices
-        )
-
-    _openrouter_voice_cache[cache_key] = voices
-    return voices
 
 
 def is_no_voice(voice_name: str | None) -> bool:
@@ -377,13 +222,8 @@ def tts(
     voice_volume: float = 1.0,
     voice_pitch: str = "",
 ) -> TtsResult:
-    """Synthesize speech and return the outcome with the failure reason.
-
-    Every failure path returns a TtsResult carrying a specific, sanitized
-    `error` instead of None — the caller forwards it to the task failure
-    so the PostHog `video_generation_failed` event names the real cause
-    instead of a generic "voice/subtitle mismatch".
-    """
+    """Synthesize speech. Failures return a TtsResult with a specific, sanitized
+    `error` naming the real cause (forwarded to the task failure for PostHog)."""
     if is_no_voice(voice_name):
         duration_seconds = estimate_no_voice_duration(text)
         if not generate_silent_audio(duration_seconds, voice_file):
@@ -424,38 +264,23 @@ def tts(
         return chatterbox_tts(
             text, chatterbox_voice, voice_file, voice_rate, voice_volume
         )
-    if is_openrouter_voice(voice_name):
-        # Format: openrouter:<model>:<voice>. The model is part of the id
-        # because OpenRouter voices are per-model.
-        parsed = parse_openrouter_voice(voice_name)
-        if parsed is None:
-            logger.error(f"Invalid openrouter voice name format: {voice_name}")
-            return TtsResult(
-                error=(
-                    "invalid OpenRouter voice name (expected "
-                    "'openrouter:<model>:<voice>')"
-                )
-            )
-        model, openrouter_voice = parsed
-        return openrouter_tts(
-            text, model, openrouter_voice, voice_file, voice_rate, voice_volume
-        )
+    routed = dispatch_openrouter_tts(voice_name, text, voice_file, voice_rate, voice_volume)
+    if routed is not None:
+        return routed
 
     # An unrecognised voice id used to fall through to `azure_tts_v1(...)`, which
     # turned every typo into a silent edge-tts request that failed as if it were
     # a network problem. Fail loud instead: the caller picked a voice that no
     # longer exists.
     logger.error(
-        f"unknown voice: {voice_name!r}. Providers are ElevenLabs "
-        "(`elevenlabs:<id>`), Chatterbox (`chatterbox:<name>`) and OpenRouter "
-        f"(`openrouter:<model>:<voice>`); use the explicit {NO_VOICE_NAME!r} "
-        "sentinel for silence."
+        f"unknown voice: {voice_name!r}. Providers are ElevenLabs (`elevenlabs:<id>`), "
+        "Chatterbox (`chatterbox:<name>`) and OpenRouter (`openrouter:<model>:<voice>`); "
+        f"use the explicit {NO_VOICE_NAME!r} sentinel for silence."
     )
     return TtsResult(
         error=(
-            f"unknown voice {voice_name!r}; providers are ElevenLabs "
-            f"('elevenlabs:<id>'), Chatterbox ('chatterbox:<name>') and "
-            f"OpenRouter ('openrouter:<model>:<voice>'); "
+            f"unknown voice {voice_name!r}; providers are ElevenLabs ('elevenlabs:<id>'), "
+            "Chatterbox ('chatterbox:<name>') and OpenRouter ('openrouter:<model>:<voice>'); "
             f"use {NO_VOICE_NAME!r} for silence"
         )
     )

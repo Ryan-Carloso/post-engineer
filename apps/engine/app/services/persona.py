@@ -9,6 +9,7 @@ from typing import Any, Optional
 
 
 from app.services import voice as voice_service
+from app.services.openrouter_tts import get_openrouter_voices
 
 # Short Instagram/TikTok-style video hook used for the house voice
 # preview samples, per language: hook question, then the pitch.
@@ -110,10 +111,10 @@ def get_house_voices() -> list[dict[str, Any]]:
 
     OpenRouter contributes nothing until it is configured (``[openrouter]``
     with both a key and at least one model); see
-    ``voice.get_openrouter_voices`` for the discovery bounds.
+    ``openrouter_tts.get_openrouter_voices`` for the discovery bounds.
     """
     voice_ids = list(voice_service.get_chatterbox_voices())
-    voice_ids.extend(voice_service.get_openrouter_voices())
+    voice_ids.extend(get_openrouter_voices())
     return [{"id": voice_id} for voice_id in voice_ids]
 
 
