@@ -62,7 +62,8 @@ class DeathDiagnosticStateTests(unittest.TestCase):
                 response
                 for _ in orphans
                 for response in (
-                    _response(json_data=[]),  # GET video_generations
+                    _response(json_data=[]),  # GET video_generations (redispatch lookup)
+                    _response(json_data=[]),  # GET video_generations (billing settle)
                     _response(json_data=[{}]),  # PATCH task failed
                 )
             ],

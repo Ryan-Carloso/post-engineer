@@ -243,9 +243,10 @@ class SupabaseStateReconcileTests(unittest.TestCase):
         backend = _make_state(self.requests)
         self.requests.request.side_effect = [
             _response(json_data=orphans),  # SELECT non-terminal rows
-            _response(json_data=[]),  # GET video_generations for t-1: no row
+            _response(json_data=[]),  # GET video_generations for t-1 redispatch: no row
+            _response(json_data=[]),  # GET video_generations for t-1 settle: no row
             _response(json_data=[{}]),  # PATCH t-1 failed
-            _response(json_data=[]),  # GET video_generations for t-2: no row
+            _response(json_data=[]),  # GET video_generations for t-2 settle: no row
             _response(json_data=[{}]),  # PATCH t-2 failed
         ]
         with patch.object(state_module.logger, "warning"):
@@ -255,10 +256,11 @@ class SupabaseStateReconcileTests(unittest.TestCase):
         calls = self.requests.request.call_args_list
         self.assertIn("state=not.in.(-1,1)", calls[0][0][1])
         # Billing settles before the terminal task PATCH, per task:
-        # [SELECT, GET gen t-1, PATCH t-1, GET gen t-2, PATCH t-2]
+        # [SELECT, GET redispatch t-1, GET settle t-1, PATCH t-1,
+        #  GET settle t-2, PATCH t-2] (t-2 has no stage: no redispatch lookup)
         self.assertEqual(calls[1][0][0], "GET")
         self.assertIn("video_generations", calls[1][0][1])
-        for i, task_id in zip([2, 4], ["t-1", "t-2"]):
+        for i, task_id in zip([3, 5], ["t-1", "t-2"]):
             call = calls[i]
             self.assertEqual(call[0][0], "PATCH")
             self.assertIn(f"task_id=eq.{task_id}", call[0][1])
@@ -292,12 +294,13 @@ class SupabaseStateReconcileTests(unittest.TestCase):
         backend = _make_state(self.requests)
         self.requests.request.side_effect = [
             _response(json_data=[{"task_id": "t-1", "data": {"stage": "render"}}]),
-            _response(json_data=[]),  # GET video_generations: no row
+            _response(json_data=[]),  # GET video_generations redispatch: no row
+            _response(json_data=[]),  # GET video_generations settle: no row
             _response(json_data=[{}]),  # PATCH task
         ]
         with patch.object(state_module.logger, "warning"):
             backend.reconcile_orphaned_tasks()
-        payload = self.requests.request.call_args_list[2][1]["json"]
+        payload = self.requests.request.call_args_list[3][1]["json"]
         self.assertEqual(payload["data"]["stage"], "render")
         self.assertIn("error", payload["data"])
 
