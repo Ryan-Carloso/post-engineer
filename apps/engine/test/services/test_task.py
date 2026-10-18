@@ -1326,9 +1326,6 @@ class TestArchiveFinalVideos(unittest.TestCase):
             upload.assert_not_called()
 
 
-if __name__ == "__main__":
-    unittest.main()
-
     def test_generate_final_videos_degrades_past_the_lipsync_ceiling(self):
         """A hook in the 12-15s dead zone skips the lipsync intro and ships
         the normal video instead of failing the task."""
@@ -1338,7 +1335,9 @@ if __name__ == "__main__":
         params = VideoParams(
             video_subject="test",
             persona=PersonaParams(
-                name="Ana", photo_url="https://supabase.test/signed/foto.png"
+                name="Ana",
+                photo_url="https://supabase.test/signed/foto.png",
+                voice_id="test-voice",
             ),
         )
         ceiling = HookExceedsLipsyncCeiling(14.6, 12.0)
@@ -1372,3 +1371,6 @@ if __name__ == "__main__":
             {"task_id": task_id, "hook_end_seconds": 14.6},
             immediate=True,
         )
+
+if __name__ == "__main__":
+    unittest.main()
