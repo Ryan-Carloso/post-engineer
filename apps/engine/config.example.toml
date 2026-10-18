@@ -436,12 +436,15 @@ redis_host = "localhost"
 redis_port = 6379
 
 # Private SVG catalog (Doodly bundle). The artwork and its index are licensed
-# and are never committed: they are injected on deploy under resource/svg, and
-# `svg_catalog_enabled` stays false on a checkout without them, so material
-# search falls back to the stock providers instead of failing every render.
+# and live in Cloudflare R2: they are fetched on demand and cached under
+# <svg_cache_dir>, and are never committed. SVG is opt-in and defaults to
+# off: without `svg_catalog_enabled` there is no SVG, and material search
+# falls back to the stock providers. When enabled, `svg_r2_prefix` is
+# REQUIRED — the render fails fast instead of silently degrading.
 svg_catalog_enabled = false
-svg_catalog_index_dir = "resource/svg/_index"
-svg_assets_root = "resource/svg"
+svg_r2_bucket = "videos"
+svg_r2_prefix = ""
+svg_cache_dir = "resource/svg/_cache"
 # "texto" searches the FTS5 index and needs nothing extra. "semantico" /
 # "hibrido" require an ONNX index under <index_dir>/models, which is not built
 # yet: they log a warning and degrade to "texto" rather than failing.
