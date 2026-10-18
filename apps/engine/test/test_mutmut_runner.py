@@ -22,6 +22,19 @@ def _engine_root() -> Path:
     return Path(__file__).parent.parent
 
 
+def _repo_root() -> Path:
+    return _engine_root().parent.parent
+
+
+# Shards whose tests leave subprocesses in mutmut's parent. svg_pencil.py and
+# svg_sketch.py crashed the same way on PR #222; they are not on main yet.
+_SUBPROCESS_SHARDS = (
+    "app/services/analytics.py",
+    "app/services/upload_publisher.py",
+    "app/services/video.py",
+)
+
+
 def _pyproject() -> dict:
     with (_engine_root() / "pyproject.toml").open("rb") as handle:
         return tomllib.load(handle)
@@ -60,6 +73,21 @@ class MutmutRunnerPinTests(unittest.TestCase):
             "the fork runner reaps every child with os.wait(); stray "
             "nvidia-smi/ffmpeg children crash the shard with KeyError",
         )
+
+    def test_mutmut_config_change_reruns_subprocess_shards(self):
+        # The per-file shard list is the PR's app/**/*.py diff. A runner
+        # change only touches pyproject.toml, so without this canary the
+        # suites that actually crash os.wait() never run on that PR.
+        workflow = (_repo_root() / ".github" / "workflows" / "mutation.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("grep -Eq '^\\+.*(process_isolation|\"mutmut)'", workflow)
+        for path in _SUBPROCESS_SHARDS:
+            self.assertIn(path, workflow)
+            self.assertTrue(
+                (_engine_root() / path).is_file(),
+                f"canary shard {path} must exist on this branch",
+            )
 
 
 if __name__ == "__main__":
