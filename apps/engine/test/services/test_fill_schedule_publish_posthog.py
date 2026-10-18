@@ -42,7 +42,7 @@ class FillSchedulePublishPostHogTests(TestCase):
         storage_patcher = patch.object(
             video_storage, "read_final_video_r2", return_value=b"fake-video-bytes"
         )
-        storage_patcher.start()
+        self.read_r2_mock = storage_patcher.start()
         self.addCleanup(storage_patcher.stop)
         handle, self.video_path = tempfile.mkstemp(suffix=".mp4")
         with os.fdopen(handle, "wb") as video_file:
@@ -137,6 +137,31 @@ class FillSchedulePublishPostHogTests(TestCase):
         self.assertEqual(len(failed_calls), 1)
         self.assertEqual(len(failed_calls[0][0][1]["response_body"]), 500)
 
+    def test_response_body_secrets_are_scrubbed(self) -> None:
+        # The security property: remote-controlled response text must be
+        # scrubbed before reaching PostHog. Would fail if scrub_error_text
+        # were reverted to a raw slice.
+        from app.services.upload_publisher import PublishError
+
+        store = _FakeStore()
+        store.ready_due_slots = lambda now: [self._slot()]  # type: ignore[method-assign]
+        publish_mock = MagicMock(
+            side_effect=PublishError(
+                "upload API returned HTTP 400",
+                status_code=400,
+                response_body='{"error": "bad api_key=<redacted>"}',
+            )
+        )
+        scheduler = self._scheduler(store, publish_mock)
+        with patch.object(publish_module, "track_event") as track_mock:
+            scheduler.publish_due(datetime(2026, 10, 18, 12, 0, tzinfo=UTC))
+        props = [
+            c for c in track_mock.call_args_list if c[0][0] == "publish_provider_failed"
+        ][0][0][1]
+        # The secret VALUE is gone; the key name remaining is expected
+        # (scrub_secret_values redacts values, not key names).
+        self.assertNotIn("<redacted>", props["response_body"])
+
     def test_publish_video_oserror_emits_event(self) -> None:
         # OSError from publish_video (inside the provider loop) has no
         # status_code/response_body; the event still fires with safe
@@ -162,17 +187,11 @@ class FillSchedulePublishPostHogTests(TestCase):
         # read_final_video_r2 raising BEFORE the provider loop is the case
         # the provider=None initialization guards: the event must fire with
         # provider="unknown" and the handler must not raise UnboundLocalError.
-        from app.services import video_storage
-
         store = _FakeStore()
         store.ready_due_slots = lambda now: [self._slot()]  # type: ignore[method-assign]
         scheduler = self._scheduler(store, MagicMock())
-        with (
-            patch.object(
-                video_storage, "read_final_video_r2", side_effect=OSError("r2 down")
-            ),
-            patch.object(publish_module, "track_event") as track_mock,
-        ):
+        self.read_r2_mock.side_effect = OSError("r2 down")
+        with patch.object(publish_module, "track_event") as track_mock:
             scheduler.publish_due(datetime(2026, 10, 18, 12, 0, tzinfo=UTC))
         failed_calls = [
             c for c in track_mock.call_args_list if c[0][0] == "publish_provider_failed"

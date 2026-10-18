@@ -238,6 +238,9 @@ class BatchPublisher:
                         "retryable": attempts < MAX_PUBLISH_ATTEMPTS,
                         "attempts": attempts,
                     },
+                    # Same lone-event rationale as publish_provider_failed
+                    # above: flush so the failure is visible immediately.
+                    immediate=True,
                 )
                 notify_safe(
                     self.notify,
