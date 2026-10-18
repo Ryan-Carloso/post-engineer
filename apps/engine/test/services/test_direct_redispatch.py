@@ -304,11 +304,13 @@ class RedispatchStartupTests(unittest.TestCase):
             release.set()
 
     def test_startup_event_runs_the_worker_only_after_state_is_bound(self):
-        """Mirror production order: review inside the state constructor, then startup.
+        """Review does not start a worker, even while state is unbound.
 
-        ``state = DeathDiagnosticTaskState()`` runs the review before the
-        module attribute exists. startup_event runs later and is what
-        starts the worker. The worker is a real task-manager thread.
+        Production reconcile now runs from startup_event, after
+        app.services.state.state exists (#220). The review still must not
+        start tm.start: that used to run inside the state constructor,
+        before the name was assigned. This test keeps that window, then
+        startup_event runs the worker on a real task-manager thread.
         """
         import app.services.state as state_mod
         from app import asgi
@@ -340,6 +342,12 @@ class RedispatchStartupTests(unittest.TestCase):
                 patch("app.asgi.start_fill_schedule_scheduler"),
                 patch("app.services.engine_heartbeat.start_heartbeat_thread"),
                 patch("app.services.engine_heartbeat.report_boot_event"),
+                patch.object(
+                    saved_state,
+                    "reconcile_orphaned_tasks",
+                    return_value=0,
+                    create=True,
+                ),
             ):
                 # Constructor window: the name is not published yet.
                 del state_mod.state

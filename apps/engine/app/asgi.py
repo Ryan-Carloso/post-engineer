@@ -412,10 +412,11 @@ def startup_event():
     except Exception as exc:  # noqa: BLE001 - startup continues regardless
         logger.warning(f"engine heartbeat/boot event failed: {exc}")
     start_fill_schedule_scheduler()
-    # Direct orphans are only marked during SupabaseTaskState construction,
-    # which runs while this module's import is still assigning
-    # app.services.state.state. Start them now, once that binding exists,
-    # through the shared task manager (max_concurrent_tasks).
+    # The reconcile above only marks direct orphans. Start them here,
+    # through the shared task manager (max_concurrent_tasks). The review
+    # must not start tm.start itself: that used to run inside
+    # SupabaseTaskState.__init__, before app.services.state.state was
+    # assigned, and the worker reads that binding.
     try:
         from app.services.direct_redispatch import start_pending_direct_redispatches
 

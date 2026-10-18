@@ -1,10 +1,12 @@
 """Restart orphaned direct generations after engine state exists.
 
-``triage_redispatch_direct`` runs from ``SupabaseTaskState.__init__``,
-before ``app.services.state.state`` is assigned. It only marks the task
-and records a pending job. The ASGI startup hook calls
-``start_pending_direct_redispatches`` once that binding exists, through
-the shared task manager.
+``triage_redispatch_direct`` only marks the task and records a pending
+job. The ASGI startup hook reconciles orphans (after
+``app.services.state.state`` exists) and then calls
+``start_pending_direct_redispatches``, through the shared task manager.
+The review must not start the pipeline: it used to run inside
+``SupabaseTaskState.__init__``, before that binding existed, and
+``tm.start`` reads it.
 
 Clearing ``stage`` is deliberate. A restart that dies before the pipeline
 writes a new generation stage (crash between the mark and startup, a
@@ -40,10 +42,10 @@ class _DirectRedispatch:
     requeue_count: int
 
 
-# Filled during SupabaseTaskState construction and drained from the ASGI
-# startup hook. Process local. Review already wrote stage=None and the
-# requeue counter, so a crash before the drain is not retried: the next
-# boot sees no generation stage and fail+refunds.
+# Filled by the boot reconcile and drained later in the same ASGI startup
+# hook. Process local. Review already wrote stage=None and the requeue
+# counter, so a crash before the drain is not retried: the next boot sees
+# no generation stage and fail+refunds.
 _pending_direct_redispatches: list[_DirectRedispatch] = []
 
 
@@ -89,10 +91,12 @@ def triage_redispatch_direct(state: Any, task_id: str, data: dict[str, Any]) -> 
     persisted on the video_generations row (issue #205) are claimed here:
     the task row goes back to PROCESSING/0 and the validated payload is
     recorded for ``start_pending_direct_redispatches``. This function does
-    not start the pipeline. It runs from ``SupabaseTaskState.__init__``,
-    before ``app.services.state.state`` is assigned; ``tm.start`` reads
-    that binding, so a thread started here can die with AttributeError
-    and leave the task PROCESSING with no worker.
+    not start the pipeline. ``tm.start`` reads ``app.services.state.state``.
+    The review used to run inside ``SupabaseTaskState.__init__``, before
+    that name was assigned, so a thread started here could die with
+    AttributeError and leave the task PROCESSING with no worker. The
+    boot reconcile now runs from startup, after the binding exists; the
+    start still waits for ``start_pending_direct_redispatches``.
 
     The slot binding (scheduled_posts.task_id) and the video_generations
     row are untouched, so the tick reconciler advances the slot when the
