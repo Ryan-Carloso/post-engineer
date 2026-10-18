@@ -65,12 +65,9 @@ class DeathDiagnosticTaskState(SupabaseTaskState):
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        # Set before super().__init__: the base __init__ may dispatch to our
-        # reconcile_orphaned_tasks override (when reconcile_on_boot=True),
-        # which records the stats on this attribute. Initialized here so it
-        # also exists when reconcile_on_boot=False (production: the real
-        # server boot runs the reconcile explicitly in app.asgi.startup_event
-        # instead of at import time).
+        # Set before super().__init__ so it exists when the boot reconcile
+        # (run explicitly in app.asgi.startup_event) records its stats via
+        # our reconcile_orphaned_tasks override.
         self.last_reconcile_stats: dict[str, object] = {}
         super().__init__(*args, **kwargs)
 

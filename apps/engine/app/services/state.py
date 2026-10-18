@@ -247,7 +247,6 @@ class SupabaseTaskState(BaseState):
         service_key: str | None = None,
         requests_module: Any | None = None,
         table: str = "engine_task_state",
-        reconcile_on_boot: bool = True,
     ) -> None:
         base_url = url or os.getenv("SUPABASE_URL")
         key = service_key or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
@@ -272,10 +271,10 @@ class SupabaseTaskState(BaseState):
         # dropping the other's kwargs. Same role as MemoryState's RLock.
         self._lock = threading.RLock()
         self._verify_table()
-        if reconcile_on_boot:
-            failed = self.reconcile_orphaned_tasks()
-            if failed:
-                logger.info(f"marked {failed} orphaned task(s) failed at boot")
+        # NOTE: the orphan reconcile used to run here (reconcile_on_boot).
+        # It now runs only in app.asgi.startup_event: reconciling at import
+        # time let any stray importing process fail the live engine's
+        # running tasks as orphans.
 
     def _request(
         self, method: str, query: str, table: str | None = None, **kwargs: Any
@@ -637,7 +636,7 @@ state: BaseState
 if _state_backend == "supabase":
     from app.services.death_diagnostics import DeathDiagnosticTaskState  # lazy: avoids an import cycle
 
-    state = DeathDiagnosticTaskState(reconcile_on_boot=False)  # reconcile runs in asgi.startup_event, not at import
+    state = DeathDiagnosticTaskState()  # reconcile runs in asgi.startup_event, not at import
 elif _enable_redis:
     state = RedisState(
         host=_redis_host, port=_redis_port, db=_redis_db, password=_redis_password
