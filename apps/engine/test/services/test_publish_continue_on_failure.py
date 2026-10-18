@@ -120,8 +120,10 @@ class PublishContinueOnFailureTest(unittest.TestCase):
         assert task is not None
         self.assertNotEqual(task["state"], const.TASK_STATE_FAILED)
         self.assertEqual(task["publish_results"], results)
-        self.track.assert_called_once_with(
-            "video_publish_partial_failure",
+        partial_calls = [c for c in self.track.call_args_list if c[0][0] == "video_publish_partial_failure"]
+        self.assertEqual(len(partial_calls), 1)
+        self.assertEqual(
+            partial_calls[0][0][1],
             {
                 "task_id": "task_1",
                 "user_id": "user-1",
@@ -188,7 +190,12 @@ class PublishContinueOnFailureTest(unittest.TestCase):
         self.assertIn("youtube: publish failed for final.mp4:", str(task["error"]))
         self.assertIn("bluesky: publish failed for final.mp4:", str(task["error"]))
         self.assertNotIn("/tmp/final.mp4", str(task["error"]))
-        self.track.assert_not_called()
+        # publish_provider_failed fires per failed provider; the partial
+        # event is for partial success only.
+        failed_calls = [c for c in self.track.call_args_list if c[0][0] == "publish_provider_failed"]
+        self.assertEqual(len(failed_calls), 2)
+        partial_calls = [c for c in self.track.call_args_list if c[0][0] == "video_publish_partial_failure"]
+        self.assertEqual(len(partial_calls), 0)
         self.discord.assert_not_called()
 
     def test_empty_results_are_persisted_without_failing(self) -> None:
@@ -248,8 +255,10 @@ class PublishContinueOnFailureTest(unittest.TestCase):
         assert task is not None
         self.assertNotEqual(task["state"], const.TASK_STATE_FAILED)
         self.assertEqual(task["publish_results"], results)
-        self.track.assert_called_once_with(
-            "video_publish_partial_failure",
+        partial_calls = [c for c in self.track.call_args_list if c[0][0] == "video_publish_partial_failure"]
+        self.assertEqual(len(partial_calls), 1)
+        self.assertEqual(
+            partial_calls[0][0][1],
             {
                 "task_id": "task_1",
                 "user_id": "user-1",
@@ -286,7 +295,9 @@ class PublishContinueOnFailureTest(unittest.TestCase):
         self.assertIn("bluesky: publish failed for final.mp4:", str(task["error"]))
         self.assertNotIn(secret, str(task["error"]))
         self.assertIsNone(task.get("publish_results"))
-        self.track.assert_not_called()
+        # publish_provider_failed fires per failed provider even on total failure.
+        failed_calls = [c for c in self.track.call_args_list if c[0][0] == "publish_provider_failed"]
+        self.assertEqual(len(failed_calls), 2)
 
     def test_engine_provider_and_status_win_over_upstream_fields(self) -> None:
         def fake_publish_video(**kwargs):  # type: ignore[no-untyped-def]

@@ -86,8 +86,9 @@ class PublishFailurePosthogTest(unittest.TestCase):
             )
 
         # One event for the failed provider; the healthy one emits nothing.
-        track_mock.assert_called_once()
-        event_name, props = track_mock.call_args[0]
+        provider_failed_calls = [c for c in track_mock.call_args_list if c[0][0] == 'publish_provider_failed']
+        self.assertEqual(len(provider_failed_calls), 1)
+        event_name, props = provider_failed_calls[0][0]
         self.assertEqual(event_name, "publish_provider_failed")
         self.assertEqual(props["provider"], "youtube")
         self.assertEqual(props["status_code"], 400)
@@ -130,8 +131,9 @@ class PublishFailurePosthogTest(unittest.TestCase):
                     video_paths=["/tmp/final.mp4"],
                 )
 
-        track_mock.assert_called_once()
-        props = track_mock.call_args[0][1]
+        provider_failed_calls = [c for c in track_mock.call_args_list if c[0][0] == 'publish_provider_failed']
+        self.assertEqual(len(provider_failed_calls), 1)
+        props = provider_failed_calls[0][0][1]
         self.assertLessEqual(len(props["response_body"]), 500)
 
     def test_no_posthog_event_when_all_providers_succeed(self) -> None:
