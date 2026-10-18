@@ -1,8 +1,8 @@
-"""Only ElevenLabs and Chatterbox remain as TTS providers.
+"""ElevenLabs, Chatterbox and OpenRouter are the TTS providers.
 
 edge_tts was the Azure v1 transport and the Chatterbox fallback; ElevenLabs,
-SiliconFlow, Gemini, MiMo and Azure v2 were the other providers. All of them are
-gone. They were not removed for tidiness:
+SiliconFlow, Gemini, MiMo and Azure v2 were the other providers. All of those
+are gone. They were not removed for tidiness:
 
 * every one of them could only be reached with a voice id the UI never offers
   (the catalog exposed four house voices that resolved to Azure names), and
@@ -10,6 +10,10 @@ gone. They were not removed for tidiness:
   video died at the `audio` stage after three 30s timeouts.
 
 `SubMaker` survives as a local class — the subtitle carrier, not a transport.
+
+Note this file pins what was *removed*, not what OpenRouter does; the audio
+provider map changed when OpenRouter was added and this scan must not be
+widened into "every provider that ever existed".
 
 This is a source scan, not a behaviour test: the guarantee is that a removed
 provider cannot come back through a new call site.
@@ -26,6 +30,7 @@ import pytest
 APP = Path(__file__).resolve().parents[2] / "app"
 VOICE = APP / "services" / "voice.py"
 VOICE_PROVIDERS = APP / "services" / "voice_providers.py"
+OPENROUTER_TTS = APP / "services" / "openrouter_tts.py"
 
 # Symbols that belong to a removed provider. Each one is a function or guard
 # that only existed to reach that provider.
@@ -133,7 +138,7 @@ class TestRemainingProviders:
             "azure_voices.json is unreachable now that both Azure providers are gone"
         )
 
-    def test_tts_only_dispatches_the_two_remaining_providers(self):
+    def test_tts_only_dispatches_the_supported_providers(self):
         """An unknown voice must fail loudly, not fall through to a provider.
 
         The old final line was `return azure_tts_v1(...)`: any id the catalog
@@ -154,7 +159,10 @@ class TestRemainingProviders:
             for child in ast.walk(tts_node)
             if isinstance(child, ast.Call) and isinstance(child.func, ast.Name)
         }
-        assert {"chatterbox_tts", "elevenlabs_tts"} <= called
+        # OpenRouter dispatch lives in app/services/openrouter_tts.py so voice.py
+        # stays under the file-size cap; tts() keeps a single call into it and
+        # the provider behaviour is covered in test_openrouter_tts.py.
+        assert {"chatterbox_tts", "elevenlabs_tts", "dispatch_openrouter_tts"} <= called
         assert "is_no_voice" in called
         assert "is_chatterbox_voice" in called
         assert "is_elevenlabs_voice" in called
@@ -167,3 +175,19 @@ class TestRemainingProviders:
             "chatterbox_edge_tts_fallback",
         }
         assert removed == set(), f"tts() still dispatches to {sorted(removed)}"
+
+    def test_openrouter_dispatcher_reaches_the_provider(self):
+        """The thin dispatch in tts() is only honest if the dispatcher it calls
+        actually reaches openrouter_tts."""
+        tree = ast.parse(OPENROUTER_TTS.read_text(encoding="utf-8"))
+        dispatch_node = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "dispatch_openrouter_tts"
+        )
+        called = {
+            child.func.id
+            for child in ast.walk(dispatch_node)
+            if isinstance(child, ast.Call) and isinstance(child.func, ast.Name)
+        }
+        assert "openrouter_tts" in called

@@ -110,6 +110,31 @@ def test_scrub_secret_values_redacts_key_value_pairs():
     assert analytics.scrub_secret_values("Bearer xyz789") == "Bearer [redacted]"
 
 
+def test_scrub_secret_values_redacts_a_bare_provider_key():
+    # A hosted provider key is self-identifying by its prefix, so it leaks even
+    # when nothing in the message names the field it belongs to -- e.g. an HTTP
+    # error body echoing the rejected key back at us. The key-anchored pattern
+    # above cannot see that shape, and these strings reach the task error, the
+    # logs, the Discord alerts and PostHog.
+    assert "abcdefghijklmnopqrstuvwxyz012345" not in analytics.scrub_secret_values(
+        "rejected key sk-or-v1-abcdefghijklmnopqrstuvwxyz012345"
+    )
+    assert "abcdefghijklmnopqrstuvwxyz012345" not in analytics.scrub_secret_values(
+        '{"error":"bad key sk-or-v1-abcdefghijklmnopqrstuvwxyz012345"}'
+    )
+    # The same shape for OpenAI-style keys, which the TTS path can also surface.
+    assert "abcdefghijklmnopqrstuvwxyz012345" not in analytics.scrub_secret_values(
+        "rejected key sk-proj-abcdefghijklmnopqrstuvwxyz012345"
+    )
+
+
+def test_scrub_secret_values_keeps_short_sk_words():
+    # The prefix alone is not proof of a secret: "sk-" fragments inside ordinary
+    # prose or a short id must survive, or the scrubber eats real diagnostics.
+    assert analytics.scrub_secret_values("task sk-42 finished") == "task sk-42 finished"
+    assert analytics.scrub_secret_values("sketch") == "sketch"
+
+
 def test_scrub_secret_values_redacts_quoted_shapes():
     # Model output and SDK errors echo config blobs as JSON or Python dict
     # reprs — the scrubber must catch those shapes too, not just bare

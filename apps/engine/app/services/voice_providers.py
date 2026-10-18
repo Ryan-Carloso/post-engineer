@@ -310,8 +310,6 @@ def elevenlabs_tts(
     return TtsResult(
         error=f"ElevenLabs TTS failed after 3 attempts ({last_error or 'unknown error'})"
     )
-
-
 def chatterbox_tts(
     text: str,
     voice: str,
