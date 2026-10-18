@@ -391,6 +391,13 @@ class MessageBuilderTests(unittest.TestCase):
         self.assertIn("Lisbon trams", message)
         self.assertIn("ffmpeg crashed", message)
 
+    def test_partial_publish_lists_failed_providers_only(self):
+        message = nf.partial_publish_msg("task-7", ["youtube", "linkedin"])
+        self.assertIn("task-7", message)
+        self.assertIn("youtube", message)
+        self.assertIn("linkedin", message)
+        self.assertNotIn("error", message.lower())
+
     def test_task_failed_handles_empty_subject(self):
         message = nf.task_failed_msg("task-42", "boom")
         self.assertIn("task-42", message)

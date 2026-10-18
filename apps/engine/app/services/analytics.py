@@ -5,6 +5,7 @@ Tracks the video lifecycle funnel as PostHog events:
 - video_generation_started / video_generation_failed / video_generated
 - video_generation_progress (every 10% milestone)
 - video_publish_started / video_published / video_publish_failed
+- video_publish_partial_failure (some providers published, others failed)
 
 Safety rules:
 - Never raises: telemetry must never break video generation.

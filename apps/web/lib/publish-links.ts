@@ -11,6 +11,8 @@
 //
 // So two providers arrive with a URL and two need one derived. A provider
 // entry with neither is omitted rather than rendered as a dead link.
+// An entry whose status is "failed" is omitted even when it also carries
+// a URL: that publish did not happen.
 //
 // Dependency-free on purpose: the detail page and the card both read this,
 // and it must stay safe to import from a client component.
@@ -93,6 +95,10 @@ export function resolvePublishLinks(
   for (const entry of publishResults) {
     if (typeof entry !== 'object' || entry === null) continue;
     const record = entry as Record<string, unknown>;
+
+    // Failed publishes must not become clickable links, even if the payload
+    // also carries a URL or post id from a partial upstream body.
+    if (record.status === 'failed') continue;
 
     const provider = readString(record, 'provider');
     if (provider === null || !PROVIDERS.has(provider)) continue;

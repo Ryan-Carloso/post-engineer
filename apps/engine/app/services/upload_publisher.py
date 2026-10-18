@@ -304,6 +304,29 @@ _PART_BUILDERS: _PartBuilders = {
 }
 
 
+def _application_failure_reason(result: dict[str, Any]) -> str | None:
+    """Discord-safe reason when a 2xx body did not publish anything.
+
+    Returns None when the body is a real success (including a provider
+    that posted to at least one account). The reason never includes
+    ``error``, ``errorType``, or per-account text: those fields are
+    remote-controlled and the reason reaches Discord via the task error.
+    """
+    if result.get("success") is False:
+        return "upload API reported failure"
+    accounts = result.get("results")
+    if (
+        isinstance(accounts, list)
+        and len(accounts) > 0
+        and all(
+            isinstance(account, dict) and account.get("success") is False
+            for account in accounts
+        )
+    ):
+        return "upload API reported failure for every account"
+    return None
+
+
 def publish_video(
     base_url: str,
     api_secret: str,
@@ -372,6 +395,20 @@ def publish_video(
                 result: dict[str, Any] = response.json()
             except ValueError as exc:
                 raise PublishError("upload API returned invalid JSON") from exc
+            # HTTP 200 is not success. Bluesky/LinkedIn answer 200 with
+            # success:false (and often error/errorType). YouTube/Instagram
+            # keep success:true and put per-account outcomes in results.
+            # Either shape with nothing posted must raise: the message
+            # stays Discord-safe and the body is server logs only.
+            # Not retried — the request completed; the post did not.
+            if isinstance(result, dict):
+                failure = _application_failure_reason(result)
+                if failure is not None:
+                    raise PublishError(
+                        failure,
+                        status_code=response.status_code,
+                        response_body=response.text[:500],
+                    )
             return result
 
         last_error = PublishError(

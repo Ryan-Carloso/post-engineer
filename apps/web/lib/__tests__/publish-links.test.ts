@@ -60,6 +60,28 @@ describe('resolvePublishLinks', () => {
     expect(resolvePublishLinks([{ provider: 'linkedin' }])).toEqual([]);
   });
 
+  // The engine stamps status "failed" when that provider did not post.
+  // A URL on the same entry must not render: it would advertise a publish
+  // that did not happen. A sibling published entry still links.
+  it('yields no link for a failed provider entry', () => {
+    expect(
+      resolvePublishLinks([
+        {
+          provider: 'youtube',
+          status: 'failed',
+          videoUrl: 'https://www.youtube.com/watch?v=abc123',
+        },
+        {
+          provider: 'bluesky',
+          status: 'published',
+          postId: 'at://did:plc:abc123/app.bsky.feed.post/xyz789',
+        },
+      ]),
+    ).toEqual([
+      { provider: 'bluesky', url: 'https://bsky.app/profile/did:plc:abc123/post/xyz789' },
+    ]);
+  });
+
   it('ignores an unknown provider', () => {
     expect(resolvePublishLinks([{ provider: 'tiktok', postId: 'x' }])).toEqual([]);
   });
