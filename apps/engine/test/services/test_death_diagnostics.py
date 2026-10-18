@@ -26,7 +26,7 @@ def _make_diag_state(requests_mock, **kwargs):
     requests_mock.request.return_value = _response(json_data=[])
     with _isolated_environ(ENV):
         backend = DeathDiagnosticTaskState(
-            requests_module=requests_mock, reconcile_on_boot=False, **kwargs
+            requests_module=requests_mock, **kwargs
         )
     # Drop the init verify call so tests index only their own requests.
     requests_mock.request.reset_mock()
@@ -42,9 +42,9 @@ class DeathDiagnosticStateTests(unittest.TestCase):
         self.assertIsInstance(backend, state_module.SupabaseTaskState)
 
     def test_last_reconcile_stats_defaults_empty(self):
-        # The attribute must exist even when reconcile_on_boot=False: the
-        # boot autopsy reads it via getattr with a default, but an absent
-        # attribute would silently report zero orphans.
+        # The attribute must exist from construction: the boot autopsy
+        # reads it via getattr with a default, but an absent attribute
+        # would silently report zero orphans.
         backend = _make_diag_state(self.requests)
         self.assertEqual(backend.last_reconcile_stats, {})
 
@@ -127,6 +127,18 @@ class DeathDiagnosticStateTests(unittest.TestCase):
         data = post[1]["json"]["data"]
         self.assertEqual(data["stage"], "audio")
         self.assertNotIn("stage_rss_mb", data)
+
+    def test_construction_does_not_reconcile(self):
+        # The production singleton never reconciles at construction:
+        # constructing the state (import time) must never mark running tasks
+        # as orphans. The real server boot runs the reconcile explicitly in
+        # app.asgi.startup_event. A reconcile here would kill the live
+        # engine's tasks from any stray importing process.
+        with patch.object(
+            DeathDiagnosticTaskState, "reconcile_orphaned_tasks"
+        ) as reconcile:
+            _make_diag_state(self.requests)
+        reconcile.assert_not_called()
 
 
 if __name__ == "__main__":

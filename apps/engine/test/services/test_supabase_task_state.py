@@ -51,7 +51,7 @@ def _make_state(requests_mock, **kwargs):
     requests_mock.request.return_value = _response(json_data=[])
     with patch.dict(os.environ, ENV, clear=True):
         backend = state_module.SupabaseTaskState(
-            requests_module=requests_mock, reconcile_on_boot=False, **kwargs
+            requests_module=requests_mock, **kwargs
         )
     # Drop the init verify call so tests index only their own requests.
     requests_mock.request.reset_mock()
@@ -63,7 +63,7 @@ class SupabaseStateEnvTests(unittest.TestCase):
         with patch.dict(os.environ, {k: "" for k in ENV}, clear=True):
             with self.assertRaises(RuntimeError) as ctx:
                 state_module.SupabaseTaskState(
-                    requests_module=MagicMock(), reconcile_on_boot=False
+                    requests_module=MagicMock()
                 )
         self.assertIn("SUPABASE_URL", str(ctx.exception))
 
@@ -72,7 +72,7 @@ class SupabaseStateEnvTests(unittest.TestCase):
         with patch.dict(os.environ, env, clear=True):
             with self.assertRaises(RuntimeError) as ctx:
                 state_module.SupabaseTaskState(
-                    requests_module=MagicMock(), reconcile_on_boot=False
+                    requests_module=MagicMock()
                 )
         self.assertIn("SUPABASE_SERVICE_ROLE_KEY", str(ctx.exception))
 
@@ -82,7 +82,7 @@ class SupabaseStateEnvTests(unittest.TestCase):
         with patch.dict(os.environ, ENV, clear=True):
             with self.assertRaises(RuntimeError) as ctx:
                 state_module.SupabaseTaskState(
-                    requests_module=requests_mock, reconcile_on_boot=False
+                    requests_module=requests_mock
                 )
         self.assertIn("003_engine-task-state.sql", str(ctx.exception))
 
@@ -308,18 +308,6 @@ class SupabaseStateReconcileTests(unittest.TestCase):
         # only the SELECT ran
         self.assertEqual(self.requests.request.call_count, 1)
 
-    def test_reconcile_runs_on_boot_by_default(self):
-        requests_mock = MagicMock()
-        requests_mock.request.side_effect = [
-            _response(json_data=[]),  # table verify
-            _response(json_data=[]),  # reconcile SELECT
-        ]
-        with patch.dict(os.environ, ENV, clear=True):
-            state_module.SupabaseTaskState(requests_module=requests_mock)
-        select = requests_mock.request.call_args_list[1][0][1]
-        self.assertIn("state=not.in.(-1,1)", select)
-
-
 class SupabaseStateBillingReconcileTests(unittest.TestCase):
     """The engine settles orphaned tasks alone: no web visit required.
 
@@ -535,7 +523,7 @@ class SupabaseStateRetryTests(unittest.TestCase):
         # policy is asserted without ever opening a connection.
         with patch.dict(os.environ, ENV, clear=True):
             with patch.object(state_module.SupabaseTaskState, "_verify_table"):
-                backend = state_module.SupabaseTaskState(reconcile_on_boot=False)
+                backend = state_module.SupabaseTaskState()
         retry = backend._requests.get_adapter("https://supabase.example").max_retries
         self.assertEqual(retry.connect, CONNECT_RETRIES)
         self.assertIs(retry.read, False)
