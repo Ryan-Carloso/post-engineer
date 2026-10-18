@@ -17,6 +17,7 @@ from loguru import logger
 from app.config import config
 from app.models.schema import MaterialInfo, VideoAspect
 from app.services import image_material, svg_catalog
+from app.utils import utils
 
 
 # Long edge, in px, used when rasterizing a catalog SVG to a still frame.
@@ -164,7 +165,16 @@ def _persist_svg_item(
 
     Cached by a digest of the asset path and the aspect: the same asset in two
     aspects is two different stills.
+
+    An empty save_dir (the shipped default) falls back to the same storage
+    cache save_video uses: without it the stills and clips would land as
+    CWD-relative paths while every other provider returns absolute ones.
     """
+    if not save_dir:
+        save_dir = utils.storage_dir("cache_videos")
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+
     width, height = video_aspect.to_resolution()
     digest = hashlib.sha256(
         f"{item.url}|{width}x{height}".encode("utf-8")

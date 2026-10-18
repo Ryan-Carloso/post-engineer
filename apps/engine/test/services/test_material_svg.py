@@ -2,6 +2,7 @@
 import hashlib
 import os
 import subprocess
+import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
@@ -301,6 +302,81 @@ class RenderImageFileToMp4ErrorTests(unittest.TestCase):
 
         mock_open.side_effect = OSError("no such file")
         self.assertEqual(image_material.render_image_file_to_mp4("/nope.png"), "")
+
+
+class PersistSvgItemTests(unittest.TestCase):
+    """The SVG still/clip cache never lands in the process CWD.
+
+    With the default config ``material_directory`` is "", and save_video
+    handles that by falling back to utils.storage_dir("cache_videos"); the
+    SVG branch must do the same instead of writing CWD-relative paths.
+    """
+
+    def _item(self):
+        return MaterialInfo(provider="svg", url="/cache/hen.svg", duration=4)
+
+    def _render(self, item, save_dir, storage_root):
+        captured = {}
+        storage_cache = os.path.join(storage_root, "cache_videos")
+
+        def fake_rasterize(svg_path, png_path, *args, **kwargs):
+            captured["png_path"] = png_path
+            with open(png_path, "wb") as handle:
+                handle.write(b"png")
+            return True
+
+        def fake_render(png_path, clip_duration=4):
+            captured["render_input"] = png_path
+            return png_path + ".mp4"
+
+        with patch.object(
+            svg_material.utils, "storage_dir", return_value=storage_cache
+        ), patch.object(
+            svg_material, "rasterize_svg_to_png", side_effect=fake_rasterize
+        ), patch.object(
+            svg_material.image_material,
+            "render_image_file_to_mp4",
+            side_effect=fake_render,
+        ):
+            result = svg_material._persist_svg_item(
+                item, save_dir, 4, VideoAspect.portrait
+            )
+        return result, captured, storage_cache
+
+    def test_empty_save_dir_uses_storage_cache(self):
+        with tempfile.TemporaryDirectory() as storage_root:
+            result, captured, storage_cache = self._render(
+                self._item(), "", storage_root
+            )
+        self.assertTrue(os.path.isabs(captured["png_path"]), captured["png_path"])
+        self.assertEqual(
+            os.path.dirname(captured["png_path"]), storage_cache
+        )
+        self.assertTrue(os.path.isabs(result), result)
+        self.assertEqual(captured["render_input"], captured["png_path"])
+
+    def test_empty_save_dir_creates_the_cache_directory(self):
+        with tempfile.TemporaryDirectory() as storage_root:
+            missing = os.path.join(storage_root, "does-not-exist")
+            with patch.object(
+                svg_material.utils, "storage_dir", return_value=missing
+            ), patch.object(
+                svg_material, "rasterize_svg_to_png", return_value=True
+            ), patch.object(
+                svg_material.image_material,
+                "render_image_file_to_mp4",
+                return_value="/x.mp4",
+            ):
+                svg_material._persist_svg_item(
+                    self._item(), "", 4, VideoAspect.portrait
+                )
+            self.assertTrue(os.path.isdir(missing))
+
+    def test_explicit_save_dir_is_used_as_is(self):
+        with tempfile.TemporaryDirectory() as save_dir:
+            result, captured, _ = self._render(self._item(), save_dir, save_dir)
+        self.assertEqual(os.path.dirname(captured["png_path"]), save_dir)
+        self.assertTrue(os.path.isabs(result))
 
     @patch("app.services.video._open_image_clip_with_fallback")
     @patch("app.services.video.close_clip")
