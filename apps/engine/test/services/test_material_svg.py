@@ -6,8 +6,10 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
+import numpy as np
+
 from app.models.schema import MaterialInfo, VideoAspect
-from app.services import material, svg_material
+from app.services import material, svg_draw, svg_material, svg_sketch
 
 
 class SearchVideosSvgTests(unittest.TestCase):
@@ -82,7 +84,9 @@ class RasterizeSvgTests(unittest.TestCase):
 class PersistSvgMaterialTests(unittest.TestCase):
     def test_renders_svg_into_an_mp4(self):
         item = MaterialInfo(provider="svg", url="/cat/a.svg", duration=3)
-        with patch.object(svg_material, "rasterize_svg_to_png", return_value=True), patch(
+        with patch.object(svg_material, "_render_drawn_clip", return_value=""), patch.object(
+            svg_material, "rasterize_svg_to_png", return_value=True
+        ), patch(
             "app.services.image_material.render_image_file_to_mp4", return_value="/out/a.mp4"
         ) as mock_render:
             result = svg_material._persist_svg_item(item, "/save", 3)
@@ -92,7 +96,9 @@ class PersistSvgMaterialTests(unittest.TestCase):
 
     def test_cache_name_is_derived_from_asset_path_and_aspect(self):
         item = MaterialInfo(provider="svg", url="/cat/a.svg", duration=3)
-        with patch.object(svg_material, "rasterize_svg_to_png", return_value=True) as mock_ras, patch(
+        with patch.object(svg_material, "_render_drawn_clip", return_value=""), patch.object(
+            svg_material, "rasterize_svg_to_png", return_value=True
+        ) as mock_ras, patch(
             "app.services.image_material.render_image_file_to_mp4", return_value="/out/a.mp4"
         ):
             svg_material._persist_svg_item(item, "/save", 3, VideoAspect.portrait)
@@ -106,7 +112,9 @@ class PersistSvgMaterialTests(unittest.TestCase):
         item = MaterialInfo(provider="svg", url="/cat/a.svg", duration=3)
         names = []
         for aspect in (VideoAspect.portrait, VideoAspect.square):
-            with patch.object(svg_material, "rasterize_svg_to_png", return_value=True) as mock_ras, patch(
+            with patch.object(svg_material, "_render_drawn_clip", return_value=""), patch.object(
+                svg_material, "rasterize_svg_to_png", return_value=True
+            ) as mock_ras, patch(
                 "app.services.image_material.render_image_file_to_mp4", return_value="/out/a.mp4"
             ):
                 svg_material._persist_svg_item(item, "/save", 3, aspect)
@@ -115,12 +123,16 @@ class PersistSvgMaterialTests(unittest.TestCase):
 
     def test_rasterize_failure_returns_empty(self):
         item = MaterialInfo(provider="svg", url="/cat/a.svg", duration=3)
-        with patch.object(svg_material, "rasterize_svg_to_png", return_value=False):
+        with patch.object(svg_material, "_render_drawn_clip", return_value=""), patch.object(
+            svg_material, "rasterize_svg_to_png", return_value=False
+        ):
             self.assertEqual(svg_material._persist_svg_item(item, "/save", 3), "")
 
     def test_render_failure_returns_empty(self):
         item = MaterialInfo(provider="svg", url="/cat/a.svg", duration=3)
-        with patch.object(svg_material, "rasterize_svg_to_png", return_value=True), patch(
+        with patch.object(svg_material, "_render_drawn_clip", return_value=""), patch.object(
+            svg_material, "rasterize_svg_to_png", return_value=True
+        ), patch(
             "app.services.image_material.render_image_file_to_mp4", return_value=""
         ):
             self.assertEqual(svg_material._persist_svg_item(item, "/save", 3), "")
@@ -406,6 +418,159 @@ class PersistSvgItemTests(unittest.TestCase):
         self.assertEqual(image_material.render_image_file_to_mp4("/bad.png"), "")
         # The probe handle is still released.
         mock_close.assert_any_call(probe)
+
+
+class AnimatedSvgMaterialTests(unittest.TestCase):
+    """The pencil-drawn clip is preferred; the static still is the fallback."""
+
+    def _item(self):
+        return MaterialInfo(provider="svg", url="/cat/a.svg", duration=3)
+
+    def _frames(self, count):
+        return [np.zeros((8, 8, 3), np.uint8) for _ in range(count)]
+
+    def test_prefers_drawn_clip_over_static_still(self):
+        with patch.object(
+            svg_material, "_render_drawn_clip", return_value="/out/drawn.mp4"
+        ) as mock_drawn, patch.object(
+            svg_material, "rasterize_svg_to_png"
+        ) as mock_rasterize:
+            result = svg_material._persist_svg_item(self._item(), "/save", 3)
+        self.assertEqual(result, "/out/drawn.mp4")
+        mock_drawn.assert_called_once()
+        mock_rasterize.assert_not_called()
+
+    def test_falls_back_to_static_when_drawn_clip_fails(self):
+        with patch.object(svg_material, "_render_drawn_clip", return_value=""), patch.object(
+            svg_material, "rasterize_svg_to_png", return_value=True
+        ), patch(
+            "app.services.image_material.render_image_file_to_mp4",
+            return_value="/out/static.mp4",
+        ):
+            result = svg_material._persist_svg_item(self._item(), "/save", 3)
+        self.assertEqual(result, "/out/static.mp4")
+
+    def test_drawn_cache_key_differs_from_static_still(self):
+        # The animated clip must never reuse a Ken Burns still cache entry.
+        item = self._item()
+        with patch.object(
+            svg_material, "_render_drawn_clip", return_value="/out/drawn.mp4"
+        ) as mock_drawn:
+            svg_material._persist_svg_item(item, "/save", 3, VideoAspect.portrait)
+        mp4_arg = mock_drawn.call_args[0][1]
+        static_digest = hashlib.sha256(b"/cat/a.svg|1080x1920").hexdigest()[:16]
+        self.assertNotIn(static_digest, os.path.basename(mp4_arg))
+        self.assertTrue(os.path.basename(mp4_arg).startswith("svg-drawn-"))
+
+    def test_render_drawn_clip_uses_sketch_path_for_embedded_raster(self):
+        frames = self._frames(4)
+        with patch.object(
+            svg_material, "_pencil_sprite", return_value=("sprite", (1.0, 2.0))
+        ), patch.object(
+            svg_sketch, "render_sketch_clip", return_value=frames
+        ) as mock_sketch, patch.object(
+            svg_sketch, "write_clip", return_value="/out/x.mp4"
+        ) as mock_write:
+            result = svg_material._render_drawn_clip(
+                "/cat/a.svg", "/out/x.mp4", 1080, 1920, 3
+            )
+        self.assertEqual(result, "/out/x.mp4")
+        mock_sketch.assert_called_once()
+        # A short performance is held on its last frame up to the clip length.
+        written = mock_write.call_args[0][0]
+        self.assertEqual(len(written), 3 * svg_sketch.DRAW_FPS)
+
+    def test_render_drawn_clip_uses_line_art_path_without_embedded_raster(self):
+        frames = self._frames(4)
+        with patch.object(
+            svg_material, "_pencil_sprite", return_value=("sprite", (1.0, 2.0))
+        ), patch.object(
+            svg_sketch, "render_sketch_clip", return_value=None
+        ), patch.object(
+            svg_draw, "is_drawable", return_value=True
+        ), patch.object(
+            svg_material, "_drawn_line_art_frames", return_value=frames
+        ) as mock_frames, patch.object(
+            svg_sketch, "write_clip", return_value="/out/x.mp4"
+        ):
+            result = svg_material._render_drawn_clip(
+                "/cat/a.svg", "/out/x.mp4", 1080, 1920, 3
+            )
+        self.assertEqual(result, "/out/x.mp4")
+        mock_frames.assert_called_once()
+
+    def test_render_drawn_clip_returns_empty_when_not_animatable(self):
+        with patch.object(
+            svg_material, "_pencil_sprite", return_value=("sprite", (1.0, 2.0))
+        ), patch.object(svg_sketch, "render_sketch_clip", return_value=None), patch.object(
+            svg_draw, "is_drawable", return_value=False
+        ):
+            self.assertEqual(
+                svg_material._render_drawn_clip("/cat/a.svg", "/out/x.mp4", 1080, 1920, 3),
+                "",
+            )
+
+    def test_render_drawn_clip_returns_empty_when_sprite_fails(self):
+        with patch.object(svg_material, "_pencil_sprite", return_value=None), patch.object(
+            svg_sketch, "render_sketch_clip"
+        ) as mock_sketch:
+            self.assertEqual(
+                svg_material._render_drawn_clip("/cat/a.svg", "/out/x.mp4", 1080, 1920, 3),
+                "",
+            )
+        mock_sketch.assert_not_called()
+
+    def test_render_drawn_clip_returns_empty_when_write_fails(self):
+        with patch.object(
+            svg_material, "_pencil_sprite", return_value=("sprite", (1.0, 2.0))
+        ), patch.object(
+            svg_sketch, "render_sketch_clip", return_value=self._frames(2)
+        ), patch.object(
+            svg_sketch, "write_clip", side_effect=OSError("disk full")
+        ), patch("loguru.logger.warning"):
+            self.assertEqual(
+                svg_material._render_drawn_clip("/cat/a.svg", "/out/x.mp4", 1080, 1920, 3),
+                "",
+            )
+
+    def test_pencil_sprite_returns_none_when_rsvg_convert_missing(self):
+        with patch("subprocess.run", side_effect=FileNotFoundError("no rsvg")):
+            self.assertIsNone(svg_material._pencil_sprite())
+
+    def test_drawn_line_art_frames_renders_staggered_progress(self):
+        # A tiny two-stroke SVG: the mock rasterizer snapshots each frame's
+        # SVG so the test can assert the dashoffset actually walks.
+        seen = []
+
+        def fake_run(argv, **kwargs):
+            src = argv[-1]
+            with open(src, "rb") as handle:
+                seen.append(handle.read())
+            import cv2
+
+            cv2.imwrite(argv[argv.index("-o") + 1], np.zeros((10, 10, 3), np.uint8))
+            return Mock(returncode=0)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            svg_path = os.path.join(tmp, "two.svg")
+            with open(svg_path, "w", encoding="utf-8") as handle:
+                handle.write(
+                    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">'
+                    '<path d="M2 2 L18 2" fill="none" stroke="#111" stroke-width="2"/>'
+                    '<path d="M2 18 L18 18" fill="none" stroke="#111" stroke-width="2"/>'
+                    "</svg>"
+                )
+            sprite = np.zeros((8, 8, 4), np.uint8)
+            with patch("subprocess.run", side_effect=fake_run):
+                frames = svg_material._drawn_line_art_frames(
+                    svg_path, sprite, (1.0, 2.0), frame_count=4,
+                    width=1080, height=1920,
+                )
+        self.assertEqual(len(frames), 4)
+        # First frame draws nothing, last frame draws everything.
+        self.assertNotEqual(seen[0], seen[-1])
+        for frame in frames:
+            self.assertEqual(frame.shape, (1920, 1080, 3))
 
 
 if __name__ == "__main__":
