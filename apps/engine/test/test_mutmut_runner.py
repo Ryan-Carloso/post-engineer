@@ -74,6 +74,13 @@ class MutmutRunnerPinTests(unittest.TestCase):
             "nvidia-smi/ffmpeg children crash the shard with KeyError",
         )
 
+    def test_mutmut_does_not_execute_this_file(self):
+        # mutmut copies test/ into mutants/ and runs pytest -x from there.
+        # This file's repo-root walk is one directory short inside that
+        # copy, so collecting it aborts stats before any mutant is scored.
+        args = _pyproject()["tool"]["mutmut"]["pytest_add_cli_args"]
+        self.assertIn("--ignore=test/test_mutmut_runner.py", args)
+
     def test_mutmut_config_change_reruns_subprocess_shards(self):
         # The per-file shard list is the PR's app/**/*.py diff. A runner
         # change only touches pyproject.toml, so without this canary the

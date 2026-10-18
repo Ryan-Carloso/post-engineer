@@ -180,11 +180,17 @@ also_copy = [
 # - test_mypy_config.py pins the CI workflow file layout (.github/workflows/),
 #   which does not exist inside mutmut's mutants/ working copy. It exercises
 #   no app code, so it carries zero mutation signal.
+# - test_mutmut_runner.py pins this config and mutation.yml. mutmut copies
+#   test/ into mutants/, one directory deeper than apps/engine, so the
+#   file's repo-root walk lands on apps/engine and the workflow read
+#   raises FileNotFoundError. Stats collection runs pytest -x, so that
+#   single failure aborts the shard before any mutant is scored.
 # - test/services/test_cli.py has a pre-existing order-dependent isolation flaw
 #   (loguru file sink closed by earlier tests; passes under pytest-randomly in
 #   normal CI, fails under mutmut's deterministic subset ordering).
 pytest_add_cli_args = [
     "--ignore=test/test_mypy_config.py",
+    "--ignore=test/test_mutmut_runner.py",
     "--ignore=test/services/test_cli.py",
 ]
 pytest_add_cli_args_test_selection = [
