@@ -169,11 +169,13 @@ def _persist_svg_item(
     An empty save_dir (the shipped default) falls back to the same storage
     cache save_video uses: without it the stills and clips would land as
     CWD-relative paths while every other provider returns absolute ones.
+    Only the fallback directory is created; an explicit save_dir keeps the
+    previous contract (no filesystem side effects beyond the render itself).
     """
     if not save_dir:
         save_dir = utils.storage_dir("cache_videos")
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
 
     width, height = video_aspect.to_resolution()
     digest = hashlib.sha256(
