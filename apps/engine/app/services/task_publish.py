@@ -5,6 +5,17 @@ schema publish params to client metadata, enforces explicit configuration,
 publishes each final video to every selected provider and records results in
 the task state.
 
+One provider failing does not cancel the others. Each result is
+``status`` ``"published"`` or ``"failed"``. An HTTP 200 whose body reports
+``success: false``, or whose per-account ``results`` are all unsuccessful,
+is a failed provider — the upstream body stays in the server log, not in
+the task error (that string reaches Discord). The task fails only when
+every attempted provider failed. An empty result list (nothing was
+attempted) is persisted and returned without failing the task. When some
+providers publish and others fail, the engine emits
+``video_publish_partial_failure`` and a Discord alert naming the failed
+providers.
+
 Idempotency: if the task state already carries ``publish_results`` the publish
 is skipped, so retries/timeouts never double-post.
 """
@@ -22,6 +33,8 @@ from app.models.schema import TaskVideoRequest
 from app.services import state as sm
 from app.services import upload_publisher
 from app.services import video_storage
+from app.services.analytics import track_event
+from app.services.notify import partial_publish_msg, send_discord
 
 BASE_URL_ENV: str = "MPT_UPLOAD_API_BASE_URL"
 SERVICE_KEY_ENV: str = "MONEYPRINT_API_SECRET"
@@ -116,11 +129,24 @@ def publish_videos(
     in-process only) so the boot orphan triage can finish a publish
     interrupted by a restart.
 
-    Results are recorded in the task state under ``publish_results``.
+    Results are recorded in the task state under ``publish_results`` —
+    one entry per (provider, video) with ``status`` ``"published"`` or
+    ``"failed"``. A provider failure is recorded, not fatal: the loop
+    continues with the remaining providers, so one provider being down
+    never cancels the others. Application-level failures (HTTP 200 with
+    ``success: false``, or a non-empty ``results`` list in which every
+    account failed) are failed entries too.
+
+    An empty ``results`` list means nothing was attempted. It is stored
+    and returned; it does not fail the task.
 
     Raises:
-        PublishFailedError: when the upload API rejects a video. The task state
-            is moved to FAILED with the upstream error preserved.
+        PublishFailedError: when at least one provider was attempted and
+            every one of them failed. The task state is moved to FAILED.
+            The error names each provider and keeps the basename only —
+            no local path and no upstream body. Partial success (at least
+            one provider published) returns normally after a partial-failure
+            alert that lists the providers that failed.
         RuntimeError: when required configuration is missing.
     """
     existing = sm.state.get_task(task_id) or {}
@@ -176,18 +202,101 @@ def publish_videos(
                     content_type="video/mp4",
                 )
             except upload_publisher.PublishError as exc:
-                # Basename only: the full local path would land in the task
-                # error and (via start()'s generic handler) in the Discord
-                # alert — no need to disclose the server's filesystem layout.
-                # The upstream response body likewise stays out of the error
-                # string (it reaches Discord); it is logged server-side only.
-                error = f"publish failed for {os.path.basename(video_path)}: {exc}"
-                logger.error(f"task {task_id}: {error} | upstream response: {exc.response_body}")
-                sm.persist_state_update(
-                    sm.state, task_id, state=const.TASK_STATE_FAILED, error=error
+                # One provider failing must not cancel the others: record
+                # the failure and keep going. Basename only: the full local
+                # path would land in the task error and (via start()'s
+                # generic handler) in the Discord alert — no need to
+                # disclose the server's filesystem layout. The upstream
+                # response body likewise stays out of the error string (it
+                # reaches Discord); it is logged server-side only.
+                # The provider name is part of the error so an all-fail
+                # aggregate can say which provider each failure belongs to.
+                video_name = os.path.basename(video_path)
+                error = f"{provider}: publish failed for {video_name}: {exc}"
+                logger.error(
+                    f"task {task_id}: {error} | upstream response: {exc.response_body}"
                 )
-                raise PublishFailedError(error) from exc
-            results.append({"provider": provider, "video": video_path, **result})
+                results.append(
+                    {
+                        "provider": provider,
+                        "video": video_name,
+                        "status": "failed",
+                        "error": error,
+                    }
+                )
+                continue
+            # Spread the upstream body first so a provider/status/video
+            # field in the response cannot overwrite the engine's values.
+            results.append(
+                {
+                    **result,
+                    "provider": provider,
+                    "video": video_path,
+                    "status": "published",
+                }
+            )
 
+    published = _providers_with_status(results, "published")
+    failed = _providers_with_status(results, "failed")
+
+    # Nothing attempted (no videos, or every provider skipped): the
+    # pre-change contract persisted [] and returned. An empty list is
+    # not "every provider failed".
+    if not results:
+        sm.persist_state_update(sm.state, task_id, publish_results=results)
+        return results
+
+    # Only when every attempted provider failed does the task itself fail.
+    if not published:
+        failures = "; ".join(str(entry.get("error", "unknown")) for entry in results)
+        error = f"publish failed for all providers: {failures}"
+        sm.persist_state_update(
+            sm.state, task_id, state=const.TASK_STATE_FAILED, error=error
+        )
+        raise PublishFailedError(error)
+
+    # Partial success is a success: the task completes and the per-provider
+    # results let the UI show which providers published and which failed.
+    # Persist first so a telemetry hiccup cannot drop the idempotency
+    # marker and cause a retry to post again.
     sm.persist_state_update(sm.state, task_id, publish_results=results)
+    if failed:
+        _emit_partial_publish_failure(task_id, owner, failed, published)
     return results
+
+
+def _providers_with_status(results: list[dict[str, object]], status: str) -> list[str]:
+    """Provider names with ``status``, first-seen order, duplicates dropped."""
+    seen: list[str] = []
+    for entry in results:
+        if entry.get("status") != status:
+            continue
+        provider = entry.get("provider")
+        if not isinstance(provider, str) or not provider or provider in seen:
+            continue
+        seen.append(provider)
+    return seen
+
+
+def _emit_partial_publish_failure(
+    task_id: str,
+    owner: str,
+    failed_providers: list[str],
+    published_providers: list[str],
+) -> None:
+    """Alert that some providers failed while others published.
+
+    Provider names only. The task completed, so this is not
+    ``video_generation_failed`` and it does not mark the task FAILED.
+    ``track_event`` and ``send_discord`` never raise.
+    """
+    track_event(
+        "video_publish_partial_failure",
+        {
+            "task_id": task_id,
+            "user_id": owner,
+            "failed_providers": failed_providers,
+            "published_providers": published_providers,
+        },
+    )
+    send_discord(partial_publish_msg(task_id, failed_providers))

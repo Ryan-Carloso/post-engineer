@@ -370,6 +370,113 @@ class PublishVideoClientTest(unittest.TestCase):
         # response_body is truncated at exactly 500 chars, server logs only.
         self.assertEqual(len(exc.response_body or ""), 500)
 
+    def test_publish_video_raises_on_http_200_success_false(self) -> None:
+        # The route answers 200 for handler results. success:false (with
+        # error/errorType) is an application failure, not a published post.
+        # Not retried. The body stays out of the exception message.
+        secret = "SECRET-UPSTREAM-BODY"
+        _MockHandler.responses.append(
+            (200, {"success": False, "error": secret, "errorType": "CustomErrorType"})
+        )
+        sleeps: list[float] = []
+        with self.assertRaises(upload_publisher.PublishError) as caught:
+            upload_publisher.publish_video(
+                base_url=self.base_url,
+                api_secret="k",
+                owner_user_id="user-1",
+                metadata=_youtube_metadata(),
+                video_path="final.mp4",
+                video_bytes=b"mp4-bytes",
+                content_type="video/mp4",
+                timeout_seconds=5,
+                sleep=sleeps.append,
+            )
+        exc = caught.exception
+        self.assertEqual(str(exc), "upload API reported failure")
+        self.assertEqual(exc.status_code, 200)
+        self.assertNotIn(secret, str(exc))
+        self.assertNotIn("CustomErrorType", str(exc))
+        self.assertIn(secret, exc.response_body or "")
+        self.assertEqual(len(_MockHandler.requests), 1)
+        self.assertEqual(sleeps, [])
+
+    def test_publish_video_raises_when_every_account_result_failed(self) -> None:
+        # YouTube and Instagram keep top-level success true and report each
+        # account under results. Every account unsuccessful is still a failure.
+        secret = "ACCOUNT-SECRET"
+        _MockHandler.responses.append(
+            (
+                200,
+                {
+                    "success": True,
+                    "results": [
+                        {"accountId": "a", "success": False, "error": secret},
+                        {"accountId": "b", "success": False, "error": secret},
+                    ],
+                },
+            )
+        )
+        with self.assertRaises(upload_publisher.PublishError) as caught:
+            upload_publisher.publish_video(
+                base_url=self.base_url,
+                api_secret="k",
+                owner_user_id="user-1",
+                metadata=_youtube_metadata(),
+                video_path="final.mp4",
+                video_bytes=b"mp4-bytes",
+                content_type="video/mp4",
+                timeout_seconds=5,
+                sleep=lambda seconds: None,
+            )
+        self.assertEqual(str(caught.exception), "upload API reported failure for every account")
+        self.assertNotIn(secret, str(caught.exception))
+        self.assertIn(secret, caught.exception.response_body or "")
+
+    def test_publish_video_accepts_partial_account_success(self) -> None:
+        # One account posting is a provider success. An empty results list
+        # is not "every account failed" (all([]) is true).
+        _MockHandler.responses.append(
+            (
+                200,
+                {
+                    "success": True,
+                    "results": [
+                        {"accountId": "a", "success": False, "error": "nope"},
+                        {"accountId": "b", "success": True, "videoId": "yt-1"},
+                    ],
+                },
+            )
+        )
+        result = upload_publisher.publish_video(
+            base_url=self.base_url,
+            api_secret="k",
+            owner_user_id="user-1",
+            metadata=_youtube_metadata(),
+            video_path="final.mp4",
+            video_bytes=b"mp4-bytes",
+            content_type="video/mp4",
+            timeout_seconds=5,
+            sleep=lambda seconds: None,
+        )
+        self.assertEqual(result["success"], True)
+        self.assertEqual(result["results"][1]["videoId"], "yt-1")
+
+    def test_publish_video_accepts_empty_account_results(self) -> None:
+        _MockHandler.responses.append((200, {"success": True, "results": []}))
+        result = upload_publisher.publish_video(
+            base_url=self.base_url,
+            api_secret="k",
+            owner_user_id="user-1",
+            metadata=_youtube_metadata(),
+            video_path="final.mp4",
+            video_bytes=b"mp4-bytes",
+            content_type="video/mp4",
+            timeout_seconds=5,
+            sleep=lambda seconds: None,
+        )
+        self.assertEqual(result["success"], True)
+        self.assertEqual(result["results"], [])
+
     def test_publish_video_instagram_contract(self) -> None:
         _MockHandler.responses.append((200, {"success": True}))
         upload_publisher.publish_video(
