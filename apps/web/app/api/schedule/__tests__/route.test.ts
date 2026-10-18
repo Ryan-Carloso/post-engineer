@@ -46,7 +46,7 @@ function mockSupabase(handlers: {
   accountsByProvider?: Record<string, unknown[]>;
   insert?: { data: unknown; error: unknown };
   // Current schedule row (used by DELETE for the ownership lookup).
-  current?: { data: unknown };
+  current?: { data: unknown; error?: unknown };
   update?: { error: unknown };
   remove?: { error: unknown };
   deleteError?: unknown;
@@ -59,7 +59,7 @@ function mockSupabase(handlers: {
   };
   slotsInsert?: { error?: unknown; returnedRows?: Record<string, unknown>[] };
   /** Rows currently on scheduled_posts for this schedule (DELETE cancel). */
-  scheduleSlots?: Record<string, unknown>[];
+  scheduleSlots?: (Record<string, unknown> | null)[];
   /** First scheduled_posts select fails (the re-read uses the live rows). */
   slotsError?: unknown;
   /** The post-delete re-read fails. The first select still returns scheduleSlots. */
@@ -80,8 +80,8 @@ function mockSupabase(handlers: {
   const slotSelectArgs: string[] = [];
   const slotDeleteFilters: Record<string, unknown>[] = [];
   let slotReads = 0;
-  let liveSlots: Record<string, unknown>[] = Array.isArray(handlers.scheduleSlots)
-    ? handlers.scheduleSlots.map((row) => ({ ...row }))
+  let liveSlots: (Record<string, unknown> | null)[] = Array.isArray(handlers.scheduleSlots)
+    ? handlers.scheduleSlots.map((row) => (row === null ? null : { ...row }))
     : [];
   const client = {
     auth: {
