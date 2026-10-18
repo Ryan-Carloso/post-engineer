@@ -937,9 +937,7 @@ class TestFaceFiltering(unittest.TestCase):
             patch.dict(config.app, {"material_directory": ""}),
             patch.object(material, "search_videos_pexels", side_effect=fake_search),
             patch.object(material, "save_video", return_value="/tmp/face-saved.mp4"),
-            patch.object(
-                material.face_detect,
-                "video_contains_face",
+            patch("app.services.face_detect.video_contains_face",
                 return_value=True,
             ) as face_check,
         ):
@@ -969,9 +967,7 @@ class TestFaceFiltering(unittest.TestCase):
             patch.dict(config.app, {"material_directory": ""}),
             patch.object(material, "search_videos_pexels", side_effect=fake_search),
             patch.object(material, "save_video", return_value="/tmp/clean-saved.mp4"),
-            patch.object(
-                material.face_detect,
-                "video_contains_face",
+            patch("app.services.face_detect.video_contains_face",
                 return_value=False,
             ) as face_check,
         ):
@@ -1003,9 +999,7 @@ class TestFaceFiltering(unittest.TestCase):
             patch.dict(config.app, {"material_directory": ""}),
             patch.object(material, "search_videos_pexels", side_effect=fake_search),
             patch.object(material, "save_video", return_value="/tmp/x-saved.mp4"),
-            patch.object(
-                material.face_detect,
-                "video_contains_face",
+            patch("app.services.face_detect.video_contains_face",
                 return_value=False,
             ) as face_check,
         ):
@@ -1035,9 +1029,7 @@ class TestFaceFiltering(unittest.TestCase):
             patch.dict(config.app, {"material_directory": ""}),
             patch.object(material, "search_videos_pexels", side_effect=fake_search),
             patch.object(material, "save_video", return_value="/tmp/f1-saved.mp4"),
-            patch.object(
-                material.face_detect,
-                "video_contains_face",
+            patch("app.services.face_detect.video_contains_face",
                 return_value=True,
             ) as face_check,
         ):
@@ -1068,9 +1060,7 @@ class TestFaceFiltering(unittest.TestCase):
             patch.dict(config.app, {"material_directory": ""}),
             patch.object(material, "search_videos_pexels", side_effect=fake_search),
             patch.object(material, "save_video", return_value="/tmp/s1-saved.mp4"),
-            patch.object(
-                material.face_detect,
-                "video_contains_face",
+            patch("app.services.face_detect.video_contains_face",
                 return_value=False,
             ) as face_check,
         ):
