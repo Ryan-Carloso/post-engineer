@@ -142,10 +142,13 @@ def _svg_canvas_background() -> tuple:
     raw = raw.lstrip("#")
     if len(raw) == 3:
         raw = "".join(char * 2 for char in raw)
-    if len(raw) != 6:
+    try:
+        if len(raw) != 6:
+            raise ValueError(f"bad length {len(raw)}")
+        return tuple(int(raw[i : i + 2], 16) for i in (0, 2, 4)) + (255,)
+    except ValueError:
         logger.warning(f"invalid svg_canvas_background={raw!r}, using white")
-        raw = "FFFFFF"
-    return tuple(int(raw[i : i + 2], 16) for i in (0, 2, 4)) + (255,)
+        return (255, 255, 255, 255)
 
 
 def _persist_svg_item(

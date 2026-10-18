@@ -125,6 +125,26 @@ class PersistSvgMaterialTests(unittest.TestCase):
             self.assertEqual(svg_material._persist_svg_item(item, "/save", 3), "")
 
 
+class SvgCanvasBackgroundTests(unittest.TestCase):
+    def _background(self, value):
+        with patch.object(svg_material.config, "app", {"svg_canvas_background": value}):
+            return svg_material._svg_canvas_background()
+
+    def test_parses_six_digit_hex(self):
+        self.assertEqual(self._background("#112233"), (17, 34, 51, 255))
+
+    def test_parses_three_digit_hex(self):
+        self.assertEqual(self._background("#abc"), (170, 187, 204, 255))
+
+    def test_non_hex_value_falls_back_to_white(self):
+        # A 6-char non-hex value used to raise ValueError out of material
+        # resolution instead of degrading to white.
+        self.assertEqual(self._background("purple"), (255, 255, 255, 255))
+
+    def test_bad_length_falls_back_to_white(self):
+        self.assertEqual(self._background("#12345"), (255, 255, 255, 255))
+
+
 class SvgRasterizeAspectTests(unittest.TestCase):
     """The still must match the target aspect or combine_videos rejects it.
 
@@ -169,26 +189,35 @@ class SvgRasterizeAspectTests(unittest.TestCase):
         with Image.open(png) as image:
             self.assertEqual(image.size, (1080, 1080))
 
-    def test_aspect_produces_no_more_bars_than_the_limit(self):
-        """The rendered still must pass the same bar check the combiner uses."""
+    def test_wide_artwork_is_fitted_not_cropped(self):
+        """A very wide illustration keeps its aspect on the portrait canvas.
+
+        The canvas is always exactly target_width x target_height, so the
+        bar arithmetic against the canvas size can never fail. What matters
+        is the artwork region: it must be fitted (aspect preserved, fully
+        visible), not cropped or stretched.
+        """
         import tempfile
 
+        import numpy as np
         from PIL import Image
-
-        from app.services.material import MAX_LETTERBOX_BARS
 
         tmp = tempfile.mkdtemp()
         svg = os.path.join(tmp, "wide.svg")
         png = os.path.join(tmp, "out.png")
         self._make_svg(svg, 1600, 400)  # very wide: worst case for portrait
-        svg_material.rasterize_svg_to_png(svg, png, target_width=1080, target_height=1920)
-        with Image.open(png) as image:
-            clip_w, clip_h = image.size
-        target_w, target_h = 1080, 1920
-        clip_ratio = clip_w / clip_h
-        video_ratio = target_w / target_h
-        bars = 1 - video_ratio / clip_ratio if clip_ratio > video_ratio else 0.0
-        self.assertLessEqual(bars, MAX_LETTERBOX_BARS)
+        self.assertTrue(
+            svg_material.rasterize_svg_to_png(svg, png, target_width=1080, target_height=1920)
+        )
+        arr = np.asarray(Image.open(png).convert("RGB"))
+        # Non-white pixels are the fitted artwork (blue rect on white canvas).
+        non_white = (np.abs(arr.astype(int) - 255).sum(axis=2) > 24)
+        self.assertTrue(non_white.any(), "artwork must be visible on the canvas")
+        ys, xs = np.where(non_white)
+        art_w, art_h = int(xs.max() - xs.min() + 1), int(ys.max() - ys.min() + 1)
+        # Aspect preserved (1600:400 = 4:1) and fitted to the canvas width.
+        self.assertAlmostEqual(art_w / art_h, 4.0, delta=0.05)
+        self.assertEqual(art_w, 1080)
 
     def test_no_target_keeps_the_long_edge_default(self):
         import tempfile

@@ -154,6 +154,7 @@ def _flatten(
             continue
 
         if upper == "M":
+            first_pair = True
             while True:
                 chunk = take(2)
                 if chunk is None:
@@ -162,16 +163,15 @@ def _flatten(
                     chunk[0] + current[0] if relative else chunk[0],
                     chunk[1] + current[1] if relative else chunk[1],
                 )
-                if not points or index >= 2:
-                    if points and index == 2:
-                        pass
+                if first_pair:
+                    # A following Z closes to the initial moveto point; later
+                    # pairs are implicit linetos, not new subpaths.
                     start = current
-                    points.append(current)
-                    # Subsequent pairs after the first are implicit lineto.
-                    upper = "L"
-                    relative = command.islower()
-                if index >= 2:
-                    upper = "L"
+                    first_pair = False
+                points.append(current)
+                # Subsequent pairs after the first are implicit lineto.
+                upper = "L"
+                relative = command.islower()
             last_cubic_control = last_quad_control = None
             continue
 
