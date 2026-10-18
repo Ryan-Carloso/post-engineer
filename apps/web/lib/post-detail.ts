@@ -266,9 +266,11 @@ export async function getSlotPost(
 
 //---------------
 // getGenerationPost — one video_generations row by generation_id, with live
-// engine progress while the generation is still running (status 'pending'
-// + engine task attached). A failed progress lookup degrades to 0 — the
-// detail still resolves; the next poll retries.
+// engine progress while the generation is still in flight. generate-and-schedule
+// writes status 'running' (and engine_task_id) once the engine accepts the
+// job; 'pending' is the pre-accept snapshot and is included so a task id
+// recorded before that flip still shows progress. A failed progress lookup
+// degrades to 0 — the detail still resolves; the next poll retries.
 //---------------
 export async function getGenerationPost(
   supabase: SupabaseClient,
@@ -302,7 +304,7 @@ export async function getGenerationPost(
 
   let progress = 0;
   let stage: string | null = null;
-  if (row.status === 'pending' && row.engine_task_id) {
+  if ((row.status === 'pending' || row.status === 'running') && row.engine_task_id) {
     try {
       const task = await fetchEngineTaskProgress(row.engine_task_id, userId);
       if (!task.gone) {

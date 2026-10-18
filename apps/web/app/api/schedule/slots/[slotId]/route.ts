@@ -84,17 +84,6 @@ async function loadOwnedSlot(
   return { slot: row };
 }
 
-
-//---------------
-
-//---------------
-// GET — one post's full detail: the slot row, its schedule (providers +
-// account ids, so clients can resolve the target accounts) and the
-// persona. Presentation follows /api/schedule/status (pending→awaiting,
-// live engine progress for generating/failed slots via the shared
-// enrichSlot helper). Unknown id or another user's slot → 404, never the
-// row.
-//---------------
 //---------------
 // GET — one post's full detail: the slot row, its schedule (providers +
 // account ids, so clients can resolve the target accounts) and the
@@ -159,6 +148,11 @@ async function deleteHandler(
 
   const { slotId } = await context.params;
 
+  // The param is a scheduled_posts uuid, but callers sometimes send the
+  // engine generation key `batch:<scheduleId>:slot:<slotId>` (including
+  // percent-encoded). Resolve the real slot uuid before any uuid-typed
+  // filter — a raw non-uuid raises Postgres 22P02 and turns into a 500.
+  // Anything unresolvable is an unknown id: 404, never a database round-trip.
   const resolvedSlotId = resolveSlotUuid(slotId);
   if (resolvedSlotId === null) {
     return apiErrorResponse(404, 'Slot not found.', { route: 'DELETE /api/schedule/slots' });
@@ -241,6 +235,8 @@ async function patchHandler(
 
   const { slotId } = await context.params;
 
+  // Same normalization as DELETE: batch keys and percent-encoded ids
+  // resolve to the slot uuid; anything else 404s before a uuid filter.
   const resolvedSlotId = resolveSlotUuid(slotId);
   if (resolvedSlotId === null) {
     return apiErrorResponse(404, 'Slot not found.', { route: 'PATCH /api/schedule/slots' });

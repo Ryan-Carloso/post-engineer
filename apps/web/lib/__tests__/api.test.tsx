@@ -501,9 +501,9 @@ describe('api', () => {
 
     const invalidatedKeys = invalidateSpy.mock.calls.map((c) => (c[0] as { queryKey: unknown[] })?.queryKey);
     expect(invalidatedKeys).toContainEqual(['fill-schedule-status']);
-    // The detail page reads ['schedule-slot', slotId] with a 30s staleTime —
+    // The detail page reads ['post-detail', slotId] with a 30s staleTime —
     // a topic save must invalidate it too or the page shows the old topic.
-    expect(invalidatedKeys).toContainEqual(['schedule-slot', 'slot-1']);
+    expect(invalidatedKeys).toContainEqual(['post-detail', 'slot-1']);
     invalidateSpy.mockRestore();
   });
 

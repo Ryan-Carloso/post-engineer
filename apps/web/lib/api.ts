@@ -1029,9 +1029,9 @@ export function useUpdateSlotMutation() {
       updateSlotTopic(slotId, topic),
     onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['fill-schedule-status'] });
-      // The detail page reads ['schedule-slot', slotId] with a 30s staleTime;
+      // The detail page reads ['post-detail', slotId] with a 30s staleTime;
       // invalidate it too so the saved topic shows immediately.
-      void queryClient.invalidateQueries({ queryKey: ['schedule-slot', variables.slotId] });
+      void queryClient.invalidateQueries({ queryKey: ['post-detail', variables.slotId] });
     },
   });
 }
@@ -1154,7 +1154,6 @@ export function usePostDetailQuery(id: string) {
     refetchInterval: 60_000,
   });
 }
-
 
 //---------------
 // Create post — POST /api/videos/generate-and-schedule. One call mints the
@@ -1397,7 +1396,6 @@ export function seedCreatedPostCaches(
     queryClient.setQueryData(['fill-schedules'], [...schedules, seededSchedule]);
   }
 }
-
 
 export {
   fetchYouTubeAccounts,

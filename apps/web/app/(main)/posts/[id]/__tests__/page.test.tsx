@@ -6,9 +6,7 @@ import type { ReactNode } from 'react';
 
 //---------------
 // Tests for the post detail page (/posts/[id]) — resolves the entity by
-// id through the detail endpoints (GET /api/schedule/slots/:id and
-// GET /api/persona/video-generations/:id), never by scanning the history
-// lists.
+// id through GET /api/posts/[id], never by scanning the history lists.
 //---------------
 
 const pushMock = vi.fn();
@@ -58,6 +56,7 @@ import {
   useDeleteSlotMutation,
 } from '@/lib/api';
 import { useParams } from 'next/navigation';
+import { useI18n } from '@/lib/i18n/provider';
 
 const SLOT_SCHEDULE = {
   id: 's1',
@@ -222,6 +221,7 @@ function mockMutations() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(useI18n).mockReturnValue({ t: (key: string) => key, locale: 'en', setLocale: vi.fn() });
   mockQueries();
   mockMutations();
   vi.mocked(useParams).mockReturnValue({ id: 'u1' });
@@ -267,6 +267,8 @@ describe('PostDetailPage', () => {
         publishLinks: [
           { provider: 'youtube', url: 'https://www.youtube.com/watch?v=abc' },
           { provider: 'instagram', url: 'https://www.instagram.com/p/xyz/' },
+          { provider: 'bluesky', url: 'https://bsky.app/profile/viva.bsky.social/post/1' },
+          { provider: 'linkedin', url: 'https://www.linkedin.com/feed/update/urn:li:activity:1' },
         ],
       }),
     });
@@ -277,6 +279,10 @@ describe('PostDetailPage', () => {
     expect(youtube).toHaveAttribute('href', 'https://www.youtube.com/watch?v=abc');
     const instagram = screen.getByRole('link', { name: /Instagram/ });
     expect(instagram).toHaveAttribute('href', 'https://www.instagram.com/p/xyz/');
+    const bluesky = screen.getByRole('link', { name: /Bluesky/ });
+    expect(bluesky).toHaveAttribute('href', 'https://bsky.app/profile/viva.bsky.social/post/1');
+    const linkedin = screen.getByRole('link', { name: /LinkedIn/ });
+    expect(linkedin).toHaveAttribute('href', 'https://www.linkedin.com/feed/update/urn:li:activity:1');
   });
 
   // Published links open another site, so they must never share the tab
@@ -584,6 +590,13 @@ describe('PostDetailPage', () => {
     const video = screen.getByRole('region', { name: 'posts.detailsTitle' }).querySelector('video');
     expect(video).not.toBeNull();
     expect(video?.getAttribute('src')).toBe('/api/persona/video-download/task-3/final-1.mp4');
+    expect(screen.getByRole('heading', { name: 'Viva Leve' })).toBeInTheDocument();
+    expect(screen.getByText('posts.statusCompleted')).toBeInTheDocument();
+    expect(screen.getByText('posts.statusCompleted').className).toContain('bg-[#cff5df]');
+    expect(screen.getByRole('region', { name: 'posts.detailsTitle' })).toHaveTextContent('Launch recap');
+    expect(screen.queryByText('posts.errorUnknown')).not.toBeInTheDocument();
+    expect(screen.queryByText('posts.refundedBadge')).not.toBeInTheDocument();
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'posts.delete' })).not.toBeInTheDocument();
   });
 
@@ -643,8 +656,18 @@ describe('PostDetailPage — post identity', () => {
     // printed next to the viewer's local time.
     const section = screen.getByLabelText('posts.scheduleLabel');
     expect(section).toHaveTextContent('posts.scheduledForLabel');
+    expect(section).toHaveTextContent('Jun');
     expect(section).toHaveTextContent('11:00');
     expect(section).toHaveTextContent('(Europe/Lisbon)');
+  });
+
+  it('renders the scheduled date in Portuguese when the locale is pt', () => {
+    vi.mocked(useI18n).mockReturnValue({ t: (key: string) => key, locale: 'pt', setLocale: vi.fn() });
+    render(<DetailPage />);
+
+    const section = screen.getByLabelText('posts.scheduleLabel');
+    expect(section).toHaveTextContent(/jun/i);
+    expect(section).not.toHaveTextContent('Jun');
   });
 
   it('shows the published date in the schedule timezone for published posts', () => {
@@ -819,5 +842,150 @@ describe('PostDetailPage — progress history', () => {
     render(<DetailPage />);
 
     expect(screen.queryByLabelText('posts.progressHistoryTitle')).not.toBeInTheDocument();
+  });
+});
+
+function directGeneration(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return { ...COMPLETED_GENERATION, ...overrides };
+}
+
+describe('PostDetailPage — direct generation progress', () => {
+  it('shows live progress for a pending generation that already has a task id', () => {
+    mockQueries({
+      generation: directGeneration({
+        status: 'pending',
+        progress: 12,
+        stage: 'script',
+        engineTaskId: 'task-pending',
+      }),
+    });
+    vi.mocked(useParams).mockReturnValue({ id: 'gen-3' });
+    render(<DetailPage />);
+
+    expect(screen.getByRole('progressbar')).toBeInTheDocument();
+    expect(screen.getByText('posts.videoGenerating')).toBeInTheDocument();
+    expect(screen.getByText('posts.statusPending')).toBeInTheDocument();
+    expect(screen.getByText('script').tagName).toBe('P');
+    expect(screen.queryByRole('region', { name: 'posts.detailsTitle' })?.querySelector('video')).toBeNull();
+  });
+
+  it('shows live progress once the generation is running', () => {
+    mockQueries({
+      generation: directGeneration({
+        status: 'running',
+        progress: 67,
+        stage: 'audio',
+        engineTaskId: 'task-running',
+      }),
+    });
+    vi.mocked(useParams).mockReturnValue({ id: 'gen-3' });
+    render(<DetailPage />);
+
+    expect(screen.getByRole('progressbar')).toBeInTheDocument();
+    expect(screen.getByText('67%')).toBeInTheDocument();
+    expect(screen.getByText('posts.statusRunning')).toBeInTheDocument();
+    expect(screen.getByText('posts.statusRunning').className).toContain('bg-[#e3f0ff]');
+    expect(screen.queryByText('posts.coverNoVideo')).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'posts.detailsTitle' })?.querySelector('video')).toBeNull();
+  });
+
+  it('shows the no-video placeholder while pending with no task id', () => {
+    mockQueries({
+      generation: directGeneration({ status: 'pending', engineTaskId: null, progress: 0, stage: null }),
+    });
+    vi.mocked(useParams).mockReturnValue({ id: 'gen-3' });
+    render(<DetailPage />);
+
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    expect(screen.getByText('posts.coverNoVideo')).toBeInTheDocument();
+  });
+
+  it('shows the mapped failure and the refund badge', () => {
+    mockQueries({
+      generation: directGeneration({
+        status: 'failed',
+        errorCode: 'custom_audio_invalid',
+        tokensRefunded: true,
+        engineTaskId: 'task-3',
+      }),
+    });
+    vi.mocked(useParams).mockReturnValue({ id: 'gen-3' });
+    render(<DetailPage />);
+
+    expect(screen.getByText('posts.errorCustomAudio')).toBeInTheDocument();
+    expect(screen.getByText('posts.refundedBadge')).toBeInTheDocument();
+    expect(screen.getByText('posts.statusFailed')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'posts.detailsTitle' })?.querySelector('video')).toBeNull();
+  });
+
+  it('falls back to the unknown error when the code is missing or unrecognized', () => {
+    mockQueries({
+      generation: directGeneration({ status: 'failed', errorCode: null, engineTaskId: null }),
+    });
+    vi.mocked(useParams).mockReturnValue({ id: 'gen-3' });
+    const missing = render(<DetailPage />);
+    expect(screen.getByText('posts.errorUnknown')).toBeInTheDocument();
+    missing.unmount();
+
+    mockQueries({
+      generation: directGeneration({ status: 'failed', errorCode: 'brand_new_code', engineTaskId: null }),
+    });
+    render(<DetailPage />);
+    expect(screen.getByText('posts.errorUnknown')).toBeInTheDocument();
+  });
+
+  it('uses the persona and topic fallbacks when those fields are null', () => {
+    mockQueries({
+      generation: directGeneration({ personaName: null, videoSubject: null, status: 'completed' }),
+    });
+    vi.mocked(useParams).mockReturnValue({ id: 'gen-3' });
+    render(<DetailPage />);
+
+    expect(screen.getByRole('heading', { name: 'posts.personaFallback' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'posts.detailsTitle' })).toHaveTextContent('posts.unknownTopic');
+  });
+
+  it('does not enter the generation view when the payload has no generation', () => {
+    vi.mocked(usePostDetailQuery).mockReturnValue({
+      data: { kind: 'generation' },
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as never);
+    vi.mocked(useParams).mockReturnValue({ id: 'gen-3' });
+    render(<DetailPage />);
+
+    expect(screen.getByRole('heading', { name: 'posts.personaFallback' })).toBeInTheDocument();
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    expect(screen.queryByText('posts.videoGenerating')).not.toBeInTheDocument();
+  });
+});
+
+describe('PostDetailPage — status badge', () => {
+  it.each([
+    ['pending', 'posts.statusPending', 'bg-[#e8edf1]'],
+    ['generating', 'posts.statusGenerating', 'bg-[#e3f0ff]'],
+    ['ready', 'posts.statusReady', 'bg-[#fff4d6]'],
+    ['publishing', 'posts.statusPublishing', 'bg-[#e3f0ff]'],
+    ['published', 'posts.statusPublished', 'bg-[#cff5df]'],
+    ['failed', 'posts.statusFailed', 'bg-[#ffe1de]'],
+  ] as const)('labels a %s slot with %s', (status, label, style) => {
+    mockQueries({ slot: slotPayload({ id: 'u1', status, taskId: 'task-status' }) });
+    vi.mocked(useParams).mockReturnValue({ id: 'u1' });
+    render(<DetailPage />);
+
+    const badge = screen.getByText(label);
+    expect(badge.className).toContain(style);
+  });
+
+  it('plays the video for a publishing slot', () => {
+    mockQueries({
+      slot: slotPayload({ id: 'u1', status: 'publishing', taskId: 'task-pub', progress: 100 }),
+    });
+    vi.mocked(useParams).mockReturnValue({ id: 'u1' });
+    render(<DetailPage />);
+
+    const video = screen.getByRole('region', { name: 'posts.detailsTitle' }).querySelector('video');
+    expect(video?.getAttribute('src')).toBe('/api/persona/video-download/task-pub/final-1.mp4');
   });
 });

@@ -57,6 +57,7 @@ const STATUS_STYLE: Record<string, string> = {
 const STATUS_KEY: Record<string, TranslationKey> = {
   pending: 'posts.statusPending',
   generating: 'posts.statusGenerating',
+  running: 'posts.statusRunning',
   ready: 'posts.statusReady',
   publishing: 'posts.statusPublishing',
   published: 'posts.statusPublished',
@@ -217,7 +218,7 @@ export default function PostDetailPage() {
           <p className="text-sm text-muted-foreground">
             {formatDateTime(generation.createdAt, locale)} · {generation.videoSubject ?? t('posts.unknownTopic')}
           </p>
-          {generation.status === 'pending' && generation.engineTaskId ? (
+          {(generation.status === 'pending' || generation.status === 'running') && generation.engineTaskId ? (
             <DetailProgressBar progress={generation.progress} stage={generation.stage} />
           ) : (
             <DetailPlayer

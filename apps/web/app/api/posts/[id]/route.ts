@@ -5,6 +5,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { apiErrorResponse } from '@/lib/api-error';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { getGenerationPost, getSlotPost } from '@/lib/post-detail';
+import { resolveSlotUuid } from '@/lib/schedule-slot-id';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
@@ -38,13 +39,17 @@ async function getHandler(
   const { id } = await context.params;
 
   try {
-    // A generation_id never collides with a slot UUID
-    // ("<uuid>:slot:<uuid>"), so order is just a fast-path choice.
+    // generation_id is text (a direct id, or `batch:<scheduleId>:slot:<slotId>`),
+    // so this lookup is safe with the raw param. scheduled_posts.id is uuid:
+    // a batch key, a percent-encoded key, or garbage must be normalized
+    // first. Feeding any of those into the uuid filter raises Postgres
+    // 22P02 and the catch below would turn it into a 500 (issue #201).
     const generation = await getGenerationPost(supabase, id, auth.userId);
     if (generation) {
       return NextResponse.json({ success: true, kind: 'generation', generation });
     }
-    const slotDetail = await getSlotPost(supabase, id, auth.userId);
+    const slotUuid = resolveSlotUuid(id);
+    const slotDetail = slotUuid === null ? null : await getSlotPost(supabase, slotUuid, auth.userId);
     if (slotDetail) {
       return NextResponse.json({ success: true, kind: 'slot', ...slotDetail });
     }

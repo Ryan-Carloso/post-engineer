@@ -177,7 +177,8 @@ describe('getGenerationPost', () => {
     vi.clearAllMocks();
   });
 
-  it('returns the generation with live engine progress while running', async () => {
+  it('returns live engine progress for a pending generation that already has a task id', async () => {
+    const { fetchEngineTaskProgress } = await import('../engine-tasks');
     const { supabase, chains } = mockSupabase({
       video_generations: { data: GENERATION_ROW, error: null },
     });
@@ -186,9 +187,46 @@ describe('getGenerationPost', () => {
     expect(detail?.progress).toBe(67);
     expect(detail?.stage).toBe('audio');
     expect(detail?.tokensRefunded).toBe(false);
+    expect(fetchEngineTaskProgress).toHaveBeenCalledWith('task-1', 'user-1');
     expect(chains['video_generations'].select).toHaveBeenCalledWith(
       'id, generation_id, engine_task_id, persona_name, video_subject, status, error_code, tokens_refunded, created_at, completed_at'
     );
+  });
+
+  it('returns live engine progress once the generation is running', async () => {
+    const { fetchEngineTaskProgress } = await import('../engine-tasks');
+    const { supabase } = mockSupabase({
+      video_generations: { data: { ...GENERATION_ROW, status: 'running' }, error: null },
+    });
+    const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1');
+    expect(detail?.status).toBe('running');
+    expect(detail?.progress).toBe(67);
+    expect(detail?.stage).toBe('audio');
+    expect(fetchEngineTaskProgress).toHaveBeenCalledWith('task-1', 'user-1');
+  });
+
+  it('does not call the engine for a pending generation with no task id', async () => {
+    const { fetchEngineTaskProgress } = await import('../engine-tasks');
+    const { supabase } = mockSupabase({
+      video_generations: { data: { ...GENERATION_ROW, engine_task_id: null }, error: null },
+    });
+    const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1');
+    expect(detail?.progress).toBe(0);
+    expect(detail?.stage).toBeNull();
+    expect(fetchEngineTaskProgress).not.toHaveBeenCalled();
+  });
+
+  it('does not call the engine for a running generation with no task id', async () => {
+    const { fetchEngineTaskProgress } = await import('../engine-tasks');
+    const { supabase } = mockSupabase({
+      video_generations: {
+        data: { ...GENERATION_ROW, status: 'running', engine_task_id: null },
+        error: null,
+      },
+    });
+    const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1');
+    expect(detail?.progress).toBe(0);
+    expect(fetchEngineTaskProgress).not.toHaveBeenCalled();
   });
 
   it('returns progress 0 for terminal generations (no engine lookup)', async () => {
