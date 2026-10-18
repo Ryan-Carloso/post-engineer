@@ -559,6 +559,14 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(typeof payload.generation_id).toBe('string');
     });
 
+    it('sends slot_id to the engine so boot orphan triage can requeue the task', async () => {
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+      expect(typeof payload.slot_id).toBe('string');
+      expect(payload.slot_id).toBeTruthy();
+    });
+
     it('persists the full engine payload, publish mode and slot time on the video_generations row', async () => {
       const res = await post(baseBody());
       expect(res.status).toBe(200);

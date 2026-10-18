@@ -1329,10 +1329,10 @@ async function postHandler(request: Request): Promise<NextResponse> {
         video_subject: topic,
         video_script_prompt: validatedOptions.scriptPrompts?.[i] ?? validatedOptions.scriptPrompt,
         webhook_url: validatedOptions.webhookUrl,
-        // The web-side correlation id travels to the engine so its PostHog
-        // events (requested/progress/failed/404) can be joined back to the
-        // video_generations row without a database lookup.
+        // generation_id: web-side correlation id for PostHog event joins;
+        // slot_id: lets boot orphan triage requeue (not fail) on engine restart.
         generation_id: slotGenerationId,
+        slot_id: slot.id,
         // The per-post "no face" choice reaches the engine as lipsync: the
         // engine's persona_lipsync_active also returns false when no visual is
         // attached, and a faceless job carries no photo_url.

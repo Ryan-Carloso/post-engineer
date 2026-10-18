@@ -305,6 +305,7 @@ class TaskVideoRequest(VideoParams, BaseModel):
     # traced end-to-end without a database lookup. Never used as the task
     # id itself — the engine keeps minting its own task ids.
     generation_id: Optional[str] = None
+    slot_id: Optional[str] = None  # Web-side slot id; lets boot orphan triage requeue web tasks.
 
     @field_validator("webhook_url")
     @classmethod
