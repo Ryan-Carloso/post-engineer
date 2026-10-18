@@ -292,6 +292,20 @@ class EndToEndTests(unittest.TestCase):
             )
 
 
+class DrawPaceTests(unittest.TestCase):
+    """One source of truth for the drawing speed, so both CLIs cannot drift."""
+
+    def test_pace_matches_the_configured_duration(self):
+        self.assertEqual(svg_sketch.draw_frame_count(), round(svg_sketch.DRAW_SECONDS * svg_sketch.DRAW_FPS))
+
+    def test_pace_is_at_least_two_frames(self):
+        self.assertGreaterEqual(svg_sketch.draw_frame_count(), 2)
+
+    def test_pace_is_the_fast_setting(self):
+        # Guards the regression: the reveal was 2.2s and felt like it stalled.
+        self.assertLessEqual(svg_sketch.DRAW_SECONDS, 1.2)
+
+
 class RevealAxisTests(unittest.TestCase):
     def test_horizontal_axis_increases_left_to_right(self):
         axis = svg_sketch._reveal_axis(50, 10, (1.0, 0.0))

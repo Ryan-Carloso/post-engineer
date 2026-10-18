@@ -21,7 +21,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.services import svg_sketch  # noqa: E402
 
 CANVAS_W, CANVAS_H = 1080, 1920
-FRAMES = 60
 PEN_SIZE = 460
 # Top-left to bottom-right sweep, with the barrel on the far side of the tip.
 DIAGONAL = (1.0, 1.0)
@@ -56,7 +55,7 @@ def main() -> int:
     sprite = pencil_sprite()
     tip = svg_sketch.pencil_tip_in_sprite(PEN_SIZE)
     frames = svg_sketch.render_sketch_clip(
-        svg_path, sprite, tip, FRAMES, CANVAS_W, CANVAS_H,
+        svg_path, sprite, tip, svg_sketch.draw_frame_count(), CANVAS_W, CANVAS_H,
         direction=DIAGONAL, angle_offset=PENCIL_FLIP,
         monochrome=MONOCHROME,
     )
@@ -64,8 +63,8 @@ def main() -> int:
         print(f"no embedded raster in {svg_path} — use tools/render_sketch_icon.py for line art")
         return 1
 
-    svg_sketch.write_clip(frames, out_path, fps=20)
-    print(f"OK {out_path} ({len(frames)} frames)")
+    svg_sketch.write_clip(frames, out_path, fps=svg_sketch.DRAW_FPS)
+    print(f"OK {out_path} ({len(frames)} frames @ {svg_sketch.DRAW_FPS}fps)")
     return 0
 
 

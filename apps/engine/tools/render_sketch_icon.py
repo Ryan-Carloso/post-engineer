@@ -23,7 +23,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.services import line_art, svg_draw, svg_sketch  # noqa: E402
 
 CANVAS_W, CANVAS_H = 1080, 1920
-FRAMES = 44
 PEN_SIZE = 460
 PENCIL_SIZE = 700
 # Barrel on the far side of the tip.
@@ -99,24 +98,17 @@ def icon_frames(name: str, frame_count: int, width: int):
 def main() -> int:
     name = sys.argv[1] if len(sys.argv) > 1 else "clock"
     out_dir = sys.argv[2] if len(sys.argv) > 2 else "/tmp/svg-sketch-demo"
-    # Optional: seconds of drawing and output fps. Clip length is their
-    # product, so either lever can change the pace.
-    seconds = float(sys.argv[3]) if len(sys.argv) > 3 else None
-    fps = int(sys.argv[4]) if len(sys.argv) > 4 else 20
-
-    frame_count = FRAMES if seconds is None else max(int(round(seconds * fps)), 2)
     os.makedirs(out_dir, exist_ok=True)
 
     sprite, tip = pencil_sprite()
     pencil = svg_sketch.Pencil(sprite, tip)
 
-    frames, masks = icon_frames(name, frame_count, 700)
+    frames, masks = icon_frames(name, svg_sketch.draw_frame_count(), 700)
     frames = svg_sketch.attach_pencil(frames, masks, pencil, angle_offset=PENCIL_FLIP)
 
-    suffix = "" if seconds is None else f"_{seconds:g}s"
-    out = os.path.join(out_dir, f"lapis_{name}{suffix}.mp4")
-    svg_sketch.write_clip(frames, out, fps=fps)
-    print(f"OK {out} ({len(frames)} frames @ {fps}fps = {len(frames)/fps:.2f}s)")
+    out = os.path.join(out_dir, f"lapis_{name}.mp4")
+    svg_sketch.write_clip(frames, out, fps=svg_sketch.DRAW_FPS)
+    print(f"OK {out} ({len(frames)} frames @ {svg_sketch.DRAW_FPS}fps)")
     return 0
 
 

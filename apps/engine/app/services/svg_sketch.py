@@ -42,6 +42,18 @@ _MIN_VARIANCE = 1e-6
 
 _CANVAS_MARGIN = 0.12
 
+# Drawing pace, in one place so the icon CLI and the catalog CLI cannot drift.
+# 1.1s at 30fps: fast enough not to stall a video, slow enough that each stroke
+# still reads as being traced rather than popping into place.
+DRAW_SECONDS = 1.1
+DRAW_FPS = 30
+
+
+def draw_frame_count() -> int:
+    """Frames for one reveal at the configured pace."""
+    return max(int(round(DRAW_SECONDS * DRAW_FPS)), 2)
+
+
 # Default reveal axis: left to right. Callers pass a diagonal to sweep
 # top-left to bottom-right instead.
 _HORIZONTAL = (1.0, 0.0)
