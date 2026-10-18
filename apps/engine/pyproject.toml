@@ -71,9 +71,7 @@ override-dependencies = [
 dev = [
     "coverage>=7.6.0",
     "httpx>=0.28.1",
-    # Floor is 3.8: that release's forkserver runner ignores unexpected
-    # child pids. Older releases KeyError in read_one_child_exit_status.
-    "mutmut>=3.8.0",
+    "mutmut>=3.3.1",
     "mypy>=1.10.0",
     "pre-commit>=4.0.0",
     "pytest>=9.1.1",
@@ -153,15 +151,6 @@ source_paths = [
     "app/",
 ]
 only_mutate = []
-# mutmut >= 3.8 forkserver runner. The default fork runner reaps every
-# child with os.wait() and looks the pid up in its worker table. The
-# clean-test pass runs inside that process, so a daemon thread the suite
-# starts (the engine heartbeat's nvidia-smi subprocess, or an ffmpeg the
-# tests spawn) is a direct child of mutmut. os.wait() then reaps that
-# child and the shard dies with KeyError before it can write a score.
-# forkserver runs the suite in its own process and skips pids it did
-# not fork, so those children cannot abort the run.
-process_isolation = "forkserver"
 # Files the test run needs inside mutants/, beyond mutmut's defaults
 # (test/, pyproject.toml, uv.lock, ...).
 # - modal_longcat.py / modal_longcat_gpu.py: the LongCat source-scan tests
@@ -180,17 +169,11 @@ also_copy = [
 # - test_mypy_config.py pins the CI workflow file layout (.github/workflows/),
 #   which does not exist inside mutmut's mutants/ working copy. It exercises
 #   no app code, so it carries zero mutation signal.
-# - test_mutmut_runner.py pins this config and mutation.yml. mutmut copies
-#   test/ into mutants/, one directory deeper than apps/engine, so the
-#   file's repo-root walk lands on apps/engine and the workflow read
-#   raises FileNotFoundError. Stats collection runs pytest -x, so that
-#   single failure aborts the shard before any mutant is scored.
 # - test/services/test_cli.py has a pre-existing order-dependent isolation flaw
 #   (loguru file sink closed by earlier tests; passes under pytest-randomly in
 #   normal CI, fails under mutmut's deterministic subset ordering).
 pytest_add_cli_args = [
     "--ignore=test/test_mypy_config.py",
-    "--ignore=test/test_mutmut_runner.py",
     "--ignore=test/services/test_cli.py",
 ]
 pytest_add_cli_args_test_selection = [
