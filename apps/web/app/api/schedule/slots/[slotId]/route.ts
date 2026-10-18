@@ -358,10 +358,7 @@ async function deleteHandler(
 
   // The last remaining slot of a schedule cannot be deleted individually —
   // that would leave an active but empty schedule. Delete the whole
-  // schedule instead (DELETE /api/schedule?id=...). That cancel removes
-  // pending, generating, and ready slots (this per-slot DELETE does not —
-  // a generating slot, which is what a just-created post is, 409s here).
-  // The check-and-delete is
+  // schedule instead (DELETE /api/schedule?id=...). The check-and-delete is
   // atomic via the delete_slot_if_not_last RPC (row lock + count + delete
   // in one transaction); two concurrent deletes cannot both slip past the
   // guard.
