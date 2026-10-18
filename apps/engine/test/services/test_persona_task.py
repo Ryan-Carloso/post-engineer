@@ -685,11 +685,14 @@ class TestFaceFillBestEffort:
 
 class TestLipsyncCeilingGuard:
     """The hook window constant could be edited past the LongCat segment
-    ceiling; prepare_persona_lipsync_video rejects it at runtime instead of
-    rendering an oversized intro."""
+    ceiling; prepare_persona_lipsync_video raises the dedicated ceiling
+    error instead of rendering an oversized intro. The pipeline caller
+    catches it and degrades to the normal video."""
 
     def test_hook_past_the_lipsync_ceiling_raises(self, tmp_path, monkeypatch):
         import base64 as b64
+
+        from app.services.persona_hook import HookExceedsLipsyncCeiling
 
         monkeypatch.setattr(
             task_service, "_find_hook_end_seconds", lambda *a, **k: 17.0
@@ -701,7 +704,7 @@ class TestLipsyncCeilingGuard:
             lambda _path: _subtitles_for_face_fill(),
         )
         params = _params(voice_id="calm", photo_url=None, avatar_url="data:image/png;base64," + b64.b64encode(b"img").decode())
-        with pytest.raises(ValueError, match="exceeds the lipsync ceiling"):
+        with pytest.raises(HookExceedsLipsyncCeiling, match="exceeds the lipsync ceiling") as exc_info:
             task_service.prepare_persona_lipsync_video(
                 task_id="task-1",
                 params=params,
@@ -711,3 +714,4 @@ class TestLipsyncCeilingGuard:
                 video_script="Hook.\n\nBody.",
                 subtitle_path="subtitle.srt",
             )
+        assert exc_info.value.hook_end_seconds == 17.0

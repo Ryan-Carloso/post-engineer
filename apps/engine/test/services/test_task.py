@@ -1328,3 +1328,47 @@ class TestArchiveFinalVideos(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_generate_final_videos_degrades_past_the_lipsync_ceiling(self):
+        """A hook in the 12-15s dead zone skips the lipsync intro and ships
+        the normal video instead of failing the task."""
+        from app.services.persona_hook import HookExceedsLipsyncCeiling
+
+        task_id = "ceiling-degrade"
+        params = VideoParams(
+            video_subject="test",
+            persona=PersonaParams(
+                name="Ana", photo_url="https://supabase.test/signed/foto.png"
+            ),
+        )
+        ceiling = HookExceedsLipsyncCeiling(14.6, 12.0)
+        with patch.object(tm.sm.state, "get_task", return_value={"user_id": "alice"}), \
+            patch.object(tm.history_repository, "recent", return_value=[]), \
+            patch.object(tm, "_update_task"), \
+            patch.object(tm.video, "combine_videos"), \
+            patch.object(
+                tm, "prepare_persona_lipsync_video", side_effect=ceiling
+            ), \
+            patch.object(
+                tm, "_apply_persona_face_fill", side_effect=lambda **k: k["video_file"]
+            ), \
+            patch.object(tm.persona_hook, "track_event") as track, \
+            patch.object(tm.video, "generate_video") as generate_video:
+            final_paths, combined_paths, intro_report = tm.generate_final_videos(
+                task_id, params, ["clip.mp4"], "voice.mp3", "sub.srt", "script", "none"
+            )
+
+        # The task completes: the normal (non-lipsync) video ships.
+        self.assertEqual(len(final_paths), 1)
+        self.assertEqual(len(combined_paths), 1)
+        self.assertFalse(intro_report.ran)
+        generate_video.assert_called_once()
+        self.assertEqual(
+            generate_video.call_args.kwargs["video_path"], combined_paths[0]
+        )
+        # The skip is observable in PostHog.
+        track.assert_called_once_with(
+            "persona_hook_lipsync_skipped",
+            {"task_id": task_id, "hook_end_seconds": 14.6},
+            immediate=True,
+        )

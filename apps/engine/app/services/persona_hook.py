@@ -59,6 +59,52 @@ def resolve_exhausted_hook(
     )
 
 
+class HookExceedsLipsyncCeiling(ValueError):
+    """The hook fits the product rule but not the GPU lipsync renderer.
+
+    A hook in the 12-15s dead zone ships best-effort upstream (under the
+    15s hard fail) yet would SIGKILL the Modal container past the LongCat
+    segment ceiling. Subclasses ValueError so existing ceiling guards
+    keep failing loudly; callers that degrade instead catch this type.
+    """
+
+    def __init__(self, hook_end_seconds: float, ceiling_seconds: float):
+        self.hook_end_seconds = hook_end_seconds
+        self.ceiling_seconds = ceiling_seconds
+        super().__init__(
+            "persona hook exceeds the lipsync ceiling: hook ends at "
+            f"{hook_end_seconds:g}s, max {ceiling_seconds:g}s"
+        )
+
+
+def ensure_hook_within_lipsync_ceiling(hook_end_seconds: float, ceiling_seconds: float) -> None:
+    """Fail fast when the hook cannot be rendered by the GPU lipsync pipeline.
+
+    Lets the caller degrade to the normal video (hook still spoken) instead
+    of burning GPU on a render the container cannot survive.
+    """
+    if hook_end_seconds > ceiling_seconds:
+        raise HookExceedsLipsyncCeiling(hook_end_seconds, ceiling_seconds)
+
+
+def report_lipsync_intro_skipped(task_id: str, hook_end_seconds: float) -> None:
+    """Log and track a lipsync-intro skip over the GPU ceiling.
+
+    The video still ships (normal layout, hook spoken) — this records why
+    the intro is missing. immediate=True: a lone skip event would otherwise
+    sit in the analytics queue.
+    """
+    logger.warning(
+        f"persona hook exceeds the lipsync ceiling ({hook_end_seconds:g}s); "
+        "skipping lipsync intro, shipping normal video"
+    )
+    track_event(
+        "persona_hook_lipsync_skipped",
+        {"task_id": task_id, "hook_end_seconds": round(hook_end_seconds, 2)},
+        immediate=True,
+    )
+
+
 def _find_hook_end_seconds(
     video_script: str,
     subtitles: Sequence[tuple[int, str, str]],
