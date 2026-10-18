@@ -210,11 +210,25 @@ def publish_videos(
                 # response body likewise stays out of the error string (it
                 # reaches Discord); it is logged server-side only.
                 # The provider name is part of the error so an all-fail
-                # aggregate can say which provider each failure belongs to.
+                                # aggregate can say which provider each failure belongs to.
                 video_name = os.path.basename(video_path)
                 error = f"{provider}: publish failed for {video_name}: {exc}"
                 logger.error(
                     f"task {task_id}: {error} | upstream response: {exc.response_body}"
+                )
+                # PostHog gets the full diagnostic picture (provider, status,
+                # upstream body): unlike Discord, it is our own observability
+                # backend, not a user-facing surface. The body is the
+                # provider's error text — no credentials or video bytes.
+                track_event(
+                    "publish_provider_failed",
+                    {
+                        "task_id": task_id,
+                        "user_id": owner,
+                        "provider": provider,
+                        "status_code": exc.status_code,
+                        "response_body": (exc.response_body or "")[:500],
+                    },
                 )
                 results.append(
                     {
