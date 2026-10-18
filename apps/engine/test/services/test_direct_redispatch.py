@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.controllers.manager.memory_manager import InMemoryTaskManager
 from app.models import const
-from app.services import orphan_requeue
+from app.services import direct_redispatch, orphan_requeue
 
 
 def _direct_data(**overrides):
@@ -58,7 +58,7 @@ def _state_with_rows(rows):
 class DirectGenerationRowTests(unittest.TestCase):
     def test_returns_row_for_non_terminal_row_with_params(self):
         state = _state_with_rows([_row()])
-        row = orphan_requeue._direct_generation_row(state, "t-1")
+        row = direct_redispatch._direct_generation_row(state, "t-1")
         self.assertEqual(row, _row())
         # The lookup keys the orphan's engine task id.
         query = state._request.call_args[0][1]
@@ -66,37 +66,37 @@ class DirectGenerationRowTests(unittest.TestCase):
 
     def test_returns_none_when_no_row(self):
         state = _state_with_rows([])
-        self.assertIsNone(orphan_requeue._direct_generation_row(state, "t-1"))
+        self.assertIsNone(direct_redispatch._direct_generation_row(state, "t-1"))
 
     def test_returns_none_for_terminal_rows(self):
         for status in ("failed", "completed"):
             with self.subTest(status=status):
                 state = _state_with_rows([_row(status=status)])
-                self.assertIsNone(orphan_requeue._direct_generation_row(state, "t-1"))
+                self.assertIsNone(direct_redispatch._direct_generation_row(state, "t-1"))
 
     def test_returns_none_without_usable_params(self):
         for params in (None, "not-a-dict", [1, 2]):
             with self.subTest(params=params):
                 state = _state_with_rows([_row(params=params)])
-                self.assertIsNone(orphan_requeue._direct_generation_row(state, "t-1"))
+                self.assertIsNone(direct_redispatch._direct_generation_row(state, "t-1"))
 
     def test_returns_none_when_lookup_raises(self):
         state = MagicMock()
         state._request.side_effect = RuntimeError("supabase down")
         state._eq.side_effect = lambda value: value
-        self.assertIsNone(orphan_requeue._direct_generation_row(state, "t-1"))
+        self.assertIsNone(direct_redispatch._direct_generation_row(state, "t-1"))
 
 
 class TriageRedispatchDirectTests(unittest.TestCase):
     def setUp(self):
-        orphan_requeue._pending_direct_redispatches.clear()
+        direct_redispatch._pending_direct_redispatches.clear()
 
     def tearDown(self):
-        orphan_requeue._pending_direct_redispatches.clear()
+        direct_redispatch._pending_direct_redispatches.clear()
 
     def _claimed(self, state, task_id, data):
-        with patch.object(orphan_requeue, "track_event"):
-            return orphan_requeue.triage_redispatch_direct(state, task_id, data)
+        with patch.object(direct_redispatch, "track_event"):
+            return direct_redispatch.triage_redispatch_direct(state, task_id, data)
 
     def test_batch_owned_task_not_claimed(self):
         state = _state_with_rows([_row()])
@@ -153,10 +153,10 @@ class TriageRedispatchDirectTests(unittest.TestCase):
         before = {thread.name for thread in threading.enumerate()}
         with (
             patch("threading.Thread") as mock_thread,
-            patch.object(orphan_requeue, "_load_pipeline_start") as load,
-            patch.object(orphan_requeue, "track_event"),
+            patch.object(direct_redispatch, "_load_pipeline_start") as load,
+            patch.object(direct_redispatch, "track_event"),
         ):
-            claimed = orphan_requeue.triage_redispatch_direct(state, "t-1", _direct_data())
+            claimed = direct_redispatch.triage_redispatch_direct(state, "t-1", _direct_data())
         self.assertTrue(claimed)
         mock_thread.assert_not_called()
         load.assert_not_called()
@@ -165,8 +165,8 @@ class TriageRedispatchDirectTests(unittest.TestCase):
 
     def test_claims_and_records_redispatch_for_startup(self):
         state = _state_with_rows([_row()])
-        with patch.object(orphan_requeue, "track_event") as track:
-            claimed = orphan_requeue.triage_redispatch_direct(state, "t-1", _direct_data())
+        with patch.object(direct_redispatch, "track_event") as track:
+            claimed = direct_redispatch.triage_redispatch_direct(state, "t-1", _direct_data())
         self.assertTrue(claimed)
         # The task row goes back to a fresh PROCESSING state; the slot
         # binding (scheduled_posts.task_id) and the video_generations row
@@ -180,8 +180,8 @@ class TriageRedispatchDirectTests(unittest.TestCase):
         self.assertEqual(kwargs["requeue_count"], 1)
         # The counter write happens during review. Startup is what starts
         # the pipeline; this test stops before that.
-        self.assertEqual(len(orphan_requeue._pending_direct_redispatches), 1)
-        job = orphan_requeue._pending_direct_redispatches[0]
+        self.assertEqual(len(direct_redispatch._pending_direct_redispatches), 1)
+        job = direct_redispatch._pending_direct_redispatches[0]
         self.assertEqual(job.task_id, "t-1")
         self.assertEqual(job.requeue_count, 1)
         self.assertEqual(job.request.video_subject, "myth busting")
@@ -202,18 +202,18 @@ class TriageRedispatchDirectTests(unittest.TestCase):
 
 class TriageOrphanDirectWiringTests(unittest.TestCase):
     def setUp(self):
-        orphan_requeue._pending_direct_redispatches.clear()
+        direct_redispatch._pending_direct_redispatches.clear()
 
     def tearDown(self):
-        orphan_requeue._pending_direct_redispatches.clear()
+        direct_redispatch._pending_direct_redispatches.clear()
 
     def test_triage_orphan_claims_direct_via_redispatch(self):
         state = _state_with_rows([_row()])
-        with patch.object(orphan_requeue, "track_event"):
+        with patch.object(direct_redispatch, "track_event"):
             claimed = orphan_requeue.triage_orphan(state, "t-1", _direct_data(), None)
         self.assertTrue(claimed)
         self.assertEqual(state.update_task.call_args[1]["state"], const.TASK_STATE_PROCESSING)
-        self.assertEqual(len(orphan_requeue._pending_direct_redispatches), 1)
+        self.assertEqual(len(direct_redispatch._pending_direct_redispatches), 1)
 
 
 def _wait_until(predicate, timeout: float = 2.0) -> None:
@@ -227,29 +227,29 @@ def _wait_until(predicate, timeout: float = 2.0) -> None:
 
 class RedispatchStartupTests(unittest.TestCase):
     def setUp(self):
-        orphan_requeue._pending_direct_redispatches.clear()
+        direct_redispatch._pending_direct_redispatches.clear()
 
     def tearDown(self):
-        orphan_requeue._pending_direct_redispatches.clear()
+        direct_redispatch._pending_direct_redispatches.clear()
 
     def test_pipeline_import_failure_keeps_the_persisted_counter(self):
-        # The counter is written during review. A later import failure must
-        # not be able to skip it, or the task retries on every boot forever.
+        # The counter is written during review, before the pipeline import.
+        # An import error used to skip that write and retry on every boot.
         state = _state_with_rows([_row()])
-        with patch.object(orphan_requeue, "track_event"):
-            claimed = orphan_requeue.triage_redispatch_direct(state, "t-1", _direct_data())
+        with patch.object(direct_redispatch, "track_event"):
+            claimed = direct_redispatch.triage_redispatch_direct(state, "t-1", _direct_data())
         self.assertTrue(claimed)
         self.assertEqual(state.update_task.call_args[1]["requeue_count"], 1)
         manager = InMemoryTaskManager(max_concurrent_tasks=1)
         with (
             patch.object(
-                orphan_requeue,
+                direct_redispatch,
                 "_load_pipeline_start",
                 side_effect=ImportError("pipeline unavailable"),
             ),
             patch.object(orphan_requeue.logger, "error"),
         ):
-            accepted = orphan_requeue.start_pending_direct_redispatches(manager)
+            accepted = direct_redispatch.start_pending_direct_redispatches(manager)
         self.assertEqual(accepted, 0)
         self.assertEqual(state.update_task.call_count, 1)
         self.assertEqual(manager.current_tasks, 0)
@@ -257,15 +257,15 @@ class RedispatchStartupTests(unittest.TestCase):
 
     def test_queue_full_keeps_the_persisted_counter(self):
         state = _state_with_rows([_row()])
-        with patch.object(orphan_requeue, "track_event"):
-            claimed = orphan_requeue.triage_redispatch_direct(state, "t-1", _direct_data())
+        with patch.object(direct_redispatch, "track_event"):
+            claimed = direct_redispatch.triage_redispatch_direct(state, "t-1", _direct_data())
         self.assertTrue(claimed)
         manager = InMemoryTaskManager(max_concurrent_tasks=0, max_queued_tasks=0)
         with (
             patch("app.services.task.start"),
             patch.object(orphan_requeue.logger, "error"),
         ):
-            accepted = orphan_requeue.start_pending_direct_redispatches(manager)
+            accepted = direct_redispatch.start_pending_direct_redispatches(manager)
         self.assertEqual(accepted, 0)
         self.assertEqual(state.update_task.call_args[1]["requeue_count"], 1)
 
@@ -281,15 +281,15 @@ class RedispatchStartupTests(unittest.TestCase):
 
         for index in range(3):
             state = _state_with_rows([_row()])
-            with patch.object(orphan_requeue, "track_event"):
-                claimed = orphan_requeue.triage_redispatch_direct(
+            with patch.object(direct_redispatch, "track_event"):
+                claimed = direct_redispatch.triage_redispatch_direct(
                     state, f"t-{index}", _direct_data()
                 )
             self.assertTrue(claimed)
         manager = InMemoryTaskManager(max_concurrent_tasks=1, max_queued_tasks=10)
         try:
             with patch("app.services.task.start", worker):
-                accepted = orphan_requeue.start_pending_direct_redispatches(manager)
+                accepted = direct_redispatch.start_pending_direct_redispatches(manager)
             self.assertEqual(accepted, 3)
             # Reserved under the lock: one running, two queued, before any
             # worker has to have entered. A bare thread per job would show
@@ -335,7 +335,7 @@ class RedispatchStartupTests(unittest.TestCase):
         try:
             with (
                 patch("app.services.task.start", worker),
-                patch.object(orphan_requeue, "track_event"),
+                patch.object(direct_redispatch, "track_event"),
                 patch("app.asgi.warm_client"),
                 patch("app.asgi.start_fill_schedule_scheduler"),
                 patch("app.services.engine_heartbeat.start_heartbeat_thread"),
@@ -346,7 +346,7 @@ class RedispatchStartupTests(unittest.TestCase):
                 try:
                     before = {thread.name for thread in threading.enumerate()}
                     mock_state = _state_with_rows([_row()])
-                    claimed = orphan_requeue.triage_redispatch_direct(
+                    claimed = direct_redispatch.triage_redispatch_direct(
                         mock_state, "t-1", _direct_data()
                     )
                     self.assertTrue(claimed)
@@ -367,7 +367,7 @@ class RedispatchStartupTests(unittest.TestCase):
         finally:
             state_mod.state = saved_state
             video_controller.task_manager = saved_manager
-            orphan_requeue._pending_direct_redispatches.clear()
+            direct_redispatch._pending_direct_redispatches.clear()
 
 
 if __name__ == "__main__":

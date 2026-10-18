@@ -407,7 +407,7 @@ def startup_event():
     # app.services.state.state. Start them now, once that binding exists,
     # through the shared task manager (max_concurrent_tasks).
     try:
-        from app.services.orphan_requeue import start_pending_direct_redispatches
+        from app.services.direct_redispatch import start_pending_direct_redispatches
 
         start_pending_direct_redispatches()
     except Exception as exc:  # noqa: BLE001 - startup continues regardless
