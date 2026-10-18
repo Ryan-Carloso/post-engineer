@@ -4,20 +4,28 @@ Issue #205 persists the full engine job payload on the video_generations
 row at request time. The boot triage uses it to rebuild direct orphans
 (tasks with no slot_id on the row) instead of failing+refunding them:
 
-- generation-stage orphan + non-terminal row carrying params -> the
-  pipeline restarts in place with the stored payload (no billing change:
-  the generation was prepaid at request time);
+- generation-stage orphan + non-terminal row carrying params -> the task
+  is marked during review and the pipeline starts later, from the ASGI
+  startup hook, through the shared task manager (no billing change: the
+  generation was prepaid at request time);
 - no row / terminal row / snapshot-only row / unvalidatable payload ->
   fail+refund, as before (the honest remainder).
+
+The review runs inside SupabaseTaskState.__init__, before
+app.services.state.state is assigned. These tests drive that order with
+a real worker thread, not a mocked threading.Thread.
 """
 
 import sys
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+from app.controllers.manager.memory_manager import InMemoryTaskManager
 from app.models import const
 from app.services import orphan_requeue
 
@@ -80,12 +88,14 @@ class DirectGenerationRowTests(unittest.TestCase):
 
 
 class TriageRedispatchDirectTests(unittest.TestCase):
+    def setUp(self):
+        orphan_requeue._pending_direct_redispatches.clear()
+
+    def tearDown(self):
+        orphan_requeue._pending_direct_redispatches.clear()
+
     def _claimed(self, state, task_id, data):
-        with (
-            patch("threading.Thread"),
-            patch("app.services.task.start"),
-            patch.object(orphan_requeue, "track_event"),
-        ):
+        with patch.object(orphan_requeue, "track_event"):
             return orphan_requeue.triage_redispatch_direct(state, task_id, data)
 
     def test_batch_owned_task_not_claimed(self):
@@ -128,13 +138,34 @@ class TriageRedispatchDirectTests(unittest.TestCase):
         self.assertFalse(claimed)
         state.update_task.assert_not_called()
 
-    def test_claims_and_restarts_pipeline_in_place(self):
+    def test_stage_none_is_not_redispatched(self):
+        # stage=None is what a previous redispatch wrote. A crash before
+        # the pipeline re-marks a generation stage is failed+refunded, not
+        # started again. See the stage=None comment in triage_redispatch_direct.
         state = _state_with_rows([_row()])
+        claimed = self._claimed(state, "t-1", _direct_data(stage=None))
+        self.assertFalse(claimed)
+        state.update_task.assert_not_called()
+        state._request.assert_not_called()
+
+    def test_review_does_not_start_a_thread_or_import_the_pipeline(self):
+        state = _state_with_rows([_row()])
+        before = {thread.name for thread in threading.enumerate()}
         with (
             patch("threading.Thread") as mock_thread,
-            patch("app.services.task.start") as mock_start,
-            patch.object(orphan_requeue, "track_event") as track,
+            patch.object(orphan_requeue, "_load_pipeline_start") as load,
+            patch.object(orphan_requeue, "track_event"),
         ):
+            claimed = orphan_requeue.triage_redispatch_direct(state, "t-1", _direct_data())
+        self.assertTrue(claimed)
+        mock_thread.assert_not_called()
+        load.assert_not_called()
+        spawned = {thread.name for thread in threading.enumerate()} - before
+        self.assertEqual(spawned, set())
+
+    def test_claims_and_records_redispatch_for_startup(self):
+        state = _state_with_rows([_row()])
+        with patch.object(orphan_requeue, "track_event") as track:
             claimed = orphan_requeue.triage_redispatch_direct(state, "t-1", _direct_data())
         self.assertTrue(claimed)
         # The task row goes back to a fresh PROCESSING state; the slot
@@ -147,22 +178,18 @@ class TriageRedispatchDirectTests(unittest.TestCase):
         self.assertIsNone(kwargs["stage"])
         self.assertTrue(kwargs["auto_requeued"])
         self.assertEqual(kwargs["requeue_count"], 1)
-        # The pipeline restarts in a daemon thread with the validated
-        # stored payload — the same immediate path the tick uses.
-        mock_thread.assert_called_once()
-        thread_kwargs = mock_thread.call_args.kwargs
-        self.assertTrue(thread_kwargs.get("daemon"))
-        start_kwargs = thread_kwargs["kwargs"]
-        self.assertEqual(start_kwargs["task_id"], "t-1")
-        self.assertEqual(start_kwargs["stop_at"], "video")
-        self.assertEqual(start_kwargs["params"].video_subject, "myth busting")
-        self.assertEqual(start_kwargs["params"].generation_id, "g1")
-        # The captured target really is the pipeline entrypoint, wired
-        # with these kwargs.
-        thread_kwargs["target"](**start_kwargs)
-        mock_start.assert_called_once_with(
-            task_id="t-1", params=start_kwargs["params"], stop_at="video"
-        )
+        # The counter write happens during review. Startup is what starts
+        # the pipeline; this test stops before that.
+        self.assertEqual(len(orphan_requeue._pending_direct_redispatches), 1)
+        job = orphan_requeue._pending_direct_redispatches[0]
+        self.assertEqual(job.task_id, "t-1")
+        self.assertEqual(job.requeue_count, 1)
+        self.assertEqual(job.request.video_subject, "myth busting")
+        self.assertEqual(job.request.generation_id, "g1")
+        # The persisted engine payload (buildJobPayload) carries no publish
+        # plan. In-pipeline publish stays a no-op; the slot publisher posts
+        # at slot time. A publish key here would post on completion.
+        self.assertIsNone(job.request.publish)
         track.assert_called_once()
         self.assertEqual(track.call_args[0][0], "task_auto_requeued")
         self.assertEqual(track.call_args[0][1]["flow"], "direct")
@@ -174,16 +201,173 @@ class TriageRedispatchDirectTests(unittest.TestCase):
 
 
 class TriageOrphanDirectWiringTests(unittest.TestCase):
+    def setUp(self):
+        orphan_requeue._pending_direct_redispatches.clear()
+
+    def tearDown(self):
+        orphan_requeue._pending_direct_redispatches.clear()
+
     def test_triage_orphan_claims_direct_via_redispatch(self):
         state = _state_with_rows([_row()])
-        with (
-            patch("threading.Thread"),
-            patch("app.services.task.start"),
-            patch.object(orphan_requeue, "track_event"),
-        ):
+        with patch.object(orphan_requeue, "track_event"):
             claimed = orphan_requeue.triage_orphan(state, "t-1", _direct_data(), None)
         self.assertTrue(claimed)
         self.assertEqual(state.update_task.call_args[1]["state"], const.TASK_STATE_PROCESSING)
+        self.assertEqual(len(orphan_requeue._pending_direct_redispatches), 1)
+
+
+def _wait_until(predicate, timeout: float = 2.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return
+        time.sleep(0.01)
+    raise AssertionError("timed out waiting for redispatch workers")
+
+
+class RedispatchStartupTests(unittest.TestCase):
+    def setUp(self):
+        orphan_requeue._pending_direct_redispatches.clear()
+
+    def tearDown(self):
+        orphan_requeue._pending_direct_redispatches.clear()
+
+    def test_pipeline_import_failure_keeps_the_persisted_counter(self):
+        # The counter is written during review. A later import failure must
+        # not be able to skip it, or the task retries on every boot forever.
+        state = _state_with_rows([_row()])
+        with patch.object(orphan_requeue, "track_event"):
+            claimed = orphan_requeue.triage_redispatch_direct(state, "t-1", _direct_data())
+        self.assertTrue(claimed)
+        self.assertEqual(state.update_task.call_args[1]["requeue_count"], 1)
+        manager = InMemoryTaskManager(max_concurrent_tasks=1)
+        with (
+            patch.object(
+                orphan_requeue,
+                "_load_pipeline_start",
+                side_effect=ImportError("pipeline unavailable"),
+            ),
+            patch.object(orphan_requeue.logger, "error"),
+        ):
+            accepted = orphan_requeue.start_pending_direct_redispatches(manager)
+        self.assertEqual(accepted, 0)
+        self.assertEqual(state.update_task.call_count, 1)
+        self.assertEqual(manager.current_tasks, 0)
+        self.assertEqual(manager.queue_size(), 0)
+
+    def test_queue_full_keeps_the_persisted_counter(self):
+        state = _state_with_rows([_row()])
+        with patch.object(orphan_requeue, "track_event"):
+            claimed = orphan_requeue.triage_redispatch_direct(state, "t-1", _direct_data())
+        self.assertTrue(claimed)
+        manager = InMemoryTaskManager(max_concurrent_tasks=0, max_queued_tasks=0)
+        with (
+            patch("app.services.task.start"),
+            patch.object(orphan_requeue.logger, "error"),
+        ):
+            accepted = orphan_requeue.start_pending_direct_redispatches(manager)
+        self.assertEqual(accepted, 0)
+        self.assertEqual(state.update_task.call_args[1]["requeue_count"], 1)
+
+    def test_burst_queues_behind_max_concurrent_tasks(self):
+        release = threading.Event()
+        entered: list[str] = []
+        entered_lock = threading.Lock()
+
+        def worker(task_id, params, stop_at="video"):
+            with entered_lock:
+                entered.append(task_id)
+            release.wait(2)
+
+        for index in range(3):
+            state = _state_with_rows([_row()])
+            with patch.object(orphan_requeue, "track_event"):
+                claimed = orphan_requeue.triage_redispatch_direct(
+                    state, f"t-{index}", _direct_data()
+                )
+            self.assertTrue(claimed)
+        manager = InMemoryTaskManager(max_concurrent_tasks=1, max_queued_tasks=10)
+        try:
+            with patch("app.services.task.start", worker):
+                accepted = orphan_requeue.start_pending_direct_redispatches(manager)
+            self.assertEqual(accepted, 3)
+            # Reserved under the lock: one running, two queued, before any
+            # worker has to have entered. A bare thread per job would show
+            # queue_size 0.
+            self.assertEqual(manager.current_tasks, 1)
+            self.assertEqual(manager.queue_size(), 2)
+            release.set()
+            _wait_until(lambda: manager.current_tasks == 0 and manager.queue_size() == 0)
+            with entered_lock:
+                self.assertEqual(sorted(entered), ["t-0", "t-1", "t-2"])
+        finally:
+            release.set()
+
+    def test_startup_event_runs_the_worker_only_after_state_is_bound(self):
+        """Mirror production order: review inside the state constructor, then startup.
+
+        ``state = DeathDiagnosticTaskState()`` runs the review before the
+        module attribute exists. startup_event runs later and is what
+        starts the worker. The worker is a real task-manager thread.
+        """
+        import app.services.state as state_mod
+        from app import asgi
+        from app.controllers.v1 import video as video_controller
+
+        saved_state = state_mod.state
+        saved_manager = video_controller.task_manager
+        manager = InMemoryTaskManager(max_concurrent_tasks=2, max_queued_tasks=10)
+        started = threading.Event()
+        seen: dict[str, object] = {}
+
+        def worker(task_id, params, stop_at="video"):
+            # Set the event first so a start during the unbound window is
+            # visible even if reading state then raises.
+            seen["has_state"] = hasattr(state_mod, "state")
+            if hasattr(state_mod, "state"):
+                seen["state_is_saved"] = state_mod.state is saved_state
+            seen["task_id"] = task_id
+            seen["publish"] = params.publish
+            seen["stop_at"] = stop_at
+            started.set()
+
+        video_controller.task_manager = manager
+        try:
+            with (
+                patch("app.services.task.start", worker),
+                patch.object(orphan_requeue, "track_event"),
+                patch("app.asgi.warm_client"),
+                patch("app.asgi.start_fill_schedule_scheduler"),
+                patch("app.services.engine_heartbeat.start_heartbeat_thread"),
+                patch("app.services.engine_heartbeat.report_boot_event"),
+            ):
+                # Constructor window: the name is not published yet.
+                del state_mod.state
+                try:
+                    before = {thread.name for thread in threading.enumerate()}
+                    mock_state = _state_with_rows([_row()])
+                    claimed = orphan_requeue.triage_redispatch_direct(
+                        mock_state, "t-1", _direct_data()
+                    )
+                    self.assertTrue(claimed)
+                    self.assertFalse(started.is_set())
+                    spawned = {thread.name for thread in threading.enumerate()} - before
+                    self.assertEqual(spawned, set())
+                    self.assertEqual(mock_state.update_task.call_args[1]["requeue_count"], 1)
+                finally:
+                    state_mod.state = saved_state
+                asgi.startup_event()
+            self.assertTrue(started.wait(2), "startup did not run the redispatch worker")
+            self.assertTrue(seen["has_state"])
+            self.assertTrue(seen["state_is_saved"])
+            self.assertEqual(seen["task_id"], "t-1")
+            self.assertIsNone(seen["publish"])
+            self.assertEqual(seen["stop_at"], "video")
+            _wait_until(lambda: manager.current_tasks == 0)
+        finally:
+            state_mod.state = saved_state
+            video_controller.task_manager = saved_manager
+            orphan_requeue._pending_direct_redispatches.clear()
 
 
 if __name__ == "__main__":
