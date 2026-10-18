@@ -299,8 +299,10 @@ class R2ClientCredentialTests(unittest.TestCase):
             yield
 
     def test_missing_account_id_raises_without_credential_values(self):
-        key_id = "AKIAIOSFODNN7EXAMPLE"
-        secret = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+        # Deliberately fake values shaped nothing like real credentials: the
+        # point is that whatever is configured never appears in the error.
+        key_id = "test-key-id-not-a-real-credential"
+        secret = "test-secret-not-a-real-credential"
         with self._isolated_environ(
             {"R2_ACCESS_KEY_ID": key_id, "R2_SECRET_ACCESS_KEY": secret}
         ):
