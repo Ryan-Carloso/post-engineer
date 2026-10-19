@@ -873,10 +873,9 @@ def generate_audio(task_id, params, video_script):
         logger.info("no custom audio file provided, using TTS to generate audio.")
         audio_file = path.join(utils.task_dir(task_id), "audio.mp3")
         # Fail fast when nothing resolved to a usable voice name. An empty
-        # voice_name (or an empty-string persona voice_id, which the
-        # PersonaParams validator counts as a voice but the resolver treats
-        # as absent) would otherwise reach the provider and burn its retries
-        # before dying with a cryptic "voice/subtitle mismatch".
+        # voice_name (or empty-string persona voice_id) would otherwise reach
+        # the provider and burn its retries before dying with a cryptic
+        # "voice/subtitle mismatch".
         if not (persona_voice_name or "").strip():
             _fail_task(
                 task_id,
@@ -899,6 +898,7 @@ def generate_audio(task_id, params, video_script):
             voice_name=voice.parse_voice_name(persona_voice_name),
             voice_rate=params.voice_rate if params.voice_rate is not None else 1.0,
             voice_file=audio_file,
+            user_id=str((sm.state.get_task(task_id) or {}).get("user_id") or ""), task_id=task_id,
         )
         if not result.ok:
             # Forward the real TTS failure cause to _fail_task (stored error + PostHog reason).
