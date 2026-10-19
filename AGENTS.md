@@ -1258,21 +1258,20 @@ Follow these so the same issues don't come back:
   Declined without code change. Pattern: the reviewer invents a "contract"
   (e.g. "5-tuple contract", "should be Optional[...]") that the code never
   declares; check whether the alleged contract exists before touching anything.
-- **opencode-review fallback chain (2026-10-06, free-first):**
-  `openrouter/openrouter/free` -> `zai-standard/glm-4.7-flash` ->
-  `zai-coding-plan/glm-5.3-flash` -> `openrouter/z-ai/glm-5.3-flash`
-  (first success wins; paid tier is the last resort).
-  glm-4.5-flash was dropped — its review quality was too poor. The OpenRouter free tier uses the
-  special router id `openrouter/free` (same convention
-  as the engine's `_PROVIDER_DEFAULT_MODELS`, no hardcoded model list to
-  rot); the paid tier pins `z-ai/glm-5.3-flash` (verified on the OpenRouter
-  models API) instead of the auto router, for predictable review quality.
-  Both configured in opencode.json with `@ai-sdk/openai-compatible` against
-  `https://openrouter.ai/api/v1` and apiKey `{env:OPENROUTER_API_KEY}`. One
-  `OPENROUTER_API_KEY` secret serves both tiers (free models cost $0 even
-  on a paid key). The job runs if EITHER key is set; each tier is skipped
-  when its key is missing. The old "OCR fallback chain mirrors
-  opencode-review" note is dead — the ocr-review workflow no longer exists.
+- **opencode-review model chain (2026-10-19, runtime discovery):**
+  `select-review-models.py` builds the attempt list at CI time from
+  `.github/review/model-preferences.json` (ranked preferred free models,
+  denylist, paid fallbacks). It discovers OpenCode zero-cost models via
+  `opencode models opencode --verbose` (stdin closed) and OpenRouter `:free`
+  tool-capable models from the public models API when `OPENROUTER_API_KEY` is
+  set. Chain = available preferred free (in order) + a capped set of newly
+  discovered free models + paid fallbacks last (max length 8). Optional
+  `REVIEW_MODEL_CHAIN_OVERRIDE` repo variable replaces the chain. Discovery
+  failure falls back to the static preferred list. The job always runs (free
+  OpenCode models need no secret). glm-4.5-flash was dropped — poor review
+  quality. `openrouter/openrouter/free` stays only as the last paid-fallback
+  router id, not in the preferred free list. One `OPENROUTER_API_KEY` serves
+  paid and discovered free OpenRouter models.
 - **opencode-review hardened — grounded findings + mechanical checks
   (2026-10-06):** the review prompt requires a machine-checkable format per
   finding (`### SEVERITY: title`, `**Location:** path:line1-line2`, verbatim

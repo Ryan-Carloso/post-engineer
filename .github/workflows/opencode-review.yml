@@ -18,20 +18,19 @@ name: opencode-review
 #   instructions live in a temp OPENCODE_CONFIG / OPENCODE_CONFIG_DIR so the
 #   committed opencode.json is not rewritten and the 190KB review-learnings
 #   file is not injected into the prompt.
-# - Review chain, first success wins. Quality-first attempt order (strong
-#   configured model first, free models last):
-#     REVIEW_MODEL_PRIMARY -> OPENCODE_MODEL -> openrouter/$OPENROUTER_MODEL ->
-#     zai-standard/$ZAI_FREE_MODEL -> openrouter/$OPENROUTER_FREE_MODEL
-#   Free models are last. Identical model ids are deduped. Each attempt runs
-#   only when its provider key is present.
+# - Review chain, first success wins. At runtime,
+#   select-review-models.py discovers free OpenCode and OpenRouter models,
+#   applies .github/review/model-preferences.json (ranked preferred free list,
+#   denylist, paid fallbacks), caps the chain (default 8), and logs why each
+#   model was included or skipped. Paid tiers run only when their key is set.
+#   Identical model ids are deduped.
 #   glm-4.5-flash was dropped from the chain — its review quality was too
 #   poor. The OpenRouter free tier uses the special router id (no hardcoded
 #   model list to rot — same convention as the engine's
 #   _PROVIDER_DEFAULT_MODELS); one OPENROUTER_API_KEY secret serves both
 #   tiers (free models cost $0 even on a paid key).
-# - The job runs if EITHER ZAI_API_KEY or OPENROUTER_API_KEY is configured;
-#   each tier is skipped when its key is missing, so a repo with only one
-#   key still gets reviews through that provider's tiers.
+# - The job always runs: free OpenCode models need no secret. Each paid tier
+#   is skipped when its key is missing.
 # - A second pass (REVIEW_MODEL_VERIFY, default a different provider) confirms
 #   or refutes pass 1. It is skipped when its key is missing, or when the
 #   diff is docs/assets-only and pass 1 has no CRITICAL/MAJOR. If pass 2
@@ -54,11 +53,9 @@ name: opencode-review
 #   pass came from a free model (exact id match, not a substring).
 #
 # Setup:
-# 1. Add the `ZAI_API_KEY` and/or `OPENROUTER_API_KEY` secret (repo settings).
-#    Until at least one exists, the review steps are skipped.
-# 2. Optional repo variables: REVIEW_MODEL_PRIMARY (default
-#    zai-coding-plan/glm-5.3-flash) and REVIEW_MODEL_VERIFY (default
-#    openrouter/z-ai/glm-5.3-flash).
+# 1. Optional: add `ZAI_API_KEY` and/or `OPENROUTER_API_KEY` for paid tiers.
+# 2. Optional repo variables: REVIEW_MODEL_PRIMARY, REVIEW_MODEL_VERIFY,
+#    and REVIEW_MODEL_CHAIN_OVERRIDE (comma-separated attempt list).
 
 on:
   pull_request:
@@ -87,11 +84,15 @@ env:
   # One OPENROUTER_API_KEY serves both tiers. The free router is last.
   OPENROUTER_FREE_MODEL: openrouter/free
   OPENROUTER_MODEL: z-ai/glm-5.3-flash
+  # Optional comma-separated override of the runtime attempt list.
+  REVIEW_MODEL_CHAIN_OVERRIDE: ${{ vars.REVIEW_MODEL_CHAIN_OVERRIDE || '' }}
 
 jobs:
   review:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Sized for maxChainLength (8) in model-preferences.json: 10m + 7*7m pass 1,
+    # 8m pass 2, plus install/post overhead. The validator recomputes this.
+    timeout-minutes: 75
     permissions:
       contents: read
       pull-requests: write
@@ -121,15 +122,13 @@ jobs:
           else
             echo "has_openrouter_key=true" >> "$GITHUB_OUTPUT"
           fi
+          echo "has_key=true" >> "$GITHUB_OUTPUT"
           if [ -z "${ZAI_API_KEY:-}" ] && [ -z "${OPENROUTER_API_KEY:-}" ]; then
-            echo "has_key=false" >> "$GITHUB_OUTPUT"
-            echo "Neither ZAI_API_KEY nor OPENROUTER_API_KEY is set — skipping OpenCode review."
-          else
-            echo "has_key=true" >> "$GITHUB_OUTPUT"
+            echo "No paid provider key is set. Review will use free models only."
           fi
 
       - name: Mask provider secrets
-        if: steps.check.outputs.has_key == 'true'
+        if: steps.check.outputs.has_zai_key == 'true' || steps.check.outputs.has_openrouter_key == 'true'
         env:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
@@ -165,6 +164,27 @@ jobs:
         if: steps.check.outputs.has_key == 'true'
         run: opencode --version
 
+      - name: Select review models
+        if: steps.check.outputs.has_key == 'true'
+        id: select_models
+        env:
+          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          HAS_ZAI_KEY: ${{ steps.check.outputs.has_zai_key }}
+          HAS_OPENROUTER_KEY: ${{ steps.check.outputs.has_openrouter_key }}
+          REVIEW_MODEL_CHAIN_OVERRIDE: ${{ env.REVIEW_MODEL_CHAIN_OVERRIDE }}
+          REVIEW_MODEL_PRIMARY: ${{ env.REVIEW_MODEL_PRIMARY }}
+          OPENCODE_MODEL: ${{ env.OPENCODE_MODEL }}
+          OPENROUTER_MODEL: ${{ env.OPENROUTER_MODEL }}
+          OPENROUTER_FREE_MODEL: ${{ env.OPENROUTER_FREE_MODEL }}
+          ZAI_FREE_MODEL: ${{ env.ZAI_FREE_MODEL }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/select-review-models.py \
+            --output review-model-chain.json | tee review-model-chain-summary.json
+          echo "Selected chain:"
+          python3 -c "import json; c=json.load(open('review-model-chain.json')); print('\n'.join('  - '+m for m in c['attempts']))"
+
       - name: Configure review providers
         if: steps.check.outputs.has_key == 'true'
         env:
@@ -191,12 +211,10 @@ jobs:
               groups[provider].add(model)
 
           groups = defaultdict(set)
-          add(groups, os.environ.get("REVIEW_MODEL_PRIMARY", ""))
-          add(groups, os.environ.get("OPENCODE_MODEL", ""))
+          chain = json.load(open("review-model-chain.json", encoding="utf-8"))
+          for spec in chain.get("attempts") or []:
+              add(groups, spec)
           add(groups, os.environ.get("REVIEW_MODEL_VERIFY", ""))
-          add(groups, "openrouter/" + os.environ["OPENROUTER_MODEL"])
-          add(groups, "openrouter/" + os.environ["OPENROUTER_FREE_MODEL"])
-          add(groups, "zai-standard/" + os.environ["ZAI_FREE_MODEL"])
           # OPENCODE_MODEL is provider/model; its provider bucket is already
           # filled by add(). Also register the coding-plan model id explicitly
           # when OPENCODE_MODEL points at zai-coding-plan.
@@ -354,8 +372,14 @@ jobs:
           # only as environment variables (never interpolated by GitHub) so
           # they cannot break out of the shell. The prompt itself is the
           # committed review-prompt.md, not an inline string.
+          mapfile -t FREE_MODELS < <(python3 -c "import json; print('\n'.join(json.load(open('review-model-chain.json'))['freeModels']))")
           is_free() {
-            [ "$1" = "zai-standard/${ZAI_FREE_MODEL}" ] || [ "$1" = "openrouter/${OPENROUTER_FREE_MODEL}" ]
+            local model="$1"
+            local entry
+            for entry in "${FREE_MODELS[@]}"; do
+              [ "$entry" = "$model" ] && return 0
+            done
+            return 1
           }
           # One review attempt. Fails (so the loop tries the next model) when
           # OpenCode falls back to the build agent or writes an empty file.
@@ -371,7 +395,7 @@ jobs:
               --file pr-context.md \
               --file .github/review/review-checklist.md \
               --title "PR #$PR_NUMBER review" \
-              "$(cat .github/review/review-prompt.md)" > review-raw.md 2> review-stderr.txt
+              "$(cat .github/review/review-prompt.md)" < /dev/null > review-raw.md 2> review-stderr.txt
             rc=$?
             set -e
             if grep -q 'Falling back to default agent' review-raw.md review-stderr.txt; then
@@ -380,40 +404,15 @@ jobs:
             fi
             [ "$rc" -eq 0 ] && [ -s review-raw.md ]
           }
-          # Quality-first attempt order (strong configured model first, free
-          # models last). Deduped. Each attempt runs only when its key is
-          # present ("${ZAI_API_KEY:-}" / "${OPENROUTER_API_KEY:-}").
-          attempts=()
-          add_attempt() {
-            local model="$1"
-            local provider="${model%%/*}"
-            case "$provider" in
-              zai-coding-plan|zai-standard)
-                [ -n "${ZAI_API_KEY:-}" ] || return 0
-                ;;
-              openrouter)
-                [ -n "${OPENROUTER_API_KEY:-}" ] || return 0
-                ;;
-              *)
-                echo "unknown provider in $model; skipping" >&2
-                return 0
-                ;;
-            esac
-            local existing
-            for existing in "${attempts[@]+"${attempts[@]}"}"; do
-              [ "$existing" = "$model" ] && return 0
-            done
-            attempts+=("$model")
-          }
-          add_attempt "$REVIEW_MODEL_PRIMARY"
-          add_attempt "$OPENCODE_MODEL"
-          add_attempt "openrouter/$OPENROUTER_MODEL"
-          add_attempt "zai-standard/$ZAI_FREE_MODEL"
-          add_attempt "openrouter/$OPENROUTER_FREE_MODEL"
+          mapfile -t attempts < <(python3 -c "import json; [print(x) for x in json.load(open('review-model-chain.json'))['attempts']]")
           if [ "${#attempts[@]}" -eq 0 ]; then
             echo "No review model can run with the configured keys" >&2
             exit 1
           fi
+          echo "Review attempt order:"
+          for attempt in "${attempts[@]}"; do
+            echo "  - $attempt"
+          done
           success=false
           chosen=""
           first=true
@@ -488,8 +487,14 @@ jobs:
               echo "${key}=${value}" >> review-meta.env
             fi
           }
+          mapfile -t FREE_MODELS < <(python3 -c "import json; print('\n'.join(json.load(open('review-model-chain.json'))['freeModels']))")
           is_free() {
-            [ "$1" = "zai-standard/${ZAI_FREE_MODEL}" ] || [ "$1" = "openrouter/${OPENROUTER_FREE_MODEL}" ]
+            local model="$1"
+            local entry
+            for entry in "${FREE_MODELS[@]}"; do
+              [ "$entry" = "$model" ] && return 0
+            done
+            return 1
           }
           # Docs, images, lockfiles, and docs/* are not code. Workflow YAML,
           # apps/, supabase/, and .github/ still get pass 2.
@@ -534,7 +539,7 @@ jobs:
             --file .github/review/review-checklist.md \
             --file pass1.md \
             --title "PR #$PR_NUMBER verify" \
-            "$(cat .github/review/verify-prompt.md)" > pass2-raw.md 2> pass2-stderr.txt
+            "$(cat .github/review/verify-prompt.md)" < /dev/null > pass2-raw.md 2> pass2-stderr.txt
           rc=$?
           set -e
           if grep -q 'Falling back to default agent' pass2-raw.md pass2-stderr.txt; then
@@ -600,6 +605,7 @@ jobs:
               "pass2.md",
               "pass2-raw.md",
               "review-raw.md",
+              "review-model-chain.json",
           )
           for path in files:
               if not os.path.exists(path):
@@ -632,6 +638,7 @@ jobs:
             pass2-raw.md
             review.verified.md
             heuristics.md
+            review-model-chain.json
 
       - name: Post review as a new PR comment
         if: steps.check.outputs.has_key == 'true' && steps.pass1.outcome == 'success'

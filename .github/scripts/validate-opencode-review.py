@@ -6,16 +6,13 @@ Run: python3 .github/scripts/validate-opencode-review.py
 Guards the design decisions of the OpenCode review workflow:
 - direct `opencode run` (verified against the installed CLI: there is no
   --standalone flag), no third-party wrapper
-- review chain (quality-first, free models last): REVIEW_MODEL_PRIMARY ->
-  OPENCODE_MODEL -> OpenRouter paid (z-ai/glm-5.3-flash) -> z.ai standard
-  (glm-4.7-flash) -> OpenRouter free router (openrouter/free);
-  glm-4.5-flash was dropped from the chain
+- runtime model chain via select-review-models.py and model-preferences.json
+  (free models first, paid fallbacks last); glm-4.5-flash was dropped
 - OpenRouter free tier uses the special router id (no hardcoded model list
   to rot — same convention as the engine's _PROVIDER_DEFAULT_MODELS), one
   OPENROUTER_API_KEY serving both tiers
-- the job runs if EITHER key is configured; each tier is skipped when its
-  key is missing (secret gating via step outputs: secrets.* are unreliable
-  in `if:`)
+- the job always runs (free OpenCode models need no secret); each paid tier
+  is skipped when its key is missing (secret gating via step outputs)
 - both keys masked in logs and scrubbed from review.md before the comment
   is posted
 - a new PR comment per push, never updated in place (header carries head SHA)
@@ -24,6 +21,7 @@ Guards the design decisions of the OpenCode review workflow:
 """
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -143,18 +141,51 @@ def main() -> int:
         text.count('"npm": "@ai-sdk/openai-compatible"') >= 2,
         "the openrouter provider must use the same npm package as z.ai",
     )
-    # Quality-first: the paid/configured models are registered before either
-    # free model. The free router is the last add_attempt.
-    primary_at = text.find('add_attempt "$REVIEW_MODEL_PRIMARY"')
-    opencode_at = text.find('add_attempt "$OPENCODE_MODEL"')
-    paid_at = text.find('add_attempt "openrouter/$OPENROUTER_MODEL"')
-    zai_free_at = text.find('add_attempt "zai-standard/$ZAI_FREE_MODEL"')
-    free_router_at = text.find('add_attempt "openrouter/$OPENROUTER_FREE_MODEL"')
+    prefs_path = Path(__file__).resolve().parent.parent / "review" / "model-preferences.json"
+    check("model preferences file exists", prefs_path.is_file(), str(prefs_path))
+    prefs = json.loads(prefs_path.read_text()) if prefs_path.is_file() else {}
     check(
-        "free models are last in the attempt list",
-        0 <= primary_at < opencode_at < paid_at < zai_free_at < free_router_at,
-        "attempt order must be primary, coding plan, openrouter paid, "
-        "zai free, openrouter free",
+        "select-review-models.py invoked in workflow",
+        "select-review-models.py" in text,
+    )
+    check(
+        "pass 1 loads attempts from review-model-chain.json",
+        "review-model-chain.json" in text and "mapfile -t attempts" in text,
+    )
+    check(
+        "free-model banner uses chain freeModels list",
+        "freeModels" in text and "mapfile -t FREE_MODELS" in text,
+    )
+    check(
+        "opencode run closes stdin",
+        "< /dev/null" in text,
+        "non-interactive review must not read from stdin",
+    )
+    check(
+        "attempt order is printed before the first model runs",
+        text.find("Review attempt order:") != -1
+        and text.find("Review attempt order:") < text.find("Attempting review with"),
+    )
+    max_chain = int(prefs.get("maxChainLength") or 8)
+    pass1_minutes = 10 + max(max_chain - 1, 0) * 7
+    pass2_minutes = 8
+    overhead_minutes = 5
+    required_minutes = pass1_minutes + pass2_minutes + overhead_minutes
+    timeout_match = re.search(r"^\s*timeout-minutes:\s*(\d+)\s*$", text, re.M)
+    timeout_minutes = int(timeout_match.group(1)) if timeout_match else 0
+    check(
+        "job timeout covers max chain plus pass 2",
+        timeout_minutes >= required_minutes,
+        f"timeout-minutes is {timeout_minutes}; max chain {max_chain} needs at "
+        f"least {required_minutes}m",
+    )
+    check(
+        "review is not skipped when paid keys are missing",
+        "has_key=false" not in text,
+    )
+    check(
+        "free models still run without paid keys",
+        "free models only" in text,
     )
 
     # The machine-checked finding format lives in the prompt file, not in
