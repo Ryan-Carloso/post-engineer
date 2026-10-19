@@ -1,0 +1,39 @@
+{
+  "maxChainLength": 8,
+  "maxDiscoveredFree": 3,
+  "preferredFree": [
+    "opencode/glm-5.3-flash-free",
+    "opencode/deepseek-v4.1-flash-free",
+    "opencode/beam-free",
+    "opencode/mimo-v2.6-flash-free",
+    "opencode/nemotron-3-ultra-free",
+    "openrouter/thinkingmachines/inkling:free",
+    "openrouter/cohere/north-mini-code:free"
+  ],
+  "denylist": {
+    "exact": ["openrouter/openrouter/free"],
+    "idSubstrings": [
+      "content-safety",
+      "moderation",
+      "nano-omni",
+      "nemotron-3.5-super-vl",
+      "super-vl"
+    ],
+    "minOutputTokens": 8192,
+    "requireToolSupport": true,
+    "requireVisionOnlyRejection": true
+  },
+  "paidFallbacks": [
+    { "modelEnv": "REVIEW_MODEL_PRIMARY", "key": "zai" },
+    { "modelEnv": "OPENCODE_MODEL", "key": "zai" },
+    {
+      "model": "openrouter/${OPENROUTER_MODEL}",
+      "key": "openrouter"
+    },
+    { "model": "zai-standard/${ZAI_FREE_MODEL}", "key": "zai" },
+    {
+      "model": "openrouter/${OPENROUTER_FREE_MODEL}",
+      "key": "openrouter"
+    }
+  ]
+}
