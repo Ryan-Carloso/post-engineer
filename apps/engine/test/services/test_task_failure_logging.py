@@ -215,7 +215,7 @@ class TerminalWriteWiringTests(unittest.TestCase):
         # would silently drop the write on a network failure.
         services_dir = Path(task_service.__file__).parent
         offenders = []
-        for module_file in ("task.py", "task_publish.py"):
+        for module_file in ("task.py",):
             tree = ast.parse((services_dir / module_file).read_text())
             for node in ast.walk(tree):
                 if not isinstance(node, ast.Call):

@@ -26,7 +26,7 @@ from app.services import (
     upload_post,
 )
 from app.services import state as sm
-from app.services import persona_image, task_publish
+from app.services import persona_image
 from app.services import task_webhook
 from app.services.pipeline_stage import PhaseTracker
 from app.services.intro_cost import IntroCostReport, completion_cost_kwargs, cost_event_props
@@ -1558,13 +1558,9 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         # publishing: local disk is ephemeral, a restart must not lose it.
         archive_final_videos(task_id, final_video_paths, params)
 
-        phases.begin("publish")
-        phases.complete("publish")
-        task_publish.maybe_publish_finished_videos(
-            task_id=task_id,
-            params=params,
-            video_paths=list(final_video_paths),
-        )
+        # Publishing now happens exclusively through the fill-schedule slot
+        # worker (apps/engine/app/services/fill_schedule/publish.py): the
+        # task completes here and the slot publisher posts at slot time.
 
         logger.success(
             f"task {task_id} finished, generated {len(final_video_paths)} videos."

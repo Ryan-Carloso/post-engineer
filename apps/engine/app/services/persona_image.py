@@ -3,7 +3,7 @@
 import os
 import re
 
-from app.services import longcat, task_publish
+from app.services import longcat, upload_publisher
 
 # House faces from the web persona picker are stored as a path relative to
 # the web app (apps/web/public/caracter-samples/file-N.png).
@@ -18,9 +18,9 @@ def resolve_persona_image_url(image_url: str) -> str:
     """
     if not _HOUSE_FACE_PATH.fullmatch(image_url):
         return image_url
-    base_url = os.getenv(task_publish.BASE_URL_ENV)
+    base_url = os.getenv(upload_publisher.BASE_URL_ENV)
     if not base_url:
         raise longcat.LongCatError(
-            f"{task_publish.BASE_URL_ENV} is required to load the house face {image_url}"
+            f"{upload_publisher.BASE_URL_ENV} is required to load the house face {image_url}"
         )
     return f"{base_url.rstrip('/')}{image_url}"

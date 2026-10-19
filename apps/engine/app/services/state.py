@@ -462,7 +462,7 @@ class SupabaseTaskState(BaseState):
         on the next boot. Returns how many rows were failed
         (requeued/completed orphans are not counted).
         """
-        # Lazy import: orphan_requeue -> task_publish -> app.services.state,
+        # Lazy import: orphan_requeue -> app.services.state,
         # so a top-level import would run while this module is still
         # initializing (SupabaseTaskState() is constructed at import time).
         from app.services import orphan_requeue

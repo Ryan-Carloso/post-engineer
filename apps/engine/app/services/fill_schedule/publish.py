@@ -56,6 +56,18 @@ def _publish_tracking_context(
     return context
 
 
+class _AllProvidersFailed(Exception):
+    """Internal: every provider failed; trigger the slot retry/fail path."""
+
+    def __init__(self, failed_providers: list[str], first_error: str = "") -> None:
+        self.failed_providers = failed_providers
+        self.first_error = first_error
+        super().__init__(
+            f"all providers failed: {', '.join(failed_providers)}"
+            + (f": {first_error}" if first_error else "")
+        )
+
+
 class BatchPublisher:
     """Publishes due batch slots to their providers."""
 
@@ -136,28 +148,69 @@ class BatchPublisher:
                     "video refunded",
                 )
                 continue
-            # Initialized before the try: the except handler below reads it
-            # to attribute the publish_provider_failed event. Without this,
-            # a failure in read_final_video_r2 would leave a stale value
-            # from a previous slot's loop.
+            # One provider failing must not cancel the others: each
+            # provider failure is recorded and the loop continues. Only
+            # when every provider failed does the slot go through the
+            # retry/fail path below.
+            failed_providers: list[str] = []
+            published_providers: list[str] = []
+            first_error: str = ""
             provider: str | None = None
             try:
                 video_bytes = video_storage.read_final_video_r2(object_path)
                 for video_path in videos:
                     for provider in schedule.get("providers", []):
-                        self.publish_video(
-                            base_url=self.base_url,
-                            api_secret=self.api_secret,
-                            owner_user_id=schedule["user_id"],
-                            metadata=metadata_for(str(provider), topic, schedule),
-                            video_path=os.path.basename(video_path),
-                            video_bytes=video_bytes,
-                            content_type="video/mp4",
-                        )
+                        provider_name = str(provider)
+                        try:
+                            self.publish_video(
+                                base_url=self.base_url,
+                                api_secret=self.api_secret,
+                                owner_user_id=schedule["user_id"],
+                                metadata=metadata_for(provider_name, topic, schedule),
+                                video_path=os.path.basename(video_path),
+                                video_bytes=video_bytes,
+                                content_type="video/mp4",
+                            )
+                        except (
+                            upload_publisher.PublishError,
+                            OSError,
+                            RuntimeError,
+                        ) as exc:
+                            # Record and continue: a single provider being
+                            # down never cancels the others.
+                            failed_providers.append(provider_name)
+                            if not first_error:
+                                first_error = str(exc)
+                            upstream = getattr(exc, "response_body", None)
+                            logger.warning(
+                                f"fill_schedule: slot {slot['id']} provider "
+                                f"{provider_name} publish failed: {exc}"
+                                + (f" | upstream response: {upstream}" if upstream else "")
+                            )
+                            track_event(
+                                "publish_provider_failed",
+                                {
+                                    **_publish_tracking_context(slot, schedule),
+                                    "provider": provider_name,
+                                    "status_code": getattr(exc, "status_code", None),
+                                    "response_body": scrub_error_text(
+                                        getattr(exc, "response_body", None) or "",
+                                        max_chars=500,
+                                    ),
+                                },
+                                immediate=True,
+                            )
+                            continue
+                        if provider_name not in published_providers:
+                            published_providers.append(provider_name)
                 # Past the provider loops: a failure from here on (e.g. the
-                # slot-state PATCH) is not a provider failure — don't let the
-                # last loop value misattribute it.
+                # slot-state PATCH) is not a provider failure.
                 provider = None
+                if not published_providers:
+                    # Every provider failed: fall through to the retry/fail
+                    # path via a synthetic exception carrying the first
+                    # failure. The per-provider events above already fired.
+                    raise _AllProvidersFailed(failed_providers, first_error)
                 self.store.update_slot(
                     slot["id"], status=SLOT_PUBLISHED, published_at=now.isoformat()
                 )
@@ -166,7 +219,7 @@ class BatchPublisher:
                     "video_published",
                     {
                         **_publish_tracking_context(slot, schedule),
-                        "providers": [str(p) for p in schedule.get("providers", [])],
+                        "providers": published_providers,
                     },
                 )
                 notify_safe(
@@ -174,10 +227,33 @@ class BatchPublisher:
                     notify_module.slot_published_msg(
                         persona_name,
                         topic,
-                        [str(provider) for provider in schedule.get("providers", [])],
+                        published_providers,
                     ),
                 )
-            except (upload_publisher.PublishError, OSError, RuntimeError) as exc:
+                if failed_providers:
+                    # Partial success: some published, some failed. Alert
+                    # with the failed provider names (never the upstream
+                    # body — it reaches Discord).
+                    track_event(
+                        "video_publish_partial_failure",
+                        {
+                            **_publish_tracking_context(slot, schedule),
+                            "failed_providers": failed_providers,
+                            "published_providers": published_providers,
+                        },
+                    )
+                    notify_safe(
+                        self.notify,
+                        notify_module.partial_publish_msg(
+                            str(slot["id"]), failed_providers
+                        ),
+                    )
+            except (
+                _AllProvidersFailed,
+                upload_publisher.PublishError,
+                OSError,
+                RuntimeError,
+            ) as exc:
                 # The upstream response body (if any) is logged server-side
                 # only — the Discord alert via safe_reason must not carry
                 # remote-controlled response text.
@@ -188,22 +264,24 @@ class BatchPublisher:
                 )
                 # PostHog gets the full diagnostic picture (provider, status,
                 # upstream body): unlike Discord, it is our own observability
-                # backend, not a user-facing surface. Mirrors the per-provider
-                # event in app.services.task_publish. `provider` is the
+                # backend, not a user-facing surface. `provider` is the
                 # innermost loop variable; it is None (never unbound) if
                 # read_final_video_r2 raised before the loop started.
-                track_event(
-                    "publish_provider_failed",
-                    {
-                        **_publish_tracking_context(slot, schedule),
-                        "provider": str(provider) if provider else "unknown",
-                        "status_code": getattr(exc, "status_code", None),
-                        "response_body": scrub_error_text(
-                            getattr(exc, "response_body", None) or "", max_chars=500
-                        ),
-                    },
-                    immediate=True,
-                )
+                # _AllProvidersFailed skips this: the per-provider events
+                # already fired in the inner loop above.
+                if not isinstance(exc, _AllProvidersFailed):
+                    track_event(
+                        "publish_provider_failed",
+                        {
+                            **_publish_tracking_context(slot, schedule),
+                            "provider": str(provider) if provider else "unknown",
+                            "status_code": getattr(exc, "status_code", None),
+                            "response_body": scrub_error_text(
+                                getattr(exc, "response_body", None) or "", max_chars=500
+                            ),
+                        },
+                        immediate=True,
+                    )
                 attempts = int(slot.get("publish_attempts") or 0) + 1
                 if attempts >= MAX_PUBLISH_ATTEMPTS:
                     # Bounded retries: auto-cancel the slot and refund the

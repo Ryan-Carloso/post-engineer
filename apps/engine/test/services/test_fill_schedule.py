@@ -1149,7 +1149,12 @@ class PublishDueTests(unittest.TestCase):
         # response_body; filter to the video_publish_failed reason call.)
         reason_calls = [c for c in scrub.call_args_list if c[1].get("max_chars") == 200]
         self.assertEqual(len(reason_calls), 1)
-        self.assertEqual(reason_calls[0], ((str(error),), {"max_chars": 200}))
+        # The reason wraps the raw error with the failed providers; the
+        # scrubber must see the full wrapped message (with the secret) so
+        # scrubbing happens before truncation.
+        scrubbed_input = reason_calls[0][0][0]
+        self.assertIn(str(error), scrubbed_input)
+        self.assertIn("youtube", scrubbed_input)
         failed_calls = [
             c for c in track.call_args_list if c[0][0] == "video_publish_failed"
         ]
@@ -1365,9 +1370,10 @@ class PublishRetryLimitTests(unittest.TestCase):
         _, props = failed_calls[0][0]
         self.assertEqual(props["attempts"], 3)
         self.assertFalse(props["retryable"])
-        # The exception path reports the raw failure; the "3 attempts"
-        # wrapper lives on the slot's error column instead.
-        self.assertEqual(props["reason"], "boom")
+        # The exception path reports the failure with the failed providers;
+        # the "3 attempts" wrapper lives on the slot's error column instead.
+        self.assertIn("boom", props["reason"])
+        self.assertIn("youtube", props["reason"])
 
     def test_refund_error_does_not_break_the_tick(self):
         from app.services.upload_publisher import PublishError

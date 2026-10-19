@@ -26,16 +26,12 @@ writes a new generation stage is fail+refunded instead of retried.
 
 from __future__ import annotations
 
-import os
 from datetime import datetime, timezone
 from typing import Any
 
 from loguru import logger
-from pydantic import ValidationError
 
 from app.models import const
-from app.models.publish import PublishParams
-from app.services import task_publish
 from app.services.analytics import track_event
 from app.services.fill_schedule.constants import (
     SLOT_GENERATING,
@@ -212,61 +208,38 @@ def mark_complete_orphan(state: Any, task_id: str, data: dict[str, Any]) -> None
 def complete_publish_orphan(state: Any, task_id: str, data: dict[str, Any]) -> bool:
     """Finish the publish step for an orphan with a video archived in R2.
 
-    Batch orphans: the in-pipeline publish is a no-op for batch (publishing
-    happens from the ready slot), so marking complete lets the batch
-    reconciler advance the slot and the slot publisher post it at slot time.
-    Direct orphans: rebuild the publish plan persisted at dispatch and run
-    the publish now — publish_videos reads the bytes from R2 itself.
+    Publishing happens exclusively from the ready slot via the
+    fill-schedule worker, so marking the task complete lets the batch
+    reconciler advance the slot and the slot publisher post it at slot
+    time.
 
     Returns True when the orphan was completed. Returns False when it cannot
-    be completed here (caller falls through to fail+refund). Lets
-    PublishFailedError propagate: publish_videos already marked the task
-    FAILED with the real upstream error, and the caller settles billing.
+    be completed here (caller falls through to fail+refund).
     """
     object_path = data.get("video_storage_path")
     if not isinstance(object_path, str) or not object_path:
         return False
     slot_id = data.get("slot_id")
-    if isinstance(slot_id, str) and slot_id:
-        state.update_task(
-            task_id,
-            state=const.TASK_STATE_COMPLETE,
-            progress=100,
-            # The slot publisher only needs basenames; the bytes come from
-            # R2 via video_storage_path. Local paths are gone with the old
-            # process, so the R2 object path stands in (documented here so a
-            # future reader does not try to open() it).
-            videos=[object_path],
-        )
-        track_event(
-            "orphan_publish_completed",
-            {"task_id": task_id, "slot_id": slot_id, "flow": "batch"},
-        )
-        logger.info(
-            f"orphan {task_id}: video archived, marked complete; "
-            f"slot {slot_id} will publish at slot time"
-        )
-        return True
-    raw_params = data.get("publish_params")
-    if not isinstance(raw_params, dict):
+    if not isinstance(slot_id, str) or not slot_id:
         return False
-    try:
-        publish = PublishParams.model_validate(raw_params)
-    except ValidationError as exc:
-        # Deterministic: the persisted plan can never validate (schema
-        # drift or a corrupt row). Fail+refund instead of retrying it on
-        # every boot forever.
-        logger.error(f"orphan {task_id}: persisted publish_params invalid: {exc}")
-        return False
-    task_publish.publish_videos(task_id, publish, [os.path.basename(object_path)])
-    # Settle before the terminal write (see mark_complete_orphan).
-    settle_orphan_completed(state, task_id)
-    state.update_task(task_id, state=const.TASK_STATE_COMPLETE, progress=100)
+    state.update_task(
+        task_id,
+        state=const.TASK_STATE_COMPLETE,
+        progress=100,
+        # The slot publisher only needs basenames; the bytes come from
+        # R2 via video_storage_path. Local paths are gone with the old
+        # process, so the R2 object path stands in (documented here so a
+        # future reader does not try to open() it).
+        videos=[object_path],
+    )
     track_event(
         "orphan_publish_completed",
-        {"task_id": task_id, "flow": str(data.get("flow") or "unknown")},
+        {"task_id": task_id, "slot_id": slot_id, "flow": "batch"},
     )
-    logger.info(f"orphan {task_id}: boot publish completed")
+    logger.info(
+        f"orphan {task_id}: video archived, marked complete; "
+        f"slot {slot_id} will publish at slot time"
+    )
     return True
 
 
@@ -296,17 +269,6 @@ def triage_orphan(
         mark_complete_orphan(state, task_id, data)
         return True
     if decision == COMPLETE_PUBLISH:
-        try:
-            if complete_publish_orphan(state, task_id, data):
-                return True
-        except task_publish.PublishFailedError as exc:
-            # publish_videos already marked the task FAILED with the
-            # real upstream error; settle billing (refund) and report
-            # claimed without overwriting that error.
-            logger.error(f"boot publish failed for orphaned task {task_id}: {exc}")
-            try:
-                state._settle_orphan_billing(task_id)
-            except Exception as settle_exc:  # noqa: BLE001 - loud; next boot retries
-                logger.error(f"failed to settle billing for {task_id}: {settle_exc}")
+        if complete_publish_orphan(state, task_id, data):
             return True
     return False

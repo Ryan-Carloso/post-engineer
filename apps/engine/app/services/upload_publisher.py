@@ -28,6 +28,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 VALID_PRIVACY_STATUSES: tuple[str, ...] = ("public", "private", "unlisted")
+
+# Environment variable names for the internal upload API. Used by the
+# fill-schedule publisher and persona image resolution.
+BASE_URL_ENV: str = "MPT_UPLOAD_API_BASE_URL"
+SERVICE_KEY_ENV: str = "MONEYPRINT_API_SECRET"
 INSTAGRAM_CAPTION_MAX_LENGTH: int = 2200
 BLUESKY_CAPTION_MAX_GRAPHEMES: int = 300
 LINKEDIN_CAPTION_MAX_LENGTH: int = 3000
