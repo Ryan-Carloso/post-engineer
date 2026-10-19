@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.services import upload_publisher
+from app.services.fill_schedule.youtube_tags import derive_tags_from_topic
 
 
 def metadata_for(provider: str, topic: str, schedule: dict[str, Any]):
@@ -13,7 +14,10 @@ def metadata_for(provider: str, topic: str, schedule: dict[str, Any]):
         return upload_publisher.YouTubeMetadata(
             title=topic[:100],
             description=topic,
-            tags=(),
+            # Tags come from the topic text itself, so they are always in
+            # the video's own language. Never empty for a real topic; the
+            # pre-flight rejects degenerate topics before GPU is spent.
+            tags=derive_tags_from_topic(topic),
             privacy_status="public",
             account_ids=tuple(str(value) for value in schedule.get("youtube_account_ids", [])),
         )
