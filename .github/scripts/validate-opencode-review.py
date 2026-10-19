@@ -6,16 +6,19 @@ Run: python3 .github/scripts/validate-opencode-review.py
 Guards the design decisions of the OpenCode review workflow:
 - direct `opencode run` (verified against the installed CLI: there is no
   --standalone flag), no third-party wrapper
-- review chain (quality-first, free models last): REVIEW_MODEL_PRIMARY ->
+- review chain (free OpenCode models first, paid models after, older free
+  fallbacks last): opencode/glm-5.3-flash-free ->
+  opencode/deepseek-v4.1-flash-free -> REVIEW_MODEL_PRIMARY ->
   OPENCODE_MODEL -> OpenRouter paid (z-ai/glm-5.3-flash) -> z.ai standard
   (glm-4.7-flash) -> OpenRouter free router (openrouter/free);
-  glm-4.5-flash was dropped from the chain
+  glm-4.5-flash was dropped from the chain. The two OpenCode models need
+  no API key.
 - OpenRouter free tier uses the special router id (no hardcoded model list
   to rot — same convention as the engine's _PROVIDER_DEFAULT_MODELS), one
   OPENROUTER_API_KEY serving both tiers
-- the job runs if EITHER key is configured; each tier is skipped when its
-  key is missing (secret gating via step outputs: secrets.* are unreliable
-  in `if:`)
+- the job always runs, because the free OpenCode models need no secret;
+  each paid tier is skipped when its key is missing (secret gating via
+  step outputs: secrets.* are unreliable in `if:`)
 - both keys masked in logs and scrubbed from review.md before the comment
   is posted
 - a new PR comment per push, never updated in place (header carries head SHA)
@@ -143,18 +146,82 @@ def main() -> int:
         text.count('"npm": "@ai-sdk/openai-compatible"') >= 2,
         "the openrouter provider must use the same npm package as z.ai",
     )
-    # Quality-first: the paid/configured models are registered before either
-    # free model. The free router is the last add_attempt.
+    # Free OpenCode models first, then paid models, then the older free
+    # fallbacks. The free router is the last add_attempt.
+    check(
+        "OPENCODE_FREE_PRIMARY default set",
+        "OPENCODE_FREE_PRIMARY: opencode/glm-5.3-flash-free" in text,
+        "first attempt must be the free GLM flash model",
+    )
+    check(
+        "OPENCODE_FREE_SECONDARY default set",
+        "OPENCODE_FREE_SECONDARY: opencode/deepseek-v4.1-flash-free" in text,
+        "second attempt must be the free DeepSeek flash model",
+    )
+    free_primary_at = text.find('add_attempt "$OPENCODE_FREE_PRIMARY"')
+    free_secondary_at = text.find('add_attempt "$OPENCODE_FREE_SECONDARY"')
     primary_at = text.find('add_attempt "$REVIEW_MODEL_PRIMARY"')
     opencode_at = text.find('add_attempt "$OPENCODE_MODEL"')
     paid_at = text.find('add_attempt "openrouter/$OPENROUTER_MODEL"')
     zai_free_at = text.find('add_attempt "zai-standard/$ZAI_FREE_MODEL"')
     free_router_at = text.find('add_attempt "openrouter/$OPENROUTER_FREE_MODEL"')
     check(
-        "free models are last in the attempt list",
-        0 <= primary_at < opencode_at < paid_at < zai_free_at < free_router_at,
-        "attempt order must be primary, coding plan, openrouter paid, "
-        "zai free, openrouter free",
+        "free OpenCode models are first and paid models follow",
+        0
+        <= free_primary_at
+        < free_secondary_at
+        < primary_at
+        < opencode_at
+        < paid_at
+        < zai_free_at
+        < free_router_at,
+        "attempt order must be opencode/glm-5.3-flash-free, "
+        "opencode/deepseek-v4.1-flash-free, then paid models, then the "
+        "older free fallbacks",
+    )
+    opencode_arm = text.split("opencode)", 1)[1].split("zai-coding-plan|zai-standard)", 1)[0]
+    check(
+        "opencode provider attempt does not require a secret",
+        "API_KEY" not in opencode_arm and "return 0" not in opencode_arm,
+        "zero-cost OpenCode models must run with no provider key",
+    )
+    check(
+        "free model ids are exact-matched for the low-confidence banner",
+        text.count('[ "$1" = "$OPENCODE_FREE_PRIMARY" ]') >= 2
+        and text.count('[ "$1" = "$OPENCODE_FREE_SECONDARY" ]') >= 2,
+        "pass 1 and pass 2 must exact-match both free OpenCode model ids",
+    )
+    check(
+        "attempt order is printed before the first model runs",
+        text.find("Review attempt order:") != -1
+        and text.find("Review attempt order:") < text.find("Attempting review with"),
+    )
+    # Per-attempt budgets in the pass-1 loop (first model 10m, the rest 7m)
+    # plus the pass-2 `timeout 8m`, plus checkout/install/post overhead.
+    # The job timeout must exceed that sum or the runner kills the job on
+    # the all-fail path before a comment is posted.
+    attempt_calls = len(re.findall(r"^\s+add_attempt [\"']", text, re.M))
+    pass1_minutes = 10 + max(attempt_calls - 1, 0) * 7
+    pass2_minutes = 8
+    overhead_minutes = 5
+    required_minutes = pass1_minutes + pass2_minutes + overhead_minutes
+    timeout_match = re.search(r"^\s*timeout-minutes:\s*(\d+)\s*$", text, re.M)
+    timeout_minutes = int(timeout_match.group(1)) if timeout_match else 0
+    check(
+        "job timeout covers every attempt plus pass 2",
+        timeout_minutes >= required_minutes,
+        f"timeout-minutes is {timeout_minutes}; {attempt_calls} attempts "
+        f"need at least {required_minutes} "
+        f"({pass1_minutes}m pass 1 + {pass2_minutes}m pass 2 + "
+        f"{overhead_minutes}m overhead)",
+    )
+    check(
+        "review is not skipped when paid keys are missing",
+        "has_key=false" not in text,
+    )
+    check(
+        "free models still run without paid keys",
+        "free OpenCode models only" in text,
     )
 
     # The machine-checked finding format lives in the prompt file, not in
@@ -221,11 +288,9 @@ def main() -> int:
         "mechanical failures fail the job",
         "Fail job on mechanical check failure" in text,
     )
-    # skipped when its key is missing. Gating must not rely on secrets.*
-    # inside job/step `if:`.
-    # Two-key gating: the job runs if EITHER key is configured; each tier is
-    # skipped when its key is missing. Gating must not rely on secrets.*
-    # inside job/step `if:`.
+    # Paid tiers are skipped when their key is missing. Gating must not
+    # rely on secrets.* inside job/step `if:`. The job itself always runs
+    # because the free OpenCode models need no secret.
     ifs = re.findall(r"^\s*if:\s*(.+)$", text, re.M)
     check(
         "no secrets.* in any `if:` condition",

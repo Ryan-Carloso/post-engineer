@@ -18,20 +18,25 @@ name: opencode-review
 #   instructions live in a temp OPENCODE_CONFIG / OPENCODE_CONFIG_DIR so the
 #   committed opencode.json is not rewritten and the 190KB review-learnings
 #   file is not injected into the prompt.
-# - Review chain, first success wins. Quality-first attempt order (strong
-#   configured model first, free models last):
+# - Review chain, first success wins. Free OpenCode models first, paid
+#   models after, older free fallbacks last:
+#     opencode/glm-5.3-flash-free -> opencode/deepseek-v4.1-flash-free ->
 #     REVIEW_MODEL_PRIMARY -> OPENCODE_MODEL -> openrouter/$OPENROUTER_MODEL ->
 #     zai-standard/$ZAI_FREE_MODEL -> openrouter/$OPENROUTER_FREE_MODEL
-#   Free models are last. Identical model ids are deduped. Each attempt runs
-#   only when its provider key is present.
+#   The two OpenCode models are the built-in `opencode` provider's zero-cost
+#   catalog entries. They need no API key. Identical model ids are deduped.
+#   Paid attempts run only when their provider key is present, and only after
+#   both free OpenCode models fail. The older free fallbacks stay after the
+#   paid tier so a miss on the free flash models still reaches a paid model
+#   before glm-4.7-flash or the OpenRouter free router.
 #   glm-4.5-flash was dropped from the chain — its review quality was too
 #   poor. The OpenRouter free tier uses the special router id (no hardcoded
 #   model list to rot — same convention as the engine's
 #   _PROVIDER_DEFAULT_MODELS); one OPENROUTER_API_KEY secret serves both
 #   tiers (free models cost $0 even on a paid key).
-# - The job runs if EITHER ZAI_API_KEY or OPENROUTER_API_KEY is configured;
-#   each tier is skipped when its key is missing, so a repo with only one
-#   key still gets reviews through that provider's tiers.
+# - The job always runs: the free OpenCode models need no secret. Each paid
+#   tier is skipped when its key is missing, so a repo with only one key
+#   still gets that provider's paid tier after the free models.
 # - A second pass (REVIEW_MODEL_VERIFY, default a different provider) confirms
 #   or refutes pass 1. It is skipped when its key is missing, or when the
 #   diff is docs/assets-only and pass 1 has no CRITICAL/MAJOR. If pass 2
@@ -54,11 +59,13 @@ name: opencode-review
 #   pass came from a free model (exact id match, not a substring).
 #
 # Setup:
-# 1. Add the `ZAI_API_KEY` and/or `OPENROUTER_API_KEY` secret (repo settings).
-#    Until at least one exists, the review steps are skipped.
-# 2. Optional repo variables: REVIEW_MODEL_PRIMARY (default
-#    zai-coding-plan/glm-5.3-flash) and REVIEW_MODEL_VERIFY (default
-#    openrouter/z-ai/glm-5.3-flash).
+# 1. Optional: add the `ZAI_API_KEY` and/or `OPENROUTER_API_KEY` secret.
+#    The free OpenCode models run either way. A paid tier is skipped when
+#    its key is missing.
+# 2. Optional repo variables: REVIEW_MODEL_PRIMARY (first paid attempt;
+#    default zai-coding-plan/glm-5.3-flash) and REVIEW_MODEL_VERIFY (default
+#    openrouter/z-ai/glm-5.3-flash). The free attempts are
+#    opencode/glm-5.3-flash-free then opencode/deepseek-v4.1-flash-free.
 
 on:
   pull_request:
@@ -70,9 +77,13 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # REVIEW_MODEL_PRIMARY is the first attempt. Empty repo variable falls
-  # through to the Coding Plan model. OPENCODE_MODEL is the same default
-  # and is deduped when it matches the primary.
+  # Free OpenCode models are the first two attempts. They need no API key:
+  # the built-in opencode provider autoloads zero-cost catalog models.
+  # Paid models run only after both of these fail.
+  OPENCODE_FREE_PRIMARY: opencode/glm-5.3-flash-free
+  OPENCODE_FREE_SECONDARY: opencode/deepseek-v4.1-flash-free
+  # First paid attempt. Empty repo variable falls through to the Coding Plan
+  # model. OPENCODE_MODEL is the same default and is deduped when it matches.
   REVIEW_MODEL_PRIMARY: ${{ vars.REVIEW_MODEL_PRIMARY || 'zai-coding-plan/glm-5.3-flash' }}
   REVIEW_MODEL_VERIFY: ${{ vars.REVIEW_MODEL_VERIFY || 'openrouter/z-ai/glm-5.3-flash' }}
   OPENCODE_MODEL: zai-coding-plan/glm-5.3-flash
@@ -91,7 +102,14 @@ env:
 jobs:
   review:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Worst case is every attempt burning its full budget before pass 2:
+    # 10m for the first model plus 7m for each later add_attempt, then 8m
+    # for pass 2, plus a few minutes of checkout/install/post. 7 distinct
+    # attempts is 10 + 6*7 + 8 = 60m before that overhead, so 45m killed
+    # the job on the all-fail path and never posted a comment. 75 leaves
+    # room for a slow install. The validator recomputes this from the
+    # add_attempt count.
+    timeout-minutes: 75
     permissions:
       contents: read
       pull-requests: write
@@ -108,9 +126,9 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           set -euo pipefail
-          # has_key is the single gate for the whole job: the review runs if
-          # EITHER provider key is configured. Per-tier outputs let the
-          # review step skip the tiers whose key is missing.
+          # Per-provider outputs. Paid tiers are skipped inside the attempt
+          # list when their key is missing. The free OpenCode models need no
+          # key, so the job always runs a review.
           if [ -z "${ZAI_API_KEY:-}" ]; then
             echo "has_zai_key=false" >> "$GITHUB_OUTPUT"
           else
@@ -121,11 +139,9 @@ jobs:
           else
             echo "has_openrouter_key=true" >> "$GITHUB_OUTPUT"
           fi
+          echo "has_key=true" >> "$GITHUB_OUTPUT"
           if [ -z "${ZAI_API_KEY:-}" ] && [ -z "${OPENROUTER_API_KEY:-}" ]; then
-            echo "has_key=false" >> "$GITHUB_OUTPUT"
-            echo "Neither ZAI_API_KEY nor OPENROUTER_API_KEY is set — skipping OpenCode review."
-          else
-            echo "has_key=true" >> "$GITHUB_OUTPUT"
+            echo "No paid provider key is set. Review will use the free OpenCode models only."
           fi
 
       - name: Mask provider secrets
@@ -355,7 +371,7 @@ jobs:
           # they cannot break out of the shell. The prompt itself is the
           # committed review-prompt.md, not an inline string.
           is_free() {
-            [ "$1" = "zai-standard/${ZAI_FREE_MODEL}" ] || [ "$1" = "openrouter/${OPENROUTER_FREE_MODEL}" ]
+            [ "$1" = "$OPENCODE_FREE_PRIMARY" ] || [ "$1" = "$OPENCODE_FREE_SECONDARY" ] || [ "$1" = "zai-standard/${ZAI_FREE_MODEL}" ] || [ "$1" = "openrouter/${OPENROUTER_FREE_MODEL}" ]
           }
           # One review attempt. Fails (so the loop tries the next model) when
           # OpenCode falls back to the build agent or writes an empty file.
@@ -380,14 +396,18 @@ jobs:
             fi
             [ "$rc" -eq 0 ] && [ -s review-raw.md ]
           }
-          # Quality-first attempt order (strong configured model first, free
-          # models last). Deduped. Each attempt runs only when its key is
-          # present ("${ZAI_API_KEY:-}" / "${OPENROUTER_API_KEY:-}").
+          # Free OpenCode models first, paid models after, older free
+          # fallbacks last. Deduped. Paid attempts run only when their key is
+          # present ("${ZAI_API_KEY:-}" / "${OPENROUTER_API_KEY:-}"). The
+          # opencode provider needs no key.
           attempts=()
           add_attempt() {
             local model="$1"
             local provider="${model%%/*}"
             case "$provider" in
+              opencode)
+                # Built-in provider. Zero-cost models autoload with no API key.
+                ;;
               zai-coding-plan|zai-standard)
                 [ -n "${ZAI_API_KEY:-}" ] || return 0
                 ;;
@@ -405,6 +425,8 @@ jobs:
             done
             attempts+=("$model")
           }
+          add_attempt "$OPENCODE_FREE_PRIMARY"
+          add_attempt "$OPENCODE_FREE_SECONDARY"
           add_attempt "$REVIEW_MODEL_PRIMARY"
           add_attempt "$OPENCODE_MODEL"
           add_attempt "openrouter/$OPENROUTER_MODEL"
@@ -414,6 +436,10 @@ jobs:
             echo "No review model can run with the configured keys" >&2
             exit 1
           fi
+          echo "Review attempt order:"
+          for attempt in "${attempts[@]}"; do
+            echo "  - $attempt"
+          done
           success=false
           chosen=""
           first=true
@@ -489,7 +515,7 @@ jobs:
             fi
           }
           is_free() {
-            [ "$1" = "zai-standard/${ZAI_FREE_MODEL}" ] || [ "$1" = "openrouter/${OPENROUTER_FREE_MODEL}" ]
+            [ "$1" = "$OPENCODE_FREE_PRIMARY" ] || [ "$1" = "$OPENCODE_FREE_SECONDARY" ] || [ "$1" = "zai-standard/${ZAI_FREE_MODEL}" ] || [ "$1" = "openrouter/${OPENROUTER_FREE_MODEL}" ]
           }
           # Docs, images, lockfiles, and docs/* are not code. Workflow YAML,
           # apps/, supabase/, and .github/ still get pass 2.
