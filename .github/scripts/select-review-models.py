@@ -160,10 +160,16 @@ def _default_fetch_url(url: str) -> str:
         return response.read().decode("utf-8", errors="replace")
 
 
-def is_denied(model_id: str, meta: ModelMeta | None, prefs: dict[str, Any]) -> str | None:
+def is_denied(
+    model_id: str,
+    meta: ModelMeta | None,
+    prefs: dict[str, Any],
+    *,
+    paid_tier: bool = False,
+) -> str | None:
     deny = prefs.get("denylist") or {}
     exact = set(deny.get("exact") or [])
-    if model_id in exact:
+    if not paid_tier and model_id in exact:
         return "denylist exact match"
     lowered = model_id.lower()
     for fragment in deny.get("idSubstrings") or []:
@@ -193,7 +199,10 @@ def heuristic_score(meta: ModelMeta) -> int:
 def expand_paid_model(spec: dict[str, Any], env: dict[str, str]) -> str | None:
     if "model" in spec:
         template = spec["model"]
-        return os.path.expandvars(template)
+        expanded = template
+        for key, value in env.items():
+            expanded = expanded.replace(f"${{{key}}}", value)
+        return expanded
     env_name = spec.get("modelEnv")
     if not env_name:
         return None
@@ -227,17 +236,27 @@ def build_chain(
 ) -> tuple[list[str], list[str], list[ChainDecision]]:
     """Return (attempts, free_model_ids, decisions)."""
     decisions: list[ChainDecision] = []
-    attempts: list[str] = []
+    free_attempts: list[str] = []
+    paid_attempts: list[str] = []
     free_ids: list[str] = []
     seen: set[str] = set()
 
-    def add(model_id: str, reason: str, is_free: bool) -> None:
+    def add_free(model_id: str, reason: str) -> None:
         if model_id in seen:
             decisions.append(ChainDecision(model_id, False, "duplicate"))
             return
         seen.add(model_id)
-        attempts.append(model_id)
-        if is_free:
+        free_attempts.append(model_id)
+        free_ids.append(model_id)
+        decisions.append(ChainDecision(model_id, True, reason))
+
+    def add_paid(model_id: str, reason: str, counts_as_free: bool) -> None:
+        if model_id in seen:
+            decisions.append(ChainDecision(model_id, False, "duplicate"))
+            return
+        seen.add(model_id)
+        paid_attempts.append(model_id)
+        if counts_as_free:
             free_ids.append(model_id)
         decisions.append(ChainDecision(model_id, True, reason))
 
@@ -255,9 +274,13 @@ def build_chain(
             is_free = model_id.startswith("opencode/") or (
                 model_id.startswith("openrouter/") and model_id.endswith(":free")
             )
-            add(model_id, "override", is_free)
+            if is_free:
+                add_free(model_id, "override")
+            else:
+                add_paid(model_id, "override", False)
         max_len = int(prefs.get("maxChainLength") or 8)
-        return attempts[:max_len], free_ids[:max_len], decisions
+        attempts = (free_attempts + paid_attempts)[:max_len]
+        return attempts, [m for m in free_ids if m in attempts], decisions
 
     preferred = list(prefs.get("preferredFree") or [])
     if discovery_failed:
@@ -272,7 +295,7 @@ def build_chain(
             if denied:
                 decisions.append(ChainDecision(model_id, False, denied))
                 continue
-            add(model_id, "preferred (static fallback)", True)
+            add_free(model_id, "preferred (static fallback)")
     else:
         for model_id in preferred:
             if model_id.startswith("openrouter/") and env.get("HAS_OPENROUTER_KEY") != "true":
@@ -287,7 +310,7 @@ def build_chain(
             if denied:
                 decisions.append(ChainDecision(model_id, False, denied))
                 continue
-            add(model_id, "preferred (available)", True)
+            add_free(model_id, "preferred (available)")
 
         preferred_set = set(preferred)
         discovered = [
@@ -309,7 +332,7 @@ def build_chain(
             if denied:
                 decisions.append(ChainDecision(model_id, False, denied))
                 continue
-            add(model_id, "discovered free", True)
+            add_free(model_id, "discovered free")
             added_discovered += 1
 
     for spec in prefs.get("paidFallbacks") or []:
@@ -324,21 +347,28 @@ def build_chain(
         if not provider_key_ok(model_id, key_kind, env):
             decisions.append(ChainDecision(model_id, False, f"{key_kind} key missing"))
             continue
-        denied = is_denied(model_id, available.get(model_id), prefs)
+        denied = is_denied(
+            model_id,
+            available.get(model_id),
+            prefs,
+            paid_tier=True,
+        )
         if denied:
             decisions.append(ChainDecision(model_id, False, denied))
             continue
-        is_free = model_id == f"openrouter/{env.get('OPENROUTER_FREE_MODEL', '')}" or (
+        counts_as_free = model_id == f"openrouter/{env.get('OPENROUTER_FREE_MODEL', '')}" or (
             model_id == f"zai-standard/{env.get('ZAI_FREE_MODEL', '')}"
         )
-        add(model_id, "paid fallback", is_free)
+        add_paid(model_id, "paid fallback", counts_as_free)
 
     max_len = int(prefs.get("maxChainLength") or 8)
-    if len(attempts) > max_len:
-        for dropped in attempts[max_len:]:
-            decisions.append(ChainDecision(dropped, False, "chain length cap"))
-        attempts = attempts[:max_len]
-        free_ids = [mid for mid in free_ids if mid in attempts]
+    free_budget = max(0, max_len - len(paid_attempts))
+    if len(free_attempts) > free_budget:
+        for dropped in free_attempts[free_budget:]:
+            decisions.append(ChainDecision(dropped, False, "chain length cap (free tier)"))
+        free_attempts = free_attempts[:free_budget]
+    attempts = free_attempts + paid_attempts
+    free_ids = [mid for mid in free_ids if mid in attempts]
     return attempts, free_ids, decisions
 
 

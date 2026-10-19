@@ -160,6 +160,27 @@ def test_chain_override_replaces_discovery(mod, tmp_path):
     ]
 
 
+def test_paid_fallbacks_survive_chain_length_cap(mod):
+    prefs = json.loads(PREFS_PATH.read_text(encoding="utf-8"))
+    prefs["maxChainLength"] = 8
+    prefs["maxDiscoveredFree"] = 5
+    available = mod.parse_opencode_verbose(SAMPLE_OPENCODE_VERBOSE)
+    env = {
+        "HAS_ZAI_KEY": "true",
+        "HAS_OPENROUTER_KEY": "true",
+        "REVIEW_MODEL_PRIMARY": "zai-coding-plan/glm-5.3-flash",
+        "OPENCODE_MODEL": "zai-coding-plan/glm-5.3-flash",
+        "OPENROUTER_MODEL": "z-ai/glm-5.3-flash",
+        "OPENROUTER_FREE_MODEL": "openrouter/free",
+        "ZAI_FREE_MODEL": "glm-4.7-flash",
+    }
+    attempts, _, _ = mod.build_chain(prefs, available, env)
+    assert "zai-coding-plan/glm-5.3-flash" in attempts
+    assert attempts[-1] == "openrouter/openrouter/free"
+    assert len(attempts) <= 8
+    assert attempts.index("zai-coding-plan/glm-5.3-flash") > 0
+
+
 def test_main_writes_chain_file(mod, tmp_path, monkeypatch):
     prefs_copy = tmp_path / "prefs.json"
     prefs_copy.write_text(PREFS_PATH.read_text(encoding="utf-8"), encoding="utf-8")
