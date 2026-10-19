@@ -455,16 +455,14 @@ class SupabaseTaskState(BaseState):
         Each orphan is classified by its last persisted stage
         (app.services.orphan_requeue.classify_orphan): generation stages
         linked to a batch slot go back to ``pending`` for the next
-        fill-schedule tick, publish-stage orphans with a finished video
-        complete the publish, and everything else keeps the historical
+        fill-schedule tick, and everything else keeps the historical
         fail+refund. A per-task failure is logged loudly and never breaks
         the loop or the boot: the task stays non-terminal and is retried
         on the next boot. Returns how many rows were failed
-        (requeued/completed orphans are not counted).
+        (requeued orphans are not counted).
         """
-        # Lazy import: orphan_requeue -> task_publish -> app.services.state,
-        # so a top-level import would run while this module is still
-        # initializing (SupabaseTaskState() is constructed at import time).
+        # Lazy import to keep this module importable from small entry
+        # points; orphan_requeue pulls in the fill-schedule store.
         from app.services import orphan_requeue
 
         response = self._request(

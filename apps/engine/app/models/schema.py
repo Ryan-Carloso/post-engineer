@@ -296,7 +296,6 @@ def _validate_webhook_url(value: Optional[str]) -> Optional[str]:
 
 
 class TaskVideoRequest(VideoParams, BaseModel):
-    publish: Optional[publish_models.PublishParams] = None
     # Optional callback fired once when the task reaches a terminal state
     # (completed/failed). Must be http(s); delivery is fire-and-forget.
     webhook_url: Optional[str] = None

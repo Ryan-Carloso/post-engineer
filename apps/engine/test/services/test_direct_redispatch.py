@@ -187,9 +187,8 @@ class TriageRedispatchDirectTests(unittest.TestCase):
         self.assertEqual(job.request.video_subject, "myth busting")
         self.assertEqual(job.request.generation_id, "g1")
         # The persisted engine payload (buildJobPayload) carries no publish
-        # plan. In-pipeline publish stays a no-op; the slot publisher posts
-        # at slot time. A publish key here would post on completion.
-        self.assertIsNone(job.request.publish)
+        # plan: publishing happens exclusively via the fill-schedule slot
+        # worker. The TaskVideoRequest.publish field was removed.
         track.assert_called_once()
         self.assertEqual(track.call_args[0][0], "task_auto_requeued")
         self.assertEqual(track.call_args[0][1]["flow"], "direct")
@@ -329,7 +328,6 @@ class RedispatchStartupTests(unittest.TestCase):
             if hasattr(state_mod, "state"):
                 seen["state_is_saved"] = state_mod.state is saved_state
             seen["task_id"] = task_id
-            seen["publish"] = params.publish
             seen["stop_at"] = stop_at
             started.set()
 
@@ -369,7 +367,6 @@ class RedispatchStartupTests(unittest.TestCase):
             self.assertTrue(seen["has_state"])
             self.assertTrue(seen["state_is_saved"])
             self.assertEqual(seen["task_id"], "t-1")
-            self.assertIsNone(seen["publish"])
             self.assertEqual(seen["stop_at"], "video")
             _wait_until(lambda: manager.current_tasks == 0)
         finally:

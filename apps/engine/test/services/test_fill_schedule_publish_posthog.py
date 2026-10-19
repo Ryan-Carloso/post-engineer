@@ -1,11 +1,9 @@
 """PostHog publish_provider_failed event in the fill-schedule publish path.
 
 The fill-schedule publisher (apps/engine/app/services/fill_schedule/publish.py)
-has its own publish loop with slot-level retries, separate from
-app.services.task_publish. A provider failure here must emit the same
+is the single publish path. A provider failure here emits the
 publish_provider_failed diagnostic event (provider, status_code,
-response_body) so failures are visible in PostHog no matter which path
-published the slot.
+response_body) so failures are visible in PostHog.
 """
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
 """Contract tests for LinkedIn publish support (engine side).
 
-Covers PublishParams (schema), task_publish bridge and upload_publisher
+Covers PublishParams (schema) and upload_publisher
 metadata/multipart rules for the linkedin provider.
 """
 
@@ -8,7 +8,6 @@ import unittest
 
 from app.models.publish import PublishParams, LinkedInPublish
 from app.services import upload_publisher
-from app.services import task_publish
 
 
 class LinkedInPublishParamsTest(unittest.TestCase):
@@ -91,20 +90,6 @@ class LinkedInPartsTest(unittest.TestCase):
             ],
         )
         self.assertEqual(parts.tags, [])
-
-
-class LinkedInBridgeTest(unittest.TestCase):
-    """task_publish.to_client_metadata bridges LinkedInPublish params."""
-
-    def test_bridge_maps_linkedin_metadata(self) -> None:
-        params = PublishParams(
-            providers=["linkedin"],
-            linkedin=LinkedInPublish(caption="post", account_ids=["member-123"]),
-        )
-        metadata = task_publish.to_client_metadata(params)
-        assert metadata is not None and metadata.linkedin is not None
-        self.assertEqual(metadata.linkedin.caption, "post")
-        self.assertEqual(metadata.linkedin.account_ids, ("member-123",))
 
 
 if __name__ == "__main__":

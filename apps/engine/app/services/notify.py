@@ -248,7 +248,7 @@ def slot_failed_msg(persona: str, topic: str, reason: str) -> str:
     )
 
 
-def partial_publish_msg(task_id: str, failed_providers: list[str]) -> str:
+def partial_publish_msg(slot_id: str, failed_providers: list[str]) -> str:
     """Discord alert when some providers published and others did not.
 
     Lists provider names only. Callers must not pass upstream response
@@ -256,7 +256,7 @@ def partial_publish_msg(task_id: str, failed_providers: list[str]) -> str:
     """
     listing = ", ".join(failed_providers) if failed_providers else "unknown"
     return _clip(
-        f"⚠️ Partial publish — task: {task_id} | failed providers: {listing}",
+        f"⚠️ Partial publish — slot: {slot_id} | failed providers: {listing}",
         DISCORD_MAX_CONTENT,
     )
 
