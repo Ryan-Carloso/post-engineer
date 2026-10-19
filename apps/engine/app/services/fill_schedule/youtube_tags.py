@@ -50,17 +50,27 @@ def _tokenize(text: str) -> list[str]:
 def derive_tags_from_topic(topic: str) -> tuple[str, ...]:
     """Extract up to ``_MAX_TAGS`` keyword tags from the topic.
 
-    Returns lowercase, de-duplicated tokens in first-seen order. An empty
-    tuple means the topic carried no usable keyword (only then does the
-    publish pre-flight fail the slot instead of burning GPU).
+    Returns lowercase, de-duplicated tokens in first-seen order. When the
+    strict pass finds nothing usable, falls back to cutting the title into
+    raw words with looser rules: tags are metadata garnish, not worth
+    failing a slot over — a rough tag beats a failed generation. Only a
+    topic with no words at all (pure punctuation) still yields ``()``,
+    and only then does the publish pre-flight fail the slot.
     """
+    tags = _derive_tags(topic, min_token_length=_MIN_TOKEN_LENGTH, drop_digits=True)
+    if not tags:
+        tags = _derive_tags(topic, min_token_length=1, drop_digits=False)
+    return tags
+
+
+def _derive_tags(topic: str, *, min_token_length: int, drop_digits: bool) -> tuple[str, ...]:
     seen: set[str] = set()
     tags: list[str] = []
     total_chars = 0
     for token in _tokenize(topic.lower()):
-        if len(token) < _MIN_TOKEN_LENGTH:
+        if len(token) < min_token_length:
             continue
-        if token.isdigit():
+        if drop_digits and token.isdigit():
             continue
         if token in seen:
             continue

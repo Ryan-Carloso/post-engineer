@@ -75,6 +75,12 @@ class DeriveTagsFromTopicTest(unittest.TestCase):
         self.assertEqual(derive_tags_from_topic("   "), ())
         self.assertEqual(derive_tags_from_topic("!!! ???"), ())
 
+    def test_falls_back_to_cut_title_when_strict_yields_nothing(self) -> None:
+        # "AI" is too short for the strict pass, so the fallback cuts the
+        # title into raw words instead of failing the slot over tags.
+        self.assertEqual(derive_tags_from_topic("AI"), ("ai",))
+        self.assertEqual(derive_tags_from_topic("U2"), ("u2",))
+
 
 class MetadataForTagsTest(unittest.TestCase):
     def test_youtube_tags_come_from_topic(self) -> None:
