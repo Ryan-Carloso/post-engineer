@@ -2,7 +2,7 @@
 
 Historically ``SupabaseTaskState.reconcile_orphaned_tasks`` failed every
 non-terminal orphan and refunded its token. That is correct for genuinely
-dead work, but three cases can recover by themselves:
+dead work, but two cases can recover by themselves:
 
 - an orphan in a generation stage that belongs to a batch slot: the slot
   goes back to ``pending`` and the next fill-schedule tick re-dispatches it.
@@ -12,10 +12,6 @@ dead work, but three cases can recover by themselves:
   marks the task during this review and restarts the pipeline after boot
   has published ``app.services.state.state``, through the shared task
   manager — also prepaid, no billing change;
-- an orphan in stage ``publish`` with a finished video archived in R2: the
-  publish already ran (``publish_results`` present) or can run now — failing
-  it would refund a video that is sitting in storage ready to be posted.
-
 Everything else keeps the historical fail+refund. Batch requeue is
 idempotent across boots: a crash between triage and the tick leaves the
 slot ``pending`` (re-triage skips it) or the task non-terminal in a
@@ -26,12 +22,10 @@ writes a new generation stage is fail+refunded instead of retried.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any
 
 from loguru import logger
 
-from app.models import const
 from app.services.analytics import track_event
 from app.services.fill_schedule.constants import (
     SLOT_GENERATING,
@@ -41,11 +35,7 @@ from app.services.fill_schedule.constants import (
 
 # Decisions returned by classify_orphan().
 REQUEUE = "requeue"
-COMPLETE_PUBLISH = "complete_publish"
-MARK_COMPLETE = "mark_complete"
 FAIL = "fail"
-
-PUBLISH_STAGE = "publish"
 
 # Pipeline phases (task.py _mark) whose GPU work can simply restart from
 # zero. ``custom_audio``/``download`` never come from _mark (they are
@@ -98,14 +88,6 @@ def slot_store_or_none() -> Any | None:
 def classify_orphan(data: dict[str, Any]) -> str:
     """Decide what a boot orphan needs, from its last persisted stage."""
     stage = data.get("stage")
-    if stage == PUBLISH_STAGE:
-        if data.get("publish_results") is not None:
-            # The publish already ran; only the terminal COMPLETE write was
-            # lost. Backfill completion instead of failing a delivered video.
-            return MARK_COMPLETE
-        if data.get("video_storage_path"):
-            return COMPLETE_PUBLISH
-        return FAIL
     if stage in GENERATION_STAGES and data.get("slot_id"):
         return REQUEUE
     return FAIL
@@ -129,10 +111,7 @@ def triage_requeue(state: Any, slot_store: Any, task_id: str, data: dict[str, An
         return False
     status = slot.get("status")
     if status == SLOT_GENERATING:
-        # Only generation-stage orphans restart from zero. A publish-stage
-        # orphan with a finished video must complete the publish via
-        # classify_orphan below — resetting its slot would discard the
-        # archived video and re-spend the GPU on a full regeneration.
+        # Only generation-stage orphans restart from zero.
         if data.get("stage") not in GENERATION_STAGES:
             return False
         requeue_count = int(data.get("requeue_count") or 0) + 1
@@ -159,101 +138,15 @@ def triage_requeue(state: Any, slot_store: Any, task_id: str, data: dict[str, An
     return False
 
 
-def settle_orphan_completed(state: Any, task_id: str) -> None:
-    """Mark the video_generations row completed for a finished orphan.
-
-    Used when the triage has proof of delivery (publish_results): the
-    video shipped, so the generation is completed — never failed, and
-    never refunded. Rows that are already terminal are left alone.
-    """
-    response = state._request(
-        "GET",
-        f"engine_task_id=eq.{state._eq(task_id)}"
-        "&select=generation_id,status"
-        "&order=created_at.asc",
-        table="video_generations",
-    )
-    rows = response.json()
-    if not rows:
-        # Normal for fill_schedule batch tasks (no video_generations row).
-        return
-    gen = rows[0]
-    if gen.get("status") in ("failed", "completed"):
-        return
-    now = datetime.now(timezone.utc).isoformat()
-    state._request(
-        "PATCH",
-        f"generation_id=eq.{state._eq(gen['generation_id'])}",
-        table="video_generations",
-        json={"status": "completed", "completed_at": now, "updated_at": now},
-    )
-
-
-def mark_complete_orphan(state: Any, task_id: str, data: dict[str, Any]) -> None:
-    """Backfill COMPLETE for an orphan whose publish already ran."""
-    # Billing first: if the process dies after the settle but before the
-    # terminal write, the next boot re-selects the still-non-terminal task
-    # and the idempotent settle skips the already-completed row. The
-    # reverse order would strand the generation row in processing forever
-    # (the boot SELECT excludes terminal rows).
-    settle_orphan_completed(state, task_id)
-    state.update_task(task_id, state=const.TASK_STATE_COMPLETE, progress=100)
-    track_event(
-        "orphan_marked_complete",
-        {"task_id": task_id, "flow": str(data.get("flow") or "unknown")},
-    )
-    logger.info(f"orphan {task_id} already published pre-crash; marked complete")
-
-
-def complete_publish_orphan(state: Any, task_id: str, data: dict[str, Any]) -> bool:
-    """Finish the publish step for an orphan with a video archived in R2.
-
-    Publishing happens exclusively from the ready slot via the
-    fill-schedule worker, so marking the task complete lets the batch
-    reconciler advance the slot and the slot publisher post it at slot
-    time.
-
-    Returns True when the orphan was completed. Returns False when it cannot
-    be completed here (caller falls through to fail+refund).
-    """
-    object_path = data.get("video_storage_path")
-    if not isinstance(object_path, str) or not object_path:
-        return False
-    slot_id = data.get("slot_id")
-    if not isinstance(slot_id, str) or not slot_id:
-        return False
-    state.update_task(
-        task_id,
-        state=const.TASK_STATE_COMPLETE,
-        progress=100,
-        # The slot publisher only needs basenames; the bytes come from
-        # R2 via video_storage_path. Local paths are gone with the old
-        # process, so the R2 object path stands in (documented here so a
-        # future reader does not try to open() it).
-        videos=[object_path],
-    )
-    track_event(
-        "orphan_publish_completed",
-        {"task_id": task_id, "slot_id": slot_id, "flow": "batch"},
-    )
-    logger.info(
-        f"orphan {task_id}: video archived, marked complete; "
-        f"slot {slot_id} will publish at slot time"
-    )
-    return True
-
-
 def triage_orphan(
     state: Any, task_id: str, data: dict[str, Any], slot_store: Any
 ) -> bool:
     """Run the boot triage for one orphaned task.
 
     Returns True when the orphan was claimed and the caller must NOT
-    fail+refund it: the slot was requeued for the tick, a direct
-    generation was marked for restart, the publish was already complete,
-    the publish finished now, or the publish attempt failed and billing
-    was already settled. Returns False when the caller falls through to
-    the historical fail+refund.
+    fail+refund it: the slot was requeued for the tick or a direct
+    generation was marked for restart. Returns False when the caller
+    falls through to the historical fail+refund.
     """
     if triage_requeue(state, slot_store, task_id, data):
         return True
@@ -264,11 +157,4 @@ def triage_orphan(
 
     if triage_redispatch_direct(state, task_id, data):
         return True
-    decision = classify_orphan(data)
-    if decision == MARK_COMPLETE:
-        mark_complete_orphan(state, task_id, data)
-        return True
-    if decision == COMPLETE_PUBLISH:
-        if complete_publish_orphan(state, task_id, data):
-            return True
     return False

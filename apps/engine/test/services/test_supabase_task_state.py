@@ -867,51 +867,6 @@ class SupabaseStateOrphanTriageTests(unittest.TestCase):
                 payload.get("state"), const.TASK_STATE_FAILED
             )
 
-    def test_publish_orphan_with_results_marked_complete(self):
-        orphans = [
-            {
-                "task_id": "t-2",
-                "data": {
-                    "stage": "publish",
-                    "flow": "direct",
-                    "publish_results": [{"provider": "youtube"}],
-                },
-            }
-        ]
-        backend = _make_state(self.requests)
-        slot_store = self._slot_store(None)
-        self.requests.request.side_effect = [
-            _response(json_data=orphans),  # SELECT non-terminal rows
-            _response(
-                json_data=[
-                    {"generation_id": "g-1", "status": "processing"}
-                ]
-            ),  # GET video_generations (settle runs before the COMPLETE write)
-            _response(json_data=[{}]),  # PATCH generation completed
-            _response(json_data=[]),  # update_task read-modify-write SELECT
-            _response(json_data=[{}]),  # update_task POST (COMPLETE)
-        ]
-        with patch.object(
-            orphan_requeue, "slot_store_or_none", return_value=slot_store
-        ):
-            failed = backend.reconcile_orphaned_tasks()
-        self.assertEqual(failed, 0)
-        posts = [
-            c for c in self.requests.request.call_args_list if c[0][0] == "POST"
-        ]
-        self.assertEqual(posts[0][1]["json"]["state"], const.TASK_STATE_COMPLETE)
-        patches = [
-            c
-            for c in self.requests.request.call_args_list
-            if c[0][0] == "PATCH" and "video_generations" in c[0][1]
-        ]
-        self.assertEqual(len(patches), 1)
-        self.assertEqual(patches[0][1]["json"]["status"], "completed")
-        # No refund RPC on the completion path.
-        rpcs = [
-            c for c in self.requests.request.call_args_list if "/rpc/" in c[0][1]
-        ]
-        self.assertEqual(rpcs, [])
 
     def test_triage_error_leaves_task_for_next_boot(self):
         orphans = [

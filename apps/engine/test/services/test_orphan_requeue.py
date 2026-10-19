@@ -73,17 +73,6 @@ class ClassifyOrphanTests(unittest.TestCase):
         del data["slot_id"]
         self.assertEqual(orphan_requeue.classify_orphan(data), orphan_requeue.FAIL)
 
-    def test_publish_with_results_marks_complete(self):
-        data = _task_data(stage="publish", publish_results=[{"provider": "youtube"}])
-        self.assertEqual(orphan_requeue.classify_orphan(data), orphan_requeue.MARK_COMPLETE)
-
-    def test_publish_with_archived_video_completes_publish(self):
-        data = _task_data(stage="publish", video_storage_path="u/t/v.mp4")
-        self.assertEqual(orphan_requeue.classify_orphan(data), orphan_requeue.COMPLETE_PUBLISH)
-
-    def test_publish_without_artifact_fails(self):
-        data = _task_data(stage="publish")
-        self.assertEqual(orphan_requeue.classify_orphan(data), orphan_requeue.FAIL)
 
     def test_unknown_stage_fails(self):
         self.assertEqual(
@@ -156,41 +145,6 @@ class TriageRequeueTests(unittest.TestCase):
         self.assertFalse(claimed)
 
 
-class MarkCompleteOrphanTests(unittest.TestCase):
-    def test_marks_complete_and_settles_without_refund(self):
-        state = MagicMock()
-        with (
-            patch.object(orphan_requeue, "track_event") as track,
-            patch.object(orphan_requeue, "settle_orphan_completed") as settle,
-        ):
-            orphan_requeue.mark_complete_orphan(
-                state, "t-1", _task_data(stage="publish", publish_results=[{"provider": "youtube"}])
-            )
-        _, kwargs = state.update_task.call_args
-        self.assertEqual(kwargs["state"], const.TASK_STATE_COMPLETE)
-        self.assertEqual(kwargs["progress"], 100)
-        settle.assert_called_once_with(state, "t-1")
-        track.assert_called_once()
-        self.assertEqual(track.call_args[0][0], "orphan_marked_complete")
-
-
-class CompletePublishOrphanTests(unittest.TestCase):
-    def test_batch_orphan_marks_complete_for_slot_publisher(self):
-        state = MagicMock()
-        with patch.object(orphan_requeue, "track_event"):
-            done = orphan_requeue.complete_publish_orphan(
-                state,
-                "t-1",
-                _task_data(stage="publish", video_storage_path="u/t/v.mp4"),
-            )
-        self.assertTrue(done)
-        _, kwargs = state.update_task.call_args
-        self.assertEqual(kwargs["state"], const.TASK_STATE_COMPLETE)
-        # The slot publisher only needs basenames; bytes come from R2.
-        self.assertEqual(kwargs["videos"], ["u/t/v.mp4"])
-
-
-
 class SlotStoreOrNoneTests(unittest.TestCase):
     def test_returns_none_when_supabase_unconfigured(self):
         with _isolated_environ({}):
@@ -208,44 +162,6 @@ class SlotStoreOrNoneTests(unittest.TestCase):
         self.assertEqual(store._base_url, "https://example.supabase.co")
 
 
-class SettleOrphanCompletedTests(unittest.TestCase):
-    def _state_with_generations(self, generations):
-        state = MagicMock()
-        responses = [MagicMock()]
-        responses[0].json.return_value = generations
-        if generations and generations[0].get("status") not in ("failed", "completed"):
-            patch_response = MagicMock()
-            patch_response.json.return_value = [{}]
-            responses.append(patch_response)
-        state._request.side_effect = responses
-        return state
-
-    def test_marks_processing_generation_completed(self):
-        state = self._state_with_generations(
-            [{"generation_id": "g-1", "status": "processing"}]
-        )
-        orphan_requeue.settle_orphan_completed(state, "t-1")
-        self.assertEqual(state._request.call_count, 2)
-        patch_call = state._request.call_args_list[1]
-        self.assertEqual(patch_call[1]["table"], "video_generations")
-        self.assertEqual(patch_call[1]["json"]["status"], "completed")
-        self.assertNotIn("tokens_refunded", patch_call[1]["json"])
-
-    def test_terminal_generations_untouched(self):
-        for status in ("failed", "completed"):
-            with self.subTest(status=status):
-                state = self._state_with_generations(
-                    [{"generation_id": "g-1", "status": status}]
-                )
-                orphan_requeue.settle_orphan_completed(state, "t-1")
-                state._request.assert_called_once()  # only the GET
-
-    def test_missing_generation_row_is_noop(self):
-        state = self._state_with_generations([])
-        orphan_requeue.settle_orphan_completed(state, "t-1")
-        state._request.assert_called_once()  # only the GET
-
-
 class TriageOrphanTests(unittest.TestCase):
     def test_requeue_claims(self):
         state = MagicMock()
@@ -256,36 +172,6 @@ class TriageOrphanTests(unittest.TestCase):
         self.assertTrue(claimed)
         store.update_slot.assert_called_once_with("slot-1", status="pending")
 
-    def test_mark_complete_claims(self):
-        state = MagicMock()
-        data = _task_data(stage="publish", publish_results=[{"provider": "youtube"}])
-        with (
-            patch.object(orphan_requeue, "settle_orphan_completed") as settle,
-            patch.object(orphan_requeue, "track_event"),
-        ):
-            claimed = orphan_requeue.triage_orphan(state, "t-1", data, None)
-        self.assertTrue(claimed)
-        settle.assert_called_once_with(state, "t-1")
-        self.assertEqual(
-            state.update_task.call_args[1]["state"], const.TASK_STATE_COMPLETE
-        )
-
-    def test_complete_publish_claims(self):
-        state = MagicMock()
-        data = _task_data(stage="publish", video_storage_path="u/t/v.mp4")
-        with patch.object(orphan_requeue, "track_event"):
-            claimed = orphan_requeue.triage_orphan(state, "t-1", data, None)
-        self.assertTrue(claimed)
-        self.assertEqual(
-            state.update_task.call_args[1]["state"], const.TASK_STATE_COMPLETE
-        )
-
-    def test_complete_publish_returns_false_not_claimed(self):
-        state = MagicMock()
-        data = _task_data(stage="publish", video_storage_path="u/t/v.mp4")
-        del data["slot_id"]  # orphan without slot_id
-        claimed = orphan_requeue.triage_orphan(state, "t-1", data, None)
-        self.assertFalse(claimed)
 
     def test_failed_decision_not_claimed(self):
         state = MagicMock()
@@ -302,18 +188,6 @@ class TriageRequeueStageGateTests(unittest.TestCase):
         store.get_slot.return_value = slot
         return store
 
-    def test_publish_stage_orphan_with_archived_video_not_requeued(self):
-        # A batch orphan whose video was already archived must complete the
-        # publish, not reset the slot to pending for a full regeneration.
-        state = MagicMock()
-        store = self._slot_store({"id": "slot-1", "status": "generating"})
-        data = _task_data(stage="publish", video_storage_path="u/t/v.mp4")
-        with patch.object(orphan_requeue, "track_event"):
-            claimed = orphan_requeue.triage_orphan(state, "t-1", data, store)
-        self.assertTrue(claimed)
-        store.update_slot.assert_not_called()
-        _, kwargs = state.update_task.call_args
-        self.assertEqual(kwargs["state"], const.TASK_STATE_COMPLETE)
 
     def test_requeue_capped_after_max_attempts(self):
         state = MagicMock()
@@ -338,8 +212,6 @@ class TriageRequeueStageGateTests(unittest.TestCase):
         self.assertTrue(claimed)
         store.update_slot.assert_called_once_with("slot-1", status="pending")
         self.assertEqual(state.update_task.call_args[1]["requeue_count"], 3)
-
-
 
 
 if __name__ == "__main__":

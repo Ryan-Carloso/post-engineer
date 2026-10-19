@@ -80,8 +80,7 @@ _discord_notified_failed_tasks_lock = Lock()
 #---------------
 # Terminal-event emission dedup: the FIRST _fail_task notice for a task
 # always emits video_generation_failed, even when the FAILED state was
-# pre-written by an earlier stage (the publish stage writes FAILED
-# directly before raising). Later notices stay deduped. Bounded like the
+# already written. Later notices stay deduped. Bounded like the
 # alert cache above: task ids are never reused, so eviction only drops
 # ids whose terminal event was long since emitted.
 #---------------
@@ -418,12 +417,11 @@ def _fail_task(
             sm.state, task_id, state=const.TASK_STATE_FAILED, error=error, **kwargs
         )
     # Terminal either way: drop the milestone cache on every failure
-    # notice, including repeats for an already-FAILED task (the publish
-    # stage pre-writes FAILED before raising into the generic handler).
+    # notice, including repeats for an already-FAILED task.
     _progress_milestones.pop(task_id, None)
     # The first _fail_task notice always emits the terminal funnel event,
     # even when the state was already FAILED — dedup is by notice, not by
-    # state, so publish-stage failures are not lost from the funnel.
+    # state, so no failure is lost from the funnel.
     if _should_emit_failed_event(task_id):
         context = _task_tracking_context(task_id)
         context["stage"] = failed_stage
