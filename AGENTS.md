@@ -1258,21 +1258,27 @@ Follow these so the same issues don't come back:
   Declined without code change. Pattern: the reviewer invents a "contract"
   (e.g. "5-tuple contract", "should be Optional[...]") that the code never
   declares; check whether the alleged contract exists before touching anything.
-- **opencode-review fallback chain (2026-10-06, free-first):**
-  `openrouter/openrouter/free` -> `zai-standard/glm-4.7-flash` ->
-  `zai-coding-plan/glm-5.3-flash` -> `openrouter/z-ai/glm-5.3-flash`
-  (first success wins; paid tier is the last resort).
+- **opencode-review fallback chain (2026-10-19, free OpenCode models first):**
+  `opencode/glm-5.3-flash-free` -> `opencode/deepseek-v4.1-flash-free` ->
+  `zai-coding-plan/glm-5.3-flash` -> `openrouter/z-ai/glm-5.3-flash` ->
+  `zai-standard/glm-4.7-flash` -> `openrouter/openrouter/free`
+  (first success wins). The two OpenCode models are zero-cost catalog
+  entries on the built-in `opencode` provider and need no API key. Paid
+  models run only after both free models fail. The older free fallbacks
+  stay last so a miss on the free flash models still reaches a paid model
+  before glm-4.7-flash or the OpenRouter free router.
   glm-4.5-flash was dropped — its review quality was too poor. The OpenRouter free tier uses the
   special router id `openrouter/free` (same convention
   as the engine's `_PROVIDER_DEFAULT_MODELS`, no hardcoded model list to
   rot); the paid tier pins `z-ai/glm-5.3-flash` (verified on the OpenRouter
   models API) instead of the auto router, for predictable review quality.
-  Both configured in opencode.json with `@ai-sdk/openai-compatible` against
-  `https://openrouter.ai/api/v1` and apiKey `{env:OPENROUTER_API_KEY}`. One
-  `OPENROUTER_API_KEY` secret serves both tiers (free models cost $0 even
-  on a paid key). The job runs if EITHER key is set; each tier is skipped
-  when its key is missing. The old "OCR fallback chain mirrors
-  opencode-review" note is dead — the ocr-review workflow no longer exists.
+  Both OpenRouter tiers are configured in the workflow's temp opencode.json
+  with `@ai-sdk/openai-compatible` against `https://openrouter.ai/api/v1`
+  and apiKey `{env:OPENROUTER_API_KEY}`. One `OPENROUTER_API_KEY` secret
+  serves both tiers (free models cost $0 even on a paid key). The job
+  always runs; each paid tier is skipped when its key is missing. The old
+  "OCR fallback chain mirrors opencode-review" note is dead — the
+  ocr-review workflow no longer exists.
 - **opencode-review hardened — grounded findings + mechanical checks
   (2026-10-06):** the review prompt requires a machine-checkable format per
   finding (`### SEVERITY: title`, `**Location:** path:line1-line2`, verbatim
