@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.utils import utils
 from app.services import voice as vs
+from app.services import voice_providers as vp
 
 temp_dir = utils.storage_dir("temp")
 
@@ -347,7 +348,7 @@ class TestVoiceService(unittest.TestCase):
             "app.services.voice_providers.AudioFileClip", return_value=_FakeClip()
         ):
             voice_file = str(Path(tmp_dir) / "chatterbox.mp3")
-            result = vs.chatterbox_tts(
+            result = vp.chatterbox_tts(
                 text="Hello world. Second sentence.",
                 voice="default",
                 voice_file=voice_file,
@@ -378,7 +379,7 @@ class TestVoiceService(unittest.TestCase):
         with patch.object(
             vs.config, "chatterbox", {"base_url": ""}
         ), patch.object(vs.requests, "post") as post:
-            result = vs.chatterbox_tts(
+            result = vp.chatterbox_tts(
                 text="hi", voice="default", voice_file="unused.mp3"
             )
         self.assertIsNone(result.sub_maker)
@@ -400,7 +401,7 @@ class TestVoiceService(unittest.TestCase):
             vs.requests, "post", return_value=_FakeResponse()
         ) as post:
             voice_file = str(Path(tmp_dir) / "chatterbox.mp3")
-            result = vs.chatterbox_tts(
+            result = vp.chatterbox_tts(
                 text="hi", voice="default", voice_file=voice_file
             )
         self.assertIsNone(result.sub_maker)
@@ -412,14 +413,14 @@ class TestVoiceService(unittest.TestCase):
     def test_chatterbox_success_is_returned_as_is(self):
         """A successful Chatterbox result is returned untouched.
 
-        It used to then go through the edge-tts fallback; with edge_tts gone
-        the result IS the answer, and no other provider may be consulted.
+        No other provider may be consulted on success — the Edge TTS
+        fallback only triggers on failure, for test accounts.
         """
         chatterbox_marker = vs.SubMaker()
         with tempfile.TemporaryDirectory() as tmp_dir, patch.object(
             vs.config, "chatterbox", {}
-        ), patch.object(
-            vs, "chatterbox_tts", return_value=chatterbox_marker
+        ), patch(
+            "app.services.edge_tts.chatterbox_tts", return_value=chatterbox_marker
         ), patch.object(
             vs, "elevenlabs_tts"
         ) as elevenlabs:

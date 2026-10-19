@@ -12,11 +12,11 @@ from moviepy.audio.io.AudioFileClip import AudioFileClip
 from moviepy.video.tools import subtitles
 
 from app.config import config
+from app.services.edge_tts import chatterbox_tts_with_fallback
 from app.services.openrouter_tts import dispatch_openrouter_tts
 from app.services.voice_providers import (
     SubMaker,
     TtsResult,
-    chatterbox_tts,
     elevenlabs_tts,
     ensure_file_path_exists,
     populate_legacy_submaker_with_full_text,
@@ -29,8 +29,7 @@ NO_VOICE_NAME = "no-voice"
 # on upgrade; the WebUI and new code use the clearer `no-voice`.
 _NO_VOICE_ALIASES = {NO_VOICE_NAME, "none"}
 
-# 100-nanosecond units per second. The subtitle timeline predates every TTS
-# provider and `mktimestamp` is integer-based on it.
+# 100-nanosecond units per second; `mktimestamp` is integer-based on it.
 SUB_TIME_UNITS_PER_SECOND = 10000000
 
 
@@ -41,11 +40,8 @@ def _configure_pydub_ffmpeg(audio_segment_cls):
 
 
 def mktimestamp(time_unit: float) -> str:
-    """Format a 100-nanosecond-unit timestamp as an SRT timestamp.
-
-    The subtitle timeline is integer-based on 100-nanosecond units;
-    this formats one such value as HH:MM:SS.mmm.
-    """
+    """Format a 100-nanosecond-unit timestamp as an SRT timestamp."""
+    hour = math.floor(time_unit / 10**7 / 3600)
     hour = math.floor(time_unit / 10**7 / 3600)
     minute = math.floor((time_unit / 10**7 / 60) % 60)
     seconds = (time_unit / 10**7) % 60
@@ -221,9 +217,11 @@ def tts(
     voice_file: str,
     voice_volume: float = 1.0,
     voice_pitch: str = "",
+    user_id: str | None = None, task_id: str | None = None,
 ) -> TtsResult:
     """Synthesize speech. Failures return a TtsResult with a specific, sanitized
-    `error` naming the real cause (forwarded to the task failure for PostHog)."""
+    `error` naming the real cause (forwarded to the task failure for PostHog).
+    Test accounts fall back to free Edge TTS on Chatterbox failure."""
     if is_no_voice(voice_name):
         duration_seconds = estimate_no_voice_duration(text)
         if not generate_silent_audio(duration_seconds, voice_file):
@@ -261,17 +259,17 @@ def tts(
         chatterbox_voice = parts[1].strip()
         if chatterbox_voice.endswith(("-Female", "-Male")):
             chatterbox_voice = chatterbox_voice.rsplit("-", 1)[0]
-        return chatterbox_tts(
-            text, chatterbox_voice, voice_file, voice_rate, voice_volume
+        return chatterbox_tts_with_fallback(
+            text, chatterbox_voice, voice_file, voice_rate, voice_volume,
+            user_id=user_id, task_id=task_id,
         )
     routed = dispatch_openrouter_tts(voice_name, text, voice_file, voice_rate, voice_volume)
     if routed is not None:
         return routed
 
-    # An unrecognised voice id used to fall through to `azure_tts_v1(...)`, which
-    # turned every typo into a silent edge-tts request that failed as if it were
-    # a network problem. Fail loud instead: the caller picked a voice that no
-    # longer exists.
+    # An unrecognised voice id used to fall through to Azure, turning typos
+    # into silent network failures. Fail loud: the caller picked a voice
+    # that no longer exists.
     logger.error(
         f"unknown voice: {voice_name!r}. Providers are ElevenLabs (`elevenlabs:<id>`), "
         "Chatterbox (`chatterbox:<name>`) and OpenRouter (`openrouter:<model>:<voice>`); "
