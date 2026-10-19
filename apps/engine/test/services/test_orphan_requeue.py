@@ -21,7 +21,6 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from app.models import const
 from app.services import orphan_requeue
 
 
