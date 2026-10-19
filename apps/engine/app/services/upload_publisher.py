@@ -145,6 +145,14 @@ def validate_publish_metadata(
                 "invalid youtube privacy status. "
                 f'Use {"|".join(VALID_PRIVACY_STATUSES)}'
             )
+        if not youtube.title.strip():
+            raise ValueError("youtube publish requires a non-empty title")
+        if not youtube.description.strip():
+            raise ValueError("youtube publish requires a non-empty description")
+        # The internal upload route 400s on empty tags ("Video tags are
+        # required"); fail here, before generation, instead of after it.
+        if not youtube.tags:
+            raise ValueError("youtube publish requires at least one tag")
     if INSTAGRAM_PROVIDER in providers:
         if instagram is None:
             raise ValueError("instagram provider requires instagram metadata")
