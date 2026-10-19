@@ -94,6 +94,21 @@ describe('resolveConfig', () => {
       /not a valid URL/,
     );
   });
+
+  it('defaults faceless to false', () => {
+    const cfg = resolveConfig(baseEnv());
+    assert.equal(cfg.faceless, false);
+  });
+
+  it('enables faceless mode when TEST_FLIGHT_FACELESS=true', () => {
+    const cfg = resolveConfig(baseEnv({ TEST_FLIGHT_FACELESS: 'true' }));
+    assert.equal(cfg.faceless, true);
+  });
+
+  it('ignores non-true TEST_FLIGHT_FACELESS values', () => {
+    const cfg = resolveConfig(baseEnv({ TEST_FLIGHT_FACELESS: 'yes' }));
+    assert.equal(cfg.faceless, false);
+  });
 });
 
 describe('discoverAccounts', () => {
@@ -256,6 +271,29 @@ describe('buildAsapPayload', () => {
     assert.deepEqual(payload.topics, ['t']);
     assert.equal(payload.idempotencyKey, 'k1');
   });
+
+  it('omits options when faceless is false (default persona flight)', () => {
+    const payload = buildAsapPayload({
+      personaId: 'p1',
+      topic: 't',
+      accounts: { bluesky: ['b1'] },
+      idempotencyKey: 'k1',
+    });
+    assert.ok(!('options' in payload));
+  });
+
+  it('sets options.faceless=true when faceless (persona kept for voice + accounts)', () => {
+    const payload = buildAsapPayload({
+      personaId: 'p1',
+      topic: 't',
+      accounts: { bluesky: ['b1'] },
+      idempotencyKey: 'k1',
+      faceless: true,
+    });
+    assert.equal(payload.personaId, 'p1');
+    assert.deepEqual(payload.options, { faceless: true });
+    assert.equal(payload.publishing.mode, 'asap');
+  });
 });
 
 describe('scheduledTarget', () => {
@@ -286,6 +324,31 @@ describe('buildScheduledPayload', () => {
       times: ['13:10'],
       timezone: 'UTC',
     });
+  });
+
+  it('omits options when faceless is false (default persona flight)', () => {
+    const payload = buildScheduledPayload({
+      personaId: 'p1',
+      topic: 't',
+      accounts: { youtube: ['y1'] },
+      idempotencyKey: 'k2',
+      schedule: { startAt: '2026-10-17', times: ['13:10'], timezone: 'UTC' },
+    });
+    assert.ok(!('options' in payload));
+  });
+
+  it('sets options.faceless=true when faceless', () => {
+    const payload = buildScheduledPayload({
+      personaId: 'p1',
+      topic: 't',
+      accounts: { youtube: ['y1'] },
+      idempotencyKey: 'k2',
+      schedule: { startAt: '2026-10-17', times: ['13:10'], timezone: 'UTC' },
+      faceless: true,
+    });
+    assert.equal(payload.personaId, 'p1');
+    assert.deepEqual(payload.options, { faceless: true });
+    assert.equal(payload.publishing.mode, 'scheduled');
   });
 });
 

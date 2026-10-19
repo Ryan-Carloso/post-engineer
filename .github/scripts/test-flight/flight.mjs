@@ -38,6 +38,12 @@
 //                                  (manual or scheduled) rotates MONITOR_TOPICS.
 //   TEST_FLIGHT_API_BASE_URL       default https://post-engineer.com.
 //   TEST_FLIGHT_SCHEDULED_ACTION   'cancel' (default) or 'leave'.
+//   TEST_FLIGHT_FACELESS             'true' to generate faceless videos
+//                                  (persona kept for voice + account
+//                                  routing, but options.faceless=true
+//                                  skips the GPU lipsync render). Used by
+//                                  the test-flight-faceless workflow;
+//                                  unset/false for the persona flight.
 //   TEST_FLIGHT_RUN_ID             idempotency base. The workflow passes
 //                                  `${github.run_id}-${github.run_attempt}`
 //                                  so a re-run is not treated as a replay.
@@ -132,12 +138,17 @@ export function resolveConfig(env) {
   if (parsedUrl.protocol !== 'https:' && !isLoopback) {
     throw new FlightError(`test-flight: TEST_FLIGHT_API_BASE_URL must be https (got '${apiBaseUrl}')`);
   }
+  // Faceless mode: persona is still passed (for voice + account routing) but
+  // options.faceless=true skips the GPU lipsync render — used by the
+  // test-flight-faceless workflow when Modal/GPU is unavailable.
+  const faceless = optionalEnv(env, 'TEST_FLIGHT_FACELESS') === 'true';
   return {
     apiKey,
     personaId,
     accounts,
     scheduledAction,
     apiBaseUrl,
+    faceless,
     runId: optionalEnv(env, 'TEST_FLIGHT_RUN_ID') || `manual-${Date.now()}`,
     pollTimeoutMs: parsePositiveInt(optionalEnv(env, 'TEST_FLIGHT_POLL_TIMEOUT_MIN'), 'TEST_FLIGHT_POLL_TIMEOUT_MIN', DEFAULT_POLL_TIMEOUT_MS / 60000) * 60000,
     pollIntervalMs: parsePositiveInt(optionalEnv(env, 'TEST_FLIGHT_POLL_INTERVAL_SEC'), 'TEST_FLIGHT_POLL_INTERVAL_SEC', DEFAULT_POLL_INTERVAL_MS / 1000) * 1000,
@@ -217,7 +228,7 @@ export async function resolveFlightAccounts({ explicit, client, discover = disco
 // Payloads
 //---------------
 
-export function buildAsapPayload({ personaId, topic, accounts, idempotencyKey }) {
+export function buildAsapPayload({ personaId, topic, accounts, idempotencyKey, faceless = false }) {
   return {
     personaId,
     topics: [topic],
@@ -226,6 +237,7 @@ export function buildAsapPayload({ personaId, topic, accounts, idempotencyKey })
       providers: Object.keys(accounts),
       accounts,
     },
+    ...(faceless ? { options: { faceless: true } } : {}),
     idempotencyKey,
   };
 }
@@ -241,7 +253,7 @@ export function scheduledTarget(now = new Date()) {
   };
 }
 
-export function buildScheduledPayload({ personaId, topic, accounts, idempotencyKey, schedule }) {
+export function buildScheduledPayload({ personaId, topic, accounts, idempotencyKey, schedule, faceless = false }) {
   return {
     personaId,
     topics: [topic],
@@ -255,6 +267,7 @@ export function buildScheduledPayload({ personaId, topic, accounts, idempotencyK
         timezone: schedule.timezone,
       },
     },
+    ...(faceless ? { options: { faceless: true } } : {}),
     idempotencyKey,
   };
 }
@@ -457,7 +470,7 @@ export async function runFlight(env = process.env, options = {}) {
   const providers = Object.keys(accounts);
   const summary = [];
 
-  console.log(`test-flight: leg 1/2 (ASAP) topic="${topic}" providers=${providers.join(',')}`);
+  console.log(`test-flight: leg 1/2 (ASAP) topic="${topic}" providers=${providers.join(',')}${cfg.faceless ? ' faceless' : ''}`);
   const asapBody = await apiJson(client, '/api/videos/generate-and-schedule', {
     method: 'POST',
     body: buildAsapPayload({
@@ -465,6 +478,7 @@ export async function runFlight(env = process.env, options = {}) {
       topic,
       accounts,
       idempotencyKey: `test-flight-${cfg.runId}-asap`,
+      faceless: cfg.faceless,
     }),
   });
   const asapSlot = singleSlot(asapBody, 'ASAP');
@@ -490,6 +504,7 @@ export async function runFlight(env = process.env, options = {}) {
         accounts,
         idempotencyKey: `test-flight-${cfg.runId}-scheduled`,
         schedule: target,
+        faceless: cfg.faceless,
       }),
     });
     const scheduleId = scheduledBody.schedule !== null && typeof scheduledBody.schedule === 'object'
