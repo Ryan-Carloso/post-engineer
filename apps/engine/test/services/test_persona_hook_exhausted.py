@@ -10,8 +10,12 @@ import pytest
 
 from app.models.schema import PersonaParams, VideoParams
 from app.services import task as task_service
+from app.services import persona_hook
 from app.services.persona_hook import (
     PERSONA_HOOK_HARD_FAIL_SECONDS,
+    HookExceedsLipsyncCeiling,
+    ensure_hook_within_lipsync_ceiling,
+    report_lipsync_intro_skipped,
     resolve_exhausted_hook,
 )
 
@@ -151,3 +155,51 @@ def test_best_effort_ship_emits_posthog_event():
     assert len(best_effort) == 1
     assert best_effort[0][0][1]["task_id"] == "task-1"
     assert best_effort[0][0][1]["hook_end_seconds"] == 4.74
+
+
+class TestLipsyncCeilingGuard:
+    """The GPU lipsync renderer caps the hook at PERSONA_LIPSYNC_MAX_SECONDS.
+
+    A hook in the 12-15s dead zone fits the product rule (best-effort under
+    the 15s hard fail) but would SIGKILL the Modal container, so the caller
+    degrades to the normal video instead of rendering the intro.
+    """
+
+    def test_hook_at_or_below_the_ceiling_passes(self):
+        ensure_hook_within_lipsync_ceiling(12.0, 12.0)
+        ensure_hook_within_lipsync_ceiling(8.5, 12.0)
+
+    def test_hook_past_the_ceiling_raises_the_dedicated_error(self):
+        with pytest.raises(HookExceedsLipsyncCeiling) as exc_info:
+            ensure_hook_within_lipsync_ceiling(14.6, 12.0)
+        assert exc_info.value.hook_end_seconds == 14.6
+        assert exc_info.value.ceiling_seconds == 12.0
+        assert "exceeds the lipsync ceiling" in str(exc_info.value)
+
+    def test_ceiling_error_stays_a_value_error(self):
+        # Backward compatible with guards that catch ValueError.
+        assert issubclass(HookExceedsLipsyncCeiling, ValueError)
+
+    def test_report_lipsync_intro_skipped_tracks_and_logs(self, monkeypatch):
+        from loguru import logger
+
+        tracked = []
+        monkeypatch.setattr(
+            persona_hook, "track_event", lambda *a, **k: tracked.append((a, k))
+        )
+        messages = []
+        handler_id = logger.add(lambda m: messages.append(m), level="WARNING")
+        try:
+            report_lipsync_intro_skipped("task-9", 14.6)
+        finally:
+            logger.remove(handler_id)
+        assert tracked == [
+            (
+                (
+                    "persona_hook_lipsync_skipped",
+                    {"task_id": "task-9", "hook_end_seconds": 14.6},
+                ),
+                {"immediate": True},
+            )
+        ]
+        assert any("skipping lipsync intro" in str(m) for m in messages)

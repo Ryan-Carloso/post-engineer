@@ -17,6 +17,7 @@ from app.services import (
     llm,
     longcat,
     material,
+    persona_hook,
     subtitle,
     twelvelabs,
     video,
@@ -1061,18 +1062,22 @@ def generate_final_videos(
     video_for_render = combined_video_path
     if persona_lipsync_active(params):
         logger.info("generating persona lip-sync intro")
-        video_for_render, intro_cost_usd, intro_job_id = prepare_persona_lipsync_video(
-            task_id=task_id,
-            params=params,
-            audio_file=audio_file,
-            background_video=combined_video_path,
-            index=1,
-            video_script=video_script,
-            subtitle_path=subtitle_path,
-        )
-        intro_report = IntroCostReport(
-            ran=True, cost_usd=intro_cost_usd, job_id=intro_job_id
-        )
+        try:
+            video_for_render, intro_cost_usd, intro_job_id = prepare_persona_lipsync_video(
+                task_id=task_id,
+                params=params,
+                audio_file=audio_file,
+                background_video=combined_video_path,
+                index=1,
+                video_script=video_script,
+                subtitle_path=subtitle_path,
+            )
+        except persona_hook.HookExceedsLipsyncCeiling as exc:
+            persona_hook.report_lipsync_intro_skipped(task_id, exc.hook_end_seconds)
+        else:
+            intro_report = IntroCostReport(
+                ran=True, cost_usd=intro_cost_usd, job_id=intro_job_id
+            )
         # Experimental face-fill: close the video on the persona so weak
         # stock never has to fill the tail. Best-effort — ANY failure
         # (Modal down, unreadable file) degrades to the intro-only video;
@@ -1214,16 +1219,11 @@ def prepare_persona_lipsync_video(
     # video for the same mistiming. The GPU ceiling below still applies.
     hook_duration = _find_hook_end_seconds(video_script, subtitles)
     # Explicit GPU-ceiling guard: the hook is measured, not window-checked,
-    # above (a mistimed hook ships best-effort), so an oversized intro still
-    # fails here instead of SIGKILLing inside the Modal container past the
-    # LongCat segment ceiling (the constant pair is pinned by
-    # test_hook_constants_stay_inside_the_gpu_ceiling; this is the runtime
-    # counterpart).
-    if hook_duration > PERSONA_LIPSYNC_MAX_SECONDS:
-        raise ValueError(
-            f"persona hook exceeds the lipsync ceiling: hook ends at "
-            f"{hook_duration:g}s, max {PERSONA_LIPSYNC_MAX_SECONDS:g}s"
-        )
+    # above (a mistimed hook ships best-effort), so an oversized intro
+    # degrades to the normal video here instead of SIGKILLing inside the
+    # Modal container past the LongCat segment ceiling (pinned by
+    # test_hook_constants_stay_inside_the_gpu_ceiling).
+    persona_hook.ensure_hook_within_lipsync_ceiling(hook_duration, PERSONA_LIPSYNC_MAX_SECONDS)
     lipsync_path = path.join(task_dir, f"lipsync-intro-{index}.mp4")
     _, intro_cost_usd, intro_job_id = longcat.generate_intro(
         image_path=image_path,
