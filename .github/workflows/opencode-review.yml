@@ -102,7 +102,14 @@ env:
 jobs:
   review:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Worst case is every attempt burning its full budget before pass 2:
+    # 10m for the first model plus 7m for each later add_attempt, then 8m
+    # for pass 2, plus a few minutes of checkout/install/post. 7 distinct
+    # attempts is 10 + 6*7 + 8 = 60m before that overhead, so 45m killed
+    # the job on the all-fail path and never posted a comment. 75 leaves
+    # room for a slow install. The validator recomputes this from the
+    # add_attempt count.
+    timeout-minutes: 75
     permissions:
       contents: read
       pull-requests: write

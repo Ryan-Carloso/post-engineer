@@ -196,6 +196,25 @@ def main() -> int:
         text.find("Review attempt order:") != -1
         and text.find("Review attempt order:") < text.find("Attempting review with"),
     )
+    # Per-attempt budgets in the pass-1 loop (first model 10m, the rest 7m)
+    # plus the pass-2 `timeout 8m`, plus checkout/install/post overhead.
+    # The job timeout must exceed that sum or the runner kills the job on
+    # the all-fail path before a comment is posted.
+    attempt_calls = len(re.findall(r"^\s+add_attempt [\"']", text, re.M))
+    pass1_minutes = 10 + max(attempt_calls - 1, 0) * 7
+    pass2_minutes = 8
+    overhead_minutes = 5
+    required_minutes = pass1_minutes + pass2_minutes + overhead_minutes
+    timeout_match = re.search(r"^\s*timeout-minutes:\s*(\d+)\s*$", text, re.M)
+    timeout_minutes = int(timeout_match.group(1)) if timeout_match else 0
+    check(
+        "job timeout covers every attempt plus pass 2",
+        timeout_minutes >= required_minutes,
+        f"timeout-minutes is {timeout_minutes}; {attempt_calls} attempts "
+        f"need at least {required_minutes} "
+        f"({pass1_minutes}m pass 1 + {pass2_minutes}m pass 2 + "
+        f"{overhead_minutes}m overhead)",
+    )
     check(
         "review is not skipped when paid keys are missing",
         "has_key=false" not in text,
