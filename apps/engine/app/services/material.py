@@ -422,7 +422,7 @@ def download_videos(
                 video_aspect,
             )
             if saved_video_path:
-                logger.info(f"video saved: {saved_video_path}")
+                logger.info(f"video saved: {os.path.basename(saved_video_path)}")
                 video_paths.append(saved_video_path)
                 seconds = min(max_clip_duration, item.duration)
                 total_duration += seconds
@@ -512,7 +512,7 @@ def _download_videos_by_script_order(
                 if not saved_video_path:
                     continue
 
-                logger.info(f"video saved: {saved_video_path}")
+                logger.info(f"video saved: {os.path.basename(saved_video_path)}")
                 video_paths.append(saved_video_path)
                 total_duration += min(max_clip_duration, item.duration)
                 if total_duration > audio_duration:

@@ -52,7 +52,7 @@ def save_video(video_url: str, save_dir: str = "") -> str:
 
     # if video already exists, return the path
     if os.path.exists(video_path) and os.path.getsize(video_path) > 0:
-        logger.info(f"video already exists: {video_path}")
+        logger.info(f"video already exists: {os.path.basename(video_path)}")
         return video_path
 
     headers = {

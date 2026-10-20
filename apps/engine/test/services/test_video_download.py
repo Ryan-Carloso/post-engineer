@@ -17,6 +17,16 @@ from app.services import material, svg_material, video_download
 
 
 class SharedDownloaderTests(unittest.TestCase):
+    def setUp(self):
+        self.original_app_config = dict(config.app)
+        self.original_proxy_config = dict(config.proxy)
+
+    def tearDown(self):
+        config.app.clear()
+        config.app.update(self.original_app_config)
+        config.proxy.clear()
+        config.proxy.update(self.original_proxy_config)
+
     def test_material_reexports_the_shared_save_video(self):
         self.assertIs(material.save_video, video_download.save_video)
 
