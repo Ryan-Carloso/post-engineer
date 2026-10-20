@@ -448,15 +448,15 @@ def resolve_material_path(
     clip has no real face to screen, and the detector would discard most of the
     cartoon catalog for nothing.
     """
-    # Only the download branch needs face detection; keep its import at call
-    # time so rendering catalog SVGs never loads the detector stack.
-    from app.services import face_detect
-
     if item.provider == "svg":
         rendered = _persist_svg_item(item, save_dir, max_clip_duration, video_aspect)
         if rendered:
             logger.info(f"svg clip rendered: {os.path.basename(rendered)}")
         return rendered
+
+    # Only the download branch needs face detection; importing here keeps
+    # catalog-SVG renders from loading the detector stack at all.
+    from app.services import face_detect
 
     path = video_download.save_video(video_url=item.url, save_dir=save_dir)
     if not path:
