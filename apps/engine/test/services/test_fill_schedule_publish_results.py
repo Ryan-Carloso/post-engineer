@@ -67,7 +67,14 @@ class FillSchedulePublishResultsTests(TestCase):
             },
         }
 
-    def _run(self, providers, publish_mock):  # type: ignore[no-untyped-def]
+    def _run(  # type: ignore[no-untyped-def]
+        self,
+        providers,
+        publish_mock,
+        events=None,
+        task_extra=None,
+        update_task_side_effect=None,
+    ):
         from app.services.fill_schedule import scheduler as scheduler_module
 
         store = _FakeStore()
@@ -77,13 +84,32 @@ class FillSchedulePublishResultsTests(TestCase):
             "state": 1,
             "videos": [self.video_path],
             "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+            **(task_extra or {}),
         }
+        if update_task_side_effect is not None:
+            state.update_task.side_effect = update_task_side_effect
+        if events is not None:
+            record_update_slot = store.update_slot
+
+            def _update_slot(slot_id, **kwargs):  # type: ignore[no-untyped-def]
+                events.append(("slot", kwargs.get("status")))
+                record_update_slot(slot_id, **kwargs)
+
+            store.update_slot = _update_slot  # type: ignore[method-assign]
+            record_update_task = state.update_task
+
+            def _update_task(task_id, **kwargs):  # type: ignore[no-untyped-def]
+                events.append(("state", "publish_results" in kwargs))
+                return record_update_task(task_id, **kwargs)
+
+            state.update_task = _update_task
         sched = scheduler_module.FillScheduleScheduler(
             store=store, task_state=state, publish_video=publish_mock
         )
         sched.publisher.base_url = "https://post-engineer.com"
         sched.publisher.api_secret = "secret"
-        with patch.object(publish_module, "track_event"):
+        with patch.object(publish_module, "track_event") as track_mock:
+            self.track_mock = track_mock
             sched.publish_due(datetime(2026, 10, 20, 12, 0, tzinfo=UTC))
         return store, state
 
@@ -182,3 +208,139 @@ class FillSchedulePublishResultsTests(TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["provider"], "youtube")
         self.assertEqual(results[0]["status"], "failed")
+
+    def test_failed_entry_error_is_scrubbed_before_recording(self) -> None:
+        # The recorded error is client-visible: publish_results ride the
+        # task state the web reads back, so the persisted text must have
+        # gone through scrub_error_text — a secret-shaped fragment in the
+        # exception message must never reach the task row raw.
+        from app.services.upload_publisher import PublishError
+
+        secret = "sk-abcdef0123456789abcdef0123456789"
+
+        def _publish(**kwargs):  # type: ignore[no-untyped-def]
+            metadata = kwargs["metadata"]
+            if type(metadata).__name__ == "BlueskyMetadata":
+                raise PublishError(f"upload failed for key {secret}", status_code=401)
+            return {
+                "success": True,
+                "results": [
+                    {"accountId": "chan-1", "success": True, "videoUrl": "https://youtu.be/abc"}
+                ],
+            }
+
+        _store, state = self._run(["bluesky", "youtube"], MagicMock(side_effect=_publish))
+        results = self._recorded_results(state)
+        self.assertIsNotNone(results)
+        by_provider = {entry["provider"]: entry for entry in results}
+        error = by_provider["bluesky"]["error"]
+        self.assertNotIn(secret, error)
+        self.assertIn("[redacted]", error)
+
+    def test_failed_entry_error_is_truncated_to_500_chars(self) -> None:
+        from app.services.upload_publisher import PublishError
+
+        publish_mock = MagicMock(
+            side_effect=PublishError("upload failed: " + "x" * 600, status_code=500)
+        )
+        _store, state = self._run(["youtube"], publish_mock)
+        results = self._recorded_results(state)
+        self.assertIsNotNone(results)
+        self.assertLessEqual(len(results[0]["error"]), 500)
+
+    def test_publish_results_written_before_slot_flips_published(self) -> None:
+        # The web only reads publish_results for slots already showing
+        # 'published', so the state write must land BEFORE the slot flip —
+        # otherwise the published-without-links race this PR closes is
+        # still open.
+        publish_mock = MagicMock(
+            return_value={
+                "success": True,
+                "results": [
+                    {"accountId": "chan-1", "success": True, "videoUrl": "https://youtu.be/abc"}
+                ],
+            }
+        )
+        events: list = []
+        self._run(["youtube"], publish_mock, events=events)
+        write_index = next(
+            i for i, event in enumerate(events) if event == ("state", True)
+        )
+        flip_index = next(
+            i for i, event in enumerate(events) if event == ("slot", "published")
+        )
+        self.assertLess(write_index, flip_index)
+
+    def test_empty_results_list_records_no_published_entry(self) -> None:
+        # A 2xx body with an explicitly empty results list attempted no
+        # account: nothing was posted, so no entry may claim a publish.
+        publish_mock = MagicMock(return_value={"success": True, "results": []})
+        _store, state = self._run(["youtube"], publish_mock)
+        self.assertIsNone(self._recorded_results(state))
+
+    def test_lost_state_write_fires_partial_failure_event(self) -> None:
+        # persist_state_update reports a lost write by returning False;
+        # the slot still flips to published (the video really posted), so
+        # the lost links must surface as a partial failure, not just a log.
+        def _fail_publish_results_write(task_id, **kwargs):  # type: ignore[no-untyped-def]
+            if "publish_results" in kwargs:
+                raise RuntimeError("supabase unreachable")
+            return None
+
+        publish_mock = MagicMock(
+            return_value={
+                "success": True,
+                "results": [
+                    {"accountId": "chan-1", "success": True, "videoUrl": "https://youtu.be/abc"}
+                ],
+            }
+        )
+        store, _state = self._run(
+            ["youtube"],
+            publish_mock,
+            update_task_side_effect=_fail_publish_results_write,
+        )
+        partial_calls = [
+            call
+            for call in self.track_mock.call_args_list
+            if call.args and call.args[0] == "video_publish_partial_failure"
+        ]
+        self.assertEqual(len(partial_calls), 1)
+        props = partial_calls[0].args[1]
+        self.assertEqual(props["failed_providers"], ["state-write"])
+        self.assertEqual(props["published_providers"], ["youtube"])
+        # The slot itself still lands on published.
+        self.assertIn(
+            ("slot-1", {"status": "published", "published_at": "2026-10-20T12:00:00+00:00"}),
+            [(slot_id, {k: v for k, v in kw.items() if k in ("status", "published_at")}) for slot_id, kw in store.updates],
+        )
+
+    def test_prior_published_entries_survive_for_untouched_providers(self) -> None:
+        # A retry rewrites publish_results wholesale; links recorded by an
+        # earlier attempt for a provider this attempt does not touch must
+        # be preserved — that post is live, its link is the only record.
+        prior = [
+            {
+                "provider": "bluesky",
+                "video": "final-0.mp4",
+                "status": "published",
+                "postId": "at://did:plc:abc/app.bsky.feed.post/xyz",
+            }
+        ]
+        publish_mock = MagicMock(
+            return_value={
+                "success": True,
+                "results": [
+                    {"accountId": "chan-1", "success": True, "videoUrl": "https://youtu.be/abc"}
+                ],
+            }
+        )
+        _store, state = self._run(
+            ["youtube"], publish_mock, task_extra={"publish_results": prior}
+        )
+        results = self._recorded_results(state)
+        self.assertIsNotNone(results)
+        by_provider = {entry["provider"]: entry for entry in results}
+        self.assertEqual(by_provider["bluesky"], prior[0])
+        self.assertEqual(by_provider["youtube"]["status"], "published")
+        self.assertEqual(by_provider["youtube"]["videoUrl"], "https://youtu.be/abc")

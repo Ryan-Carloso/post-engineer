@@ -29,6 +29,11 @@ def entries_for_result(
     """
     video_name = os.path.basename(video_path)
     accounts = result.get("results") if isinstance(result, dict) else None
+    if accounts == []:
+        # A 2xx body with an explicitly empty results list attempted no
+        # account: nothing was posted, so record no entry rather than a
+        # link-less "published" claim.
+        return []
     if not isinstance(accounts, list) or not accounts:
         entry: dict[str, Any] = {
             "provider": provider_name,
@@ -66,3 +71,27 @@ def failed_entry(provider_name: str, video_path: str, error: str) -> dict[str, A
         "status": "failed",
         "error": error,
     }
+
+
+def merge_prior_published(
+    existing: Any, new_entries: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """New entries plus prior published entries for untouched providers.
+
+    Recording replaces the whole ``publish_results`` key (every state
+    backend's update overwrites it), so without merging, a retry would
+    erase links an earlier attempt recorded for a provider this attempt
+    did not touch — even though that post is live and the recorded link
+    is its only trace.
+    """
+    if not isinstance(existing, list):
+        return new_entries
+    attempted = {entry.get("provider") for entry in new_entries}
+    preserved = [
+        entry
+        for entry in existing
+        if isinstance(entry, dict)
+        and entry.get("status") == "published"
+        and entry.get("provider") not in attempted
+    ]
+    return preserved + new_entries

@@ -1,8 +1,10 @@
 //---------------
 // publish-links — turn the engine's publish_results into clickable links.
 //
-// The engine (task_publish.py) records one entry per (provider, video) it
-// published, and each entry carries whatever that provider handed back:
+// The engine's fill-schedule publisher (fill_schedule/publish.py, via
+// fill_schedule/publish_results.py) records one entry per (provider,
+// video) it published, and each entry carries whatever the provider
+// handed back:
 //
 //   youtube   → videoUrl   ready-made watch URL
 //   instagram → permalink  ready-made post URL

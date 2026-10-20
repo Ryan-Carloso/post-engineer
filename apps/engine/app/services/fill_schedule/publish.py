@@ -22,6 +22,7 @@ from app.services.fill_schedule.metadata import metadata_for
 from app.services.fill_schedule.publish_results import (
     entries_for_result,
     failed_entry,
+    merge_prior_published,
 )
 from app.services.fill_schedule.store import ScheduleStore
 from app.services.fill_schedule.support import (
@@ -233,11 +234,26 @@ class BatchPublisher:
                 # dropped the task_publish.py recording, nothing wrote
                 # these — published slots showed no links at all.
                 if publish_results and slot.get("task_id"):
-                    persist_state_update(
+                    recorded = persist_state_update(
                         self.task_state,
                         str(slot["task_id"]),
-                        publish_results=publish_results,
+                        publish_results=merge_prior_published(
+                            (task or {}).get("publish_results"), publish_results
+                        ),
                     )
+                    if not recorded:
+                        # The video really posted but its links could not
+                        # be recorded; the slot still flips to published
+                        # below, so surface the lost write as a partial
+                        # failure instead of leaving only a server log.
+                        track_event(
+                            "video_publish_partial_failure",
+                            {
+                                **_publish_tracking_context(slot, schedule),
+                                "failed_providers": ["state-write"],
+                                "published_providers": published_providers,
+                            },
+                        )
                 if not published_providers:
                     # Every provider failed: fall through to the retry/fail
                     # path via a synthetic exception carrying the first
