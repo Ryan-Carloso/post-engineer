@@ -399,6 +399,27 @@ describe('assertPublishedSlot', () => {
       /no post link for: youtube/,
     );
   });
+
+  it('labels detail-shaped slots by their id field, never undefined', () => {
+    // GET /api/schedule/slots/[slotId] returns slot.id (not slotId):
+    // the 2026-10-20 flight reported "ASAP slot undefined published...".
+    assert.throws(
+      () =>
+        assertPublishedSlot(
+          { id: 's9', status: 'published', publishLinks: [] },
+          providers,
+        ),
+      /ASAP slot s9 published but has no post link for: bluesky, youtube/,
+    );
+    assert.throws(
+      () => assertPublishedSlot({ id: 's9', status: 'failed', error: 'boom' }, providers),
+      /ASAP slot s9 ended as 'failed'/,
+    );
+    assert.throws(
+      () => assertPublishedSlot({ status: 'failed', error: 'boom' }, providers),
+      /ASAP slot unknown ended as 'failed'/,
+    );
+  });
 });
 
 describe('assertScheduledSlot', () => {
@@ -453,7 +474,7 @@ describe('waitForPublished', () => {
       const state = states[Math.min(calls, states.length - 1)];
       calls += 1;
       return {
-        slotId: 's1',
+        id: 's1',
         ...state,
         publishLinks: providers.map((provider) => ({ provider, url: `https://${provider}/p` })),
       };
@@ -470,7 +491,7 @@ describe('waitForPublished', () => {
   });
 
   it('throws when the slot fails', async () => {
-    const fetchSlot = async () => ({ slotId: 's1', status: 'failed', error: 'engine blew up' });
+    const fetchSlot = async () => ({ id: 's1', status: 'failed', error: 'engine blew up' });
     await assert.rejects(
       waitForPublished(null, 's1', providers, {
         timeoutMs: 60_000,
@@ -485,7 +506,7 @@ describe('waitForPublished', () => {
 
   it('throws on timeout', async () => {
     let now = 0;
-    const fetchSlot = async () => ({ slotId: 's1', status: 'generating' });
+    const fetchSlot = async () => ({ id: 's1', status: 'generating' });
     await assert.rejects(
       waitForPublished(null, 's1', providers, {
         timeoutMs: 5_000,
@@ -526,11 +547,11 @@ describe('runFlight', () => {
     });
   }
 
-  function publishedSlot(slotId) {
+  function publishedSlot(id) {
     return {
       success: true,
       slot: {
-        slotId,
+        id,
         status: 'published',
         publishLinks: PROVIDER_ORDER.map((provider) => ({ provider, url: `https://${provider}/p` })),
       },
@@ -648,6 +669,26 @@ describe('runFlight', () => {
     });
     assert.equal(calls.some((call) => call.method === 'DELETE'), false);
     assert.equal(summary.some((line) => line.includes('left to fire')), true);
+  });
+
+  it('labels the leave-path summary "unknown" when the create slot has no slotId', async () => {
+    const { fetchFn } = installFetch(
+      happyRoutes({
+        scheduledBody: {
+          success: true,
+          schedule: { id: 'sch-sched', mode: 'scheduled' },
+          slots: [{ slotAt: target.target.toISOString(), status: 'generating' }],
+        },
+      }),
+    );
+    const summary = await runFlight(flightEnv({ TEST_FLIGHT_SCHEDULED_ACTION: 'leave' }), {
+      now,
+      fetchFn,
+      sleepFn: async () => {},
+      nowFn: () => now.getTime(),
+    });
+    assert.equal(summary.some((line) => line.includes('scheduled slot unknown at ')), true);
+    assert.equal(summary.some((line) => line.includes('scheduled slot unknown left to fire')), true);
   });
 
   it('fails when the slot is still generating after the schedule delete', async () => {

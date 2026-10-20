@@ -328,10 +328,21 @@ export function singleSlot(body, leg) {
   return slots[0];
 }
 
+// The create response names the slot id `slotId`; the slot-detail
+// response (GET /api/schedule/slots/[slotId]) names it `id`. The ASAP
+// assertion runs against the detail shape (waitForPublished) and the
+// scheduled assertion against the create shape, so resolve the label
+// from either field instead of printing "undefined" (flight 2026-10-20).
+export function slotLabel(slot) {
+  if (slot && typeof slot.slotId === 'string' && slot.slotId) return slot.slotId;
+  if (slot && typeof slot.id === 'string' && slot.id) return slot.id;
+  return 'unknown';
+}
+
 export function assertPublishedSlot(slot, providers) {
   if (slot.status !== 'published') {
     throw new FlightError(
-      `test-flight: ASAP slot ${slot.slotId} ended as '${slot.status}'${slot.error ? `: ${slot.error}` : ''}`,
+      `test-flight: ASAP slot ${slotLabel(slot)} ended as '${slot.status}'${slot.error ? `: ${slot.error}` : ''}`,
     );
   }
   const links = Array.isArray(slot.publishLinks) ? slot.publishLinks : [];
@@ -341,7 +352,7 @@ export function assertPublishedSlot(slot, providers) {
   const missing = providers.filter((provider) => !have.has(provider));
   if (missing.length > 0) {
     throw new FlightError(
-      `test-flight: ASAP slot ${slot.slotId} published but has no post link for: ${missing.join(', ')}`,
+      `test-flight: ASAP slot ${slotLabel(slot)} published but has no post link for: ${missing.join(', ')}`,
     );
   }
   return links;
@@ -356,17 +367,17 @@ const SCHEDULED_LANDING_STATUSES = new Set(['pending', 'awaiting', 'generating',
 export function assertScheduledSlot(slot, target) {
   if (!SCHEDULED_LANDING_STATUSES.has(slot.status)) {
     throw new FlightError(
-      `test-flight: scheduled slot ${slot.slotId} ended as '${slot.status}'${slot.error ? `: ${slot.error}` : ''}`,
+      `test-flight: scheduled slot ${slotLabel(slot)} ended as '${slot.status}'${slot.error ? `: ${slot.error}` : ''}`,
     );
   }
   const slotAt = new Date(slot.slotAt).getTime();
   if (Number.isNaN(slotAt)) {
-    throw new FlightError(`test-flight: scheduled slot ${slot.slotId} has an unparsable slotAt: ${slot.slotAt}`);
+    throw new FlightError(`test-flight: scheduled slot ${slotLabel(slot)} has an unparsable slotAt: ${slot.slotAt}`);
   }
   const driftMs = Math.abs(slotAt - target.getTime());
   if (driftMs > SLOT_AT_TOLERANCE_MS) {
     throw new FlightError(
-      `test-flight: scheduled slot ${slot.slotId} lands at ${slot.slotAt}, ` +
+      `test-flight: scheduled slot ${slotLabel(slot)} lands at ${slot.slotAt}, ` +
         `expected ~${target.toISOString()} (drift ${Math.round(driftMs / 60000)}m exceeds 10m)`,
     );
   }
@@ -520,7 +531,7 @@ export async function runFlight(env = process.env, options = {}) {
     created.slotId = typeof schedSlot.slotId === 'string' ? schedSlot.slotId : null;
     created.slotAt = schedSlot.slotAt;
     assertScheduledSlot(schedSlot, target.target);
-    summary.push(`scheduled slot ${schedSlot.slotId} at ${schedSlot.slotAt}`);
+    summary.push(`scheduled slot ${slotLabel(schedSlot)} at ${schedSlot.slotAt}`);
   } catch (error) {
     flightError = error instanceof Error ? error : new FlightError(String(error));
   } finally {
@@ -547,7 +558,7 @@ export async function runFlight(env = process.env, options = {}) {
   if (cancelNote !== null) {
     summary.push(cancelNote);
   } else if (created !== null) {
-    summary.push(`scheduled slot ${created.slotId} left to fire at ${created.slotAt}`);
+    summary.push(`scheduled slot ${slotLabel(created)} left to fire at ${created.slotAt}`);
   }
 
   const lines = ['## test-flight: PASS', '', ...summary.map((line) => `- ${line}`)];
