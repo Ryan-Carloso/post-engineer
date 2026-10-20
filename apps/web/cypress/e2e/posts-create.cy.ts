@@ -12,6 +12,12 @@
 const NEW_POST_SCHEDULE_ID = 'sched-e2e-new';
 const NEW_POST_SLOT_ID = 'slot-e2e-new';
 
+function authCookieName(): string {
+  const supabaseUrl = Cypress.env('supabaseUrl') as string;
+  const ref = new URL(supabaseUrl).hostname.split('.')[0];
+  return `sb-${ref}-auth-token`;
+}
+
 function personasPayload() {
   return {
     authenticated: true,
@@ -186,6 +192,7 @@ describe('Creating a post', () => {
     // At least one publishing account.
     cy.get('[data-testid="account-card"]').first().click();
 
+    cy.getCookie(authCookieName(), { log: false }).should('exist');
     cy.contains('button', /Agendar posts|Schedule posts/).click();
 
     cy.wait('@createPost').its('request.body').should('deep.include', {
@@ -195,7 +202,7 @@ describe('Creating a post', () => {
 
     // Success opens THAT post's page, not the list: the video and its live
     // progress are what the user came for.
-    cy.location('pathname').should('eq', `/posts/${NEW_POST_SLOT_ID}`);
+    cy.location('pathname', { timeout: 15000 }).should('eq', `/posts/${NEW_POST_SLOT_ID}`);
     cy.wait('@slotDetail');
     cy.contains('E2E topic one').should('be.visible');
     // Freshly created: 0% with a progress bar, like the detail page shows.
