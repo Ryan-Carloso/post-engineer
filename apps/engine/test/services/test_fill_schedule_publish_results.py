@@ -303,6 +303,26 @@ class FillSchedulePublishResultsTests(TestCase):
         )
         self.assertLess(write_index, flip_index)
 
+    def test_no_successful_account_records_failed_entry_and_retries(self) -> None:
+        # A 2xx body whose results carry no success flag at all (renamed
+        # field, partial payload) raises nothing in publish_video and
+        # yields no published entry — the attempt must still be recorded
+        # as a failed entry and the provider must take the retry path,
+        # not silently vanish from both provider lists.
+        publish_mock = MagicMock(
+            return_value={"success": True, "results": [{"accountId": "chan-1"}]}
+        )
+        store, state = self._run(["youtube"], publish_mock)
+        results = self._recorded_results(state)
+        self.assertIsNotNone(results)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["provider"], "youtube")
+        self.assertEqual(results[0]["status"], "failed")
+        self.assertIn("error", results[0])
+        statuses = [kw.get("status") for _slot_id, kw in store.updates]
+        self.assertNotIn("published", statuses)
+        self.assertIn("ready", statuses)
+
     def test_empty_results_list_records_no_published_entry(self) -> None:
         # A 2xx body with an explicitly empty results list attempted no
         # account: nothing was posted, so no entry may claim a publish —

@@ -60,6 +60,18 @@ def entries_for_result(
             if account.get(field):
                 entry[field] = account[field]
         entries.append(entry)
+    if not entries:
+        # A non-empty results list with no successful account (missing
+        # or renamed success flag, non-dict items) posted nothing, but
+        # the attempt must not vanish: record it as a failed entry so
+        # the failure stays diagnosable on the task state.
+        return [
+            failed_entry(
+                provider_name,
+                video_path,
+                "upload API returned no successful account result",
+            )
+        ]
     return entries
 
 

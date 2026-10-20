@@ -218,16 +218,23 @@ class BatchPublisher:
                                 immediate=True,
                             )
                             continue
-                        entries = entries_for_result(
-                            provider_name, video_path, result
-                        )
+                        entries = entries_for_result(provider_name, video_path, result)
                         publish_results.extend(entries)
-                        # No entries means nothing was posted (e.g. a 2xx
-                        # body with an empty results list): the provider
-                        # must not count as published, or the slot flips
-                        # to published with zero recorded links.
-                        if entries and provider_name not in published_providers:
-                            published_providers.append(provider_name)
+                        # Only a published entry counts as published: a
+                        # 2xx body can still post nothing (empty results
+                        # list, or no successful account), and counting
+                        # the provider anyway would flip the slot to
+                        # published with zero recorded links. A provider
+                        # that posted nothing is named as failed so the
+                        # retry/fail path carries it instead of the
+                        # provider silently vanishing.
+                        if any(e.get("status") == "published" for e in entries):
+                            if provider_name not in published_providers:
+                                published_providers.append(provider_name)
+                        elif provider_name not in failed_providers:
+                            failed_providers.append(provider_name)
+                            if not first_error and entries:
+                                first_error = str(entries[0].get("error") or "")
                 # Past the provider loops: a failure from here on (e.g. the
                 # slot-state PATCH) is not a provider failure.
                 provider = None
