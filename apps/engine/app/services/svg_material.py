@@ -16,7 +16,7 @@ from loguru import logger
 
 from app.config import config
 from app.models.schema import MaterialInfo, VideoAspect
-from app.services import image_material, svg_catalog, svg_draw, svg_pencil, svg_sketch
+from app.services import image_material, svg_catalog, svg_draw, svg_pencil, svg_sketch, video_download
 from app.utils import utils
 
 
@@ -445,11 +445,9 @@ def resolve_material_path(
     clip has no real face to screen, and the detector would discard most of the
     cartoon catalog for nothing.
     """
-    # Imported lazily: material.py imports this module at top level, so a
-    # top-level import back would be circular. Resolved at call time, which
-    # also keeps patch.object(material, "save_video") working in tests.
+    # Only the download branch needs face detection; keep its import at call
+    # time so rendering catalog SVGs never loads the detector stack.
     from app.services import face_detect
-    from app.services.material import save_video
 
     if item.provider == "svg":
         rendered = _persist_svg_item(item, save_dir, max_clip_duration, video_aspect)
@@ -457,7 +455,7 @@ def resolve_material_path(
             logger.info(f"svg clip rendered: {rendered}")
         return rendered
 
-    path = save_video(video_url=item.url, save_dir=save_dir)
+    path = video_download.save_video(video_url=item.url, save_dir=save_dir)
     if not path:
         return ""
     if face_detect.video_contains_face(path, force_exclude=exclude_faces):

@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 import numpy as np
 
 from app.models.schema import MaterialInfo, VideoAspect
-from app.services import material, svg_catalog, svg_draw, svg_material, svg_pencil, svg_sketch
+from app.services import material, svg_catalog, svg_draw, svg_material, svg_pencil, svg_sketch, video_download
 
 
 def _patch_asset_resolution(test_case):
@@ -266,7 +266,7 @@ class ResolveMaterialPathTests(unittest.TestCase):
     def test_svg_branch_never_calls_the_downloader(self):
         item = MaterialInfo(provider="svg", url="/cat/a.svg", duration=3)
         with patch.object(svg_material, "_persist_svg_item", return_value="/out/a.mp4") as mock_p, patch.object(
-            material, "save_video"
+            video_download, "save_video"
         ) as mock_dl, patch("app.services.face_detect.video_contains_face") as mock_face:
             result = svg_material.resolve_material_path(item, "/save", 3, None)
         self.assertEqual(result, "/out/a.mp4")
@@ -277,7 +277,7 @@ class ResolveMaterialPathTests(unittest.TestCase):
 
     def test_download_branch_runs_face_detection(self):
         item = MaterialInfo(provider="pexels", url="https://x/v.mp4", duration=3)
-        with patch.object(material, "save_video", return_value="/save/v.mp4"), patch("app.services.face_detect.video_contains_face", return_value=False
+        with patch.object(video_download, "save_video", return_value="/save/v.mp4"), patch("app.services.face_detect.video_contains_face", return_value=False
         ) as mock_face:
             result = svg_material.resolve_material_path(item, "/save", 3, None)
         self.assertEqual(result, "/save/v.mp4")
@@ -285,13 +285,13 @@ class ResolveMaterialPathTests(unittest.TestCase):
 
     def test_download_branch_drops_face_detected_video(self):
         item = MaterialInfo(provider="pexels", url="https://x/v.mp4", duration=3)
-        with patch.object(material, "save_video", return_value="/save/v.mp4"), patch("app.services.face_detect.video_contains_face", return_value=True
+        with patch.object(video_download, "save_video", return_value="/save/v.mp4"), patch("app.services.face_detect.video_contains_face", return_value=True
         ):
             self.assertEqual(svg_material.resolve_material_path(item, "/save", 3, None), "")
 
     def test_download_failure_returns_empty(self):
         item = MaterialInfo(provider="pexels", url="https://x/v.mp4", duration=3)
-        with patch.object(material, "save_video", return_value=""):
+        with patch.object(video_download, "save_video", return_value=""):
             self.assertEqual(svg_material.resolve_material_path(item, "/save", 3, None), "")
 
 
