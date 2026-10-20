@@ -40,7 +40,7 @@ import {
 import { validateScheduleWindow } from '@/lib/schedule-window';
 import { isValidTimezone } from '@/lib/timezone';
 import { computeVideoTokens, toFiniteNumber, type FaceQuality } from '@/lib/tokens';
-import { resolvePostWithoutPersona, resolvePublishingAccounts, type PersonaPrep } from './persona-prep';
+import { resolvePostWithoutPersona, resolvePublishingAccounts, signedUrl, type PersonaPrep } from './persona-prep';
 import {
   buildJobPayload,
   hasNonEmptyString,
@@ -52,12 +52,12 @@ import {
   startEngineVideoTask,
 } from '@/lib/generation/video-generation';
 import { checkCustomAudioUrl, isHttpUrl } from '@/lib/generation/custom-audio';
-import { IMAGE_BUCKET, recordRecentImageId, resolveVideoImage } from '@/lib/persona-images';
+import { recordRecentImageId, resolveVideoImage } from '@/lib/persona-images';
 import { resolveIdempotency } from '@/lib/idempotency';
 import { VALID_SCHEDULE_PROVIDERS } from '@/app/api/schedule/route';
 import { trackApiEvent } from '@/lib/analytics';
 import { logger } from '@/lib/logger';
-import { ensureEngineImageUrl } from '@/lib/engine-image-url';
+import { ensureEngineImageUrl, isEngineUsablePersonaImageUrl } from '@/lib/engine-image-url';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 const ROUTE = 'POST /api/videos/generate-and-schedule';
@@ -69,7 +69,6 @@ const MAX_SCRIPT_PROMPT_CHARS = 2000;
 // rejecting at the same boundary here is what turns an opaque engine
 // validation error into a 400 that names the field.
 const MAX_LANGUAGE_CHARS = 32;
-const SIGNED_URL_TTL_SECONDS = 3600;
 
 //---------------
 // Request shape. Semantic checks (codes, fields) run after the shape parse
@@ -192,27 +191,6 @@ function violatedConstraint(
   if (error?.code !== UNIQUE_VIOLATION_SQLSTATE) return null;
   const source = `${error.message ?? ''} ${error.details ?? ''}`;
   return /constraint "([^"]+)"/.exec(source)?.[1] ?? null;
-}
-
-/** signedUrl() never throws: a signing failure resolves to undefined and is
- * classified by the caller's guards — the incident stays diagnosable here. */
-async function signedUrl(
-  supabase: SupabaseClient,
-  path: string | null,
-): Promise<string | undefined> {
-  if (!path) return undefined;
-  try {
-    const { data, error } = await supabase.storage
-      .from(IMAGE_BUCKET)
-      .createSignedUrl(path, SIGNED_URL_TTL_SECONDS);
-    if (error) {
-      logger.warn('[generate-and-schedule] failed to sign storage URL', error as unknown as Record<string, unknown>);
-    }
-    return data?.signedUrl;
-  } catch (err) {
-    logger.warn('[generate-and-schedule] failed to sign storage URL', err as Record<string, unknown>);
-    return undefined;
-  }
 }
 
 /** Per-slot dispatch failure: marks the slot failed, refunds its prepaid
@@ -681,6 +659,15 @@ async function preparePersona(
   ) {
     return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'Persona paragraph_number must be an integer between 1 and 10: update the persona.', 'personaId');
   }
+  // Persona image: a faced post sends the stored avatar_url to the engine,
+  // which only discovers an unusable one at ~75% of the pipeline — after the
+  // charge ("persona image download rejected"). Fail fast here instead.
+  // Skipped for faceless posts (no photo is sent) and for a pinned library
+  // image, which replaces the persona photo and is checked separately below.
+  const avatarUrl = (persona.avatar_url as string | null) ?? null;
+  if (!opts.faceless && !opts.imageId && avatarUrl && !isEngineUsablePersonaImageUrl(avatarUrl)) {
+    return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'Persona image URL must be a valid http(s) URL or a data:image/ URI: update the persona.', 'personaId');
+  }
   // Voice: custom per-request audio wins; otherwise the persona voice.
   // The engine requires exactly one of voice_id / voice_audio_url.
   const voiceAudioUrl = opts.audioUrl ?? (await signedUrl(supabase, (persona.voice_audio_path as string | null) ?? null));
@@ -706,7 +693,7 @@ async function preparePersona(
     faceQuality,
     voiceAudioUrl,
     voiceIdValue,
-    avatarUrl: (persona.avatar_url as string | null) ?? null,
+    avatarUrl,
     photoPath: (persona.photo_path as string | null) ?? null,
     // The persona's editorial definition, each overridable per post. These
     // resolved values are snapshotted onto the schedule (not re-read at tick

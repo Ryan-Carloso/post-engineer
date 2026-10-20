@@ -28,7 +28,7 @@ export function isHttpUrl(value: string): boolean {
   }
 }
 
-function isPublicIp(ip: string): boolean {
+export function isPublicIp(ip: string): boolean {
   const family = isIP(ip);
   if (family === 4) {
     const [a, b, c] = ip.split('.').map(Number);

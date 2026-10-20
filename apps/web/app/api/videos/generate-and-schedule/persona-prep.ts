@@ -4,7 +4,32 @@
 // ratchet. PersonaPrep is the snapshot the engine reads at tick time.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getPersonaDefaultAccounts } from '@/lib/persona-publishing-accounts';
+import { IMAGE_BUCKET } from '@/lib/persona-images';
+import { logger } from '@/lib/logger';
 import type { FaceQuality } from '@/lib/tokens';
+
+const SIGNED_URL_TTL_SECONDS = 3600;
+
+/** signedUrl() never throws: a signing failure resolves to undefined and is
+ * classified by the caller's guards — the incident stays diagnosable here. */
+export async function signedUrl(
+  supabase: SupabaseClient,
+  path: string | null,
+): Promise<string | undefined> {
+  if (!path) return undefined;
+  try {
+    const { data, error } = await supabase.storage
+      .from(IMAGE_BUCKET)
+      .createSignedUrl(path, SIGNED_URL_TTL_SECONDS);
+    if (error) {
+      logger.warn('[generate-and-schedule] failed to sign storage URL', error as unknown as Record<string, unknown>);
+    }
+    return data?.signedUrl;
+  } catch (err) {
+    logger.warn('[generate-and-schedule] failed to sign storage URL', err as Record<string, unknown>);
+    return undefined;
+  }
+}
 
 export interface PersonaPrep {
   personaName: string;
