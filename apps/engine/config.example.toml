@@ -570,9 +570,10 @@ voices = ["default-Female"]
 #
 #   TEST_ACCOUNT_USER_IDS  comma-separated user IDs that get the fallback
 #                          (e.g. "91f32003-31f4-419a-a5ee-ef8a3563ff03")
-#   EDGE_TTS_VOICE         Edge TTS voice name (default: pt-BR-FranciscaNeural).
-#                          100+ locales available, e.g. pt-PT-DuarteNeural,
-#                          en-US-AriaNeural, es-ES-ElviraNeural.
+#   EDGE_TTS_VOICE         Fallback Edge TTS voice name, used only when the
+#                          video's language is missing/unknown — a known
+#                          language always selects its own voice (default:
+#                          pt-BR-FranciscaNeural).
 #
 # When Chatterbox (Modal) is unavailable — exhausted credits surface as HTTP
 # 404 — test-account generations fall back to Edge TTS instead of failing.

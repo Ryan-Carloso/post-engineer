@@ -219,5 +219,122 @@ class TestMaybeFallback(unittest.TestCase):
         mock_edge.assert_not_called()
 
 
+class TestEdgeTtsVoiceLanguage(unittest.TestCase):
+    """The Edge voice follows the video language, never a fixed PT voice.
+
+    Regression: a test flight generated an English video but the fallback
+    read it with the hardcoded pt-BR voice, because the voice came only
+    from EDGE_TTS_VOICE / the pt-BR default and the job's language never
+    reached the fallback.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.voice_file = str(Path(self.tmp.name) / "audio.mp3")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _voice_used(self, language=None, env=None):
+        isolated = dict(env or {})
+        # Keep MUTANT_UNDER_TEST for the mutmut trampoline (see AGENTS.md).
+        if "MUTANT_UNDER_TEST" in os.environ:
+            isolated["MUTANT_UNDER_TEST"] = os.environ["MUTANT_UNDER_TEST"]
+        with patch("app.services.edge_tts._run_edge_tts") as mock_run:
+            with patch("app.services.edge_tts.AudioFileClip") as mock_clip:
+                mock_clip.return_value = _clip(2.0)
+                with patch.dict(os.environ, isolated, clear=True):
+                    et.edge_tts("hello world", self.voice_file, language=language)
+        return mock_run.call_args[0][1]
+
+    def test_english_uses_us_english_voice(self):
+        self.assertEqual(self._voice_used(language="en"), "en-US-AriaNeural")
+        self.assertEqual(self._voice_used(language="en-US"), "en-US-AriaNeural")
+
+    def test_british_english_uses_gb_voice(self):
+        self.assertEqual(self._voice_used(language="en-GB"), "en-GB-SoniaNeural")
+
+    def test_portuguese_variants_keep_portuguese_voices(self):
+        self.assertEqual(self._voice_used(language="pt"), "pt-BR-FranciscaNeural")
+        self.assertEqual(self._voice_used(language="pt-BR"), "pt-BR-FranciscaNeural")
+        self.assertEqual(self._voice_used(language="pt-PT"), "pt-PT-RaquelNeural")
+
+    def test_other_supported_languages(self):
+        self.assertEqual(self._voice_used(language="es"), "es-ES-ElviraNeural")
+        self.assertEqual(self._voice_used(language="fr"), "fr-FR-DeniseNeural")
+        self.assertEqual(self._voice_used(language="de"), "de-DE-KatjaNeural")
+        self.assertEqual(self._voice_used(language="it"), "it-IT-ElsaNeural")
+        self.assertEqual(self._voice_used(language="hi"), "hi-IN-SwaraNeural")
+
+    def test_language_name_and_case_are_normalized(self):
+        self.assertEqual(self._voice_used(language="English"), "en-US-AriaNeural")
+        self.assertEqual(self._voice_used(language="EN_us"), "en-US-AriaNeural")
+
+    def test_language_wins_over_env_voice(self):
+        # A deployment-wide EDGE_TTS_VOICE pin must not reintroduce the bug:
+        # an English video read by a Portuguese voice.
+        env = {"EDGE_TTS_VOICE": "pt-BR-FranciscaNeural"}
+        self.assertEqual(self._voice_used(language="en", env=env), "en-US-AriaNeural")
+
+    def test_unknown_language_falls_back_to_env_voice(self):
+        env = {"EDGE_TTS_VOICE": "en-US-AriaNeural"}
+        self.assertEqual(self._voice_used(language="xx", env=env), "en-US-AriaNeural")
+
+    def test_no_language_keeps_env_then_default(self):
+        env = {"EDGE_TTS_VOICE": "fr-FR-DeniseNeural"}
+        self.assertEqual(self._voice_used(env=env), "fr-FR-DeniseNeural")
+        self.assertEqual(self._voice_used(), et.DEFAULT_EDGE_TTS_VOICE)
+
+
+class TestFallbackLanguageForwarding(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.voice_file = str(Path(self.tmp.name) / "audio.mp3")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    @patch("app.services.edge_tts.track_event")
+    @patch("app.services.edge_tts.edge_tts")
+    def test_maybe_fallback_forwards_language(self, mock_edge, mock_track):
+        mock_edge.return_value = TtsResult(sub_maker=MagicMock())
+        with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "user-123"}):
+            et.maybe_fallback_to_edge_tts(
+                "boom",
+                text="hello",
+                voice_file=self.voice_file,
+                voice_rate=1.0,
+                user_id="user-123",
+                task_id="task-9",
+                language="en",
+            )
+        self.assertEqual(mock_edge.call_args.kwargs.get("language"), "en")
+        props = mock_track.call_args[0][1]
+        self.assertEqual(props["language"], "en")
+
+    @patch("app.services.edge_tts.maybe_fallback_to_edge_tts")
+    @patch("app.services.edge_tts.chatterbox_tts")
+    def test_wrapper_forwards_language(self, mock_chatterbox, mock_fallback):
+        mock_chatterbox.return_value = TtsResult(error="status 404")
+        mock_fallback.return_value = TtsResult(sub_maker=MagicMock())
+        et.chatterbox_tts_with_fallback(
+            "hello", "ryan", self.voice_file, user_id="u1", language="en"
+        )
+        self.assertEqual(mock_fallback.call_args.kwargs.get("language"), "en")
+
+    @patch("app.services.voice.chatterbox_tts_with_fallback")
+    def test_voice_tts_forwards_language(self, mock_fallback):
+        mock_fallback.return_value = TtsResult(sub_maker=MagicMock())
+        voice_service.tts(
+            "hello",
+            "chatterbox:ryan",
+            1.0,
+            self.voice_file,
+            user_id="u1",
+            language="en",
+        )
+        self.assertEqual(mock_fallback.call_args.kwargs.get("language"), "en")
+
+
 if __name__ == "__main__":
     unittest.main()

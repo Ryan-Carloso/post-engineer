@@ -897,7 +897,7 @@ def generate_audio(task_id, params, video_script):
             text=video_script,
             voice_name=voice.parse_voice_name(persona_voice_name),
             voice_rate=params.voice_rate if params.voice_rate is not None else 1.0,
-            voice_file=audio_file,
+            voice_file=audio_file, language=params.video_language,
             user_id=str((sm.state.get_task(task_id) or {}).get("user_id") or ""), task_id=task_id,
         )
         if not result.ok:
