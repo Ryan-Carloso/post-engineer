@@ -1,6 +1,7 @@
 """Tests for the SVG branch of the material pipeline."""
 import hashlib
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -441,6 +442,27 @@ class PersistSvgItemTests(unittest.TestCase):
                 )
             self.assertTrue(os.path.isdir(missing))
 
+    def test_empty_save_dir_without_create_flag_leaves_the_cache_directory_absent(self):
+        with tempfile.TemporaryDirectory() as storage_root:
+            missing = os.path.join(storage_root, "does-not-exist")
+            with patch.object(
+                svg_material.utils, "storage_dir", return_value=missing
+            ), patch.object(
+                svg_material, "rasterize_svg_to_png", return_value=True
+            ), patch.object(
+                svg_material.image_material,
+                "render_image_file_to_mp4",
+                return_value="/x.mp4",
+            ):
+                svg_material._persist_svg_item(
+                    self._item(),
+                    "",
+                    4,
+                    VideoAspect.portrait,
+                    create_fallback_dir=False,
+                )
+            self.assertFalse(os.path.exists(missing))
+
     def test_explicit_save_dir_is_used_as_is(self):
         with tempfile.TemporaryDirectory() as save_dir:
             result, captured, _ = self._render(self._item(), save_dir, save_dir)
@@ -863,6 +885,9 @@ class AnimatedSvgMaterialTests(unittest.TestCase):
         for frame in frames:
             self.assertEqual(frame.shape, (1920, 1080, 3))
 
+    @unittest.skipUnless(
+        shutil.which("rsvg-convert"), "rsvg-convert is not installed"
+    )
     def test_drawn_line_art_final_frame_has_no_pencil(self):
         """The completed tracing is shown clean, like the sketch path.
 

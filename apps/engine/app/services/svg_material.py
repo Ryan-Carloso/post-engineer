@@ -173,6 +173,8 @@ def _persist_svg_item(
     save_dir: str,
     max_clip_duration: int,
     video_aspect: VideoAspect = VideoAspect.portrait,
+    *,
+    create_fallback_dir: bool = True,
 ) -> str:
     """Render a catalog SVG into a video clip.
 
@@ -193,12 +195,13 @@ def _persist_svg_item(
     An empty save_dir (the shipped default) falls back to the same storage
     cache save_video uses: without it the stills and clips would land as
     CWD-relative paths while every other provider returns absolute ones.
-    Only the fallback directory is created; an explicit save_dir keeps the
-    previous contract (no filesystem side effects beyond the render itself).
+    Only the fallback directory is created — and only when
+    create_fallback_dir is true; an explicit save_dir keeps the previous
+    contract (no filesystem side effects beyond the render itself).
     """
     if not save_dir:
         save_dir = utils.storage_dir("cache_videos")
-        if not os.path.exists(save_dir):
+        if create_fallback_dir and not os.path.exists(save_dir):
             os.makedirs(save_dir)
 
     width, height = video_aspect.to_resolution()
@@ -218,7 +221,7 @@ def _persist_svg_item(
         svg_path, drawn_mp4, width, height, max_clip_duration, background
     )
     if drawn:
-        logger.info(f"svg drawn clip rendered: {drawn}")
+        logger.info(f"svg drawn clip rendered: {os.path.basename(drawn)}")
         return drawn
 
     digest = hashlib.sha256(f"{item.url}|{width}x{height}".encode("utf-8")).hexdigest()[
@@ -452,13 +455,13 @@ def resolve_material_path(
     if item.provider == "svg":
         rendered = _persist_svg_item(item, save_dir, max_clip_duration, video_aspect)
         if rendered:
-            logger.info(f"svg clip rendered: {rendered}")
+            logger.info(f"svg clip rendered: {os.path.basename(rendered)}")
         return rendered
 
     path = video_download.save_video(video_url=item.url, save_dir=save_dir)
     if not path:
         return ""
     if face_detect.video_contains_face(path, force_exclude=exclude_faces):
-        logger.info(f"video discarded (face detected): {path}")
+        logger.info(f"video discarded (face detected): {os.path.basename(path)}")
         return ""
     return path
