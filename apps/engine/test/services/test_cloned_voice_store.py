@@ -62,8 +62,6 @@ class ClonedVoiceStoreTest(unittest.TestCase):
         )
         self.assertIsNone(store.get_for_user("user-1", "clone-1"))
 
-<<<<<<< HEAD
-=======
     def test_upload_reference_wav_posts_to_storage(self) -> None:
         requests = MagicMock()
         response = MagicMock()
@@ -89,7 +87,6 @@ class ClonedVoiceStoreTest(unittest.TestCase):
             requests_module=requests,
         )
         self.assertTrue(store.delete_row("user-1", "clone-1"))
->>>>>>> a98576e (test(engine): cover cloned voice store upload and delete_row)
 
 if __name__ == "__main__":
     unittest.main()
