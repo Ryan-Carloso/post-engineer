@@ -29,6 +29,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from app.config import config
 from app.models import const
+from app.services import image_material
 from app.services.material import MAX_LETTERBOX_BARS
 from app.models.schema import (
     MaterialInfo,
@@ -1936,8 +1937,11 @@ def preprocess_video(materials: List[MaterialInfo], clip_duration=4):
         try:
             width = clip.size[0]
             height = clip.size[1]
-            if width < 480 or height < 480:
-                logger.warning(f"low resolution material: {width}x{height}, minimum 480x480 required")
+            if width < image_material.MIN_MATERIAL_EDGE or height < image_material.MIN_MATERIAL_EDGE:
+                logger.warning(
+                    f"low resolution material: {width}x{height}, "
+                    f"minimum {image_material.MIN_MATERIAL_EDGE}x{image_material.MIN_MATERIAL_EDGE} required"
+                )
                 # Release the probe handle right after detecting low
                 # resolution, and don't pass the material on.
                 close_clip(clip)
@@ -1949,30 +1953,11 @@ def preprocess_video(materials: List[MaterialInfo], clip_duration=4):
                 # release that handle before re-creating the image clip used
                 # for export.
                 close_clip(clip)
-                # Create an image clip and set its duration to 3 seconds
-                clip = (
-                    ImageClip(material_source_path)
-                    .with_duration(clip_duration)
-                    .with_position("center")
+                video_file = image_material.render_image_file_to_mp4(
+                    material_source_path, clip_duration
                 )
-                # Apply a zoom effect using the resize method.
-                # A lambda function is used to make the zoom effect dynamic over time.
-                # The zoom effect starts from the original size and gradually scales up to 120%.
-                # t represents the current time, and clip.duration is the total duration of the clip (3 seconds).
-                # Note: 1 represents 100% size, so 1.2 represents 120% size.
-                zoom_clip = clip.resized(
-                    lambda t: 1 + (clip_duration * 0.03) * (t / clip.duration)
-                )
-
-                # Optionally, create a composite video clip containing the zoomed clip.
-                # This is useful when you want to add other elements to the video.
-                final_clip = CompositeVideoClip([zoom_clip])
-
-                # Output the video to a file.
-                video_file = f"{material_source_path}.mp4"
-                final_clip.write_videofile(video_file, fps=30, logger=None)
-                close_clip(clip)
-                close_clip(final_clip)
+                if not video_file:
+                    continue
                 material.url = video_file
                 logger.success(f"image processed: {video_file}")
             else:

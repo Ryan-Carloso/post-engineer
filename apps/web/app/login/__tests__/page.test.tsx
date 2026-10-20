@@ -81,9 +81,12 @@ describe('app/login/page — Login', () => {
 
   it('renders terms text', () => {
     render(<Login />, { wrapper: createWrapper() });
-    expect(screen.getByText('login.title')).toBeTruthy();
-    expect(screen.getByText('login.subtitle')).toBeTruthy();
-    expect(screen.getByText('login.githubButton')).toBeTruthy();
+    // agreePrefix/agreeAnd are bare text nodes inside the agree note <p>.
+    const note = screen.getAllByRole('link', { name: 'footer.terms' })[0].closest('p');
+    expect(note?.textContent).toContain('login.agreePrefix');
+    expect(note?.textContent).toContain('login.agreeAnd');
+    expect(screen.getAllByText('footer.terms').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('footer.privacy').length).toBeGreaterThan(0);
   });
 
   it('clicking login button calls signInWithOAuth', async () => {
@@ -92,6 +95,7 @@ describe('app/login/page — Login', () => {
     await waitFor(() => {
       expect(mockSignInWithOAuth).toHaveBeenCalled();
     });
+    expect(mockSignInWithOAuth.mock.calls[0][0].provider).toBe('github');
   });
 
   it('disables button while redirecting', async () => {
@@ -101,6 +105,7 @@ describe('app/login/page — Login', () => {
     await waitFor(() => {
       expect(screen.getAllByText('login.redirecting').length).toBeGreaterThan(0);
     });
+    expect(screen.getByRole('button', { name: /login\.redirecting/ })).toBeDisabled();
   });
 
   it('re-enables button on error', async () => {
@@ -116,24 +121,60 @@ describe('app/login/page — Login', () => {
 
   it('terms and privacy are links', () => {
     render(<Login />, { wrapper: createWrapper() });
-    expect(screen.getByText('login.title')).toBeTruthy();
+    // Both the agree note and the bottom bar link to the legal pages.
+    const termsLinks = screen.getAllByRole('link', { name: 'footer.terms' });
+    expect(termsLinks).toHaveLength(2);
+    for (const link of termsLinks) expect(link).toHaveAttribute('href', '/terms');
+    const privacyLinks = screen.getAllByRole('link', { name: 'footer.privacy' });
+    expect(privacyLinks).toHaveLength(2);
+    for (const link of privacyLinks) expect(link).toHaveAttribute('href', '/privacy');
   });
 
-  it('terms link opens in new tab', () => {
+  it('renders the support mailto link in the bottom bar', () => {
     render(<Login />, { wrapper: createWrapper() });
-    expect(screen.getByText('login.githubButton')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'footer.support' })).toHaveAttribute(
+      'href',
+      'mailto:madebyryandev@gmail.com',
+    );
+    expect(screen.getByText('footer.rights')).toBeTruthy();
+  });
+
+  it('renders the hero pitch and feature list', () => {
+    render(<Login />, { wrapper: createWrapper() });
+    expect(screen.getByText('login.heroBadge')).toBeTruthy();
+    expect(screen.getByText('login.heroTitle')).toBeTruthy();
+    expect(screen.getByText('login.heroTitleAccent')).toBeTruthy();
+    expect(screen.getByText('login.heroDescription')).toBeTruthy();
+    expect(screen.getByText('login.heroNote')).toBeTruthy();
+    for (const n of [1, 2, 3]) {
+      expect(screen.getByText(`login.feature${n}Title`)).toBeTruthy();
+      expect(screen.getByText(`login.feature${n}Hint`)).toBeTruthy();
+    }
+  });
+
+  it('renders locale switcher with the current locale pressed', () => {
+    render(<Login />, { wrapper: createWrapper() });
+    expect(screen.getByRole('button', { name: 'PT' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'EN' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByText('login.noAccount')).toBeTruthy();
+    expect(screen.getByRole('link', { name: /login\.createAccount/ })).toHaveAttribute(
+      'href',
+      '/login',
+    );
   });
 
   it('shows cancelled notice after OAuth cancellation', () => {
     mockErrorParam = 'cancelled';
     render(<Login />, { wrapper: createWrapper() });
     expect(screen.getByRole('alert')).toHaveTextContent('login.cancelled');
+    expect(screen.getByRole('alert').className).toContain('bg-[#f8fafc]');
   });
 
   it('shows generic error notice after OAuth failure', () => {
     mockErrorParam = 'auth';
     render(<Login />, { wrapper: createWrapper() });
     expect(screen.getByRole('alert')).toHaveTextContent('login.authError');
+    expect(screen.getByRole('alert').className).toContain('bg-[#fff0ef]');
   });
 
   it('shows no notice without error param', () => {

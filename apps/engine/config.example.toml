@@ -434,6 +434,27 @@ material_directory = ""
 enable_redis = false
 redis_host = "localhost"
 redis_port = 6379
+
+# Private SVG catalog (Doodly bundle). The artwork and its index are licensed
+# and live in Cloudflare R2: they are fetched on demand and cached under
+# <svg_cache_dir>, and are never committed. SVG is opt-in and defaults to
+# off: without `svg_catalog_enabled` there is no SVG, and material search
+# uses only the stock providers. When enabled, the catalog is searched first
+# and the stock providers cover keywords it has no artwork for. It needs
+# `svg_r2_prefix` and the R2_* credentials — a missing one, or an unreachable
+# index, fails the render instead of silently degrading to stock.
+svg_catalog_enabled = false
+svg_r2_bucket = "videos"
+svg_r2_prefix = ""
+svg_cache_dir = "resource/svg/_cache"
+# "texto" searches the FTS5 index and needs nothing extra. "semantico" /
+# "hibrido" require an ONNX index under <index_dir>/models, which is not built
+# yet: they log a warning and degrade to "texto" rather than failing.
+svg_search_mode = "texto"
+# Fill used for the canvas a catalog still is fitted onto. The artwork is
+# fitted to the target aspect so combine_videos keeps the clip; this only
+# decides what shows in the padding around it.
+svg_canvas_background = "#FFFFFF"
 redis_db = 0
 redis_password = ""
 

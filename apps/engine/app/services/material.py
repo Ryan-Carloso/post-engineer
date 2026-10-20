@@ -10,7 +10,7 @@ from moviepy.video.io.VideoFileClip import VideoFileClip
 
 from app.config import config
 from app.models.schema import MaterialInfo, VideoAspect, VideoConcatMode
-from app.services import face_detect
+from app.services import svg_catalog, svg_material
 from app.utils import secret_redaction, ssrf, utils
 
 # Cap for cached stock-video downloads (bytes).
@@ -402,15 +402,17 @@ def _build_search_videos(
 
     Without `source_mix`: behaves as before — only the `source` provider.
     With `source_mix` (2+ providers): cascades per keyword in list order; a
-    provider is only queried when the previous ones returned no material.
+    provider is only queried when the previous ones returned no material. An
+    enabled SVG catalog always leads the cascade (svg_catalog.lead_cascade).
     """
     providers = {
+        "svg": svg_material.search_videos_svg,
         "pexels": search_videos_pexels,
         "pixabay": search_videos_pixabay,
         "coverr": search_videos_coverr,
     }
     if source_mix:
-        chain = [providers[name] for name in source_mix if name in providers]
+        chain = [providers[n] for n in svg_catalog.lead_cascade(source_mix) if n in providers]
     else:
         chain = [providers.get(source, search_videos_pexels)]
 
@@ -497,15 +499,14 @@ def download_videos(
     for item in valid_video_items:
         try:
             logger.info(f"downloading video: {item.url}")
-            saved_video_path = save_video(
-                video_url=item.url, save_dir=material_directory
+            saved_video_path = svg_material.resolve_material_path(
+                item,
+                material_directory,
+                max_clip_duration,
+                exclude_faces,
+                video_aspect,
             )
             if saved_video_path:
-                if face_detect.video_contains_face(
-                    saved_video_path, force_exclude=exclude_faces
-                ):
-                    logger.info(f"video discarded (face detected): {saved_video_path}")
-                    continue
                 logger.info(f"video saved: {saved_video_path}")
                 video_paths.append(saved_video_path)
                 seconds = min(max_clip_duration, item.duration)
@@ -586,17 +587,14 @@ def _download_videos_by_script_order(
                 logger.info(
                     f"downloading ordered video for '{search_term}': {item.url}"
                 )
-                saved_video_path = save_video(
-                    video_url=item.url,
-                    save_dir=material_directory,
+                saved_video_path = svg_material.resolve_material_path(
+                    item,
+                    material_directory,
+                    max_clip_duration,
+                    exclude_faces,
+                    video_aspect,
                 )
                 if not saved_video_path:
-                    continue
-
-                if face_detect.video_contains_face(
-                    saved_video_path, force_exclude=exclude_faces
-                ):
-                    logger.info(f"ordered video discarded (face detected): {saved_video_path}")
                     continue
 
                 logger.info(f"video saved: {saved_video_path}")
