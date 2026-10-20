@@ -178,6 +178,15 @@ class ProgressMilestoneTests(unittest.TestCase):
         tm._update_task(self.task_id, progress=100)
         self.assertEqual(self._milestones(), [50, 70])
 
+    def test_no_refire_after_multi_milestone_jump(self):
+        # The pipeline's real write pair in generate_final_videos:
+        # progress=75 crosses both milestones, then progress=100 must not
+        # fire anything again (pins the guard storing the HIGHEST crossed
+        # milestone — storing the lowest would re-fire 70 at 100).
+        tm._update_task(self.task_id, progress=75)
+        tm._update_task(self.task_id, progress=100)
+        self.assertEqual(self._milestones(), [50, 70])
+
     def test_out_of_order_progress_does_not_refire_milestone(self):
         # The jump to 70 crosses both milestones; a later, lower progress
         # update must not fire anything again.
