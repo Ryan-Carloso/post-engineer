@@ -259,6 +259,14 @@ def tts(
         chatterbox_voice = parts[1].strip()
         if chatterbox_voice.endswith(("-Female", "-Male")):
             chatterbox_voice = chatterbox_voice.rsplit("-", 1)[0]
+        from app.services.cloned_voices.ownership import chatterbox_voice_allowed_for_user
+
+        if not chatterbox_voice_allowed_for_user(user_id, chatterbox_voice):
+            logger.error(
+                "cloned chatterbox voice rejected for user, "
+                f"voice: {chatterbox_voice}, user_id: {user_id or 'missing'}"
+            )
+            return TtsResult(error="cloned voice is not available for this user")
         return chatterbox_tts_with_fallback(
             text, chatterbox_voice, voice_file, voice_rate, voice_volume,
             user_id=user_id, task_id=task_id, language=language,

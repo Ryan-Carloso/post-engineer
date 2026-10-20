@@ -35,6 +35,10 @@ interface McpToolCard {
 const MCP_TOOL_CARDS: McpToolCard[] = [
   { id: 'list_personas', descKey: 'apiKeys.toolDescListPersonas', Icon: AccountsIcon },
   { id: 'list_voices', descKey: 'apiKeys.toolDescListVoices', Icon: MicIcon },
+  { id: 'list_cloned_voices', descKey: 'apiKeys.toolDescListClonedVoices', Icon: MicIcon },
+  { id: 'create_cloned_voice', descKey: 'apiKeys.toolDescCreateClonedVoice', Icon: UploadIcon },
+  { id: 'delete_cloned_voice', descKey: 'apiKeys.toolDescDeleteClonedVoice', Icon: TrashIcon },
+  { id: 'preview_cloned_voice', descKey: 'apiKeys.toolDescPreviewClonedVoice', Icon: MicIcon },
   { id: 'list_faces', descKey: 'apiKeys.toolDescListFaces', Icon: ImageIcon },
   { id: 'create_persona', descKey: 'apiKeys.toolDescCreatePersona', Icon: SparklesIcon },
   { id: 'update_persona', descKey: 'apiKeys.toolDescUpdatePersona', Icon: ComposeIcon },

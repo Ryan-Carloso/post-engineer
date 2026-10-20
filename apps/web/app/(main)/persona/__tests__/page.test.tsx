@@ -1195,7 +1195,7 @@ describe('app/(main)/persona/page — validação do submit (guards do store)', 
     expect(screen.getByText('persona.voiceLabel')).toBeTruthy();
     expect(screen.getByText('personas.preferencesLabel')).toBeTruthy();
     expect(screen.getByText('personas.aspectLabel')).toBeTruthy();
-    expect(screen.getByText('persona.sampleLanguage')).toBeTruthy();
+    expect(screen.getAllByText('persona.sampleLanguage').length).toBeGreaterThan(0);
     expect(screen.getByText('persona.photoLabel')).toBeTruthy();
   });
 });

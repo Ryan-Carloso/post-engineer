@@ -8,6 +8,10 @@ import {
   CreatePersonaShape,
   ListPersonasShape,
   ListVoicesShape,
+  ListClonedVoicesShape,
+  CreateClonedVoiceShape,
+  DeleteClonedVoiceShape,
+  PreviewClonedVoiceShape,
   ListFacesShape,
   UpdatePersonaShape,
   ListSocialAccountsShape,
@@ -36,6 +40,10 @@ import {
   handleCreatePersona,
   handleListPersonas,
   handleListVoices,
+  handleListClonedVoices,
+  handleCreateClonedVoice,
+  handleDeleteClonedVoice,
+  handlePreviewClonedVoice,
   handleListFaces,
   handleUpdatePersona,
   handleListSocialAccounts,
@@ -128,6 +136,42 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
     ListVoicesShape,
     withTracking('list_voices', async () => {
       return handleListVoices(apiClient);
+    })
+  );
+
+  server.tool(
+    'list_cloned_voices',
+    'List per-user Chatterbox voice clones (status, voice_id when ready).',
+    ListClonedVoicesShape,
+    withTracking('list_cloned_voices', async () => {
+      return handleListClonedVoices(apiClient);
+    })
+  );
+
+  server.tool(
+    'create_cloned_voice',
+    'Register a voice clone from a short HTTPS audio URL (requires explicit consent).',
+    CreateClonedVoiceShape,
+    withTracking('create_cloned_voice', async (args) => {
+      return handleCreateClonedVoice(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'delete_cloned_voice',
+    'Delete one of your voice clones by id.',
+    DeleteClonedVoiceShape,
+    withTracking('delete_cloned_voice', async (args) => {
+      return handleDeleteClonedVoice(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'preview_cloned_voice',
+    'Synthesize a short MP3 preview for a ready voice clone (returns base64 audio).',
+    PreviewClonedVoiceShape,
+    withTracking('preview_cloned_voice', async (args) => {
+      return handlePreviewClonedVoice(apiClient, args);
     })
   );
 
