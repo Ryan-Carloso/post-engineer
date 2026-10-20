@@ -12,12 +12,6 @@
 const NEW_POST_SCHEDULE_ID = 'sched-e2e-new';
 const NEW_POST_SLOT_ID = 'slot-e2e-new';
 
-function authCookieName(): string {
-  const supabaseUrl = Cypress.env('supabaseUrl') as string;
-  const ref = new URL(supabaseUrl).hostname.split('.')[0];
-  return `sb-${ref}-auth-token`;
-}
-
 function personasPayload() {
   return {
     authenticated: true,
@@ -191,7 +185,9 @@ describe('Creating a post', () => {
     // At least one publishing account.
     cy.get('[data-testid="account-card"]').first().click();
 
-    cy.getCookie(authCookieName(), { log: false }).should('exist');
+    const supabaseUrl = Cypress.env('supabaseUrl') as string;
+    const authCookie = `sb-${new URL(supabaseUrl).hostname.split('.')[0]}-auth-token`;
+    cy.getCookie(authCookie, { log: false }).should('exist');
     cy.contains('button', /Agendar posts|Schedule posts/).click();
 
     cy.wait('@createPost').its('request.body').should('deep.include', {
