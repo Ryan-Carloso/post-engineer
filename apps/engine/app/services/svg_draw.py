@@ -371,6 +371,15 @@ def shape_length(element: ET.Element) -> float:
     return 0.0
 
 
+def total_draw_length(root: ET.Element) -> float:
+    """Combined drawn length of every drawable shape, in user units.
+
+    This is the workload the pencil traces, so it drives the reveal pace:
+    detailed artwork takes longer to draw than a simple icon.
+    """
+    return sum(shape_length(element) for element in collect_drawable(root))
+
+
 def dash_for(element: ET.Element, default: float) -> float:
     """Dash length for a shape: its measured length, or a safe fallback.
 

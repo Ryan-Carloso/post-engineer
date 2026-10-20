@@ -4,6 +4,7 @@ import os
 import subprocess
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -420,6 +421,60 @@ class PersistSvgItemTests(unittest.TestCase):
         mock_close.assert_any_call(probe)
 
 
+class LineArtTravelTests(unittest.TestCase):
+    """SVG-unit stroke lengths become on-screen pencil travel in canvas px."""
+
+    def _root(self, attrs: str, inner: str):
+        return ET.fromstring(
+            f'<svg xmlns="http://www.w3.org/2000/svg" {attrs}>{inner}</svg>'
+        )
+
+    def test_travel_scales_units_through_render_and_fit(self):
+        root = self._root(
+            'viewBox="0 0 200 200"',
+            '<path d="M0 0 L100 0" stroke="#111"/>',
+        )
+        # 100 units x (700/200 render) x min(1080*.85/700, 1920*.7/700 fit)
+        expected = 100 * 3.5 * min(1080 * 0.85 / 700, 1920 * 0.7 / 700)
+        self.assertAlmostEqual(
+            svg_material._line_art_travel_px(root, 1080, 1920), expected
+        )
+
+    def test_dimensions_fall_back_to_width_height_attributes(self):
+        root = self._root(
+            'width="400" height="400"',
+            '<path d="M0 0 L100 0" stroke="#111"/>',
+        )
+        expected = 100 * (700 / 400) * min(1080 * 0.85 / 700, 1920 * 0.7 / 700)
+        self.assertAlmostEqual(
+            svg_material._line_art_travel_px(root, 1080, 1920), expected
+        )
+
+    def test_unmeasurable_dimensions_give_zero(self):
+        root = self._root("", '<path d="M0 0 L100 0" stroke="#111"/>')
+        self.assertEqual(svg_material._line_art_travel_px(root, 1080, 1920), 0.0)
+
+    def test_complex_art_draws_longer_than_simple_art(self):
+        simple = self._root(
+            'viewBox="0 0 200 200"',
+            '<path d="M20 100 L180 100" stroke="#111"/>',
+        )
+        complex_ = self._root(
+            'viewBox="0 0 200 200"',
+            '<circle cx="100" cy="100" r="80" stroke="#111"/>'
+            '<path d="M20 180 L100 20 L180 180 Z" stroke="#111"/>'
+            '<rect x="40" y="40" width="120" height="120" stroke="#111"/>',
+        )
+        self.assertGreater(
+            svg_sketch.draw_frame_count(
+                svg_material._line_art_travel_px(complex_, 1080, 1920)
+            ),
+            svg_sketch.draw_frame_count(
+                svg_material._line_art_travel_px(simple, 1080, 1920)
+            ),
+        )
+
+
 class AnimatedSvgMaterialTests(unittest.TestCase):
     """The pencil-drawn clip is preferred; the static still is the fallback."""
 
@@ -561,12 +616,16 @@ class AnimatedSvgMaterialTests(unittest.TestCase):
                     "</svg>"
                 )
             sprite = np.zeros((8, 8, 4), np.uint8)
+            root = ET.parse(svg_path).getroot()
+            expected = svg_sketch.draw_frame_count(
+                svg_material._line_art_travel_px(root, 1080, 1920)
+            )
             with patch("subprocess.run", side_effect=fake_run):
                 frames = svg_material._drawn_line_art_frames(
-                    svg_path, sprite, (1.0, 2.0), frame_count=4,
-                    width=1080, height=1920,
+                    svg_path, sprite, (1.0, 2.0), width=1080, height=1920
                 )
-        self.assertEqual(len(frames), 4)
+        # The frame count is derived from the measured stroke length.
+        self.assertEqual(len(frames), expected)
         # First frame draws nothing, last frame draws everything.
         self.assertNotEqual(seen[0], seen[-1])
         for frame in frames:
@@ -606,16 +665,19 @@ class AnimatedSvgMaterialTests(unittest.TestCase):
                 svg_path,
                 pencil_png,
                 svg_pencil.pencil_tip_in_sprite(460),
-                frame_count=6,
                 width=540,
                 height=960,
+            )
+            root = ET.parse(svg_path).getroot()
+            expected = svg_sketch.draw_frame_count(
+                svg_material._line_art_travel_px(root, 540, 960)
             )
 
         def pencil_yellow(frame):
             b, g, r = (frame[..., i].astype(np.int16) for i in range(3))
             return int(((r > 150) & (g > 100) & (b < 130) & (r > b + 60)).sum())
 
-        self.assertEqual(len(frames), 6)
+        self.assertEqual(len(frames), expected)
         self.assertGreater(pencil_yellow(frames[-2]), 0, "pencil missing mid-draw")
         self.assertEqual(pencil_yellow(frames[-1]), 0, "pencil left on the finished drawing")
 

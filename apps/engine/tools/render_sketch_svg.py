@@ -55,7 +55,7 @@ def main() -> int:
     sprite = pencil_sprite()
     tip = svg_pencil.pencil_tip_in_sprite(PEN_SIZE)
     frames = svg_sketch.render_sketch_clip(
-        svg_path, sprite, tip, svg_sketch.draw_frame_count(), CANVAS_W, CANVAS_H,
+        svg_path, sprite, tip, None, CANVAS_W, CANVAS_H,
         direction=DIAGONAL, angle_offset=PENCIL_FLIP,
         monochrome=MONOCHROME,
     )

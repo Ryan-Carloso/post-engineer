@@ -221,6 +221,31 @@ class ShapeLengthTests(unittest.TestCase):
         self.assertEqual(svg_draw.shape_length(_element("text")), 0.0)
 
 
+class TotalDrawLengthTests(unittest.TestCase):
+    def _root(self, inner: str):
+        return ET.fromstring(
+            f'<svg xmlns="{svg_draw.SVG_NS}" viewBox="0 0 200 200">{inner}</svg>'
+        )
+
+    def test_sums_every_drawable_shape(self):
+        root = self._root(
+            '<line x1="0" y1="0" x2="3" y2="4" stroke="#111"/>'
+            '<rect x="0" y="0" width="10" height="20" stroke="#111"/>'
+        )
+        self.assertAlmostEqual(svg_draw.total_draw_length(root), 5.0 + 60.0)
+
+    def test_ignores_shapes_without_a_stroke(self):
+        root = self._root(
+            '<line x1="0" y1="0" x2="3" y2="4" fill="#111"/>'
+            '<rect x="0" y="0" width="10" height="20" stroke="#111"/>'
+        )
+        self.assertAlmostEqual(svg_draw.total_draw_length(root), 60.0)
+
+    def test_no_drawable_shapes_is_zero(self):
+        root = self._root('<rect x="0" y="0" width="10" height="20" fill="#111"/>')
+        self.assertEqual(svg_draw.total_draw_length(root), 0.0)
+
+
 class DashForTests(unittest.TestCase):
     def test_measured_shape_gets_length_times_margin(self):
         element = _element("line", x1="0", y1="0", x2="20", y2="0")

@@ -29,6 +29,10 @@ _SVG_RASTER_LONG_EDGE = 1080
 _PENCIL_SPRITE_SIZE = 460
 _PENCIL_ANGLE_OFFSET = 180.0
 
+# Width, in px, at which line art is rasterized frame by frame. The drawn
+# pace conversion (_line_art_travel_px) is expressed against this raster.
+_LINE_ART_RENDER_WIDTH = 700
+
 
 def search_videos_svg(
     search_term: str,
@@ -279,11 +283,40 @@ def _frame_to_canvas(rendered, width: int, height: int):
     return canvas, mask
 
 
+def _line_art_travel_px(root, width: int, height: int) -> float:
+    """On-screen pencil travel for line art, in canvas pixels.
+
+    Stroke lengths are measured in SVG user units; the frames rasterize the
+    viewBox at _LINE_ART_RENDER_WIDTH px wide and _frame_to_canvas then fits
+    that raster onto the canvas, so the travel the viewer sees is the unit
+    length scaled by both factors. Returns 0.0 when the artwork declares no
+    dimensions to scale from — the pace then falls back to the maximum.
+    """
+    view_box = (root.get("viewBox") or "").replace(",", " ").split()
+    if len(view_box) == 4:
+        try:
+            vb_w, vb_h = float(view_box[2]), float(view_box[3])
+        except ValueError:
+            vb_w = vb_h = 0.0
+    else:
+        try:
+            vb_w = float(root.get("width") or 0)
+            vb_h = float(root.get("height") or 0)
+        except ValueError:
+            vb_w = vb_h = 0.0
+    if vb_w <= 0 or vb_h <= 0:
+        return 0.0
+    units = svg_draw.total_draw_length(root)
+    render_scale = _LINE_ART_RENDER_WIDTH / vb_w
+    rendered_h = _LINE_ART_RENDER_WIDTH * vb_h / vb_w
+    fit_scale = min(width * 0.85 / _LINE_ART_RENDER_WIDTH, height * 0.7 / rendered_h)
+    return units * render_scale * fit_scale
+
+
 def _drawn_line_art_frames(
     svg_path: str,
     pencil_png,
     pencil_tip,
-    frame_count: int,
     width: int,
     height: int,
 ):
@@ -291,8 +324,10 @@ def _drawn_line_art_frames(
 
     The production counterpart of tools/render_sketch_icon.py: each frame is
     the artwork with stroke-dashoffset at that progress, rasterized and fitted
-    to the target canvas. Returns [] when the artwork has no strokes to trace
-    or a frame fails to rasterize.
+    to the target canvas. The frame count follows the artwork's measured
+    stroke length at the constant pencil speed (see svg_sketch.draw_seconds).
+    Returns [] when the artwork has no strokes to trace or a frame fails to
+    rasterize.
     """
     import cv2
     import tempfile
@@ -308,7 +343,7 @@ def _drawn_line_art_frames(
 
     pencil = svg_pencil.Pencil(pencil_png, pencil_tip)
     frames, masks = [], []
-    total = max(int(frame_count), 2)
+    total = svg_sketch.draw_frame_count(_line_art_travel_px(root, width, height))
     with tempfile.TemporaryDirectory() as tmp:
         for index in range(total):
             progress = index / (total - 1)
@@ -321,7 +356,7 @@ def _drawn_line_art_frames(
                     [
                         "rsvg-convert",
                         "-w",
-                        "700",
+                        str(_LINE_ART_RENDER_WIDTH),
                         "--keep-aspect-ratio",
                         "-o",
                         frame_png,
@@ -371,7 +406,7 @@ def _render_drawn_clip(
             svg_path,
             pencil_png,
             tip,
-            svg_sketch.draw_frame_count(),
+            None,
             width,
             height,
             direction=(1.0, 1.0),
@@ -379,9 +414,7 @@ def _render_drawn_clip(
             monochrome=False,
         )
         if frames is None:
-            frames = _drawn_line_art_frames(
-                svg_path, pencil_png, tip, svg_sketch.draw_frame_count(), width, height
-            )
+            frames = _drawn_line_art_frames(svg_path, pencil_png, tip, width, height)
     except Exception as exc:  # animation must never lose the material
         logger.warning(f"svg drawn clip failed for {svg_path}: {exc}")
         return ""

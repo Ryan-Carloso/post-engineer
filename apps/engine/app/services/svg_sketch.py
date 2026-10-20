@@ -34,16 +34,45 @@ _DATA_URI = re.compile(r'xlink:href="data:image/(?:png|jpe?g);base64,([^"]+)"')
 
 _CANVAS_MARGIN = 0.12
 
-# Drawing pace, in one place so the icon CLI and the catalog CLI cannot drift.
-# 1.1s at 30fps: fast enough not to stall a video, slow enough that each stroke
-# still reads as being traced rather than popping into place.
-DRAW_SECONDS = 1.1
+# Drawing pace: the pencil travels at a constant speed, so a reveal lasts
+# as long as the artwork's strokes take to trace — simple art finishes fast,
+# detailed art takes longer. The duration is bounded on both sides so a
+# trivial icon never blinks in and a huge illustration never stalls a clip.
+# Speeds are in canvas pixels: callers convert their stroke measure (SVG
+# user units for line art, ink area for raster art) before asking.
+PENCIL_SPEED_PX_PER_SECOND = 1100.0
+DRAW_MIN_SECONDS = 1.5
+DRAW_MAX_SECONDS = 4.0
 DRAW_FPS = 30
 
 
-def draw_frame_count() -> int:
-    """Frames for one reveal at the configured pace."""
-    return max(int(round(DRAW_SECONDS * DRAW_FPS)), 2)
+def draw_seconds(stroke_length_px: Optional[float]) -> float:
+    """Reveal duration for a stroke length measured in canvas pixels.
+
+    An unmeasured length (None or non-positive) gets the maximum: art we
+    cannot measure should still read as drawn, never pop into place.
+    """
+    if stroke_length_px is None or stroke_length_px <= 0:
+        return DRAW_MAX_SECONDS
+    return min(
+        max(stroke_length_px / PENCIL_SPEED_PX_PER_SECOND, DRAW_MIN_SECONDS),
+        DRAW_MAX_SECONDS,
+    )
+
+
+def draw_frame_count(stroke_length_px: Optional[float] = None) -> int:
+    """Frames for one reveal of the given stroke length."""
+    return max(int(round(draw_seconds(stroke_length_px) * DRAW_FPS)), 2)
+
+
+# Canny edges dilated once are ~2px wide, so a raster ink mask's area over
+# that width approximates the centreline length the pencil would travel.
+_INK_STROKE_WIDTH_PX = 2.0
+
+
+def stroke_length_from_ink(ink: np.ndarray) -> float:
+    """Approximate stroke-centreline length of a raster ink mask, in pixels."""
+    return float(np.count_nonzero(ink)) / _INK_STROKE_WIDTH_PX
 
 
 # Default reveal axis: left to right. Callers pass a diagonal to sweep
@@ -246,20 +275,27 @@ def render_sketch_clip(
     svg_path: str,
     pencil_png: np.ndarray,
     pencil_tip: Tuple[float, float],
-    frame_count: int,
+    frame_count: Optional[int] = None,
     canvas_width: int = 1080,
     canvas_height: int = 1920,
     direction: Tuple[float, float] = _HORIZONTAL,
     angle_offset: float = 0.0,
     monochrome: bool = False,
 ) -> Optional[List[np.ndarray]]:
-    """Full pipeline: catalog SVG -> frames drawn by the pencil."""
+    """Full pipeline: catalog SVG -> frames drawn by the pencil.
+
+    A frame_count of None derives the pace from the artwork itself: the
+    fitted ink mask's approximate stroke length at the constant pencil
+    speed (see draw_seconds).
+    """
     embedded = extract_embedded_png(svg_path)
     if embedded is None:
         return None
     colour = flatten_on_white(embedded)
     ink = derive_ink(colour)
     placement = fit_art(colour, ink, canvas_width, canvas_height)
+    if frame_count is None:
+        frame_count = draw_frame_count(stroke_length_from_ink(placement.ink))
     pencil = Pencil(pencil_png, pencil_tip)
     return render_frames(
         placement,

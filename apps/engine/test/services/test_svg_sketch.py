@@ -312,17 +312,65 @@ class EndToEndTests(unittest.TestCase):
 
 
 class DrawPaceTests(unittest.TestCase):
-    """One source of truth for the drawing speed, so both CLIs cannot drift."""
+    """Constant pencil speed: duration follows the measured stroke length."""
 
-    def test_pace_matches_the_configured_duration(self):
-        self.assertEqual(svg_sketch.draw_frame_count(), round(svg_sketch.DRAW_SECONDS * svg_sketch.DRAW_FPS))
+    def test_short_length_gets_the_floor(self):
+        self.assertEqual(svg_sketch.draw_seconds(1.0), svg_sketch.DRAW_MIN_SECONDS)
 
-    def test_pace_is_at_least_two_frames(self):
-        self.assertGreaterEqual(svg_sketch.draw_frame_count(), 2)
+    def test_long_length_gets_the_ceiling(self):
+        self.assertEqual(svg_sketch.draw_seconds(1e9), svg_sketch.DRAW_MAX_SECONDS)
 
-    def test_pace_is_the_fast_setting(self):
-        # Guards the regression: the reveal was 2.2s and felt like it stalled.
-        self.assertLessEqual(svg_sketch.DRAW_SECONDS, 1.2)
+    def test_mid_length_is_proportional_to_the_speed(self):
+        length = svg_sketch.PENCIL_SPEED_PX_PER_SECOND * 2.5
+        self.assertAlmostEqual(svg_sketch.draw_seconds(length), 2.5)
+
+    def test_unmeasured_length_gets_the_ceiling(self):
+        # Art we cannot measure must still read as drawn, never pop in.
+        self.assertEqual(svg_sketch.draw_seconds(None), svg_sketch.DRAW_MAX_SECONDS)
+        self.assertEqual(svg_sketch.draw_seconds(0.0), svg_sketch.DRAW_MAX_SECONDS)
+
+    def test_frame_count_scales_with_length(self):
+        length = svg_sketch.PENCIL_SPEED_PX_PER_SECOND * 2.5
+        self.assertEqual(
+            svg_sketch.draw_frame_count(length),
+            round(2.5 * svg_sketch.DRAW_FPS),
+        )
+
+    def test_frame_count_is_at_least_two(self):
+        self.assertGreaterEqual(svg_sketch.draw_frame_count(1.0), 2)
+
+    def test_longer_stroke_draws_for_longer(self):
+        speed = svg_sketch.PENCIL_SPEED_PX_PER_SECOND
+        self.assertGreater(
+            svg_sketch.draw_frame_count(speed * 3.0),
+            svg_sketch.draw_frame_count(speed * 2.0),
+        )
+
+    def test_ink_proxy_scales_with_ink_area(self):
+        ink = np.zeros((10, 10), dtype=bool)
+        ink[2:4, :] = True  # 20 ink pixels
+        self.assertAlmostEqual(svg_sketch.stroke_length_from_ink(ink), 10.0)
+
+    def test_auto_frame_count_measures_the_ink(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            svg = os.path.join(tmp, "a.svg")
+            with open(svg, "w", encoding="utf-8") as handle:
+                handle.write(_svg_embedding(_png_with_rect()))
+            frames = svg_sketch.render_sketch_clip(
+                svg, _pencil_png(), svg_pencil.pencil_tip_in_sprite(460), None, 540, 960
+            )
+            self.assertIsNotNone(frames)
+            assert frames is not None
+            embedded = svg_sketch.extract_embedded_png(svg)
+            assert embedded is not None
+            colour = svg_sketch.flatten_on_white(embedded)
+            placement = svg_sketch.fit_art(
+                colour, svg_sketch.derive_ink(colour), 540, 960
+            )
+            expected = svg_sketch.draw_frame_count(
+                svg_sketch.stroke_length_from_ink(placement.ink)
+            )
+            self.assertEqual(len(frames), expected)
 
 
 class RevealAxisTests(unittest.TestCase):
