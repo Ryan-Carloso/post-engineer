@@ -76,22 +76,28 @@ def failed_entry(provider_name: str, video_path: str, error: str) -> dict[str, A
 def merge_prior_published(
     existing: Any, new_entries: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
-    """New entries plus prior published entries for untouched providers.
+    """New entries plus prior published entries this attempt did not repost.
 
     Recording replaces the whole ``publish_results`` key (every state
     backend's update overwrites it), so without merging, a retry would
-    erase links an earlier attempt recorded for a provider this attempt
-    did not touch — even though that post is live and the recorded link
-    is its only trace.
+    erase links an earlier attempt recorded — even though that post is
+    live and the recorded link is its only trace. A prior published
+    entry survives unless the new entries contain a published entry
+    for the same (provider, video): a failed re-attempt never erases
+    the link of a post that is already live.
     """
     if not isinstance(existing, list):
         return new_entries
-    attempted = {entry.get("provider") for entry in new_entries}
+    reposted = {
+        (entry.get("provider"), entry.get("video"))
+        for entry in new_entries
+        if entry.get("status") == "published"
+    }
     preserved = [
         entry
         for entry in existing
         if isinstance(entry, dict)
         and entry.get("status") == "published"
-        and entry.get("provider") not in attempted
+        and (entry.get("provider"), entry.get("video")) not in reposted
     ]
     return preserved + new_entries

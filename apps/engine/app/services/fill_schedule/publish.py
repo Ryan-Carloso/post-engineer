@@ -218,10 +218,15 @@ class BatchPublisher:
                                 immediate=True,
                             )
                             continue
-                        publish_results.extend(
-                            entries_for_result(provider_name, video_path, result)
+                        entries = entries_for_result(
+                            provider_name, video_path, result
                         )
-                        if provider_name not in published_providers:
+                        publish_results.extend(entries)
+                        # No entries means nothing was posted (e.g. a 2xx
+                        # body with an empty results list): the provider
+                        # must not count as published, or the slot flips
+                        # to published with zero recorded links.
+                        if entries and provider_name not in published_providers:
                             published_providers.append(provider_name)
                 # Past the provider loops: a failure from here on (e.g. the
                 # slot-state PATCH) is not a provider failure.
