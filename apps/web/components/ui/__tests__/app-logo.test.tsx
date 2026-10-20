@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import AppLogo from '@/components/ui/app-logo';
 
@@ -45,5 +45,14 @@ describe('AppLogo', () => {
     render(<AppLogo />);
     expect(capturedImageProps).toHaveLength(1);
     expect(capturedImageProps[0]).not.toHaveProperty('priority');
+  });
+
+  it('renders a branded initials fallback when the image fails to load', () => {
+    render(<AppLogo size={32} />);
+    fireEvent.error(screen.getByTestId('app-logo'));
+    const fallback = screen.getByTestId('app-logo-fallback');
+    expect(fallback).toHaveAttribute('aria-label', 'Post Engineer');
+    expect(fallback).toHaveTextContent('PE');
+    expect(screen.queryByTestId('app-logo')).toBeNull();
   });
 });

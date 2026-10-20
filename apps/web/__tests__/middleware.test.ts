@@ -152,4 +152,16 @@ describe('middleware auth redirect', () => {
     expect(response.status).toBe(307);
     expect(response.headers.get('location')).toBe('http://localhost:3434/');
   });
+
+  it('does not redirect unauthenticated requests for public static assets (logo.png)', async () => {
+    getUser.mockResolvedValue({
+      data: { user: null },
+      error: authError('AuthSessionMissingError', 400, 'Auth session missing!'),
+    });
+
+    const response = await middleware(requestFor('/logo.png'));
+
+    expect(response.status).not.toBe(307);
+    expect(response.headers.get('location')).toBeNull();
+  });
 });
