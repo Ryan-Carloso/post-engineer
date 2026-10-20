@@ -1,6 +1,5 @@
 import sys
 import unittest
-from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -9,7 +8,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from app.services.cloned_voices.chatterbox_registry import RegistryNotConfiguredError
 from app.services.cloned_voices.constants import (
     ERROR_REGISTRY_NOT_CONFIGURED,
-    STATUS_FAILED,
     STATUS_PENDING,
     STATUS_READY,
 )
