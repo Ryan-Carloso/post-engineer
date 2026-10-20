@@ -415,6 +415,10 @@ describe('assertPublishedSlot', () => {
       () => assertPublishedSlot({ id: 's9', status: 'failed', error: 'boom' }, providers),
       /ASAP slot s9 ended as 'failed'/,
     );
+    assert.throws(
+      () => assertPublishedSlot({ status: 'failed', error: 'boom' }, providers),
+      /ASAP slot unknown ended as 'failed'/,
+    );
   });
 });
 
