@@ -16,7 +16,12 @@ export const ListPostsShape = {
 export const ListPostsSchema = z.object(ListPostsShape);
 
 export const CancelScheduleShape = {
-  scheduleId: z.string().min(1, 'scheduleId is required').describe('The ID of the schedule to cancel'),
+  scheduleId: z
+    .string()
+    .min(1, 'scheduleId is required')
+    .describe(
+      'The ID of the schedule to cancel. Unpublished slots (pending, generating, or ready) are removed and their prepaid tokens are refunded. A post already publishing or published is not recalled.',
+    ),
 };
 
 export const CancelScheduleSchema = z.object(CancelScheduleShape);

@@ -1,5 +1,5 @@
 //---------------
-// Comandos customizados do Cypress
+// Custom Cypress commands
 //---------------
 
 declare global {
@@ -12,11 +12,13 @@ declare global {
 }
 
 Cypress.Commands.add('loginE2EUser', () => {
-  // NOTE: call this AFTER the first cy.visit(). cy.setCookie() before any
-  // visit does not attach the cookie to the AUT domain properly — the page
-  // shell renders but every API route returns 401. Visiting any page first
-  // (even /landing) makes the cookie stick and API calls authenticate.
-  // Existing specs never noticed because they stub every API response.
+  // The session cookie has to be written after the browser is already on
+  // the app origin. Writing it before any visit does not attach it to
+  // that host, so the next document request has no session and middleware
+  // sends it to /landing (the page never mounts, and cy.wait reports
+  // "No request ever occurred"). /landing is public and does not mount
+  // the Supabase client, so a previous test's still-open document — which
+  // can clear cookies after this command starts — is gone before the write.
   const supabaseUrl = requiredCypressEnv('supabaseUrl', 'CYPRESS_SUPABASE_URL');
   const anonKey = requiredCypressEnv('supabaseAnonKey', 'CYPRESS_SUPABASE_ANON_KEY');
   const email = requiredCypressEnv('e2eTestEmail', 'CYPRESS_E2E_TEST_EMAIL');
@@ -37,7 +39,11 @@ Cypress.Commands.add('loginE2EUser', () => {
           .replace(/\+/g, '-')
           .replace(/\//g, '_')
           .replace(/=+$/, '');
-        cy.setCookie(`sb-${ref}-auth-token`, `base64-${encoded}`);
+        const cookieName = `sb-${ref}-auth-token`;
+        cy.visit('/landing');
+        // log: false — the value is a live access token.
+        cy.setCookie(cookieName, `base64-${encoded}`, { log: false });
+        cy.getCookie(cookieName, { log: false }).should('exist');
       });
 });
 

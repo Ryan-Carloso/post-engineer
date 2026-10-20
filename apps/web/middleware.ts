@@ -1,8 +1,30 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 
+// auth-js reports these as { user: null, error } and does not clear the
+// session. 429 is an AuthApiError; aborted fetches and 5xx (including
+// Cloudflare 520-530) are AuthRetryableFetchError. A 307 to /landing on
+// any of them sticks: the matcher excludes /landing, so a still-valid
+// session never bounces back.
+const TRANSIENT_AUTH_STATUSES: ReadonlySet<number> = new Set([
+  429, 500, 501, 502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 527, 528, 529, 530,
+])
+
+function isTransientAuthError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false
+  if ('name' in error && error.name === 'AuthRetryableFetchError') return true
+  return 'status' in error && typeof error.status === 'number' && TRANSIENT_AUTH_STATUSES.has(error.status)
+}
+
+function authErrorLogFields(error: unknown): { name: string; status: number | null } {
+  if (typeof error !== 'object' || error === null) return { name: 'unknown', status: null }
+  const name = 'name' in error && typeof error.name === 'string' ? error.name : 'unknown'
+  const status = 'status' in error && typeof error.status === 'number' ? error.status : null
+  return { name, status }
+}
+
 //---------------
-// getSupabaseEnv — valida env vars sem fallback
+// getSupabaseEnv — fail when the public Supabase env vars are missing
 //---------------
 
 function getSupabaseEnv() {
@@ -20,7 +42,7 @@ function getSupabaseEnv() {
 }
 
 //---------------
-// Middleware — valida sessão e redireciona
+// Middleware — require a session on protected pages
 //---------------
 
 export async function middleware(request: NextRequest) {
@@ -67,21 +89,30 @@ export async function middleware(request: NextRequest) {
 
   const {
     data: { user },
+    error,
   } = await supabase.auth.getUser()
 
-  // Rotas públicas — acessíveis sem autenticação.
-  // .well-known (OAuth discovery/JWKS) e oauth/* cuidam da própria sessão:
-  // authorize/consent redirecionam para /login com `next`, token/register
-  // são públicos por especificação.
+  // Public pages. .well-known (OAuth discovery/JWKS) and oauth/* handle
+  // their own session: authorize/consent redirect to /login with `next`,
+  // and token/register are public by spec.
   const publicPaths = ['/landing', '/login', '/privacy', '/terms'];
   const pathname = request.nextUrl.pathname;
 
-  // Se não autenticado e não está em rota pública → redireciona para a landing
+  // No user on a protected page → /landing. A transient getUser failure
+  // is not "logged out": the cookie is still there, and following the
+  // redirect leaves the browser on /landing for the rest of the navigation.
   if (!user && !publicPaths.includes(pathname)) {
-    return NextResponse.redirect(new URL('/landing', request.url))
+    if (!isTransientAuthError(error)) {
+      return NextResponse.redirect(new URL('/landing', request.url))
+    }
+    // Name and status only. error.message can echo upstream response text.
+    console.warn('[middleware] auth check failed transiently; continuing', {
+      ...authErrorLogFields(error),
+      pathname,
+    })
   }
 
-  // Se autenticado e está na landing ou no login → redireciona para home
+  // Authenticated visitor on the landing or login page → home
   if (user && (pathname === '/login' || pathname === '/landing')) {
     return NextResponse.redirect(new URL('/', request.url))
   }
@@ -90,7 +121,7 @@ export async function middleware(request: NextRequest) {
 }
 
 //---------------
-// Matcher — rota protegida, exclui estáticos, API, auth
+// Matcher — protected routes, excluding static files, API, and auth
 //---------------
 
 export const config = {
