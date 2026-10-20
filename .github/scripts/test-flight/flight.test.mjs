@@ -474,7 +474,7 @@ describe('waitForPublished', () => {
       const state = states[Math.min(calls, states.length - 1)];
       calls += 1;
       return {
-        slotId: 's1',
+        id: 's1',
         ...state,
         publishLinks: providers.map((provider) => ({ provider, url: `https://${provider}/p` })),
       };
@@ -491,7 +491,7 @@ describe('waitForPublished', () => {
   });
 
   it('throws when the slot fails', async () => {
-    const fetchSlot = async () => ({ slotId: 's1', status: 'failed', error: 'engine blew up' });
+    const fetchSlot = async () => ({ id: 's1', status: 'failed', error: 'engine blew up' });
     await assert.rejects(
       waitForPublished(null, 's1', providers, {
         timeoutMs: 60_000,
@@ -506,7 +506,7 @@ describe('waitForPublished', () => {
 
   it('throws on timeout', async () => {
     let now = 0;
-    const fetchSlot = async () => ({ slotId: 's1', status: 'generating' });
+    const fetchSlot = async () => ({ id: 's1', status: 'generating' });
     await assert.rejects(
       waitForPublished(null, 's1', providers, {
         timeoutMs: 5_000,
