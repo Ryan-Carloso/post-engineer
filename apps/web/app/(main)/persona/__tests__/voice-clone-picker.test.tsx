@@ -41,11 +41,10 @@ vi.mock('@/lib/api', () => ({
 
 vi.mock('@/lib/store', () => {
   const state = { voiceId: 'voice-1', setVoiceId: cloneMocks.setVoiceId };
-  const usePersonaStore = vi.fn(
-    (selector: (s: { voiceId: string | null; setVoiceId: (id: string) => void }) => unknown) =>
-      selector(state),
-  ) as typeof import('@/lib/store').usePersonaStore;
-  usePersonaStore.getState = () => state;
+  const usePersonaStore = Object.assign(
+    vi.fn((selector: (s: typeof state) => unknown) => selector(state)),
+    { getState: () => state },
+  );
   return { usePersonaStore };
 });
 
@@ -90,6 +89,20 @@ function makeWavFile(name = 'sample.wav'): File {
   return new File([bytes], name, { type: 'audio/wav' });
 }
 
+function publicRow(
+  overrides: Partial<ClonedVoicePublicRow> & Pick<ClonedVoicePublicRow, 'id' | 'status'>,
+): ClonedVoicePublicRow {
+  return {
+    language: 'pt',
+    voice_id: null,
+    error_code: null,
+    consent_at: null,
+    created_at: null,
+    updated_at: null,
+    ...overrides,
+  };
+}
+
 describe('PersonaVoiceClonePanel', () => {
   beforeEach(() => {
     cloneMocks.list = [];
@@ -128,12 +141,7 @@ describe('PersonaVoiceClonePanel', () => {
 
   it('uploads when consent is checked', async () => {
     const user = userEvent.setup();
-    cloneMocks.create.mockResolvedValue({
-      id: 'clone-pending',
-      status: 'pending',
-      language: 'pt',
-      voice_id: null,
-    } satisfies ClonedVoicePublicRow);
+    cloneMocks.create.mockResolvedValue(publicRow({ id: 'clone-pending', status: 'pending' }));
     renderPanel();
     await user.click(screen.getByRole('checkbox'));
     const panel = screen.getByTestId('voice-clone-panel');
@@ -146,18 +154,8 @@ describe('PersonaVoiceClonePanel', () => {
   });
 
   it('shows pending status while polling', async () => {
-    cloneMocks.fetchById.mockResolvedValue({
-      id: 'clone-pending',
-      status: 'pending',
-      language: 'pt',
-      voice_id: null,
-    });
-    cloneMocks.create.mockResolvedValue({
-      id: 'clone-pending',
-      status: 'pending',
-      language: 'pt',
-      voice_id: null,
-    });
+    cloneMocks.fetchById.mockResolvedValue(publicRow({ id: 'clone-pending', status: 'pending' }));
+    cloneMocks.create.mockResolvedValue(publicRow({ id: 'clone-pending', status: 'pending' }));
     const user = userEvent.setup();
     renderPanel();
     await user.click(screen.getByRole('checkbox'));
@@ -168,12 +166,11 @@ describe('PersonaVoiceClonePanel', () => {
   });
 
   it('renders ready clone actions and applies voice to persona', async () => {
-    const ready: ClonedVoicePublicRow = {
+    const ready = publicRow({
       id: 'clone-ready',
       status: 'ready',
-      language: 'pt',
       voice_id: 'chatterbox:uabc_123',
-    };
+    });
     cloneMocks.list = [ready];
     const user = userEvent.setup();
     renderPanel();
@@ -188,12 +185,11 @@ describe('PersonaVoiceClonePanel', () => {
 
   it('deletes a clone from the list', async () => {
     cloneMocks.list = [
-      {
+      publicRow({
         id: 'clone-del',
         status: 'ready',
-        language: 'pt',
         voice_id: 'chatterbox:ux',
-      },
+      }),
     ];
     cloneMocks.delete.mockResolvedValue(undefined);
     const user = userEvent.setup();
