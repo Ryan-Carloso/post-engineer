@@ -16,7 +16,17 @@ from app.controllers.v1 import persona as persona_controller
 
 class PersonaEnvelopeTests(unittest.TestCase):
     def test_house_voices_wrapped_in_body(self):
-        resp = persona_controller.list_house_voices_endpoint()
+        from unittest.mock import MagicMock, patch
+
+        from app.controllers.base import AuthContext
+
+        request = MagicMock()
+        request.state.auth = AuthContext(user_id="test-user")
+        with patch(
+            "app.services.cloned_voices.service.list_catalog_entries",
+            return_value=[],
+        ):
+            resp = persona_controller.list_house_voices_endpoint(request)
         self.assertIsInstance(resp.body, list)
         self.assertGreater(len(resp.body), 0)
 

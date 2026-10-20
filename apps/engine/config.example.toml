@@ -564,6 +564,16 @@ model_id = "chatterbox"
 # Voices exposed by your server; shown in the WebUI dropdown as chatterbox:<name>
 voices = ["default-Female"]
 
+# Per-user Chatterbox voice cloning (TRUE cloning) #############################
+# The engine registers each user's reference audio on the Chatterbox voice
+# volume via an admin registry service (not the public /audio/speech TTS URL).
+# Leave registry_base_url empty to disable registration (rows stay failed with
+# error_code registry_not_configured). Secrets may also be set via env:
+# CHATTERBOX_REGISTRY_BASE_URL, CHATTERBOX_REGISTRY_API_KEY.
+[cloned_voices]
+registry_base_url = ""
+registry_api_key = ""
+
 # Edge TTS fallback (free, no API key) ########################################
 # Microsoft Edge TTS is the automatic fallback when Chatterbox fails, for test
 # accounts ONLY. It never appears in the UI. Configure via env vars (not here):

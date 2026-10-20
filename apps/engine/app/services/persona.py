@@ -98,7 +98,7 @@ class PersonaValidationError(Exception):
     """Raised when the persona payload is missing or invalid."""
 
 
-def get_house_voices() -> list[dict[str, Any]]:
+def get_house_voices(user_id: str | None = None) -> list[dict[str, Any]]:
     """The voice catalog the UI offers.
 
     These are the Chatterbox voices configured under ``[chatterbox] voices``
@@ -115,6 +115,11 @@ def get_house_voices() -> list[dict[str, Any]]:
     """
     voice_ids = list(voice_service.get_chatterbox_voices())
     voice_ids.extend(get_openrouter_voices())
+    if user_id:
+        from app.services.cloned_voices.service import list_catalog_entries
+
+        for entry in list_catalog_entries(user_id):
+            voice_ids.append(entry["id"])
     return [{"id": voice_id} for voice_id in voice_ids]
 
 
