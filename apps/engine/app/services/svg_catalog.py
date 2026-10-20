@@ -25,6 +25,7 @@ import json
 import os
 import sqlite3
 import tempfile
+import threading
 import time
 from dataclasses import dataclass
 from typing import List, Optional
@@ -42,6 +43,15 @@ _INDEX_REFRESH_SECONDS = 600
 
 # Monotonic time of the last successful index check; None forces a check.
 _index_checked_at: Optional[float] = None
+
+# Serializes index refreshes: the engine serves concurrent requests, and
+# without the lock every thread that observes a stale check would call R2
+# and rewrite the cached index at the same time.
+_index_check_lock = threading.Lock()
+
+# R2 downloads stream to disk in chunks of this size, so neither the 18MB
+# index nor an unusually large asset is ever held whole in memory.
+_DOWNLOAD_CHUNK_BYTES = 64 * 1024
 
 
 @dataclass(frozen=True)
@@ -147,7 +157,6 @@ def _download_key(key: str, local_path: str, client=None) -> Optional[str]:
         client = _r2_client()
     try:
         response = client.get_object(Bucket=_r2_bucket(), Key=key)
-        payload = response["Body"].read()
     except ClientError as exc:
         if _is_missing(exc):
             raise FileNotFoundError(key) from exc
@@ -158,7 +167,9 @@ def _download_key(key: str, local_path: str, client=None) -> Optional[str]:
     )
     try:
         with os.fdopen(fd, "wb") as handle:
-            handle.write(payload)
+            body = response["Body"]
+            for chunk in iter(lambda: body.read(_DOWNLOAD_CHUNK_BYTES), b""):
+                handle.write(chunk)
         os.replace(tmp_path, local_path)
     except BaseException:
         try:
@@ -182,52 +193,64 @@ def _read_etag(path: str) -> Optional[str]:
         return None
 
 
+def _index_is_fresh(local: str, now: float) -> bool:
+    return (
+        os.path.isfile(local)
+        and _index_checked_at is not None
+        and now - _index_checked_at < _INDEX_REFRESH_SECONDS
+    )
+
+
 def _ensure_index() -> str:
     """Return the local catalog.sqlite, refreshed when R2 has a newer one.
 
     The local copy is trusted for _INDEX_REFRESH_SECONDS after a check; past
     that, the R2 object's ETag is compared with the one recorded when the copy
     was downloaded, and a mismatch (a reindexed catalog) downloads it again.
+
+    Refreshes are serialized with a lock (checked twice: before acquiring,
+    and again inside, since another thread may have just refreshed) so
+    concurrent requests never stampede R2 or rewrite the cache together.
     """
     from botocore.exceptions import ClientError  # lazy: only the SVG path needs boto3
 
     global _index_checked_at
     local = _index_cache_path()
     now = time.monotonic()
-    if (
-        os.path.isfile(local)
-        and _index_checked_at is not None
-        and now - _index_checked_at < _INDEX_REFRESH_SECONDS
-    ):
+    if _index_is_fresh(local, now):
         return local
 
-    key = f"{_require_r2_config()}/_index/catalog.sqlite"
-    client = _r2_client()
-    try:
-        remote_etag = client.head_object(Bucket=_r2_bucket(), Key=key).get("ETag")
-    except ClientError as exc:
-        if _is_missing(exc):
-            raise FileNotFoundError(key) from exc
-        raise
+    with _index_check_lock:
+        if _index_is_fresh(local, now):
+            return local
 
-    etag_path = f"{local}.etag"
-    stale = (
-        not os.path.isfile(local)
-        or remote_etag is None
-        or _read_etag(etag_path) != remote_etag
-    )
-    if stale:
-        downloaded_etag = _download_key(key, local, client)
-        if downloaded_etag is None:
-            # No ETag to compare next time: drop any old one so the next
-            # check downloads again instead of trusting a mismatched record.
-            if os.path.isfile(etag_path):
-                os.unlink(etag_path)
-        else:
-            with open(etag_path, "w", encoding="utf-8") as handle:
-                handle.write(downloaded_etag)
-    _index_checked_at = now
-    return local
+        key = f"{_require_r2_config()}/_index/catalog.sqlite"
+        client = _r2_client()
+        try:
+            remote_etag = client.head_object(Bucket=_r2_bucket(), Key=key).get("ETag")
+        except ClientError as exc:
+            if _is_missing(exc):
+                raise FileNotFoundError(key) from exc
+            raise
+
+        etag_path = f"{local}.etag"
+        stale = (
+            not os.path.isfile(local)
+            or remote_etag is None
+            or _read_etag(etag_path) != remote_etag
+        )
+        if stale:
+            downloaded_etag = _download_key(key, local, client)
+            if downloaded_etag is None:
+                # No ETag to compare next time: drop any old one so the next
+                # check downloads again instead of trusting a mismatched record.
+                if os.path.isfile(etag_path):
+                    os.unlink(etag_path)
+            else:
+                with open(etag_path, "w", encoding="utf-8") as handle:
+                    handle.write(downloaded_etag)
+        _index_checked_at = now
+        return local
 
 
 def resolve_asset_path(relative_path: str) -> str:
