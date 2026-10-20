@@ -309,10 +309,24 @@ jobs:
 
       # Runtime artifacts from a previous run are not part of mutmut's
       # incremental state — drop them so no test ever observes another
-      # run's leftovers.
+      # run's leftovers. Also drop files that were deleted from the source
+      # tree since the cache was saved: mutmut copies sources into
+      # mutants/ without deleting extras, so a stale file (e.g. a test
+      # removed on main while this PR was open) would keep running — and
+      # failing — against current code on every shard. mutmut's own state
+      # (*.meta verdicts, mutmut-*.json stats) is kept.
       - name: Prune ephemeral artifacts from restored cache
         run: |
           rm -rf mutants/storage mutants/.pytest_cache
+          if [ -d mutants ]; then
+            (cd mutants && find . -type f \
+              ! -name '*.meta' ! -name 'mutmut-*.json' \
+              ! -path '*/__pycache__/*' -print0) \
+            | while IFS= read -r -d '' f; do
+                rel="${f#./}"
+                [ -e "$rel" ] || rm -f "mutants/$rel"
+              done
+          fi
 
       - name: Install system dependencies
         run: |
