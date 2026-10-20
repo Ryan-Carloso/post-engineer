@@ -184,3 +184,5 @@ describe('Main Layout — Sidebar user name fallbacks', () => {
     cy.contains('p', 'GitHub User', { timeout: 10_000 }).scrollIntoView().should('be.visible');
   });
 });
+
+export {};
