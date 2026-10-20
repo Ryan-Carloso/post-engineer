@@ -399,6 +399,23 @@ describe('assertPublishedSlot', () => {
       /no post link for: youtube/,
     );
   });
+
+  it('labels detail-shaped slots by their id field, never undefined', () => {
+    // GET /api/schedule/slots/[slotId] returns slot.id (not slotId):
+    // the 2026-10-20 flight reported "ASAP slot undefined published...".
+    assert.throws(
+      () =>
+        assertPublishedSlot(
+          { id: 's9', status: 'published', publishLinks: [] },
+          providers,
+        ),
+      /ASAP slot s9 published but has no post link for: bluesky, youtube/,
+    );
+    assert.throws(
+      () => assertPublishedSlot({ id: 's9', status: 'failed', error: 'boom' }, providers),
+      /ASAP slot s9 ended as 'failed'/,
+    );
+  });
 });
 
 describe('assertScheduledSlot', () => {
