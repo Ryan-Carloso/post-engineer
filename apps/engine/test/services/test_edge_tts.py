@@ -343,6 +343,20 @@ class TestFallbackLanguageForwarding(_VoiceFileTestCase):
         )
         self.assertEqual(mock_fallback.call_args.kwargs.get("language"), "en")
 
+    @patch("app.services.edge_tts.chatterbox_tts")
+    def test_chatterbox_clone_denied_before_tts_call(self, mock_chatterbox):
+        owner = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        other = "ffffffff-bbbb-cccc-dddd-eeeeeeeeeeee"
+        clone_key = "uaaaaaaaabbbb_cccccccccccc"
+        result = et.chatterbox_tts_with_fallback(
+            "hello",
+            clone_key,
+            self.voice_file,
+            user_id=other,
+        )
+        mock_chatterbox.assert_not_called()
+        self.assertIn("cloned voice is not available", result.error or "")
+
 
 if __name__ == "__main__":
     unittest.main()

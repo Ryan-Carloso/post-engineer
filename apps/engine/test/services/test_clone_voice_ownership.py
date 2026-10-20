@@ -47,6 +47,13 @@ class CloneVoiceOwnershipTest(unittest.TestCase):
         key = "  uaaaaaaaabbbb_cccccccccccc  "
         self.assertTrue(user_owns_clone_engine_key(user_id, key))
 
+    def test_whitespace_trimmed_on_user_id(self) -> None:
+        user_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        key = "uaaaaaaaabbbb_cccccccccccc"
+        self.assertTrue(
+            chatterbox_voice_allowed_for_user(f"  {user_id}  ", key),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
