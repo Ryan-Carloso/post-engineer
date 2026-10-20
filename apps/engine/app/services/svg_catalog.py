@@ -3,7 +3,8 @@
 The catalog is a Doodly bundle licensed for private use: the artwork and its
 index never live in the public repo. They live in R2 under ``svg_r2_prefix``
 and are fetched on demand, then cached under ``svg_cache_dir`` so
-`rsvg-convert` can rasterize from a real filesystem path.
+`rsvg-convert` can rasterize from a real filesystem path. Search reads only
+the index: an asset's artwork is fetched when a render actually uses it.
 
 Search is SQLite FTS5 over the ``search`` table built by the catalog indexer.
 Only the text mode is implemented: it needs no extra dependency and covers the
@@ -14,7 +15,9 @@ warns and degrades to text rather than failing the render.
 The feature is opt-in via ``svg_catalog_enabled`` (default false): without the
 flag there is no SVG and material search falls back to the stock providers.
 Enabling it without ``svg_r2_prefix`` is a deploy misconfiguration and fails
-fast with a clear error instead of silently degrading.
+fast with a clear error instead of silently degrading. The same holds for R2
+itself: missing credentials or an unreachable index raise, never an empty
+result that would quietly turn every render into stock footage.
 """
 from __future__ import annotations
 
@@ -22,6 +25,7 @@ import json
 import os
 import sqlite3
 import tempfile
+import time
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -29,17 +33,24 @@ from loguru import logger
 
 from app.config import config
 from app.config.config import root_dir
+from app.services import video_storage
 from app.utils import file_security
+
+# How long a verified local index is trusted before its ETag is re-checked
+# against R2, so a reindexed catalog is picked up without a restart.
+_INDEX_REFRESH_SECONDS = 600
+
+# Monotonic time of the last successful index check; None forces a check.
+_index_checked_at: Optional[float] = None
 
 
 @dataclass(frozen=True)
 class SvgAsset:
-    """One catalog entry resolved to a file in the local cache."""
+    """One catalog entry; its artwork is fetched by resolve_asset_path."""
 
     asset_id: str
     title: str
     relative_path: str
-    absolute_path: str
 
 
 def _config_bool(key: str, default: bool = False) -> bool:
@@ -55,7 +66,7 @@ def _config_str(key: str, default: str) -> str:
 
 
 def _r2_bucket() -> str:
-    return _config_str("svg_r2_bucket", "videos")
+    return _config_str("svg_r2_bucket", video_storage.STORAGE_BUCKET)
 
 
 def _r2_prefix() -> str:
@@ -97,44 +108,48 @@ def is_enabled() -> bool:
     return True
 
 
-def _r2_client():
-    """Build a boto3 S3 client pointed at the account's R2 endpoint.
+def lead_cascade(source_mix: List[str]) -> List[str]:
+    """Put "svg" first in a material source cascade when the catalog is on.
 
-    Imported lazily so only the SVG path needs boto3; credentials come from the
-    same R2_* env vars as video storage. Signature V4 is mandatory for R2,
-    which plain `requests` cannot produce; botocore does the signing. Endpoint
-    URL is explicit because R2 is not AWS.
+    The stock providers then serve as fallback for keywords the catalog has
+    no artwork for. Raises like is_enabled when the flag is on without a
+    prefix, so a misconfigured catalog fails the render instead of using stock.
     """
-    import boto3  # imported lazily so non-SVG engine operations need no client
-
-    account_id = (os.environ.get("R2_ACCOUNT_ID") or "").strip()
-    if not account_id:
-        raise ValueError("svg_catalog: R2_ACCOUNT_ID is not set")
-    return boto3.client(
-        "s3",
-        endpoint_url=f"https://{account_id}.r2.cloudflarestorage.com",
-        aws_access_key_id=(os.environ.get("R2_ACCESS_KEY_ID") or "").strip(),
-        aws_secret_access_key=(os.environ.get("R2_SECRET_ACCESS_KEY") or "").strip(),
-        # R2 ignores the region, but botocore refuses to sign without one.
-        region_name="auto",
-    )
+    rest = [name for name in source_mix if name != "svg"]
+    return ["svg", *rest] if is_enabled() else list(source_mix)
 
 
-def _download_key(key: str, local_path: str) -> None:
+def _r2_client():
+    """The video-storage R2 client, after checking every R2_* variable is set.
+
+    The catalog shares the account and credentials with video storage, so it
+    shares the builder too; the check fails before boto3 would sign a request
+    with empty credentials.
+    """
+    video_storage.require_r2_configuration()
+    return video_storage._r2_client()
+
+
+def _is_missing(exc: Exception) -> bool:
+    code = getattr(exc, "response", {}).get("Error", {}).get("Code")
+    return code in ("NoSuchKey", "NotFound", "404")
+
+
+def _download_key(key: str, local_path: str, client=None) -> Optional[str]:
     """Fetch one R2 object into the local cache, atomically.
 
-    A missing object surfaces as FileNotFoundError so callers can skip that
-    asset; any other failure propagates loudly.
+    Returns the object's ETag. A missing object surfaces as FileNotFoundError
+    so callers can skip that asset; any other failure propagates loudly.
     """
-    from botocore.exceptions import ClientError  # lazy, like boto3 above
+    from botocore.exceptions import ClientError  # lazy: only the SVG path needs boto3
 
-    client = _r2_client()
+    if client is None:
+        client = _r2_client()
     try:
         response = client.get_object(Bucket=_r2_bucket(), Key=key)
         payload = response["Body"].read()
     except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code")
-        if code in ("NoSuchKey", "NotFound", "404"):
+        if _is_missing(exc):
             raise FileNotFoundError(key) from exc
         raise
     os.makedirs(os.path.dirname(local_path), exist_ok=True)
@@ -152,19 +167,66 @@ def _download_key(key: str, local_path: str) -> None:
             pass
         raise
     logger.info(f"svg_catalog: cached r2/{_r2_bucket()}/{key}")
+    return response.get("ETag")
 
 
 def _index_cache_path() -> str:
     return os.path.join(_cache_dir(), "_index", "catalog.sqlite")
 
 
+def _read_etag(path: str) -> Optional[str]:
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            return handle.read().strip() or None
+    except FileNotFoundError:
+        return None
+
+
 def _ensure_index() -> str:
-    """Return the local catalog.sqlite, downloading it from R2 on first use."""
+    """Return the local catalog.sqlite, refreshed when R2 has a newer one.
+
+    The local copy is trusted for _INDEX_REFRESH_SECONDS after a check; past
+    that, the R2 object's ETag is compared with the one recorded when the copy
+    was downloaded, and a mismatch (a reindexed catalog) downloads it again.
+    """
+    from botocore.exceptions import ClientError  # lazy: only the SVG path needs boto3
+
+    global _index_checked_at
     local = _index_cache_path()
-    if os.path.isfile(local):
+    now = time.monotonic()
+    if (
+        os.path.isfile(local)
+        and _index_checked_at is not None
+        and now - _index_checked_at < _INDEX_REFRESH_SECONDS
+    ):
         return local
-    prefix = _require_r2_config()
-    _download_key(f"{prefix}/_index/catalog.sqlite", local)
+
+    key = f"{_require_r2_config()}/_index/catalog.sqlite"
+    client = _r2_client()
+    try:
+        remote_etag = client.head_object(Bucket=_r2_bucket(), Key=key).get("ETag")
+    except ClientError as exc:
+        if _is_missing(exc):
+            raise FileNotFoundError(key) from exc
+        raise
+
+    etag_path = f"{local}.etag"
+    stale = (
+        not os.path.isfile(local)
+        or remote_etag is None
+        or _read_etag(etag_path) != remote_etag
+    )
+    if stale:
+        downloaded_etag = _download_key(key, local, client)
+        if downloaded_etag is None:
+            # No ETag to compare next time: drop any old one so the next
+            # check downloads again instead of trusting a mismatched record.
+            if os.path.isfile(etag_path):
+                os.unlink(etag_path)
+        else:
+            with open(etag_path, "w", encoding="utf-8") as handle:
+                handle.write(downloaded_etag)
+    _index_checked_at = now
     return local
 
 
@@ -234,8 +296,8 @@ def _fts_query(term: str) -> str:
 def _asset_from_row(row: sqlite3.Row) -> Optional[SvgAsset]:
     """Build an asset from a joined row, or None when it is unusable.
 
-    A row whose JSON is malformed or whose file cannot be fetched must not
-    abort the whole search: the caller falls back to the remaining assets.
+    A row whose JSON is malformed must not abort the whole search: the caller
+    falls back to the remaining assets. The artwork itself is not fetched here.
     """
     try:
         payload = json.loads(row["data"] or "{}")
@@ -248,18 +310,11 @@ def _asset_from_row(row: sqlite3.Row) -> Optional[SvgAsset]:
         logger.warning(f"svg_catalog: row {row['id']} has no arquivo_relativo")
         return None
 
-    try:
-        absolute_path = resolve_asset_path(relative_path)
-    except Exception as exc:  # one bad asset must not kill the whole search
-        logger.warning(f"svg_catalog: unreadable asset {relative_path}: {exc}")
-        return None
-
     title = payload.get("titulo_original") or row["title"] or ""
     return SvgAsset(
         asset_id=row["id"],
         title=title,
         relative_path=relative_path,
-        absolute_path=absolute_path,
     )
 
 
@@ -282,16 +337,11 @@ def search(search_term: str, limit: int = 5) -> List[SvgAsset]:
         "WHERE search MATCH ? ORDER BY rank LIMIT ?"
     )
 
-    try:
-        connection = _connect()
-    except Exception as exc:
-        logger.warning(f"svg_catalog: index unavailable: {exc}")
-        return []
+    # An unreachable or unreadable index raises: the catalog is enabled, so a
+    # silent [] would quietly turn every render into stock footage.
+    connection = _connect()
     try:
         rows = connection.execute(query, (match, max(1, int(limit)))).fetchall()
-    except sqlite3.Error as exc:
-        logger.warning(f"svg_catalog: search failed for {search_term!r}: {exc}")
-        return []
     finally:
         connection.close()
 

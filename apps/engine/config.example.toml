@@ -439,8 +439,10 @@ redis_port = 6379
 # and live in Cloudflare R2: they are fetched on demand and cached under
 # <svg_cache_dir>, and are never committed. SVG is opt-in and defaults to
 # off: without `svg_catalog_enabled` there is no SVG, and material search
-# falls back to the stock providers. When enabled, `svg_r2_prefix` is
-# REQUIRED — the render fails fast instead of silently degrading.
+# uses only the stock providers. When enabled, the catalog is searched first
+# and the stock providers cover keywords it has no artwork for. It needs
+# `svg_r2_prefix` and the R2_* credentials — a missing one, or an unreachable
+# index, fails the render instead of silently degrading to stock.
 svg_catalog_enabled = false
 svg_r2_bucket = "videos"
 svg_r2_prefix = ""

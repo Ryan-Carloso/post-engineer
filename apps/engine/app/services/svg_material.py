@@ -24,9 +24,8 @@ from app.utils import utils
 # 1080 matches the renderer's long edge, so the Ken Burns zoom never upsamples.
 _SVG_RASTER_LONG_EDGE = 1080
 
-# Pencil sprite size, in px, and the barrel flip so the stroke direction
-# points away from the hand. Same values as the demo tools.
-_PENCIL_SPRITE_SIZE = 460
+# Barrel flip so the stroke direction points away from the hand. Same value
+# as the demo tools.
 _PENCIL_ANGLE_OFFSET = 180.0
 
 # Width, in px, at which line art is rasterized frame by frame. The drawn
@@ -41,8 +40,10 @@ def search_videos_svg(
 ) -> List[MaterialInfo]:
     """Look up catalog SVG assets matching a keyword.
 
-    The aspect is unused: a catalog entry is a still image, and the clip is
-    letterboxed to the render size later, when it becomes an mp4.
+    The material url is the asset's catalog-relative path: the artwork is
+    fetched from R2 only when resolve_material_path renders it, so unused
+    matches cost nothing. The aspect is unused: a catalog entry is a still
+    image, and the clip is letterboxed to the render size later.
     """
     del video_aspect
     if not svg_catalog.is_enabled():
@@ -50,7 +51,7 @@ def search_videos_svg(
     return [
         MaterialInfo(
             provider="svg",
-            url=asset.absolute_path,
+            url=asset.relative_path,
             duration=minimum_duration,
         )
         for asset in svg_catalog.search(search_term)
@@ -146,6 +147,12 @@ def _fit_onto_canvas(png_path: str, width: int, height: int) -> None:
         canvas.convert("RGB").save(png_path, format="PNG")
 
 
+def _svg_canvas_background_bgr() -> tuple:
+    """The configured canvas colour as a BGR triple, for OpenCV frames."""
+    red, green, blue, _ = _svg_canvas_background()
+    return (blue, green, red)
+
+
 def _svg_canvas_background() -> tuple:
     """Parse the configured canvas colour into an RGBA tuple."""
     raw = str(config.app.get("svg_canvas_background", "#FFFFFF")).strip() or "#FFFFFF"
@@ -174,9 +181,14 @@ def _persist_svg_item(
     stroke. When the artwork cannot be drawn — or the animation fails — the
     clip falls back to the static still with a Ken Burns drift.
 
+    item.url is the asset's catalog-relative path; the artwork is fetched
+    (or read from the local catalog cache) only on a clip cache miss. A
+    missing asset raises FileNotFoundError for the caller to log and skip.
+
     Cached by a digest of the asset path and the aspect: the same asset in two
-    aspects is two different clips. The animated cache key carries its own tag
-    so it never collides with the older static-still entries.
+    aspects is two different clips. The drawn clip's key also carries the clip
+    length and the canvas colour, both of which change its frames, plus its own
+    tag so it never collides with the static-still entries.
 
     An empty save_dir (the shipped default) falls back to the same storage
     cache save_video uses: without it the stills and clips would land as
@@ -191,13 +203,20 @@ def _persist_svg_item(
 
     width, height = video_aspect.to_resolution()
 
+    background = _svg_canvas_background_bgr()
     digest = hashlib.sha256(
-        f"{item.url}|{width}x{height}|drawn-v1".encode("utf-8")
+        f"{item.url}|{width}x{height}|{max_clip_duration}s|{background}|drawn-v2".encode(
+            "utf-8"
+        )
     ).hexdigest()[:16]
     drawn_mp4 = os.path.join(save_dir, f"svg-drawn-{digest}.mp4")
     if os.path.isfile(drawn_mp4) and os.path.getsize(drawn_mp4) > 0:
         return drawn_mp4
-    drawn = _render_drawn_clip(item.url, drawn_mp4, width, height, max_clip_duration)
+
+    svg_path = svg_catalog.resolve_asset_path(item.url)
+    drawn = _render_drawn_clip(
+        svg_path, drawn_mp4, width, height, max_clip_duration, background
+    )
     if drawn:
         logger.info(f"svg drawn clip rendered: {drawn}")
         return drawn
@@ -206,7 +225,7 @@ def _persist_svg_item(
         :16
     ]
     png_path = os.path.join(save_dir, f"svg-{digest}.png")
-    if not rasterize_svg_to_png(item.url, png_path, width, height):
+    if not rasterize_svg_to_png(svg_path, png_path, width, height):
         return ""
 
     return image_material.render_image_file_to_mp4(
@@ -214,38 +233,8 @@ def _persist_svg_item(
     ) or ""
 
 
-def _pencil_sprite(size: int = _PENCIL_SPRITE_SIZE):
-    """Rasterize the pencil artwork into an (RGBA sprite, tip) pair.
-
-    Returns None when rsvg-convert is missing or the sprite is unreadable;
-    the caller then falls back to the static still instead of losing the clip.
-    """
-    import cv2
-    import tempfile
-
-    with tempfile.TemporaryDirectory() as tmp:
-        svg_path = os.path.join(tmp, "pencil.svg")
-        png_path = os.path.join(tmp, "pencil.png")
-        with open(svg_path, "w", encoding="utf-8") as handle:
-            handle.write(svg_pencil.build_pencil_svg())
-        try:
-            subprocess.run(
-                ["rsvg-convert", "-w", str(size), "-o", png_path, svg_path],
-                check=True,
-                capture_output=True,
-            )
-        except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:
-            logger.warning(f"svg pencil sprite failed: {exc}")
-            return None
-        sprite = cv2.imread(png_path, cv2.IMREAD_UNCHANGED)
-    if sprite is None or sprite.ndim != 3 or sprite.shape[2] != 4:
-        logger.warning("svg pencil sprite unreadable")
-        return None
-    return sprite, svg_pencil.pencil_tip_in_sprite(size)
-
-
-def _frame_to_canvas(rendered, width: int, height: int):
-    """Fit one rasterized frame onto the target canvas.
+def _frame_to_canvas(rendered, width: int, height: int, background: tuple):
+    """Fit one rasterized frame onto a canvas of the given BGR colour.
 
     Returns the canvas and the ink mask the pencil follower tracks.
     """
@@ -264,7 +253,8 @@ def _frame_to_canvas(rendered, width: int, height: int):
         > 0
     )
 
-    canvas = np.full((height, width, 3), 252, np.uint8)
+    canvas = np.empty((height, width, 3), np.uint8)
+    canvas[:, :] = background
     ox, oy = (width - new_w) // 2, (height - new_h) // 2
     region = canvas[oy : oy + new_h, ox : ox + new_w].astype(np.float32)
     if resized.shape[2] == 4:
@@ -319,14 +309,16 @@ def _drawn_line_art_frames(
     pencil_tip,
     width: int,
     height: int,
+    background: tuple,
+    max_frames: int,
 ):
     """Frames of genuine line art being drawn, pencil attached.
 
     The production counterpart of tools/render_sketch_icon.py: each frame is
     the artwork with stroke-dashoffset at that progress, rasterized and fitted
     to the target canvas. The frame count follows the artwork's measured
-    stroke length at the constant pencil speed (see svg_sketch.draw_seconds).
-    Returns [] when the artwork has no strokes to trace or a frame fails to
+    stroke length at the constant pencil speed (see svg_sketch.draw_seconds),
+    capped at max_frames so the draw fits the clip. Returns [] when the artwork has no strokes to trace or a frame fails to
     rasterize.
     """
     import cv2
@@ -343,7 +335,10 @@ def _drawn_line_art_frames(
 
     pencil = svg_pencil.Pencil(pencil_png, pencil_tip)
     frames, masks = [], []
-    total = svg_sketch.draw_frame_count(_line_art_travel_px(root, width, height))
+    total = min(
+        svg_sketch.draw_frame_count(_line_art_travel_px(root, width, height)),
+        max(int(max_frames), 2),
+    )
     with tempfile.TemporaryDirectory() as tmp:
         for index in range(total):
             progress = index / (total - 1)
@@ -372,7 +367,7 @@ def _drawn_line_art_frames(
             if rendered is None:
                 logger.warning(f"svg draw: unreadable frame {index} for {svg_path}")
                 return []
-            canvas, mask = _frame_to_canvas(rendered, width, height)
+            canvas, mask = _frame_to_canvas(rendered, width, height, background)
             frames.append(canvas)
             masks.append(mask)
     # clean_final: the completed tracing is the frame the clip hold repeats,
@@ -388,18 +383,22 @@ def _render_drawn_clip(
     width: int,
     height: int,
     max_clip_duration: int,
+    background: tuple,
 ) -> str:
     """Render the pencil-drawn clip for a catalog SVG, or "" when it cannot.
 
     Doodly-style artwork (embedded raster) is revealed as a sketch; genuine
-    line art is traced stroke by stroke. A short performance is held on its
-    last frame up to the requested clip length. Any failure degrades to the
-    static still path in _persist_svg_item — never to a lost clip.
+    line art is traced stroke by stroke. The clip is exactly
+    max_clip_duration long: the draw is sped up when it would not finish in
+    time, then held on its last frame (see svg_sketch.fit_frames_to_clip). Any failure
+    degrades to the static still path in _persist_svg_item — never to a lost
+    clip.
     """
-    sprite = _pencil_sprite()
+    sprite = svg_pencil.load_sprite()
     if sprite is None:
         return ""
     pencil_png, tip = sprite
+    want = max(int(max_clip_duration * svg_sketch.DRAW_FPS), 1)
 
     try:
         frames = svg_sketch.render_sketch_clip(
@@ -412,21 +411,22 @@ def _render_drawn_clip(
             direction=(1.0, 1.0),
             angle_offset=_PENCIL_ANGLE_OFFSET,
             monochrome=False,
+            background=background,
         )
         if frames is None:
-            frames = _drawn_line_art_frames(svg_path, pencil_png, tip, width, height)
+            frames = _drawn_line_art_frames(
+                svg_path, pencil_png, tip, width, height, background, want
+            )
     except Exception as exc:  # animation must never lose the material
         logger.warning(f"svg drawn clip failed for {svg_path}: {exc}")
         return ""
     if not frames:
         return ""
 
-    want = max(int(max_clip_duration * svg_sketch.DRAW_FPS), 1)
-    if len(frames) < want:
-        frames = frames + [frames[-1]] * (want - len(frames))
+    frames = svg_sketch.fit_frames_to_clip(frames, want)
     try:
         return svg_sketch.write_clip(frames, out_mp4, fps=svg_sketch.DRAW_FPS)
-    except OSError as exc:
+    except (subprocess.CalledProcessError, OSError) as exc:
         logger.warning(f"svg drawn clip write failed for {svg_path}: {exc}")
         return ""
 
@@ -440,8 +440,8 @@ def resolve_material_path(
 ) -> str:
     """Material to a local video file, or "" when it must be skipped.
 
-    Catalog SVGs are rasterized into a clip; every other provider is
-    downloaded. Face detection runs only on downloaded footage: an illustrated
+    Catalog SVGs are fetched from the catalog and rendered into a clip; every
+    other provider is downloaded. Face detection runs only on downloaded footage: an illustrated
     clip has no real face to screen, and the detector would discard most of the
     cartoon catalog for nothing.
     """

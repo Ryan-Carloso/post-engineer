@@ -13,11 +13,15 @@ pixels are newly inked each frame.
 from __future__ import annotations
 
 import math
+import os
+import subprocess
+import tempfile
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import cv2
 import numpy as np
+from loguru import logger
 
 
 # Direction smoothing. A full step per frame makes the pencil twitch on
@@ -272,3 +276,46 @@ def pencil_tip_in_sprite(sprite_size: int, rendered_size: int = 700) -> Tuple[fl
     """Where the graphite tip sits in the rendered sprite."""
     scale = sprite_size / float(rendered_size)
     return (150.0 * scale, 560.0 * scale)
+
+
+# Default sprite size, in px. Same value as the demo tools.
+SPRITE_SIZE = 460
+
+# The rasterized sprite, kept after the first successful render: the artwork
+# is static, so every clip would otherwise spawn the same rsvg-convert.
+_sprite_cache: dict = {}
+
+
+def load_sprite(size: int = SPRITE_SIZE):
+    """Rasterize the pencil artwork into an (RGBA sprite, tip) pair.
+
+    Returns None when rsvg-convert is missing or the sprite is unreadable;
+    the caller then falls back to the static still instead of losing the clip.
+    Only a successful render is cached, so a transient failure is retried.
+    """
+    cached = _sprite_cache.get(size)
+    if cached is not None:
+        return cached
+
+    with tempfile.TemporaryDirectory() as tmp:
+        svg_path = os.path.join(tmp, "pencil.svg")
+        png_path = os.path.join(tmp, "pencil.png")
+        with open(svg_path, "w", encoding="utf-8") as handle:
+            handle.write(build_pencil_svg())
+        try:
+            subprocess.run(
+                ["rsvg-convert", "-w", str(size), "-o", png_path, svg_path],
+                check=True,
+                capture_output=True,
+            )
+        except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:
+            logger.warning(f"svg pencil sprite failed: {exc}")
+            return None
+        sprite = cv2.imread(png_path, cv2.IMREAD_UNCHANGED)
+    if sprite is None or sprite.ndim != 3 or sprite.shape[2] != 4:
+        logger.warning("svg pencil sprite unreadable")
+        return None
+    sprite.flags.writeable = False  # shared across clips
+    result = (sprite, pencil_tip_in_sprite(size))
+    _sprite_cache[size] = result
+    return result

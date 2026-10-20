@@ -60,6 +60,34 @@ def draw_seconds(stroke_length_px: Optional[float]) -> float:
     )
 
 
+# Seconds the finished drawing is held at the end of a clip.
+FINAL_HOLD_SECONDS = 0.5
+
+
+def fit_frames_to_clip(frames: List[np.ndarray], total: int) -> List[np.ndarray]:
+    """Fit a drawing performance into exactly `total` frames.
+
+    combine_videos cuts any clip longer than max_clip_duration into segments
+    (shuffled in random mode, truncated in sequential), which would scramble
+    or cut off the drawing. So a draw longer than the clip minus the final
+    hold is sped up by sampling evenly, always keeping the first and the
+    finished last frame; the finished frame then fills the rest of the clip.
+    """
+    total = max(int(total), 1)
+    hold = min(int(FINAL_HOLD_SECONDS * DRAW_FPS), total // 2)
+    draw_budget = max(total - hold, 1)
+    if len(frames) > draw_budget:
+        if draw_budget == 1:
+            frames = [frames[-1]]
+        else:
+            last = len(frames) - 1
+            frames = [
+                frames[round(index * last / (draw_budget - 1))]
+                for index in range(draw_budget)
+            ]
+    return frames + [frames[-1]] * (total - len(frames))
+
+
 def draw_frame_count(stroke_length_px: Optional[float] = None) -> int:
     """Frames for one reveal of the given stroke length."""
     return max(int(round(draw_seconds(stroke_length_px) * DRAW_FPS)), 2)
@@ -113,19 +141,24 @@ def extract_embedded_png(svg_path: str) -> Optional[np.ndarray]:
     return None if image is None else image
 
 
-def flatten_on_white(image: np.ndarray) -> np.ndarray:
-    """Composite an RGBA image onto white.
+def flatten_on_white(
+    image: np.ndarray, background: Tuple[int, int, int] = (255, 255, 255)
+) -> np.ndarray:
+    """Composite an RGBA image onto white, or onto the given BGR colour.
 
     The catalog art is transparent outside the subject. Blending against
     transparent pixels by setting the RGB channel alone turns the background
-    black, which poisons every edge detector downstream.
+    black, which poisons every edge detector downstream. Edge detection uses
+    the white default; the displayed colour uses the clip's canvas colour so
+    the artwork shows no box around it.
     """
     if image.ndim == 2:
         return cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
     if image.shape[2] == 3:
         return image.copy()
     alpha = image[..., 3:4].astype(np.float32) / 255.0
-    return (image[..., :3] * alpha + 255.0 * (1.0 - alpha)).astype(np.uint8)
+    fill = np.array(background, np.float32)
+    return (image[..., :3] * alpha + fill * (1.0 - alpha)).astype(np.uint8)
 
 
 def derive_ink(colour: np.ndarray, low: int = 40, high: int = 110) -> np.ndarray:
@@ -256,8 +289,9 @@ def render_frames(
             patch[:, :] = background
             patch[band] = ink_colour
         else:
+            fill = np.array(background, np.float32)
             patch = (
-                placement.colour * reveal[..., None] + 255.0 * (1.0 - reveal[..., None])
+                placement.colour * reveal[..., None] + fill * (1.0 - reveal[..., None])
             ).astype(np.uint8)
         canvas[oy : oy + art_h, ox : ox + art_w] = patch
 
@@ -281,18 +315,19 @@ def render_sketch_clip(
     direction: Tuple[float, float] = _HORIZONTAL,
     angle_offset: float = 0.0,
     monochrome: bool = False,
+    background: Tuple[int, int, int] = (252, 252, 252),
 ) -> Optional[List[np.ndarray]]:
     """Full pipeline: catalog SVG -> frames drawn by the pencil.
 
     A frame_count of None derives the pace from the artwork itself: the
     fitted ink mask's approximate stroke length at the constant pencil
-    speed (see draw_seconds).
+    speed (see draw_seconds). background is the BGR canvas colour.
     """
     embedded = extract_embedded_png(svg_path)
     if embedded is None:
         return None
-    colour = flatten_on_white(embedded)
-    ink = derive_ink(colour)
+    ink = derive_ink(flatten_on_white(embedded))
+    colour = flatten_on_white(embedded, background)
     placement = fit_art(colour, ink, canvas_width, canvas_height)
     if frame_count is None:
         frame_count = draw_frame_count(stroke_length_from_ink(placement.ink))
@@ -306,15 +341,27 @@ def render_sketch_clip(
         direction=direction,
         angle_offset=angle_offset,
         monochrome=monochrome,
+        background=background,
     )
 
 
 def write_clip(frames: List[np.ndarray], output_path: str, fps: int = 20) -> str:
-    """Encode frames with ffmpeg. Returns the written path."""
+    """Encode frames with ffmpeg. Returns the written path.
+
+    ffmpeg writes to a temporary file beside output_path, which is renamed
+    into place only after a successful encode: callers treat any non-empty
+    file at output_path as a finished clip, so a failed or killed encode must
+    never leave a partial one there.
+    """
+    import shutil
     import subprocess
     import tempfile
 
     directory = tempfile.mkdtemp(prefix="svg-sketch-")
+    fd, partial = tempfile.mkstemp(
+        dir=os.path.dirname(output_path) or ".", prefix=".svg-clip-", suffix=".mp4"
+    )
+    os.close(fd)
     try:
         for index, frame in enumerate(frames):
             cv2.imwrite(os.path.join(directory, f"{index:04d}.png"), frame)
@@ -324,14 +371,15 @@ def write_clip(frames: List[np.ndarray], output_path: str, fps: int = 20) -> str
                 "-framerate", str(fps),
                 "-i", os.path.join(directory, "%04d.png"),
                 "-c:v", "libx264", "-pix_fmt", "yuv420p",
-                "-movflags", "+faststart", output_path,
+                "-movflags", "+faststart", partial,
             ],
             check=True,
             capture_output=True,
         )
+        os.replace(partial, output_path)
     finally:
-        import shutil
-
         shutil.rmtree(directory, ignore_errors=True)
+        if os.path.exists(partial):
+            os.unlink(partial)
     return output_path
 

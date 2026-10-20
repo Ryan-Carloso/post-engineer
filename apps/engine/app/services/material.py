@@ -10,7 +10,7 @@ from moviepy.video.io.VideoFileClip import VideoFileClip
 
 from app.config import config
 from app.models.schema import MaterialInfo, VideoAspect, VideoConcatMode
-from app.services import svg_material
+from app.services import svg_catalog, svg_material
 from app.utils import secret_redaction, ssrf, utils
 
 # Cap for cached stock-video downloads (bytes).
@@ -402,7 +402,8 @@ def _build_search_videos(
 
     Without `source_mix`: behaves as before — only the `source` provider.
     With `source_mix` (2+ providers): cascades per keyword in list order; a
-    provider is only queried when the previous ones returned no material.
+    provider is only queried when the previous ones returned no material. An
+    enabled SVG catalog always leads the cascade (svg_catalog.lead_cascade).
     """
     providers = {
         "svg": svg_material.search_videos_svg,
@@ -411,7 +412,7 @@ def _build_search_videos(
         "coverr": search_videos_coverr,
     }
     if source_mix:
-        chain = [providers[name] for name in source_mix if name in providers]
+        chain = [providers[n] for n in svg_catalog.lead_cascade(source_mix) if n in providers]
     else:
         chain = [providers.get(source, search_videos_pexels)]
 

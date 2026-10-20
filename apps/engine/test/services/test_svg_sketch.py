@@ -3,6 +3,7 @@ import base64
 import os
 import subprocess
 import unittest
+import unittest.mock
 import tempfile
 
 import cv2
@@ -527,6 +528,142 @@ class AttachPencilTests(unittest.TestCase):
         # With no fresh pixels the follower keeps its last pose, so the pencil
         # must not have wandered off by the end.
         self.assertEqual(out[0].shape, out[-1].shape)
+
+
+
+def _rgba_png_with_rect(size=(200, 200)) -> bytes:
+    """Transparent canvas with an opaque dark outline: interior stays clear."""
+    img = np.zeros((size[0], size[1], 4), np.uint8)
+    cv2.rectangle(img, (50, 60), (150, 140), (30, 30, 30, 255), 5)
+    ok, buf = cv2.imencode(".png", img)
+    assert ok
+    return buf.tobytes()
+
+
+class FlattenBackgroundTests(unittest.TestCase):
+    def test_transparent_pixels_take_the_given_colour(self):
+        image = np.zeros((4, 4, 4), np.uint8)
+        flat = svg_sketch.flatten_on_white(image, (10, 20, 30))
+        self.assertEqual(tuple(flat[0, 0]), (10, 20, 30))
+
+
+class SketchBackgroundTests(unittest.TestCase):
+    def test_finished_drawing_shows_no_box_around_the_artwork(self):
+        # The rectangle's interior is transparent: on the finished frame it
+        # must match the canvas colour, not the white the art was flattened on.
+        background = (10, 200, 30)
+        with tempfile.TemporaryDirectory() as tmp:
+            svg = os.path.join(tmp, "c.svg")
+            with open(svg, "w", encoding="utf-8") as handle:
+                handle.write(_svg_embedding(_rgba_png_with_rect()))
+            frames = svg_sketch.render_sketch_clip(
+                svg,
+                _pencil_png(),
+                svg_pencil.pencil_tip_in_sprite(460),
+                8,
+                540,
+                960,
+                background=background,
+            )
+        assert frames is not None
+        final = frames[-1]
+        self.assertEqual(tuple(final[0, 0]), background)
+        self.assertEqual(tuple(final[480, 270]), background)
+
+
+class FitFramesToClipTests(unittest.TestCase):
+    def _frames(self, count):
+        return [np.full((2, 2, 3), i % 256, np.uint8) for i in range(count)]
+
+    def test_short_draw_is_held_on_its_last_frame(self):
+        frames = self._frames(10)
+        fitted = svg_sketch.fit_frames_to_clip(frames, 60)
+        self.assertEqual(len(fitted), 60)
+        self.assertTrue(all(a is b for a, b in zip(fitted[:10], frames)))
+        self.assertTrue(all(frame is frames[-1] for frame in fitted[10:]))
+
+    def test_long_draw_is_sped_up_to_finish_inside_the_clip(self):
+        frames = self._frames(120)
+        total = 60
+        fitted = svg_sketch.fit_frames_to_clip(frames, total)
+        hold = int(svg_sketch.FINAL_HOLD_SECONDS * svg_sketch.DRAW_FPS)
+        self.assertEqual(len(fitted), total)
+        self.assertIs(fitted[0], frames[0])
+        # The finished frame is reached before the hold and then held.
+        self.assertTrue(all(frame is frames[-1] for frame in fitted[total - hold - 1 :]))
+        # Sampling keeps the drawing in order.
+        ids = [id(frame) for frame in frames]
+        positions = [ids.index(id(frame)) for frame in fitted]
+        self.assertEqual(positions, sorted(positions))
+
+    def test_single_frame_clip_shows_the_finished_drawing(self):
+        frames = self._frames(5)
+        fitted = svg_sketch.fit_frames_to_clip(frames, 1)
+        self.assertEqual(len(fitted), 1)
+        self.assertIs(fitted[0], frames[-1])
+
+
+class WriteClipTests(unittest.TestCase):
+    def test_failed_encode_leaves_no_file_at_the_output_path(self):
+        # A partial mp4 at the output path would be served as a cache hit.
+        def failing_ffmpeg(argv, **kwargs):
+            with open(argv[-1], "wb") as handle:
+                handle.write(b"truncated")
+            raise subprocess.CalledProcessError(1, argv)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output = os.path.join(tmp, "clip.mp4")
+            with unittest.mock.patch("subprocess.run", side_effect=failing_ffmpeg):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    svg_sketch.write_clip([np.zeros((4, 4, 3), np.uint8)], output)
+            self.assertFalse(os.path.exists(output))
+            self.assertEqual(os.listdir(tmp), [])
+
+    def test_successful_encode_lands_at_the_output_path(self):
+        def fake_ffmpeg(argv, **kwargs):
+            self.assertNotEqual(argv[-1], output)
+            with open(argv[-1], "wb") as handle:
+                handle.write(b"mp4")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output = os.path.join(tmp, "clip.mp4")
+            with unittest.mock.patch("subprocess.run", side_effect=fake_ffmpeg):
+                result = svg_sketch.write_clip([np.zeros((4, 4, 3), np.uint8)], output)
+            self.assertEqual(result, output)
+            with open(output, "rb") as handle:
+                self.assertEqual(handle.read(), b"mp4")
+            self.assertEqual(os.listdir(tmp), ["clip.mp4"])
+
+
+class LoadSpriteTests(unittest.TestCase):
+    def setUp(self):
+        patcher = unittest.mock.patch.dict(svg_pencil._sprite_cache, clear=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_returns_none_when_rsvg_convert_missing(self):
+        with unittest.mock.patch(
+            "subprocess.run", side_effect=FileNotFoundError("no rsvg")
+        ):
+            self.assertIsNone(svg_pencil.load_sprite())
+
+    def test_successful_sprite_is_rendered_once(self):
+        real_run = subprocess.run
+        with unittest.mock.patch("subprocess.run", side_effect=real_run) as mock_run:
+            first = svg_pencil.load_sprite()
+            second = svg_pencil.load_sprite()
+        self.assertIsNotNone(first)
+        self.assertIs(first, second)
+        self.assertEqual(mock_run.call_count, 1)
+
+    def test_failure_is_not_cached(self):
+        real_run = subprocess.run
+        with unittest.mock.patch(
+            "subprocess.run", side_effect=FileNotFoundError("no rsvg")
+        ):
+            self.assertIsNone(svg_pencil.load_sprite())
+        with unittest.mock.patch("subprocess.run", side_effect=real_run):
+            self.assertIsNotNone(svg_pencil.load_sprite())
 
 
 if __name__ == "__main__":
