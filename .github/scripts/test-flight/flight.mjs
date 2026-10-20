@@ -558,7 +558,7 @@ export async function runFlight(env = process.env, options = {}) {
   if (cancelNote !== null) {
     summary.push(cancelNote);
   } else if (created !== null) {
-    summary.push(`scheduled slot ${created.slotId ?? 'unknown'} left to fire at ${created.slotAt}`);
+    summary.push(`scheduled slot ${slotLabel(created)} left to fire at ${created.slotAt}`);
   }
 
   const lines = ['## test-flight: PASS', '', ...summary.map((line) => `- ${line}`)];
