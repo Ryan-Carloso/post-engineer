@@ -1,13 +1,11 @@
 //---------------
-// LinkedIn connect — e2e da seção LinkedIn na página de contas.
-// OAuth via popup: valida presença do painel e botão (fluxo completo
-// de OAuth precisa de app real — coberto pelos testes unitários).
+// LinkedIn connect — accounts page LinkedIn section (OAuth popup flow).
+// Validates the panel and start endpoint; full OAuth needs a real app (unit tests).
 //---------------
 
-describe('LinkedIn — seção na página de contas', () => {
+describe('LinkedIn — accounts page section', () => {
   beforeEach(() => {
-    // Sessão REAL no Supabase (usuário de teste do repo): o middleware
-    // valida o cookie server-side, intercepts não bastam.
+    // Real Supabase session (test user): middleware validates the cookie server-side.
     cy.loginE2EUser();
 
     cy.intercept('GET', '/api/account', {
@@ -16,12 +14,19 @@ describe('LinkedIn — seção na página de contas', () => {
     }).as('getAccounts');
   });
 
-  it('exibe seção LinkedIn com botão OAuth', () => {
+  function visitAccountsLinkedInSection(): void {
     cy.visit('/accounts');
-    cy.wait('@getAccounts');
+    // Do not cy.wait('@getAccounts'): React Query may serve a warm cache on the
+    // second test and never hit the network (cypress-coverage flake).
+    cy.contains('section', 'LinkedIn', { timeout: 10_000 })
+      .scrollIntoView()
+      .should('be.visible');
+  }
+
+  it('shows the LinkedIn section with the OAuth connect button', () => {
+    visitAccountsLinkedInSection();
 
     cy.contains('section', 'LinkedIn').within(() => {
-      // texto do hint menciona páginas (perfil + company pages)
       cy.contains('páginas').should('exist');
       cy.get('button[aria-label="Conectar uma conta"]')
         .scrollIntoView()
@@ -30,7 +35,7 @@ describe('LinkedIn — seção na página de contas', () => {
     });
   });
 
-  it('roda start OAuth: chama /api/linkedin-auth/start e abre popup com auth_url', () => {
+  it('start OAuth calls /api/linkedin-auth/start and surfaces missing-credentials error', () => {
     cy.intercept('GET', '/api/linkedin-auth/start', {
       statusCode: 500,
       body: {
@@ -39,16 +44,16 @@ describe('LinkedIn — seção na página de contas', () => {
       },
     }).as('linkedinStart');
 
-    cy.visit('/accounts');
-    cy.wait('@getAccounts');
+    visitAccountsLinkedInSection();
 
     cy.contains('section', 'LinkedIn').within(() => {
       cy.get('button[aria-label="Conectar uma conta"]').scrollIntoView().click();
     });
     cy.wait('@linkedinStart');
-    // sem credenciais configuradas no ambiente de teste: erro exibido
     cy.contains('section', 'LinkedIn').within(() => {
       cy.contains('LinkedIn credentials are not configured').should('be.visible');
     });
   });
 });
+
+export {};
