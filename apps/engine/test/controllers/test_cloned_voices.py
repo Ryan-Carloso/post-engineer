@@ -59,3 +59,49 @@ class ClonedVoicesControllerTests(unittest.TestCase):
     def test_list_requires_auth(self, _mock_service_cls):
         response = self.client.get("/api/v1/cloned-voices")
         self.assertEqual(response.status_code, 401)
+
+    @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
+    def test_get_returns_public_row(self, mock_service_cls):
+        service = MagicMock()
+        mock_service_cls.return_value = service
+        service._store.get_for_user.return_value = {
+            "id": "clone-1",
+            "status": "ready",
+            "engine_voice_key": "uabc_clone1",
+            "language": "pt",
+            "consent_at": "2026-01-01T00:00:00Z",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+        }
+        response = self.client.get("/api/v1/cloned-voices/clone-1", headers=self.headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["body"]["voice_id"], "chatterbox:uabc_clone1")
+
+    @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
+    def test_get_missing_returns_404(self, mock_service_cls):
+        service = MagicMock()
+        mock_service_cls.return_value = service
+        service._store.get_for_user.return_value = None
+        response = self.client.get("/api/v1/cloned-voices/missing", headers=self.headers)
+        self.assertEqual(response.status_code, 404)
+
+    @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
+    def test_delete_returns_404_when_not_found(self, mock_service_cls):
+        service = MagicMock()
+        mock_service_cls.return_value = service
+        service.delete.return_value = False
+        response = self.client.delete("/api/v1/cloned-voices/clone-1", headers=self.headers)
+        self.assertEqual(response.status_code, 404)
+
+    @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
+    def test_preview_returns_mpeg(self, mock_service_cls):
+        service = MagicMock()
+        mock_service_cls.return_value = service
+        service.preview_mp3.return_value = b"mp3"
+        response = self.client.post(
+            "/api/v1/cloned-voices/clone-1/preview",
+            headers=self.headers,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b"mp3")
+        self.assertEqual(response.headers.get("content-type"), "audio/mpeg")
