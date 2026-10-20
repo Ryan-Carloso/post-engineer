@@ -195,9 +195,6 @@ const LoginHero = () => {
       </div>
 
       <div className="relative flex items-center gap-2 text-[#ff8a85]">
-        <svg className="size-8 -scale-x-100" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 14c-1.5-6-6-10-13-11m0 0L9 6.5M6 3 2.5 6" />
-        </svg>
         <p className="text-lg font-medium italic">{t('login.heroNote')}</p>
       </div>
     </aside>
