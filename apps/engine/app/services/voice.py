@@ -217,11 +217,11 @@ def tts(
     voice_file: str,
     voice_volume: float = 1.0,
     voice_pitch: str = "",
-    user_id: str | None = None, task_id: str | None = None,
+    user_id: str | None = None, task_id: str | None = None, language: str | None = None,
 ) -> TtsResult:
     """Synthesize speech. Failures return a TtsResult with a specific, sanitized
     `error` naming the real cause (forwarded to the task failure for PostHog).
-    Test accounts fall back to free Edge TTS on Chatterbox failure."""
+    Test accounts fall back to free Edge TTS on Chatterbox failure (voice follows `language`)."""
     if is_no_voice(voice_name):
         duration_seconds = estimate_no_voice_duration(text)
         if not generate_silent_audio(duration_seconds, voice_file):
@@ -261,7 +261,7 @@ def tts(
             chatterbox_voice = chatterbox_voice.rsplit("-", 1)[0]
         return chatterbox_tts_with_fallback(
             text, chatterbox_voice, voice_file, voice_rate, voice_volume,
-            user_id=user_id, task_id=task_id,
+            user_id=user_id, task_id=task_id, language=language,
         )
     routed = dispatch_openrouter_tts(voice_name, text, voice_file, voice_rate, voice_volume)
     if routed is not None:
