@@ -329,9 +329,10 @@ export function singleSlot(body, leg) {
 }
 
 // The create response names the slot id `slotId`; the slot-detail
-// response (GET /api/schedule/slots/[slotId]) names it `id`. Assertions
-// run against the detail shape, so resolve the label from either field
-// instead of printing "undefined" (flight 2026-10-20).
+// response (GET /api/schedule/slots/[slotId]) names it `id`. The ASAP
+// assertion runs against the detail shape (waitForPublished) and the
+// scheduled assertion against the create shape, so resolve the label
+// from either field instead of printing "undefined" (flight 2026-10-20).
 export function slotLabel(slot) {
   if (slot && typeof slot.slotId === 'string' && slot.slotId) return slot.slotId;
   if (slot && typeof slot.id === 'string' && slot.id) return slot.id;

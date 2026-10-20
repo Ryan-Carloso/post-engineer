@@ -543,11 +543,11 @@ describe('runFlight', () => {
     });
   }
 
-  function publishedSlot(slotId) {
+  function publishedSlot(id) {
     return {
       success: true,
       slot: {
-        slotId,
+        id,
         status: 'published',
         publishLinks: PROVIDER_ORDER.map((provider) => ({ provider, url: `https://${provider}/p` })),
       },
