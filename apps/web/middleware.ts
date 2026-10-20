@@ -27,6 +27,10 @@ function authErrorLogFields(error: unknown): { name: string; status: number | nu
 // getSupabaseEnv — fail when the public Supabase env vars are missing
 //---------------
 
+// Public files under apps/web/public/ must bypass auth — next/image fetches
+// /logo.png server-side; a 307 to /landing yields HTML and breaks the optimizer.
+export const PUBLIC_STATIC_ASSET_PATH = /\.(?:png|jpe?g|gif|webp|svg|ico|txt|mp3|woff2?|ttf)$/i;
+
 function getSupabaseEnv() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -46,6 +50,15 @@ function getSupabaseEnv() {
 //---------------
 
 export async function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+  if (PUBLIC_STATIC_ASSET_PATH.test(pathname)) {
+    return NextResponse.next({
+      request: {
+        headers: request.headers,
+      },
+    });
+  }
+
   const { url, key } = getSupabaseEnv()
 
   // Create an unmodified response
@@ -96,7 +109,6 @@ export async function middleware(request: NextRequest) {
   // their own session: authorize/consent redirect to /login with `next`,
   // and token/register are public by spec.
   const publicPaths = ['/landing', '/login', '/privacy', '/terms'];
-  const pathname = request.nextUrl.pathname;
 
   // No user on a protected page → /landing. A transient getUser failure
   // is not "logged out": the cookie is still there, and following the
@@ -131,10 +143,11 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
+     * - common public/ file extensions (logo.png, voice-samples, etc.)
      * - api/ (API routes)
      * - auth/ (auth callback)
      * - login, landing, privacy, terms (public pages)
      */
-    '/((?!_next/static|_next/image|favicon.ico|api/|auth/|.well-known/|oauth/|login|landing|privacy|terms).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpe?g|gif|webp|svg|ico|txt|mp3|woff2?|ttf)$|api/|auth/|.well-known/|oauth/|login|landing|privacy|terms).*)',
   ],
 }
