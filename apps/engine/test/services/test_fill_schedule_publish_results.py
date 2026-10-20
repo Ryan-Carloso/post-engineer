@@ -195,6 +195,38 @@ class FillSchedulePublishResultsTests(TestCase):
         self.assertNotIn(secret, results[1]["error"])
         self.assertIn("[redacted]", results[1]["error"])
 
+    def test_linkless_successful_account_still_publishes_but_warns(self) -> None:
+        # The post really is live (success: true) — a retry would
+        # double-post — so the entry stays published and the slot
+        # flips, but the missing link must leave a signal: a renamed
+        # upstream field would otherwise silently recreate the
+        # published-without-links regression.
+        from app.services.fill_schedule import publish_results as results_module
+
+        publish_mock = MagicMock(
+            return_value={
+                "success": True,
+                "results": [{"accountId": "chan-1", "success": True}],
+            }
+        )
+        with patch.object(results_module, "logger") as logger_mock:
+            store, state = self._run(["youtube"], publish_mock)
+        results = self._recorded_results(state)
+        self.assertEqual(
+            results,
+            [
+                {
+                    "provider": "youtube",
+                    "video": self.video_name,
+                    "status": "published",
+                    "accountId": "chan-1",
+                }
+            ],
+        )
+        logger_mock.warning.assert_called_once()
+        statuses = [kw.get("status") for _slot_id, kw in store.updates]
+        self.assertIn("published", statuses)
+
     def test_top_level_link_fields_become_one_entry(self) -> None:
         publish_mock = MagicMock(
             return_value={"postId": "at://did:plc:abc/app.bsky.feed.post/xyz"}

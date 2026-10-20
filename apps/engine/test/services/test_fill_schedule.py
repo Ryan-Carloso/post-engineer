@@ -1029,7 +1029,7 @@ class PublishDueTests(unittest.TestCase):
         }
         scheduler = fs.FillScheduleScheduler(
             store=store, task_state=state,
-            publish_video=MagicMock(),
+            publish_video=MagicMock(return_value={"success": True, "results": [{"success": True}]}),
         )
         scheduler.publisher.base_url = "https://post-engineer.com"
         scheduler.publisher.api_secret = "test-shared-secret"
@@ -1052,7 +1052,7 @@ class PublishDueTests(unittest.TestCase):
         }
         scheduler = fs.FillScheduleScheduler(
             store=store, task_state=state,
-            publish_video=MagicMock(),
+            publish_video=MagicMock(return_value={"success": True, "results": [{"success": True}]}),
         )
         scheduler.publisher.base_url = "https://post-engineer.com"
         scheduler.publisher.api_secret = "secret"
@@ -1074,7 +1074,7 @@ class PublishDueTests(unittest.TestCase):
         }
         scheduler = fs.FillScheduleScheduler(
             store=store, task_state=state,
-            publish_video=MagicMock(),
+            publish_video=MagicMock(return_value={"success": True, "results": [{"success": True}]}),
         )
         scheduler.publisher.base_url = "https://post-engineer.com"
         scheduler.publisher.api_secret = "secret"

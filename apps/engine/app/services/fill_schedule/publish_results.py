@@ -13,6 +13,8 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from loguru import logger
+
 from app.services.analytics import scrub_error_text
 
 # Link fields the web resolver reads at entry top level: a provider
@@ -96,6 +98,15 @@ def entries_for_result(
         for field in _LINK_FIELDS:
             if account.get(field):
                 entry[field] = account[field]
+        if not any(entry.get(field) for field in _LINK_FIELDS):
+            # The post is live (a retry would double-post), so the
+            # entry stays published — but leave a signal: a renamed
+            # upstream link field would otherwise silently recreate
+            # the published-without-links regression.
+            logger.warning(
+                f"fill_schedule: provider {provider_name} account published "
+                "without a link field; post is live but no link was recorded"
+            )
         entries.append(entry)
     if not entries:
         # A non-empty results list with no successful account (missing
