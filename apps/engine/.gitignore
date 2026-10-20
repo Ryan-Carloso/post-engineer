@@ -36,6 +36,7 @@ test_*.py
 !test/test_asgi_health.py
 !test/test_asgi_posthog_sink.py
 !test/test_video_pipeline_e2e.py
+!test/test_chatterbox_registry_volume.py
 streamlit.log
 /docs/superpowers
 .understand-anything
