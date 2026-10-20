@@ -115,6 +115,13 @@ _EDGE_BASE_BY_LANGUAGE_NAME: dict[str, str] = {
     "indonesian": "id",
     "ukrainian": "uk",
     "swedish": "sv",
+    # Native-script names: resolved before the ASCII fold below, which
+    # would otherwise erase them entirely.
+    "русский": "ru",
+    "中文": "zh",
+    "日本語": "ja",
+    "한국어": "ko",
+    "हिन्दी": "hi",
 }
 
 
@@ -140,6 +147,12 @@ def _voice_for_language(language: str | None) -> str | None:
     None lets the caller fall back to the deployment's configured voice.
     """
     raw = (language or "").strip().lower().replace("_", "-")
+    # Native-script names ("русский", "中文") vanish under the ASCII fold
+    # below, so resolve them first.
+    native_base = _EDGE_BASE_BY_LANGUAGE_NAME.get(raw)
+    if native_base is not None:
+        locale = _EDGE_DEFAULT_LOCALE_BY_BASE.get(native_base)
+        return _EDGE_VOICE_BY_LOCALE.get(locale) if locale else None
     # Drop diacritics so accented names match too ("português", "español").
     raw = unicodedata.normalize("NFKD", raw).encode("ascii", "ignore").decode()
     if not raw or raw == "auto":
@@ -260,7 +273,7 @@ def maybe_fallback_to_edge_tts(
         {
             "from_provider": "chatterbox",
             "to_provider": "edge_tts",
-            "reason": scrub_error_text(primary_error)[:200],
+            "reason": scrub_error_text(primary_error, max_chars=200),
             "task_id": task_id,
             "user_id": user_id,
             "language": language,

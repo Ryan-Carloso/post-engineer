@@ -56,7 +56,9 @@ class TestIsTestAccount(unittest.TestCase):
             self.assertFalse(et.is_test_account(None))
 
 
-class TestEdgeTts(unittest.TestCase):
+class _VoiceFileTestCase(unittest.TestCase):
+    """Shared fixture: an isolated tmp dir holding the voice-file path."""
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.voice_file = str(Path(self.tmp.name) / "audio.mp3")
@@ -64,6 +66,7 @@ class TestEdgeTts(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+class TestEdgeTts(_VoiceFileTestCase):
     def test_empty_text_fails_fast(self):
         result = et.edge_tts("", self.voice_file)
         self.assertFalse(result.ok)
@@ -103,15 +106,8 @@ class TestEdgeTts(unittest.TestCase):
         self.assertEqual(voice, et.DEFAULT_EDGE_TTS_VOICE)
 
 
-class TestChatterboxFallback(unittest.TestCase):
+class TestChatterboxFallback(_VoiceFileTestCase):
     """voice.tts falls back to Edge TTS for test accounts on Chatterbox failure."""
-
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.voice_file = str(Path(self.tmp.name) / "audio.mp3")
-
-    def tearDown(self):
-        self.tmp.cleanup()
 
     def _chatterbox_fails(self):
         return TtsResult(error="Chatterbox TTS failed after 3 attempts (status 404)")
@@ -174,14 +170,7 @@ class TestChatterboxFallback(unittest.TestCase):
         mock_fallback.assert_not_called()
 
 
-class TestMaybeFallback(unittest.TestCase):
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.voice_file = str(Path(self.tmp.name) / "audio.mp3")
-
-    def tearDown(self):
-        self.tmp.cleanup()
-
+class TestMaybeFallback(_VoiceFileTestCase):
     @patch("app.services.edge_tts.track_event")
     @patch("app.services.edge_tts.edge_tts")
     def test_emits_posthog_event_with_ids_only(self, mock_edge, mock_track):
@@ -211,7 +200,10 @@ class TestMaybeFallback(unittest.TestCase):
         mock_edge.return_value = TtsResult(sub_maker=MagicMock())
         with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "user-123"}):
             et.maybe_fallback_to_edge_tts(
-                "failed: api_key=TOPSECRET123 at /home/operator/voices/clone.wav",
+                "failed: api_key=TOPSECRET123 at "
+                "/home/operator/voices/clone.wav\n"
+                + "x" * 300
+                + " api_key=TOPSECRET999",
                 text="hello",
                 voice_file=self.voice_file,
                 voice_rate=1.0,
@@ -221,8 +213,11 @@ class TestMaybeFallback(unittest.TestCase):
         props = mock_track.call_args[0][1]
         self.assertIn("[redacted]", props["reason"])
         self.assertNotIn("TOPSECRET123", props["reason"])
+        self.assertNotIn("TOPSECRET999", props["reason"])
         self.assertNotIn("/home/operator", props["reason"])
-        self.assertLessEqual(len(str(props["reason"])), 200)
+        # The fixture error is >300 chars, so the 200-char cap must bite:
+        # scrub_error_text keeps first line + diagnostic tail at exactly 200.
+        self.assertEqual(len(str(props["reason"])), 200)
 
     @patch("app.services.edge_tts.edge_tts")
     def test_returns_none_for_non_test_account(self, mock_edge):
@@ -238,7 +233,7 @@ class TestMaybeFallback(unittest.TestCase):
         mock_edge.assert_not_called()
 
 
-class TestEdgeTtsVoiceLanguage(unittest.TestCase):
+class TestEdgeTtsVoiceLanguage(_VoiceFileTestCase):
     """The Edge voice follows the video language, never a fixed PT voice.
 
     Regression: a test flight generated an English video but the fallback
@@ -246,13 +241,6 @@ class TestEdgeTtsVoiceLanguage(unittest.TestCase):
     from EDGE_TTS_VOICE / the pt-BR default and the job's language never
     reached the fallback.
     """
-
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.voice_file = str(Path(self.tmp.name) / "audio.mp3")
-
-    def tearDown(self):
-        self.tmp.cleanup()
 
     def _voice_used(self, language=None, env=None):
         isolated = dict(env or {})
@@ -285,6 +273,13 @@ class TestEdgeTtsVoiceLanguage(unittest.TestCase):
         self.assertEqual(self._voice_used(language="it"), "it-IT-ElsaNeural")
         self.assertEqual(self._voice_used(language="hi"), "hi-IN-SwaraNeural")
 
+    def test_native_script_language_names(self):
+        self.assertEqual(self._voice_used(language="Русский"), "ru-RU-SvetlanaNeural")
+        self.assertEqual(self._voice_used(language="中文"), "zh-CN-XiaoxiaoNeural")
+        self.assertEqual(self._voice_used(language="日本語"), "ja-JP-NanamiNeural")
+        self.assertEqual(self._voice_used(language="한국어"), "ko-KR-SunHiNeural")
+        self.assertEqual(self._voice_used(language="हिन्दी"), "hi-IN-SwaraNeural")
+
     def test_language_name_and_case_are_normalized(self):
         self.assertEqual(self._voice_used(language="English"), "en-US-AriaNeural")
         self.assertEqual(self._voice_used(language="EN_us"), "en-US-AriaNeural")
@@ -305,14 +300,7 @@ class TestEdgeTtsVoiceLanguage(unittest.TestCase):
         self.assertEqual(self._voice_used(), et.DEFAULT_EDGE_TTS_VOICE)
 
 
-class TestFallbackLanguageForwarding(unittest.TestCase):
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.voice_file = str(Path(self.tmp.name) / "audio.mp3")
-
-    def tearDown(self):
-        self.tmp.cleanup()
-
+class TestFallbackLanguageForwarding(_VoiceFileTestCase):
     @patch("app.services.edge_tts.track_event")
     @patch("app.services.edge_tts.edge_tts")
     def test_maybe_fallback_forwards_language(self, mock_edge, mock_track):
