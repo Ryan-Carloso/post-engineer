@@ -166,6 +166,7 @@ also_copy = [
     "main.py",
     "modal_longcat.py",
     "modal_longcat_gpu.py",
+    "chatterbox_registry_volume.py",
 ]
 # Test exclusions for mutmut runs (these still run in the main engine CI job):
 # - test_mypy_config.py pins the CI workflow file layout (.github/workflows/),

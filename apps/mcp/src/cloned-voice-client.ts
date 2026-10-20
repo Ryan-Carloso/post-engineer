@@ -1,5 +1,3 @@
-import { ApiError } from './errors.js';
-
 const UPLOAD_TIMEOUT_MS = 120_000;
 
 export interface ClonedVoiceClientHost {
