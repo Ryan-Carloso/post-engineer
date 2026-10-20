@@ -687,6 +687,7 @@ describe('runFlight', () => {
       sleepFn: async () => {},
       nowFn: () => now.getTime(),
     });
+    assert.equal(summary.some((line) => line.includes('scheduled slot unknown at ')), true);
     assert.equal(summary.some((line) => line.includes('scheduled slot unknown left to fire')), true);
   });
 
