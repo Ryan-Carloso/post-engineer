@@ -54,6 +54,16 @@ class CloneVoiceOwnershipTest(unittest.TestCase):
             chatterbox_voice_allowed_for_user(f"  {user_id}  ", key),
         )
 
+    def test_whitespace_trimmed_on_chatterbox_voice_name(self) -> None:
+        user_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        key = "  uaaaaaaaabbbb_cccccccccccc  "
+        self.assertTrue(chatterbox_voice_allowed_for_user(user_id, key))
+
+    def test_user_owns_clone_returns_false_when_no_match(self) -> None:
+        user_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        foreign_key = "ubbbbbbbbbbbb_dddddddddddd"
+        self.assertFalse(user_owns_clone_engine_key(user_id, foreign_key))
+
 
 if __name__ == "__main__":
     unittest.main()

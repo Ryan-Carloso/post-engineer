@@ -598,7 +598,6 @@ class TestTtsFailureReasons(unittest.TestCase):
         self.assertNotIn("voice/subtitle mismatch", result.error or "")
 
     def test_chatterbox_user_clone_rejected_for_wrong_user(self):
-        owner = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
         other = "ffffffff-bbbb-cccc-dddd-eeeeeeeeeeee"
         key = "uaaaaaaaabbbb_cccccccccccc"
         result = vs.tts(
