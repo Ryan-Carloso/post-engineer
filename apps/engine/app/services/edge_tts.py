@@ -28,7 +28,7 @@ import unicodedata
 from loguru import logger
 from moviepy.audio.io.AudioFileClip import AudioFileClip
 
-from app.services.analytics import track_event
+from app.services.analytics import scrub_error_text, track_event
 from app.services.voice_providers import (
     SubMaker,
     TtsResult,
@@ -260,7 +260,7 @@ def maybe_fallback_to_edge_tts(
         {
             "from_provider": "chatterbox",
             "to_provider": "edge_tts",
-            "reason": primary_error[:200],
+            "reason": scrub_error_text(primary_error)[:200],
             "task_id": task_id,
             "user_id": user_id,
             "language": language,

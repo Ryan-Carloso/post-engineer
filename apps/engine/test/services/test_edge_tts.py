@@ -205,6 +205,25 @@ class TestMaybeFallback(unittest.TestCase):
         # Never leak audio text into analytics.
         self.assertNotIn("secret script text", str(props))
 
+    @patch("app.services.edge_tts.track_event")
+    @patch("app.services.edge_tts.edge_tts")
+    def test_scrubs_reason_before_sending_to_posthog(self, mock_edge, mock_track):
+        mock_edge.return_value = TtsResult(sub_maker=MagicMock())
+        with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "user-123"}):
+            et.maybe_fallback_to_edge_tts(
+                "failed: api_key=TOPSECRET123 at /home/operator/voices/clone.wav",
+                text="hello",
+                voice_file=self.voice_file,
+                voice_rate=1.0,
+                user_id="user-123",
+                task_id="task-9",
+            )
+        props = mock_track.call_args[0][1]
+        self.assertIn("[redacted]", props["reason"])
+        self.assertNotIn("TOPSECRET123", props["reason"])
+        self.assertNotIn("/home/operator", props["reason"])
+        self.assertLessEqual(len(str(props["reason"])), 200)
+
     @patch("app.services.edge_tts.edge_tts")
     def test_returns_none_for_non_test_account(self, mock_edge):
         with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "user-123"}):
@@ -311,6 +330,7 @@ class TestFallbackLanguageForwarding(unittest.TestCase):
         self.assertEqual(mock_edge.call_args.kwargs.get("language"), "en")
         props = mock_track.call_args[0][1]
         self.assertEqual(props["language"], "en")
+        self.assertEqual(props["voice"], "en-US-AriaNeural")
 
     @patch("app.services.edge_tts.maybe_fallback_to_edge_tts")
     @patch("app.services.edge_tts.chatterbox_tts")
