@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { ensureEngineImageUrl } from '../engine-image-url';
+import { ensureEngineImageUrl, isEngineUsablePersonaImageUrl } from '../engine-image-url';
 
 //---------------
 // The engine downloads the persona image over HTTP through an SSRF guard that
@@ -126,5 +126,46 @@ describe('ensureEngineImageUrl', () => {
     });
 
     expect(result).toBeUndefined();
+  });
+});
+
+describe('isEngineUsablePersonaImageUrl', () => {
+  it.each([
+    // Site paths are re-hosted by ensureEngineImageUrl before the engine
+    // ever sees them.
+    '/caracter-samples/file-1.png',
+    // Data URIs with the payload separator the engine splits on.
+    'data:image/png;base64,iVBORw0KGgo=',
+    // Ordinary public http(s) URLs.
+    'https://cdn.example/avatar.png',
+    'http://images.example.org/a.jpg?size=large',
+    // A literal public IP is a global address, like the engine's check.
+    'https://8.8.8.8/avatar.png',
+  ])('accepts %s', (url) => {
+    expect(isEngineUsablePersonaImageUrl(url)).toBe(true);
+  });
+
+  it.each([
+    // A relative path that is not one of our own site assets.
+    'characters/ana.png',
+    'avatar.png',
+    // Non-http(s) schemes.
+    'ftp://cdn.example/avatar.png',
+    'file:///etc/passwd',
+    // A data URI without the payload separator cannot be decoded by the
+    // engine ("invalid persona image data URI").
+    'data:image/png;base64',
+    // Private / loopback / link-local literal IPs are rejected by the
+    // engine's SSRF guard.
+    'http://127.0.0.1/avatar.png',
+    'http://10.0.0.5/avatar.png',
+    'https://192.168.1.10/avatar.png',
+    'http://169.254.169.254/latest/meta-data',
+    'http://[::1]/avatar.png',
+    // Plain garbage.
+    'not-a-url',
+    '',
+  ])('rejects %s', (url) => {
+    expect(isEngineUsablePersonaImageUrl(url)).toBe(false);
   });
 });

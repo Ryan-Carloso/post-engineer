@@ -15,6 +15,10 @@
 // personas bucket, which yields a real public URL in every environment.
 //---------------
 
+import { isIP } from 'node:net';
+
+import { isHttpUrl, isPublicIp } from '@/lib/generation/custom-audio';
+
 const IMAGE_BUCKET = 'personas';
 const MAX_ASSET_BYTES = 5 * 1024 * 1024;
 
@@ -44,6 +48,38 @@ export interface EngineImageUrlDeps {
 //---------------
 function isDirectlyUsable(url: string): boolean {
   return url.startsWith('data:image/') || /^https?:\/\//i.test(url);
+}
+
+//---------------
+// isEngineUsablePersonaImageUrl — true when a stored persona image URL is
+// a shape the engine can consume, mirroring the acceptance rules of
+// prepare_persona_lipsync_video + ssrf.assert_public_url in the engine
+// (the engine re-checks everything at download time; this pre-flight check
+// exists only so a bad stored URL fails before any token charge):
+// - a site path (`/caracter-samples/...`): ensureEngineImageUrl re-hosts it
+//   into a public URL before the engine ever sees it;
+// - a `data:image/` URI with the payload separator the engine splits on;
+// - an http(s) URL with a hostname, where a literal IP host must be public
+//   (hostnames are left to the engine's resolve-and-check, like the other
+//   pre-flight URL checks in the generate-and-schedule route).
+// Anything else (a relative non-site path, a non-http scheme, a host-less
+// URL) is guaranteed to die mid-pipeline, so callers reject it up front.
+//---------------
+export function isEngineUsablePersonaImageUrl(value: string): boolean {
+  const candidate = value.trim();
+  if (candidate.startsWith('/')) return true;
+  if (candidate.startsWith('data:image/')) return candidate.includes(',');
+  if (!isHttpUrl(candidate)) return false;
+  let hostname: string;
+  try {
+    hostname = new URL(candidate).hostname;
+  } catch {
+    return false;
+  }
+  if (!hostname) return false;
+  const literalIp = hostname.replace(/^\[|\]$/g, '');
+  if (isIP(literalIp) !== 0 && !isPublicIp(literalIp)) return false;
+  return true;
 }
 
 //---------------

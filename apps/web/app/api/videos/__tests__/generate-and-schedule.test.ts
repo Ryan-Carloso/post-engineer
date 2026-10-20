@@ -1463,6 +1463,108 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(json.field).toBe('personaId');
     });
 
+    it('rejects a stored avatar_url the engine cannot use, before any charge', async () => {
+      // A relative path that is not one of our own site assets can never be
+      // fetched by the engine: it used to die at ~75% of the pipeline as
+      // "persona image download rejected", after the tokens were charged.
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, avatar_url: 'characters/ana.png' } });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.error).toBe('Persona image URL must be a valid http(s) URL or a data:image/ URI: update the persona.');
+      expect(json.field).toBe('personaId');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+      expect(inserts.schedules).toBeUndefined();
+      expect(vi.mocked(startEngineVideoTask)).not.toHaveBeenCalled();
+      expect(vi.mocked(trackApiEvent)).toHaveBeenCalledWith(
+        'video_creation_validation_failed',
+        expect.objectContaining({ errorCode: 'VALIDATION_FAILED', field: 'personaId' }),
+      );
+    });
+
+    it('rejects a non-http(s) avatar_url scheme before any charge', async () => {
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, avatar_url: 'ftp://cdn.example/avatar.png' } });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.field).toBe('personaId');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it('rejects an avatar_url pointing at a private literal IP before any charge', async () => {
+      // The engine's SSRF guard rejects private addresses; a literal private
+      // IP is rejected there deterministically, so the pre-flight mirrors it.
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, avatar_url: 'http://127.0.0.1/avatar.png' } });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.field).toBe('personaId');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it('rejects a data:image avatar_url without a payload separator', async () => {
+      // The engine splits a data URI on the first comma and decodes the
+      // payload; without the separator it raises "invalid persona image
+      // data URI" mid-pipeline.
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, avatar_url: 'data:image/png;base64' } });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.field).toBe('personaId');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it('accepts a data:image avatar_url and forwards it to the engine unchanged', async () => {
+      const dataUri = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, avatar_url: dataUri } });
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as {
+        persona: { photo_url?: string };
+      };
+      expect(payload.persona.photo_url).toBe(dataUri);
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(1);
+    });
+
+    it('accepts a valid https avatar_url and forwards it to the engine unchanged', async () => {
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, avatar_url: 'https://cdn.example/hosted-avatar.jpg' } });
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as {
+        persona: { photo_url?: string };
+      };
+      expect(payload.persona.photo_url).toBe('https://cdn.example/hosted-avatar.jpg');
+    });
+
+    it('does not validate the persona image for faceless posts', async () => {
+      // A faceless post never sends a photo to the engine, so a stored bad
+      // avatar_url must not block it.
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, avatar_url: 'not-a-url' } });
+      const res = await post(baseBody({ options: { faceless: true } }));
+      expect(res.status).toBe(200);
+    });
+
+    it('does not validate the persona image when a library image is pinned', async () => {
+      // A pinned imageId replaces the persona photo for every slot (the
+      // pinned image itself is resolved and checked before the charge), so
+      // the stored avatar_url never reaches the engine.
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, avatar_url: 'not-a-url' } });
+      vi.mocked(resolveVideoImage).mockResolvedValue({
+        ok: true,
+        image: { id: 'img-1', image_path: 'library/img-1.png' } as never,
+      });
+      const res = await post(baseBody({ options: { imageId: 'img-1' } }));
+      expect(res.status).toBe(200);
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as {
+        persona: { photo_url?: string };
+      };
+      expect(payload.persona.photo_url).toBe('https://cdn.example/signed');
+    });
+
     it('503s when the persona voice audio cannot be signed', async () => {
       setup({
         ...DEFAULT_CFG,
