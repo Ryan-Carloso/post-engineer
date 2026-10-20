@@ -19,6 +19,10 @@ from app.services.fill_schedule.constants import (
     SLOT_READY,
 )
 from app.services.fill_schedule.metadata import metadata_for
+from app.services.fill_schedule.publish_results import (
+    entries_for_result,
+    failed_entry,
+)
 from app.services.fill_schedule.store import ScheduleStore
 from app.services.fill_schedule.support import (
     notify_safe,
@@ -28,6 +32,7 @@ from app.services.fill_schedule.support import (
     token_cost,
     track_refund_issued,
 )
+from app.services.state import persist_state_update
 
 
 def _publish_tracking_context(
@@ -154,6 +159,7 @@ class BatchPublisher:
             # retry/fail path below.
             failed_providers: list[str] = []
             published_providers: list[str] = []
+            publish_results: list[dict[str, Any]] = []
             first_error: str = ""
             provider: str | None = None
             try:
@@ -162,7 +168,7 @@ class BatchPublisher:
                     for provider in schedule.get("providers", []):
                         provider_name = str(provider)
                         try:
-                            self.publish_video(
+                            result = self.publish_video(
                                 base_url=self.base_url,
                                 api_secret=self.api_secret,
                                 owner_user_id=schedule["user_id"],
@@ -179,6 +185,16 @@ class BatchPublisher:
                             # Record and continue: a single provider being
                             # down never cancels the others.
                             failed_providers.append(provider_name)
+                            publish_results.append(
+                                failed_entry(
+                                    provider_name,
+                                    video_path,
+                                    # 500 like the publish_provider_failed
+                                    # event's response_body: this entry is a
+                                    # diagnostic record, not a display field.
+                                    scrub_error_text(str(exc), max_chars=500),
+                                )
+                            )
                             if not first_error:
                                 first_error = str(exc)
                             upstream = getattr(exc, "response_body", None)
@@ -201,11 +217,27 @@ class BatchPublisher:
                                 immediate=True,
                             )
                             continue
+                        publish_results.extend(
+                            entries_for_result(provider_name, video_path, result)
+                        )
                         if provider_name not in published_providers:
                             published_providers.append(provider_name)
                 # Past the provider loops: a failure from here on (e.g. the
                 # slot-state PATCH) is not a provider failure.
                 provider = None
+                # Record the per-provider results on the task state BEFORE
+                # the slot flips to published: the web builds the post's
+                # links from publish_results (post-detail -> engine task),
+                # and a slot already showing 'published' must never read
+                # as published-without-links. Since the #231 unification
+                # dropped the task_publish.py recording, nothing wrote
+                # these — published slots showed no links at all.
+                if publish_results and slot.get("task_id"):
+                    persist_state_update(
+                        self.task_state,
+                        str(slot["task_id"]),
+                        publish_results=publish_results,
+                    )
                 if not published_providers:
                     # Every provider failed: fall through to the retry/fail
                     # path via a synthetic exception carrying the first
