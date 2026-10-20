@@ -1,10 +1,7 @@
-//---------------
-// en-US dictionary — follows the typed contract (Dictionary) defined in PT.
-// Any missing or extra key here is a TypeScript error.
-//---------------
+// en-US dictionary — mirrors the pt Dictionary key structure.
 
 import type { Dictionary } from './pt';
-
+import { personaVoiceCloneEn, voiceCloneApiToolDescEn } from './voice-clone-i18n-en';
 export const enDictionary: Dictionary = {
   nav: {
     brand: 'Post Engineer',
@@ -385,10 +382,7 @@ export const enDictionary: Dictionary = {
     toolsSubtitle: 'Here are the tools your AI agent gets access to after connecting.',
     toolDescListPersonas: 'List your personas',
     toolDescListVoices: 'List available voices',
-    toolDescListClonedVoices: 'List your voice clones',
-    toolDescCreateClonedVoice: 'Create a voice clone from an audio URL',
-    toolDescDeleteClonedVoice: 'Delete a voice clone',
-    toolDescPreviewClonedVoice: 'Preview a ready voice clone',
+    ...voiceCloneApiToolDescEn,
     toolDescListFaces: 'List stock avatar faces',
     toolDescCreatePersona: 'Create a new persona',
     toolDescUpdatePersona: 'Update an existing persona',
@@ -489,37 +483,7 @@ export const enDictionary: Dictionary = {
     errName: 'Give the persona a name.',
     errAvatar: 'Upload a photo or generate an AI avatar.',
     errVoice: 'Pick a voice for this persona.',
-    voiceHouseTab: 'House voices',
-    voiceCloneTab: 'Clone my voice',
-    voiceCloneHint:
-      'Record or upload a short sample of your voice. It is used only to create a TTS clone on your account.',
-    voiceCloneScript:
-      'Read aloud in a natural tone: "Hello! This is a test of my cloned voice. I am speaking clearly and steadily so the system can learn my tone. I will keep going for a few more seconds, without rushing or whispering."',
-    voiceCloneConsent:
-      'I consent to using this recording solely to create and use a voice clone on my account.',
-    voiceCloneConsentRequired: 'Check the consent box before submitting.',
-    voiceCloneRecord: 'Record in browser',
-    voiceCloneStop: 'Stop recording',
-    voiceCloneUpload: 'Upload file',
-    voiceCloneDurationGuide:
-      'Aim for {soft}s of continuous speech (min {min}s, max {max}s).',
-    voiceCloneLocalPreview: 'Listen before submitting',
-    voiceCloneRerecord: 'Record again',
-    voiceCloneSubmit: 'Create voice clone',
-    voiceCloneSubmitting: 'Submitting…',
-    voiceClonePending: 'Processing your voice clone…',
-    voiceCloneFailed: 'Could not create the clone. Try another recording.',
-    voiceCloneListError: 'Could not load your clones.',
-    voiceCloneMicUnavailable: 'Recording is not available in this browser.',
-    voiceCloneMicDenied: 'Allow microphone access to record.',
-    voiceCloneNeedAudio: 'Record or upload audio before submitting.',
-    voiceClonePreviewFailed: 'Could not play the preview.',
-    voiceClonePlayPreview: 'Play preview',
-    voiceCloneUseOnPersona: 'Use on this persona',
-    voiceCloneDelete: 'Delete clone',
-    voiceCloneStatusReady: 'Ready',
-    voiceCloneStatusPending: 'Processing',
-    voiceCloneStatusFailed: 'Failed',
+    ...personaVoiceCloneEn,
     errServer: 'Could not connect to the server. Try again.',
     errPromptRejected: 'This content is not allowed. Please revise the script or niche and try again.',
     errSubjectMissing: 'Add a niche or a script to generate the video.',

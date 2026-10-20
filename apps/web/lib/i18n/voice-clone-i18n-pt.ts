@@ -1,0 +1,39 @@
+export const personaVoiceClonePt = {
+  voiceHouseTab: 'Vozes da casa',
+  voiceCloneTab: 'Clonar minha voz',
+  voiceCloneHint:
+    'Grave ou envie um áudio curto da sua voz. Usamos só para criar um clone de TTS na sua conta.',
+  voiceCloneScript:
+    'Leia em voz alta, num tom natural: «Olá! Este é um teste da minha voz clonada. Estou falando de forma clara e constante para o sistema aprender meu timbre. Vou continuar por alguns segundos, sem pressa e sem sussurrar.»',
+  voiceCloneConsent:
+    'Autorizo o uso desta gravação apenas para criar e usar um clone de voz na minha conta.',
+  voiceCloneConsentRequired: 'Marque o consentimento antes de enviar.',
+  voiceCloneRecord: 'Gravar no navegador',
+  voiceCloneStop: 'Parar gravação',
+  voiceCloneUpload: 'Enviar arquivo',
+  voiceCloneDurationGuide: 'Recomendado: {soft}s de fala contínua (mín. {min}s, máx. {max}s).',
+  voiceCloneLocalPreview: 'Ouça antes de enviar',
+  voiceCloneRerecord: 'Gravar de novo',
+  voiceCloneSubmit: 'Criar clone de voz',
+  voiceCloneSubmitting: 'Enviando…',
+  voiceClonePending: 'Processando seu clone de voz…',
+  voiceCloneFailed: 'Não foi possível criar o clone. Tente outra gravação.',
+  voiceCloneListError: 'Não foi possível carregar seus clones.',
+  voiceCloneMicUnavailable: 'Gravação não disponível neste navegador.',
+  voiceCloneMicDenied: 'Permita o microfone para gravar.',
+  voiceCloneNeedAudio: 'Grave ou envie um áudio antes de enviar.',
+  voiceClonePreviewFailed: 'Não foi possível reproduzir a prévia.',
+  voiceClonePlayPreview: 'Ouvir prévia',
+  voiceCloneUseOnPersona: 'Usar nesta persona',
+  voiceCloneDelete: 'Excluir clone',
+  voiceCloneStatusReady: 'Pronto',
+  voiceCloneStatusPending: 'Processando',
+  voiceCloneStatusFailed: 'Falhou',
+} as const;
+
+export const voiceCloneApiToolDescPt = {
+  toolDescListClonedVoices: 'Liste seus clones de voz',
+  toolDescCreateClonedVoice: 'Crie um clone de voz a partir de uma URL de áudio',
+  toolDescDeleteClonedVoice: 'Exclua um clone de voz',
+  toolDescPreviewClonedVoice: 'Ouça a prévia de um clone pronto',
+} as const;

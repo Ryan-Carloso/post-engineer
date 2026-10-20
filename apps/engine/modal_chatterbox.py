@@ -42,25 +42,12 @@ Validate, then deploy:
     uv run modal run modal_chatterbox.py::validate --voice ryan
     uv run modal deploy modal_chatterbox.py
 
-Runtime voice registry (per-user clones from the engine, no redeploy):
-
-    POST /v1/voices   — Bearer CHATTERBOX_HTTP_SECRET
-        {"voice": "<id>", "language_id": "pt", "reference_wav_base64": "..."}
-    DELETE /v1/voices/{voice}
-
-    Writes ``<voice>/reference.wav`` on the ``chatterbox-voices`` volume and
-    updates ``voices.toml``. Warm TTS containers reload the volume on each
-    request via ``VOICES_VOLUME.reload()``.
-
-    Point the engine ``[cloned_voices] registry_base_url`` at this deployed
-    app URL (same host as ``/v1/audio/speech``). Use the same bearer secret as
-    ``CHATTERBOX_HTTP_SECRET`` for ``registry_api_key`` (or set
-    ``CHATTERBOX_REGISTRY_API_KEY`` in the engine environment).
+Per-user clone registry: ``POST/DELETE /v1/voices`` (see ``modal_chatterbox_registry_routes``).
+Point engine ``[cloned_voices] registry_base_url`` at this app; same bearer as speech.
 """
 
 from __future__ import annotations
 
-import hmac
 import os
 import subprocess
 import tempfile
@@ -70,13 +57,9 @@ from pathlib import Path
 
 import modal
 
-from chatterbox_registry_volume import (
-    delete_voice_on_volume,
-    decode_reference_wav,
-    is_valid_voice_name,
-    register_voice_on_volume,
-)
 from fastapi import FastAPI, Request
+from modal_chatterbox_auth import authorize_request
+from modal_chatterbox_registry_routes import mount_chatterbox_registry_routes
 from fastapi.responses import JSONResponse, Response
 
 # ── Configuration ────────────────────────────────────────────────────────────
@@ -93,10 +76,6 @@ MAX_CONCURRENT_INPUTS = 2
 
 MODELS_VOLUME = modal.Volume.from_name("chatterbox-models", create_if_missing=True)
 VOICES_VOLUME = modal.Volume.from_name("chatterbox-voices", create_if_missing=True)
-# Shared bearer secret required by every endpoint.
-# Create with: `modal secret create chatterbox-http CHATTERBOX_HTTP_SECRET=...`
-HTTP_SECRET = os.environ.get("CHATTERBOX_HTTP_SECRET")
-
 VOICES_DIR = "/voices"
 VOICES_CONFIG_PATH = "/voices/voices.toml"
 # The engine's chatterbox client caps nothing; the service rejects oversized
@@ -253,35 +232,6 @@ def _generate_audio(text: str, voice: str, response_format: str) -> tuple[bytes,
         return mp3_path.read_bytes(), media_type
 
 
-# ── Auth ─────────────────────────────────────────────────────────────────────
-
-
-def _auth_error() -> object | None:
-    """503 when the server itself has no secret configured."""
-    if not HTTP_SECRET:
-        # Deliberately vague: never echo configuration details.
-        return {"status_code": 503, "content": {"error": "server not configured"}}
-    return None
-
-
-def _check_bearer(request) -> object | None:
-    """401 unless the Authorization header matches the secret (constant-time)."""
-    header = request.headers.get("authorization", "")
-    expected = f"Bearer {HTTP_SECRET}"
-    if not hmac.compare_digest(header.encode(), expected.encode()):
-        return {"status_code": 401, "content": {"error": "unauthorized"}}
-    return None
-
-
-def _auth_response(potential):
-    """Turn an auth-check result into a JSONResponse, or return None."""
-    if potential is None:
-        return None
-    from fastapi.responses import JSONResponse
-
-    return JSONResponse(status_code=potential["status_code"], content=potential["content"])
-
-
 # ── HTTP endpoints ───────────────────────────────────────────────────────────
 
 
@@ -292,7 +242,7 @@ def _build_fastapi_app():
     async def health(request: Request) -> JSONResponse:
         # Authenticated too: an unauthenticated probe must not even confirm
         # the service exists or reveal cold/warm state.
-        auth = _auth_response(_auth_error()) or _auth_response(_check_bearer(request))
+        auth = authorize_request(request)
         if auth is not None:
             return auth
         return JSONResponse(
@@ -304,7 +254,7 @@ def _build_fastapi_app():
 
     @fastapi_app.post("/v1/audio/speech")
     async def speech(request: Request) -> Response:
-        auth = _auth_response(_auth_error()) or _auth_response(_check_bearer(request))
+        auth = authorize_request(request)
         if auth is not None:
             return auth
 
@@ -369,79 +319,13 @@ def _build_fastapi_app():
         )
         return Response(content=audio_bytes, media_type=media_type)
 
-    @fastapi_app.post("/v1/voices")
-    async def register_voice(request: Request) -> JSONResponse:
-        auth = _auth_response(_auth_error()) or _auth_response(_check_bearer(request))
-        if auth is not None:
-            return auth
-
-        try:
-            payload = await request.json()
-        except Exception:
-            return JSONResponse(status_code=400, content={"error": "invalid JSON body"})
-        if not isinstance(payload, dict):
-            return JSONResponse(status_code=400, content={"error": "invalid JSON body"})
-
-        voice = str(payload.get("voice", "") or "").strip()
-        language_id = str(payload.get("language_id", "pt") or "pt").strip() or "pt"
-        reference_b64 = payload.get("reference_wav_base64")
-        if not voice or not is_valid_voice_name(voice):
-            return JSONResponse(status_code=400, content={"error": "voice must be a simple identifier"})
-        if not isinstance(reference_b64, str) or not reference_b64.strip():
-            return JSONResponse(status_code=400, content={"error": "reference_wav_base64 is required"})
-
-        try:
-            wav_bytes = decode_reference_wav(reference_b64.strip())
-        except ValueError as error:
-            return JSONResponse(status_code=400, content={"error": str(error)})
-
-        try:
-            register_voice_on_volume(
-                Path(VOICES_DIR),
-                Path(VOICES_CONFIG_PATH),
-                voice,
-                language_id,
-                wav_bytes,
-            )
-            VOICES_VOLUME.commit()
-        except ValueError as error:
-            return JSONResponse(status_code=400, content={"error": str(error)})
-        except Exception:
-            import loguru
-
-            loguru.logger.exception("chatterbox registry register failed")
-            return JSONResponse(status_code=500, content={"error": "registry write failed"})
-
-        return JSONResponse(status_code=201, content={"voice": voice, "language_id": language_id})
-
-    @fastapi_app.delete("/v1/voices/{voice}")
-    async def unregister_voice(request: Request, voice: str) -> JSONResponse:
-        auth = _auth_response(_auth_error()) or _auth_response(_check_bearer(request))
-        if auth is not None:
-            return auth
-
-        voice = voice.strip()
-        if not voice or not is_valid_voice_name(voice):
-            return JSONResponse(status_code=400, content={"error": "invalid voice"})
-
-        try:
-            removed = delete_voice_on_volume(
-                Path(VOICES_DIR),
-                Path(VOICES_CONFIG_PATH),
-                voice,
-            )
-            VOICES_VOLUME.commit()
-        except ValueError as error:
-            return JSONResponse(status_code=400, content={"error": str(error)})
-        except Exception:
-            import loguru
-
-            loguru.logger.exception("chatterbox registry delete failed")
-            return JSONResponse(status_code=500, content={"error": "registry delete failed"})
-
-        if not removed:
-            return JSONResponse(status_code=404, content={"error": "voice not found"})
-        return JSONResponse(status_code=200, content={"voice": voice, "deleted": True})
+    mount_chatterbox_registry_routes(
+        fastapi_app,
+        voices_dir=VOICES_DIR,
+        voices_config_path=VOICES_CONFIG_PATH,
+        commit_volume=VOICES_VOLUME.commit,
+        authorize=authorize_request,
+    )
 
     return fastapi_app
 

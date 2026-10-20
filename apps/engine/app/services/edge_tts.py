@@ -301,6 +301,11 @@ def chatterbox_tts_with_fallback(
     ``TEST_ACCOUNT_USER_IDS``) transparently retry with the free Edge TTS
     provider; production keeps the loud Chatterbox failure.
     """
+    from app.services.cloned_voices.ownership import chatterbox_voice_allowed_for_user
+
+    if not chatterbox_voice_allowed_for_user(user_id, voice):
+        return TtsResult(error="cloned voice is not available for this user")
+
     result = chatterbox_tts(text, voice, voice_file, voice_rate, voice_volume)
     # A non-TtsResult (e.g. a test marker) is treated as success.
     if getattr(result, "ok", True):

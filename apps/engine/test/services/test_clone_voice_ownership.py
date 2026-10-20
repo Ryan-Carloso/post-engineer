@@ -5,6 +5,7 @@ import unittest
 from app.services.cloned_voices.ownership import (
     chatterbox_voice_allowed_for_user,
     is_user_clone_engine_key,
+    user_id_prefix,
     user_owns_clone_engine_key,
 )
 
@@ -32,6 +33,19 @@ class CloneVoiceOwnershipTest(unittest.TestCase):
         key = "uaaaaaaaabbbb_dddddddddddd"
         self.assertFalse(chatterbox_voice_allowed_for_user(None, key))
         self.assertFalse(chatterbox_voice_allowed_for_user("", key))
+
+    def test_invalid_key_shape_is_not_user_clone(self) -> None:
+        self.assertFalse(is_user_clone_engine_key("not_a_clone"))
+        self.assertFalse(is_user_clone_engine_key("u_short_bad"))
+
+    def test_user_id_prefix_strips_hyphens(self) -> None:
+        user_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        self.assertEqual(user_id_prefix(user_id), "a1b2c3d4e5f6")
+
+    def test_whitespace_trimmed_on_engine_key(self) -> None:
+        user_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        key = "  uaaaaaaaabbbb_cccccccccccc  "
+        self.assertTrue(user_owns_clone_engine_key(user_id, key))
 
 
 if __name__ == "__main__":
