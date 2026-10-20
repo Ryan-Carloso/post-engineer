@@ -238,18 +238,18 @@ def _first_http_url(paths: object) -> str | None:
 # failure % per flow (direct API vs batch fill_schedule):
 #   video_generation_requested (at task acceptance, BEFORE the pipeline
 #     starts) -> video_generation_started -> video_generation_progress
-#     (every 10%) -> video_generation_failed / video_generated.
-# track_event never raises (analytics.py), so telemetry can't break the
-# pipeline — and the task-state reads below degrade to "unknown" instead
-# of raising.
+#     (50%/70% only) -> video_generation_failed / video_generated.
+# track_event never raises (analytics.py), so telemetry can't break the pipeline —
+# and the task-state reads below degrade to "unknown" instead of raising.
 #---------------
-# Highest 10% milestone already reported per task. Process-local: the dict
-# starts empty in every process and direct task ids are uuid4 (never
-# reused). Batch task ids are uuid5 and CAN be re-dispatched after a crash
-# (see generate.py new_task_id) — requested and failed emission are
-# therefore deduped per process by the bounded check-and-record guards
-# above, and terminal transitions pop the milestone entry, so a stale
-# entry can never double-report within one process lifetime.
+# The progress milestones worth an analytics event, and the highest one already
+# reported per task. Process-local: the dict starts empty in every process and
+# direct task ids are uuid4 (never reused). Batch task ids are uuid5 and CAN
+# be re-dispatched after a crash (see generate.py new_task_id) — requested and
+# failed emission are therefore deduped per process by the bounded
+# check-and-record guards above, and terminal transitions pop the milestone
+# entry, so a stale entry can never double-report in one process lifetime.
+PROGRESS_MILESTONES = (50, 70)
 _progress_milestones: dict[str, int] = {}
 
 
@@ -327,25 +327,25 @@ def track_generation_started(task_id: str) -> None:
 
 
 def _update_task(task_id: str, **kwargs: object) -> None:
-    """Write task state; report PostHog progress at every 10% milestone.
+    """Write task state; report PostHog progress at the 50%/70% milestones.
 
-    Emits ``video_generation_progress`` once per 10% boundary crossed
-    (10, 20, ..., 100) so the funnel shows drop-off across pipeline stages.
-    A jump (e.g. 5 -> 30) reports each crossed milestone.
+    Emits ``video_generation_progress`` only when progress crosses a ``PROGRESS_MILESTONES``
+    entry (50, 70) — at most once per task, even on jumps or out-of-order updates; there is
+    no event at 100%: completion is covered by the terminal events.
     """
     sm.state.update_task(task_id, **kwargs)
     progress = kwargs.get("progress")
     if not isinstance(progress, (int, float)) or isinstance(progress, bool):
         return
-    milestone = int(progress // 10) * 10
     last = _progress_milestones.get(task_id, 0)
-    if milestone <= last:
+    crossed = [m for m in PROGRESS_MILESTONES if last < m <= progress]
+    if not crossed:
         return
     context = _task_tracking_context(task_id)
     context["progress"] = progress
-    for crossed in range(last + 10, milestone + 1, 10):
-        track_event("video_generation_progress", {**context, "milestone": crossed})
-    _progress_milestones[task_id] = milestone
+    for milestone in crossed:
+        track_event("video_generation_progress", {**context, "milestone": milestone})
+    _progress_milestones[task_id] = crossed[-1]
 
 
 def _complete_task(
