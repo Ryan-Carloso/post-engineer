@@ -671,6 +671,25 @@ describe('runFlight', () => {
     assert.equal(summary.some((line) => line.includes('left to fire')), true);
   });
 
+  it('labels the leave-path summary "unknown" when the create slot has no slotId', async () => {
+    const { fetchFn } = installFetch(
+      happyRoutes({
+        scheduledBody: {
+          success: true,
+          schedule: { id: 'sch-sched', mode: 'scheduled' },
+          slots: [{ slotAt: target.target.toISOString(), status: 'generating' }],
+        },
+      }),
+    );
+    const summary = await runFlight(flightEnv({ TEST_FLIGHT_SCHEDULED_ACTION: 'leave' }), {
+      now,
+      fetchFn,
+      sleepFn: async () => {},
+      nowFn: () => now.getTime(),
+    });
+    assert.equal(summary.some((line) => line.includes('scheduled slot unknown left to fire')), true);
+  });
+
   it('fails when the slot is still generating after the schedule delete', async () => {
     const { fetchFn } = installFetch(
       happyRoutes({

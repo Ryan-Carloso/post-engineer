@@ -531,7 +531,7 @@ export async function runFlight(env = process.env, options = {}) {
     created.slotId = typeof schedSlot.slotId === 'string' ? schedSlot.slotId : null;
     created.slotAt = schedSlot.slotAt;
     assertScheduledSlot(schedSlot, target.target);
-    summary.push(`scheduled slot ${schedSlot.slotId} at ${schedSlot.slotAt}`);
+    summary.push(`scheduled slot ${slotLabel(schedSlot)} at ${schedSlot.slotAt}`);
   } catch (error) {
     flightError = error instanceof Error ? error : new FlightError(String(error));
   } finally {
