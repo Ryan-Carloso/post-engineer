@@ -2,8 +2,8 @@
 
 Covers the funnel the user watches in PostHog to compute the failure %:
 video_generation_requested (before the pipeline starts) ->
-video_generation_started -> video_generation_progress (every 10%) ->
-video_generation_failed / video_generated.
+video_generation_started -> video_generation_progress (50% and 70%
+milestones only) -> video_generation_failed / video_generated.
 """
 
 import sys
@@ -152,30 +152,56 @@ class ProgressMilestoneTests(unittest.TestCase):
     def _milestones(self):
         return [c[0][1]["milestone"] for c in self.track.call_args_list]
 
-    def test_no_milestone_below_ten_percent(self):
-        tm._update_task(self.task_id, progress=5)
+    def test_no_milestone_below_fifty_percent(self):
+        for progress in (5, 10, 30, 49):
+            tm._update_task(self.task_id, progress=progress)
         self.track.assert_not_called()
 
-    def test_milestone_at_ten_percent(self):
-        tm._update_task(self.task_id, progress=10)
-        self.assertEqual(self._milestones(), [10])
+    def test_milestone_at_fifty_percent(self):
+        tm._update_task(self.task_id, progress=50)
+        self.assertEqual(self._milestones(), [50])
 
     def test_each_milestone_reported_once(self):
-        tm._update_task(self.task_id, progress=10)
-        tm._update_task(self.task_id, progress=10)
-        tm._update_task(self.task_id, progress=20)
-        self.assertEqual(self._milestones(), [10, 20])
+        tm._update_task(self.task_id, progress=50)
+        tm._update_task(self.task_id, progress=50)
+        tm._update_task(self.task_id, progress=70)
+        tm._update_task(self.task_id, progress=70)
+        self.assertEqual(self._milestones(), [50, 70])
 
     def test_jump_reports_every_crossed_milestone(self):
-        tm._update_task(self.task_id, progress=35)
-        self.assertEqual(self._milestones(), [10, 20, 30])
+        tm._update_task(self.task_id, progress=75)
+        self.assertEqual(self._milestones(), [50, 70])
+
+    def test_no_progress_event_at_hundred_percent(self):
+        # Completion is covered by video_generated / video_generation_failed,
+        # never by a 100% progress event.
+        tm._update_task(self.task_id, progress=100)
+        self.assertEqual(self._milestones(), [50, 70])
+
+    def test_no_refire_after_multi_milestone_jump(self):
+        # The pipeline's real write pair in generate_final_videos:
+        # progress=75 crosses both milestones, then progress=100 must not
+        # fire anything again (pins the guard storing the HIGHEST crossed
+        # milestone — storing the lowest would re-fire 70 at 100).
+        tm._update_task(self.task_id, progress=75)
+        tm._update_task(self.task_id, progress=100)
+        self.assertEqual(self._milestones(), [50, 70])
+
+    def test_out_of_order_progress_does_not_refire_milestone(self):
+        # The jump to 70 crosses both milestones; a later, lower progress
+        # update must not fire anything again.
+        tm._update_task(self.task_id, progress=70)
+        tm._update_task(self.task_id, progress=50)
+        tm._update_task(self.task_id, progress=60)
+        self.assertEqual(self._milestones(), [50, 70])
 
     def test_milestone_props_carry_task_context(self):
-        tm._update_task(self.task_id, progress=40)
+        tm._update_task(self.task_id, progress=50)
         _, props = self.track.call_args[0]
         self.assertEqual(props["task_id"], self.task_id)
         self.assertEqual(props["user_id"], "user-1")
-        self.assertEqual(props["progress"], 40)
+        self.assertEqual(props["progress"], 50)
+        self.assertEqual(props["milestone"], 50)
 
     def test_update_without_progress_reports_nothing(self):
         tm._update_task(self.task_id, music_mood="calm")
@@ -185,9 +211,9 @@ class ProgressMilestoneTests(unittest.TestCase):
         other = "progress-task-2"
         sm.state.update_task(other, user_id="user-1", flow="direct", pipeline="video")
         try:
-            tm._update_task(self.task_id, progress=10)
-            tm._update_task(other, progress=10)
-            self.assertEqual(self._milestones(), [10, 10])
+            tm._update_task(self.task_id, progress=50)
+            tm._update_task(other, progress=50)
+            self.assertEqual(self._milestones(), [50, 50])
         finally:
             sm.state.delete_task(other)
 
