@@ -152,9 +152,12 @@ class FillSchedulePublishResultsTests(TestCase):
             [(slot_id, {k: v for k, v in kw.items() if k in ("status", "published_at")}) for slot_id, kw in store.updates],
         )
 
-    def test_mixed_account_results_record_only_successful_accounts(self) -> None:
+    def test_mixed_account_results_record_success_and_failed_entries(self) -> None:
         # One account posted, another failed inside the same 2xx body:
-        # only the successful account becomes an entry.
+        # the successful account becomes a published entry and the
+        # failed one a failed entry — it must not vanish without a
+        # trace. Its upstream error text is scrubbed before recording.
+        secret = "abcdefghijklmnopqrstuvwxyz0123456789"
         publish_mock = MagicMock(
             return_value={
                 "success": True,
@@ -164,23 +167,33 @@ class FillSchedulePublishResultsTests(TestCase):
                         "success": True,
                         "videoUrl": "https://youtu.be/abc",
                     },
-                    {"accountId": "chan-2", "success": False},
+                    {
+                        "accountId": "chan-2",
+                        "success": False,
+                        "error": f"quota exceeded for Bearer {secret}",
+                    },
                 ],
             }
         )
         _store, state = self._run(["youtube"], publish_mock)
+        results = self._recorded_results(state)
+        self.assertIsNotNone(results)
+        self.assertEqual(len(results), 2)
         self.assertEqual(
-            self._recorded_results(state),
-            [
-                {
-                    "provider": "youtube",
-                    "video": self.video_name,
-                    "status": "published",
-                    "accountId": "chan-1",
-                    "videoUrl": "https://youtu.be/abc",
-                }
-            ],
+            results[0],
+            {
+                "provider": "youtube",
+                "video": self.video_name,
+                "status": "published",
+                "accountId": "chan-1",
+                "videoUrl": "https://youtu.be/abc",
+            },
         )
+        self.assertEqual(results[1]["provider"], "youtube")
+        self.assertEqual(results[1]["status"], "failed")
+        self.assertEqual(results[1]["accountId"], "chan-2")
+        self.assertNotIn(secret, results[1]["error"])
+        self.assertIn("[redacted]", results[1]["error"])
 
     def test_top_level_link_fields_become_one_entry(self) -> None:
         publish_mock = MagicMock(
@@ -323,18 +336,39 @@ class FillSchedulePublishResultsTests(TestCase):
         self.assertNotIn("published", statuses)
         self.assertIn("ready", statuses)
 
-    def test_empty_results_list_records_no_published_entry(self) -> None:
+    def test_empty_results_list_records_failed_entry_and_retries(self) -> None:
         # A 2xx body with an explicitly empty results list attempted no
         # account: nothing was posted, so no entry may claim a publish —
         # and the provider must not count as published either, or the
         # slot flips to published with zero links (the regression this
-        # PR exists to close) and no retry ever happens.
+        # PR exists to close) and no retry ever happens. The attempt is
+        # recorded as a failed entry so the empty body is diagnosable.
         publish_mock = MagicMock(return_value={"success": True, "results": []})
         store, state = self._run(["youtube"], publish_mock)
-        self.assertIsNone(self._recorded_results(state))
+        results = self._recorded_results(state)
+        self.assertIsNotNone(results)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["provider"], "youtube")
+        self.assertEqual(results[0]["status"], "failed")
         statuses = [kw.get("status") for _slot_id, kw in store.updates]
         self.assertNotIn("published", statuses)
         # Every provider yielded nothing: the slot takes the retry path.
+        self.assertIn("ready", statuses)
+
+    def test_linkless_body_without_results_records_failed_entry(self) -> None:
+        # A 2xx body with no results list and no top-level link field
+        # names nothing that was posted: it must not become a link-less
+        # published entry (published-without-links again) — record it
+        # as failed and take the retry path.
+        publish_mock = MagicMock(return_value={"success": True})
+        store, state = self._run(["bluesky"], publish_mock)
+        results = self._recorded_results(state)
+        self.assertIsNotNone(results)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["provider"], "bluesky")
+        self.assertEqual(results[0]["status"], "failed")
+        statuses = [kw.get("status") for _slot_id, kw in store.updates]
+        self.assertNotIn("published", statuses)
         self.assertIn("ready", statuses)
 
     def test_lost_state_write_fires_partial_failure_event(self) -> None:

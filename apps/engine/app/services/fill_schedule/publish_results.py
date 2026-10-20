@@ -13,6 +13,8 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from app.services.analytics import scrub_error_text
+
 # Link fields the web resolver reads at entry top level: a provider
 # hands back at most one of them per account.
 _LINK_FIELDS = ("videoUrl", "permalink", "postId")
@@ -31,23 +33,58 @@ def entries_for_result(
     accounts = result.get("results") if isinstance(result, dict) else None
     if accounts == []:
         # A 2xx body with an explicitly empty results list attempted no
-        # account: nothing was posted, so record no entry rather than a
-        # link-less "published" claim.
-        return []
+        # account: nothing was posted. Record the attempt as failed so
+        # the empty body stays diagnosable instead of vanishing.
+        return [
+            failed_entry(
+                provider_name,
+                video_path,
+                "upload API returned an empty results list",
+            )
+        ]
     if not isinstance(accounts, list) or not accounts:
+        links = {
+            field: result[field]
+            for field in _LINK_FIELDS
+            if isinstance(result, dict) and result.get(field)
+        }
+        if not links:
+            # No results list and no top-level link either: the body
+            # names nothing that was posted, so claiming a publish
+            # would recreate the published-without-links regression.
+            return [
+                failed_entry(
+                    provider_name,
+                    video_path,
+                    "upload API returned no per-account results and no link",
+                )
+            ]
         entry: dict[str, Any] = {
             "provider": provider_name,
             "video": video_name,
             "status": "published",
+            **links,
         }
-        if isinstance(result, dict):
-            for field in _LINK_FIELDS:
-                if result.get(field):
-                    entry[field] = result[field]
         return [entry]
     entries: list[dict[str, Any]] = []
     for account in accounts:
-        if not isinstance(account, dict) or account.get("success") is not True:
+        if not isinstance(account, dict):
+            continue
+        if account.get("success") is not True:
+            # A failed account inside a 2xx body raises nothing: record
+            # it as a failed entry (upstream text scrubbed first — the
+            # entry is client-visible via the task state).
+            upstream_error = str(
+                account.get("error") or "upload API reported account failure"
+            )
+            failed = failed_entry(
+                provider_name,
+                video_path,
+                scrub_error_text(upstream_error, max_chars=500),
+            )
+            if account.get("accountId"):
+                failed["accountId"] = account["accountId"]
+            entries.append(failed)
             continue
         entry = {
             "provider": provider_name,
