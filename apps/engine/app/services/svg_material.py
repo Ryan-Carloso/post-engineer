@@ -340,8 +340,10 @@ def _drawn_line_art_frames(
             canvas, mask = _frame_to_canvas(rendered, width, height)
             frames.append(canvas)
             masks.append(mask)
+    # clean_final: the completed tracing is the frame the clip hold repeats,
+    # so the pencil must not be resting on it.
     return svg_pencil.attach_pencil(
-        frames, masks, pencil, angle_offset=_PENCIL_ANGLE_OFFSET
+        frames, masks, pencil, angle_offset=_PENCIL_ANGLE_OFFSET, clean_final=True
     )
 
 

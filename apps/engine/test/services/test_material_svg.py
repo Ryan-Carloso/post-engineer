@@ -572,6 +572,53 @@ class AnimatedSvgMaterialTests(unittest.TestCase):
         for frame in frames:
             self.assertEqual(frame.shape, (1920, 1080, 3))
 
+    def test_drawn_line_art_final_frame_has_no_pencil(self):
+        """The completed tracing is shown clean, like the sketch path.
+
+        Uses the real rasterizer and the real pencil sprite: the hold in a
+        drawn clip repeats the final frame, so it must not carry the pencil.
+        Yellow detection (BGR order) works because the fixture art is black
+        on white — yellow can only be the pencil body.
+        """
+        import cv2
+
+        from app.services import svg_pencil
+
+        with tempfile.TemporaryDirectory() as tmp:
+            pencil_svg = os.path.join(tmp, "pencil.svg")
+            pencil_path = os.path.join(tmp, "pencil.png")
+            svg_pencil.build_pencil_svg(output_path=pencil_svg)
+            subprocess.run(
+                ["rsvg-convert", "-w", "460", "-o", pencil_path, pencil_svg],
+                check=True,
+                capture_output=True,
+            )
+            pencil_png = cv2.imread(pencil_path, cv2.IMREAD_UNCHANGED)
+            svg_path = os.path.join(tmp, "two.svg")
+            with open(svg_path, "w", encoding="utf-8") as handle:
+                handle.write(
+                    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">'
+                    '<path d="M10 60 L190 60" fill="none" stroke="#111" stroke-width="6"/>'
+                    '<path d="M10 140 L190 140" fill="none" stroke="#111" stroke-width="6"/>'
+                    "</svg>"
+                )
+            frames = svg_material._drawn_line_art_frames(
+                svg_path,
+                pencil_png,
+                svg_pencil.pencil_tip_in_sprite(460),
+                frame_count=6,
+                width=540,
+                height=960,
+            )
+
+        def pencil_yellow(frame):
+            b, g, r = (frame[..., i].astype(np.int16) for i in range(3))
+            return int(((r > 150) & (g > 100) & (b < 130) & (r > b + 60)).sum())
+
+        self.assertEqual(len(frames), 6)
+        self.assertGreater(pencil_yellow(frames[-2]), 0, "pencil missing mid-draw")
+        self.assertEqual(pencil_yellow(frames[-1]), 0, "pencil left on the finished drawing")
+
 
 if __name__ == "__main__":
     unittest.main()

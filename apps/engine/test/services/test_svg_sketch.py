@@ -256,6 +256,26 @@ class RenderFramesTests(unittest.TestCase):
 
         self.assertLess(art_ink(frames[0]), art_ink(frames[-1]))
 
+    def test_final_frame_is_the_finished_drawing_without_the_pencil(self):
+        """Mid-draw the pencil is on the canvas; on the completed frame it is gone.
+
+        Detected by the pencil body's yellow (BGR channel order): the fixture
+        art is white and dark grey, so yellow can only come from the pencil.
+        """
+        colour = np.full((200, 300, 3), 255, np.uint8)
+        cv2.rectangle(colour, (40, 40), (260, 160), (20, 20, 20), 6)
+        ink = svg_sketch.derive_ink(colour)
+        placement = svg_sketch.fit_art(colour, ink, 540, 960)
+        pencil = svg_pencil.Pencil(_pencil_png(), svg_pencil.pencil_tip_in_sprite(460))
+        frames = svg_sketch.render_frames(placement, pencil, 12, 540, 960)
+
+        def pencil_yellow(frame):
+            b, g, r = (frame[..., i].astype(np.int16) for i in range(3))
+            return int(((r > 150) & (g > 100) & (b < 130) & (r > b + 60)).sum())
+
+        self.assertGreater(pencil_yellow(frames[-2]), 0, "pencil missing mid-draw")
+        self.assertEqual(pencil_yellow(frames[-1]), 0, "pencil left on the finished drawing")
+
 
 class BuildPencilSvgTests(unittest.TestCase):
     def test_emits_gradient_and_opaque_eraser(self):
@@ -409,6 +429,25 @@ class AttachPencilTests(unittest.TestCase):
     def test_requires_aligned_inputs(self):
         with self.assertRaises(ValueError):
             svg_pencil.attach_pencil(self._frames(3), [np.zeros((10, 10), bool)], self.pencil)
+
+    def test_clean_final_holds_the_drawing_without_the_pencil(self):
+        """With clean_final the pencil leaves with the last stroke.
+
+        The drawn-clip pipeline pads the hold by repeating the final frame,
+        so a pencil left on it would rest on the finished drawing for the
+        whole hold. Mid-draw frames keep the pencil: it is still drawing.
+        """
+        frames = self._frames(4)
+        clean = [frame.copy() for frame in frames]
+        masks = [np.zeros((400, 300), bool) for _ in range(4)]
+        for index in range(4):
+            masks[index][200, 100 + index * 20 : 130 + index * 20] = True
+        out = svg_pencil.attach_pencil(frames, masks, self.pencil, clean_final=True)
+        self.assertLess(int(out[1].min()), 200, "pencil missing mid-draw")
+        self.assertTrue(
+            np.array_equal(out[-1], clean[-1]),
+            "final frame must be the completed drawing alone, no pencil on it",
+        )
 
     def test_draws_on_every_frame(self):
         frames = self._frames(4)

@@ -237,7 +237,9 @@ def render_frames(
         full_mask[oy : oy + art_h, ox : ox + art_w] = band
         masks.append(full_mask)
 
-    return attach_pencil(frames, masks, pencil, angle_offset=angle_offset)
+    # clean_final: the completed reveal is the frame the clip hold repeats,
+    # so the pencil must not be resting on it.
+    return attach_pencil(frames, masks, pencil, angle_offset=angle_offset, clean_final=True)
 
 
 def render_sketch_clip(

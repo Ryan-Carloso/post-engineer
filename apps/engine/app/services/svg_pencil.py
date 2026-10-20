@@ -180,6 +180,7 @@ def attach_pencil(
     pencil: Pencil,
     shadow_offset: Tuple[int, int] = (14, 20),
     angle_offset: float = 0.0,
+    clean_final: bool = False,
 ) -> List[np.ndarray]:
     """Draw the pencil onto pre-rendered frames, tracking each frame's new ink.
 
@@ -187,6 +188,11 @@ def attach_pencil(
     different sources: stroke-dashoffset renders of genuine line art
     (svg_draw), or reveal masks over a flattened illustration (render_frames).
     The pencil only needs to know which pixels are newly inked this frame.
+
+    With ``clean_final`` the last frame is left untouched: it is the completed
+    drawing, and clip builders pad the hold by repeating it — a pencil drawn
+    on it would sit on the finished artwork for the whole hold. The pencil
+    belongs to the act of drawing, not to the result.
     """
     if len(frames) != len(ink_masks):
         raise ValueError(
@@ -196,14 +202,16 @@ def attach_pencil(
     follower = PencilFollower(pencil=pencil, angle_offset=angle_offset)
     previous: Optional[np.ndarray] = None
     out: List[np.ndarray] = []
+    last = len(frames) - 1
 
-    for frame, mask in zip(frames, ink_masks):
+    for index, (frame, mask) in enumerate(zip(frames, ink_masks)):
         mask_bool = mask.astype(bool)
         fresh = mask_bool if previous is None else (mask_bool & ~previous)
         previous = mask_bool
         ys, xs = np.where(fresh)
         follower.step(stroke_direction(xs, ys))
-        follower.draw(frame)
+        if not (clean_final and index == last):
+            follower.draw(frame)
         out.append(frame)
 
     return out
