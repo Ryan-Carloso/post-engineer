@@ -8,6 +8,7 @@ import tempfile
 
 import cv2
 import numpy as np
+from loguru import logger
 
 from app.services import svg_pencil, svg_sketch
 
@@ -633,6 +634,59 @@ class WriteClipTests(unittest.TestCase):
             with open(output, "rb") as handle:
                 self.assertEqual(handle.read(), b"mp4")
             self.assertEqual(os.listdir(tmp), ["clip.mp4"])
+
+    def test_temp_dir_cleanup_failure_is_logged_not_silent(self):
+        def fake_ffmpeg(argv, **kwargs):
+            with open(argv[-1], "wb") as handle:
+                handle.write(b"mp4")
+
+        records = []
+        handler_id = logger.add(
+            lambda message: records.append(str(message)), level="WARNING"
+        )
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                output = os.path.join(tmp, "clip.mp4")
+                with unittest.mock.patch(
+                    "subprocess.run", side_effect=fake_ffmpeg
+                ), unittest.mock.patch(
+                    "shutil.rmtree", side_effect=OSError("permission denied")
+                ):
+                    result = svg_sketch.write_clip(
+                        [np.zeros((4, 4, 3), np.uint8)], output
+                    )
+                self.assertEqual(result, output)
+        finally:
+            logger.remove(handler_id)
+        warnings = [r for r in records if "failed to remove temp dir" in r]
+        self.assertEqual(len(warnings), 1)
+
+    def test_partial_cleanup_failure_is_logged_and_keeps_the_encode_error(self):
+        def failing_ffmpeg(argv, **kwargs):
+            with open(argv[-1], "wb") as handle:
+                handle.write(b"truncated")
+            raise subprocess.CalledProcessError(1, argv)
+
+        records = []
+        handler_id = logger.add(
+            lambda message: records.append(str(message)), level="WARNING"
+        )
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                output = os.path.join(tmp, "clip.mp4")
+                with unittest.mock.patch(
+                    "subprocess.run", side_effect=failing_ffmpeg
+                ), unittest.mock.patch(
+                    "os.unlink", side_effect=OSError("file locked")
+                ):
+                    with self.assertRaises(subprocess.CalledProcessError):
+                        svg_sketch.write_clip(
+                            [np.zeros((4, 4, 3), np.uint8)], output
+                        )
+        finally:
+            logger.remove(handler_id)
+        warnings = [r for r in records if "failed to remove partial clip" in r]
+        self.assertEqual(len(warnings), 1)
 
 
 class LoadSpriteTests(unittest.TestCase):

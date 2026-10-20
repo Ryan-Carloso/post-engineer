@@ -26,6 +26,7 @@ from typing import List, Optional, Tuple
 
 import cv2
 import numpy as np
+from loguru import logger
 
 from app.services.svg_pencil import Pencil, attach_pencil
 
@@ -378,8 +379,18 @@ def write_clip(frames: List[np.ndarray], output_path: str, fps: int = 20) -> str
         )
         os.replace(partial, output_path)
     finally:
-        shutil.rmtree(directory, ignore_errors=True)
-        if os.path.exists(partial):
-            os.unlink(partial)
+        # Cleanup is best-effort, but a failure is logged, never silent:
+        # unnoticed temp dirs and partial clips would fill the disk.
+        try:
+            shutil.rmtree(directory)
+        except OSError as exc:
+            logger.warning(f"svg sketch: failed to remove temp dir {directory}: {exc}")
+        try:
+            if os.path.exists(partial):
+                os.unlink(partial)
+        except OSError as exc:
+            logger.warning(
+                f"svg sketch: failed to remove partial clip {partial}: {exc}"
+            )
     return output_path
 
