@@ -992,7 +992,7 @@ class PublishDueTests(unittest.TestCase):
             "state": 1, "videos": [self.video_path],
             "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
         }
-        publish = MagicMock()
+        publish = MagicMock(return_value={"success": True, "results": [{"success": True}]})
         scheduler = fs.FillScheduleScheduler(
             store=store, task_state=state,
             publish_video=publish,
@@ -1029,7 +1029,7 @@ class PublishDueTests(unittest.TestCase):
         }
         scheduler = fs.FillScheduleScheduler(
             store=store, task_state=state,
-            publish_video=MagicMock(),
+            publish_video=MagicMock(return_value={"success": True, "results": [{"success": True}]}),
         )
         scheduler.publisher.base_url = "https://post-engineer.com"
         scheduler.publisher.api_secret = "test-shared-secret"
@@ -1052,7 +1052,7 @@ class PublishDueTests(unittest.TestCase):
         }
         scheduler = fs.FillScheduleScheduler(
             store=store, task_state=state,
-            publish_video=MagicMock(),
+            publish_video=MagicMock(return_value={"success": True, "results": [{"success": True}]}),
         )
         scheduler.publisher.base_url = "https://post-engineer.com"
         scheduler.publisher.api_secret = "secret"
@@ -1074,7 +1074,7 @@ class PublishDueTests(unittest.TestCase):
         }
         scheduler = fs.FillScheduleScheduler(
             store=store, task_state=state,
-            publish_video=MagicMock(),
+            publish_video=MagicMock(return_value={"success": True, "results": [{"success": True}]}),
         )
         scheduler.publisher.base_url = "https://post-engineer.com"
         scheduler.publisher.api_secret = "secret"
@@ -1455,7 +1455,7 @@ class NotifyIntegrationTests(unittest.TestCase):
     def _scheduler(self, store, **kwargs):
         defaults = dict(
             store=store, task_state=MagicMock(),
-            publish_video=MagicMock(),
+            publish_video=MagicMock(return_value={"success": True, "results": [{"success": True}]}),
         )
         defaults.update(kwargs)
         return fs.FillScheduleScheduler(**defaults)
@@ -1930,7 +1930,7 @@ class CoverageGapTests(unittest.TestCase):
             "state": 1, "videos": [self.video_path],
             "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
         }
-        publish = MagicMock()
+        publish = MagicMock(return_value={"success": True, "results": [{"success": True}]})
         scheduler = self._scheduler(store, task_state=state, publish_video=publish)
         scheduler.publisher.base_url = "https://post-engineer.com"
         scheduler.publisher.api_secret = "secret"
