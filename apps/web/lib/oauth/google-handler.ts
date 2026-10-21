@@ -11,6 +11,6 @@ export function useYouTubeOAuth() {
     popupTitle: 'YouTube OAuth',
     successType: 'youtube-oauth-success',
     errorType: 'youtube-oauth-error',
-    queryKey: ['youtube-accounts'],
+    queryKey: ['social-accounts'],
   });
 }

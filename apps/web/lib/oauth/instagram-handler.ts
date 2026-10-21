@@ -11,6 +11,6 @@ export function useInstagramOAuth() {
     popupTitle: 'Instagram OAuth',
     successType: 'instagram-oauth-success',
     errorType: 'instagram-oauth-error',
-    queryKey: ['instagram-accounts'],
+    queryKey: ['social-accounts'],
   });
 }

@@ -43,7 +43,7 @@
 
 - `apps/web/components/ui/` = presentational components (props + callbacks); keep fetching/OAuth/state outside.
 - **Reuse before you build (strict).** Look in order: `components/ui/` (shadcn; add primitives with `pnpm dlx shadcn@latest add <x>`), `components/` (`account-card.tsx`, `provider-icon.tsx`, `ui/social-accounts-section.tsx`, `ui/insufficient-tokens-dialog.tsx`, `ui/version-badge.tsx`, `ui/token-pack-cards.tsx`), `lib/ui.tsx` (icons, `INPUT_CLASS`, `SECTION_LABEL_CLASS`; compose with `cn()`), `lib/publish-links.ts` (network maps). A second differently-styled version of an existing component is a bug. Justify any new component in the PR.
-- Social accounts: React Query via `useYouTubeAccountsQuery` / `useInstagramAccountsQuery` (`lib/api.ts`), shared `youtube-accounts`/`instagram-accounts` keys; no parallel `useState`/`useEffect` fetchers.
+- Social accounts: React Query via `useSocialAccountsQuery` / `useYouTubeAccountsQuery` / `useInstagramAccountsQuery` / `useBlueskyAccountsQuery` / `useLinkedinAccountsQuery` (`lib/api.ts`), all sharing the single `social-accounts` key (one `GET /api/account`, provider hooks filter via `select`); no parallel `useState`/`useEffect` fetchers.
 - Never render raw server/English errors or internal codes in the localized UI — map to i18n keys with a localized generic fallback. User-facing numbers interpolate shared constants.
 - Client fetch helpers never throw on HTTP errors: check `response.ok`, guard `response.json()` (proxy HTML bodies), return `{ success: false, error }`. Every promise chain has a `.catch`.
 - Image anti-repeat rotation: explicit user overrides never enter rotation history; selection is a pure function (no side effects).

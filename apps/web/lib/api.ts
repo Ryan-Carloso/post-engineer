@@ -38,14 +38,20 @@ interface ServerAccountPayload {
 // The shape and the provider list come from the registry (lib/providers/registry.ts):
 // the server already returns each account with provider and correct fields.
 //---------------
+function selectProviderAccounts<T extends PublicAccountItem>(
+  provider: T['provider'],
+): (payload: ServerAccountPayload) => { authenticated: boolean; accounts: T[] } {
+  return (payload) => ({
+    authenticated: payload.authenticated,
+    accounts: payload.accounts.filter((item): item is T => item.provider === provider),
+  });
+}
+
 async function fetchProviderAccounts<T extends PublicAccountItem>(
   provider: T['provider'],
 ): Promise<{ authenticated: boolean; accounts: T[] }> {
   const payload = await fetchServerAccounts();
-  return {
-    authenticated: payload.authenticated,
-    accounts: payload.accounts.filter((item): item is T => item.provider === provider),
-  };
+  return selectProviderAccounts<T>(provider)(payload);
 }
 
 async function fetchServerAccounts(): Promise<ServerAccountPayload> {
@@ -83,10 +89,6 @@ async function fetchInstagramAccounts(): Promise<InstagramAccountResponse> {
 export interface BlueskyAccountResponse {
   authenticated: boolean;
   accounts: BlueskyAccountData[];
-}
-
-async function fetchBlueskyAccounts(): Promise<BlueskyAccountResponse> {
-  return fetchProviderAccounts<BlueskyAccountData>('bluesky');
 }
 
 async function createPersona(formData: FormData): Promise<CreatePersonaResult> {
@@ -568,53 +570,51 @@ async function fetchSession(): Promise<SupabaseSessionUser | null> {
 // React Query hooks — data shared across screens
 //---------------
 
-export function useYouTubeAccountsQuery(): UseQueryResult<AccountResponse, Error> {
-  return useQuery<AccountResponse>({
-    queryKey: ['youtube-accounts'],
-    queryFn: fetchYouTubeAccounts,
+//---------------
+// Social accounts — ONE shared query for every provider. All four provider
+// hooks (and useSocialAccountsQuery itself) read the same ['social-accounts']
+// cache entry, so a page mounting several of them fires exactly one
+// GET /api/account — and therefore emits one server-side account_fetched
+// telemetry event — instead of one request per provider. The provider hooks
+// filter the shared payload client-side via React Query's `select`; their
+// return types are unchanged, so no screen code changes.
+//---------------
+
+export function useSocialAccountsQuery(): UseQueryResult<ServerAccountPayload, Error>;
+export function useSocialAccountsQuery<TData>(
+  select: (payload: ServerAccountPayload) => TData,
+): UseQueryResult<TData, Error>;
+export function useSocialAccountsQuery<TData>(
+  select?: (payload: ServerAccountPayload) => TData,
+): UseQueryResult<TData, Error> {
+  return useQuery<ServerAccountPayload, Error, TData>({
+    queryKey: ['social-accounts'],
+    queryFn: fetchServerAccounts,
     staleTime: 30_000,
     refetchOnWindowFocus: true,
+    select,
   });
+}
+
+export function useYouTubeAccountsQuery(): UseQueryResult<AccountResponse, Error> {
+  return useSocialAccountsQuery(selectProviderAccounts<AccountData>('youtube'));
 }
 
 export function useInstagramAccountsQuery(): UseQueryResult<InstagramAccountResponse, Error> {
-  return useQuery<InstagramAccountResponse>({
-    queryKey: ['instagram-accounts'],
-    queryFn: fetchInstagramAccounts,
-    staleTime: 30_000,
-    refetchOnWindowFocus: true,
-  });
+  return useSocialAccountsQuery(selectProviderAccounts<InstagramAccountData>('instagram'));
 }
 
 export function useBlueskyAccountsQuery(): UseQueryResult<BlueskyAccountResponse, Error> {
-  return useQuery<BlueskyAccountResponse>({
-    queryKey: ['bluesky-accounts'],
-    queryFn: fetchBlueskyAccounts,
-    staleTime: 30_000,
-    refetchOnWindowFocus: true,
-  });
+  return useSocialAccountsQuery(selectProviderAccounts<BlueskyAccountData>('bluesky'));
 }
-
-//---------------
-// fetchLinkedinAccounts — LinkedIn accounts (member/orgs) via /api/account
-//---------------
 
 export interface LinkedinAccountResponse {
   authenticated: boolean;
   accounts: LinkedinAccountData[];
 }
 
-async function fetchLinkedinAccounts(): Promise<LinkedinAccountResponse> {
-  return fetchProviderAccounts<LinkedinAccountData>('linkedin');
-}
-
 export function useLinkedinAccountsQuery(): UseQueryResult<LinkedinAccountResponse, Error> {
-  return useQuery<LinkedinAccountResponse>({
-    queryKey: ['linkedin-accounts'],
-    queryFn: fetchLinkedinAccounts,
-    staleTime: 30_000,
-    refetchOnWindowFocus: true,
-  });
+  return useSocialAccountsQuery(selectProviderAccounts<LinkedinAccountData>('linkedin'));
 }
 
 //---------------
@@ -648,7 +648,7 @@ export function useDisconnectAccountMutation(provider: DisconnectableProvider) {
   return useMutation({
     mutationFn: (input: DisconnectAccountInput) => disconnectAccount(provider, input.providerAccountId),
     onSuccess: (_data, input) => {
-      void queryClient.invalidateQueries({ queryKey: [`${provider}-accounts`] });
+      void queryClient.invalidateQueries({ queryKey: ['social-accounts'] });
       // Deselects the disconnected account from upload on any network
       // (no-op if it was not selected).
       useUploadStore.getState().deselectAccount(provider, input.providerAccountId);
