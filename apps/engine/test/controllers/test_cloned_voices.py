@@ -60,10 +60,26 @@ class ClonedVoicesControllerTests(unittest.TestCase):
             "user-uuid-1", "clone-1", b"wav", "en"
         )
 
-    @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
-    def test_list_requires_auth(self, _mock_service_cls):
+    def test_list_requires_auth(self):
         response = self.client.get("/api/v1/cloned-voices")
         self.assertEqual(response.status_code, 401)
+
+    @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
+    @patch("app.controllers.v1.cloned_voices.MAX_REFERENCE_BYTES", 4)
+    def test_create_rejects_oversized_upload_before_buffering(self, mock_service_cls):
+        service = MagicMock()
+        mock_service_cls.return_value = service
+
+        response = self.client.post(
+            "/api/v1/cloned-voices",
+            headers=self.headers,
+            data={"language": "en", "consent": "true"},
+            files={"file": ("sample.wav", io.BytesIO(b"0123456789"), "audio/wav")},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["body"]["error_code"], "audio_too_large")
+        service.create_from_upload.assert_not_called()
 
     @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
     def test_get_returns_public_row(self, mock_service_cls):

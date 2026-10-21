@@ -13,8 +13,10 @@ from app.models.schema import BaseResponse
 from app.services.cloned_voices.audio import ReferenceAudioError
 from app.services.cloned_voices.constants import (
     CHATTERBOX_VOICE_PREFIX,
+    ERROR_AUDIO_TOO_LARGE,
     ERROR_NOT_FOUND,
     ERROR_NOT_READY,
+    MAX_REFERENCE_BYTES,
 )
 from app.services.cloned_voices.service import ClonedVoiceService
 from app.utils import utils
@@ -40,6 +42,17 @@ def _public_row(row: dict[str, Any]) -> dict[str, Any]:
         "created_at": row.get("created_at"),
         "updated_at": row.get("updated_at"),
     }
+
+
+def _audio_too_large_response() -> JSONResponse:
+    return JSONResponse(
+        status_code=400,
+        content=utils.get_response(
+            status=400,
+            message=f"reference audio exceeds {MAX_REFERENCE_BYTES // 1024 // 1024} MB",
+            body={"error_code": ERROR_AUDIO_TOO_LARGE},
+        ),
+    )
 
 
 @cloned_router.get(
@@ -93,13 +106,19 @@ def create_cloned_voice(
             content=utils.get_response(status=400, message="language is required"),
         )
 
+    # Bound the read itself: normalize_reference_audio enforces the same
+    # limit, but only after the upload is fully buffered in memory.
+    if file.size is not None and file.size > MAX_REFERENCE_BYTES:
+        return _audio_too_large_response()
     try:
-        source_bytes = file.file.read()
+        source_bytes = file.file.read(MAX_REFERENCE_BYTES + 1)
     except Exception:
         return JSONResponse(
             status_code=400,
             content=utils.get_response(status=400, message="could not read upload"),
         )
+    if len(source_bytes) > MAX_REFERENCE_BYTES:
+        return _audio_too_large_response()
 
     service = ClonedVoiceService()
     try:
