@@ -38,6 +38,8 @@ describe('api', () => {
             accounts: [
               { provider: 'youtube', channelId: 'ch-1', channelName: 'Canal', recordId: 'r1', connectedAt: 5, lastUsed: 6, statistics: { viewCount: '10' } },
               { provider: 'instagram', igUserId: 'ig-1', username: 'foo', recordId: 'r3', followersCount: 3, mediaCount: 4 },
+              { provider: 'bluesky', recordId: 'r-bsky', did: 'did:plc:1', handle: 'user.bsky.social', connectedAt: 5, lastUsed: 6 },
+              { provider: 'linkedin', recordId: 'r-li', providerAccountId: 'urn:li:person:1', accountName: 'Person One', connectedAt: 5, lastUsed: 6 },
               { provider: 'twitter' },
             ],
           });
@@ -177,38 +179,58 @@ describe('api', () => {
     expect(result.current.data?.accounts).toHaveLength(1);
   });
 
-  it('shares account data between consumers and refreshes only the invalidated network', async () => {
-    const { useYouTubeAccountsQuery, useInstagramAccountsQuery } = await import('@/lib/api');
+  it('mounting all four provider hooks fetches /api/account exactly once', async () => {
+    const {
+      useYouTubeAccountsQuery,
+      useInstagramAccountsQuery,
+      useBlueskyAccountsQuery,
+      useLinkedinAccountsQuery,
+      useSocialAccountsQuery,
+    } = await import('@/lib/api');
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const wrapper = ({ children }: { children: ReactNode }): ReactNode => (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
-    const first = renderHook(() => ({ youtube: useYouTubeAccountsQuery(), instagram: useInstagramAccountsQuery() }), { wrapper });
-    const second = renderHook(() => ({ youtube: useYouTubeAccountsQuery(), instagram: useInstagramAccountsQuery() }), { wrapper });
+    const useAllAccountHooks = () => ({
+      social: useSocialAccountsQuery(),
+      youtube: useYouTubeAccountsQuery(),
+      instagram: useInstagramAccountsQuery(),
+      bluesky: useBlueskyAccountsQuery(),
+      linkedin: useLinkedinAccountsQuery(),
+    });
+    const first = renderHook(useAllAccountHooks, { wrapper });
+    const second = renderHook(useAllAccountHooks, { wrapper });
 
     await waitFor(() => {
       expect(first.result.current.youtube.isSuccess).toBe(true);
-      expect(second.result.current.instagram.isSuccess).toBe(true);
+      expect(second.result.current.linkedin.isSuccess).toBe(true);
     });
-    expect(fetch).toHaveBeenCalledTimes(2);
-    expect(first.result.current.youtube.data).toBe(second.result.current.youtube.data);
-    expect(first.result.current.instagram.data).toBe(second.result.current.instagram.data);
+    // One shared query key: every consumer reads the same single request,
+    // no matter how many provider hooks are mounted.
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledWith('/api/account');
+    expect(first.result.current.social.data?.accounts).toHaveLength(5);
+    expect(first.result.current.youtube.data?.accounts).toHaveLength(1);
+    expect(first.result.current.youtube.data?.accounts[0]?.channelId).toBe('ch-1');
+    expect(first.result.current.instagram.data?.accounts).toHaveLength(1);
+    expect(first.result.current.instagram.data?.accounts[0]?.igUserId).toBe('ig-1');
+    expect(first.result.current.bluesky.data?.accounts).toHaveLength(1);
+    expect(first.result.current.bluesky.data?.accounts[0]?.handle).toBe('user.bsky.social');
+    expect(first.result.current.linkedin.data?.accounts).toHaveLength(1);
+    expect(first.result.current.linkedin.data?.accounts[0]?.providerAccountId).toBe('urn:li:person:1');
+    expect(first.result.current.youtube.data).toEqual(second.result.current.youtube.data);
 
     first.unmount();
     second.unmount();
-    const remounted = renderHook(() => ({ youtube: useYouTubeAccountsQuery(), instagram: useInstagramAccountsQuery() }), { wrapper });
+    const remounted = renderHook(useAllAccountHooks, { wrapper });
     expect(remounted.result.current.youtube.isSuccess).toBe(true);
-    expect(remounted.result.current.instagram.isSuccess).toBe(true);
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledTimes(1);
 
+    // Invalidating the shared key refetches once for all providers.
     await act(async () => {
-      await client.invalidateQueries({ queryKey: ['youtube-accounts'] });
+      await client.invalidateQueries({ queryKey: ['social-accounts'] });
     });
-    expect(fetch).toHaveBeenCalledTimes(3);
-    await act(async () => {
-      await client.invalidateQueries({ queryKey: ['instagram-accounts'] });
-    });
-    expect(fetch).toHaveBeenCalledTimes(4);
+    expect(fetch).toHaveBeenCalledTimes(2);
     remounted.unmount();
     client.clear();
   });
@@ -285,7 +307,7 @@ describe('api', () => {
     );
   });
 
-  it('useDisconnectAccountMutation invalidates the disconnected network query', async () => {
+  it('useDisconnectAccountMutation invalidates the shared social accounts query', async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ success: true }));
     const { useDisconnectAccountMutation } = await import('@/lib/api');
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -301,7 +323,7 @@ describe('api', () => {
       '/api/account?provider=youtube&providerAccountId=ch-1',
       expect.objectContaining({ method: 'DELETE' }),
     );
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['youtube-accounts'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['social-accounts'] });
     invalidateSpy.mockRestore();
   });
 

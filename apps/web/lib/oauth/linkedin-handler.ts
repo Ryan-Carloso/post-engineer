@@ -11,6 +11,6 @@ export function useLinkedInOAuth() {
     popupTitle: 'LinkedIn OAuth',
     successType: 'linkedin-oauth-success',
     errorType: 'linkedin-oauth-error',
-    queryKey: ['linkedin-accounts'],
+    queryKey: ['social-accounts'],
   });
 }

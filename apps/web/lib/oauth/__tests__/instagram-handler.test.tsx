@@ -79,7 +79,7 @@ describe('useInstagramOAuth', () => {
       }),
     );
     expect(mockRefresh).toHaveBeenCalledTimes(1);
-    expect(mockRefresh).toHaveBeenCalledWith({ queryKey: ['instagram-accounts'] });
+    expect(mockRefresh).toHaveBeenCalledWith({ queryKey: ['social-accounts'] });
     expect(result.current.error).toBeNull();
     vi.unstubAllGlobals();
   });

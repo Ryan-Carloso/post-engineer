@@ -74,7 +74,7 @@ describe('useYouTubeOAuth', () => {
     );
     expect(mockWaitForOAuthPopup).toHaveBeenCalled();
     expect(mockRefresh).toHaveBeenCalledTimes(1);
-    expect(mockRefresh).toHaveBeenCalledWith({ queryKey: ['youtube-accounts'] });
+    expect(mockRefresh).toHaveBeenCalledWith({ queryKey: ['social-accounts'] });
     expect(result.current.isLoading).toBe(false);
     expect(result.current.error).toBeNull();
     vi.unstubAllGlobals();
