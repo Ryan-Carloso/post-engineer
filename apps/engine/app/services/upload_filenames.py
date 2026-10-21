@@ -3,7 +3,7 @@
 from app.models.exception import HttpException
 
 
-def sanitize_upload_filename(filename: str, request_id: str) -> str:
+def sanitize_upload_filename(filename: str | None, request_id: str) -> str:
     # Browsers/clients sometimes include directory info, or even smuggle ../
     # traversal segments. Keep only the bare filename so the upload endpoint
     # never writes outside the target directory.
