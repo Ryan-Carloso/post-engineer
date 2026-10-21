@@ -22,6 +22,10 @@ vi.mock('@/lib/api-error-reporting', () => ({
   resolveReportingUserId: () => 'user-1',
 }));
 
+vi.mock('@/lib/cloned-voice-audio', () => ({
+  validateCloneReferenceBuffer: vi.fn(() => ({ ok: true as const })),
+}));
+
 describe('GET /api/persona/cloned-voices', () => {
   beforeEach(() => {
     vi.stubEnv('MONEYPRINT_API_URL', 'http://127.0.0.1:8080');
@@ -31,6 +35,21 @@ describe('GET /api/persona/cloned-voices', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
+  });
+
+  it('returns 502 when engine body is not an array', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ body: { not: 'array' } }),
+      })),
+    );
+
+    const response = await GET(new Request('http://localhost/api/persona/cloned-voices'));
+    expect(response.status).toBe(502);
+    const json = await response.json();
+    expect(json.error).toBe('Invalid cloned voices payload.');
   });
 
   it('returns voices from engine envelope', async () => {
@@ -60,6 +79,39 @@ describe('POST /api/persona/cloned-voices', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
+  });
+
+  it('proxies a valid create to the engine', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 201,
+      json: async () => ({
+        body: {
+          id: 'clone-1',
+          status: 'pending',
+          language: 'pt',
+          voice_id: null,
+          error_code: null,
+          consent_at: '2026-01-01T00:00:00Z',
+          created_at: null,
+          updated_at: null,
+        },
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const form = new FormData();
+    form.set('consent', 'true');
+    form.set('language', 'pt');
+    form.set('file', new Blob([new Uint8Array(44)], { type: 'audio/wav' }), 'a.wav');
+    const response = await POST(
+      new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: form }),
+    );
+    expect(response.status).toBe(201);
+    const json = await response.json();
+    expect(json.success).toBe(true);
+    expect(json.voice.id).toBe('clone-1');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('rejects missing consent', async () => {

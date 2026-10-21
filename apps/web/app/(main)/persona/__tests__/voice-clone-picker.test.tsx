@@ -139,6 +139,18 @@ describe('PersonaVoiceClonePanel', () => {
     expect(cloneMocks.create).not.toHaveBeenCalled();
   });
 
+  it('clears local preview when rerecord is chosen', async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    const panel = screen.getByTestId('voice-clone-panel');
+    const fileInput = panel.querySelector('input[type="file"]');
+    await user.upload(fileInput as HTMLInputElement, makeWavFile());
+    expect(screen.getByRole('button', { name: 'persona.voiceCloneRerecord' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'persona.voiceCloneRerecord' }));
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:local-preview');
+    expect(screen.queryByRole('button', { name: 'persona.voiceCloneSubmit' })).not.toBeInTheDocument();
+  });
+
   it('uploads when consent is checked', async () => {
     const user = userEvent.setup();
     cloneMocks.create.mockResolvedValue(publicRow({ id: 'clone-pending', status: 'pending' }));
