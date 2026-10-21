@@ -119,7 +119,7 @@ class ClonedVoiceStore:
             )
             response.raise_for_status()
 
-    def delete_storage_object(self, storage_path: str) -> None:
+    def delete_storage_object(self, storage_path: str) -> bool:
         response = self._requests.delete(
             f"{self._base_url}/storage/v1/object/{CLONED_VOICES_STORAGE_BUCKET}",
             headers={
@@ -133,8 +133,10 @@ class ClonedVoiceStore:
         if response.status_code >= 400:
             logger.warning(
                 "cloned voice storage delete failed, "
-                f"status: {response.status_code}, path_prefix: {storage_path.split('/', 1)[0]}"
+                f"status: {response.status_code}, path: {storage_path}"
             )
+            return False
+        return True
 
     def get_for_user(self, user_id: str, clone_id: str) -> dict[str, Any] | None:
         response = self._rest(

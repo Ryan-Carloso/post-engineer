@@ -91,6 +91,19 @@ class ClonedVoiceServiceTests(unittest.TestCase):
         self.store.delete_storage_object.assert_called_once()
         self.store.delete_row.assert_called_once()
 
+    def test_delete_still_removes_row_when_storage_delete_fails(self):
+        self.store.get_for_user.return_value = {
+            "engine_voice_key": "uabc_clone1",
+            "storage_path": "user/cloned-voices/clone-1/reference.wav",
+        }
+        self.store.delete_storage_object.return_value = False
+        self.store.delete_row.return_value = True
+        self.assertTrue(self.service.delete("user-1", "clone-1"))
+        self.store.delete_storage_object.assert_called_once_with(
+            "user/cloned-voices/clone-1/reference.wav"
+        )
+        self.store.delete_row.assert_called_once_with("user-1", "clone-1")
+
     @patch("app.services.cloned_voices.service.chatterbox_tts")
     def test_preview_requires_ready_status(self, mock_tts):
         self.store.get_for_user.return_value = {

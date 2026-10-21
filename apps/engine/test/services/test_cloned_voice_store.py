@@ -88,5 +88,39 @@ class ClonedVoiceStoreTest(unittest.TestCase):
         )
         self.assertTrue(store.delete_row("user-1", "clone-1"))
 
+    def test_delete_storage_object_returns_true_on_success(self) -> None:
+        requests = MagicMock()
+        response = MagicMock()
+        response.status_code = 200
+        requests.delete.return_value = response
+        store = ClonedVoiceStore(
+            url="https://supabase.example",
+            service_key="service-key",
+            requests_module=requests,
+        )
+        self.assertIs(
+            store.delete_storage_object("user-1/cloned-voices/c1/reference.wav"), True
+        )
+        requests.delete.assert_called_once()
+        call = requests.delete.call_args
+        self.assertIn("/storage/v1/object/", call[0][0])
+        self.assertEqual(
+            call[1]["json"], {"prefixes": ["user-1/cloned-voices/c1/reference.wav"]}
+        )
+
+    def test_delete_storage_object_returns_false_on_http_error(self) -> None:
+        requests = MagicMock()
+        response = MagicMock()
+        response.status_code = 500
+        requests.delete.return_value = response
+        store = ClonedVoiceStore(
+            url="https://supabase.example",
+            service_key="service-key",
+            requests_module=requests,
+        )
+        self.assertIs(
+            store.delete_storage_object("user-1/cloned-voices/c1/reference.wav"), False
+        )
+
 if __name__ == "__main__":
     unittest.main()
