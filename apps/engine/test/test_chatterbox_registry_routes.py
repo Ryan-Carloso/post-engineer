@@ -46,7 +46,7 @@ class ChatterboxRegistryRoutesTest(unittest.TestCase):
 
     def _payload(self, **overrides: object) -> dict[str, object]:
         payload: dict[str, object] = {
-            "voice": "uabc_clone1",
+            "voice": "u0123456789ab_0123456789ab",
             "language_id": "en",
             "reference_wav_base64": base64.b64encode(WAV_BYTES).decode("ascii"),
         }
@@ -56,9 +56,9 @@ class ChatterboxRegistryRoutesTest(unittest.TestCase):
     def test_register_writes_voice_and_reloads_before_commit(self) -> None:
         response = self.client.post("/v1/voices", json=self._payload())
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.json(), {"voice": "uabc_clone1", "language_id": "en"})
-        self.assertTrue((self.voices_dir / "uabc_clone1" / "reference.wav").is_file())
-        self.assertEqual(load_voices_toml(self.config_path)["uabc_clone1"]["language_id"], "en")
+        self.assertEqual(response.json(), {"voice": "u0123456789ab_0123456789ab", "language_id": "en"})
+        self.assertTrue((self.voices_dir / "u0123456789ab_0123456789ab" / "reference.wav").is_file())
+        self.assertEqual(load_voices_toml(self.config_path)["u0123456789ab_0123456789ab"]["language_id"], "en")
         self.assertEqual(self.events, ["reload", "commit"])
 
     def test_register_rejects_invalid_voice_name(self) -> None:
@@ -84,7 +84,7 @@ class ChatterboxRegistryRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("not a valid language code", response.json()["error"])
         self.assertFalse(self.config_path.is_file())
-        self.assertFalse((self.voices_dir / "uabc_clone1" / "reference.wav").exists())
+        self.assertFalse((self.voices_dir / "u0123456789ab_0123456789ab" / "reference.wav").exists())
         # The volume reload ran, but a rejected registration never commits.
         self.assertEqual(self.events, ["reload"])
 
@@ -106,14 +106,27 @@ class ChatterboxRegistryRoutesTest(unittest.TestCase):
     def test_delete_removes_voice_and_reloads_before_commit(self) -> None:
         self.client.post("/v1/voices", json=self._payload())
         self.events.clear()
-        response = self.client.delete("/v1/voices/uabc_clone1")
+        response = self.client.delete("/v1/voices/u0123456789ab_0123456789ab")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"voice": "uabc_clone1", "deleted": True})
-        self.assertNotIn("uabc_clone1", load_voices_toml(self.config_path))
+        self.assertEqual(response.json(), {"voice": "u0123456789ab_0123456789ab", "deleted": True})
+        self.assertNotIn("u0123456789ab_0123456789ab", load_voices_toml(self.config_path))
         self.assertEqual(self.events, ["reload", "commit"])
 
+    def test_register_rejects_house_voice_name(self) -> None:
+        response = self.client.post("/v1/voices", json=self._payload(voice="ryan"))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("user clone key", response.json()["error"])
+        self.assertFalse(self.config_path.is_file())
+        self.assertEqual(self.events, [])
+
+    def test_delete_rejects_house_voice_name(self) -> None:
+        response = self.client.delete("/v1/voices/ryan")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("user clone key", response.json()["error"])
+        self.assertEqual(self.events, [])
+
     def test_delete_missing_voice_returns_404(self) -> None:
-        response = self.client.delete("/v1/voices/uabc_missing")
+        response = self.client.delete("/v1/voices/u0123456789ab_ffffffffffff")
         self.assertEqual(response.status_code, 404)
 
     def test_routes_work_without_a_reload_hook(self) -> None:

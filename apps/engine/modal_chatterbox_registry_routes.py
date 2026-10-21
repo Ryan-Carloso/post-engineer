@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from chatterbox_registry_volume import (
     delete_voice_on_volume,
     decode_reference_wav,
+    is_user_clone_voice_name,
     is_valid_voice_name,
     register_voice_on_volume,
 )
@@ -55,6 +56,8 @@ def mount_chatterbox_registry_routes(
         reference_b64 = payload.get("reference_wav_base64")
         if not voice or not is_valid_voice_name(voice):
             return JSONResponse(status_code=400, content={"error": "voice must be a simple identifier"})
+        if not is_user_clone_voice_name(voice):
+            return JSONResponse(status_code=400, content={"error": "voice must be a user clone key"})
         if not isinstance(reference_b64, str) or not reference_b64.strip():
             return JSONResponse(status_code=400, content={"error": "reference_wav_base64 is required"})
 
@@ -92,6 +95,8 @@ def mount_chatterbox_registry_routes(
         voice = voice.strip()
         if not voice or not is_valid_voice_name(voice):
             return JSONResponse(status_code=400, content={"error": "invalid voice"})
+        if not is_user_clone_voice_name(voice):
+            return JSONResponse(status_code=400, content={"error": "voice must be a user clone key"})
 
         try:
             _reload()

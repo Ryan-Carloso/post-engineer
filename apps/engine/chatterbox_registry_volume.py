@@ -21,6 +21,17 @@ def is_valid_voice_name(name: str) -> bool:
     return bool(name) and bool(_VOICE_NAME_RE.match(name))
 
 
+# Per-user clone keys minted by the engine store: u{12 hex of the user
+# uuid}_{12 hex of the clone uuid}. The registry HTTP routes exist only for
+# these keys — house voices (ryan, ...) are seeded by ops entrypoints and
+# must never be overwritten or deleted through the routes.
+_USER_CLONE_VOICE_RE = re.compile(r"^u[0-9a-f]{12}_[0-9a-f]{12}$", re.IGNORECASE)
+
+
+def is_user_clone_voice_name(name: str) -> bool:
+    return bool(name) and _USER_CLONE_VOICE_RE.fullmatch(name) is not None
+
+
 def is_valid_language_id(language_id: str) -> bool:
     return bool(language_id) and _LANGUAGE_ID_RE.fullmatch(language_id) is not None
 
