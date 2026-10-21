@@ -21,7 +21,6 @@ describe('Accounts — UI', () => {
 
     cy.visit('/accounts');
     cy.wait('@getAccounts');
-    cy.wait('@getAccounts');
 
     cy.contains('h1', 'Contas').should('be.visible');
     cy.get('button[aria-label="Conectar uma conta"]').should('have.length', 4);
