@@ -84,6 +84,9 @@ class ChatterboxRegistryRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("not a valid language code", response.json()["error"])
         self.assertFalse(self.config_path.is_file())
+        self.assertFalse((self.voices_dir / "uabc_clone1" / "reference.wav").exists())
+        # The volume reload ran, but a rejected registration never commits.
+        self.assertEqual(self.events, ["reload"])
 
     def test_register_rejects_invalid_json(self) -> None:
         response = self.client.post(

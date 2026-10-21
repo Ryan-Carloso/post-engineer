@@ -22,7 +22,7 @@ def is_valid_voice_name(name: str) -> bool:
 
 
 def is_valid_language_id(language_id: str) -> bool:
-    return bool(language_id) and bool(_LANGUAGE_ID_RE.match(language_id))
+    return bool(language_id) and _LANGUAGE_ID_RE.fullmatch(language_id) is not None
 
 
 def load_voices_toml(path: Path) -> dict[str, dict[str, str]]:
@@ -121,11 +121,13 @@ def register_voice_on_volume(
     if not is_valid_voice_name(voice):
         raise ValueError("voice must be a simple identifier")
     reference_rel = f"{voice}/reference.wav"
+    # Validate (via upsert) before writing anything: a rejected registration
+    # must not leave an orphan reference.wav behind.
+    voices = load_voices_toml(config_path)
+    voices = upsert_voice(voices, voice, language_id, reference_rel)
     destination = voices_root / voice / "reference.wav"
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_bytes(wav_bytes)
-    voices = load_voices_toml(config_path)
-    voices = upsert_voice(voices, voice, language_id, reference_rel)
     config_path.write_text(serialize_voices_toml(voices), encoding="utf-8")
     return reference_rel
 
