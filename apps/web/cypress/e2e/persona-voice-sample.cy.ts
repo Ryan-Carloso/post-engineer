@@ -75,8 +75,11 @@ describe('Persona — sample de voz ao clicar no card', () => {
       const audios = (win as unknown as { __fakeAudios: FakeAudioRecord[] }).__fakeAudios;
       expect(audios).to.have.length(1);
       // Sample files are named after the voice id, URL-encoded
-      // (public/voice-samples/<encoded-id>-<lang>.mp3).
-      expect(audios[0].url).to.equal('/voice-samples/chatterbox%3Aryan-pt-br.mp3');
+      // (public/voice-samples/<encoded-id>-<lang>.mp3). English-only
+      // launch: no fixture language matches a new persona's language, so
+      // the picker's fallback sample language applies — en-us now,
+      // pt-br before the launch lock.
+      expect(audios[0].url).to.equal('/voice-samples/chatterbox%3Aryan-en-us.mp3');
       expect(audios[0].playCalled).to.be.true;
     });
   });
@@ -89,7 +92,7 @@ describe('Persona — sample de voz ao clicar no card', () => {
       const audios = (win as unknown as { __fakeAudios: FakeAudioRecord[] }).__fakeAudios;
       expect(audios).to.have.length(2);
       expect(audios[1].url).to.equal(
-        '/voice-samples/chatterbox%3Aen_us_female_01-pt-br.mp3',
+        '/voice-samples/chatterbox%3Aen_us_female_01-en-us.mp3',
       );
       expect(audios[1].playCalled).to.be.true;
     });
