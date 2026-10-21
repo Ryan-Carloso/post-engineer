@@ -69,6 +69,11 @@ function mockBase(): void {
     statusCode: 200,
     body: { success: true, images: [] },
   }).as('getPersonaImages');
+
+  cy.intercept('GET', '/api/persona/cloned-voices', {
+    statusCode: 200,
+    body: { success: true, voices: [] },
+  }).as('getClonedVoices');
 }
 
 function visitPersona(path: string): void {
@@ -115,7 +120,7 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
 
     cy.contains('[role="tab"]', 'Envie sua foto').click();
     cy.contains('button', 'Enviar foto').should('be.visible');
-    cy.get('input[type="file"]').selectFile(
+    cy.get('input[type="file"][accept="image/jpeg,image/png"]').selectFile(
       { contents: Cypress.Buffer.from('fake image bytes'), fileName: 'foto.png', mimeType: 'image/png' },
       { force: true },
     );
@@ -164,7 +169,7 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
     cy.get('button[aria-label="Escolha um personagem 1"]').click();
     cy.contains('button', 'Criar persona').click();
 
-    cy.contains('Escolha uma voz ou envie um áudio.').should('be.visible');
+    cy.contains('Escolha uma voz para a persona.').should('be.visible');
   });
 
   it('edição carrega a persona e casa o idioma da amostra por prefixo', () => {
