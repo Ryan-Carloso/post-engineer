@@ -34,7 +34,11 @@ export const DeleteClonedVoiceSchema = z.object(DeleteClonedVoiceShape);
 
 export const PreviewClonedVoiceShape = {
   cloneId: z.string().min(1).describe('Ready cloned voice id'),
-  language: z.string().optional().describe('Optional preview language override'),
+  language: z
+    .string()
+    .refine(isEnglishLanguage, { message: ONLY_ENGLISH_CLONE_MESSAGE })
+    .optional()
+    .describe('Optional preview language override — English only for now'),
 };
 
 export const PreviewClonedVoiceSchema = z.object(PreviewClonedVoiceShape);

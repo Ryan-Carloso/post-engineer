@@ -181,6 +181,14 @@ def create_cloned_voice(
 )
 def preview_cloned_voice(request: Request, clone_id: str, language: str | None = None):
     auth = base.get_auth_context(request)
+    # English-only launch: a preview renders the cloned voice speaking, so a
+    # non-English language override is rejected like a non-English
+    # registration. No override keeps the clone's registered language.
+    if language and language.strip() and not is_english_language(language):
+        return JSONResponse(
+            status_code=400,
+            content=utils.get_response(status=400, message=ENGLISH_ONLY_CLONE_MESSAGE),
+        )
     service = ClonedVoiceService()
     try:
         audio_bytes = service.preview_mp3(auth.user_id, clone_id, language=language)

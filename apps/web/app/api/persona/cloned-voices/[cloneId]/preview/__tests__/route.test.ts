@@ -70,7 +70,7 @@ describe('POST /api/persona/cloned-voices/:cloneId/preview', () => {
     );
 
     const response = await POST(
-      new Request('http://localhost/api/persona/cloned-voices/clone-1/preview?language=pt'),
+      new Request('http://localhost/api/persona/cloned-voices/clone-1/preview?language=en'),
       { params: Promise.resolve({ cloneId: 'clone-1' }) },
     );
     expect(response.status).toBe(200);
@@ -169,14 +169,31 @@ describe('POST /api/persona/cloned-voices/:cloneId/preview error branches', () =
     vi.stubGlobal('fetch', fetchMock);
 
     await POST(
-      new Request('http://localhost/api/persona/cloned-voices/clone-1/preview?language=%20pt%20', {
+      new Request('http://localhost/api/persona/cloned-voices/clone-1/preview?language=%20en-US%20', {
         method: 'POST',
       }),
       ctx('clone-1'),
     );
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
-      'http://127.0.0.1:8080/api/v1/cloned-voices/clone-1/preview?language=pt',
+      'http://127.0.0.1:8080/api/v1/cloned-voices/clone-1/preview?language=en-US',
     );
+  });
+
+  it('rejects a non-English preview language without calling the engine', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await POST(
+      new Request('http://localhost/api/persona/cloned-voices/clone-1/preview?language=pt', {
+        method: 'POST',
+      }),
+      ctx('clone-1'),
+    );
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toBe(
+      'Voice cloning is only available in English for now.',
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('does not forward a blank language query to the engine', async () => {

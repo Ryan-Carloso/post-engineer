@@ -456,6 +456,32 @@ describe('cloned voice tools run through the MCP server', () => {
     }
   });
 
+  it('preview_cloned_voice rejects a non-English language (English-only launch)', async () => {
+    const request = vi.fn();
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock as typeof fetch;
+    // Same direct linked-pair drive as the create rejection above: the
+    // schema gate must error before the preview handler fetches anything.
+    const apiClient = fakeHost(request) as unknown as PostEngineerClient;
+    const server = createPostEngineerMcpServer(apiClient);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'test-client', version: '0.0.0' });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const result = await client.callTool({
+        name: 'preview_cloned_voice',
+        arguments: { cloneId: 'clone-1', language: 'pt' },
+      });
+      expect(result.isError).toBe(true);
+      expect(firstText(result as { content?: unknown })).toContain(
+        'Voice cloning is only available in English for now'
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      await client.close();
+    }
+  });
+
   it('delete_cloned_voice calls the client request', async () => {
     const request = vi.fn().mockResolvedValue({ success: true });
     await callTool('delete_cloned_voice', { cloneId: 'clone-1' }, request);

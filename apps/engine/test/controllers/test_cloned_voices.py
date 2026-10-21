@@ -239,3 +239,37 @@ class ClonedVoicesControllerTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b"mp3")
         self.assertEqual(response.headers.get("content-type"), "audio/mpeg")
+
+    @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
+    def test_preview_rejects_non_english_language(self, mock_service_cls):
+        service = MagicMock()
+        mock_service_cls.return_value = service
+
+        for language in ("pt", "pt-BR", "es", "enx"):
+            with self.subTest(language=language):
+                response = self.client.post(
+                    "/api/v1/cloned-voices/clone-1/preview",
+                    headers=self.headers,
+                    params={"language": language},
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(
+                    response.json()["message"],
+                    "Voice cloning is only available in English for now",
+                )
+        service.preview_mp3.assert_not_called()
+
+    @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
+    def test_preview_accepts_english_language_override(self, mock_service_cls):
+        service = MagicMock()
+        mock_service_cls.return_value = service
+        service.preview_mp3.return_value = b"mp3"
+        response = self.client.post(
+            "/api/v1/cloned-voices/clone-1/preview",
+            headers=self.headers,
+            params={"language": "en-US"},
+        )
+        self.assertEqual(response.status_code, 200)
+        service.preview_mp3.assert_called_once_with(
+            "user-uuid-1", "clone-1", language="en-US"
+        )
