@@ -54,6 +54,11 @@ class ClonedVoicesControllerTests(unittest.TestCase):
         self.assertEqual(body["status"], 202)
         self.assertEqual(body["body"]["id"], "clone-1")
         service.create_from_upload.assert_called_once()
+        # TestClient runs background tasks before returning, so the scheduled
+        # registration must already have fired with the created payload.
+        service.complete_registration.assert_called_once_with(
+            "user-uuid-1", "clone-1", b"wav", "en"
+        )
 
     @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
     def test_list_requires_auth(self, _mock_service_cls):

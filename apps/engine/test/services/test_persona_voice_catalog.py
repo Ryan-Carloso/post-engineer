@@ -44,6 +44,25 @@ class TestHouseVoiceCatalog(unittest.TestCase):
             result, [{"id": voice} for voice in CHATTERBOX_VOICES + OPENROUTER_VOICES]
         )
 
+    def test_cloned_voices_are_merged_when_user_id_provided(self):
+        with patch.object(
+            persona_service.voice_service, "get_chatterbox_voices", return_value=CHATTERBOX_VOICES
+        ):
+            with patch.object(
+                persona_service, "get_openrouter_voices", return_value=[]
+            ):
+                with patch(
+                    "app.services.cloned_voices.service.list_catalog_entries",
+                    return_value=[{"id": "chatterbox:uabc_clone1"}],
+                ) as mock_entries:
+                    result = persona_service.get_house_voices(user_id="user-1")
+
+        mock_entries.assert_called_once_with("user-1")
+        self.assertEqual(
+            result,
+            [{"id": voice} for voice in CHATTERBOX_VOICES + ["chatterbox:uabc_clone1"]],
+        )
+
     def test_openrouter_alone_is_enough_when_chatterbox_is_empty(self):
         """The two providers are independent; neither requires the other."""
         with patch.object(
