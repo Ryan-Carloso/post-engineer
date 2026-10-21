@@ -14,35 +14,20 @@
 // billing-owned tables and re-checks ownership on every query.
 //---------------
 
-import { createHash, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { createReconcileStore, runBillingReconciliation } from '@/lib/billing/reconcile';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting } from '@/lib/api-error-reporting';
-
-function secretsEqual(provided: string, expected: string): boolean {
-  // Hash both sides first so timingSafeEqual never leaks the expected
-  // length and never throws on length mismatch.
-  const a = createHash('sha256').update(provided).digest();
-  const b = createHash('sha256').update(expected).digest();
-  return timingSafeEqual(a, b);
-}
+import { rejectUnauthorizedCron } from '@/lib/cron-auth';
 
 async function postHandler(request: Request): Promise<NextResponse> {
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) {
-    logger.error('[cron/billing-reconcile] CRON_SECRET is not configured; refusing to run', null, {});
-    return NextResponse.json(
-      { success: false, error: 'Reconciliation is not configured.' },
-      { status: 500 },
-    );
-  }
-  const header = request.headers.get('authorization') ?? '';
-  const provided = header.startsWith('Bearer ') ? header.slice(7) : '';
-  if (!provided || !secretsEqual(provided, cronSecret)) {
-    return NextResponse.json({ success: false, error: 'Unauthorized.' }, { status: 401 });
-  }
+  const rejection = rejectUnauthorizedCron(
+    request,
+    'cron/billing-reconcile',
+    'Reconciliation is not configured.',
+  );
+  if (rejection !== null) return rejection;
 
   const store = createReconcileStore(createSupabaseServiceClient());
   const report = await runBillingReconciliation(store);

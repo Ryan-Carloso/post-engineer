@@ -1,0 +1,251 @@
+import 'server-only';
+
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { logger } from '@/lib/logger';
+
+//---------------
+// post-metrics — per-video performance snapshots for A/B content tests.
+//
+// Hourly (pg_cron -> POST /api/cron/post-metrics), every published slot is
+// snapshotted twice: once 24-48h after publish ('24h') and once 168-192h
+// after publish ('7d'). A window that was missed (engine down, token
+// expired for the whole 24h) is skipped, never back-filled with a late
+// number that would not be comparable. The windows live in SQL
+// (public.find_post_metrics_due, migration 025).
+//
+// Only YouTube and Instagram are measured: they are the providers whose
+// per-video counters the connected accounts already grant access to.
+//
+// Pure orchestration: the store and the provider fetchers are injected so
+// tests never reach Supabase, the engine, or a social API.
+//---------------
+
+export type MetricsWindow = '24h' | '7d';
+export type MeasuredProvider = 'youtube' | 'instagram';
+
+// Bound the fan-out of one run: each post costs one engine read plus one
+// provider call per published video. Which posts are due (the 24h/7d
+// windows) is decided in SQL: public.find_post_metrics_due (migration 025).
+export const MAX_POSTS_PER_RUN = 50;
+export const RUN_TIME_BUDGET_MS = 45_000;
+
+export interface MetricsCounters {
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
+  saves: number | null;
+}
+
+export interface DuePost {
+  id: string;
+  userId: string;
+  taskId: string;
+  window: MetricsWindow;
+  // `${provider}:${externalId}` of the videos already snapshotted for this
+  // window: a partially collected post only retries the missing videos.
+  collectedKeys: Set<string>;
+}
+
+export interface MetricsRow extends MetricsCounters {
+  postId: string;
+  userId: string;
+  provider: MeasuredProvider;
+  accountId: string;
+  externalId: string;
+  window: MetricsWindow;
+}
+
+export interface MetricsTarget {
+  provider: MeasuredProvider;
+  accountId: string;
+  externalId: string;
+}
+
+export interface PostMetricsDeps {
+  listDuePosts: (now: Date, limit: number) => Promise<DuePost[]>;
+  fetchPublishResults: (taskId: string, userId: string) => Promise<unknown[]>;
+  fetchCounters: (userId: string, target: MetricsTarget) => Promise<MetricsCounters>;
+  saveMetrics: (row: MetricsRow) => Promise<void>;
+  track: (event: string, properties: Record<string, unknown>) => void;
+  now: () => Date;
+}
+
+export interface PostMetricsReport {
+  checked: number;
+  recorded: number;
+  errors: string[];
+  truncated: boolean;
+}
+
+export function targetKey(target: Pick<MetricsTarget, 'provider' | 'externalId'>): string {
+  return `${target.provider}:${target.externalId}`;
+}
+
+//---------------
+// youtubeVideoId — the video id from a recorded YouTube link
+// (watch?v=, youtu.be/, /shorts/). Null when the link is not YouTube.
+//---------------
+export function youtubeVideoId(link: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(link);
+  } catch {
+    return null;
+  }
+  const host = url.hostname.replace(/^www\./, '').replace(/^m\./, '');
+  if (host === 'youtu.be') return url.pathname.slice(1) || null;
+  if (host !== 'youtube.com') return null;
+  const watchId = url.searchParams.get('v');
+  if (watchId !== null && watchId !== '') return watchId;
+  const shorts = url.pathname.match(/^\/shorts\/([^/]+)/);
+  return shorts ? shorts[1] : null;
+}
+
+function readString(record: Record<string, unknown>, key: string): string | null {
+  const value = record[key];
+  return typeof value === 'string' && value !== '' ? value : null;
+}
+
+//---------------
+// metricsTargets — the measurable videos in an engine task's
+// publish_results: published YouTube entries with a video link and
+// published Instagram entries with a media id, each with its account.
+//---------------
+export function metricsTargets(publishResults: unknown[]): MetricsTarget[] {
+  const targets: MetricsTarget[] = [];
+  for (const entry of publishResults) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const record = entry as Record<string, unknown>;
+    if (record.status === 'failed') continue;
+    const accountId = readString(record, 'accountId');
+    if (accountId === null) continue;
+    if (record.provider === 'youtube') {
+      const link = readString(record, 'videoUrl');
+      const videoId = link === null ? null : youtubeVideoId(link);
+      if (videoId !== null) targets.push({ provider: 'youtube', accountId, externalId: videoId });
+    } else if (record.provider === 'instagram') {
+      const mediaId = readString(record, 'postId');
+      if (mediaId !== null) targets.push({ provider: 'instagram', accountId, externalId: mediaId });
+    }
+  }
+  return targets;
+}
+
+//---------------
+// collectPostMetrics — one cron run. Per-video failures are logged and
+// reported, never thrown: one expired token must not block every other
+// user's snapshot. The next hourly run retries while the window is open.
+//---------------
+export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMetricsReport> {
+  const startedAt = deps.now();
+  const report: PostMetricsReport = { checked: 0, recorded: 0, errors: [], truncated: false };
+
+  const posts = await deps.listDuePosts(startedAt, MAX_POSTS_PER_RUN + 1);
+  if (posts.length > MAX_POSTS_PER_RUN) report.truncated = true;
+
+  for (const post of posts.slice(0, MAX_POSTS_PER_RUN)) {
+    if (deps.now().getTime() - startedAt.getTime() > RUN_TIME_BUDGET_MS) {
+      report.truncated = true;
+      break;
+    }
+    report.checked += 1;
+
+    let targets: MetricsTarget[];
+    try {
+      targets = metricsTargets(await deps.fetchPublishResults(post.taskId, post.userId));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn('[post-metrics] publish results unavailable', { postId: post.id, error: message });
+      report.errors.push(`${post.id}: publish results unavailable`);
+      continue;
+    }
+
+    for (const target of targets) {
+      if (post.collectedKeys.has(targetKey(target))) continue;
+      try {
+        const counters = await deps.fetchCounters(post.userId, target);
+        await deps.saveMetrics({ postId: post.id, userId: post.userId, window: post.window, ...target, ...counters });
+        report.recorded += 1;
+        // task_id joins this event with script_angle_generated in PostHog,
+        // so performance can be broken down by the angle the script used.
+        deps.track('post_metrics_collected', {
+          task_id: post.taskId,
+          post_id: post.id,
+          user_id: post.userId,
+          provider: target.provider,
+          window: post.window,
+          ...counters,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.warn('[post-metrics] snapshot failed', {
+          postId: post.id,
+          provider: target.provider,
+          error: message,
+        });
+        report.errors.push(`${post.id}/${target.provider}: snapshot failed`);
+      }
+    }
+  }
+  return report;
+}
+
+//---------------
+// createPostMetricsStore — Supabase-backed store (service role: the cron
+// has no user session; every row carries the post owner's user_id).
+//---------------
+export function createPostMetricsStore(
+  supabase: SupabaseClient,
+): Pick<PostMetricsDeps, 'listDuePosts' | 'saveMetrics'> {
+  return {
+    async listDuePosts(now, limit) {
+      // supabase-js rpc() never throws: the error must be checked.
+      const { data, error } = await supabase.rpc('find_post_metrics_due', {
+        p_now: now.toISOString(),
+        p_limit: limit,
+      });
+      if (error) throw new Error(`due posts lookup failed: ${error.message}`);
+      const posts: DuePost[] = [];
+      for (const row of (Array.isArray(data) ? data : []) as Array<Record<string, unknown>>) {
+        const window = row.metrics_window;
+        if (
+          typeof row.post_id !== 'string'
+          || typeof row.user_id !== 'string'
+          || typeof row.task_id !== 'string'
+          || (window !== '24h' && window !== '7d')
+        ) {
+          continue;
+        }
+        const keys = Array.isArray(row.collected_keys)
+          ? row.collected_keys.filter((key): key is string => typeof key === 'string')
+          : [];
+        posts.push({
+          id: row.post_id,
+          userId: row.user_id,
+          taskId: row.task_id,
+          window,
+          collectedKeys: new Set(keys),
+        });
+      }
+      return posts;
+    },
+    async saveMetrics(row) {
+      const { error } = await supabase.from('post_metrics').upsert(
+        {
+          post_id: row.postId,
+          user_id: row.userId,
+          provider: row.provider,
+          account_id: row.accountId,
+          external_id: row.externalId,
+          metrics_window: row.window,
+          views: row.views,
+          likes: row.likes,
+          comments: row.comments,
+          saves: row.saves,
+        },
+        { onConflict: 'post_id,provider,external_id,metrics_window' },
+      );
+      if (error) throw new Error(`metrics write failed: ${error.message}`);
+    },
+  };
+}
