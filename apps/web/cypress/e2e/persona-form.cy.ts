@@ -167,8 +167,14 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
     cy.wait('@getClonedVoices');
 
     cy.get('#persona-name').type('Maya E2E').blur();
-    cy.get('button[aria-label="Escolha um personagem 1"]').click();
-    cy.get('button[aria-label="Escolha um personagem 1"]').should('have.attr', 'aria-pressed', 'true');
+    // Photo upload satisfies the avatar gate without relying on the character
+    // carousel (off-screen slides flake in CI viewports).
+    cy.contains('[role="tab"]', 'Envie sua foto').click();
+    cy.get('input[type="file"][accept="image/jpeg,image/png"]').selectFile(
+      { contents: Cypress.Buffer.from('fake image bytes'), fileName: 'foto.png', mimeType: 'image/png' },
+      { force: true },
+    );
+    cy.contains('foto.png').should('be.visible');
 
     cy.contains('button', 'Criar persona').click();
 
