@@ -8,6 +8,12 @@ export interface ClonedVoiceClientHost {
     label: string,
     timeoutMs?: number,
   ): Promise<unknown>;
+  requestAudioBase64(
+    path: string,
+    init: RequestInit,
+    label: string,
+    timeoutMs?: number,
+  ): Promise<{ audioBase64: string; contentType: string | null }>;
 }
 
 export async function fetchCloneReferenceAudio(audioUrl: string): Promise<Blob> {
@@ -99,17 +105,15 @@ export async function previewClonedVoice(
   const suffix =
     language && language.trim() ? `?language=${encodeURIComponent(language.trim())}` : '';
   const path = `/api/persona/cloned-voices/${encodeURIComponent(cloneId)}/preview${suffix}`;
-  const response = await client.request(
+  // The preview route answers with raw audio bytes, not JSON: go through
+  // the binary client path so the tool can surface base64 audio.
+  const result = await client.requestAudioBase64(
     path,
     { method: 'POST', headers: client.getHeaders() },
     'preview cloned voice',
   );
-  if (typeof response !== 'object' || response === null) {
-    throw new Error('unexpected preview response');
-  }
-  const record = response as Record<string, unknown>;
-  if (typeof record.audioBase64 !== 'string') {
+  if (typeof result.audioBase64 !== 'string' || result.audioBase64.length === 0) {
     throw new Error('preview response missing audioBase64');
   }
-  return record;
+  return result;
 }

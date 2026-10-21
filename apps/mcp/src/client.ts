@@ -321,30 +321,7 @@ export class PostEngineerClient {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      // Structured API error bodies ({ success: false, error, code, field })
-      // carry the platform's stable machine code: keep it on the typed
-      // error so handlers can surface { code, message, field } instead of
-      // rewording the platform's own human message. The human message (or
-      // the raw body when it is not structured JSON) stays capped at
-      // MAX_ERROR_BODY_CHARS so nothing unbounded reaches agent output.
-      let code: string | null = null;
-      let field: string | null = null;
-      let detail = errorText.slice(0, MAX_ERROR_BODY_CHARS);
-      try {
-        const parsed: unknown = JSON.parse(errorText);
-        if (typeof parsed === 'object' && parsed !== null) {
-          const record = parsed as Record<string, unknown>;
-          if (typeof record.error === 'string' && record.error.length > 0) {
-            detail = record.error.slice(0, MAX_ERROR_BODY_CHARS);
-          }
-          if (typeof record.code === 'string') code = record.code;
-          if (typeof record.field === 'string') field = record.field;
-        }
-      } catch {
-        // Non-JSON body: detail stays the capped raw text.
-      }
-      throw new ApiError(`Failed to ${action}: ${response.status} ${detail}`, code, field);
+      throw await this.buildApiError(response, action);
     }
 
     // Some endpoints answer 204 No Content. An empty or non-JSON body on any
@@ -359,6 +336,63 @@ export class PostEngineerClient {
     } catch {
       throw new Error(`Failed to ${action}: response was not valid JSON (status ${response.status}).`);
     }
+  }
+
+  private async buildApiError(response: Response, action: string): Promise<ApiError> {
+    const errorText = await response.text();
+    // Structured API error bodies ({ success: false, error, code, field })
+    // carry the platform's stable machine code: keep it on the typed
+    // error so handlers can surface { code, message, field } instead of
+    // rewording the platform's own human message. The human message (or
+    // the raw body when it is not structured JSON) stays capped at
+    // MAX_ERROR_BODY_CHARS so nothing unbounded reaches agent output.
+    let code: string | null = null;
+    let field: string | null = null;
+    let detail = errorText.slice(0, MAX_ERROR_BODY_CHARS);
+    try {
+      const parsed: unknown = JSON.parse(errorText);
+      if (typeof parsed === 'object' && parsed !== null) {
+        const record = parsed as Record<string, unknown>;
+        if (typeof record.error === 'string' && record.error.length > 0) {
+          detail = record.error.slice(0, MAX_ERROR_BODY_CHARS);
+        }
+        if (typeof record.code === 'string') code = record.code;
+        if (typeof record.field === 'string') field = record.field;
+      }
+    } catch {
+      // Non-JSON body: detail stays the capped raw text.
+    }
+    return new ApiError(`Failed to ${action}: ${response.status} ${detail}`, code, field);
+  }
+
+  /**
+   * Fetch a binary (audio) response and return it base64-encoded. The JSON
+   * `request` path cannot carry audio bytes: the cloned-voice preview route
+   * answers with raw MP3, so tools surface the preview as base64 instead.
+   */
+  async requestAudioBase64(
+    path: string,
+    init: RequestInit,
+    action: string,
+    timeoutMs = REQUEST_TIMEOUT_MS,
+  ): Promise<{ audioBase64: string; contentType: string | null }> {
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      ...init,
+      signal: init.signal ?? AbortSignal.timeout(timeoutMs),
+    });
+
+    if (!response.ok) {
+      throw await this.buildApiError(response, action);
+    }
+
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length === 0) {
+      throw new Error(`Failed to ${action}: preview audio was empty (status ${response.status}).`);
+    }
+    return {
+      audioBase64: bytes.toString('base64'),
+      contentType: response.headers.get('content-type'),
+    };
   }
 
   async createPersona(input: CreatePersonaInput): Promise<unknown> {
