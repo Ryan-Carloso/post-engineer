@@ -226,7 +226,7 @@ describe('api', () => {
     expect(remounted.result.current.youtube.isSuccess).toBe(true);
     expect(fetch).toHaveBeenCalledTimes(1);
 
-    // Invalidating the shared key refetches once for every provider.
+    // Invalidating the shared key refetches once for all providers.
     await act(async () => {
       await client.invalidateQueries({ queryKey: ['social-accounts'] });
     });
