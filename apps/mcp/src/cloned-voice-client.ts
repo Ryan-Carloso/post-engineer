@@ -11,6 +11,38 @@ export interface ClonedVoiceClientHost {
   readonly baseUrl: string;
 }
 
+/**
+ * Read a fetch response body without buffering past `maxBytes`: stream the
+ * chunks and cancel the stream as soon as the cap is exceeded, so a hostile
+ * or broken server cannot exhaust memory with an oversized body. Falls back
+ * to a capped arrayBuffer read when the response has no readable stream.
+ */
+async function readBodyWithCap(response: Response, maxBytes: number): Promise<Buffer> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length > maxBytes) {
+      throw new Error(`Downloaded audio exceeds ${maxBytes / (1024 * 1024)} MB`);
+    }
+    return buffer;
+  }
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      throw new Error(`Downloaded audio exceeds ${maxBytes / (1024 * 1024)} MB`);
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks);
+}
+
 export async function fetchCloneReferenceAudio(audioUrl: string): Promise<Blob> {
   let parsed: URL;
   try {
@@ -36,13 +68,10 @@ export async function fetchCloneReferenceAudio(audioUrl: string): Promise<Blob> 
     if (!response.ok) {
       throw new Error(`Failed to download audio: HTTP ${response.status}`);
     }
-    const buffer = Buffer.from(await response.arrayBuffer());
+    const maxBytes = 20 * 1024 * 1024;
+    const buffer = await readBodyWithCap(response, maxBytes);
     if (buffer.length === 0) {
       throw new Error('Downloaded audio is empty');
-    }
-    const maxBytes = 20 * 1024 * 1024;
-    if (buffer.length > maxBytes) {
-      throw new Error(`Downloaded audio exceeds ${maxBytes / (1024 * 1024)} MB`);
     }
     const contentType = response.headers.get('content-type') ?? 'application/octet-stream';
     return new Blob([buffer], { type: contentType });

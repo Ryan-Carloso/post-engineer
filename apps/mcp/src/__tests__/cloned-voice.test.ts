@@ -117,6 +117,48 @@ describe('fetchCloneReferenceAudio', () => {
       'Downloaded audio exceeds 20 MB'
     );
   });
+
+  it('streams a chunked body under the cap', async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2]));
+        controller.enqueue(new Uint8Array([3]));
+        controller.close();
+      },
+    });
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(stream, { status: 200, headers: { 'content-type': 'audio/mpeg' } })
+    );
+    const blob = await fetchCloneReferenceAudio('https://cdn.example.com/ref.mp3');
+    expect(blob.type).toBe('audio/mpeg');
+    expect(new Uint8Array(await blob.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+  });
+
+  it('cancels an over-cap stream instead of buffering it whole', async () => {
+    let pulledBytes = 0;
+    let cancelled = false;
+    const chunk = new Uint8Array(1024 * 1024);
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulledBytes += chunk.byteLength;
+        controller.enqueue(chunk);
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(stream, { status: 200, headers: { 'content-type': 'audio/wav' } })
+    );
+    await expect(fetchCloneReferenceAudio('https://cdn.example.com/endless.wav')).rejects.toThrow(
+      'Downloaded audio exceeds 20 MB'
+    );
+    expect(cancelled).toBe(true);
+    // The reader aborts as soon as the cap is crossed: pulling stops at
+    // the cap plus the runtime's small read-ahead — never the whole
+    // endless body.
+    expect(pulledBytes).toBeLessThanOrEqual(23 * 1024 * 1024);
+  });
 });
 
 describe('cloned voice client calls', () => {
