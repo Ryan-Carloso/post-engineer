@@ -37,7 +37,8 @@ from app.models.schema import (
 )
 from app.services import state as sm, task as tm
 from app.services import video_storage
-from app.services.language_gate import ENGLISH_ONLY_VIDEO_MESSAGE, is_english_language
+from app.services.language_gate import ensure_english_video_language
+from app.services.upload_filenames import sanitize_upload_filename as _sanitize_upload_filename
 from app.utils import file_security, upload_limits, utils
 
 # Operator-private task fields (cost_usd, cost_missing_reason): persisted
@@ -82,20 +83,6 @@ else:
         max_concurrent_tasks=_max_concurrent_tasks,
         max_queued_tasks=_max_queued_tasks,
     )
-
-
-def _sanitize_upload_filename(filename: str, request_id: str) -> str:
-    # Browsers/clients sometimes include directory info, or even smuggle ../
-    # traversal segments. Keep only the bare filename so the upload endpoint
-    # never writes outside the target directory.
-    normalized_name = (filename or "").replace("\\", "/").split("/")[-1].strip()
-    if not normalized_name or normalized_name in {".", ".."}:
-        raise HttpException(
-            task_id=request_id,
-            status_code=400,
-            message=f"{request_id}: invalid filename",
-        )
-    return normalized_name
 
 
 def _resolve_path_within_directory(base_dir: str, unsafe_path: str, request_id: str) -> str:
@@ -405,20 +392,8 @@ def create_task(
     request_id = base.get_task_id(request)
     auth = base.get_auth_context(request)
     # English-only launch: a direct job in any other language is rejected
-    # before the task row exists. Web/MCP enforce the same rule upstream;
-    # this is the backstop for callers that reach the engine directly. An
-    # empty video_language keeps the historical auto-detect default.
-    video_language = getattr(body, "video_language", None)
-    if (
-        isinstance(video_language, str)
-        and video_language.strip()
-        and not is_english_language(video_language)
-    ):
-        raise HttpException(
-            task_id=task_id,
-            status_code=400,
-            message=f"{request_id}: {ENGLISH_ONLY_VIDEO_MESSAGE}",
-        )
+    # before the task row exists (web/MCP enforce the same rule upstream).
+    ensure_english_video_language(body, request_id, task_id)
     try:
         task = {
             "task_id": task_id,

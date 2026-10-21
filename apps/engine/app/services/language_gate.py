@@ -11,6 +11,8 @@ launch lock lifts.
 
 from __future__ import annotations
 
+from app.models.exception import HttpException
+
 ENGLISH_ONLY_VIDEO_MESSAGE = "Only English videos are supported for now"
 ENGLISH_ONLY_CLONE_MESSAGE = "Voice cloning is only available in English for now"
 
@@ -21,3 +23,22 @@ def is_english_language(language: str | None) -> bool:
         return False
     base = language.strip().lower().replace("_", "-").split("-", 1)[0]
     return base == "en"
+
+
+def ensure_english_video_language(body: object, request_id: str, task_id: str) -> None:
+    """Raise HttpException when a video job names a non-English language.
+
+    An empty video_language keeps the historical auto-detect default and
+    is not rejected.
+    """
+    video_language = getattr(body, "video_language", None)
+    if (
+        isinstance(video_language, str)
+        and video_language.strip()
+        and not is_english_language(video_language)
+    ):
+        raise HttpException(
+            task_id=task_id,
+            status_code=400,
+            message=f"{request_id}: {ENGLISH_ONLY_VIDEO_MESSAGE}",
+        )
