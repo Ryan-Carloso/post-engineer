@@ -186,18 +186,49 @@ def _discard_stale_subtitle(subtitle_path: str) -> None:
         )
 
 
-def _limit_generated_script(script: str) -> str:
-    """Keep generated speech inside the configured character budget."""
-    limit = int(config.app.get("max_video_script_characters", 700))
-    normalized = re.sub(r"[ \t]+", " ", script.strip())
-    if len(normalized) <= limit:
-        return normalized
-    candidate = normalized[:limit]
+_SENTENCE_END_RE = re.compile(r"(?<=[.!?。！？])\s+")
+
+
+def _cut_to_budget(text: str, limit: int) -> str:
+    """Cut text to at most `limit` chars, on a sentence end when possible."""
+    candidate = text[:limit]
     sentence_end = max(candidate.rfind(mark) for mark in ".!?。！？")
     if sentence_end >= 0:
         return candidate[: sentence_end + 1].strip()
     word_end = candidate.rfind(" ")
     return candidate[: word_end if word_end > 0 else limit].strip()
+
+
+def _limit_generated_script(script: str) -> str:
+    """Keep generated speech inside the configured character budget.
+
+    The call to action is the script's last sentence, so an over-budget
+    script is trimmed from the body before it: cutting from the end would
+    drop exactly the CTA. Falls back to a plain cut when the last sentence
+    alone cannot fit next to any body text.
+    """
+    limit = int(config.app.get("max_video_script_characters", 700))
+    normalized = re.sub(r"[ \t]+", " ", script.strip())
+    if len(normalized) <= limit:
+        return normalized
+    sentences = _SENTENCE_END_RE.split(normalized)
+    closing = sentences[-1]
+    head = normalized[: len(normalized) - len(closing)].rstrip()
+    # Keep the separator that preceded the closing sentence (paragraph
+    # break or space) so the hook paragraph boundary survives the trim.
+    separator = normalized[len(head) : len(normalized) - len(closing)]
+    head_budget = limit - len(separator) - len(closing)
+    if len(sentences) > 1 and head_budget > 0:
+        trimmed_head = _cut_to_budget(head, head_budget)
+        if "\n\n" in head and "\n\n" not in trimmed_head and "\n" not in separator:
+            # The trim kept only the hook paragraph: the closing sentence
+            # must stay its own paragraph or the hook loses its boundary.
+            separator = "\n\n"
+            if len(trimmed_head) + len(separator) + len(closing) > limit:
+                trimmed_head = _cut_to_budget(head, head_budget - 2)
+        if trimmed_head:
+            return f"{trimmed_head}{separator}{closing}"
+    return _cut_to_budget(normalized, limit)
 
 
 def _regenerate_fitting_hook(
@@ -242,6 +273,7 @@ def _regenerate_fitting_hook(
             "word_cap": word_cap,
         },
     )
+    body = "\n\n".join(paragraphs[1:])
     hook = llm.generate_script(
         video_subject=params.video_subject,
         language=params.video_language,
@@ -250,10 +282,12 @@ def _regenerate_fitting_hook(
             f"{params.video_script_prompt} Return only a standalone hook paragraph: "
             f"one complete sentence of at most {word_cap} words ending with terminal "
             f"punctuation, designed to take {window_min:g} to {window_max:g} seconds "
-            "when spoken."
+            "when spoken. It must open this exact video, whose remaining "
+            f"narration is: {body}"
         ),
         custom_system_prompt=params.custom_system_prompt,
         target_words_min=words_min,
         target_words_max=word_cap,
+        include_cta=False,
     )
-    return _limit_generated_script(f"{hook.strip()}\n\n" + "\n\n".join(paragraphs[1:]))
+    return _limit_generated_script(f"{hook.strip()}\n\n{body}")

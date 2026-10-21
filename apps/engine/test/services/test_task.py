@@ -47,16 +47,21 @@ class TestTaskService(unittest.TestCase):
             custom_system_prompt="Only write short narration.",
         )
 
-        with patch.object(tm.llm, "generate_script", return_value="生成的文案") as generate:
+        with (
+            patch.object(tm.llm, "generate_script_angle", return_value="Coffee angle") as angle,
+            patch.object(tm.llm, "generate_script", return_value="生成的文案") as generate,
+        ):
             result = tm.generate_script("task-id", params)
 
         self.assertEqual(result, "生成的文案")
+        angle.assert_called_once_with(video_subject="咖啡", language="zh-CN", niche="")
         generate.assert_called_once_with(
             video_subject="咖啡",
             language="zh-CN",
             paragraph_number=2,
             video_script_prompt="语气轻松",
             custom_system_prompt="Only write short narration.",
+            angle="Coffee angle",
         )
 
     def test_generate_final_videos_does_not_rerecord_old_bgm(self):

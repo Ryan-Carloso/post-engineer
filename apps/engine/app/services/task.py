@@ -544,17 +544,46 @@ def _ensure_persona_hook_fits(
     raise AssertionError("unreachable: hook retry loop always returns or raises")
 
 
+def _resolve_script_angle(task_id: str, params: VideoParams) -> str:
+    """Pick a specific angle for the topic, or "" to script the bare topic.
+
+    The angle is an enhancement: an LLM failure here degrades to the raw
+    topic (loud log + telemetry) instead of failing the user's video.
+    """
+    niche = params.persona.niche if params.persona is not None else ""
+    try:
+        angle = llm.generate_script_angle(
+            video_subject=params.video_subject,
+            language=params.video_language,
+            niche=niche,
+        )
+    except Exception as exc:
+        logger.warning(
+            "script angle generation failed; scripting the bare topic: "
+            f"{scrub_error_text(str(exc))}"
+        )
+        angle = ""
+    if not angle:
+        track_event("script_angle_fallback", _task_tracking_context(task_id))
+    return angle
+
+
 def generate_script(task_id, params):
     logger.info("\n\n## generating video script")
     video_script = params.video_script.strip()
+    angle = ""
     if not video_script:
+        angle = _resolve_script_angle(task_id, params)
         script_prompt = params.video_script_prompt
         if persona_lipsync_active(params):
+            # The lip-sync intro paragraph doubles as the retention hook, so
+            # the timing contract and the scroll-stopping opener coincide.
             script_prompt = (
                 f"{script_prompt} Start with a standalone hook paragraph of "
                 f"{PERSONA_HOOK_TARGET_WORDS_MIN} to {PERSONA_HOOK_TARGET_WORDS_MAX} words, "
                 f"designed to take {PERSONA_HOOK_MIN_SECONDS:g} to {PERSONA_HOOK_MAX_SECONDS:g} "
-                "seconds when spoken. End the hook with terminal "
+                "seconds when spoken. This paragraph is the scroll-stopping hook. "
+                "End the hook with terminal "
                 "punctuation, then add exactly one blank line before the main content."
             ).strip()
         video_script = llm.generate_script(
@@ -563,6 +592,7 @@ def generate_script(task_id, params):
             paragraph_number=params.paragraph_number,
             video_script_prompt=script_prompt,
             custom_system_prompt=params.custom_system_prompt,
+            angle=angle,
         )
     else:
         # Log only the size — the script itself is user content and must not
@@ -592,6 +622,8 @@ def generate_script(task_id, params):
                 custom_system_prompt=params.custom_system_prompt,
                 target_words_min=PERSONA_HOOK_TARGET_WORDS_MIN,
                 target_words_max=PERSONA_HOOK_TARGET_WORDS_MAX,
+                angle=angle,
+                include_cta=False,
             )
             body = llm.generate_script(
                 video_subject=params.video_subject,
@@ -605,6 +637,7 @@ def generate_script(task_id, params):
                 custom_system_prompt=params.custom_system_prompt,
                 target_words_min=72,
                 target_words_max=94,
+                angle=angle,
             )
             video_script = _limit_generated_script(f"{hook.strip()}\n\n{body.strip()}")
             paragraphs = [paragraph.strip() for paragraph in re.split(r"\n\s*\n", video_script) if paragraph.strip()]

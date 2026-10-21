@@ -23,6 +23,15 @@ MIN_SCRIPT_PARAGRAPH_NUMBER = 1
 MAX_SCRIPT_PARAGRAPH_NUMBER = 10
 MAX_SCRIPT_PROMPT_LENGTH = 2000
 MAX_SCRIPT_SYSTEM_PROMPT_LENGTH = 8000
+MAX_SCRIPT_ANGLE_LENGTH = 200
+MAX_SCRIPT_CTA_LENGTH = 200
+# Used when the caller supplies no explicit call to action: the model picks
+# the engagement ask that fits the content instead of a fixed phrase.
+DEFAULT_SCRIPT_CTA_INSTRUCTION = (
+    "choose the one that best fits the content: follow for more on this "
+    "subject, comment an answer to a specific question, or save the video "
+    "for later"
+)
 _THINK_BLOCK_RE = re.compile(r"<think\b[^>]*>.*?</think>", re.IGNORECASE | re.DOTALL)
 _UNCLOSED_THINK_BLOCK_RE = re.compile(r"<think\b[^>]*>.*$", re.IGNORECASE | re.DOTALL)
 _URL_USERINFO_RE = re.compile(r"((?:https?|wss?)://)([^/\s?#@]*:[^/\s?#@]*@)", re.IGNORECASE)
@@ -35,7 +44,13 @@ DEFAULT_SCRIPT_SYSTEM_PROMPT = """
 # Role: Video Script Generator
 
 ## Goals:
-Generate a script for a video, depending on the subject of the video.
+Generate a script for a short vertical video, depending on the subject of the video.
+The viewer decides in the first two seconds whether to keep watching, so the script must earn attention immediately, keep it, and end with a reason to engage.
+
+## Structure:
+1. hook: the very first sentence. At most 15 words. Interrupt the scroll with a provocative question, a counterintuitive claim, a common mistake, a concrete number, or a direct "stop doing X". Never open with greetings, "in this video", or a generic "did you know".
+2. body: deliver exactly what the hook promised. One single idea, concrete and specific (examples, numbers, consequences), told in short spoken sentences that sound natural when read aloud. No lists, no filler, no repetition of the hook.
+3. call to action: the very last sentence. At most 12 words, tied to what was just said, spoken naturally (never "like and subscribe").
 
 ## Constrains:
 1. do not under any circumstance reference this prompt in your response.
@@ -1028,6 +1043,9 @@ def build_script_prompt(
     custom_system_prompt: str = "",
     target_words_min: int | None = None,
     target_words_max: int | None = None,
+    angle: str = "",
+    cta: str = "",
+    include_cta: bool = True,
 ) -> str:
     paragraph_number = _normalize_script_paragraph_number(paragraph_number)
     video_script_prompt = _limit_script_text(
@@ -1036,6 +1054,8 @@ def build_script_prompt(
     custom_system_prompt = _limit_script_text(
         custom_system_prompt, MAX_SCRIPT_SYSTEM_PROMPT_LENGTH, "custom_system_prompt"
     )
+    angle = _limit_script_text(angle, MAX_SCRIPT_ANGLE_LENGTH, "angle")
+    cta = _limit_script_text(cta, MAX_SCRIPT_CTA_LENGTH, "cta")
 
     # Keep the "script generation rules" and the "runtime context" as separate
     # blocks. Advanced users overriding the default system prompt still get
@@ -1049,10 +1069,23 @@ def build_script_prompt(
 - video subject: {video_subject}
 - target length: {minimum_words} to {maximum_words} words
 """.rstrip()
+    if angle:
+        prompt += f"\n- angle (build the hook and body around it): {angle}"
     if paragraph_number is not None:
         prompt += f"\n- number of paragraphs: {paragraph_number}"
     if language:
         prompt += f"\n- language: {language}"
+    # A partial script (e.g. a standalone hook regenerated for timing) must
+    # not end with a call to action: the rest of the script already has one.
+    if not include_cta:
+        prompt += "\n- call to action: none, this is not the end of the video"
+    elif cta:
+        prompt += (
+            f"\n- call to action (keep the idea, adapt the wording to the "
+            f"language): {cta}"
+        )
+    else:
+        prompt += f"\n- call to action: {DEFAULT_SCRIPT_CTA_INSTRUCTION}"
     if video_script_prompt:
         prompt += f"""
 
@@ -1099,6 +1132,9 @@ def generate_script(
     custom_system_prompt: str = "",
     target_words_min: int | None = None,
     target_words_max: int | None = None,
+    angle: str = "",
+    cta: str = "",
+    include_cta: bool = True,
 ) -> str:
     paragraph_number = _normalize_script_paragraph_number(paragraph_number)
     video_script_prompt = _limit_script_text(
@@ -1115,6 +1151,9 @@ def generate_script(
         custom_system_prompt=custom_system_prompt,
         target_words_min=target_words_min,
         target_words_max=target_words_max,
+        angle=angle,
+        cta=cta,
+        include_cta=include_cta,
     )
     final_script = ""
     logger.info(
@@ -1190,6 +1229,46 @@ def generate_script(
             "retries; stripped them"
         )
     return cleaned
+
+
+def generate_script_angle(video_subject: str, language: str = "", niche: str = "") -> str:
+    """Turn a bare topic into one specific, curiosity-driven angle.
+
+    Users only type a topic ("coffee"); scripting the topic directly yields
+    generic videos. One cheap call picks a concrete angle ("the mistake
+    that makes home coffee bitter") the script is then built around.
+
+    Returns "" when the model gives nothing usable. Raises whatever the LLM
+    call raises; the caller decides how to degrade.
+    """
+    subject = _limit_script_text(video_subject, MAX_SCRIPT_PROMPT_LENGTH, "video_subject")
+    niche = _limit_script_text(niche, MAX_SCRIPT_PROMPT_LENGTH, "niche")
+    prompt = f"""You are a short-form video strategist. Given a broad topic, propose ONE
+specific angle for a 30 to 40 second vertical video that makes people stop scrolling.
+
+Good angles are concrete and create curiosity: a common mistake, a counterintuitive
+fact, a surprising number, a myth to debunk, a before/after, or a "stop doing X".
+Avoid vague or generic angles ("the benefits of X", "everything about X").
+
+Topic: {subject}"""
+    if niche:
+        prompt += f"\nChannel niche: {niche}"
+    if language:
+        prompt += f"\nWrite the angle in this language: {language}"
+    prompt += (
+        "\n\nReturn only the angle as one plain sentence, with no quotes, no "
+        "labels and no explanation."
+    )
+
+    response = _generate_response_with_fallback(prompt=prompt)
+    lines = [line.strip() for line in _strip_code_fence(response).splitlines() if line.strip()]
+    if not lines:
+        return ""
+    angle = lines[0].strip("\"'“”«» ")
+    if _uses_latin_script(language) and _find_foreign_script(angle):
+        logger.warning("script angle contains foreign-script characters; discarding it")
+        return ""
+    return _limit_script_text(angle, MAX_SCRIPT_ANGLE_LENGTH, "angle")
 
 
 def generate_music_mood(video_script: str, available_moods: tuple[str, ...]) -> str:
