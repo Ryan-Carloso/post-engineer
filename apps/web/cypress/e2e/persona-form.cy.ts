@@ -74,7 +74,9 @@ function mockBase(): void {
 
 function visitPersona(path: string): void {
   cy.visit(path, { onBeforeLoad: stubFormAudio });
-  cy.wait('@getVoices');
+  // Do not cy.wait('@getVoices'): React Query may serve a warm cache with no
+  // network round-trip (same flake class as posts-create personas wait).
+  cy.get('#persona-name').should('be.visible');
 }
 
 // Fill a valid create form: name + character + voice.

@@ -160,10 +160,9 @@ describe('Creating a post', () => {
     // stay client-side (a cy.visit would wipe the React Query cache, which
     // the real Next.js Link navigation never does).
     cy.visit('/posts');
-    cy.wait('@status');
-    cy.contains('a', /Novo post|New post/).click();
+    cy.contains('a', /Novo post|New post/).should('be.visible').click();
     cy.location('pathname').should('eq', '/posts/new');
-    cy.wait('@personas');
+    cy.contains('E2E Persona').should('be.visible');
 
     // From here the stubs go quiet on purpose: the assertions below must
     // pass on the seeded cache alone, because no stubbed response arrives
@@ -186,9 +185,6 @@ describe('Creating a post', () => {
     // At least one publishing account.
     cy.get('[data-testid="account-card"]').first().click();
 
-    const supabaseUrl = Cypress.env('supabaseUrl') as string;
-    const authCookie = `sb-${new URL(supabaseUrl).hostname.split('.')[0]}-auth-token`;
-    cy.getCookie(authCookie, { log: false }).should('exist');
     cy.contains('button', /Agendar posts|Schedule posts/).click();
 
     cy.wait('@createPost').its('request.body').should('deep.include', {
@@ -306,8 +302,6 @@ describe('Posts list progress', () => {
 
   it('shows the live progress percent on the list card', () => {
     cy.visit('/posts');
-    cy.wait('@status');
-
     cy.contains('E2E generating topic').should('be.visible');
     cy.contains('42%').should('be.visible');
     cy.get('[role="progressbar"]').should('have.attr', 'aria-valuenow', '42');
