@@ -16,7 +16,7 @@ import {
   handlePreviewClonedVoice,
 } from '../cloned-voice-tools.js';
 import { createPostEngineerMcpServer } from '../index.js';
-import { PostEngineerClient } from '../client.js';
+import type { PostEngineerClient } from '../client.js';
 
 const mockTrackEvent = vi.fn();
 vi.mock('../analytics.js', () => ({
@@ -25,11 +25,9 @@ vi.mock('../analytics.js', () => ({
 
 const realFetch = global.fetch;
 
-function fakeHost(
-  request: ReturnType<typeof vi.fn>,
-  requestAudioBase64: ReturnType<typeof vi.fn> = vi.fn(),
-): ClonedVoiceClientHost {
+function fakeHost(request: ReturnType<typeof vi.fn>): ClonedVoiceClientHost {
   return {
+    baseUrl: 'https://api.test',
     getHeaders: vi.fn((includeContentType?: boolean): Record<string, string> => {
       const headers: Record<string, string> = { Authorization: 'Bearer test-token' };
       if (includeContentType !== false) {
@@ -38,8 +36,6 @@ function fakeHost(
       return headers;
     }),
     request: request as unknown as ClonedVoiceClientHost['request'],
-    requestAudioBase64:
-      requestAudioBase64 as unknown as ClonedVoiceClientHost['requestAudioBase64'],
   };
 }
 
@@ -124,6 +120,10 @@ describe('fetchCloneReferenceAudio', () => {
 });
 
 describe('cloned voice client calls', () => {
+  afterEach(() => {
+    global.fetch = realFetch;
+  });
+
   it('lists cloned voices through the host request', async () => {
     const request = vi.fn().mockResolvedValue({ success: true, voices: [] });
     const host = fakeHost(request);
@@ -148,90 +148,54 @@ describe('cloned voice client calls', () => {
   });
 
   it('previews without a language suffix by default', async () => {
-    const requestAudioBase64 = vi
-      .fn()
-      .mockResolvedValue({ audioBase64: 'QUJD', contentType: 'audio/mpeg' });
-    const host = fakeHost(vi.fn(), requestAudioBase64);
+    global.fetch = vi.fn().mockResolvedValue(audioResponse([0x49, 0x44, 0x33], 'audio/mpeg'));
+    const host = fakeHost(vi.fn());
     const result = await previewClonedVoice(host, 'clone-1');
-    expect(result).toEqual({ audioBase64: 'QUJD', contentType: 'audio/mpeg' });
-    expect(requestAudioBase64).toHaveBeenCalledWith(
-      '/api/persona/cloned-voices/clone-1/preview',
-      expect.objectContaining({ method: 'POST' }),
-      'preview cloned voice'
+    expect(result).toEqual({
+      audioBase64: Buffer.from([0x49, 0x44, 0x33]).toString('base64'),
+      contentType: 'audio/mpeg',
+    });
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.test/api/persona/cloned-voices/clone-1/preview',
+      expect.objectContaining({
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer test-token',
+        },
+      })
     );
   });
 
   it('adds a trimmed, encoded language suffix to previews', async () => {
-    const requestAudioBase64 = vi
-      .fn()
-      .mockResolvedValue({ audioBase64: 'QUJD', contentType: 'audio/mpeg' });
-    const host = fakeHost(vi.fn(), requestAudioBase64);
+    global.fetch = vi.fn().mockResolvedValue(audioResponse([1], 'audio/mpeg'));
+    const host = fakeHost(vi.fn());
     await previewClonedVoice(host, 'clone-1', ' pt-BR ');
-    expect(requestAudioBase64).toHaveBeenCalledWith(
-      '/api/persona/cloned-voices/clone-1/preview?language=pt-BR',
-      expect.objectContaining({ method: 'POST' }),
-      'preview cloned voice'
-    );
-  });
-
-  it('rejects a preview response without audioBase64', async () => {
-    const requestAudioBase64 = vi
-      .fn()
-      .mockResolvedValue({ audioBase64: '', contentType: 'audio/mpeg' });
-    const host = fakeHost(vi.fn(), requestAudioBase64);
-    await expect(previewClonedVoice(host, 'clone-1')).rejects.toThrow(
-      'preview response missing audioBase64'
-    );
-  });
-});
-
-describe('PostEngineerClient.requestAudioBase64', () => {
-  afterEach(() => {
-    global.fetch = realFetch;
-  });
-
-  it('returns base64 audio and the content type from a binary response', async () => {
-    const audio = new Uint8Array([0x49, 0x44, 0x33, 0x04]);
-    global.fetch = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(audio, { status: 200, headers: { 'content-type': 'audio/mpeg' } })
-      );
-    const api = new PostEngineerClient({ apiKey: 'key', baseUrl: 'https://api.test/' });
-    const result = await api.requestAudioBase64(
-      '/api/persona/cloned-voices/clone-1/preview',
-      { method: 'POST', headers: api.getHeaders() },
-      'preview cloned voice'
-    );
-    expect(result.audioBase64).toBe(Buffer.from(audio).toString('base64'));
-    expect(result.contentType).toBe('audio/mpeg');
     expect(global.fetch).toHaveBeenCalledWith(
-      'https://api.test/api/persona/cloned-voices/clone-1/preview',
+      'https://api.test/api/persona/cloned-voices/clone-1/preview?language=pt-BR',
       expect.objectContaining({ method: 'POST' })
     );
   });
 
-  it('throws the structured API error message on a non-ok response', async () => {
-    global.fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ success: false, error: 'Cloned voice not found.' }), {
-        status: 404,
-        headers: { 'content-type': 'application/json' },
-      })
+  it('throws the structured API error message on a non-ok preview', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      text: async () =>
+        JSON.stringify({ success: false, error: 'Cloned voice not found.' }),
+    });
+    const host = fakeHost(vi.fn());
+    await expect(previewClonedVoice(host, 'clone-1')).rejects.toThrow(
+      'Failed to preview cloned voice: 404 Cloned voice not found.'
     );
-    const api = new PostEngineerClient({ apiKey: 'key', baseUrl: 'https://api.test/' });
-    await expect(
-      api.requestAudioBase64('/preview', { method: 'POST' }, 'preview cloned voice')
-    ).rejects.toThrow('Failed to preview cloned voice: 404 Cloned voice not found.');
   });
 
-  it('rejects an empty audio body', async () => {
-    global.fetch = vi
-      .fn()
-      .mockResolvedValue(new Response(new Uint8Array(0), { status: 200 }));
-    const api = new PostEngineerClient({ apiKey: 'key', baseUrl: 'https://api.test/' });
-    await expect(
-      api.requestAudioBase64('/preview', { method: 'POST' }, 'preview cloned voice')
-    ).rejects.toThrow('preview audio was empty');
+  it('rejects an empty preview audio body', async () => {
+    global.fetch = vi.fn().mockResolvedValue(audioResponse([], 'audio/mpeg'));
+    const host = fakeHost(vi.fn());
+    await expect(previewClonedVoice(host, 'clone-1')).rejects.toThrow(
+      'preview audio was empty'
+    );
   });
 });
 
@@ -331,20 +295,20 @@ describe('cloned voice tool handlers', () => {
   });
 
   it('handlePreviewClonedVoice returns the audio payload', async () => {
-    const requestAudioBase64 = vi
-      .fn()
-      .mockResolvedValue({ audioBase64: 'QUJD', contentType: 'audio/mpeg' });
-    const client = fakeHost(vi.fn(), requestAudioBase64) as unknown as PostEngineerClient;
+    global.fetch = vi.fn().mockResolvedValue(audioResponse([0x41, 0x42, 0x43], 'audio/mpeg'));
+    const client = fakeHost(vi.fn()) as unknown as PostEngineerClient;
     const result = await handlePreviewClonedVoice(client, { cloneId: 'clone-1' });
     expect(result.isError).toBeFalsy();
     expect(firstText(result)).toContain('QUJD');
   });
 
-  it('handlePreviewClonedVoice maps a malformed payload to an error response', async () => {
-    const requestAudioBase64 = vi
-      .fn()
-      .mockResolvedValue({ audioBase64: '', contentType: 'audio/mpeg' });
-    const client = fakeHost(vi.fn(), requestAudioBase64) as unknown as PostEngineerClient;
+  it('handlePreviewClonedVoice maps a failed preview to an error response', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 502,
+      text: async () => JSON.stringify({ success: false, error: 'Preview unavailable.' }),
+    });
+    const client = fakeHost(vi.fn()) as unknown as PostEngineerClient;
     const result = await handlePreviewClonedVoice(client, { cloneId: 'clone-1' });
     expect(result.isError).toBe(true);
     expect(firstText(result)).toContain('Error previewing cloned voice');
@@ -363,10 +327,9 @@ describe('cloned voice tools run through the MCP server', () => {
   async function callTool(
     toolName: string,
     args: Record<string, unknown>,
-    request: ReturnType<typeof vi.fn>,
-    requestAudioBase64: ReturnType<typeof vi.fn> = vi.fn()
+    request: ReturnType<typeof vi.fn>
   ) {
-    const apiClient = fakeHost(request, requestAudioBase64) as unknown as PostEngineerClient;
+    const apiClient = fakeHost(request) as unknown as PostEngineerClient;
     const server = createPostEngineerMcpServer(apiClient);
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const client = new Client({ name: 'test-client', version: '0.0.0' });
@@ -423,20 +386,13 @@ describe('cloned voice tools run through the MCP server', () => {
     );
   });
 
-  it('preview_cloned_voice calls the binary client request', async () => {
-    const requestAudioBase64 = vi
-      .fn()
-      .mockResolvedValue({ audioBase64: 'QUJD', contentType: 'audio/mpeg' });
-    await callTool(
-      'preview_cloned_voice',
-      { cloneId: 'clone-1' },
-      vi.fn(),
-      requestAudioBase64
-    );
-    expect(requestAudioBase64).toHaveBeenCalledWith(
-      '/api/persona/cloned-voices/clone-1/preview',
-      expect.objectContaining({ method: 'POST' }),
-      'preview cloned voice'
+  it('preview_cloned_voice fetches the preview audio', async () => {
+    global.fetch = vi.fn().mockResolvedValue(audioResponse([0x41, 0x42, 0x43], 'audio/mpeg'));
+    const result = await callTool('preview_cloned_voice', { cloneId: 'clone-1' }, vi.fn());
+    expect(firstText(result as { content?: unknown })).toContain('QUJD');
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.test/api/persona/cloned-voices/clone-1/preview',
+      expect.objectContaining({ method: 'POST' })
     );
   });
 });

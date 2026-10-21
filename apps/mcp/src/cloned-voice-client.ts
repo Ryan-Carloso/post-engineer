@@ -8,12 +8,7 @@ export interface ClonedVoiceClientHost {
     label: string,
     timeoutMs?: number,
   ): Promise<unknown>;
-  requestAudioBase64(
-    path: string,
-    init: RequestInit,
-    label: string,
-    timeoutMs?: number,
-  ): Promise<{ audioBase64: string; contentType: string | null }>;
+  readonly baseUrl: string;
 }
 
 export async function fetchCloneReferenceAudio(audioUrl: string): Promise<Blob> {
@@ -105,15 +100,41 @@ export async function previewClonedVoice(
   const suffix =
     language && language.trim() ? `?language=${encodeURIComponent(language.trim())}` : '';
   const path = `/api/persona/cloned-voices/${encodeURIComponent(cloneId)}/preview${suffix}`;
-  // The preview route answers with raw audio bytes, not JSON: go through
-  // the binary client path so the tool can surface base64 audio.
-  const result = await client.requestAudioBase64(
-    path,
-    { method: 'POST', headers: client.getHeaders() },
-    'preview cloned voice',
-  );
-  if (typeof result.audioBase64 !== 'string' || result.audioBase64.length === 0) {
-    throw new Error('preview response missing audioBase64');
+  // The preview route answers with raw audio bytes, not JSON, so it cannot
+  // go through the client's JSON request path: fetch the bytes here and
+  // surface them as base64 (same own-fetch pattern as the download above).
+  // The upload timeout applies: preview synthesis can cold-start the GPU app.
+  const response = await fetch(`${client.baseUrl}${path}`, {
+    method: 'POST',
+    headers: client.getHeaders(),
+    signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    // Mirror the client's error contract: prefer the structured `error`
+    // message, capped like MAX_ERROR_BODY_CHARS in client.ts.
+    let detail = errorText.slice(0, 200);
+    try {
+      const parsed: unknown = JSON.parse(errorText);
+      if (typeof parsed === 'object' && parsed !== null) {
+        const record = parsed as Record<string, unknown>;
+        if (typeof record.error === 'string' && record.error.length > 0) {
+          detail = record.error.slice(0, 200);
+        }
+      }
+    } catch {
+      // Non-JSON body: detail stays the capped raw text.
+    }
+    throw new Error(`Failed to preview cloned voice: ${response.status} ${detail}`);
   }
-  return result;
+  const bytes = Buffer.from(await response.arrayBuffer());
+  if (bytes.length === 0) {
+    throw new Error(
+      `Failed to preview cloned voice: preview audio was empty (status ${response.status}).`,
+    );
+  }
+  return {
+    audioBase64: bytes.toString('base64'),
+    contentType: response.headers.get('content-type'),
+  };
 }
