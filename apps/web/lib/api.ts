@@ -596,16 +596,25 @@ export function useSocialAccountsQuery<TData>(
   });
 }
 
+// Hoisted to module scope so each hook hands React Query the SAME select
+// function identity on every render — TanStack Query memoizes the selected
+// result on the select reference, and a fresh closure per render would
+// defeat that memoization (new data identity on every render).
+const selectYouTubeAccounts = selectProviderAccounts<AccountData>('youtube');
+const selectInstagramAccounts = selectProviderAccounts<InstagramAccountData>('instagram');
+const selectBlueskyAccounts = selectProviderAccounts<BlueskyAccountData>('bluesky');
+const selectLinkedinAccounts = selectProviderAccounts<LinkedinAccountData>('linkedin');
+
 export function useYouTubeAccountsQuery(): UseQueryResult<AccountResponse, Error> {
-  return useSocialAccountsQuery(selectProviderAccounts<AccountData>('youtube'));
+  return useSocialAccountsQuery(selectYouTubeAccounts);
 }
 
 export function useInstagramAccountsQuery(): UseQueryResult<InstagramAccountResponse, Error> {
-  return useSocialAccountsQuery(selectProviderAccounts<InstagramAccountData>('instagram'));
+  return useSocialAccountsQuery(selectInstagramAccounts);
 }
 
 export function useBlueskyAccountsQuery(): UseQueryResult<BlueskyAccountResponse, Error> {
-  return useSocialAccountsQuery(selectProviderAccounts<BlueskyAccountData>('bluesky'));
+  return useSocialAccountsQuery(selectBlueskyAccounts);
 }
 
 export interface LinkedinAccountResponse {
@@ -614,7 +623,7 @@ export interface LinkedinAccountResponse {
 }
 
 export function useLinkedinAccountsQuery(): UseQueryResult<LinkedinAccountResponse, Error> {
-  return useSocialAccountsQuery(selectProviderAccounts<LinkedinAccountData>('linkedin'));
+  return useSocialAccountsQuery(selectLinkedinAccounts);
 }
 
 //---------------
