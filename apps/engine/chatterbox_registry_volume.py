@@ -81,6 +81,10 @@ def decode_reference_wav(payload_b64: str) -> bytes:
         raise ValueError("reference wav is empty")
     if len(wav_bytes) > MAX_REGISTRY_WAV_BYTES:
         raise ValueError("reference wav exceeds size limit")
+    # The engine only ever registers normalized WAV references; reject any
+    # other payload here instead of failing later inside synthesis.
+    if len(wav_bytes) < 12 or wav_bytes[0:4] != b"RIFF" or wav_bytes[8:12] != b"WAVE":
+        raise ValueError("reference wav is not a WAV file")
     return wav_bytes
 
 

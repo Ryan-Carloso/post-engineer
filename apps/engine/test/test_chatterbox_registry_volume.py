@@ -1,16 +1,20 @@
 """Unit tests for voices.toml registry helpers."""
 
+import base64
 import tempfile
 import unittest
 from pathlib import Path
 
 from chatterbox_registry_volume import (
+    decode_reference_wav,
     delete_voice_on_volume,
     load_voices_toml,
     register_voice_on_volume,
     serialize_voices_toml,
     upsert_voice,
 )
+
+WAV_HEADER = b"RIFF" + b"\x24\x00\x00\x00" + b"WAVE" + b"fmt " + b"\x00" * 28
 
 
 class ChatterboxRegistryVolumeTest(unittest.TestCase):
@@ -30,12 +34,32 @@ class ChatterboxRegistryVolumeTest(unittest.TestCase):
             root.mkdir()
             config = root / "voices.toml"
             config.write_text("", encoding="utf-8")
-            wav = b"RIFF" + b"\x00" * 40
-            register_voice_on_volume(root, config, "uabc_clone1", "en", wav)
+            register_voice_on_volume(root, config, "uabc_clone1", "en", WAV_HEADER)
             self.assertTrue((root / "uabc_clone1" / "reference.wav").is_file())
             self.assertIn("uabc_clone1", load_voices_toml(config))
             self.assertTrue(delete_voice_on_volume(root, config, "uabc_clone1"))
             self.assertNotIn("uabc_clone1", load_voices_toml(config))
+
+    def test_load_missing_or_empty_config_returns_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as work:
+            missing = Path(work) / "voices.toml"
+            self.assertEqual(load_voices_toml(missing), {})
+            missing.write_text("", encoding="utf-8")
+            self.assertEqual(load_voices_toml(missing), {})
+
+    def test_decode_reference_wav_roundtrip(self) -> None:
+        payload = base64.b64encode(WAV_HEADER).decode("ascii")
+        self.assertEqual(decode_reference_wav(payload), WAV_HEADER)
+
+    def test_decode_reference_wav_rejects_non_wav_payload(self) -> None:
+        payload = base64.b64encode(b"this is not audio data").decode("ascii")
+        with self.assertRaisesRegex(ValueError, "not a WAV file"):
+            decode_reference_wav(payload)
+
+    def test_decode_reference_wav_rejects_truncated_header(self) -> None:
+        payload = base64.b64encode(b"RIFF").decode("ascii")
+        with self.assertRaisesRegex(ValueError, "not a WAV file"):
+            decode_reference_wav(payload)
 
 
 if __name__ == "__main__":
