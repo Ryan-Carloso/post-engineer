@@ -62,31 +62,107 @@ def register_clone_in_background(
     store: ClonedVoiceStore | None = None,
     registry: VoiceRegistry | None = None,
 ) -> None:
-    """Complete pending registration (runs after the HTTP response)."""
-    db = store or ClonedVoiceStore()
-    reg = registry or default_registry()
-    row = db.get_for_user(user_id, clone_id)
-    if row is None:
-        logger.error(f"cloned voice row missing during registration, clone_id: {clone_id}")
-        return
-    voice_key = row.get("engine_voice_key")
-    if not isinstance(voice_key, str) or not voice_key:
-        db.mark_failed(user_id, clone_id, ERROR_REGISTRY_FAILED)
-        _track_clone("voice_clone_failed", user_id, clone_id, ERROR_REGISTRY_FAILED)
-        return
+    """Complete pending registration (runs after the HTTP response).
+
+    Never raises: this is a fire-and-forget background task, so an escaping
+    exception would strand the row in ``pending`` with no signal. Store
+    bookkeeping failures fall back to marking the row failed; if even that
+    fails, the row stays pending and the boot reconcile retries it.
+    """
     try:
-        reg.register_voice(voice_key, language, wav_bytes)
-    except RegistryNotConfiguredError:
-        db.mark_failed(user_id, clone_id, ERROR_REGISTRY_NOT_CONFIGURED)
-        _track_clone("voice_clone_failed", user_id, clone_id, ERROR_REGISTRY_NOT_CONFIGURED)
-        return
+        db = store or ClonedVoiceStore()
+        reg = registry or default_registry()
     except Exception:
-        logger.exception(f"cloned voice registry failed, clone_id: {clone_id}")
-        db.mark_failed(user_id, clone_id, ERROR_REGISTRY_FAILED)
-        _track_clone("voice_clone_failed", user_id, clone_id, ERROR_REGISTRY_FAILED)
+        logger.exception(f"cloned voice registration could not start, clone_id: {clone_id}")
         return
-    db.mark_ready(user_id, clone_id)
-    _track_clone("voice_clone_succeeded", user_id, clone_id)
+    marked_ready = False
+    try:
+        row = db.get_for_user(user_id, clone_id)
+        if row is None:
+            logger.error(f"cloned voice row missing during registration, clone_id: {clone_id}")
+            return
+        voice_key = row.get("engine_voice_key")
+        if not isinstance(voice_key, str) or not voice_key:
+            db.mark_failed(user_id, clone_id, ERROR_REGISTRY_FAILED)
+            _track_clone("voice_clone_failed", user_id, clone_id, ERROR_REGISTRY_FAILED)
+            return
+        try:
+            reg.register_voice(voice_key, language, wav_bytes)
+        except RegistryNotConfiguredError:
+            db.mark_failed(user_id, clone_id, ERROR_REGISTRY_NOT_CONFIGURED)
+            _track_clone("voice_clone_failed", user_id, clone_id, ERROR_REGISTRY_NOT_CONFIGURED)
+            return
+        except Exception:
+            logger.exception(f"cloned voice registry failed, clone_id: {clone_id}")
+            db.mark_failed(user_id, clone_id, ERROR_REGISTRY_FAILED)
+            _track_clone("voice_clone_failed", user_id, clone_id, ERROR_REGISTRY_FAILED)
+            return
+        db.mark_ready(user_id, clone_id)
+        marked_ready = True
+        _track_clone("voice_clone_succeeded", user_id, clone_id)
+    except Exception:
+        logger.exception(f"cloned voice registration bookkeeping failed, clone_id: {clone_id}")
+        if marked_ready:
+            return
+        try:
+            db.mark_failed(user_id, clone_id, ERROR_REGISTRY_FAILED)
+        except Exception:
+            logger.exception(f"cloned voice row stuck pending, clone_id: {clone_id}")
+
+
+def reconcile_pending_registrations(
+    store: ClonedVoiceStore | None = None,
+    registry: VoiceRegistry | None = None,
+) -> int:
+    """Re-run registration for rows left pending by a restart.
+
+    The background task that completes a registration does not survive the
+    process, so at engine boot every ``pending`` row is orphaned: fetch its
+    reference WAV back from storage and register it again. Runs only when
+    the store env is configured (same skip pattern as the fill-schedule
+    scheduler); never raises. Returns how many rows were picked up.
+    """
+    if store is None and not (
+        os.getenv("SUPABASE_URL") and os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    ):
+        return 0
+    try:
+        db = store or ClonedVoiceStore()
+        pending = db.list_pending()
+    except Exception:
+        logger.exception("cloned voice pending reconcile could not list rows")
+        return 0
+    recovered = 0
+    for row in pending:
+        user_id = row.get("user_id")
+        clone_id = row.get("id")
+        storage_path = row.get("storage_path")
+        if not (
+            isinstance(user_id, str)
+            and isinstance(clone_id, str)
+            and isinstance(storage_path, str)
+        ):
+            continue
+        try:
+            wav_bytes = db.download_reference_wav(storage_path)
+        except Exception:
+            logger.exception(
+                f"cloned voice pending reconcile could not fetch reference, clone_id: {clone_id}"
+            )
+            continue
+        language = row.get("language")
+        register_clone_in_background(
+            user_id,
+            clone_id,
+            wav_bytes,
+            language if isinstance(language, str) and language else "en",
+            store=db,
+            registry=registry,
+        )
+        recovered += 1
+    if recovered:
+        logger.info(f"re-ran registration for {recovered} pending cloned voice(s) at boot")
+    return recovered
 
 
 class ClonedVoiceService:
@@ -123,14 +199,29 @@ class ClonedVoiceService:
                 "could not store reference audio",
             )
 
-        row = self._store.insert_pending(
-            user_id=user_id,
-            clone_id=clone_id,
-            consent_at=consent_at,
-            storage_path=storage_path,
-            engine_voice_key=engine_voice_key,
-            language=language.strip(),
-        )
+        try:
+            row = self._store.insert_pending(
+                user_id=user_id,
+                clone_id=clone_id,
+                consent_at=consent_at,
+                storage_path=storage_path,
+                engine_voice_key=engine_voice_key,
+                language=language.strip(),
+            )
+        except Exception:
+            # The reference WAV is already in storage; without the row it
+            # can never be reached by the delete path, so remove it now —
+            # and say so loudly if even that fails.
+            try:
+                removed = self._store.delete_storage_object(storage_path)
+            except Exception:
+                removed = False
+            if not removed:
+                logger.error(
+                    "cloned voice reference orphaned in storage, "
+                    f"clone_id: {clone_id}, path: {storage_path}"
+                )
+            raise
         _track_clone("voice_clone_started", user_id, clone_id)
         return {
             "row": row,

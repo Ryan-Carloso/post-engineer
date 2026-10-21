@@ -180,6 +180,31 @@ class ClonedVoiceStore:
         response.raise_for_status()
         return list(response.json() or [])
 
+    def list_pending(self) -> list[dict[str, Any]]:
+        response = self._rest(
+            "GET",
+            "cloned_voices",
+            params={
+                "status": f"eq.{STATUS_PENDING}",
+                "select": "id,user_id,storage_path,engine_voice_key,language,created_at",
+                "order": "created_at.asc",
+            },
+        )
+        response.raise_for_status()
+        return list(response.json() or [])
+
+    def download_reference_wav(self, storage_path: str) -> bytes:
+        response = self._requests.get(
+            f"{self._base_url}/storage/v1/object/{CLONED_VOICES_STORAGE_BUCKET}/{storage_path}",
+            headers={
+                "apikey": self._key,
+                "Authorization": f"Bearer {self._key}",
+            },
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        return response.content
+
     def mark_ready(self, user_id: str, clone_id: str) -> None:
         self._patch_status(user_id, clone_id, STATUS_READY, error_code=None)
 

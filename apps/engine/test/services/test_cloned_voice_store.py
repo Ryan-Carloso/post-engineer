@@ -122,5 +122,43 @@ class ClonedVoiceStoreTest(unittest.TestCase):
             store.delete_storage_object("user-1/cloned-voices/c1/reference.wav"), False
         )
 
+    def test_list_pending_queries_pending_rows_oldest_first(self) -> None:
+        requests = MagicMock()
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = [
+            {"id": "clone-1", "user_id": "user-1", "status": "pending"}
+        ]
+        requests.request.return_value = response
+        store = ClonedVoiceStore(
+            url="https://supabase.example",
+            service_key="service-key",
+            requests_module=requests,
+        )
+        rows = store.list_pending()
+        self.assertEqual(len(rows), 1)
+        call = requests.request.call_args
+        self.assertEqual(call[1]["params"]["status"], "eq.pending")
+        self.assertEqual(call[1]["params"]["order"], "created_at.asc")
+
+    def test_download_reference_wav_gets_storage_object(self) -> None:
+        requests = MagicMock()
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.content = b"wav-bytes"
+        requests.get.return_value = response
+        store = ClonedVoiceStore(
+            url="https://supabase.example",
+            service_key="service-key",
+            requests_module=requests,
+        )
+        data = store.download_reference_wav("user-1/cloned-voices/c1/reference.wav")
+        self.assertEqual(data, b"wav-bytes")
+        requests.get.assert_called_once()
+        self.assertIn(
+            "/storage/v1/object/personas/user-1/cloned-voices/c1/reference.wav",
+            requests.get.call_args[0][0],
+        )
+
 if __name__ == "__main__":
     unittest.main()
