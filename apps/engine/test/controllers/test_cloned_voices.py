@@ -60,6 +60,69 @@ class ClonedVoicesControllerTests(unittest.TestCase):
             "user-uuid-1", "clone-1", b"wav", "en"
         )
 
+    @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
+    def test_create_rejects_language_with_toml_breaking_characters(self, mock_service_cls):
+        service = MagicMock()
+        mock_service_cls.return_value = service
+
+        response = self.client.post(
+            "/api/v1/cloned-voices",
+            headers=self.headers,
+            data={"language": "en\n[injected]", "consent": "true"},
+            files={"file": ("sample.wav", io.BytesIO(b"data"), "audio/wav")},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["message"], "language is invalid")
+        service.create_from_upload.assert_not_called()
+
+    @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
+    def test_create_rejects_malformed_language_codes(self, mock_service_cls):
+        service = MagicMock()
+        mock_service_cls.return_value = service
+
+        for language in ("e", "english", "en us", "en-", "-en", "en-u"):
+            with self.subTest(language=language):
+                response = self.client.post(
+                    "/api/v1/cloned-voices",
+                    headers=self.headers,
+                    data={"language": language, "consent": "true"},
+                    files={"file": ("sample.wav", io.BytesIO(b"data"), "audio/wav")},
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(response.json()["message"], "language is invalid")
+        service.create_from_upload.assert_not_called()
+
+    @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
+    def test_create_accepts_region_language_code(self, mock_service_cls):
+        service = MagicMock()
+        mock_service_cls.return_value = service
+        service.create_from_upload.return_value = {
+            "row": {
+                "id": "clone-1",
+                "status": "pending",
+                "engine_voice_key": "uabc_clone1",
+                "language": "pt-BR",
+                "consent_at": "2026-01-01T00:00:00Z",
+                "created_at": "2026-01-01T00:00:00Z",
+                "updated_at": "2026-01-01T00:00:00Z",
+            },
+            "wav_bytes": b"wav",
+            "language": "pt-BR",
+        }
+
+        response = self.client.post(
+            "/api/v1/cloned-voices",
+            headers=self.headers,
+            data={"language": "pt-BR", "consent": "true"},
+            files={"file": ("sample.wav", io.BytesIO(b"data"), "audio/wav")},
+        )
+
+        self.assertEqual(response.status_code, 202)
+        service.create_from_upload.assert_called_once_with(
+            "user-uuid-1", b"data", "pt-BR", consent_acknowledged=True
+        )
+
     def test_list_requires_auth(self):
         response = self.client.get("/api/v1/cloned-voices")
         self.assertEqual(response.status_code, 401)

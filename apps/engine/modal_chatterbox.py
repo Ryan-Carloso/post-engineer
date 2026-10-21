@@ -41,11 +41,13 @@ Validate, then deploy:
 
     uv run modal run modal_chatterbox.py::validate --voice ryan
     uv run modal deploy modal_chatterbox.py
+
+Per-user clone registry: ``POST/DELETE /v1/voices`` (see ``modal_chatterbox_registry_routes``).
+Point engine ``[cloned_voices] registry_base_url`` at this app; same bearer as speech.
 """
 
 from __future__ import annotations
 
-import hmac
 import os
 import subprocess
 import tempfile
@@ -54,7 +56,10 @@ import time
 from pathlib import Path
 
 import modal
+
 from fastapi import FastAPI, Request
+from modal_chatterbox_auth import authorize_request
+from modal_chatterbox_registry_routes import mount_chatterbox_registry_routes
 from fastapi.responses import JSONResponse, Response
 
 # ── Configuration ────────────────────────────────────────────────────────────
@@ -71,10 +76,6 @@ MAX_CONCURRENT_INPUTS = 2
 
 MODELS_VOLUME = modal.Volume.from_name("chatterbox-models", create_if_missing=True)
 VOICES_VOLUME = modal.Volume.from_name("chatterbox-voices", create_if_missing=True)
-# Shared bearer secret required by every endpoint.
-# Create with: `modal secret create chatterbox-http CHATTERBOX_HTTP_SECRET=...`
-HTTP_SECRET = os.environ.get("CHATTERBOX_HTTP_SECRET")
-
 VOICES_DIR = "/voices"
 VOICES_CONFIG_PATH = "/voices/voices.toml"
 # The engine's chatterbox client caps nothing; the service rejects oversized
@@ -231,35 +232,6 @@ def _generate_audio(text: str, voice: str, response_format: str) -> tuple[bytes,
         return mp3_path.read_bytes(), media_type
 
 
-# ── Auth ─────────────────────────────────────────────────────────────────────
-
-
-def _auth_error() -> object | None:
-    """503 when the server itself has no secret configured."""
-    if not HTTP_SECRET:
-        # Deliberately vague: never echo configuration details.
-        return {"status_code": 503, "content": {"error": "server not configured"}}
-    return None
-
-
-def _check_bearer(request) -> object | None:
-    """401 unless the Authorization header matches the secret (constant-time)."""
-    header = request.headers.get("authorization", "")
-    expected = f"Bearer {HTTP_SECRET}"
-    if not hmac.compare_digest(header.encode(), expected.encode()):
-        return {"status_code": 401, "content": {"error": "unauthorized"}}
-    return None
-
-
-def _auth_response(potential):
-    """Turn an auth-check result into a JSONResponse, or return None."""
-    if potential is None:
-        return None
-    from fastapi.responses import JSONResponse
-
-    return JSONResponse(status_code=potential["status_code"], content=potential["content"])
-
-
 # ── HTTP endpoints ───────────────────────────────────────────────────────────
 
 
@@ -270,7 +242,7 @@ def _build_fastapi_app():
     async def health(request: Request) -> JSONResponse:
         # Authenticated too: an unauthenticated probe must not even confirm
         # the service exists or reveal cold/warm state.
-        auth = _auth_response(_auth_error()) or _auth_response(_check_bearer(request))
+        auth = authorize_request(request)
         if auth is not None:
             return auth
         return JSONResponse(
@@ -282,7 +254,7 @@ def _build_fastapi_app():
 
     @fastapi_app.post("/v1/audio/speech")
     async def speech(request: Request) -> Response:
-        auth = _auth_response(_auth_error()) or _auth_response(_check_bearer(request))
+        auth = authorize_request(request)
         if auth is not None:
             return auth
 
@@ -346,6 +318,15 @@ def _build_fastapi_app():
             f"bytes: {len(audio_bytes)}, took_s: {elapsed}"
         )
         return Response(content=audio_bytes, media_type=media_type)
+
+    mount_chatterbox_registry_routes(
+        fastapi_app,
+        voices_dir=VOICES_DIR,
+        voices_config_path=VOICES_CONFIG_PATH,
+        commit_volume=VOICES_VOLUME.commit,
+        authorize=authorize_request,
+        reload_volume=VOICES_VOLUME.reload,
+    )
 
     return fastapi_app
 

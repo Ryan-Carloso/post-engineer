@@ -23,7 +23,7 @@ import { PersonaImageLibrarySection, mapPersonaImageWarnings } from './persona-i
 import { PersonaPreferencesSection } from './persona-preferences-section';
 import { PersonaPublishingAccountsSection } from './persona-publishing-accounts-section';
 import { PersonaFormSync } from './persona-form-sync';
-import { PersonaHouseVoicePicker } from './voice-picker';
+import { PersonaVoiceSection } from './persona-voice-section';
 import { InlineFieldError, SectionDivider } from './persona-section-parts';
 import { scrollToErrorField } from '@/lib/scroll-to-error';
 import { DEFAULT_PERSONA_FACE_IDS } from '@/lib/persona-faces';
@@ -509,26 +509,6 @@ const PersonaNameField = () => {
         <InlineFieldError message={result.error} />
       ) : null}
     </div>
-  );
-};
-
-//---------------
-// PersonaVoiceSection — voice choice among the house voices.
-// In edit mode, the sample language starts from the persona's saved language
-// instead of the pt-br default.
-//---------------
-const PersonaVoiceSection = ({ personaLanguage }: { personaLanguage?: string }) => {
-  const result = usePersonaStore((s) => s.result);
-  const { t } = useI18n();
-
-  return (
-    <section data-error-field="voice">
-      <SectionDivider label={t('persona.voiceLabel')} />
-      <PersonaHouseVoicePicker personaLanguage={personaLanguage} />
-      {result && !result.success && result.error === t('persona.errVoice') ? (
-        <InlineFieldError message={result.error} />
-      ) : null}
-    </section>
   );
 };
 

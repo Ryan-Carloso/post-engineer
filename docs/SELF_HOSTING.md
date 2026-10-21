@@ -165,6 +165,25 @@ Provision the database schema in your Supabase project:
     private `personas` bucket at
     `{userId}/cloned-voices/{cloneId}/reference.wav`.
 
+### Voice cloning (Chatterbox on Modal)
+
+Per-user clones need the engine registry client **and** the Modal Chatterbox
+service registry API:
+
+1. Deploy `apps/engine/modal_chatterbox.py` (see module docstring). Create the
+   `chatterbox-http` secret with `CHATTERBOX_HTTP_SECRET`, run
+   `download_weights`, seed house voices, then `modal deploy`.
+2. Set engine `[cloned_voices]` in `config.toml` (or env):
+   - `registry_base_url` = your deployed Modal app URL (same host as
+     `/v1/audio/speech`, no trailing slash)
+   - `registry_api_key` = the same bearer value as `CHATTERBOX_HTTP_SECRET`
+3. Set web `MONEYPRINT_API_URL` / `MONEYPRINT_API_SECRET` as usual so
+   `/api/persona/cloned-voices` proxies to the engine.
+
+New clones call `POST /v1/voices` on Modal (reference WAV + `voices.toml`
+update) without redeploying the TTS app; warm containers reload the volume on
+each speech request.
+
 Paste each file into the Supabase Dashboard > SQL Editor and run, in order
 (the numeric prefixes encode the order — always apply the
 lowest number first), or apply them with the Supabase CLI from the repo

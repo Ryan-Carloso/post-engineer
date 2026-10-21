@@ -70,6 +70,10 @@ function mockBase(): void {
     body: { success: true, images: [] },
   }).as('getPersonaImages');
 
+  cy.intercept('GET', '/api/persona/cloned-voices', {
+    statusCode: 200,
+    body: { success: true, voices: [] },
+  }).as('getClonedVoices');
 }
 
 function visitPersona(path: string): void {
@@ -171,6 +175,7 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
 
   it('enviar sem voz mostra erro de voz', () => {
     visitPersona('/persona');
+    cy.wait('@getClonedVoices');
 
     cy.get('#persona-name').type('Maya E2E').blur();
     // Photo upload satisfies the avatar gate without relying on the character
@@ -186,7 +191,7 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
 
     cy.get('[data-error-field="voice"]')
       .find('[role="alert"]')
-      .should('contain.text', 'Escolha uma voz ou envie um áudio.');
+      .should('contain.text', 'Escolha uma voz para a persona.');
   });
 
   it('edição carrega a persona e casa o idioma da amostra por prefixo', () => {

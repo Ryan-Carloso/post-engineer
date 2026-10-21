@@ -26,6 +26,8 @@ export const RATE_LIMITS = {
   youtubeUpload: { name: 'youtube-upload', limit: 5, windowMs: 60_000 },
   // Instagram media upload: writes up to 100MB to disk
   mediaUpload: { name: 'media-upload', limit: 10, windowMs: 60_000 },
+  // Voice clone registration: GPU/registry cost — stricter than media upload.
+  voiceCloneCreate: { name: 'voice-clone-create', limit: 3, windowMs: 60 * 60 * 1000 },
   // Instagram content posting
   instagramPost: { name: 'instagram-post', limit: 10, windowMs: 60_000 },
   // OAuth token endpoint: brute-force / token-farming protection

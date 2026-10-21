@@ -287,7 +287,7 @@ function narrowDirectPublishResult(value: unknown): DirectPublishResult {
 }
 
 export class PostEngineerClient {
-  private readonly baseUrl: string;
+  readonly baseUrl: string;
   private readonly apiKey?: string;
   private readonly now: () => Date;
 

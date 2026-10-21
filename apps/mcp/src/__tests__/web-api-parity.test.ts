@@ -48,6 +48,10 @@ const ENDPOINT_TOOLS: Record<string, string[]> = {
     'get_video_task_progress',
   ],
   'GET /api/persona/voices': ['list_voices'],
+  'GET /api/persona/cloned-voices': ['list_cloned_voices'],
+  'POST /api/persona/cloned-voices': ['create_cloned_voice'],
+  'DELETE /api/persona/cloned-voices/[cloneId]': ['delete_cloned_voice'],
+  'POST /api/persona/cloned-voices/[cloneId]/preview': ['preview_cloned_voice'],
   'GET /api/schedule': ['list_schedules'],
   'DELETE /api/schedule': ['cancel_schedule'],
   'GET /api/schedule/slots/[slotId]': ['get_slot'],
@@ -104,6 +108,8 @@ const EXCLUDED_ENDPOINTS: Record<string, string> = {
     'Dashboard engine-task cleanup; MCP polls status but never cancels engine tasks.',
   'GET /api/persona/voice-sample-languages':
     'Dashboard voice-sample UI proxy (session-only); MCP list_voices covers voice listing.',
+  'GET /api/persona/cloned-voices/[cloneId]':
+    'Dashboard clone status polling; MCP list_cloned_voices returns every clone row.',
   'GET /api/posts/[id]':
     'Dashboard-only unified post detail (issue #208); MCP get_slot and get_video_generation cover the same data.',
   'GET /api/version': 'Public version endpoint for ops/diagnostics.',

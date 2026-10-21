@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from fastapi import BackgroundTasks, File, Form, Request, UploadFile
@@ -104,6 +105,15 @@ def create_cloned_voice(
         return JSONResponse(
             status_code=400,
             content=utils.get_response(status=400, message="language is required"),
+        )
+    # The language is persisted and later written into the Chatterbox
+    # voices.toml registry; only BCP-47-shaped codes are accepted (the
+    # registry volume re-validates the same shape at the sink). Keep this
+    # pattern in sync with _LANGUAGE_ID_RE in chatterbox_registry_volume.py.
+    if not re.fullmatch(r"[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?", lang):
+        return JSONResponse(
+            status_code=400,
+            content=utils.get_response(status=400, message="language is invalid"),
         )
 
     # Bound the read itself: normalize_reference_audio enforces the same

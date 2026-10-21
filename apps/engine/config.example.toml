@@ -589,8 +589,10 @@ voices = ["default-Female"]
 # The engine registers each user's reference audio on the Chatterbox voice
 # volume via an admin registry service (not the public /audio/speech TTS URL).
 # Leave registry_base_url empty to disable registration (rows stay failed with
-# error_code registry_not_configured). Secrets may also be set via env:
-# CHATTERBOX_REGISTRY_BASE_URL, CHATTERBOX_REGISTRY_API_KEY.
+# error_code registry_not_configured). When using Modal, set registry_base_url
+# to the deployed modal_chatterbox.py app URL (hosts POST/DELETE /v1/voices).
+# Secrets may also be set via env: CHATTERBOX_REGISTRY_BASE_URL,
+# CHATTERBOX_REGISTRY_API_KEY (typically the same value as CHATTERBOX_HTTP_SECRET).
 [cloned_voices]
 registry_base_url = ""
 registry_api_key = ""

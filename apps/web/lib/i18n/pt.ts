@@ -1,8 +1,6 @@
-//---------------
-// pt-BR dictionary — defines the typed contract (Dictionary)
-// EN must follow exactly this key structure.
-//---------------
+// pt-BR dictionary — defines the typed contract (Dictionary).
 
+import { personaVoiceClonePt, voiceCloneApiToolDescPt } from './voice-clone-i18n-pt';
 export const ptDictionary = {
   // Sidebar / navigation
   nav: {
@@ -384,6 +382,7 @@ export const ptDictionary = {
     toolsSubtitle: 'Estas são as tools que seu agente de IA recebe acesso após conectar.',
     toolDescListPersonas: 'Liste suas personas',
     toolDescListVoices: 'Liste as vozes disponíveis',
+    ...voiceCloneApiToolDescPt,
     toolDescListFaces: 'Liste rostos de avatar padrão',
     toolDescCreatePersona: 'Crie uma nova persona',
     toolDescUpdatePersona: 'Atualize uma persona existente',
@@ -481,7 +480,8 @@ export const ptDictionary = {
     loadErrorHint: 'O serviço de vozes está indisponível. Verifique se o engine está em execução e tente novamente.',
     errName: 'Dê um nome para a persona.',
     errAvatar: 'Envie uma foto ou gere um avatar por IA.',
-    errVoice: 'Escolha uma voz ou envie um áudio.',
+    errVoice: 'Escolha uma voz para a persona.',
+    ...personaVoiceClonePt,
     errServer: 'Não foi possível conectar ao servidor. Tente novamente.',
     errPromptRejected: 'Este conteúdo não é permitido. Revise o roteiro ou o nicho e tente novamente.',
     errSubjectMissing: 'Escreva um nicho ou um roteiro para gerar o vídeo.',

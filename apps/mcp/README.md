@@ -91,6 +91,10 @@ The `Authorization: Bearer` API key header is sent to the configured base URL, s
 
 - `list_personas`: list existing personas.
 - `list_voices`: list available persona voices (live catalog from the platform, not hardcoded).
+- `list_cloned_voices`: list your per-user Chatterbox voice clones (status and `voice_id` when ready).
+- `create_cloned_voice`: register a voice clone from a short HTTPS audio URL (requires `consent: true`).
+- `delete_cloned_voice`: delete a voice clone by id.
+- `preview_cloned_voice`: synthesize a short MP3 preview for a ready clone (returns base64 audio).
 - `list_faces`: list default/stock persona faces (live catalog from `/api/persona/faces`). Each item has `id`, `url`, `name`, `gender`, `age` (single number, e.g. 23), `ethnicity`, `hair`, and `description` (English) so agents can choose without the photo; pass a face `url` as `avatarUrl` on `create_persona`.
 - `create_persona`: create an AI persona (avatar, voice, language, niche). `avatarUrl` is REQUIRED — every persona has a face; "no face" is a per-video choice (`options.faceless` on `generate_persona_videos`).
 - `update_persona`: update an existing persona (only the provided fields change).

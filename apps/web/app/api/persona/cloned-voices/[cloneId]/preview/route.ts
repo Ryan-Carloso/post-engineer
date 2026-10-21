@@ -1,0 +1,70 @@
+import { NextResponse } from 'next/server';
+
+import { engineBaseUrl } from '@/lib/engine-proxy';
+import { logger } from '@/lib/logger';
+import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
+
+type RouteContext = { params: Promise<{ cloneId: string }> };
+
+async function postHandler(request: Request, context: RouteContext): Promise<NextResponse> {
+  const { auth, error: authError } = await requireSupabaseSession(request);
+  if (authError || !auth) {
+    return authError;
+  }
+
+  const limited = await applyRateLimit(request, RATE_LIMITS.mediaUpload, auth.userId);
+  if (limited) {
+    return limited;
+  }
+
+  const { cloneId } = await context.params;
+  if (!cloneId.trim()) {
+    return NextResponse.json({ success: false, error: 'Clone id is required.' }, { status: 400 });
+  }
+
+  let baseUrl: string;
+  try {
+    baseUrl = engineBaseUrl();
+  } catch (error) {
+    logger.error('[api/persona/cloned-voices/:id/preview] env missing', error);
+    return NextResponse.json({ success: false, error: 'Configuration error.' }, { status: 500 });
+  }
+
+  const url = new URL(`${baseUrl}/api/v1/cloned-voices/${encodeURIComponent(cloneId)}/preview`);
+  const language = new URL(request.url).searchParams.get('language');
+  if (language && language.trim()) {
+    url.searchParams.set('language', language.trim());
+  }
+
+  try {
+    const upstream = await fetch(url.toString(), {
+      method: 'POST',
+      headers: engineAuthHeaders(auth.userId),
+    });
+    if (upstream.status === 404) {
+      return NextResponse.json({ success: false, error: 'Cloned voice not found.' }, { status: 404 });
+    }
+    if (!upstream.ok) {
+      return NextResponse.json({ success: false, error: 'Preview unavailable.' }, { status: 502 });
+    }
+    const audio = await upstream.arrayBuffer();
+    return new NextResponse(audio, {
+      status: 200,
+      headers: {
+        'Content-Type': upstream.headers.get('content-type') ?? 'audio/mpeg',
+        'Cache-Control': 'private, no-store',
+      },
+    });
+  } catch (error) {
+    logger.error('[api/persona/cloned-voices/:id/preview] unreachable', error);
+    return NextResponse.json({ success: false, error: 'Preview service unreachable.' }, { status: 502 });
+  }
+}
+
+const POST_ROUTE = 'POST /api/persona/cloned-voices/[cloneId]/preview';
+
+export const POST = withApiErrorReporting(POST_ROUTE, postHandler, {
+  getUserId: resolveReportingUserId,
+});

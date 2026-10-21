@@ -1,10 +1,7 @@
-//---------------
-// en-US dictionary — follows the typed contract (Dictionary) defined in PT.
-// Any missing or extra key here is a TypeScript error.
-//---------------
+// en-US dictionary — mirrors the pt Dictionary key structure.
 
 import type { Dictionary } from './pt';
-
+import { personaVoiceCloneEn, voiceCloneApiToolDescEn } from './voice-clone-i18n-en';
 export const enDictionary: Dictionary = {
   nav: {
     brand: 'Post Engineer',
@@ -385,6 +382,7 @@ export const enDictionary: Dictionary = {
     toolsSubtitle: 'Here are the tools your AI agent gets access to after connecting.',
     toolDescListPersonas: 'List your personas',
     toolDescListVoices: 'List available voices',
+    ...voiceCloneApiToolDescEn,
     toolDescListFaces: 'List stock avatar faces',
     toolDescCreatePersona: 'Create a new persona',
     toolDescUpdatePersona: 'Update an existing persona',
@@ -484,7 +482,8 @@ export const enDictionary: Dictionary = {
     loadErrorHint: 'The voice service is unavailable. Check that the engine is running and try again.',
     errName: 'Give the persona a name.',
     errAvatar: 'Upload a photo or generate an AI avatar.',
-    errVoice: 'Pick a voice or upload an audio.',
+    errVoice: 'Pick a voice for this persona.',
+    ...personaVoiceCloneEn,
     errServer: 'Could not connect to the server. Try again.',
     errPromptRejected: 'This content is not allowed. Please revise the script or niche and try again.',
     errSubjectMissing: 'Add a niche or a script to generate the video.',

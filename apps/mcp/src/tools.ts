@@ -29,8 +29,8 @@ export {
   UpdateSlotTopicSchema,
   UpdateSlotTopicShape,
 };
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { PostEngineerClient } from './client.js';
+import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 import {
   MAX_LIBRARY_IMAGES,
   MAX_LIBRARY_IMAGE_MB,
@@ -41,7 +41,7 @@ import {
 } from './client.js';
 import { getErrorMessage, ApiError } from './errors.js';
 
-export type McpToolResponse = CallToolResult;
+export type { McpToolResponse } from './tools-call.js';
 
 // Shared field definitions: path/tag/description limits appear in both the
 // create-persona images array and add_persona_image — define once so the
@@ -92,6 +92,17 @@ export const ListPersonasSchema = z.object(ListPersonasShape);
 export const ListVoicesShape = {};
 
 export const ListVoicesSchema = z.object(ListVoicesShape);
+
+export {
+  ListClonedVoicesShape,
+  ListClonedVoicesSchema,
+  CreateClonedVoiceShape,
+  CreateClonedVoiceSchema,
+  DeleteClonedVoiceShape,
+  DeleteClonedVoiceSchema,
+  PreviewClonedVoiceShape,
+  PreviewClonedVoiceSchema,
+} from './cloned-voice-tools.js';
 
 export const ListFacesShape = {};
 
@@ -411,6 +422,12 @@ export async function handleListVoices(
   return handleLibraryCall(() => client.listVoices(), 'listing voices');
 }
 
+export {
+  handleListClonedVoices,
+  handleCreateClonedVoice,
+  handleDeleteClonedVoice,
+  handlePreviewClonedVoice,
+} from './cloned-voice-tools.js';
 
 export async function handleListFaces(
   client: PostEngineerClient
@@ -1160,36 +1177,7 @@ export async function handleGetTokenBalance(
   return handleLibraryCall(() => client.getTokenBalance(), 'getting token balance');
 }
 
-/** Shared wrapper for the persona-image handlers: same try/catch + text
- * response shape, differing only in the client call and the message verbs.
- * Older handlers (handleConnectAccount) keep inline
- * try/catch because they pre-validate args before the client call —
- * the wrapper only covers the call itself. */
-export async function handleLibraryCall(
-  clientCall: () => Promise<unknown>,
-  errorVerb: string,
-  successPrefix?: string,
-): Promise<McpToolResponse> {
-  try {
-    const result = await clientCall();
-    const text = successPrefix
-      ? `${successPrefix}: ${JSON.stringify(result, null, 2)}`
-      : JSON.stringify(result, null, 2);
-    return {
-      content: [{ type: 'text', text }],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error ${errorVerb}: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
-}
+export { handleLibraryCall } from './tools-call.js';
 
 export async function handleListPersonaImages(
   client: PostEngineerClient,

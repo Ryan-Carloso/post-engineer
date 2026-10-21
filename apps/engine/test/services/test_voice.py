@@ -597,6 +597,19 @@ class TestTtsFailureReasons(unittest.TestCase):
         self.assertIn("invalid Chatterbox voice name", result.error or "")
         self.assertNotIn("voice/subtitle mismatch", result.error or "")
 
+    def test_chatterbox_user_clone_rejected_for_wrong_user(self):
+        other = "ffffffff-bbbb-cccc-dddd-eeeeeeeeeeee"
+        key = "uaaaaaaaabbbb_cccccccccccc"
+        result = vs.tts(
+            text="hello",
+            voice_name=f"chatterbox:{key}",
+            voice_rate=1.0,
+            voice_file="/tmp/clone-denied.mp3",
+            user_id=other,
+        )
+        self.assertIsNone(result.sub_maker)
+        self.assertIn("cloned voice is not available", result.error or "")
+
     def test_elevenlabs_unauthorized_reports_provider_cause(self):
         unauthorized = SimpleNamespace(
             status_code=401,
