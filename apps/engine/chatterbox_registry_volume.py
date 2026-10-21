@@ -18,7 +18,7 @@ _LANGUAGE_ID_RE = re.compile(r"^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?$")
 
 
 def is_valid_voice_name(name: str) -> bool:
-    return bool(name) and bool(_VOICE_NAME_RE.match(name))
+    return bool(name) and _VOICE_NAME_RE.fullmatch(name) is not None
 
 
 # Per-user clone keys minted by the engine store: u{12 hex of the user

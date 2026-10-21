@@ -29,9 +29,9 @@ def mount_chatterbox_registry_routes(
     """Wire per-user clone registry endpoints onto the Chatterbox FastAPI app.
 
     Writes are read-modify-write on voices.toml: reload the volume first
-    (when a reload hook is wired) so a container whose view predates
-    another container's commit does not erase that registration when it
-    commits its own.
+    (when a reload hook is wired) so each write starts from the latest
+    committed state. This narrows the lost-update window between
+    concurrent containers to the reload-to-commit span; it is not a lock.
     """
 
     def _reload() -> None:

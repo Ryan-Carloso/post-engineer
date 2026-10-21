@@ -17,12 +17,16 @@ export interface ClonedVoiceClientHost {
  * or broken server cannot exhaust memory with an oversized body. Falls back
  * to a capped arrayBuffer read when the response has no readable stream.
  */
-async function readBodyWithCap(response: Response, maxBytes: number): Promise<Buffer> {
+async function readBodyWithCap(
+  response: Response,
+  maxBytes: number,
+  subject = 'Downloaded audio',
+): Promise<Buffer> {
   const reader = response.body?.getReader();
   if (!reader) {
     const buffer = Buffer.from(await response.arrayBuffer());
     if (buffer.length > maxBytes) {
-      throw new Error(`Downloaded audio exceeds ${maxBytes / (1024 * 1024)} MB`);
+      throw new Error(`${subject} exceeds ${maxBytes / (1024 * 1024)} MB`);
     }
     return buffer;
   }
@@ -36,7 +40,7 @@ async function readBodyWithCap(response: Response, maxBytes: number): Promise<Bu
     total += value.byteLength;
     if (total > maxBytes) {
       await reader.cancel();
-      throw new Error(`Downloaded audio exceeds ${maxBytes / (1024 * 1024)} MB`);
+      throw new Error(`${subject} exceeds ${maxBytes / (1024 * 1024)} MB`);
     }
     chunks.push(value);
   }
@@ -136,6 +140,7 @@ export async function previewClonedVoice(
   const response = await fetch(`${client.baseUrl}${path}`, {
     method: 'POST',
     headers: client.getHeaders(),
+    redirect: 'error',
     signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
   });
   if (!response.ok) {
@@ -156,7 +161,7 @@ export async function previewClonedVoice(
     }
     throw new Error(`Failed to preview cloned voice: ${response.status} ${detail}`);
   }
-  const bytes = Buffer.from(await response.arrayBuffer());
+  const bytes = await readBodyWithCap(response, 20 * 1024 * 1024, 'Preview audio');
   if (bytes.length === 0) {
     throw new Error(
       `Failed to preview cloned voice: preview audio was empty (status ${response.status}).`,

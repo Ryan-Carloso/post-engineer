@@ -239,6 +239,19 @@ describe('cloned voice client calls', () => {
       'preview audio was empty'
     );
   });
+
+  it('rejects a preview body over the size cap', async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(new Uint8Array(20 * 1024 * 1024 + 1), {
+        status: 200,
+        headers: { 'content-type': 'audio/mpeg' },
+      })
+    );
+    const host = fakeHost(vi.fn());
+    await expect(previewClonedVoice(host, 'clone-1')).rejects.toThrow(
+      'Preview audio exceeds 20 MB'
+    );
+  });
 });
 
 describe('createClonedVoiceFromUrl', () => {

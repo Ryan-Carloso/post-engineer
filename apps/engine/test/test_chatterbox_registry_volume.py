@@ -68,6 +68,15 @@ class ChatterboxRegistryVolumeTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "exceeds size limit"):
             decode_reference_wav(payload)
 
+    def test_voice_name_validation_rejects_trailing_newline(self) -> None:
+        from chatterbox_registry_volume import is_valid_voice_name
+
+        self.assertTrue(is_valid_voice_name("ryan"))
+        self.assertTrue(is_valid_voice_name("u0123456789ab_0123456789ab"))
+        self.assertFalse(is_valid_voice_name("ryan\n"))
+        self.assertFalse(is_valid_voice_name("ry an"))
+        self.assertFalse(is_valid_voice_name("../ryan"))
+
     def test_upsert_accepts_bcp47_language_codes(self) -> None:
         for code in ("pt", "en", "pt-BR", "zh-Hans", "es-419"):
             voices = upsert_voice({}, "ryan", code, "ryan/reference.wav")
