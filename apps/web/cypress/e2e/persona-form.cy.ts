@@ -76,7 +76,8 @@ function visitPersona(path: string): void {
   cy.visit(path, { onBeforeLoad: stubFormAudio });
   // Do not cy.wait('@getVoices'): React Query may serve a warm cache with no
   // network round-trip (same flake class as posts-create personas wait).
-  cy.get('#persona-name').should('be.visible');
+  cy.location('pathname', { timeout: 15_000 }).should('not.eq', '/landing');
+  cy.get('#persona-name', { timeout: 15_000 }).should('be.visible');
 }
 
 // Fill a valid create form: name + character + voice.
