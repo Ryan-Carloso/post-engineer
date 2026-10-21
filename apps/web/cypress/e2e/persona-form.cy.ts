@@ -164,12 +164,17 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
 
   it('enviar sem voz mostra erro de voz', () => {
     visitPersona('/persona');
+    cy.wait('@getClonedVoices');
 
-    cy.get('#persona-name').type('Maya E2E');
+    cy.get('#persona-name').type('Maya E2E').blur();
     cy.get('button[aria-label="Escolha um personagem 1"]').click();
+    cy.get('button[aria-label="Escolha um personagem 1"]').should('have.attr', 'aria-pressed', 'true');
+
     cy.contains('button', 'Criar persona').click();
 
-    cy.contains('Escolha uma voz para a persona.').should('be.visible');
+    cy.get('[data-error-field="voice"]')
+      .find('[role="alert"]')
+      .should('contain.text', 'Escolha uma voz para a persona.');
   });
 
   it('edição carrega a persona e casa o idioma da amostra por prefixo', () => {
