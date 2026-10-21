@@ -37,10 +37,9 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 const ENGINE_CLEANUP_BUDGET_MS = 20_000;
 
 //---------------
-// POST /api/persona — creates the user's persona:
-// uploads photo/audio to the private 'personas' bucket on Supabase and
-// inserts the record into public.personas (RLS by user_id).
-// Validation = shared zod schema (lib/persona-schema.ts).
+// POST /api/persona — creates the user's persona: uploads photo/audio
+// to the private 'personas' bucket and inserts into public.personas
+// (RLS by user_id). Validation = shared zod schema (lib/persona-schema.ts).
 //---------------
 
 function errorResponse(
@@ -298,8 +297,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
 }
 
 //---------------
-// parseJsonStringArray — reads an optional JSON array of strings from a
-// multipart field (e.g. imageTags). Returns [] on missing/invalid input.
+// parseJsonStringArray — optional JSON string array from a multipart
+// field (e.g. imageTags). Returns [] on missing/invalid input.
 //---------------
 function parseJsonStringArray(value: FormDataEntryValue | null): string[] {
   if (typeof value !== 'string' || value.trim() === '') return [];
@@ -763,8 +762,7 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
 
 
 //---------------
-// uploadFile — uploads the file to the 'personas' bucket under the user's folder.
-// Exported for reuse by other persona routes.
+// uploadFile — uploads to the 'personas' bucket under the user's folder; exported for other persona routes.
 //---------------
 export async function uploadFile(
   supabase: SupabaseClient,

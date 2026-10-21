@@ -57,7 +57,12 @@ export async function parsePatchBody(request: Request): Promise<ParsePatchResult
     return { ok: false, error: `Invalid videoLayout: ${videoLayout}. Use one of ${VIDEO_LAYOUTS.join(', ')}.` };
   }
   const scriptPrompt = optionalString(formData.get('scriptPrompt'));
-  const ctaText = optionalString(formData.get('ctaText'));
+  // ctaText is the one field the user can also clear: a present but blank
+  // value means "remove the CTA" (''), not "leave unchanged" — the generic
+  // optionalString blank-to-null mapping would silently drop the clear.
+  const rawCtaText = formData.get('ctaText');
+  const ctaText =
+    typeof rawCtaText === 'string' ? (rawCtaText.trim().length === 0 ? '' : rawCtaText) : null;
   if (ctaText !== null && ctaText.length > PERSONA_CTA_MAX_LENGTH) {
     return { ok: false, error: `Invalid ctaText: use at most ${PERSONA_CTA_MAX_LENGTH} characters.` };
   }

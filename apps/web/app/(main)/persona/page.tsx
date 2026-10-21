@@ -49,8 +49,7 @@ export default function PersonaPage() {
 //---------------
 // resolveEditingPersonaId — the persona id being edited comes from ?edit=
 // (current route) or the legacy /personas/<id>/edit path. Shared by
-// PersonaPageContent and PersonaSubmit so the two cannot drift if the
-// legacy route format ever changes.
+// PersonaPageContent and PersonaSubmit so the two cannot drift.
 //---------------
 function resolveEditingPersonaId(pathname: string, editId: string | null): string | null {
   const editMatch = pathname.match(/^\/personas\/([^/]+)\/edit$/);
@@ -66,9 +65,8 @@ const PersonaPageContent = () => {
   const editingPersonaId = resolveEditingPersonaId(pathname, editId);
   const personasQuery = usePersonaListQuery();
   // Derived from the resolved id (not the raw ?edit= param): on the legacy
-  // /personas/<id>/edit path the image library renders but the old derivation
-  // left editingPersona undefined, so personaLanguage silently fell back to
-  // the default instead of the persona's saved language.
+  // path the old derivation left editingPersona undefined, so the language
+  // silently fell back to the default instead of the persona's saved one.
   const editingPersona = useMemo(
     () => (editingPersonaId ? personasQuery.data?.find((item) => item.id === editingPersonaId) : undefined),
     [editingPersonaId, personasQuery.data],
@@ -221,9 +219,8 @@ const PersonaPageError = ({ onRetry, isRetrying }: PersonaPageErrorProps) => {
 };
 
 //---------------
-// PersonaHeader — persona screen title and subtitle, with a debug mode
-// badge when unlocked (10 clicks on the logo).
-// In edit mode it shows the edit copy instead of the create copy.
+// PersonaHeader — persona screen title and subtitle (edit copy in edit
+// mode), with a debug mode badge when unlocked (10 clicks on the logo).
 //---------------
 const PersonaHeader = ({ editing }: { editing: boolean }) => {
   const { t } = useI18n();
@@ -243,10 +240,9 @@ const PersonaHeader = ({ editing }: { editing: boolean }) => {
 };
 
 //---------------
-//---------------
-// PersonaAvatarSection — visual identity choice: AI-generated or photo upload
-// Every persona has a face, so this section is always rendered; "no face" is
-// a per-post choice (NewPostFaceField on /posts/new).
+// PersonaAvatarSection — visual identity choice: AI-generated or photo
+// upload. Always rendered (every persona has a face); "no face" is a
+// per-post choice (NewPostFaceField on /posts/new).
 //---------------
 const PersonaAvatarSection = () => {
   const [source, setSource] = useState<'characters' | 'upload'>('characters');
@@ -517,9 +513,8 @@ const PersonaNameField = () => {
 
 //---------------
 // PersonaSubmit — persona validation and submit (create/edit).
-// Create: POST /api/persona (persona alone). Success → /posts, the app's
-// home, so the user lands where the results are.
-// In edit mode the button shows the save copy instead of the create copy.
+// Create: POST /api/persona. Success → /posts, the app's home. In edit
+// mode the button shows the save copy instead of the create copy.
 //---------------
 const PersonaSubmit = ({ editId }: { editId: string | null }) => {
   const { t, locale } = useI18n();
@@ -570,7 +565,10 @@ const PersonaSubmit = ({ editId }: { editId: string | null }) => {
         if (state.videoAspect) formData.append('videoAspect', state.videoAspect);
         if (state.videoLayout) formData.append('videoLayout', state.videoLayout);
         if (state.scriptPrompt.trim()) formData.append('scriptPrompt', state.scriptPrompt.trim());
-        if (state.ctaText.trim()) formData.append('ctaText', state.ctaText.trim());
+        // Always sent on edit: a blank value clears the persona's CTA
+        // (the PATCH parser maps present-but-blank to ''), omitting the
+        // field would leave the old CTA in place forever.
+        formData.append('ctaText', state.ctaText.trim());
         if (state.niche.trim()) formData.append('niche', state.niche.trim());
         const result = await updateMutation.mutateAsync({ personaId, formData });
         usePersonaStore.getState().setResult(result);
@@ -638,10 +636,8 @@ const PersonaFeedback = () => {
 
   if (!result) return null;
 
-  //---------------
   // Clears the store AND the RHF fields: without reset() the inputs keep
   // showing the old text while the store is already empty.
-  //---------------
   const handleCreateAnother = () => {
     reset({ name: '', niche: '', scriptPrompt: '', ctaText: '' });
     usePersonaStore.getState().resetForm();
@@ -693,8 +689,7 @@ const PersonaFeedback = () => {
 };
 
 //---------------
-// PersonaErrorDialog — create/update error in a modal, so the user does
-// not lose the message (it used to sit in a box at the page bottom).
+// PersonaErrorDialog — create/update error in a modal (not a box at the page bottom), so the message is not lost.
 //---------------
 const PersonaErrorDialog = () => {
   const result = usePersonaStore((s) => s.result);
@@ -736,8 +731,8 @@ const PersonaErrorDialog = () => {
 };
 
 //---------------
-// getCharacterIndex — finds the saved avatar in the carousel without scrolling it.
-// Returns the first item when the image is not an available character.
+// getCharacterIndex — finds the saved avatar in the carousel. First item
+// when the image is not an available character.
 //---------------
 const getCharacterIndex = (avatarUrl: string | null): number => {
   const match = avatarUrl?.match(/\/file-(\d+)\.png$/);

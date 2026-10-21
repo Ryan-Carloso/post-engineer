@@ -9,16 +9,13 @@
 // to its slot. No orphan videos, no schedule-only creation, no per-video
 // manual times, no recurrence.
 //
-// Backend flow:
-//   validate input -> auth -> rate limit -> persona scope + ownership ->
-//   providers + accounts -> distribute slots -> window check -> cost ->
-//   idempotency pre-checks -> ONE atomic spend_tokens -> insert schedule ->
-//   insert slots -> dispatch engine tasks per slot
-//   (slot -> generating + task_id, or failed + per-slot refund).
-//
-// The engine's 60s tick reconciles generating -> ready/failed and publishes
-// ready slots at slot_at; the tick never sees our slots while pending:
-// scheduled_at is a legacy column that always stays NULL now.
+// Backend flow: validate input -> auth -> rate limit -> persona scope +
+// ownership -> providers + accounts -> distribute slots -> window check
+// -> cost -> idempotency pre-checks -> ONE atomic spend_tokens -> insert
+// schedule -> insert slots -> dispatch engine tasks per slot (slot ->
+// generating + task_id, or failed + per-slot refund).
+// The engine's 60s tick reconciles generating -> ready/failed and
+// publishes ready slots at slot_at; scheduled_at stays NULL now.
 //---------------
 
 import { NextResponse } from 'next/server';

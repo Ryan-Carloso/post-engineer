@@ -1078,6 +1078,24 @@ describe('PATCH /api/persona', () => {
       expect(updated).toHaveLength(0);
     });
 
+    it('ctaText: a blank value clears the stored call to action', async () => {
+      const { updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
+
+      const res = await PATCH(patchRequest('persona-uuid-1', { ctaText: '' }));
+
+      expect(res.status).toBe(200);
+      expect(updated[0]).toEqual({ cta_text: '' });
+    });
+
+    it('ctaText: an absent field leaves the stored call to action untouched', async () => {
+      const { updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
+
+      const res = await PATCH(patchRequest('persona-uuid-1', { name: 'Ana Maria' }));
+
+      expect(res.status).toBe(200);
+      expect(updated[0]).toEqual({ name: 'Ana Maria' });
+    });
+
     it('niche: updates only the niche', async () => {
       const { updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
 

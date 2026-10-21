@@ -26,14 +26,12 @@ export const enDictionary: Dictionary = {
     primaryNavigation: 'Primary navigation',
     profile: 'Profile',
   },
-
   // Account area — Profile page (mobile header avatar + /account route)
   account: {
     title: 'Profile',
     subtitle: 'Your info, tokens and preferences.',
     version: 'Version',
   },
-
   // Posts page — history + upcoming posts from all accounts
   posts: {
     title: 'Posts',
@@ -113,7 +111,6 @@ export const enDictionary: Dictionary = {
     videoLoadError: 'The video could not be loaded.',
     detailLoadError: 'Could not load this post. Please try again.',
   },
-
   // /posts/new — create post (persona + topics + accounts + publish times)
   newPost: {
     title: 'New post',
@@ -197,11 +194,9 @@ export const enDictionary: Dictionary = {
     successHintAsap: 'The video is generating now and will be published to the selected accounts the moment it is ready.',
     successPartial: 'Scheduled, but some videos failed to start. Check each post for details.',
   },
-
   publishing: {
     mustSelectAccount: 'Select at least one account to publish to.',
   },
-
 
   accounts: {
     title: 'Accounts',
