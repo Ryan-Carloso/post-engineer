@@ -16,7 +16,7 @@ from loguru import logger
 
 from app.config import config
 from app.models.schema import MaterialInfo, VideoAspect
-from app.services import image_material, svg_catalog, svg_draw, svg_pencil, svg_sketch
+from app.services import image_material, svg_catalog, svg_draw, svg_pencil, svg_sketch, video_download
 from app.utils import utils
 
 
@@ -173,6 +173,8 @@ def _persist_svg_item(
     save_dir: str,
     max_clip_duration: int,
     video_aspect: VideoAspect = VideoAspect.portrait,
+    *,
+    create_fallback_dir: bool = True,
 ) -> str:
     """Render a catalog SVG into a video clip.
 
@@ -193,12 +195,13 @@ def _persist_svg_item(
     An empty save_dir (the shipped default) falls back to the same storage
     cache save_video uses: without it the stills and clips would land as
     CWD-relative paths while every other provider returns absolute ones.
-    Only the fallback directory is created; an explicit save_dir keeps the
-    previous contract (no filesystem side effects beyond the render itself).
+    Only the fallback directory is created — and only when
+    create_fallback_dir is true; an explicit save_dir keeps the previous
+    contract (no filesystem side effects beyond the render itself).
     """
     if not save_dir:
         save_dir = utils.storage_dir("cache_videos")
-        if not os.path.exists(save_dir):
+        if create_fallback_dir and not os.path.exists(save_dir):
             os.makedirs(save_dir)
 
     width, height = video_aspect.to_resolution()
@@ -218,7 +221,7 @@ def _persist_svg_item(
         svg_path, drawn_mp4, width, height, max_clip_duration, background
     )
     if drawn:
-        logger.info(f"svg drawn clip rendered: {drawn}")
+        logger.info(f"svg drawn clip rendered: {os.path.basename(drawn)}")
         return drawn
 
     digest = hashlib.sha256(f"{item.url}|{width}x{height}".encode("utf-8")).hexdigest()[
@@ -445,22 +448,20 @@ def resolve_material_path(
     clip has no real face to screen, and the detector would discard most of the
     cartoon catalog for nothing.
     """
-    # Imported lazily: material.py imports this module at top level, so a
-    # top-level import back would be circular. Resolved at call time, which
-    # also keeps patch.object(material, "save_video") working in tests.
-    from app.services import face_detect
-    from app.services.material import save_video
-
     if item.provider == "svg":
         rendered = _persist_svg_item(item, save_dir, max_clip_duration, video_aspect)
         if rendered:
-            logger.info(f"svg clip rendered: {rendered}")
+            logger.info(f"svg clip rendered: {os.path.basename(rendered)}")
         return rendered
 
-    path = save_video(video_url=item.url, save_dir=save_dir)
+    # Only the download branch needs face detection; importing here keeps
+    # catalog-SVG renders from loading the detector stack at all.
+    from app.services import face_detect
+
+    path = video_download.save_video(video_url=item.url, save_dir=save_dir)
     if not path:
         return ""
     if face_detect.video_contains_face(path, force_exclude=exclude_faces):
-        logger.info(f"video discarded (face detected): {path}")
+        logger.info(f"video discarded (face detected): {os.path.basename(path)}")
         return ""
     return path

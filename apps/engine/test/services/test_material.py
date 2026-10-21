@@ -12,7 +12,7 @@ import requests
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.config import config
-from app.services import material
+from app.services import material, video_download
 
 
 class TestMaterialTlsVerification(unittest.TestCase):
@@ -122,7 +122,7 @@ class TestMaterialTlsVerification(unittest.TestCase):
                 # Avoid live DNS: resolve example.com to a public IP locally.
                 "app.utils.ssrf._resolve_global_ips",
                 return_value=[ipaddress.ip_address("93.184.216.34")],
-            ), patch("app.services.material.VideoFileClip", FakeVideoFileClip):
+            ), patch("app.services.video_download.VideoFileClip", FakeVideoFileClip):
                 video_path = material.save_video(
                     "https://example.com/video.mp4?token=abc", save_dir=temp_dir
                 )
@@ -186,7 +186,7 @@ class TestMaterialTlsVerification(unittest.TestCase):
         with (
             patch.dict(config.app, {"material_directory": ""}),
             patch.object(material, "search_videos_pexels", side_effect=fake_search),
-            patch.object(material, "save_video", side_effect=fake_save_video),
+            patch.object(video_download, "save_video", side_effect=fake_save_video),
         ):
             result = material.download_videos(
                 task_id="ordered-materials",
@@ -251,7 +251,7 @@ class TestVideoSourceMix(unittest.TestCase):
             patch.dict(config.app, {"material_directory": ""}),
             patch.object(material, "search_videos_pexels", side_effect=fake_pexels),
             patch.object(material, "search_videos_pixabay", side_effect=fake_pixabay),
-            patch.object(material, "save_video", side_effect=fake_save_video),
+            patch.object(video_download, "save_video", side_effect=fake_save_video),
         ):
             result = material.download_videos(
                 task_id="source-mix-fallback",
@@ -289,7 +289,7 @@ class TestVideoSourceMix(unittest.TestCase):
             patch.dict(config.app, {"material_directory": ""}),
             patch.object(material, "search_videos_pexels", side_effect=fake_pexels),
             patch.object(material, "search_videos_pixabay", side_effect=fake_pixabay),
-            patch.object(material, "save_video", side_effect=fake_save_video),
+            patch.object(video_download, "save_video", side_effect=fake_save_video),
         ):
             result = material.download_videos(
                 task_id="source-mix-priority",
@@ -327,7 +327,7 @@ class TestVideoSourceMix(unittest.TestCase):
             patch.dict(config.app, {"material_directory": ""}),
             patch.object(material, "search_videos_pexels", side_effect=fake_pexels),
             patch.object(material, "search_videos_pixabay", side_effect=fake_pixabay),
-            patch.object(material, "save_video", side_effect=fake_save_video),
+            patch.object(video_download, "save_video", side_effect=fake_save_video),
         ):
             result = material.download_videos(
                 task_id="no-source-mix",
@@ -372,7 +372,7 @@ class TestVideoSourceMix(unittest.TestCase):
             patch.dict(config.app, {"material_directory": ""}),
             patch.object(material, "search_videos_pexels", side_effect=fake_pexels),
             patch.object(material, "search_videos_pixabay", side_effect=fake_pixabay),
-            patch.object(material, "save_video", side_effect=fake_save_video),
+            patch.object(video_download, "save_video", side_effect=fake_save_video),
         ):
             result = material.download_videos(
                 task_id="source-mix-ordered",
@@ -632,7 +632,7 @@ class TestCoverrProvider(unittest.TestCase):
             "app.services.material.search_videos_coverr",
             return_value=[fake_item],
         ) as search, patch(
-            "app.services.material.save_video",
+            "app.services.video_download.save_video",
             return_value="/tmp/coverr-saved.mp4",
         ) as save:
             result = material.download_videos(
@@ -936,7 +936,7 @@ class TestFaceFiltering(unittest.TestCase):
         with (
             patch.dict(config.app, {"material_directory": ""}),
             patch.object(material, "search_videos_pexels", side_effect=fake_search),
-            patch.object(material, "save_video", return_value="/tmp/face-saved.mp4"),
+            patch.object(video_download, "save_video", return_value="/tmp/face-saved.mp4"),
             patch("app.services.face_detect.video_contains_face",
                 return_value=True,
             ) as face_check,
@@ -966,7 +966,7 @@ class TestFaceFiltering(unittest.TestCase):
         with (
             patch.dict(config.app, {"material_directory": ""}),
             patch.object(material, "search_videos_pexels", side_effect=fake_search),
-            patch.object(material, "save_video", return_value="/tmp/clean-saved.mp4"),
+            patch.object(video_download, "save_video", return_value="/tmp/clean-saved.mp4"),
             patch("app.services.face_detect.video_contains_face",
                 return_value=False,
             ) as face_check,
@@ -998,7 +998,7 @@ class TestFaceFiltering(unittest.TestCase):
         with (
             patch.dict(config.app, {"material_directory": ""}),
             patch.object(material, "search_videos_pexels", side_effect=fake_search),
-            patch.object(material, "save_video", return_value="/tmp/x-saved.mp4"),
+            patch.object(video_download, "save_video", return_value="/tmp/x-saved.mp4"),
             patch("app.services.face_detect.video_contains_face",
                 return_value=False,
             ) as face_check,
@@ -1028,7 +1028,7 @@ class TestFaceFiltering(unittest.TestCase):
         with (
             patch.dict(config.app, {"material_directory": ""}),
             patch.object(material, "search_videos_pexels", side_effect=fake_search),
-            patch.object(material, "save_video", return_value="/tmp/f1-saved.mp4"),
+            patch.object(video_download, "save_video", return_value="/tmp/f1-saved.mp4"),
             patch("app.services.face_detect.video_contains_face",
                 return_value=True,
             ) as face_check,
@@ -1059,7 +1059,7 @@ class TestFaceFiltering(unittest.TestCase):
         with (
             patch.dict(config.app, {"material_directory": ""}),
             patch.object(material, "search_videos_pexels", side_effect=fake_search),
-            patch.object(material, "save_video", return_value="/tmp/s1-saved.mp4"),
+            patch.object(video_download, "save_video", return_value="/tmp/s1-saved.mp4"),
             patch("app.services.face_detect.video_contains_face",
                 return_value=False,
             ) as face_check,

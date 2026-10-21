@@ -10,6 +10,8 @@ import json
 import os
 import sqlite3
 import tempfile
+import threading
+import time
 import unittest
 from contextlib import contextmanager
 from unittest.mock import patch
@@ -55,6 +57,23 @@ class FailingR2Client(FakeR2Client):
 
     def get_object(self, Bucket, Key):
         raise RuntimeError("r2 is down")
+
+
+class ChunkedBody:
+    """A response body that only supports sized reads, like botocore's.
+
+    A bare .read() — the whole object into memory at once — fails the test.
+    """
+
+    def __init__(self, payload: bytes):
+        self._buffer = io.BytesIO(payload)
+        self.read_sizes = []
+
+    def read(self, size=-1):
+        self.read_sizes.append(size)
+        if size is None or size < 0:
+            raise AssertionError("download read the whole object into memory")
+        return self._buffer.read(size)
 
 
 def _build_index_bytes(rows: list) -> bytes:
@@ -249,6 +268,47 @@ class SvgCatalogR2Tests(unittest.TestCase):
             svg_catalog._download_key(
                 f"{self.PREFIX}/nope.svg", os.path.join(self.cache_dir, "nope.svg")
             )
+
+    def test_download_key_streams_the_body_in_chunks(self):
+        key = f"{self.PREFIX}/Animals 3/hen money.svg"
+        payload = self.fake.objects[key]
+        body = ChunkedBody(payload)
+        client = FakeR2Client(self.fake.objects)
+        client.get_object = lambda Bucket, Key: {"Body": body, "ETag": '"etag-1"'}
+        local = os.path.join(self.cache_dir, "hen.svg")
+        etag = svg_catalog._download_key(key, local, client)
+        self.assertEqual(etag, '"etag-1"')
+        with open(local, "rb") as handle:
+            self.assertEqual(handle.read(), payload)
+        self.assertTrue(body.read_sizes)
+        self.assertTrue(all(0 < size <= 65536 for size in body.read_sizes))
+
+    def test_ensure_index_serializes_concurrent_refreshes(self):
+        head_calls = []
+        original_head = self.fake.head_object
+
+        def slow_head(Bucket, Key):
+            head_calls.append(Key)
+            # Widen the race window: without serialization every thread
+            # passes the freshness check and calls R2 itself.
+            time.sleep(0.05)
+            return original_head(Bucket, Key)
+
+        self.fake.head_object = slow_head
+        results = []
+        threads = [
+            threading.Thread(
+                target=lambda: results.append(svg_catalog._ensure_index())
+            )
+            for _ in range(8)
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual(len(results), 8)
+        self.assertEqual(len(set(results)), 1)
+        self.assertEqual(len(head_calls), 1)
 
     # ---- path resolution --------------------------------------------
 

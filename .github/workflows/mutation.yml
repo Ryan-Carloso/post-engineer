@@ -316,6 +316,7 @@ jobs:
       # failing — against current code on every shard. mutmut's own state
       # (*.meta verdicts, mutmut-*.json stats) is kept.
       - name: Prune ephemeral artifacts from restored cache
+        shell: bash
         run: |
           rm -rf mutants/storage mutants/.pytest_cache
           if [ -d mutants ]; then

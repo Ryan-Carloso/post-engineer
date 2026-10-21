@@ -101,6 +101,44 @@ class FlattenCommandsTests(unittest.TestCase):
         self.assertAlmostEqual(middle[0], 17.5, places=6)
         self.assertAlmostEqual(middle[1], 10.0, places=6)
 
+    def test_smooth_cubic_relative_reflects_previous_control(self):
+        # Same geometry as the absolute S test, with relative coordinates:
+        # the s segment is the flat cubic (5,0)->(5,0)->(10,0)->(10,0).
+        points = svg_draw._flatten("M 0 0 C 0 0 5 0 5 0 s 5 0 5 0")
+        middle = points[24 + 12]
+        self.assertAlmostEqual(middle[0], 7.5, places=6)
+        self.assertAlmostEqual(middle[1], 0.0, places=6)
+        self.assertEqual(points[-1], (10.0, 0.0))
+
+    def test_smooth_cubic_relative_after_relative_cubic(self):
+        # c ends at (11,1) with control (11,1); s reflects it to (11,1),
+        # so the s midpoint is (16,1) and the path ends at (21,1).
+        points = svg_draw._flatten("M 1 1 c 0 0 10 0 10 0 s 10 0 10 0")
+        middle = points[24 + 12]
+        self.assertAlmostEqual(middle[0], 16.0, places=6)
+        self.assertAlmostEqual(middle[1], 1.0, places=6)
+        self.assertEqual(points[-1], (21.0, 1.0))
+
+    def test_smooth_quadratic_relative_reflects_previous_control(self):
+        # q control (0,10) reflected about (10,10) gives (20,10); the t
+        # midpoint is (17.5, 10), exactly like the absolute T case.
+        points = svg_draw._flatten("M 0 0 q 0 10 10 10 t 10 0")
+        middle = points[24 + 12]
+        self.assertAlmostEqual(middle[0], 17.5, places=6)
+        self.assertAlmostEqual(middle[1], 10.0, places=6)
+        self.assertEqual(points[-1], (20.0, 10.0))
+
+    def test_smooth_state_resets_on_a_new_subpath(self):
+        # After the second M, t has no previous quadratic control to
+        # reflect, so it behaves as if the control sat on (50,50).
+        points = svg_draw._flatten("M 0 0 C 0 0 5 0 5 0 s 5 0 5 0 M 50 50 t 10 10")
+        self.assertEqual(len(points), 74)
+        self.assertEqual(points[49], (50.0, 50.0))
+        self.assertEqual(points[-1], (60.0, 60.0))
+
+    def test_close_only_path_returns_to_the_start_point(self):
+        self.assertEqual(svg_draw._flatten("M 5 5 Z"), [(5.0, 5.0), (5.0, 5.0)])
+
     def test_arc_uses_endpoint_chord(self):
         points = svg_draw._flatten("M 0 0 A 5 5 0 0 1 3 4")
         self.assertEqual(points, [(0.0, 0.0), (3.0, 4.0)])

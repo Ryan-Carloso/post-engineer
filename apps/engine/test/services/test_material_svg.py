@@ -1,6 +1,7 @@
 """Tests for the SVG branch of the material pipeline."""
 import hashlib
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -10,7 +11,7 @@ from unittest.mock import Mock, patch
 import numpy as np
 
 from app.models.schema import MaterialInfo, VideoAspect
-from app.services import material, svg_catalog, svg_draw, svg_material, svg_pencil, svg_sketch
+from app.services import material, svg_catalog, svg_draw, svg_material, svg_pencil, svg_sketch, video_download
 
 
 def _patch_asset_resolution(test_case):
@@ -266,7 +267,7 @@ class ResolveMaterialPathTests(unittest.TestCase):
     def test_svg_branch_never_calls_the_downloader(self):
         item = MaterialInfo(provider="svg", url="/cat/a.svg", duration=3)
         with patch.object(svg_material, "_persist_svg_item", return_value="/out/a.mp4") as mock_p, patch.object(
-            material, "save_video"
+            video_download, "save_video"
         ) as mock_dl, patch("app.services.face_detect.video_contains_face") as mock_face:
             result = svg_material.resolve_material_path(item, "/save", 3, None)
         self.assertEqual(result, "/out/a.mp4")
@@ -277,7 +278,7 @@ class ResolveMaterialPathTests(unittest.TestCase):
 
     def test_download_branch_runs_face_detection(self):
         item = MaterialInfo(provider="pexels", url="https://x/v.mp4", duration=3)
-        with patch.object(material, "save_video", return_value="/save/v.mp4"), patch("app.services.face_detect.video_contains_face", return_value=False
+        with patch.object(video_download, "save_video", return_value="/save/v.mp4"), patch("app.services.face_detect.video_contains_face", return_value=False
         ) as mock_face:
             result = svg_material.resolve_material_path(item, "/save", 3, None)
         self.assertEqual(result, "/save/v.mp4")
@@ -285,13 +286,13 @@ class ResolveMaterialPathTests(unittest.TestCase):
 
     def test_download_branch_drops_face_detected_video(self):
         item = MaterialInfo(provider="pexels", url="https://x/v.mp4", duration=3)
-        with patch.object(material, "save_video", return_value="/save/v.mp4"), patch("app.services.face_detect.video_contains_face", return_value=True
+        with patch.object(video_download, "save_video", return_value="/save/v.mp4"), patch("app.services.face_detect.video_contains_face", return_value=True
         ):
             self.assertEqual(svg_material.resolve_material_path(item, "/save", 3, None), "")
 
     def test_download_failure_returns_empty(self):
         item = MaterialInfo(provider="pexels", url="https://x/v.mp4", duration=3)
-        with patch.object(material, "save_video", return_value=""):
+        with patch.object(video_download, "save_video", return_value=""):
             self.assertEqual(svg_material.resolve_material_path(item, "/save", 3, None), "")
 
 
@@ -440,6 +441,27 @@ class PersistSvgItemTests(unittest.TestCase):
                     self._item(), "", 4, VideoAspect.portrait
                 )
             self.assertTrue(os.path.isdir(missing))
+
+    def test_empty_save_dir_without_create_flag_leaves_the_cache_directory_absent(self):
+        with tempfile.TemporaryDirectory() as storage_root:
+            missing = os.path.join(storage_root, "does-not-exist")
+            with patch.object(
+                svg_material.utils, "storage_dir", return_value=missing
+            ), patch.object(
+                svg_material, "rasterize_svg_to_png", return_value=True
+            ), patch.object(
+                svg_material.image_material,
+                "render_image_file_to_mp4",
+                return_value="/x.mp4",
+            ):
+                svg_material._persist_svg_item(
+                    self._item(),
+                    "",
+                    4,
+                    VideoAspect.portrait,
+                    create_fallback_dir=False,
+                )
+            self.assertFalse(os.path.exists(missing))
 
     def test_explicit_save_dir_is_used_as_is(self):
         with tempfile.TemporaryDirectory() as save_dir:
@@ -863,6 +885,9 @@ class AnimatedSvgMaterialTests(unittest.TestCase):
         for frame in frames:
             self.assertEqual(frame.shape, (1920, 1080, 3))
 
+    @unittest.skipUnless(
+        shutil.which("rsvg-convert"), "rsvg-convert is not installed"
+    )
     def test_drawn_line_art_final_frame_has_no_pencil(self):
         """The completed tracing is shown clean, like the sketch path.
 
