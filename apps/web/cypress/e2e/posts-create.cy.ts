@@ -185,9 +185,6 @@ describe('Creating a post', () => {
     // At least one publishing account.
     cy.get('[data-testid="account-card"]').first().click();
 
-    const supabaseUrl = Cypress.env('supabaseUrl') as string;
-    const authCookie = `sb-${new URL(supabaseUrl).hostname.split('.')[0]}-auth-token`;
-    cy.getCookie(authCookie, { log: false }).should('exist');
     cy.contains('button', /Agendar posts|Schedule posts/).click();
 
     cy.wait('@createPost').its('request.body').should('deep.include', {
