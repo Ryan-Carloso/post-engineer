@@ -61,6 +61,32 @@ class ChatterboxRegistryVolumeTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not a WAV file"):
             decode_reference_wav(payload)
 
+    def test_decode_reference_wav_rejects_oversized_encoded_payload(self) -> None:
+        from chatterbox_registry_volume import MAX_REGISTRY_WAV_BYTES
+
+        payload = "A" * (MAX_REGISTRY_WAV_BYTES * 2 + 4)
+        with self.assertRaisesRegex(ValueError, "exceeds size limit"):
+            decode_reference_wav(payload)
+
+    def test_upsert_accepts_bcp47_language_codes(self) -> None:
+        for code in ("pt", "en", "pt-BR", "zh-Hans", "es-419"):
+            voices = upsert_voice({}, "ryan", code, "ryan/reference.wav")
+            self.assertEqual(voices["ryan"]["language_id"], code)
+
+    def test_upsert_rejects_language_with_toml_breaking_characters(self) -> None:
+        for bad in ("en\n[injected]", 'en"evil', "e", "english", "en us"):
+            with self.assertRaisesRegex(ValueError, "not a valid language code"):
+                upsert_voice({}, "ryan", bad, "ryan/reference.wav")
+
+    def test_serialize_escapes_control_characters(self) -> None:
+        import tomllib
+
+        voices = {"ryan": {"reference": "ryan/reference.wav", "language_id": "e\nvil"}}
+        text = serialize_voices_toml(voices)
+        self.assertIn('language_id = "e\\nvil"', text)
+        parsed = tomllib.loads(text)
+        self.assertEqual(parsed["ryan"]["language_id"], "e\nvil")
+
 
 if __name__ == "__main__":
     unittest.main()

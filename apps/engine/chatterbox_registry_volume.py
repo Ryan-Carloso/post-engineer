@@ -11,10 +11,18 @@ from pathlib import Path
 MAX_REGISTRY_WAV_BYTES = 20 * 1024 * 1024
 
 _VOICE_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+# BCP-47-shaped language codes (pt, pt-BR, zh-Hans, es-419). The value is
+# written into voices.toml, so anything outside this shape — quotes,
+# newlines, control characters — must never reach the serializer.
+_LANGUAGE_ID_RE = re.compile(r"^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?$")
 
 
 def is_valid_voice_name(name: str) -> bool:
     return bool(name) and bool(_VOICE_NAME_RE.match(name))
+
+
+def is_valid_language_id(language_id: str) -> bool:
+    return bool(language_id) and bool(_LANGUAGE_ID_RE.match(language_id))
 
 
 def load_voices_toml(path: Path) -> dict[str, dict[str, str]]:
@@ -46,7 +54,14 @@ def serialize_voices_toml(voices: dict[str, dict[str, str]]) -> str:
         lines.append(f"[{name}]")
         for key in ("reference", "language_id"):
             value = section.get(key, "")
-            escaped = str(value).replace("\\", "\\\\").replace('"', '\\"')
+            escaped = (
+                str(value)
+                .replace("\\", "\\\\")
+                .replace('"', '\\"')
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t")
+            )
             lines.append(f'{key} = "{escaped}"')
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
@@ -58,10 +73,13 @@ def upsert_voice(
     language_id: str,
     reference_relative: str,
 ) -> dict[str, dict[str, str]]:
+    language = language_id.strip() or "pt"
+    if not is_valid_language_id(language):
+        raise ValueError("language_id is not a valid language code")
     updated = dict(voices)
     updated[voice] = {
         "reference": reference_relative,
-        "language_id": language_id.strip() or "pt",
+        "language_id": language,
     }
     return updated
 
@@ -73,6 +91,10 @@ def remove_voice(voices: dict[str, dict[str, str]], voice: str) -> dict[str, dic
 
 
 def decode_reference_wav(payload_b64: str) -> bytes:
+    # Bound the encoded payload before decoding: base64 inflates the byte
+    # cap by ~4/3, so anything past 2x the cap can never be a valid upload.
+    if len(payload_b64) > MAX_REGISTRY_WAV_BYTES * 2:
+        raise ValueError("reference wav exceeds size limit")
     try:
         wav_bytes = base64.b64decode(payload_b64, validate=True)
     except Exception as exc:

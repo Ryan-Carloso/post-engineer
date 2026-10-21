@@ -325,6 +325,7 @@ def _build_fastapi_app():
         voices_config_path=VOICES_CONFIG_PATH,
         commit_volume=VOICES_VOLUME.commit,
         authorize=authorize_request,
+        reload_volume=VOICES_VOLUME.reload,
     )
 
     return fastapi_app

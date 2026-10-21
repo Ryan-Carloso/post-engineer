@@ -60,6 +60,22 @@ class ClonedVoicesControllerTests(unittest.TestCase):
             "user-uuid-1", "clone-1", b"wav", "en"
         )
 
+    @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
+    def test_create_rejects_language_with_toml_breaking_characters(self, mock_service_cls):
+        service = MagicMock()
+        mock_service_cls.return_value = service
+
+        response = self.client.post(
+            "/api/v1/cloned-voices",
+            headers=self.headers,
+            data={"language": "en\n[injected]", "consent": "true"},
+            files={"file": ("sample.wav", io.BytesIO(b"data"), "audio/wav")},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["message"], "language is invalid")
+        service.create_from_upload.assert_not_called()
+
     def test_list_requires_auth(self):
         response = self.client.get("/api/v1/cloned-voices")
         self.assertEqual(response.status_code, 401)

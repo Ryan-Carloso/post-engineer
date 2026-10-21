@@ -23,8 +23,19 @@ def mount_chatterbox_registry_routes(
     voices_config_path: str,
     commit_volume: Callable[[], None],
     authorize: Callable[[Request], JSONResponse | None],
+    reload_volume: Callable[[], None] | None = None,
 ) -> None:
-    """Wire per-user clone registry endpoints onto the Chatterbox FastAPI app."""
+    """Wire per-user clone registry endpoints onto the Chatterbox FastAPI app.
+
+    Writes are read-modify-write on voices.toml: reload the volume first
+    (when a reload hook is wired) so a container whose view predates
+    another container's commit does not erase that registration when it
+    commits its own.
+    """
+
+    def _reload() -> None:
+        if reload_volume is not None:
+            reload_volume()
 
     @fastapi_app.post("/v1/voices")
     async def register_voice(request: Request) -> JSONResponse:
@@ -53,6 +64,7 @@ def mount_chatterbox_registry_routes(
             return JSONResponse(status_code=400, content={"error": str(error)})
 
         try:
+            _reload()
             register_voice_on_volume(
                 Path(voices_dir),
                 Path(voices_config_path),
@@ -82,6 +94,7 @@ def mount_chatterbox_registry_routes(
             return JSONResponse(status_code=400, content={"error": "invalid voice"})
 
         try:
+            _reload()
             removed = delete_voice_on_volume(
                 Path(voices_dir),
                 Path(voices_config_path),
