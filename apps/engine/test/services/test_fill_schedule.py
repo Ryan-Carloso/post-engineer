@@ -8,10 +8,11 @@ import os
 import sys
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import requests
 from loguru import logger
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -2141,6 +2142,91 @@ class CoverageGapTests(unittest.TestCase):
         results = scheduler.run_once(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
         self.assertEqual(results["generated"], 0)
         self.assertEqual(store.connect_retries, fs.store.CONNECT_RETRIES)
+
+    # -- outage reporting ------------------------------------------------------
+    def _outage_scheduler(self, error):
+        store = _FakeStore()
+        store.pending_slots = MagicMock(side_effect=error)
+        store.generating_slots = MagicMock(side_effect=error)
+        store.ready_due_slots = MagicMock(side_effect=error)
+        scheduler = self._scheduler(store)
+        scheduler.publisher.base_url = "https://post-engineer.com"
+        scheduler.publisher.api_secret = "secret"
+        return store, scheduler
+
+    def _run_ticks(self, scheduler, minutes):
+        records = []
+        handler_id = logger.add(lambda message: records.append(message.record))
+        try:
+            for minute in minutes:
+                scheduler.run_once(
+                    datetime(2026, 9, 7, 12, 0, tzinfo=UTC) + timedelta(minutes=minute)
+                )
+        finally:
+            logger.remove(handler_id)
+        return records
+
+    @staticmethod
+    def _messages(records, level):
+        return [r["message"] for r in records if r["level"].name == level]
+
+    def test_sustained_outage_logs_one_error_not_one_per_stage_per_tick(self):
+        # Every stage fails on every tick while Supabase is unreachable. Only
+        # the outage start reaches error tracking; the repeats stay WARNING.
+        _, scheduler = self._outage_scheduler(
+            requests.exceptions.ConnectionError("Failed to resolve 'db.example'")
+        )
+        records = self._run_ticks(scheduler, range(10))
+        errors = self._messages(records, "ERROR")
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn("connection outage started in stage generated", errors[0])
+        self.assertIn("Failed to resolve", errors[0])
+        warnings = self._messages(records, "WARNING")
+        self.assertEqual(
+            sum("failed during connection outage" in m for m in warnings), 29, warnings
+        )
+
+    def test_read_timeout_counts_as_an_outage(self):
+        _, scheduler = self._outage_scheduler(
+            requests.exceptions.ReadTimeout("Read timed out. (read timeout=30)")
+        )
+        errors = self._messages(self._run_ticks(scheduler, range(3)), "ERROR")
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn("ReadTimeout", errors[0])
+
+    def test_long_outage_repeats_the_error_every_reminder_interval(self):
+        _, scheduler = self._outage_scheduler(requests.exceptions.ConnectionError("dns"))
+        reminder_minutes = fs.scheduler.OUTAGE_REMINDER_SECONDS // 60
+        errors = self._messages(
+            self._run_ticks(scheduler, range(2 * reminder_minutes + 1)), "ERROR"
+        )
+        self.assertEqual(len(errors), 3, errors)
+        self.assertIn("connection outage ongoing for 1800s", errors[1])
+        self.assertIn("connection outage ongoing for 3600s", errors[2])
+
+    def test_recovery_logs_the_outage_summary_and_resets(self):
+        store, scheduler = self._outage_scheduler(requests.exceptions.ConnectionError("dns"))
+        records = self._run_ticks(scheduler, [0, 1])
+        store.pending_slots = MagicMock(return_value=[])
+        store.generating_slots = MagicMock(return_value=[])
+        store.ready_due_slots = MagicMock(return_value=[])
+        records += self._run_ticks(scheduler, [2])
+        self.assertIn(
+            "fill_schedule: connection outage over after 120s and 6 failed stages",
+            self._messages(records, "WARNING"),
+        )
+        # A new outage after recovery is a new incident: it errors again.
+        store.pending_slots = MagicMock(side_effect=requests.exceptions.ConnectionError("dns"))
+        errors = self._messages(self._run_ticks(scheduler, [3]), "ERROR")
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn("connection outage started", errors[0])
+
+    def test_non_connection_failures_still_error_on_every_tick(self):
+        # A bug or a rejected key is not an outage: each failure stays ERROR.
+        _, scheduler = self._outage_scheduler(RuntimeError("bad row"))
+        errors = self._messages(self._run_ticks(scheduler, range(2)), "ERROR")
+        self.assertEqual(len(errors), 6, errors)
+        self.assertTrue(all("failed: RuntimeError" in m for m in errors), errors)
 
     def test_disarmed_store_still_sends_auth_headers_and_reads_rows(self):
         # set_connect_retries(0) must retune the adapter in place, never

@@ -9,9 +9,10 @@ recurring scheduling.
 from __future__ import annotations
 
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import requests
 from loguru import logger
 
 from app.services import notify as notify_module
@@ -22,6 +23,21 @@ from app.services.fill_schedule.publish import BatchPublisher
 from app.services.fill_schedule.reconcile import BatchReconciler
 from app.services.fill_schedule.store import CONNECT_RETRIES, ScheduleStore
 from app.services.fill_schedule.support import token_cost
+
+# A sustained outage fails every stage on every tick (~3 ERRORs a minute).
+# It is reported as one incident instead: ERROR when it starts, ERROR again
+# every OUTAGE_REMINDER_SECONDS while it lasts, WARNING for the failures in
+# between (the PostHog sink forwards ERROR+ only).
+OUTAGE_REMINDER_SECONDS = 30 * 60
+
+# Transport-level failures: the request did not get a response (DNS, refused,
+# TLS, connect/read timeout). SSLError is a requests ConnectionError.
+_CONNECTION_FAILURES = (
+    requests.exceptions.ConnectionError,
+    requests.exceptions.Timeout,
+    ConnectionError,
+    TimeoutError,
+)
 
 
 class FillScheduleScheduler:
@@ -42,6 +58,9 @@ class FillScheduleScheduler:
         self.publisher = BatchPublisher(
             store=store, task_state=task_state, publish_video=publish_video, notify=notify
         )
+        self._outage_since: datetime | None = None
+        self._outage_reported_at: datetime | None = None
+        self._outage_failures = 0
 
     def generate(self, now: datetime) -> int:
         """Dispatch video generation for pending batch slots."""
@@ -63,9 +82,8 @@ class FillScheduleScheduler:
         """
         results: dict[str, int] = {}
         # Connect circuit breaker: re-arm the retry budget every tick, then
-        # disarm it as soon as a stage fails. A stage failure says nothing
-        # about *why* (deliberately not classified — the requests exception
-        # taxonomy is a urllib3 implementation detail), but it does say
+        # disarm it as soon as a stage fails. The breaker does not classify
+        # the failure (only the outage report below does), but a failure does say
         # Supabase is unreachable right now: paying the full connect budget
         # again on each later stage would stretch the tick to ~2min against a
         # 60s TICK_SECONDS without recovering anything. Re-armed next tick,
@@ -76,6 +94,7 @@ class FillScheduleScheduler:
         # later stage of the same tick gets no retry. One tick of reduced
         # resilience, re-armed at the top of the next.
         self.store.set_connect_retries(CONNECT_RETRIES)
+        connection_failed = False
         for stage_name, stage in (
             ("generated", self.generate),
             ("reconciled", self.reconcile),
@@ -84,14 +103,50 @@ class FillScheduleScheduler:
             try:
                 results[stage_name] = stage(now)
             except Exception as exc:  # noqa: BLE001
-                # A failed tick stage is a real recurring error: log at ERROR
-                # so the PostHog bridge (loguru sink, ERROR+) forwards it.
-                logger.error(f"fill_schedule: stage {stage_name} failed: {notify_module.safe_diagnostic(exc)}")
+                diagnostic = notify_module.safe_diagnostic(exc)
+                if isinstance(exc, _CONNECTION_FAILURES):
+                    connection_failed = True
+                    self._report_outage(stage_name, diagnostic, now)
+                else:
+                    # A failed tick stage is a real recurring error: log at
+                    # ERROR so the PostHog bridge (loguru sink, ERROR+)
+                    # forwards it.
+                    logger.error(f"fill_schedule: stage {stage_name} failed: {diagnostic}")
                 results[stage_name] = -1
                 self.store.set_connect_retries(0)
+        if not connection_failed and self._outage_since is not None:
+            logger.warning(
+                f"fill_schedule: connection outage over after {self._outage_seconds(now)}s "
+                f"and {self._outage_failures} failed stages"
+            )
+            self._outage_since = None
+            self._outage_reported_at = None
+            self._outage_failures = 0
         if any(value != 0 for value in results.values()):
             logger.info(f"fill_schedule tick: {results}")
         return results
+
+    def _report_outage(self, stage_name: str, diagnostic: str, now: datetime) -> None:
+        """Log a stage connection failure as part of one outage incident."""
+        self._outage_failures += 1
+        if self._outage_reported_at is None:
+            self._outage_since = now
+            self._outage_reported_at = now
+            logger.error(f"fill_schedule: connection outage started in stage {stage_name}: {diagnostic}")
+            return
+        if now - self._outage_reported_at >= timedelta(seconds=OUTAGE_REMINDER_SECONDS):
+            self._outage_reported_at = now
+            logger.error(
+                f"fill_schedule: connection outage ongoing for {self._outage_seconds(now)}s, "
+                f"{self._outage_failures} failed stages, last in stage {stage_name}: {diagnostic}"
+            )
+            return
+        logger.warning(f"fill_schedule: stage {stage_name} failed during connection outage: {diagnostic}")
+
+    def _outage_seconds(self, now: datetime) -> int:
+        if self._outage_since is None:
+            return 0
+        return int((now - self._outage_since).total_seconds())
 
     @staticmethod
     def _token_cost(faceless: bool, face_quality: str) -> int:
