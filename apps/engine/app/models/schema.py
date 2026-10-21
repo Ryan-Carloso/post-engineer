@@ -197,6 +197,9 @@ class VideoParams(BaseModel):
         max_length=2000,
     )
     custom_system_prompt: str = Field(default="", max_length=8000)
+    # The persona's call to action ("" = the script LLM picks a generic one).
+    # 200 mirrors llm.MAX_SCRIPT_CTA_LENGTH and the DB check (migration 024).
+    video_cta: str = Field(default="", max_length=200)
 
 
 class SubtitleRequest(BaseModel):

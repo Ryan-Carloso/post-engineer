@@ -17,6 +17,7 @@ const PERSONA_PREFERENCE_FIELDS: ReadonlyArray<{
   { personaKey: 'video_aspect', jobKey: 'video_aspect' },
   { personaKey: 'video_layout', jobKey: 'video_layout' },
   { personaKey: 'script_prompt', jobKey: 'video_script_prompt' },
+  { personaKey: 'cta_text', jobKey: 'video_cta' },
   { personaKey: 'paragraph_number', jobKey: 'paragraph_number' },
 ];
 
@@ -61,6 +62,7 @@ export interface JobPersona {
   video_aspect?: string | null;
   video_layout?: string | null;
   script_prompt?: string | null;
+  cta_text?: string | null;
   paragraph_number?: number | null;
   niche?: string | null;
   face_quality?: string | null;

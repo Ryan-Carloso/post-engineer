@@ -86,6 +86,7 @@ const PersonaPageContent = () => {
       name: usePersonaStore.getState().name,
       niche: usePersonaStore.getState().niche,
       scriptPrompt: usePersonaStore.getState().scriptPrompt,
+      ctaText: usePersonaStore.getState().ctaText,
     },
   });
 
@@ -107,10 +108,12 @@ const PersonaPageContent = () => {
     // layout existed has none — fall back to what every older video rendered.
     store.setVideoLayout(persona.videoLayout ?? 'standard');
     store.setScriptPrompt(persona.scriptPrompt ?? '');
+    store.setCtaText(persona.ctaText ?? '');
     store.setNiche(persona.niche ?? '');
     store.setResult(null);
     methods.setValue('name', persona.name);
     methods.setValue('scriptPrompt', persona.scriptPrompt ?? '');
+    methods.setValue('ctaText', persona.ctaText ?? '');
     methods.setValue('niche', persona.niche ?? '');
   }, [editingPersona, methods]);
 
@@ -567,6 +570,7 @@ const PersonaSubmit = ({ editId }: { editId: string | null }) => {
         if (state.videoAspect) formData.append('videoAspect', state.videoAspect);
         if (state.videoLayout) formData.append('videoLayout', state.videoLayout);
         if (state.scriptPrompt.trim()) formData.append('scriptPrompt', state.scriptPrompt.trim());
+        if (state.ctaText.trim()) formData.append('ctaText', state.ctaText.trim());
         if (state.niche.trim()) formData.append('niche', state.niche.trim());
         const result = await updateMutation.mutateAsync({ personaId, formData });
         usePersonaStore.getState().setResult(result);
@@ -629,6 +633,7 @@ const PersonaFeedback = () => {
     name: string;
     niche: string;
     scriptPrompt: string;
+    ctaText: string;
   }>();
 
   if (!result) return null;
@@ -638,7 +643,7 @@ const PersonaFeedback = () => {
   // showing the old text while the store is already empty.
   //---------------
   const handleCreateAnother = () => {
-    reset({ name: '', niche: '', scriptPrompt: '' });
+    reset({ name: '', niche: '', scriptPrompt: '', ctaText: '' });
     usePersonaStore.getState().resetForm();
   };
 

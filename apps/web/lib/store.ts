@@ -213,6 +213,8 @@ interface PersonaFormState {
    *  avatar on top and b-roll below. See VIDEO_LAYOUTS in persona-schema. */
   videoLayout: string;
   scriptPrompt: string;
+  /** The persona's call to action ('' = the engine picks a generic one). */
+  ctaText: string;
   niche: string;
   result: CreatePersonaResult | null;
   /** Avatar resolution: 'ok' (480p, 1 token/video) or 'very_good' (720p,
@@ -228,6 +230,7 @@ interface PersonaFormState {
   setVideoAspect: (value: string) => void;
   setVideoLayout: (value: string) => void;
   setScriptPrompt: (value: string) => void;
+  setCtaText: (value: string) => void;
   setNiche: (value: string) => void;
   setResult: (result: CreatePersonaResult | null) => void;
   setFaceQuality: (quality: FaceQuality) => void;
@@ -245,6 +248,7 @@ const initialPersonaState = {
   videoAspect: '9:16',
   videoLayout: 'standard',
   scriptPrompt: '',
+  ctaText: '',
   niche: '',
   result: null,
   faceQuality: 'ok' as FaceQuality,
@@ -262,6 +266,7 @@ export const usePersonaStore = create<PersonaFormState>()(
     setVideoAspect: (videoAspect) => set({ videoAspect }),
     setVideoLayout: (videoLayout) => set({ videoLayout }),
     setScriptPrompt: (scriptPrompt) => set({ scriptPrompt }),
+    setCtaText: (ctaText) => set({ ctaText }),
     setNiche: (niche) => set({ niche }),
     setResult: (result) => set({ result }),
     setFaceQuality: (faceQuality) => set({ faceQuality }),
@@ -285,6 +290,7 @@ export const usePersonaStore = create<PersonaFormState>()(
       if (s.videoAspect) formData.append('videoAspect', s.videoAspect);
       if (s.videoLayout) formData.append('videoLayout', s.videoLayout);
       if (s.scriptPrompt.trim()) formData.append('scriptPrompt', s.scriptPrompt.trim());
+      if (s.ctaText.trim()) formData.append('ctaText', s.ctaText.trim());
       if (s.niche.trim()) formData.append('niche', s.niche.trim());
       const videoSubject = s.niche.trim() || s.scriptPrompt.trim();
       if (videoSubject) formData.append('video_subject', videoSubject);

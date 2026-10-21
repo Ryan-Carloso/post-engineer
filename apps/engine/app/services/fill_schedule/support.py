@@ -45,6 +45,7 @@ _SNAPSHOT_FIELDS = (
     ("voice_id", "post_voice_id"),
     ("voice_audio_url", "post_voice_audio_url"),
     ("script_prompt", "post_script_prompt"),
+    ("cta_text", "post_cta_text"),
     ("niche", "post_niche"),
     ("language", "post_language"),
     ("video_aspect", "post_video_aspect"),

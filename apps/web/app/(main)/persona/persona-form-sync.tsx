@@ -17,6 +17,7 @@ export const PersonaFormSync = () => {
   const name = useWatch({ name: 'name' });
   const niche = useWatch({ name: 'niche' });
   const scriptPrompt = useWatch({ name: 'scriptPrompt' });
+  const ctaText = useWatch({ name: 'ctaText' });
 
   useEffect(() => {
     if (dirtyFields.name && typeof name === 'string') {
@@ -35,6 +36,12 @@ export const PersonaFormSync = () => {
       usePersonaStore.getState().setScriptPrompt(scriptPrompt);
     }
   }, [scriptPrompt, dirtyFields.scriptPrompt]);
+
+  useEffect(() => {
+    if (dirtyFields.ctaText && typeof ctaText === 'string') {
+      usePersonaStore.getState().setCtaText(ctaText);
+    }
+  }, [ctaText, dirtyFields.ctaText]);
 
   return null;
 };

@@ -62,6 +62,7 @@ class TestTaskService(unittest.TestCase):
             video_script_prompt="语气轻松",
             custom_system_prompt="Only write short narration.",
             angle="Coffee angle",
+            cta="",
         )
 
     def test_generate_final_videos_does_not_rerecord_old_bgm(self):

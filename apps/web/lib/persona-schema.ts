@@ -35,6 +35,13 @@ const optionalText = <T extends z.ZodType>(schema: T) =>
 // here. A stale client sending personaMode=faceless still gets a faced
 // persona, which is the only persona this product makes.
 //---------------
+//---------------
+// PERSONA_CTA_MAX_LENGTH — cap on the persona's call to action. Mirrored by
+// the DB check (migration 024) and the engine (MAX_SCRIPT_CTA_LENGTH);
+// pinned by a sync test.
+//---------------
+export const PERSONA_CTA_MAX_LENGTH = 200;
+
 export const personaFormSchema = z.object({
   name: z.string().trim().min(1).optional(),
   avatarUrl: optionalText(z.string()),
@@ -46,6 +53,7 @@ export const personaFormSchema = z.object({
   videoAspect: optionalText(z.enum(VALID_VIDEO_ASPECTS)),
   videoLayout: optionalText(z.enum(VIDEO_LAYOUTS)),
   scriptPrompt: optionalText(z.string().max(2000)),
+  ctaText: optionalText(z.string().max(PERSONA_CTA_MAX_LENGTH)),
   niche: optionalText(z.string().max(300)),
   paragraphNumber: optionalText(z.coerce.number().int().min(1).max(10)),
   faceQuality: optionalText(z.enum(FACE_QUALITIES)),
@@ -65,6 +73,7 @@ const FIELD_ERRORS: Record<string, (value: unknown) => string> = {
   videoLayout: (value) => `Invalid videoLayout: ${String(value)}. Use one of ${VIDEO_LAYOUTS.join(', ')}.`,
   niche: () => 'Invalid niche: use at most 300 characters.',
   scriptPrompt: () => 'Invalid scriptPrompt: use at most 2000 characters.',
+  ctaText: () => `Invalid ctaText: use at most ${PERSONA_CTA_MAX_LENGTH} characters.`,
   paragraphNumber: () => 'Invalid paragraphNumber: use an integer between 1 and 10.',
   faceQuality: () => 'Invalid faceQuality: use "ok" or "very_good".',
   video_subject: () => 'Invalid video_subject: use at most 300 characters.',
@@ -95,6 +104,7 @@ export type ParsedPersonaForm = {
     videoAspect: string | null;
     videoLayout: string | null;
     scriptPrompt: string | null;
+    ctaText: string | null;
     paragraphNumber: number | null;
     niche: string | null;
     faceQuality: (typeof FACE_QUALITIES)[number] | null;
@@ -189,6 +199,7 @@ export function parsePersonaForm(formData: FormData, mode: PersonaFormMode): Par
         videoAspect: values.videoAspect ?? null,
         videoLayout: values.videoLayout ?? null,
         scriptPrompt: values.scriptPrompt ?? null,
+        ctaText: values.ctaText ?? null,
         paragraphNumber: values.paragraphNumber ?? null,
         niche: values.niche ?? null,
         faceQuality: values.faceQuality ?? null,

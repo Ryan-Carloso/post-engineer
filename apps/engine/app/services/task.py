@@ -600,6 +600,7 @@ def generate_script(task_id, params):
             video_script_prompt=script_prompt,
             custom_system_prompt=params.custom_system_prompt,
             angle=angle,
+            cta=params.video_cta,
         )
     else:
         # Log only the size — the script itself is user content and must not
@@ -645,6 +646,7 @@ def generate_script(task_id, params):
                 target_words_min=72,
                 target_words_max=94,
                 angle=angle,
+                cta=params.video_cta,
             )
             video_script = _limit_generated_script(f"{hook.strip()}\n\n{body.strip()}")
             paragraphs = [paragraph.strip() for paragraph in re.split(r"\n\s*\n", video_script) if paragraph.strip()]

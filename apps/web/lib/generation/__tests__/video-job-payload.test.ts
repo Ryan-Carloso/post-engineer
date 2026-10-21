@@ -132,6 +132,11 @@ describe('buildJobPayload — persona preference defaults', () => {
     expect(payload).not.toHaveProperty('video_aspect');
   });
 
+  it('maps the persona call to action to video_cta, and omits a missing one', () => {
+    expect(buildJobPayload(persona({ cta_text: 'Link na bio' }), {}).video_cta).toBe('Link na bio');
+    expect(buildJobPayload(persona({ cta_text: null }), {})).not.toHaveProperty('video_cta');
+  });
+
   it('never forwards null or empty persona preferences verbatim', () => {
     const payload = buildJobPayload(
       persona({ language: null, video_aspect: '', script_prompt: undefined }),

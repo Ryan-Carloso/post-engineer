@@ -169,6 +169,8 @@ export interface PersonaRecord {
   videoAspect?: string;
   videoLayout?: string;
   scriptPrompt?: string;
+  // The persona's call to action; absent = the engine picks a generic one.
+  ctaText?: string;
   paragraphNumber?: number;
   niche?: string;
   // Billing input for the per-video token cost estimate (the persona's face

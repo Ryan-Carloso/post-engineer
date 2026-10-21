@@ -2053,6 +2053,8 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(scheduleRows[0].post_video_aspect).toBe('16:9');
       expect(scheduleRows[0].post_paragraph_number).toBe(3);
       expect(scheduleRows[0].post_script_prompt).toBe('Be funny');
+      // No persona, no persona call to action: the engine picks a generic one.
+      expect(scheduleRows[0].post_cta_text).toBeNull();
       expect(scheduleRows[0].post_face_quality).toBe('ok');
 
       // The engine payload identifies the post by its own shape: no persona
@@ -2154,6 +2156,18 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(payload.video_language).toBe('pt');
       expect(payload.video_aspect).toBe('16:9');
       expect(payload.paragraph_number).toBe(2);
+    });
+  });
+
+  describe('persona call to action', () => {
+    it('snapshots the persona call to action and sends it to the engine', async () => {
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, cta_text: 'Link na bio' } });
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+      const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
+      expect(scheduleRows[0].post_cta_text).toBe('Link na bio');
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+      expect(payload.video_cta).toBe('Link na bio');
     });
   });
 

@@ -165,6 +165,10 @@ Provision the database schema in your Supabase project:
     private `personas` bucket at
     `{userId}/cloned-voices/{cloneId}/reference.wav`.
 
+21. `supabase/migrations/024_persona-cta.sql` — per-persona call to action
+    (`personas.cta_text`) plus its schedule snapshot
+    (`schedules.post_cta_text`), both capped at 200 characters.
+
 ### Voice cloning (Chatterbox on Modal)
 
 Per-user clones need the engine registry client **and** the Modal Chatterbox

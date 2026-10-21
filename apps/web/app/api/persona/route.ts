@@ -175,6 +175,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       video_aspect: body.values.videoAspect,
       video_layout: body.values.videoLayout,
       script_prompt: body.values.scriptPrompt,
+      cta_text: body.values.ctaText,
       paragraph_number: body.values.paragraphNumber,
       niche: body.values.niche,
       // face_quality is the persona's only face-related choice: the face itself is
@@ -443,6 +444,7 @@ async function patchHandler(request: Request): Promise<NextResponse> {
   if (patch.videoAspect !== null) updates.video_aspect = patch.videoAspect;
   if (patch.videoLayout !== null) updates.video_layout = patch.videoLayout;
   if (patch.scriptPrompt !== null) updates.script_prompt = patch.scriptPrompt;
+  if (patch.ctaText !== null) updates.cta_text = patch.ctaText;
   if (patch.paragraphNumber !== null) updates.paragraph_number = patch.paragraphNumber;
   if (patch.niche !== null) updates.niche = patch.niche;
 

@@ -28,6 +28,7 @@ the order — you never need to guess or read docs to know what comes next:
 | 021 | `migrations/021_video-generations-params.sql` | `video_generations.params` (JSONB: full engine job payload), `publish_mode` (`asap`/`scheduled`, CHECK-pinned, default `asap`), `scheduled_at` (timestamptz): the boot triage rebuilds orphaned direct generations from the row instead of failing them (issue #205). Partial index on `engine_task_id` where params is not null |
 | 022 | `migrations/022_persona-default-accounts.sql` | Per-persona default publishing accounts (`persona_default_accounts`) with owner-scoped RLS |
 | 023 | `migrations/023_cloned-voices.sql` | Per-user Chatterbox cloned voices (`cloned_voices`): async registration status, consent, storage path, engine voice key, language, error_code; owner-scoped RLS |
+| 024 | `migrations/024_persona-cta.sql` | Per-persona call to action (`personas.cta_text`) and its schedule snapshot (`schedules.post_cta_text`), both capped at 200 characters |
 
 ## How to apply
 

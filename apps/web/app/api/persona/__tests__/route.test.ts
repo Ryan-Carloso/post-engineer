@@ -512,6 +512,7 @@ describe('POST /api/persona', () => {
         language: 'pt',
         videoAspect: '16:9',
         scriptPrompt: 'Storytelling com hook forte.',
+        ctaText: 'Link na bio',
         paragraphNumber: '3',
       }, [photo()]),
     );
@@ -521,6 +522,7 @@ describe('POST /api/persona', () => {
       language: 'pt',
       video_aspect: '16:9',
       script_prompt: 'Storytelling com hook forte.',
+      cta_text: 'Link na bio',
       paragraph_number: 3,
     });
   });
@@ -535,8 +537,19 @@ describe('POST /api/persona', () => {
       language: null,
       video_aspect: null,
       script_prompt: null,
+      cta_text: null,
       paragraph_number: null,
     });
+  });
+
+  it('returns 400 when ctaText is over 200 characters on create', async () => {
+    const { inserted } = mockSupabase();
+
+    const res = await POST(formRequest({ name: 'Ana', voiceId: 'voz-1', ctaText: 'a'.repeat(201) }, [photo()]));
+
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe('Invalid ctaText: use at most 200 characters.');
+    expect(inserted).toHaveLength(0);
   });
 
   it('returns 400 with an invalid videoAspect', async () => {
@@ -1045,6 +1058,24 @@ describe('PATCH /api/persona', () => {
         script_prompt: 'Direto ao ponto.',
         paragraph_number: 2,
       });
+    });
+
+    it('ctaText: updates only the call to action', async () => {
+      const { updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
+
+      const res = await PATCH(patchRequest('persona-uuid-1', { ctaText: 'Segue @canal' }));
+
+      expect(res.status).toBe(200);
+      expect(updated[0]).toEqual({ cta_text: 'Segue @canal' });
+    });
+
+    it('ctaText: returns 400 when over 200 characters', async () => {
+      const { updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
+
+      const res = await PATCH(patchRequest('persona-uuid-1', { ctaText: 'a'.repeat(201) }));
+
+      expect(res.status).toBe(400);
+      expect(updated).toHaveLength(0);
     });
 
     it('niche: updates only the niche', async () => {

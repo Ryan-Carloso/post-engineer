@@ -1,5 +1,6 @@
 """Script retention structure: topic angle, hook/body/CTA prompt, CTA-safe trim."""
 
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -210,3 +211,41 @@ class TestHookRegenerationContext:
         kwargs = generate.call_args.kwargs
         assert kwargs["include_cta"] is False
         assert "remaining narration is: Corpo do vídeo. Segue pra mais." in kwargs["video_script_prompt"]
+
+
+class TestPersonaCtaPlumbing:
+    def test_persona_cta_reaches_the_main_script_and_the_body_regeneration(self):
+        params = _persona_params(video_cta="Link na bio")
+        with (
+            patch.object(task_service.llm, "generate_script_angle", return_value="O erro"),
+            patch.object(
+                task_service.llm,
+                "generate_script",
+                side_effect=["One paragraph only.", "Hook is complete.", "Details follow."],
+            ) as generate,
+        ):
+            task_service.generate_script("cta-task", params)
+
+        calls = generate.call_args_list
+        assert calls[0].kwargs["cta"] == "Link na bio"
+        # The standalone hook is not the end of the video: no CTA there.
+        assert "cta" not in calls[1].kwargs
+        assert calls[2].kwargs["cta"] == "Link na bio"
+
+    def test_video_cta_over_the_cap_is_rejected(self):
+        with pytest.raises(ValueError):
+            VideoParams(video_subject="café", video_cta="a" * 201)
+
+
+def test_cta_max_length_is_the_same_literal_everywhere():
+    """DB check, web form cap, engine schema and prompt cap must agree."""
+    repo = Path(__file__).resolve().parents[4]
+    sql = (repo / "supabase/migrations/024_persona-cta.sql").read_text()
+    web = (repo / "apps/web/lib/persona-schema.ts").read_text()
+    schema = (repo / "apps/engine/app/models/schema.py").read_text()
+
+    assert "char_length(cta_text) <= 200" in sql
+    assert "char_length(post_cta_text) <= 200" in sql
+    assert "export const PERSONA_CTA_MAX_LENGTH = 200;" in web
+    assert 'video_cta: str = Field(default="", max_length=200)' in schema
+    assert llm.MAX_SCRIPT_CTA_LENGTH == 200
