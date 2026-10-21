@@ -216,7 +216,7 @@ describe('Creating a post', () => {
     cy.intercept('GET', `/api/posts/${NEW_POST_SLOT_ID}`, { ...asapDetail, kind: 'slot' }).as('slotDetailAsap');
 
     cy.visit('/posts/new');
-    cy.wait('@personas');
+    cy.contains('E2E Persona').should('be.visible');
 
     cy.contains('E2E Persona').click();
     cy.get('[aria-label="Tema"]').type('E2E topic asap');
@@ -245,7 +245,7 @@ describe('Creating a post', () => {
 
   it('offers a single topic field with no add/remove controls', () => {
     cy.visit('/posts/new');
-    cy.wait('@personas');
+    cy.contains('E2E Persona').should('be.visible');
 
     cy.get('[aria-label="Tema"]').should('have.length', 1);
     // A second topic is a second post: the batch form is gone from /posts/new.
