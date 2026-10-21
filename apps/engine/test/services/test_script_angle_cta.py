@@ -56,6 +56,9 @@ class TestScriptPromptStructure:
         prompt = llm.build_script_prompt(video_subject="café", cta="Link na bio", include_cta=False)
 
         assert "- call to action: none, this is not the end of the video" in prompt
+        # The default system prompt's structure rule 3 orders a closing CTA;
+        # the partial-script prompt must explicitly disapply it.
+        assert "the structure rule about ending with a call to action does not apply here" in prompt
         assert "Link na bio" not in prompt
 
     def test_custom_system_prompt_still_gets_angle_and_cta(self):
@@ -86,6 +89,15 @@ class TestGenerateScriptAngle:
 
     def test_empty_response_returns_empty(self):
         with patch.object(llm, "_generate_response_with_fallback", return_value="  \n "):
+            assert llm.generate_script_angle("café", language="pt-BR") == ""
+
+    def test_provider_failure_sentinel_is_not_an_angle(self):
+        # _generate_response_with_fallback reports total provider failure as
+        # an "Error: ..." string instead of raising; it must never become
+        # the angle (persisted, shown to the user, injected into prompts).
+        with patch.object(
+            llm, "_generate_response_with_fallback", return_value="Error: all providers down"
+        ):
             assert llm.generate_script_angle("café", language="pt-BR") == ""
 
     def test_foreign_script_angle_is_discarded(self):
@@ -156,6 +168,26 @@ class TestTaskAngleThreading:
         assert events["script_angle_generated"]["angle"] == "O erro"
         assert events["script_angle_generated"]["task_id"] == "angle-ok-task"
 
+    def test_tracked_angle_is_secret_scrubbed_but_persisted_raw(self):
+        # The angle is model output: a credential-shaped fragment in it must
+        # not reach PostHog, while the task record keeps the user's data.
+        params = VideoParams(video_subject="café")
+        with (
+            patch.object(
+                task_service.llm, "generate_script_angle", return_value="O erro token=supersecretvalue"
+            ),
+            patch.object(task_service.llm, "generate_script", return_value="Roteiro."),
+            patch.object(task_service.sm, "persist_state_update") as persist,
+            patch.object(task_service, "track_event") as track,
+        ):
+            task_service.generate_script("angle-secret-task", params)
+
+        persist.assert_called_once_with(
+            task_service.sm.state, "angle-secret-task", script_angle="O erro token=supersecretvalue"
+        )
+        events = {c.args[0]: c.args[1] for c in track.call_args_list}
+        assert events["script_angle_generated"]["angle"] == "O erro token=[redacted]"
+
     def test_fallback_persists_no_angle(self):
         params = VideoParams(video_subject="café")
         with (
@@ -199,6 +231,16 @@ class TestCtaSafeTrim:
         assert len(result) <= 60
         assert result.startswith("palavra")
 
+    def test_tiny_head_budget_never_returns_an_overlong_script(self):
+        # The closing sentence leaves head_budget == 1: re-cutting the head
+        # for the forced paragraph separator used budget - 2 == -1, and
+        # text[:-1] kept almost the whole head — the result blew the limit.
+        closing = "C" * 57 + "."
+        script = f"Hook forte aqui.\n\nCorpo longo. {closing}"
+        result = persona_hook._limit_generated_script(script)
+
+        assert len(result) <= 60
+
 
 class TestHookRegenerationContext:
     def test_regenerated_hook_sees_the_body_and_has_no_cta(self):
@@ -237,9 +279,19 @@ class TestPersonaCtaPlumbing:
             VideoParams(video_subject="café", video_cta="a" * 201)
 
 
+def _repo_root() -> Path:
+    # Walk up instead of counting parents: mutmut runs the suite from a
+    # copied tree (mutants/), which shifts every fixed parent index and
+    # made parents[4] point outside the checkout in CI.
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "supabase/migrations/024_persona-cta.sql").is_file():
+            return parent
+    raise AssertionError("repo root not found from the test file location")
+
+
 def test_cta_max_length_is_the_same_literal_everywhere():
     """DB check, web form cap, engine schema and prompt cap must agree."""
-    repo = Path(__file__).resolve().parents[4]
+    repo = _repo_root()
     sql = (repo / "supabase/migrations/024_persona-cta.sql").read_text()
     web = (repo / "apps/web/lib/persona-schema.ts").read_text()
     schema = (repo / "apps/engine/app/models/schema.py").read_text()

@@ -225,7 +225,10 @@ def _limit_generated_script(script: str) -> str:
             # must stay its own paragraph or the hook loses its boundary.
             separator = "\n\n"
             if len(trimmed_head) + len(separator) + len(closing) > limit:
-                trimmed_head = _cut_to_budget(head, head_budget - 2)
+                # Clamp at 0: head_budget can be 1 here, and a negative
+                # budget makes _cut_to_budget keep text[:-1] — nearly the
+                # whole head — instead of trimming to the limit.
+                trimmed_head = _cut_to_budget(head, max(head_budget - 2, 0))
         if trimmed_head:
             return f"{trimmed_head}{separator}{closing}"
     return _cut_to_budget(normalized, limit)

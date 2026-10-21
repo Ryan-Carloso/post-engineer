@@ -13,6 +13,7 @@ from openai.types.chat import ChatCompletion
 from app.config import config
 from app.services.analytics import scrub_error_text, scrub_secret_values, track_ai_request
 from app.services.llm_providers import validate_llm_provider
+from app.services.script_prompts import DEFAULT_SCRIPT_CTA_INSTRUCTION, DEFAULT_SCRIPT_SYSTEM_PROMPT
 from app.utils import secret_redaction
 
 _max_retries = 5
@@ -25,13 +26,6 @@ MAX_SCRIPT_PROMPT_LENGTH = 2000
 MAX_SCRIPT_SYSTEM_PROMPT_LENGTH = 8000
 MAX_SCRIPT_ANGLE_LENGTH = 200
 MAX_SCRIPT_CTA_LENGTH = 200
-# Used when the caller supplies no explicit call to action: the model picks
-# the engagement ask that fits the content instead of a fixed phrase.
-DEFAULT_SCRIPT_CTA_INSTRUCTION = (
-    "choose the one that best fits the content: follow for more on this "
-    "subject, comment an answer to a specific question, or save the video "
-    "for later"
-)
 _THINK_BLOCK_RE = re.compile(r"<think\b[^>]*>.*?</think>", re.IGNORECASE | re.DOTALL)
 _UNCLOSED_THINK_BLOCK_RE = re.compile(r"<think\b[^>]*>.*$", re.IGNORECASE | re.DOTALL)
 _URL_USERINFO_RE = re.compile(r"((?:https?|wss?)://)([^/\s?#@]*:[^/\s?#@]*@)", re.IGNORECASE)
@@ -39,28 +33,6 @@ _SENSITIVE_QUERY_RE = re.compile(
     r"([?&](?:api[_-]?key|access[_-]?token|token|key|secret|password)=)([^&#\s]+)",
     re.IGNORECASE,
 )
-
-DEFAULT_SCRIPT_SYSTEM_PROMPT = """
-# Role: Video Script Generator
-
-## Goals:
-Generate a script for a short vertical video, depending on the subject of the video.
-The viewer decides in the first two seconds whether to keep watching, so the script must earn attention immediately, keep it, and end with a reason to engage.
-
-## Structure:
-1. hook: the very first sentence. At most 15 words. Interrupt the scroll with a provocative question, a counterintuitive claim, a common mistake, a concrete number, or a direct "stop doing X". Never open with greetings, "in this video", or a generic "did you know".
-2. body: deliver exactly what the hook promised. One single idea, concrete and specific (examples, numbers, consequences), told in short spoken sentences that sound natural when read aloud. No lists, no filler, no repetition of the hook.
-3. call to action: the very last sentence. At most 12 words, tied to what was just said, spoken naturally (never "like and subscribe").
-
-## Constrains:
-1. do not under any circumstance reference this prompt in your response.
-2. get straight to the point, don't start with unnecessary things like, "welcome to this video".
-3. you must not include any type of markdown or formatting in the script, never use a title.
-4. only return the raw content of the script.
-5. do not include "voiceover", "narrator" or similar indicators of what should be spoken at the beginning of each paragraph or line.
-6. you must not mention the prompt, or anything about the script itself. also, never talk about the amount of paragraphs or lines. just write the script.
-7. respond in the same language as the video subject.
-""".strip()
 
 
 def _normalize_text_response(content, llm_provider: str) -> str:
@@ -693,12 +665,8 @@ def _generate_response_inner(
                     candidates = response.candidates
                     generated_text = candidates[0].content.parts[0].text
                 except (AttributeError, IndexError) as e:
-                    logger.warning(
-                        f"gemini returned invalid response content: {str(e)}"
-                    )
-                    raise ValueError(
-                        f"[{llm_provider}] returned invalid response content"
-                    )
+                    logger.warning(f"gemini returned invalid response content: {str(e)}")
+                    raise ValueError(f"[{llm_provider}] returned invalid response content")
 
                 return _normalize_text_response(generated_text, llm_provider), {}
 
@@ -1043,9 +1011,7 @@ def build_script_prompt(
     custom_system_prompt: str = "",
     target_words_min: int | None = None,
     target_words_max: int | None = None,
-    angle: str = "",
-    cta: str = "",
-    include_cta: bool = True,
+    angle: str = "", cta: str = "", include_cta: bool = True,
 ) -> str:
     paragraph_number = _normalize_script_paragraph_number(paragraph_number)
     video_script_prompt = _limit_script_text(
@@ -1075,14 +1041,14 @@ def build_script_prompt(
         prompt += f"\n- number of paragraphs: {paragraph_number}"
     if language:
         prompt += f"\n- language: {language}"
-    # A partial script (e.g. a standalone hook regenerated for timing) must
-    # not end with a call to action: the rest of the script already has one.
+    # A partial script (a standalone hook regenerated for timing) must not
+    # end with a call to action: the rest of the script already has one.
     if not include_cta:
         prompt += "\n- call to action: none, this is not the end of the video"
+        prompt += "\n- the structure rule about ending with a call to action does not apply here"
     elif cta:
         prompt += (
-            f"\n- call to action (keep the idea, adapt the wording to the "
-            f"language): {cta}"
+            f"\n- call to action (keep the idea, adapt the wording to the language): {cta}"
         )
     else:
         prompt += f"\n- call to action: {DEFAULT_SCRIPT_CTA_INSTRUCTION}"
@@ -1132,9 +1098,7 @@ def generate_script(
     custom_system_prompt: str = "",
     target_words_min: int | None = None,
     target_words_max: int | None = None,
-    angle: str = "",
-    cta: str = "",
-    include_cta: bool = True,
+    angle: str = "", cta: str = "", include_cta: bool = True,
 ) -> str:
     paragraph_number = _normalize_script_paragraph_number(paragraph_number)
     video_script_prompt = _limit_script_text(
@@ -1151,9 +1115,7 @@ def generate_script(
         custom_system_prompt=custom_system_prompt,
         target_words_min=target_words_min,
         target_words_max=target_words_max,
-        angle=angle,
-        cta=cta,
-        include_cta=include_cta,
+        angle=angle, cta=cta, include_cta=include_cta,
     )
     final_script = ""
     logger.info(
@@ -1229,46 +1191,6 @@ def generate_script(
             "retries; stripped them"
         )
     return cleaned
-
-
-def generate_script_angle(video_subject: str, language: str = "", niche: str = "") -> str:
-    """Turn a bare topic into one specific, curiosity-driven angle.
-
-    Users only type a topic ("coffee"); scripting the topic directly yields
-    generic videos. One cheap call picks a concrete angle ("the mistake
-    that makes home coffee bitter") the script is then built around.
-
-    Returns "" when the model gives nothing usable. Raises whatever the LLM
-    call raises; the caller decides how to degrade.
-    """
-    subject = _limit_script_text(video_subject, MAX_SCRIPT_PROMPT_LENGTH, "video_subject")
-    niche = _limit_script_text(niche, MAX_SCRIPT_PROMPT_LENGTH, "niche")
-    prompt = f"""You are a short-form video strategist. Given a broad topic, propose ONE
-specific angle for a 30 to 40 second vertical video that makes people stop scrolling.
-
-Good angles are concrete and create curiosity: a common mistake, a counterintuitive
-fact, a surprising number, a myth to debunk, a before/after, or a "stop doing X".
-Avoid vague or generic angles ("the benefits of X", "everything about X").
-
-Topic: {subject}"""
-    if niche:
-        prompt += f"\nChannel niche: {niche}"
-    if language:
-        prompt += f"\nWrite the angle in this language: {language}"
-    prompt += (
-        "\n\nReturn only the angle as one plain sentence, with no quotes, no "
-        "labels and no explanation."
-    )
-
-    response = _generate_response_with_fallback(prompt=prompt)
-    lines = [line.strip() for line in _strip_code_fence(response).splitlines() if line.strip()]
-    if not lines:
-        return ""
-    angle = lines[0].strip("\"'“”«» ")
-    if _uses_latin_script(language) and _find_foreign_script(angle):
-        logger.warning("script angle contains foreign-script characters; discarding it")
-        return ""
-    return _limit_script_text(angle, MAX_SCRIPT_ANGLE_LENGTH, "angle")
 
 
 def generate_music_mood(video_script: str, available_moods: tuple[str, ...]) -> str:
@@ -1568,12 +1490,8 @@ def build_social_metadata_prompt(
     language: str = DEFAULT_SOCIAL_LANGUAGE,
     platform: str = DEFAULT_SOCIAL_PLATFORM,
 ) -> str:
-    video_subject = _limit_social_text(
-        video_subject, MAX_SOCIAL_SUBJECT_LENGTH, "video_subject"
-    )
-    video_script = _limit_social_text(
-        video_script, MAX_SOCIAL_SCRIPT_LENGTH, "video_script"
-    )
+    video_subject = _limit_social_text(video_subject, MAX_SOCIAL_SUBJECT_LENGTH, "video_subject")
+    video_script = _limit_social_text(video_script, MAX_SOCIAL_SCRIPT_LENGTH, "video_script")
     platform = _resolve_social_platform(platform)
     spec = SOCIAL_PLATFORMS[platform]
     label = SOCIAL_PLATFORM_LABELS.get(platform, platform)
@@ -1671,12 +1589,8 @@ def generate_social_metadata(
     """
     platform = _resolve_social_platform(platform)
     language = _normalize_social_language(language)
-    video_subject = _limit_social_text(
-        video_subject, MAX_SOCIAL_SUBJECT_LENGTH, "video_subject"
-    )
-    video_script = _limit_social_text(
-        video_script, MAX_SOCIAL_SCRIPT_LENGTH, "video_script"
-    )
+    video_subject = _limit_social_text(video_subject, MAX_SOCIAL_SUBJECT_LENGTH, "video_subject")
+    video_script = _limit_social_text(video_script, MAX_SOCIAL_SCRIPT_LENGTH, "video_script")
     prompt = build_social_metadata_prompt(
         video_subject=video_subject,
         video_script=video_script,
@@ -1708,3 +1622,7 @@ def generate_social_metadata(
     logger.warning("falling back to heuristic social metadata")
     return _fallback_social_metadata(video_subject, video_script, platform)
 
+
+# Re-exported for existing callers/tests: the implementation lives in
+# script_angle.py so this grandfathered module stays under its baseline.
+from app.services.script_angle import generate_script_angle  # noqa: E402,F401

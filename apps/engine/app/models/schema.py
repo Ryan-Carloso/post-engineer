@@ -193,12 +193,10 @@ class VideoParams(BaseModel):
     n_threads: Optional[int] = Field(default=2, ge=1, le=64)
     paragraph_number: Optional[int] = Field(default=None, ge=1, le=10)
     video_script_prompt: str = Field(
-        default=config.app.get("default_video_script_prompt", ""),
-        max_length=2000,
+        default=config.app.get("default_video_script_prompt", ""), max_length=2000
     )
     custom_system_prompt: str = Field(default="", max_length=8000)
-    # The persona's call to action ("" = the script LLM picks a generic one).
-    # 200 mirrors llm.MAX_SCRIPT_CTA_LENGTH and the DB check (migration 024).
+    # The persona's call to action ("" = generic); 200 mirrors MAX_SCRIPT_CTA_LENGTH + migration 024.
     video_cta: str = Field(default="", max_length=200)
 
 
