@@ -56,6 +56,22 @@ describe('GET /api/persona/cloned-voices/:cloneId', () => {
     expect(json.success).toBe(true);
     expect(json.voice.id).toBe('clone-1');
   });
+
+  it('returns 404 when engine reports missing clone', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: false,
+        status: 404,
+        json: async () => ({ message: 'not found' }),
+      })),
+    );
+
+    const response = await GET(new Request('http://localhost/api/persona/cloned-voices/missing'), {
+      params: Promise.resolve({ cloneId: 'missing' }),
+    });
+    expect(response.status).toBe(404);
+  });
 });
 
 describe('DELETE /api/persona/cloned-voices/:cloneId', () => {

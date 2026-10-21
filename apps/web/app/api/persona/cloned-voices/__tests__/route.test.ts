@@ -124,4 +124,47 @@ describe('POST /api/persona/cloned-voices', () => {
     );
     expect(response.status).toBe(400);
   });
+
+  it('rejects missing language', async () => {
+    const form = new FormData();
+    form.set('consent', 'true');
+    form.set('language', '   ');
+    form.set('file', new Blob([new Uint8Array(12)], { type: 'audio/wav' }), 'a.wav');
+    const response = await POST(
+      new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: form }),
+    );
+    expect(response.status).toBe(400);
+    const json = await response.json();
+    expect(json.error).toBe('Language is required.');
+  });
+
+  it('rejects invalid reference audio', async () => {
+    const { validateCloneReferenceBuffer } = await import('@/lib/cloned-voice-audio');
+    vi.mocked(validateCloneReferenceBuffer).mockReturnValueOnce({
+      ok: false,
+      error: 'Reference audio is empty.',
+    });
+    const form = new FormData();
+    form.set('consent', 'true');
+    form.set('language', 'pt');
+    form.set('file', new Blob([], { type: 'audio/wav' }), 'a.wav');
+    const response = await POST(
+      new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: form }),
+    );
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toBe('Reference audio is empty.');
+  });
+
+  it('returns 502 when list upstream is not ok', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: false,
+        status: 503,
+        json: async () => ({ message: 'down' }),
+      })),
+    );
+    const response = await GET(new Request('http://localhost/api/persona/cloned-voices'));
+    expect(response.status).toBe(502);
+  });
 });
