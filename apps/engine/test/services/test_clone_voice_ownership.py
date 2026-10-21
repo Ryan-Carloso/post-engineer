@@ -38,6 +38,11 @@ class CloneVoiceOwnershipTest(unittest.TestCase):
         self.assertFalse(is_user_clone_engine_key("not_a_clone"))
         self.assertFalse(is_user_clone_engine_key("u_short_bad"))
 
+    def test_ownership_check_rejects_malformed_key(self) -> None:
+        user_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        self.assertFalse(user_owns_clone_engine_key(user_id, "not_a_clone"))
+        self.assertFalse(user_owns_clone_engine_key(user_id, "ryan"))
+
     def test_user_id_prefix_strips_hyphens(self) -> None:
         user_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
         self.assertEqual(user_id_prefix(user_id), "a1b2c3d4e5f6")
