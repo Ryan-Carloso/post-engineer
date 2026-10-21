@@ -87,6 +87,7 @@ export const ptDictionary = {
     accountsLabel: 'Contas',
     publishedLinksTitle: 'Publicado em',
     progressHistoryTitle: 'Histórico de progresso',
+    scriptAngleLabel: 'Ângulo do roteiro',
     generationFactsLabel: 'Como foi gerado',
     generationPersonaLabel: 'Persona',
     generationFaceLabel: 'Rosto',

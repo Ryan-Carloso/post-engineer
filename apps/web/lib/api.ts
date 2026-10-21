@@ -1067,6 +1067,9 @@ export interface SlotDetailPayload {
     retryable: boolean | null;
     queuePosition: number | null;
     queueTotal: number | null;
+    // The specific angle the engine built the script around (derived from
+    // the topic). Null until generation starts, or when none was recorded.
+    scriptAngle: string | null;
     // Where the post went, one entry per provider. Empty until the slot is
     // published (nothing exists to link to before that).
     publishLinks: PublishLink[];
@@ -1105,7 +1108,13 @@ export interface SlotDetailPayload {
 //---------------
 export type PostDetail =
   | (SlotDetailPayload & { kind: 'slot' })
-  | { kind: 'generation'; generation: VideoGeneration & { progress: number; stage: string | null } };
+  | { kind: 'generation'; generation: VideoGeneration & { progress: number; stage: string | null; scriptAngle: string | null } };
+
+// Only a non-empty string is an angle; anything else (absent key from an
+// older server, null, malformed) renders as "no angle".
+function narrowScriptAngle(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() !== '' ? value : null;
+}
 
 export async function fetchPostDetail(id: string): Promise<PostDetail | null> {
   const response = await fetch(`/api/posts/${encodeURIComponent(id)}`, {
@@ -1119,7 +1128,8 @@ export async function fetchPostDetail(id: string): Promise<PostDetail | null> {
     const record = (typeof data.generation === 'object' && data.generation !== null ? data.generation : {}) as Record<string, unknown>;
     const progress = typeof record.progress === 'number' ? record.progress : 0;
     const stage = typeof record.stage === 'string' ? record.stage : null;
-    return { kind: 'generation', generation: { ...(record as unknown as VideoGeneration), progress, stage } };
+    const scriptAngle = narrowScriptAngle(record.scriptAngle);
+    return { kind: 'generation', generation: { ...(record as unknown as VideoGeneration), progress, stage, scriptAngle } };
   }
   if (data.kind === 'slot') {
     const payload = data as unknown as SlotDetailPayload;
@@ -1129,6 +1139,7 @@ export async function fetchPostDetail(id: string): Promise<PostDetail | null> {
       kind: 'slot',
       slot: {
         ...payload.slot,
+        scriptAngle: narrowScriptAngle((payload.slot as { scriptAngle?: unknown }).scriptAngle),
         publishLinks: narrowPublishLinks(payload.slot.publishLinks),
         progressHistory: narrowProgressHistory(payload.slot.progressHistory),
       },

@@ -99,6 +99,7 @@ function slotPayload(
       progress: 0,
       stage: null,
       retryable: null,
+      scriptAngle: null,
       ...overrides,
     },
     schedule: SLOT_SCHEDULE,
@@ -150,6 +151,7 @@ const COMPLETED_GENERATION = {
   completedAt: '2026-09-23T12:02:00.000Z',
   progress: 100,
   stage: null,
+  scriptAngle: null,
 };
 
 function mockQueries(overrides: {
@@ -598,6 +600,30 @@ describe('PostDetailPage', () => {
     expect(screen.queryByText('posts.refundedBadge')).not.toBeInTheDocument();
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'posts.delete' })).not.toBeInTheDocument();
+  });
+
+  it('shows the script angle the engine picked for a slot', () => {
+    mockQueries({ slot: slotPayload({ status: 'ready', taskId: 'task-1', scriptAngle: 'The myth that keeps coming back' }) });
+    render(<DetailPage />);
+
+    expect(screen.getByRole('region', { name: 'posts.scriptAngleLabel' })).toHaveTextContent(
+      'The myth that keeps coming back',
+    );
+  });
+
+  it('shows the script angle for a generation', () => {
+    mockQueries({ slot: null, generation: { ...COMPLETED_GENERATION, scriptAngle: 'Recap angle' } });
+    vi.mocked(useParams).mockReturnValue({ id: 'gen-3' });
+    render(<DetailPage />);
+
+    expect(screen.getByRole('region', { name: 'posts.scriptAngleLabel' })).toHaveTextContent('Recap angle');
+  });
+
+  it('renders no angle section when the engine recorded none', () => {
+    mockQueries();
+    render(<DetailPage />);
+
+    expect(screen.queryByRole('region', { name: 'posts.scriptAngleLabel' })).not.toBeInTheDocument();
   });
 
   it('shows a not-found state with a way back when both lookups return 404', () => {

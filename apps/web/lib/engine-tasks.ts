@@ -152,6 +152,39 @@ export async function fetchEnginePublishResults(
   taskId: string,
   userId: string,
 ): Promise<unknown[]> {
+  const task = await fetchEngineTaskRecord(taskId, userId);
+  const results = task ? task.publish_results : null;
+  return Array.isArray(results) ? results : [];
+}
+
+//---------------
+// fetchEngineScriptAngle — the angle the engine picked for the topic before
+// scripting (task record `script_angle`). Null when the engine recorded none
+// (angle generation fell back to the bare topic, or the task predates it).
+//
+// Throws on the same conditions as fetchEngineTaskProgress (unsafe id,
+// unconfigured engine, failed lookup) — the caller decides the fallback.
+//---------------
+export async function fetchEngineScriptAngle(
+  taskId: string,
+  userId: string,
+): Promise<string | null> {
+  const task = await fetchEngineTaskRecord(taskId, userId);
+  const angle = task ? task.script_angle : null;
+  if (typeof angle !== 'string') return null;
+  const trimmed = angle.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+//---------------
+// fetchEngineTaskRecord — GET the raw engine task record (unwrapped from the
+// `body` envelope). Shared by the read helpers that only need one field and
+// treat any non-2xx (404 included) as a failed lookup.
+//---------------
+async function fetchEngineTaskRecord(
+  taskId: string,
+  userId: string,
+): Promise<Record<string, unknown> | null> {
   if (!SAFE_TASK_ID.test(taskId)) {
     throw new Error(`Invalid taskId: ${taskId}`);
   }
@@ -174,9 +207,7 @@ export async function fetchEnginePublishResults(
       throw new Error(`Engine task lookup failed with status ${response.status}`);
     }
     const body: unknown = await response.json().catch(() => null);
-    const task = taskPayload(body);
-    const results = task ? task.publish_results : null;
-    return Array.isArray(results) ? results : [];
+    return taskPayload(body);
   } finally {
     clearTimeout(timeout);
   }

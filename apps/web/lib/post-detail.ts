@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { enrichSlot } from './schedule-slot-presentation';
-import { fetchEnginePublishResults, fetchEngineTaskProgress } from './engine-tasks';
+import { fetchEnginePublishResults, fetchEngineScriptAngle, fetchEngineTaskProgress } from './engine-tasks';
 import { resolvePublishLinks, type PublishLink } from './publish-links';
 import { buildGenerationFacts } from './generation-facts';
 import { logger } from './logger';
@@ -29,6 +29,7 @@ export interface SlotPostDetail {
     progress: number;
     stage: string | null;
     retryable: boolean | null;
+    scriptAngle: string | null;
     publishLinks: PublishLink[];
     progressHistory: Array<{ progress: number; stage: string | null; recordedAt: string }>;
     queuePosition: null;
@@ -71,6 +72,7 @@ export interface GenerationPostDetail {
   completedAt: string | null;
   progress: number;
   stage: string | null;
+  scriptAngle: string | null;
 }
 
 function isNotFound(error: unknown): boolean {
@@ -92,6 +94,24 @@ async function resolveSlotPublishLinks(
       error: error instanceof Error ? error.message : String(error),
     });
     return [];
+  }
+}
+
+//---------------
+// resolveScriptAngle — the angle the engine built the script around, read
+// from the engine task record. Cosmetic on the detail page: no task yet or
+// a failed lookup degrades to null, but a failure is never silent.
+//---------------
+async function resolveScriptAngle(taskId: string | null, userId: string): Promise<string | null> {
+  if (taskId === null || taskId.length === 0) return null;
+  try {
+    return await fetchEngineScriptAngle(taskId, userId);
+  } catch (error) {
+    logger.warn('[post-detail] script angle unavailable', {
+      taskId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
   }
 }
 
@@ -180,6 +200,7 @@ export async function getSlotPost(
 
   const enrichment = await enrichSlot(row, userId);
   const publishLinks = await resolveSlotPublishLinks(row, userId);
+  const scriptAngle = await resolveScriptAngle(row.task_id, userId);
 
   // Progress history: every observed (progress, stage) transition recorded
   // while the post was live. A failed lookup degrades to an empty list —
@@ -241,6 +262,7 @@ export async function getSlotPost(
       progress: progressOut,
       stage: stageOut,
       retryable: retryableOut,
+      scriptAngle,
       publishLinks,
       progressHistory,
       // Queue position is a list concept (position among the schedule's
@@ -348,5 +370,6 @@ export async function getGenerationPost(
     completedAt: completedAtOut,
     progress,
     stage,
+    scriptAngle: await resolveScriptAngle(row.engine_task_id, userId),
   };
 }

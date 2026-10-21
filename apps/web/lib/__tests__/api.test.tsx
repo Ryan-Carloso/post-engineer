@@ -566,6 +566,40 @@ describe('api', () => {
     await expect(fetchPostDetail('slot-1')).rejects.toThrow('boom');
   });
 
+  it('fetchPostDetail carries the script angle through and narrows missing or blank ones to null', async () => {
+    const { fetchPostDetail } = await import('@/lib/api');
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
+      success: true,
+      kind: 'slot',
+      slot: { id: 'slot-1', status: 'ready', scriptAngle: 'The myth that keeps coming back' },
+      schedule: { id: 's1' },
+      persona: null,
+    }));
+    const slotDetail = await fetchPostDetail('slot-1');
+    if (slotDetail?.kind !== 'slot') throw new Error('expected slot');
+    expect(slotDetail.slot.scriptAngle).toBe('The myth that keeps coming back');
+
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
+      success: true,
+      kind: 'slot',
+      slot: { id: 'slot-1', status: 'ready' },
+      schedule: { id: 's1' },
+      persona: null,
+    }));
+    const legacySlot = await fetchPostDetail('slot-1');
+    if (legacySlot?.kind !== 'slot') throw new Error('expected slot');
+    expect(legacySlot.slot.scriptAngle).toBeNull();
+
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
+      success: true,
+      kind: 'generation',
+      generation: { id: 'vg-1', generationId: 'gen-1', status: 'completed', scriptAngle: '  ' },
+    }));
+    const generation = await fetchPostDetail('gen-1');
+    if (generation?.kind !== 'generation') throw new Error('expected generation');
+    expect(generation.generation.scriptAngle).toBeNull();
+  });
+
   it('fetchPostDetail carries the published links through', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
       success: true,

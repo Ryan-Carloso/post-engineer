@@ -139,16 +139,34 @@ class TestTaskAngleThreading:
         assert generate.call_args.kwargs["angle"] == ""
         assert track.call_args.args[0] == "script_angle_fallback"
 
-    def test_usable_angle_emits_no_fallback_event(self):
+    def test_usable_angle_is_persisted_and_tracked_with_its_text(self):
         params = VideoParams(video_subject="café")
         with (
             patch.object(task_service.llm, "generate_script_angle", return_value="O erro"),
             patch.object(task_service.llm, "generate_script", return_value="Roteiro."),
+            patch.object(task_service.sm, "persist_state_update") as persist,
             patch.object(task_service, "track_event") as track,
         ):
             task_service.generate_script("angle-ok-task", params)
 
-        assert "script_angle_fallback" not in [c.args[0] for c in track.call_args_list]
+        persist.assert_called_once_with(task_service.sm.state, "angle-ok-task", script_angle="O erro")
+        events = {c.args[0]: c.args[1] for c in track.call_args_list}
+        assert "script_angle_fallback" not in events
+        assert events["script_angle_generated"]["angle"] == "O erro"
+        assert events["script_angle_generated"]["task_id"] == "angle-ok-task"
+
+    def test_fallback_persists_no_angle(self):
+        params = VideoParams(video_subject="café")
+        with (
+            patch.object(task_service.llm, "generate_script_angle", return_value=""),
+            patch.object(task_service.llm, "generate_script", return_value="Roteiro."),
+            patch.object(task_service.sm, "persist_state_update") as persist,
+            patch.object(task_service, "track_event") as track,
+        ):
+            task_service.generate_script("angle-empty-task", params)
+
+        persist.assert_not_called()
+        assert "script_angle_generated" not in [c.args[0] for c in track.call_args_list]
 
 
 class TestCtaSafeTrim:

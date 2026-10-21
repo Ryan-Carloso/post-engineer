@@ -214,6 +214,7 @@ export default function PostDetailPage() {
           statusStyle={STATUS_STYLE[generation.status] ?? STATUS_STYLE.pending}
         />
         <PostIdSection postId={generation.generationId} />
+        <ScriptAngleSection angle={generation.scriptAngle} />
         <section aria-label={t('posts.detailsTitle')} className="mt-6">
           <p className="text-sm text-muted-foreground">
             {formatDateTime(generation.createdAt, locale)} · {generation.videoSubject ?? t('posts.unknownTopic')}
@@ -306,6 +307,21 @@ const DetailHeader = ({
 // handle support and debugging use to locate the post; the copy follows
 // the same clipboard pattern as the API keys section.
 //---------------
+//---------------
+// ScriptAngleSection — the specific angle the engine turned the topic into
+// before scripting. Read-only; renders nothing when no angle was recorded.
+//---------------
+export const ScriptAngleSection = ({ angle }: { angle: string | null }) => {
+  const { t } = useI18n();
+  if (angle === null) return null;
+  return (
+    <section aria-label={t('posts.scriptAngleLabel')} className="mt-6">
+      <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{t('posts.scriptAngleLabel')}</p>
+      <p className="mt-2 rounded-xl border border-input bg-secondary px-3 py-2 text-sm text-[#0d2b45]">{angle}</p>
+    </section>
+  );
+};
+
 export const PostIdSection = ({ postId }: { postId: string }) => {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
@@ -669,6 +685,8 @@ export const SlotDetail = ({
           </p>
         )}
       </div>
+
+      <ScriptAngleSection angle={slot.scriptAngle} />
 
       <PostIdSection postId={slot.id} />
 

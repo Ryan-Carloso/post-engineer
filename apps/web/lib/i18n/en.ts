@@ -87,6 +87,7 @@ export const enDictionary: Dictionary = {
     accountsLabel: 'Accounts',
     publishedLinksTitle: 'Published to',
     progressHistoryTitle: 'Progress history',
+    scriptAngleLabel: 'Script angle',
     generationFactsLabel: 'How it was generated',
     generationPersonaLabel: 'Persona',
     generationFaceLabel: 'Face',

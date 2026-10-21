@@ -16,6 +16,7 @@ vi.mock('../schedule-slot-presentation', () => ({
 vi.mock('../engine-tasks', () => ({
   fetchEnginePublishResults: vi.fn(async () => ({})),
   fetchEngineTaskProgress: vi.fn(async () => ({ gone: false, progress: 67, stage: 'audio' })),
+  fetchEngineScriptAngle: vi.fn(async () => 'The myth that keeps coming back'),
 }));
 
 vi.mock('../publish-links', () => ({
@@ -118,6 +119,47 @@ describe('getSlotPost', () => {
     expect(detail?.schedule.publishMode).toBe('scheduled');
     expect(detail?.persona?.name).toBe('Viva Leve');
     expect(detail?.generation.faceless).toBe(false);
+  });
+
+  it('returns the script angle the engine recorded for the slot task', async () => {
+    const { fetchEngineScriptAngle } = await import('../engine-tasks');
+    const { supabase } = mockSupabase({
+      scheduled_posts: { data: SLOT_ROW, error: null },
+      schedules: { data: SCHEDULE_ROW, error: null },
+      scheduled_post_progress_history: { data: [], error: null },
+    });
+    const detail = await getSlotPost(supabase, 'slot-1', 'user-1');
+    expect(fetchEngineScriptAngle).toHaveBeenCalledWith('task-1', 'user-1');
+    expect(detail?.slot.scriptAngle).toBe('The myth that keeps coming back');
+  });
+
+  it('does not look up an angle for a slot that never dispatched', async () => {
+    const { fetchEngineScriptAngle } = await import('../engine-tasks');
+    const { supabase } = mockSupabase({
+      scheduled_posts: { data: { ...SLOT_ROW, status: 'pending', task_id: null }, error: null },
+      schedules: { data: SCHEDULE_ROW, error: null },
+      scheduled_post_progress_history: { data: [], error: null },
+    });
+    const detail = await getSlotPost(supabase, 'slot-1', 'user-1');
+    expect(fetchEngineScriptAngle).not.toHaveBeenCalled();
+    expect(detail?.slot.scriptAngle).toBeNull();
+  });
+
+  it('degrades the slot angle to null and warns when the engine lookup throws', async () => {
+    const { fetchEngineScriptAngle } = await import('../engine-tasks');
+    const { logger } = await import('../logger');
+    vi.mocked(fetchEngineScriptAngle).mockRejectedValueOnce(new Error('engine down'));
+    const { supabase } = mockSupabase({
+      scheduled_posts: { data: SLOT_ROW, error: null },
+      schedules: { data: SCHEDULE_ROW, error: null },
+      scheduled_post_progress_history: { data: [], error: null },
+    });
+    const detail = await getSlotPost(supabase, 'slot-1', 'user-1');
+    expect(detail?.slot.scriptAngle).toBeNull();
+    expect(logger.warn).toHaveBeenCalledWith('[post-detail] script angle unavailable', {
+      taskId: 'task-1',
+      error: 'engine down',
+    });
   });
 
   it('returns null for an unknown id (PGRST116)', async () => {
@@ -229,7 +271,7 @@ describe('getGenerationPost', () => {
     expect(fetchEngineTaskProgress).not.toHaveBeenCalled();
   });
 
-  it('returns progress 0 for terminal generations (no engine lookup)', async () => {
+  it('returns progress 0 for terminal generations (no progress lookup)', async () => {
     const { supabase, from } = mockSupabase({
       video_generations: { data: { ...GENERATION_ROW, status: 'completed' }, error: null },
     });
@@ -248,6 +290,27 @@ describe('getGenerationPost', () => {
     const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1');
     expect(detail?.progress).toBe(0);
     expect(detail?.stage).toBeNull();
+  });
+
+  it('returns the script angle for a completed generation', async () => {
+    const { fetchEngineScriptAngle, fetchEngineTaskProgress } = await import('../engine-tasks');
+    const { supabase } = mockSupabase({
+      video_generations: { data: { ...GENERATION_ROW, status: 'completed' }, error: null },
+    });
+    const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1');
+    expect(fetchEngineTaskProgress).not.toHaveBeenCalled();
+    expect(fetchEngineScriptAngle).toHaveBeenCalledWith('task-1', 'user-1');
+    expect(detail?.scriptAngle).toBe('The myth that keeps coming back');
+  });
+
+  it('returns a null angle for a generation with no task id', async () => {
+    const { fetchEngineScriptAngle } = await import('../engine-tasks');
+    const { supabase } = mockSupabase({
+      video_generations: { data: { ...GENERATION_ROW, engine_task_id: null }, error: null },
+    });
+    const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1');
+    expect(fetchEngineScriptAngle).not.toHaveBeenCalled();
+    expect(detail?.scriptAngle).toBeNull();
   });
 
   it('returns null for an unknown id (PGRST116)', async () => {

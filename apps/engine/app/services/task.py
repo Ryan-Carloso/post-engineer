@@ -565,6 +565,13 @@ def _resolve_script_angle(task_id: str, params: VideoParams) -> str:
         angle = ""
     if not angle:
         track_event("script_angle_fallback", _task_tracking_context(task_id))
+        return angle
+    # The angle is product data the user sees (post detail reads it from the
+    # task record) and a dimension to compare against real performance in
+    # PostHog. It is derived from the user's own topic; track_event still
+    # runs it through the secret scrubber.
+    sm.persist_state_update(sm.state, task_id, script_angle=angle)
+    track_event("script_angle_generated", {**_task_tracking_context(task_id), "angle": angle})
     return angle
 
 
