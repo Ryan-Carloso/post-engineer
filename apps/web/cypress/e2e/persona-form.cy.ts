@@ -76,6 +76,12 @@ function visitPersona(path: string): void {
   cy.visit(path, { onBeforeLoad: stubFormAudio });
   // Do not cy.wait('@getVoices'): React Query may serve a warm cache with no
   // network round-trip (same flake class as posts-create personas wait).
+  cy.location('pathname', { timeout: 15_000 }).then((pathname) => {
+    if (pathname === '/landing') {
+      cy.loginE2EUser();
+      cy.visit(path, { onBeforeLoad: stubFormAudio });
+    }
+  });
   cy.location('pathname', { timeout: 15_000 }).should('not.eq', '/landing');
   cy.get('#persona-name', { timeout: 15_000 }).should('be.visible');
 }
@@ -140,8 +146,10 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
   it('ouvir sample e trocar o idioma repete no novo idioma', () => {
     visitPersona('/persona');
 
-    cy.contains('button', 'ryan').click();
-    cy.get('select[data-testid=sample-language]').select('en-uk');
+    cy.contains('button', 'ryan').scrollIntoView().click();
+    cy.get('select[data-testid=sample-language]')
+      .should(($sel) => expect($sel.find('option').length).to.be.at.least(2))
+      .select('en-uk');
 
     cy.window().then((win) => {
       const audios = (win as unknown as { __fakeAudios: FakeAudioRecord[] }).__fakeAudios;
