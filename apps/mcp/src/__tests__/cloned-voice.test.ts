@@ -27,12 +27,14 @@ const realFetch = global.fetch;
 
 function fakeHost(request: ReturnType<typeof vi.fn>): ClonedVoiceClientHost {
   return {
-    getHeaders: vi.fn((includeContentType?: boolean) =>
-      includeContentType === false
-        ? { Authorization: 'Bearer test-token' }
-        : { 'Content-Type': 'application/json', Authorization: 'Bearer test-token' }
-    ),
-    request,
+    getHeaders: vi.fn((includeContentType?: boolean): Record<string, string> => {
+      const headers: Record<string, string> = { Authorization: 'Bearer test-token' };
+      if (includeContentType !== false) {
+        headers['Content-Type'] = 'application/json';
+      }
+      return headers;
+    }),
+    request: request as unknown as ClonedVoiceClientHost['request'],
   };
 }
 
