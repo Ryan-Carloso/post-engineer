@@ -120,7 +120,19 @@ export const PersonaVoiceClonePanel = ({ personaLanguage }: { personaLanguage?: 
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteClonedVoice(id),
-    onSuccess: () => {
+    onSuccess: (_data, deletedCloneId) => {
+      if (deletedCloneId === activeCloneId) {
+        setActiveCloneId(null);
+      }
+      const deletedClone = listQuery.data?.find((clone) => clone.id === deletedCloneId);
+      const deletedVoiceId = deletedClone?.voice_id;
+      if (
+        deletedVoiceId !== null &&
+        deletedVoiceId !== undefined &&
+        deletedVoiceId === usePersonaStore.getState().voiceId
+      ) {
+        usePersonaStore.getState().setVoiceId(null);
+      }
       void queryClient.invalidateQueries({ queryKey: ['cloned-voices'] });
       void queryClient.invalidateQueries({ queryKey: ['persona-voices'] });
     },
@@ -134,9 +146,14 @@ export const PersonaVoiceClonePanel = ({ personaLanguage }: { personaLanguage?: 
       clearInterval(recordTimerRef.current);
       recordTimerRef.current = null;
     }
-    mediaRecorderRef.current?.stop();
+    const recorder = mediaRecorderRef.current;
+    if (recorder !== null && recorder.state !== 'inactive') {
+      recorder.stop();
+    }
     setRecording(false);
   }, []);
+
+  useEffect(() => () => { stopRecording(); }, [stopRecording]);
 
   const startRecording = async () => {
     setError(null);

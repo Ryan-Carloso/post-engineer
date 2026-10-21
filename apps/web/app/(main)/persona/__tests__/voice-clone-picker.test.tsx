@@ -612,4 +612,101 @@ describe('PersonaVoiceClonePanel', () => {
       vi.useRealTimers();
     }
   });
+
+  it('stops recording and releases the mic when unmounted mid-recording', async () => {
+    vi.useFakeTimers();
+    try {
+      const env = setupRecordingEnv();
+      const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval');
+      const { unmount } = renderPanel();
+      fireEvent.click(screen.getByRole('button', { name: 'persona.voiceCloneRecord' }));
+      await act(async () => {});
+      const stopButton = screen.getByRole('button', { name: /persona\.voiceCloneStop/ });
+      expect(stopButton).toHaveTextContent('(0:00 / 1:00)');
+      act(() => {
+        vi.advanceTimersByTime(3000);
+      });
+      expect(stopButton).toHaveTextContent('(0:03 / 1:00)');
+      const recorder = env.instances[0];
+      expect(recorder.stop).not.toHaveBeenCalled();
+      expect(env.track.stop).not.toHaveBeenCalled();
+      const clearIntervalCallsBeforeUnmount = clearIntervalSpy.mock.calls.length;
+      unmount();
+      expect(recorder.stop).toHaveBeenCalledTimes(1);
+      expect(env.track.stop).toHaveBeenCalledTimes(1);
+      expect(clearIntervalSpy.mock.calls.length).toBeGreaterThan(
+        clearIntervalCallsBeforeUnmount,
+      );
+      act(() => {
+        vi.advanceTimersByTime(65_000);
+      });
+      expect(recorder.stop).toHaveBeenCalledTimes(1);
+      expect(env.track.stop).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops polling when the tracked pending clone is deleted', async () => {
+    const pending = publicRow({ id: 'clone-pending', status: 'pending' });
+    cloneMocks.list = [pending];
+    cloneMocks.fetchById.mockResolvedValue(pending);
+    cloneMocks.create.mockResolvedValue(pending);
+    cloneMocks.delete.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderPanel();
+    await user.click(screen.getByRole('checkbox'));
+    const fileInput = screen.getByTestId('voice-clone-panel').querySelector('input[type="file"]');
+    await user.upload(fileInput as HTMLInputElement, makeWavFile());
+    await user.click(screen.getByRole('button', { name: 'persona.voiceCloneSubmit' }));
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent('persona.voiceClonePending'),
+    );
+    await waitFor(() =>
+      expect(cloneMocks.fetchById).toHaveBeenCalledWith('clone-pending'),
+    );
+    await user.click(screen.getByRole('button', { name: 'persona.voiceCloneDelete' }));
+    await waitFor(() => expect(cloneMocks.delete).toHaveBeenCalledWith('clone-pending'));
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+    const fetchByIdCallsAfterDelete = cloneMocks.fetchById.mock.calls.length;
+    await new Promise((resolve) => {
+      setTimeout(resolve, 2800);
+    });
+    expect(cloneMocks.fetchById).toHaveBeenCalledTimes(fetchByIdCallsAfterDelete);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  }, 15_000);
+
+  it('clears the persona voice when the selected clone is deleted', async () => {
+    cloneMocks.list = [
+      publicRow({ id: 'clone-selected', status: 'ready', voice_id: 'voice-1' }),
+    ];
+    cloneMocks.delete.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderPanel();
+    await user.click(
+      await screen.findByRole('button', { name: 'persona.voiceCloneDelete' }),
+    );
+    await waitFor(() => expect(cloneMocks.delete).toHaveBeenCalledWith('clone-selected'));
+    await waitFor(() => expect(cloneMocks.setVoiceId).toHaveBeenCalledWith(null));
+    expect(cloneMocks.setVoiceId).toHaveBeenCalledTimes(1);
+    expect(cloneMocks.setVoiceId).toHaveBeenCalledWith(null);
+  });
+
+  it('keeps the persona voice when a different clone is deleted', async () => {
+    cloneMocks.list = [
+      publicRow({ id: 'clone-other', status: 'ready', voice_id: 'chatterbox:other' }),
+    ];
+    cloneMocks.delete.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    const { queryClient } = renderPanel();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    await user.click(
+      await screen.findByRole('button', { name: 'persona.voiceCloneDelete' }),
+    );
+    await waitFor(() => expect(cloneMocks.delete).toHaveBeenCalledWith('clone-other'));
+    await waitFor(() =>
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['cloned-voices'] }),
+    );
+    expect(cloneMocks.setVoiceId).not.toHaveBeenCalled();
+  });
 });
