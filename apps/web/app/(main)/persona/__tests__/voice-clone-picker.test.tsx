@@ -217,6 +217,27 @@ describe('PersonaVoiceClonePanel', () => {
     expect(screen.queryByRole('button', { name: 'persona.voiceCloneSubmit' })).not.toBeInTheDocument();
   });
 
+  it('clears the pending audio when a new pick fails validation', async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    const panel = screen.getByTestId('voice-clone-panel');
+    const fileInput = panel.querySelector('input[type="file"]');
+    await user.upload(fileInput as HTMLInputElement, makeWavFile());
+    expect(screen.getByRole('button', { name: 'persona.voiceCloneSubmit' })).toBeInTheDocument();
+    cloneMocks.validateResult = {
+      ok: false,
+      error: 'Only MP3, WAV, M4A, or WebM reference audio is accepted.',
+    };
+    const badFile = new File(['not audio at all'], 'fake.wav', { type: 'audio/wav' });
+    await user.upload(fileInput as HTMLInputElement, badFile);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Only MP3, WAV, M4A, or WebM reference audio is accepted.',
+    );
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:local-preview');
+    expect(screen.queryByRole('button', { name: 'persona.voiceCloneSubmit' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'persona.voiceCloneRerecord' })).not.toBeInTheDocument();
+  });
+
   it('uploads when consent is checked', async () => {
     const user = userEvent.setup();
     cloneMocks.create.mockResolvedValue(publicRow({ id: 'clone-pending', status: 'pending' }));

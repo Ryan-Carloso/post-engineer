@@ -205,6 +205,13 @@ export const PersonaVoiceClonePanel = ({ personaLanguage }: { personaLanguage?: 
     }
     const validation = validateCloneReferenceBuffer(new Uint8Array(await file.arrayBuffer()));
     if (!validation.ok) {
+      // A failed pick must not leave a previous recording/pick submittable
+      // behind the error message.
+      setPendingBlob(null);
+      if (previewBlobUrl) {
+        URL.revokeObjectURL(previewBlobUrl);
+        setPreviewBlobUrl(null);
+      }
       setError(validation.error);
       return;
     }
