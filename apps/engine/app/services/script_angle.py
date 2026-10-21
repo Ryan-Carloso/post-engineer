@@ -4,7 +4,9 @@ Lives outside llm.py / task.py because both are grandfathered over the
 file-size cap and may not grow. The llm helpers are reached through the
 llm module at call time (deferred import), so tests patching
 llm.generate_script_angle / llm._generate_response_with_fallback keep
-working exactly as before.
+working exactly as before. That patch point is deliberate: nothing here
+may cache an llm function at import time, or the patches would be
+bypassed.
 """
 
 from loguru import logger
@@ -48,6 +50,8 @@ Topic: {subject}"""
     response = llm._generate_response_with_fallback(prompt=prompt)
     # _generate_response_with_fallback reports total provider failure as an
     # "Error: ..." sentinel string instead of raising; that is never an angle.
+    # A genuine model reply literally starting with "Error: " is discarded
+    # too — an accepted trade-off of the shared sentinel contract.
     if response.startswith("Error: "):
         return ""
     lines = [line.strip() for line in llm._strip_code_fence(response).splitlines() if line.strip()]

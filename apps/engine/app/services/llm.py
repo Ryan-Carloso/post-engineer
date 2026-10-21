@@ -1122,7 +1122,8 @@ def generate_script(
         "generating video script: "
         f"subject={video_subject}, paragraph_number={paragraph_number}, "
         f"has_custom_prompt={bool(video_script_prompt.strip())}, "
-        f"has_custom_system_prompt={bool(custom_system_prompt.strip())}"
+        f"has_custom_system_prompt={bool(custom_system_prompt.strip())}, "
+        f"has_angle={bool(angle)}, has_cta={bool(cta)}"
     )
 
     def format_response(response):
