@@ -175,6 +175,7 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
 
   it('enviar sem voz mostra erro de voz', () => {
     visitPersona('/persona');
+    cy.wait('@getClonedVoices');
 
     cy.get('#persona-name').type('Maya E2E').blur();
     // Photo upload satisfies the avatar gate without relying on the character
