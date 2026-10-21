@@ -63,6 +63,22 @@ class TestHouseVoiceCatalog(unittest.TestCase):
             [{"id": voice} for voice in CHATTERBOX_VOICES + ["chatterbox:uabc_clone1"]],
         )
 
+    def test_catalog_degrades_to_house_voices_when_cloned_store_fails(self):
+        """The cloned merge reads Supabase; its failure must not empty the picker."""
+        with patch.object(
+            persona_service.voice_service, "get_chatterbox_voices", return_value=CHATTERBOX_VOICES
+        ):
+            with patch.object(
+                persona_service, "get_openrouter_voices", return_value=[]
+            ):
+                with patch(
+                    "app.services.cloned_voices.service.list_catalog_entries",
+                    side_effect=RuntimeError("SUPABASE_URL is required for cloned_voices"),
+                ):
+                    result = persona_service.get_house_voices(user_id="user-1")
+
+        self.assertEqual(result, [{"id": voice} for voice in CHATTERBOX_VOICES])
+
     def test_openrouter_alone_is_enough_when_chatterbox_is_empty(self):
         """The two providers are independent; neither requires the other."""
         with patch.object(

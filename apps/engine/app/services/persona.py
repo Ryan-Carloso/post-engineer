@@ -7,6 +7,7 @@ persona payload that arrives inline on a video job.
 
 from typing import Any, Optional
 
+from loguru import logger
 
 from app.services import voice as voice_service
 from app.services.openrouter_tts import get_openrouter_voices
@@ -112,14 +113,25 @@ def get_house_voices(user_id: str | None = None) -> list[dict[str, Any]]:
     OpenRouter contributes nothing until it is configured (``[openrouter]``
     with both a key and at least one model); see
     ``openrouter_tts.get_openrouter_voices`` for the discovery bounds.
+
+    When ``user_id`` is given, the caller's ready cloned voices are appended
+    as ``chatterbox:<engine_voice_key>`` entries (see
+    ``cloned_voices.service.list_catalog_entries``). That merge reads
+    Supabase; if the store is unconfigured or unreachable the catalog
+    degrades to the house voices above instead of failing the picker.
     """
     voice_ids = list(voice_service.get_chatterbox_voices())
     voice_ids.extend(get_openrouter_voices())
     if user_id:
-        from app.services.cloned_voices.service import list_catalog_entries
+        try:
+            from app.services.cloned_voices.service import list_catalog_entries
 
-        for entry in list_catalog_entries(user_id):
-            voice_ids.append(entry["id"])
+            for entry in list_catalog_entries(user_id):
+                voice_ids.append(entry["id"])
+        except Exception:
+            logger.warning(
+                "cloned voice catalog merge failed; serving house voices only"
+            )
     return [{"id": voice_id} for voice_id in voice_ids]
 
 
