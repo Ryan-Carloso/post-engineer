@@ -98,7 +98,9 @@ export const PersonaHouseVoicePicker = ({ personaLanguage }: { personaLanguage?:
   const matchedSampleLanguage = personaLanguage
     ? matchSampleLanguage(personaLanguage, sampleLanguagesQuery.data ?? [])
     : undefined;
-  const effectiveSampleLanguage = sampleLanguage ?? matchedSampleLanguage ?? 'pt-br';
+  // English-only launch: the sample-language list only carries English
+  // codes, and the fallback default is an English sample too.
+  const effectiveSampleLanguage = sampleLanguage ?? matchedSampleLanguage ?? 'en-us';
 
   const playVoiceSample = (pickedVoiceId: string, language: string): void => {
     audioRef.current?.pause();

@@ -355,6 +355,39 @@ describe('schema bounds', () => {
     expect(result.success).toBe(false);
   });
 
+  it('persona schemas reject non-English languages (English-only launch)', () => {
+    const created = CreatePersonaSchema.safeParse({
+      name: 'x',
+      avatarUrl: 'https://example.com/a.png',
+      language: 'pt-BR',
+    });
+    expect(created.success).toBe(false);
+    if (!created.success) {
+      expect(created.error.issues.map((issue) => issue.message)).toContain(
+        'Only English videos are supported for now',
+      );
+    }
+    const updated = UpdatePersonaSchema.safeParse({
+      personaId: 'p1',
+      language: 'es',
+    });
+    expect(updated.success).toBe(false);
+  });
+
+  it('persona schemas accept English regional variants', () => {
+    const created = CreatePersonaSchema.safeParse({
+      name: 'x',
+      avatarUrl: 'https://example.com/a.png',
+      language: 'en-GB',
+    });
+    expect(created.success).toBe(true);
+    const updated = UpdatePersonaSchema.safeParse({
+      personaId: 'p1',
+      language: 'EN',
+    });
+    expect(updated.success).toBe(true);
+  });
+
   it('handleConnectAccount errors clearly when the response has no auth_url', async () => {
     const client = { getOAuthConnectUrl: vi.fn() } as unknown as PostEngineerClient;
     vi.mocked(client.getOAuthConnectUrl).mockResolvedValue({ success: true });
@@ -725,11 +758,25 @@ describe('generate_persona_videos tool', () => {
         scriptPrompt: 'Be direct.',
         videoAspect: '16:9',
         paragraphNumber: 3,
-        language: 'pt-BR',
+        language: 'en-US',
         niche: 'tech',
       },
     });
     expect(result.success).toBe(true);
+  });
+
+  it('GeneratePersonaVideosSchema rejects a non-English options.language (English-only launch)', () => {
+    const { personaId: _personaId, ...rest } = baseArgs;
+    const result = GeneratePersonaVideosSchema.safeParse({
+      ...rest,
+      options: { faceless: true, voiceId: 'calm', language: 'pt-BR' },
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.map((issue) => issue.message)).toContain(
+        'Only English videos are supported for now',
+      );
+    }
   });
 
   it('GeneratePersonaVideosSchema rejects an out-of-range identity option', () => {

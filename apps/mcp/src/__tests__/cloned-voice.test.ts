@@ -417,7 +417,7 @@ describe('cloned voice tools run through the MCP server', () => {
     global.fetch = vi.fn().mockResolvedValue(audioResponse([5, 5, 5]));
     const result = await callTool(
       'create_cloned_voice',
-      { audioUrl: 'https://cdn.example.com/ref.wav', language: 'pt', consent: true },
+      { audioUrl: 'https://cdn.example.com/ref.wav', language: 'en', consent: true },
       request
     );
     expect(firstText(result as { content?: unknown })).toContain(
@@ -429,6 +429,31 @@ describe('cloned voice tools run through the MCP server', () => {
       'create cloned voice',
       120_000
     );
+  });
+
+  it('create_cloned_voice rejects a non-English language (English-only launch)', async () => {
+    const request = vi.fn().mockResolvedValue({ success: true, body: { id: 'clone-1' } });
+    global.fetch = vi.fn().mockResolvedValue(audioResponse([5, 5, 5]));
+    // callTool asserts success, so this rejection case drives the linked
+    // pair directly: the schema gate must error before any handler runs.
+    const apiClient = fakeHost(request) as unknown as PostEngineerClient;
+    const server = createPostEngineerMcpServer(apiClient);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'test-client', version: '0.0.0' });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const result = await client.callTool({
+        name: 'create_cloned_voice',
+        arguments: { audioUrl: 'https://cdn.example.com/ref.wav', language: 'pt', consent: true },
+      });
+      expect(result.isError).toBe(true);
+      expect(firstText(result as { content?: unknown })).toContain(
+        'Voice cloning is only available in English for now'
+      );
+      expect(request).not.toHaveBeenCalled();
+    } finally {
+      await client.close();
+    }
   });
 
   it('delete_cloned_voice calls the client request', async () => {

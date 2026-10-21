@@ -27,6 +27,7 @@ import { logger } from '@/lib/logger';
 import { parsePatchBody } from './patch-body';
 import { apiErrorResponse } from '@/lib/api-error';
 import { ERROR_CODES } from '@/lib/error-codes';
+import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from '@/lib/language-gate';
 import { trackApiEvent } from '@/lib/analytics';
 import { SAFE_TASK_ID } from '@/lib/video-urls';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
@@ -74,6 +75,17 @@ async function postHandler(request: Request): Promise<NextResponse> {
     return errorResponse(400, parsed.error, 'POST /api/persona');
   }
   const body = parsed.value;
+
+  // English-only launch: a persona's language is its videos' language, so
+  // a non-English persona cannot be created until the lock lifts.
+  if (
+    body.values.language !== null &&
+    body.values.language !== undefined &&
+    body.values.language.trim().length > 0 &&
+    !isEnglishLanguage(body.values.language)
+  ) {
+    return errorResponse(400, ONLY_ENGLISH_VIDEOS_MESSAGE, 'POST /api/persona');
+  }
 
   const hasPhoto = body.photo !== null;
   const hasAvatarUrl = body.values.avatarUrl !== null;
@@ -394,6 +406,16 @@ async function patchHandler(request: Request): Promise<NextResponse> {
   const parsedPatch = await parsePatchBody(request);
   if (!parsedPatch.ok) return errorResponse(400, parsedPatch.error, 'PATCH /api/persona');
   const patch = parsedPatch.value;
+
+  // English-only launch: same gate as persona creation — the language
+  // cannot be switched away from English while the lock is on.
+  if (
+    patch.language !== null &&
+    patch.language.trim().length > 0 &&
+    !isEnglishLanguage(patch.language)
+  ) {
+    return errorResponse(400, ONLY_ENGLISH_VIDEOS_MESSAGE, 'PATCH /api/persona');
+  }
 
   const { data: persona, error: selectError } = await supabase
     .from('personas')

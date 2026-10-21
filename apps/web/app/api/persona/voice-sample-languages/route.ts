@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
+import { isEnglishLanguage } from '@/lib/language-gate';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
@@ -67,7 +68,10 @@ async function getHandler(): Promise<NextResponse> {
       );
     }
 
-    return NextResponse.json({ languages: data });
+    // English-only launch: the persona form's language picker only offers
+    // English samples until the other languages launch.
+    const englishOnly = data.filter((item) => isEnglishLanguage(item.code));
+    return NextResponse.json({ languages: englishOnly });
   } catch (error) {
     logger.error('[api/persona/voice-sample-languages] money-print unreachable', error);
     return NextResponse.json(

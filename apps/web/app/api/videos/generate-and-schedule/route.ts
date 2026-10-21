@@ -31,6 +31,7 @@ import { isPersonaAllowed } from '@/lib/api-keys';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { apiErrorResponse } from '@/lib/api-error';
 import { ERROR_CODES, formatErrorMessage, type ErrorCode } from '@/lib/error-codes';
+import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from '@/lib/language-gate';
 import {
   distributeSlots,
   SlotDistributionError,
@@ -335,6 +336,16 @@ function validateOptions(
     return validationFailed(
       ERROR_CODES.VALIDATION_FAILED,
       `options.language must be at most ${MAX_LANGUAGE_CHARS} characters.`,
+      'options.language',
+    );
+  }
+  // English-only launch: a video in any other language is rejected here
+  // (and again on the effective language in preparePersona, which covers
+  // the persona's stored language when the request does not override it).
+  if (language !== undefined && language.trim().length > 0 && !isEnglishLanguage(language)) {
+    return validationFailed(
+      ERROR_CODES.VALIDATION_FAILED,
+      ONLY_ENGLISH_VIDEOS_MESSAGE,
       'options.language',
     );
   }
@@ -652,6 +663,13 @@ async function preparePersona(
   if (language && language.trim().length > 0 && language.length > 35) {
     return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'Persona language must be at most 35 characters: update the persona.', 'personaId');
   }
+  // English-only launch: the effective language (per-post override, else
+  // the persona's stored language) must be English — a legacy persona in
+  // another language cannot create videos until the lock lifts.
+  const effectiveLanguage = opts.language ?? language;
+  if (effectiveLanguage && effectiveLanguage.trim().length > 0 && !isEnglishLanguage(effectiveLanguage)) {
+    return validationFailed(ERROR_CODES.VALIDATION_FAILED, ONLY_ENGLISH_VIDEOS_MESSAGE, 'personaId');
+  }
   const paragraphNumber = (persona.paragraph_number as number | null) ?? null;
   if (
     paragraphNumber !== null &&
@@ -700,7 +718,7 @@ async function preparePersona(
     // time), so a persona edited after this moment cannot rewrite this video.
     niche: opts.niche ?? niche,
     scriptPrompt: opts.scriptPrompt ?? ((persona.script_prompt as string | null) ?? null),
-    language: opts.language ?? language,
+    language: effectiveLanguage,
     videoAspect: opts.videoAspect ?? ((persona.video_aspect as string | null) ?? null),
     // Layout is snapshotted like aspect: a persona edited after this moment
     // must not rewrite how this post was composed.

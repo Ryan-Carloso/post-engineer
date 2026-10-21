@@ -435,7 +435,7 @@ describe('app/(main)/persona/page — PersonaPage', () => {
     await waitFor(() => expect(createPersona).toHaveBeenCalledTimes(1));
     const formData = vi.mocked(createPersona).mock.calls[0][0] as FormData;
     expect(formData.get('videoAspect')).toBe('16:9');
-    expect(formData.get('language')).toBe('pt');
+    expect(formData.get('language')).toBe('en');
     expect(formData.has('paragraphNumber')).toBe(false);
     expect(formData.get('scriptPrompt')).toBe('Storytelling forte');
   });
@@ -1346,7 +1346,7 @@ describe('app/(main)/persona/page — abas, carrossel e seletor de voz', () => {
     expect(screen.getByText('xxopenrouter:foo')).toBeTruthy();
   });
 
-  it('áudio padrão do sample é pt-br na criação', async () => {
+  it('áudio padrão do sample é en-us na criação', async () => {
     const created = stubAudio();
     const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });
@@ -1354,7 +1354,7 @@ describe('app/(main)/persona/page — abas, carrossel e seletor de voz', () => {
     await user.click(screen.getByText('ryan'));
 
     expect(created).toHaveLength(1);
-    expect(created[0].url).toBe('/voice-samples/chatterbox%3Aryan-pt-br.mp3');
+    expect(created[0].url).toBe('/voice-samples/chatterbox%3Aryan-en-us.mp3');
   });
 
   it('trocar o idioma após ouvir repete o sample no novo idioma', async () => {

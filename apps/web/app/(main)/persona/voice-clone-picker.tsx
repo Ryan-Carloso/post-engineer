@@ -17,6 +17,7 @@ import {
   clonedVoicePreviewUrl,
 } from '@/lib/cloned-voices-client';
 import { usePersonaStore } from '@/lib/store';
+import { isEnglishLanguage } from '@/lib/language-gate';
 import { useI18n } from '@/lib/i18n/provider';
 import { CheckIcon, MicIcon, SpinnerIcon, TrashIcon } from '@/lib/ui';
 import { useVoiceSampleLanguagesQuery } from '@/lib/api';
@@ -60,7 +61,12 @@ export const PersonaVoiceClonePanel = ({ personaLanguage }: { personaLanguage?: 
   const queryClient = useQueryClient();
   const sampleLanguagesQuery = useVoiceSampleLanguagesQuery();
   const voiceId = usePersonaStore((s) => s.voiceId);
-  const [language, setLanguage] = useState(personaLanguage?.trim() || 'pt');
+  // English-only launch: the clone language starts (and stays) English —
+  // a legacy persona language in another language no longer preselects it.
+  const initialLanguage = personaLanguage?.trim();
+  const [language, setLanguage] = useState(
+    initialLanguage && isEnglishLanguage(initialLanguage) ? initialLanguage : 'en',
+  );
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
@@ -269,7 +275,7 @@ export const PersonaVoiceClonePanel = ({ personaLanguage }: { personaLanguage?: 
           className="mt-2 h-11 w-full max-w-sm rounded-xl border border-neutral-300 bg-white px-3 text-sm"
           disabled={isSubmitting || recording}
         >
-          {(sampleLanguagesQuery.data ?? [{ code: 'pt', label: 'Português' }]).map((lang) => (
+          {(sampleLanguagesQuery.data ?? [{ code: 'en', label: 'English' }]).map((lang) => (
             <option key={lang.code} value={lang.code}>
               {lang.label}
             </option>

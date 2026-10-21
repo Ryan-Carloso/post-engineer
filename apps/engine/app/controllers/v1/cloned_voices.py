@@ -20,6 +20,7 @@ from app.services.cloned_voices.constants import (
     MAX_REFERENCE_BYTES,
 )
 from app.services.cloned_voices.service import ClonedVoiceService
+from app.services.language_gate import ENGLISH_ONLY_CLONE_MESSAGE, is_english_language
 from app.utils import utils
 
 router = new_router()
@@ -114,6 +115,13 @@ def create_cloned_voice(
         return JSONResponse(
             status_code=400,
             content=utils.get_response(status=400, message="language is invalid"),
+        )
+    # English-only launch: cloning only ever worked well in English, so a
+    # non-English registration is rejected before any row or file exists.
+    if not is_english_language(lang):
+        return JSONResponse(
+            status_code=400,
+            content=utils.get_response(status=400, message=ENGLISH_ONLY_CLONE_MESSAGE),
         )
 
     # Bound the read itself: normalize_reference_audio enforces the same

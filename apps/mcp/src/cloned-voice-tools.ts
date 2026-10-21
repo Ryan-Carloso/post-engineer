@@ -8,6 +8,7 @@ import {
   previewClonedVoice,
 } from './cloned-voice-client.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
+import { isEnglishLanguage, ONLY_ENGLISH_CLONE_MESSAGE } from './language.js';
 
 export const ListClonedVoicesShape = {};
 
@@ -15,7 +16,11 @@ export const ListClonedVoicesSchema = z.object(ListClonedVoicesShape);
 
 export const CreateClonedVoiceShape = {
   audioUrl: z.string().url().describe('HTTPS URL of a short reference recording (MP3, WAV, M4A, or WebM, max 20MB)'),
-  language: z.string().min(1).describe('Language code for the clone (e.g. pt, en-us)'),
+  language: z
+    .string()
+    .min(1)
+    .refine(isEnglishLanguage, { message: ONLY_ENGLISH_CLONE_MESSAGE })
+    .describe('Language code for the clone — English only for now (e.g. en, en-us)'),
   consent: z.literal(true).describe('Must be true: caller confirms consent to voice cloning'),
 };
 

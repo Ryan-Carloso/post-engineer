@@ -581,7 +581,9 @@ describe('PersonaVoiceClonePanel', () => {
     const sentBlob = cloneMocks.create.mock.calls[0]?.[0] as Blob;
     expect(sentBlob.type).toBe('audio/webm;codecs=opus');
     expect(sentBlob.size).toBe(5);
-    expect(cloneMocks.create.mock.calls[0]?.[1]).toBe('pt');
+    // English-only launch: even with a Portuguese persona, the clone
+    // language defaults to English until the user picks otherwise.
+    expect(cloneMocks.create.mock.calls[0]?.[1]).toBe('en');
     expect(cloneMocks.create.mock.calls[0]?.[2]).toBe(true);
   });
 

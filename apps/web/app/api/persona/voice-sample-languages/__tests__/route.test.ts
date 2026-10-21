@@ -59,7 +59,9 @@ describe('GET /api/persona/voice-sample-languages', () => {
         message: 'success',
         body: [
           { code: 'en', label: 'English' },
+          { code: 'en-us', label: 'English (US)' },
           { code: 'pt', label: 'Português' },
+          { code: 'es', label: 'Español' },
         ],
       }),
     );
@@ -67,10 +69,11 @@ describe('GET /api/persona/voice-sample-languages', () => {
     const res = await GET();
 
     expect(res.status).toBe(200);
+    // English-only launch: only the English codes reach the picker.
     expect(await res.json()).toEqual({
       languages: [
         { code: 'en', label: 'English' },
-        { code: 'pt', label: 'Português' },
+        { code: 'en-us', label: 'English (US)' },
       ],
     });
     const headers = new Headers(fetchMock.mock.calls[0]?.[1]?.headers as HeadersInit);

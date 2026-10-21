@@ -102,26 +102,76 @@ class ClonedVoicesControllerTests(unittest.TestCase):
                 "id": "clone-1",
                 "status": "pending",
                 "engine_voice_key": "uabc_clone1",
-                "language": "pt-BR",
+                "language": "en-GB",
                 "consent_at": "2026-01-01T00:00:00Z",
                 "created_at": "2026-01-01T00:00:00Z",
                 "updated_at": "2026-01-01T00:00:00Z",
             },
             "wav_bytes": b"wav",
-            "language": "pt-BR",
+            "language": "en-GB",
         }
 
         response = self.client.post(
             "/api/v1/cloned-voices",
             headers=self.headers,
-            data={"language": "pt-BR", "consent": "true"},
+            data={"language": "en-GB", "consent": "true"},
             files={"file": ("sample.wav", io.BytesIO(b"data"), "audio/wav")},
         )
 
         self.assertEqual(response.status_code, 202)
         service.create_from_upload.assert_called_once_with(
-            "user-uuid-1", b"data", "pt-BR", consent_acknowledged=True
+            "user-uuid-1", b"data", "en-GB", consent_acknowledged=True
         )
+
+    @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
+    def test_create_rejects_non_english_languages(self, mock_service_cls):
+        service = MagicMock()
+        mock_service_cls.return_value = service
+
+        for language in ("pt", "pt-BR", "es", "fr", "enx"):
+            with self.subTest(language=language):
+                response = self.client.post(
+                    "/api/v1/cloned-voices",
+                    headers=self.headers,
+                    data={"language": language, "consent": "true"},
+                    files={"file": ("sample.wav", io.BytesIO(b"data"), "audio/wav")},
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(
+                    response.json()["message"],
+                    "Voice cloning is only available in English for now",
+                )
+        service.create_from_upload.assert_not_called()
+
+    @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
+    def test_create_accepts_english_language_variants(self, mock_service_cls):
+        service = MagicMock()
+        mock_service_cls.return_value = service
+        service.create_from_upload.return_value = {
+            "row": {
+                "id": "clone-1",
+                "status": "pending",
+                "engine_voice_key": "uabc_clone1",
+                "language": "en",
+                "consent_at": "2026-01-01T00:00:00Z",
+                "created_at": "2026-01-01T00:00:00Z",
+                "updated_at": "2026-01-01T00:00:00Z",
+            },
+            "wav_bytes": b"wav",
+            "language": "en",
+        }
+
+        for language in ("en", "en-US", "EN", "En-Gb"):
+            with self.subTest(language=language):
+                service.create_from_upload.reset_mock()
+                response = self.client.post(
+                    "/api/v1/cloned-voices",
+                    headers=self.headers,
+                    data={"language": language, "consent": "true"},
+                    files={"file": ("sample.wav", io.BytesIO(b"data"), "audio/wav")},
+                )
+                self.assertEqual(response.status_code, 202)
+                service.create_from_upload.assert_called_once()
 
     def test_list_requires_auth(self):
         response = self.client.get("/api/v1/cloned-voices")

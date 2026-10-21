@@ -40,6 +40,7 @@ import {
   VIDEO_LAYOUTS,
 } from './client.js';
 import { getErrorMessage, ApiError } from './errors.js';
+import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
 
 export type { McpToolResponse } from './tools-call.js';
 
@@ -67,7 +68,11 @@ export const CreatePersonaShape = {
       'REQUIRED. Public URL to the persona avatar image (use list_faces for stock face URLs). Every persona has a face; "no face" is chosen per video with generate_persona_videos options.faceless.',
     ),
   voiceId: z.string().default('chatterbox:ryan').describe('Voice ID to use (see list_voices)'),
-  language: z.string().default('en-US').describe('Language code (e.g. pt-BR, en-US)'),
+  language: z
+    .string()
+    .refine(isEnglishLanguage, { message: ONLY_ENGLISH_VIDEOS_MESSAGE })
+    .default('en-US')
+    .describe('Language code — English only for now (e.g. en-US, en-GB)'),
   videoAspect: z.enum(['9:16', '16:9']).default('9:16').describe('Video aspect ratio'),
   videoLayout: z
     .enum(VIDEO_LAYOUTS)
@@ -114,7 +119,11 @@ export const UpdatePersonaShape = {
   // No .nullable(): the API has no "clear avatar" sentinel — null would be silently ignored.
   avatarUrl: z.string().url().optional().describe('New public avatar image URL'),
   voiceId: z.string().optional().describe('New voice ID (see list_voices)'),
-  language: z.string().optional().describe('New language code (e.g. pt-BR, en-US)'),
+  language: z
+    .string()
+    .refine(isEnglishLanguage, { message: ONLY_ENGLISH_VIDEOS_MESSAGE })
+    .optional()
+    .describe('New language code — English only for now (e.g. en-US, en-GB)'),
   videoAspect: z.enum(['9:16', '16:9']).optional().describe('New video aspect ratio'),
   videoLayout: z.enum(VIDEO_LAYOUTS).optional().describe('New persona-hook layout (standard or react)'),
   scriptPrompt: z.string().optional().describe('New system prompt instructions for video scripts'),
@@ -313,7 +322,13 @@ export const GeneratePersonaVideosShape = {
         .optional()
         .describe('How the persona hook is composed with the b-roll. Overrides the persona when one is given; a post without a persona defaults to "standard". Same render cost either way.'),
       paragraphNumber: z.number().int().min(1).max(10).optional().describe('Paragraph count (1-10). Overrides the persona when one is given.'),
-      language: z.string().min(1).max(32).optional().describe('Spoken language code, e.g. pt-BR. Overrides the persona when one is given.'),
+      language: z
+        .string()
+        .min(1)
+        .max(32)
+        .refine(isEnglishLanguage, { message: ONLY_ENGLISH_VIDEOS_MESSAGE })
+        .optional()
+        .describe('Spoken language code — English only for now, e.g. en-US. Overrides the persona when one is given.'),
       niche: z.string().min(1).max(300).optional().describe('Content niche. Overrides the persona when one is given.'),
     })
     .optional()
