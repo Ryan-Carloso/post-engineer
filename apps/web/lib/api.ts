@@ -571,15 +571,9 @@ async function fetchSession(): Promise<SupabaseSessionUser | null> {
 //---------------
 
 //---------------
-// Social accounts — ONE shared query for every provider. All four provider
-// hooks (and useSocialAccountsQuery itself) read the same ['social-accounts']
-// cache entry, so a page mounting several of them fires exactly one
-// GET /api/account — and therefore emits one server-side account_fetched
-// telemetry event — instead of one request per provider. The provider hooks
-// filter the shared payload client-side via React Query's `select`; their
-// return types are unchanged, so no screen code changes.
+// Social accounts — ONE shared ['social-accounts'] query: one GET /api/account
+// per page, not one per provider; hooks filter via `select`, types unchanged.
 //---------------
-
 export function useSocialAccountsQuery(): UseQueryResult<ServerAccountPayload, Error>;
 export function useSocialAccountsQuery<TData>(
   select: (payload: ServerAccountPayload) => TData,
@@ -596,15 +590,11 @@ export function useSocialAccountsQuery<TData>(
   });
 }
 
-// Hoisted to module scope so each hook hands React Query the SAME select
-// function identity on every render — TanStack Query memoizes the selected
-// result on the select reference, and a fresh closure per render would
-// defeat that memoization (new data identity on every render).
+// Selectors hoisted to module scope: React Query memoizes on the select reference.
 const selectYouTubeAccounts = selectProviderAccounts<AccountData>('youtube');
 const selectInstagramAccounts = selectProviderAccounts<InstagramAccountData>('instagram');
 const selectBlueskyAccounts = selectProviderAccounts<BlueskyAccountData>('bluesky');
 const selectLinkedinAccounts = selectProviderAccounts<LinkedinAccountData>('linkedin');
-
 export function useYouTubeAccountsQuery(): UseQueryResult<AccountResponse, Error> {
   return useSocialAccountsQuery(selectYouTubeAccounts);
 }
