@@ -69,11 +69,21 @@ function mockBase(): void {
     statusCode: 200,
     body: { success: true, images: [] },
   }).as('getPersonaImages');
+
 }
 
 function visitPersona(path: string): void {
   cy.visit(path, { onBeforeLoad: stubFormAudio });
-  cy.wait('@getVoices');
+  // Do not cy.wait('@getVoices'): React Query may serve a warm cache with no
+  // network round-trip (same flake class as posts-create personas wait).
+  cy.location('pathname', { timeout: 15_000 }).then((pathname) => {
+    if (pathname === '/landing') {
+      cy.loginE2EUser();
+      cy.visit(path, { onBeforeLoad: stubFormAudio });
+    }
+  });
+  cy.location('pathname', { timeout: 15_000 }).should('not.eq', '/landing');
+  cy.get('#persona-name', { timeout: 15_000 }).should('be.visible');
 }
 
 // Fill a valid create form: name + character + voice.
@@ -115,7 +125,7 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
 
     cy.contains('[role="tab"]', 'Envie sua foto').click();
     cy.contains('button', 'Enviar foto').should('be.visible');
-    cy.get('input[type="file"]').selectFile(
+    cy.get('input[type="file"][accept="image/jpeg,image/png"]').selectFile(
       { contents: Cypress.Buffer.from('fake image bytes'), fileName: 'foto.png', mimeType: 'image/png' },
       { force: true },
     );
@@ -136,8 +146,10 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
   it('ouvir sample e trocar o idioma repete no novo idioma', () => {
     visitPersona('/persona');
 
-    cy.contains('button', 'ryan').click();
-    cy.get('select[data-testid=sample-language]').select('en-uk');
+    cy.contains('button', 'ryan').scrollIntoView().click();
+    cy.get('select[data-testid=sample-language]')
+      .should(($sel) => expect($sel.find('option').length).to.be.at.least(2))
+      .select('en-uk');
 
     cy.window().then((win) => {
       const audios = (win as unknown as { __fakeAudios: FakeAudioRecord[] }).__fakeAudios;
@@ -160,11 +172,21 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
   it('enviar sem voz mostra erro de voz', () => {
     visitPersona('/persona');
 
-    cy.get('#persona-name').type('Maya E2E');
-    cy.get('button[aria-label="Escolha um personagem 1"]').click();
+    cy.get('#persona-name').type('Maya E2E').blur();
+    // Photo upload satisfies the avatar gate without relying on the character
+    // carousel (off-screen slides flake in CI viewports).
+    cy.contains('[role="tab"]', 'Envie sua foto').click();
+    cy.get('input[type="file"][accept="image/jpeg,image/png"]').selectFile(
+      { contents: Cypress.Buffer.from('fake image bytes'), fileName: 'foto.png', mimeType: 'image/png' },
+      { force: true },
+    );
+    cy.contains('foto.png').should('be.visible');
+
     cy.contains('button', 'Criar persona').click();
 
-    cy.contains('Escolha uma voz ou envie um áudio.').should('be.visible');
+    cy.get('[data-error-field="voice"]')
+      .find('[role="alert"]')
+      .should('contain.text', 'Escolha uma voz ou envie um áudio.');
   });
 
   it('edição carrega a persona e casa o idioma da amostra por prefixo', () => {

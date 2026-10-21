@@ -423,3 +423,13 @@ def startup_event():
         start_pending_direct_redispatches()
     except Exception as exc:  # noqa: BLE001 - startup continues regardless
         logger.warning(f"direct orphan redispatch failed: {exc}")
+    # Cloned voices: the registration background task does not survive a
+    # restart, so rows would stay pending forever. Re-run them here, at
+    # real boot (reference WAVs are already in storage). Best-effort like
+    # the reconciles above; a no-op when the Supabase env is unset.
+    try:
+        from app.services.cloned_voices.service import reconcile_pending_registrations
+
+        reconcile_pending_registrations()
+    except Exception as exc:  # noqa: BLE001 - startup continues regardless
+        logger.warning(f"cloned voice pending reconcile failed: {exc}")

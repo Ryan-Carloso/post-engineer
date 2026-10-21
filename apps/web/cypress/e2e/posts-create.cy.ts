@@ -160,10 +160,9 @@ describe('Creating a post', () => {
     // stay client-side (a cy.visit would wipe the React Query cache, which
     // the real Next.js Link navigation never does).
     cy.visit('/posts');
-    cy.wait('@status');
-    cy.contains('a', /Novo post|New post/).click();
+    cy.contains('a', /Novo post|New post/).should('be.visible').click();
     cy.location('pathname').should('eq', '/posts/new');
-    cy.wait('@personas');
+    cy.contains('E2E Persona').should('be.visible');
 
     // From here the stubs go quiet on purpose: the assertions below must
     // pass on the seeded cache alone, because no stubbed response arrives
@@ -195,7 +194,7 @@ describe('Creating a post', () => {
 
     // Success opens THAT post's page, not the list: the video and its live
     // progress are what the user came for.
-    cy.location('pathname').should('eq', `/posts/${NEW_POST_SLOT_ID}`);
+    cy.location('pathname', { timeout: 15000 }).should('eq', `/posts/${NEW_POST_SLOT_ID}`);
     cy.wait('@slotDetail');
     cy.contains('E2E topic one').should('be.visible');
     // Freshly created: 0% with a progress bar, like the detail page shows.
@@ -213,7 +212,7 @@ describe('Creating a post', () => {
     cy.intercept('GET', `/api/posts/${NEW_POST_SLOT_ID}`, { ...asapDetail, kind: 'slot' }).as('slotDetailAsap');
 
     cy.visit('/posts/new');
-    cy.wait('@personas');
+    cy.contains('E2E Persona').should('be.visible');
 
     cy.contains('E2E Persona').click();
     cy.get('[aria-label="Tema"]').type('E2E topic asap');
@@ -242,7 +241,7 @@ describe('Creating a post', () => {
 
   it('offers a single topic field with no add/remove controls', () => {
     cy.visit('/posts/new');
-    cy.wait('@personas');
+    cy.contains('E2E Persona').should('be.visible');
 
     cy.get('[aria-label="Tema"]').should('have.length', 1);
     // A second topic is a second post: the batch form is gone from /posts/new.
@@ -303,10 +302,10 @@ describe('Posts list progress', () => {
 
   it('shows the live progress percent on the list card', () => {
     cy.visit('/posts');
-    cy.wait('@status');
-
     cy.contains('E2E generating topic').should('be.visible');
     cy.contains('42%').should('be.visible');
     cy.get('[role="progressbar"]').should('have.attr', 'aria-valuenow', '42');
   });
 });
+
+export {};

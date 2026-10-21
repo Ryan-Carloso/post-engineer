@@ -18,8 +18,8 @@ name: mutation
 # like `lib/oauth/**`, resolved relative to each app's directory; jobs
 # whose app has no matches are skipped).
 #
-# Scope per PR: changed source files (web/mcp: .ts/.tsx excluding tests;
-# engine: app/**/*.py). If a PR touches no source files for an app, that
+# Scope per PR: changed source files (web/mcp: .ts/.tsx excluding tests,
+# Cypress specs, and the cypress/ directory); engine: app/**/*.py). If a PR touches no
 # app's mutation step is skipped gracefully and the check still succeeds.
 #
 # Speed (2026-10-08): the engine job is sharded by file — one matrix leg
@@ -113,7 +113,8 @@ jobs:
             files="$(git diff --name-only --diff-filter=ACMR \
               "origin/${{ github.base_ref }}...HEAD" \
               -- 'apps/${{ matrix.app }}/**/*.ts' 'apps/${{ matrix.app }}/**/*.tsx' \
-              | grep -v '/__tests__/' | grep -vE '\.test\.tsx?$' || true)"
+              | grep -v '/__tests__/' | grep -v '/cypress/' \
+              | grep -vE '\.(test|cy)\.tsx?$' || true)"
             # Strip the app prefix for Stryker's working directory.
             files="$(echo "$files" | sed "s|^apps/${{ matrix.app }}/||" | paste -sd ',' -)"
           fi

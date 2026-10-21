@@ -155,6 +155,16 @@ Provision the database schema in your Supabase project:
     #205), unifying "generate now" and scheduled posts into one
     pipeline.
 
+19. `supabase/migrations/022_persona-default-accounts.sql` — per-persona
+    default publishing accounts with owner-scoped RLS.
+
+20. `supabase/migrations/023_cloned-voices.sql` — per-user Chatterbox
+    cloned voices (`cloned_voices`): registration status, consent,
+    reference storage path, engine voice key, language, and stable
+    `error_code`; owner-scoped RLS. Reference audio is stored under the
+    private `personas` bucket at
+    `{userId}/cloned-voices/{cloneId}/reference.wav`.
+
 Paste each file into the Supabase Dashboard > SQL Editor and run, in order
 (the numeric prefixes encode the order — always apply the
 lowest number first), or apply them with the Supabase CLI from the repo

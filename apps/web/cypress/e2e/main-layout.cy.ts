@@ -116,6 +116,9 @@ describe('Main Layout — Sidebar', () => {
 
   it('navega entre as páginas clicando nas abas da sidebar', () => {
     cy.visit('/');
+    // Middleware bounces to /landing when the session cookie is not yet
+    // attached to this document — wait for the shell before navigating.
+    cy.get('[data-testid=nav-brand]').should('be.visible');
 
     cy.contains('a', 'Contas').click();
     cy.url().should('include', '/accounts');
@@ -184,3 +187,5 @@ describe('Main Layout — Sidebar user name fallbacks', () => {
     cy.contains('p', 'GitHub User', { timeout: 10_000 }).scrollIntoView().should('be.visible');
   });
 });
+
+export {};

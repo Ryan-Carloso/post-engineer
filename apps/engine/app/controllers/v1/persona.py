@@ -6,8 +6,10 @@ GET  /api/v1/personas/voices  — house voice catalog
 
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+
+from app.controllers import base
 from pydantic import BaseModel
 
 from app.controllers.v1.base import new_router
@@ -52,8 +54,9 @@ def validate_persona_endpoint(request: PersonaRequest):
 @persona_router.get(
     "/personas/voices", response_model=BaseResponse, summary="House voice catalog"
 )
-def list_house_voices_endpoint():
-    return BaseResponse(body=persona_service.get_house_voices())
+def list_house_voices_endpoint(request: Request):
+    auth = base.get_auth_context(request)
+    return BaseResponse(body=persona_service.get_house_voices(user_id=auth.user_id))
 
 
 @persona_router.get(

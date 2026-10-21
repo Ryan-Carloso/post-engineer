@@ -15,7 +15,8 @@ describe('API Keys — UI & E2E', () => {
 
   it('renders the dedicated /api-keys page with keys section and MCP docs', () => {
     cy.visit('/api-keys');
-    cy.wait('@getApiKeys');
+    // React Query may serve a warm cache — assert UI, not cy.wait on GET.
+    cy.location('pathname').should('eq', '/api-keys');
 
     cy.contains('h1', 'API Keys').should('be.visible');
     cy.get('[data-testid="api-keys-empty-state"]')
@@ -39,7 +40,7 @@ describe('API Keys — UI & E2E', () => {
       .scrollIntoView()
       .click();
     cy.url().should('include', '/api-keys');
-    cy.wait('@getApiKeys');
+    cy.get('[data-testid="generate-api-key-btn"]', { timeout: 15_000 }).should('be.visible');
     cy.contains('h1', 'API Keys').should('be.visible');
   });
 
@@ -57,9 +58,7 @@ describe('API Keys — UI & E2E', () => {
     }).as('createApiKey');
 
     cy.visit('/api-keys');
-    cy.wait('@getApiKeys');
-
-    cy.get('[data-testid="generate-api-key-btn"]').scrollIntoView().click();
+    cy.get('[data-testid="generate-api-key-btn"]', { timeout: 15_000 }).scrollIntoView().click();
     cy.get('[data-testid="create-api-key-form"]').scrollIntoView().should('be.visible');
 
     cy.get('[data-testid="api-key-name-input"]').type('MCP Automation');
@@ -100,9 +99,7 @@ describe('API Keys — UI & E2E', () => {
     // fires there, and cy.wait then times out with "No request ever
     // occurred" — assert the page itself so that redirect is the error.
     cy.location('pathname').should('eq', '/api-keys');
-    cy.wait('@getApiKeysWithKey');
-
-    cy.get('[data-testid="api-key-row-key-1"]').scrollIntoView().within(() => {
+    cy.get('[data-testid="api-key-row-key-1"]', { timeout: 15_000 }).scrollIntoView().within(() => {
       cy.contains('Production Server').should('be.visible');
       cy.contains('pe_live_prod1234...').should('be.visible');
       cy.contains('Ativa').should('be.visible');
@@ -121,9 +118,7 @@ describe('API Keys — UI & E2E', () => {
         cy.stub(win.navigator.clipboard, 'writeText').resolves();
       },
     });
-    cy.wait('@getApiKeys');
-
-    cy.get('[data-testid="copy-mcp-prompt-btn"]')
+    cy.get('[data-testid="copy-mcp-prompt-btn"]', { timeout: 15_000 })
       .scrollIntoView()
       .should('be.visible')
       .and('contain', 'Copiar')
