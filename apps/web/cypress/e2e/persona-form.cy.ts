@@ -175,7 +175,7 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
 
     cy.get('[data-error-field="voice"]')
       .find('[role="alert"]')
-      .should('contain.text', 'Escolha uma voz para a persona.');
+      .should('contain.text', 'Escolha uma voz ou envie um áudio.');
   });
 
   it('edição carrega a persona e casa o idioma da amostra por prefixo', () => {
