@@ -47,7 +47,7 @@ def _validated_key_path(directory: Path, voice_key: str) -> Path:
     ``directory``.
     """
     key = (voice_key or "").strip()
-    if not _VOICE_KEY_RE.match(key):
+    if not is_valid_voice_key(key):
         raise ValueError("invalid cloned voice key")
     resolved = file_security.resolve_path_within_directory(
         str(directory), f"{key}.wav", require_file=False

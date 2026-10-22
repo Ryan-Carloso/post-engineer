@@ -30,6 +30,7 @@ from app.services.cloned_voices.constants import (
     MAX_REFERENCE_BYTES,
     MAX_REFERENCE_SECONDS,
 )
+from app.utils import utils
 
 _CLEAN_FILTER = (
     "highpass=f=70,afftdn,loudnorm,"
@@ -55,7 +56,7 @@ def clean_reference_audio(source_bytes: bytes) -> NormalizedReferenceAudio:
 
         result = subprocess.run(
             [
-                "ffmpeg",
+                utils.get_ffmpeg_binary(),
                 "-y",
                 "-i",
                 str(source_path),

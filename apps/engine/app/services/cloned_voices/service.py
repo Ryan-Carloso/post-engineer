@@ -173,6 +173,10 @@ def reconcile_missing_references(
     at boot, any ready row whose local file is missing gets it back.
     Same contract as the pending reconcile: env-gated, never raises.
     Returns how many references were restored.
+
+    ``store`` and ``registry`` are independent seams: the registry
+    default is the production local directory, so a caller overriding
+    the store (e.g. in tests) should pass its registry explicitly too.
     """
     if store is None and not (
         os.getenv("SUPABASE_URL") and os.getenv("SUPABASE_SERVICE_ROLE_KEY")

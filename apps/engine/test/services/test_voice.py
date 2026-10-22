@@ -560,6 +560,10 @@ class TestTtsFailureReasons(unittest.TestCase):
                     return_value=Path(tmp_dir),
                 ),
                 patch(
+                    "app.services.cloned_voices.local_registry.local_registry_dir",
+                    return_value=Path(tmp_dir),
+                ),
+                patch(
                     "app.services.local_tts._load_nano",
                     side_effect=RuntimeError("nano weights corrupted"),
                 ),

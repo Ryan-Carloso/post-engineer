@@ -39,8 +39,8 @@ from moviepy.audio.io.AudioFileClip import AudioFileClip
 from app.config import config
 from app.services.analytics import scrub_error_text
 from app.services.cloned_voices.local_registry import (
-    is_valid_voice_key,
     local_registry_dir,
+    reference_path_for,
 )
 from app.services.voice_providers import (
     SubMaker,
@@ -310,15 +310,17 @@ def clone_tts(
     voice_volume: float = 1.0,
 ) -> TtsResult:
     """Synthesize with a registered per-user clone (Chatterbox-Nano)."""
-    # The key comes from the persona's voice_id (user-controlled): the
-    # shape allowlist refuses crafted keys, and the resolved reference
-    # path is containment-checked here, before any use.
-    if not is_valid_voice_key(voice_key):
+    # The key comes from the persona's voice_id (user-controlled), so
+    # the path comes from the registry's canonical resolver (key
+    # allowlist + file_security containment) — never built by hand
+    # here. The resolved path is then re-checked against the registry
+    # dir at this sink, before any use.
+    try:
+        reference = reference_path_for(voice_key)
+    except ValueError:
         logger.error(f"invalid cloned voice key rejected, voice_key: {voice_key}")
         return TtsResult(error="invalid cloned voice id")
-    registry_dir = local_registry_dir().resolve()
-    reference = (registry_dir / f"{voice_key.strip()}.wav").resolve()
-    if not reference.is_relative_to(registry_dir):
+    if not reference.is_relative_to(local_registry_dir().resolve()):
         logger.error(f"cloned voice key escaped the registry dir, voice_key: {voice_key}")
         return TtsResult(error="invalid cloned voice id")
     if not reference.is_file():
