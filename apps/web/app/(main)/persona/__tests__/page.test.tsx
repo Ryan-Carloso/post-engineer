@@ -1242,6 +1242,14 @@ describe('app/(main)/persona/page — abas, carrossel e seletor de voz', () => {
     expect(screen.getByTestId('icon-check')).toBeTruthy();
   });
 
+  it('a persona voice outside the catalog is still shown on the card', () => {
+    usePersonaStore.getState().setVoiceId('chatterbox:legacy_voice_01');
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('selected-voice')).toHaveTextContent('legacy voice 01');
+    expect(screen.getByRole('button', { name: 'persona.voicePickerChange' })).toBeTruthy();
+  });
+
   it('selected voice is aria-pressed in the dialog and shown on the card', async () => {
     const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });

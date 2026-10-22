@@ -67,6 +67,10 @@ function voiceModelLabel(voiceId: string): string {
   return parseOpenrouterVoiceId(voiceId)?.model ?? '';
 }
 
+function legacyVoice(voiceId: string): VoiceOption {
+  return { id: voiceId, label: null, provider: 'chatterbox', gender: null, accent: null, kind: 'standard', description: null };
+}
+
 //---------------
 // PersonaHouseVoicePicker — the chosen voice as a card (name, tags,
 // description, play) with a button that opens VoicePickerDialog to search and
@@ -83,7 +87,12 @@ export const PersonaHouseVoicePicker = () => {
   const houseVoices = filterHouseVoices(voicesQuery.data ?? [], 'all', 'all');
   // Looked up in the full catalog: the persona may use a clone picked in the
   // "clone my voice" tab, which the house list deliberately leaves out.
-  const selected = (voicesQuery.data ?? []).find((voice) => voice.id === voiceId) ?? null;
+  // A legacy id outside the catalog (e.g. chatterbox:en_us_male_01, which the
+  // TTS server aliases) still is the persona's voice: show it by id rather
+  // than "no voice chosen".
+  const selected =
+    (voicesQuery.data ?? []).find((voice) => voice.id === voiceId) ??
+    (voiceId === null ? null : legacyVoice(voiceId));
   const selectedLabel = (voice: VoiceOption): string =>
     voice.kind === 'cloned' ? t('persona.voiceTagCloned') : voiceLabel(voice);
 
