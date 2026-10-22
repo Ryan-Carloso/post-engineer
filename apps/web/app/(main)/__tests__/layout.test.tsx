@@ -33,7 +33,6 @@ vi.mock('@/lib/ui', () => ({
   KeyIcon: () => <span data-testid="icon-key" />,
   GlobeIcon: () => <span data-testid="icon-globe" />,
   CoinsIcon: () => <span data-testid="icon-coins" />,
-  HomeIcon: () => <span data-testid="icon-home" />,
   ProfileIcon: () => <span data-testid="icon-profile" />,
   HistoryIcon: () => <span data-testid="icon-history" />,
   SparklesIcon: () => <span data-testid="icon-sparkles" />,
@@ -166,29 +165,22 @@ describe('app/(main)/layout — MainLayout', () => {
     }
   });
 
-  it('renders the sidebar tabs in order: Home, Accounts, Personas, Posts, Tokens', () => {
+  it('renders the sidebar tabs in order: Posts, Accounts, Personas, Tokens', () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     const sidebar = screen.getByTestId('nav-brand').closest('aside');
     const nav = within(sidebar as HTMLElement).getByRole('navigation');
     const titles = within(nav)
       .getAllByRole('link')
       .map((link) => link.getAttribute('title'));
-    expect(titles).toEqual(['nav.home', 'nav.accounts', 'nav.persona', 'nav.posts', 'nav.billing']);
+    expect(titles).toEqual(['nav.posts', 'nav.accounts', 'nav.persona', 'nav.billing']);
   });
 
-  it('home tab links to /', () => {
-    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-    const sidebar = screen.getByTestId('nav-brand').closest('aside');
-    const nav = within(sidebar as HTMLElement).getByRole('navigation');
-    const homeLink = within(nav).getByTitle('nav.home').closest('a');
-    expect(homeLink?.getAttribute('href')).toBe('/');
-  });
-
-  it('lists Home as the first navigation tab', () => {
+  it('lists Posts as the first navigation tab, linking to /posts', () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     const sidebar = screen.getByTestId('nav-brand').closest('aside');
     const firstTab = within(sidebar as HTMLElement).getAllByRole('link')[0];
-    expect(firstTab).toHaveAttribute('title', 'nav.home');
+    expect(firstTab).toHaveAttribute('title', 'nav.posts');
+    expect(firstTab).toHaveAttribute('href', '/posts');
   });
 
   it('does not render an API Keys tab in the sidebar nav (moved to the profile area)', () => {
@@ -356,12 +348,12 @@ describe('app/(main)/layout — MainLayout', () => {
       expect(postsLink?.getAttribute('href')).toBe('/posts');
     });
 
-    it('renders tabs in order: Home, Posts, Personas, Accounts, Billing', () => {
+    it('renders tabs in order: Posts, Personas, Accounts, Billing', () => {
       render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
       const labels = within(getMobileNav())
         .getAllByRole('link')
         .map((link) => link.textContent);
-      expect(labels).toEqual(['nav.home', 'nav.posts', 'nav.persona', 'nav.accounts', 'nav.billing']);
+      expect(labels).toEqual(['nav.posts', 'nav.persona', 'nav.accounts', 'nav.billing']);
     });
 
     it('has no API Keys tab in the mobile nav (moved to the profile area)', () => {
@@ -380,7 +372,7 @@ describe('app/(main)/layout — MainLayout', () => {
     it('keeps tabs uniform: every tab has an icon and a text label', () => {
       render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
       const links = within(getMobileNav()).getAllByRole('link');
-      expect(links.length).toBe(5);
+      expect(links.length).toBe(4);
       for (const link of links) {
         expect(link.querySelector('[data-testid^="icon-"]')).not.toBeNull();
         expect(link.textContent?.trim().length).toBeGreaterThan(0);
@@ -466,11 +458,11 @@ describe('mobile header profile area', () => {
     expect(screen.getByTestId('profile-user-link')).toHaveAttribute('href', '/account');
   });
 
-  it('mobile bottom navigation still has exactly five tabs (no profile tab, no api-keys tab)', () => {
+  it('mobile bottom navigation has exactly four tabs (no profile tab, no api-keys tab)', () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     const nav = screen.getByRole('navigation', { name: 'nav.primaryNavigation' });
     const links = within(nav).getAllByRole('link');
-    expect(links).toHaveLength(5);
-    expect(links[0]).toHaveTextContent('nav.home');
+    expect(links).toHaveLength(4);
+    expect(links[0]).toHaveTextContent('nav.posts');
   });
 });
