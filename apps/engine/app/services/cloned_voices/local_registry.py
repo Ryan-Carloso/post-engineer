@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from app.config import config as app_config
+from app.utils import file_security
 
 # Voice keys are server-generated (u<hex>_<hex> from the store) and
 # never contain separators or dots. A key that does can only arrive
@@ -34,20 +35,19 @@ _VOICE_KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 def _validated_key_path(directory: Path, voice_key: str) -> Path:
     """The WAV path for ``voice_key`` inside ``directory``.
 
-    Raises ValueError for any key that is not a plain registry key, or
-    whose resolved path would escape ``directory``. The key is reduced
-    to its basename and allowlist-checked before it ever touches a
-    path, and the joined path is containment-checked after resolving.
+    Raises ValueError for any key that is not a plain registry key.
+    The allowlist runs first; the joined path then goes through the
+    repo's canonical containment resolver (realpath + commonpath), so
+    a key that somehow slipped the allowlist still cannot escape
+    ``directory``.
     """
-    stripped = (voice_key or "").strip()
-    key = os.path.basename(stripped)
-    if key != stripped or not _VOICE_KEY_RE.match(key):
+    key = (voice_key or "").strip()
+    if not _VOICE_KEY_RE.match(key):
         raise ValueError("invalid cloned voice key")
-    base = directory.resolve()
-    path = (base / f"{key}.wav").resolve()
-    if path.parent != base:
-        raise ValueError("invalid cloned voice key")
-    return path
+    resolved = file_security.resolve_path_within_directory(
+        str(directory), f"{key}.wav", require_file=False
+    )
+    return Path(resolved)
 
 
 class VoiceRegistry(Protocol):
