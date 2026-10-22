@@ -181,7 +181,7 @@ class BatchScheduleTests(unittest.TestCase):
         slot["schedules"].update(
             {
                 "post_voice_id": "energetic",
-                "post_language": "pt-BR",
+                "post_language": "en-GB",
                 "post_script_prompt": "Be direct and short.",
                 "post_video_aspect": "16:9",
                 "post_face_quality": "ok",
@@ -199,7 +199,7 @@ class BatchScheduleTests(unittest.TestCase):
 
         self.assertEqual(enqueued, 1)
         request = dispatch_generation.call_args.args[1]
-        self.assertEqual(request.video_language, "pt-BR")
+        self.assertEqual(request.video_language, "en-GB")
 
     def test_generate_batch_slot_without_topic_fails(self):
         slot = self._batch_slot(topic="   ")
@@ -326,6 +326,29 @@ class BatchScheduleTests(unittest.TestCase):
         self.assertIn("slot-batch-1", refund_key)
         self.assertEqual(amount, 2)  # face_mix 50% @ ok = ceil(0.5*2 + 0.5*1) = 2
         self.assertEqual(store.updates[0][1]["status"], "failed")
+
+    def test_non_english_slot_fails_and_refunds_without_dispatch(self):
+        # English-only launch: a slot scheduled earlier in Portuguese must not
+        # generate, and its prepaid video cost is refunded.
+        slot = self._batch_slot()
+        slot["schedules"]["personas"]["language"] = "pt-BR"
+        store = _FakeStore()
+        store.pending_slots = lambda now: [slot]
+        store.refund_batch_calls = []
+        store.refund_batch_tokens = (
+            lambda *args, **kwargs: store.refund_batch_calls.append(args) or True
+        )
+        scheduler = self._scheduler(store)
+        scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
+
+        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch_generation:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+
+        self.assertEqual(enqueued, 0)
+        dispatch_generation.assert_not_called()
+        self.assertEqual(len(store.refund_batch_calls), 1)
+        self.assertEqual(store.updates[0][1]["status"], "failed")
+        self.assertIn("Only English videos", store.updates[0][1]["error"])
 
     def test_generate_dispatch_failure_emits_refund_issued_on_landed_refund(self):
         # Dispatch failures refund too, and the event must carry the

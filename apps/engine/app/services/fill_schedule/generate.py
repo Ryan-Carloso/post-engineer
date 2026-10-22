@@ -20,6 +20,7 @@ from app.services.fill_schedule.constants import (
 )
 from app.services.fill_schedule.metadata import validate_publish_plan
 from app.services.fill_schedule.store import ScheduleStore
+from app.services.language_gate import ENGLISH_ONLY_VIDEO_MESSAGE, is_english_language
 from app.services.fill_schedule.support import (
     build_persona_params,
     notify_safe,
@@ -146,6 +147,11 @@ class BatchGenerator:
                 persona_id=identity.get("id"),
             )
             try:
+                # English-only launch: a slot scheduled before the launch can
+                # still carry a non-English language. It fails here, inside
+                # the refund block, so its prepaid cost comes back.
+                if request.video_language.strip() and not is_english_language(request.video_language):
+                    raise ValueError(ENGLISH_ONLY_VIDEO_MESSAGE)
                 self._dispatch_generation(
                     task_id,
                     request,
