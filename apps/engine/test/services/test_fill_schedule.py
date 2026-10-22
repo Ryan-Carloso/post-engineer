@@ -341,11 +341,17 @@ class BatchScheduleTests(unittest.TestCase):
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
-        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch_generation:
+        with (
+            patch.object(scheduler.generator, "_dispatch_generation") as dispatch_generation,
+            patch("app.services.task.track_generation_requested") as track_requested,
+        ):
             enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
 
         self.assertEqual(enqueued, 0)
         dispatch_generation.assert_not_called()
+        # A language-gated slot is a data error, not a generation attempt:
+        # it must not enter the requested -> failed funnel.
+        track_requested.assert_not_called()
         self.assertEqual(len(store.refund_batch_calls), 1)
         self.assertEqual(store.updates[0][1]["status"], "failed")
         self.assertIn("Only English videos", store.updates[0][1]["error"])
