@@ -221,14 +221,22 @@ describe('MetricsPage', () => {
   });
 
   it('keeps a selected angle listed after filtering hides the other angles', async () => {
-    const fetchMock = stubMetricsFetch({ success: true, rows: [row()], truncated: false });
+    // First fetch lists the 'myth' angle; the filtered fetch returns no
+    // rows at all, so 'myth' can only stay in the select via the page's
+    // selected-angle prepend path.
+    const fetchMock = vi.fn(async (url: string) => new Response(
+      JSON.stringify(url.includes('angle=myth')
+        ? { success: true, rows: [], truncated: false }
+        : { success: true, rows: [row()], truncated: false }),
+      { status: 200 },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
     renderPage();
     await waitFor(() => expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument());
 
     fireEvent.change(screen.getByLabelText(/metrics\.filterAngle/), { target: { value: 'myth' } });
     await waitFor(() => expect(lastFetchUrl(fetchMock)).toContain('angle=myth'));
-    // The filtered response (mock returns the same single row) still lists
-    // the selected angle as an option.
+    await waitFor(() => expect(screen.getByText('metrics.emptyFiltered')).toBeInTheDocument());
     const angleSelect = screen.getByLabelText(/metrics\.filterAngle/);
     expect(angleSelect).toHaveTextContent('myth');
     expect(angleSelect).toHaveValue('myth');
