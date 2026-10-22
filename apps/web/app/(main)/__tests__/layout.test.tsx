@@ -33,7 +33,6 @@ vi.mock('@/lib/ui', () => ({
   KeyIcon: () => <span data-testid="icon-key" />,
   GlobeIcon: () => <span data-testid="icon-globe" />,
   CoinsIcon: () => <span data-testid="icon-coins" />,
-  HomeIcon: () => <span data-testid="icon-home" />,
   ProfileIcon: () => <span data-testid="icon-profile" />,
   HistoryIcon: () => <span data-testid="icon-history" />,
   SparklesIcon: () => <span data-testid="icon-sparkles" />,
@@ -166,29 +165,22 @@ describe('app/(main)/layout — MainLayout', () => {
     }
   });
 
-  it('renders the sidebar tabs in order: Home, Accounts, Personas, Posts, Tokens', () => {
+  it('renders the sidebar tabs in order: Posts, Accounts, Personas, Tokens', () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     const sidebar = screen.getByTestId('nav-brand').closest('aside');
     const nav = within(sidebar as HTMLElement).getByRole('navigation');
     const titles = within(nav)
       .getAllByRole('link')
       .map((link) => link.getAttribute('title'));
-    expect(titles).toEqual(['nav.home', 'nav.accounts', 'nav.persona', 'nav.posts', 'nav.billing']);
+    expect(titles).toEqual(['nav.posts', 'nav.accounts', 'nav.persona', 'nav.billing']);
   });
 
-  it('home tab links to /', () => {
-    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-    const sidebar = screen.getByTestId('nav-brand').closest('aside');
-    const nav = within(sidebar as HTMLElement).getByRole('navigation');
-    const homeLink = within(nav).getByTitle('nav.home').closest('a');
-    expect(homeLink?.getAttribute('href')).toBe('/');
-  });
-
-  it('lists Home as the first navigation tab', () => {
+  it('lists Posts as the first navigation tab, linking to /posts', () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     const sidebar = screen.getByTestId('nav-brand').closest('aside');
     const firstTab = within(sidebar as HTMLElement).getAllByRole('link')[0];
-    expect(firstTab).toHaveAttribute('title', 'nav.home');
+    expect(firstTab).toHaveAttribute('title', 'nav.posts');
+    expect(firstTab).toHaveAttribute('href', '/posts');
   });
 
   it('does not render an API Keys tab in the sidebar nav (moved to the profile area)', () => {
@@ -356,12 +348,12 @@ describe('app/(main)/layout — MainLayout', () => {
       expect(postsLink?.getAttribute('href')).toBe('/posts');
     });
 
-    it('renders tabs in order: Home, Posts, Personas, Accounts, Billing', () => {
+    it('renders tabs in order: Posts, Personas, Accounts, Billing', () => {
       render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
       const labels = within(getMobileNav())
         .getAllByRole('link')
         .map((link) => link.textContent);
-      expect(labels).toEqual(['nav.home', 'nav.posts', 'nav.persona', 'nav.accounts', 'nav.billing']);
+      expect(labels).toEqual(['nav.posts', 'nav.persona', 'nav.accounts', 'nav.billing']);
     });
 
     it('has no API Keys tab in the mobile nav (moved to the profile area)', () => {
@@ -380,7 +372,7 @@ describe('app/(main)/layout — MainLayout', () => {
     it('keeps tabs uniform: every tab has an icon and a text label', () => {
       render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
       const links = within(getMobileNav()).getAllByRole('link');
-      expect(links.length).toBe(5);
+      expect(links.length).toBe(4);
       for (const link of links) {
         expect(link.querySelector('[data-testid^="icon-"]')).not.toBeNull();
         expect(link.textContent?.trim().length).toBeGreaterThan(0);
@@ -399,6 +391,45 @@ describe('app/(main)/layout — MainLayout', () => {
       render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
       const postsLink = within(getMobileNav()).getByText('nav.posts').closest('a');
       expect(postsLink).toHaveAttribute('aria-current', 'page');
+    });
+
+    it.each([
+      ['/posts/abc', '/posts'],
+      ['/personas/abc', '/personas'],
+      ['/accounts/abc', '/accounts'],
+      ['/billing/abc', '/billing'],
+    ])('on %s marks only the %s tab as current in both navs', (pathname, href) => {
+      vi.mocked(usePathname).mockReturnValue(pathname);
+      render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+
+      const mobileLinks = within(getMobileNav()).getAllByRole('link');
+      for (const link of mobileLinks) {
+        const active = link.getAttribute('href') === href;
+        expect(link.getAttribute('aria-current')).toBe(active ? 'page' : null);
+        expect(link.className).toContain('flex-col');
+        expect(link.className).toContain(active ? 'font-semibold' : 'text-[#60758a]');
+      }
+
+      const sidebar = screen.getByTestId('nav-brand').closest('aside');
+      const sidebarLinks = within(within(sidebar as HTMLElement).getByRole('navigation')).getAllByRole('link');
+      const activeSidebar = sidebarLinks.filter((link) => link.className.includes('bg-[#fff3f2]'));
+      expect(activeSidebar.map((link) => link.getAttribute('href'))).toEqual([href]);
+      for (const link of sidebarLinks) {
+        const active = activeSidebar.includes(link);
+        const iconSpan = link.querySelector('span');
+        expect(link.className).toContain(active ? 'bg-[#fff3f2]' : 'hover:bg-[#f8fafc]');
+        expect(iconSpan?.className).toContain('shrink-0');
+        expect(iconSpan?.className).toContain(active ? 'text-[#ff544c]' : 'group-hover:text-[#101728]');
+      }
+    });
+
+    it('marks no tab as current on the root path', () => {
+      vi.mocked(usePathname).mockReturnValue('/');
+      render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+      const current = within(getMobileNav())
+        .getAllByRole('link')
+        .filter((link) => link.getAttribute('aria-current') === 'page');
+      expect(current).toHaveLength(0);
     });
 
     it('mobile header renders no hamburger/menu button', () => {
@@ -466,11 +497,11 @@ describe('mobile header profile area', () => {
     expect(screen.getByTestId('profile-user-link')).toHaveAttribute('href', '/account');
   });
 
-  it('mobile bottom navigation still has exactly five tabs (no profile tab, no api-keys tab)', () => {
+  it('mobile bottom navigation has exactly four tabs (no profile tab, no api-keys tab)', () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     const nav = screen.getByRole('navigation', { name: 'nav.primaryNavigation' });
     const links = within(nav).getAllByRole('link');
-    expect(links).toHaveLength(5);
-    expect(links[0]).toHaveTextContent('nav.home');
+    expect(links).toHaveLength(4);
+    expect(links[0]).toHaveTextContent('nav.posts');
   });
 });

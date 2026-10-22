@@ -75,6 +75,7 @@ table['POST /api/billing/checkout'] = 'checkout_started';
 table['POST /api/billing/webhook'] = 'billing_webhook_received';
 table['POST /api/bluesky-connect'] = 'bluesky_connected';
 table['POST /api/cron/billing-reconcile'] = 'billing_reconciled';
+table['POST /api/cron/post-metrics'] = 'post_metrics_run';
 table['POST /api/logout'] = 'user_logged_out';
 table['POST /api/persona'] = 'persona_created';
 table['POST /api/persona/avatar'] = 'persona_avatar_uploaded';

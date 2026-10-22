@@ -57,9 +57,9 @@ export type ContentUploadResponse = ContentUploadSuccess | ContentUploadFailure;
 
 //---------------
 // getAuthenticatedClient — OAuth client with the account's valid tokens
-// (tokens decrypted from Supabase, owner = authenticated userId)
+// (tokens decrypted from Supabase, owner = authenticated userId); also post-metrics
 //---------------
-async function getAuthenticatedClient(
+export async function getAuthenticatedClient(
   ownerUserId: string,
   accountId: string,
 ): Promise<OAuth2Client> {
