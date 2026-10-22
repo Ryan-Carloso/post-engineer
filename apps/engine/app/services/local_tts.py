@@ -42,7 +42,6 @@ from app.services.cloned_voices.local_registry import (
     is_valid_voice_key,
     local_registry_dir,
 )
-from app.utils import file_security
 from app.services.voice_providers import (
     SubMaker,
     TtsResult,
@@ -308,20 +307,14 @@ def clone_tts(
 ) -> TtsResult:
     """Synthesize with a registered per-user clone (Chatterbox-Nano)."""
     # The key comes from the persona's voice_id (user-controlled): the
-    # shape allowlist refuses crafted keys, and the path itself is built
-    # through the repo's containment resolver at this sink.
+    # shape allowlist refuses crafted keys, and the resolved reference
+    # path is containment-checked here, before any use.
     if not is_valid_voice_key(voice_key):
         logger.error(f"invalid cloned voice key rejected, voice_key: {voice_key}")
         return TtsResult(error="invalid cloned voice id")
-    try:
-        reference = Path(
-            file_security.resolve_path_within_directory(
-                str(local_registry_dir()),
-                f"{voice_key.strip()}.wav",
-                require_file=False,
-            )
-        )
-    except ValueError:
+    registry_dir = local_registry_dir().resolve()
+    reference = (registry_dir / f"{voice_key.strip()}.wav").resolve()
+    if not reference.is_relative_to(registry_dir):
         logger.error(f"cloned voice key escaped the registry dir, voice_key: {voice_key}")
         return TtsResult(error="invalid cloned voice id")
     if not reference.is_file():
