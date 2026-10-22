@@ -68,6 +68,16 @@ export const PersonaVoiceClonePanel = ({ personaLanguage }: { personaLanguage?: 
   const sampleLanguagesQuery = useVoiceSampleLanguagesQuery();
   const voiceId = usePersonaStore((s) => s.voiceId);
   const [language, setLanguage] = useState(personaLanguage?.trim() || 'pt');
+  const sampleLanguages = sampleLanguagesQuery.data ?? [
+    { code: 'pt', label: 'Português' },
+  ];
+  // The offered languages are the contract (the engine is English-only
+  // at launch): a seeded language outside the list would render a
+  // blank select while still submitting the unlisted code, so display
+  // and submission both fall back to the first offered language.
+  const effectiveLanguage = sampleLanguages.some((lang) => lang.code === language)
+    ? language
+    : (sampleLanguages[0]?.code ?? 'en');
   const [cloneName, setCloneName] = useState('');
   // Cleaning is the product default (user spec): the toggle starts ON and
   // the create call tells the engine to clone from the cleaned reference.
@@ -115,7 +125,7 @@ export const PersonaVoiceClonePanel = ({ personaLanguage }: { personaLanguage?: 
 
   const createMutation = useMutation({
     mutationFn: async (file: Blob) => {
-      return createClonedVoice(file, language, consent, {
+      return createClonedVoice(file, effectiveLanguage, consent, {
         name: cloneName,
         useCleaned,
       });
@@ -313,12 +323,12 @@ export const PersonaVoiceClonePanel = ({ personaLanguage }: { personaLanguage?: 
       <label className="block text-sm font-medium text-neutral-700">
         {t('persona.sampleLanguage')}
         <select
-          value={language}
+          value={effectiveLanguage}
           onChange={(e) => setLanguage(e.target.value)}
           className="mt-2 h-11 w-full max-w-sm rounded-xl border border-neutral-300 bg-white px-3 text-sm"
           disabled={isSubmitting || recording}
         >
-          {(sampleLanguagesQuery.data ?? [{ code: 'pt', label: 'Português' }]).map((lang) => (
+          {sampleLanguages.map((lang) => (
             <option key={lang.code} value={lang.code}>
               {lang.label}
             </option>

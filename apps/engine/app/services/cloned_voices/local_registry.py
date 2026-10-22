@@ -16,10 +16,34 @@ is re-registered the same way.
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import Any, Protocol
 
 from app.config import config as app_config
+
+# Voice keys are server-generated (u<hex>_<hex> from the store) and
+# never contain separators or dots. A key that does can only arrive
+# from a crafted persona voice_id — and the ownership check treats
+# non-clone-shaped names as house voices allowed for everyone — so the
+# registry sink itself refuses such keys instead of resolving them
+# into paths outside the registry directory.
+_VOICE_KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
+
+
+def _validated_key_path(directory: Path, voice_key: str) -> Path:
+    """The WAV path for ``voice_key`` inside ``directory``.
+
+    Raises ValueError for any key that is not a plain registry key, or
+    whose resolved path would escape ``directory``.
+    """
+    key = (voice_key or "").strip()
+    if not _VOICE_KEY_RE.match(key):
+        raise ValueError("invalid cloned voice key")
+    path = directory / f"{key}.wav"
+    if path.resolve().parent != directory.resolve():
+        raise ValueError("invalid cloned voice key")
+    return path
 
 
 class VoiceRegistry(Protocol):
@@ -45,7 +69,7 @@ def local_registry_dir() -> Path:
 
 def reference_path_for(voice_key: str) -> Path:
     """Local reference WAV path for an engine voice key."""
-    return local_registry_dir() / f"{voice_key}.wav"
+    return _validated_key_path(local_registry_dir(), voice_key)
 
 
 class LocalVoiceRegistry:
@@ -57,15 +81,21 @@ class LocalVoiceRegistry:
     def register_voice(self, voice_key: str, language_id: str, wav_bytes: bytes) -> None:
         # language_id is accepted for protocol parity: Nano clones are
         # English-only at launch and the reference carries no language.
+        target = _validated_key_path(self._dir, voice_key)
         self._dir.mkdir(parents=True, exist_ok=True)
-        target = self._dir / f"{voice_key}.wav"
-        tmp = self._dir / f".{voice_key}.tmp"
+        tmp = self._dir / f".{target.stem}.tmp"
         tmp.write_bytes(wav_bytes)
         tmp.replace(target)
 
     def delete_voice(self, voice_key: str) -> None:
         try:
-            (self._dir / f"{voice_key}.wav").unlink()
+            target = _validated_key_path(self._dir, voice_key)
+        except ValueError:
+            # A malformed key names no file this registry could have
+            # written; deletion stays a no-op for it.
+            return
+        try:
+            target.unlink()
         except FileNotFoundError:
             pass
 

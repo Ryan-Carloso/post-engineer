@@ -47,6 +47,29 @@ class LocalRegistryTests(unittest.TestCase):
         ):
             self.assertEqual(reference_path_for("key1"), self.dir / "key1.wav")
 
+    def test_traversal_keys_are_refused_at_the_sink(self):
+        # A crafted persona voice_id must never resolve outside the
+        # registry dir (nor read another user's reference inside it via
+        # a subdirectory-shaped key).
+        for bad_key in ("../victim", "..\\victim", "sub/dir", "..", ".", "", "a.b", "/abs"):
+            with self.assertRaises(ValueError, msg=bad_key):
+                self.registry.register_voice(bad_key, "en", b"x")
+            with patch(
+                "app.services.cloned_voices.local_registry.local_registry_dir",
+                return_value=self.dir,
+            ):
+                with self.assertRaises(ValueError, msg=bad_key):
+                    reference_path_for(bad_key)
+
+    def test_delete_with_traversal_key_cannot_remove_files_outside(self):
+        victim = self.dir.parent / "victim.wav"
+        victim.write_bytes(b"keep me")
+        try:
+            self.registry.delete_voice("../victim")
+            self.assertEqual(victim.read_bytes(), b"keep me")
+        finally:
+            victim.unlink(missing_ok=True)
+
 
 if __name__ == "__main__":
     unittest.main()

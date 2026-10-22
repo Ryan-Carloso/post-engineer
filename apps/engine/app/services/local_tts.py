@@ -303,7 +303,12 @@ def clone_tts(
     voice_volume: float = 1.0,
 ) -> TtsResult:
     """Synthesize with a registered per-user clone (Chatterbox-Nano)."""
-    reference = reference_path_for(voice_key)
+    try:
+        reference = reference_path_for(voice_key)
+    except ValueError:
+        # Crafted key (path separators/dots): never a registered clone.
+        logger.error(f"invalid cloned voice key rejected, voice_key: {voice_key}")
+        return TtsResult(error="invalid cloned voice id")
     if not reference.is_file():
         logger.error(f"cloned voice reference missing locally, voice_key: {voice_key}")
         return TtsResult(

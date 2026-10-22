@@ -198,9 +198,9 @@ def reconcile_missing_references(
         clone_id = row.get("id")
         if not (isinstance(voice_key, str) and isinstance(storage_path, str)):
             continue
-        if reference_path_for(voice_key).is_file():
-            continue
         try:
+            if reference_path_for(voice_key).is_file():
+                continue
             wav_bytes = db.download_reference_wav(storage_path)
             language = row.get("language")
             reg.register_voice(

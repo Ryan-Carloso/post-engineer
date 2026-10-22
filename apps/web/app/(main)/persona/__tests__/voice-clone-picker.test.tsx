@@ -525,6 +525,24 @@ describe('PersonaVoiceClonePanel', () => {
     expect(cloneMocks.create.mock.calls[0]?.[2]).toBe(true);
   });
 
+  it('falls back to the first offered language when the persona language is not offered', async () => {
+    // Launch engine is English-only: the panel seeds from the persona
+    // language ('pt'), which is not among the offered options — the
+    // select must show (and submit) the offered fallback, not blank.
+    cloneMocks.sampleLanguages = [{ code: 'en', label: 'English' }];
+    cloneMocks.create.mockResolvedValue(publicRow({ id: 'clone-fallback', status: 'pending' }));
+    const user = userEvent.setup();
+    renderPanel();
+    const select = screen.getByRole('combobox') as HTMLSelectElement;
+    expect(select.value).toBe('en');
+    await user.click(screen.getByRole('checkbox', { name: 'persona.voiceCloneConsent' }));
+    const fileInput = screen.getByTestId('voice-clone-panel').querySelector('input[type="file"]');
+    await user.upload(fileInput as HTMLInputElement, makeWavFile());
+    await user.click(screen.getByRole('button', { name: 'persona.voiceCloneSubmit' }));
+    await waitFor(() => expect(cloneMocks.create).toHaveBeenCalledTimes(1));
+    expect(cloneMocks.create.mock.calls[0]?.[1]).toBe('en');
+  });
+
   it('shows the mic unavailable error when mediaDevices is missing', async () => {
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: undefined });
     const user = userEvent.setup();
