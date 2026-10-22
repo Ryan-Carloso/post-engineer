@@ -84,14 +84,13 @@ export function shouldShowOAuthDebug(hostname: string): boolean {
 }
 
 //---------------
-// Browser hostname as an external store. The server snapshot is null (no
-// window during server rendering), and React also uses it for the hydration
-// render, so the server markup and the first browser render match. React
-// then re-renders with the real hostname.
+// Browser origin as an external store. The server snapshot (null) also serves
+// the hydration render, so the markup matches; React then re-renders with the
+// real origin.
 //---------------
-const subscribeToHostname = (): (() => void) => () => {};
-const getBrowserHostname = (): string => window.location.hostname;
-const getServerHostname = (): null => null;
+const subscribeToOrigin = (): (() => void) => () => {};
+const getBrowserOrigin = (): string => window.location.origin;
+const getServerOrigin = (): null => null;
 
 //---------------
 // GithubLogin — OAuth button that preserves ?next= (e.g. returning from the
@@ -103,14 +102,14 @@ const GithubLogin = () => {
   const [pending, setPending] = useState(false);
   const next = safeNext(useSearchParams().get('next'));
   const { t } = useI18n();
-  const hostname = useSyncExternalStore(subscribeToHostname, getBrowserHostname, getServerHostname);
+  const origin = useSyncExternalStore(subscribeToOrigin, getBrowserOrigin, getServerOrigin);
+  const hostname = origin === null ? null : new URL(origin).hostname;
 
   // Outside production (localhost and Vercel previews) the redirect URL is
-  // shown on screen to validate the login flow. A non-null hostname means
-  // this render runs in the browser, so window is available.
+  // shown on screen to validate the login flow.
   const debugRedirectTo =
-    hostname !== null && shouldShowOAuthDebug(hostname)
-      ? resolveLoginRedirectUrl(hostname, window.location.origin, next)
+    origin !== null && hostname !== null && shouldShowOAuthDebug(hostname)
+      ? resolveLoginRedirectUrl(hostname, origin, next)
       : null;
 
   const handleOAuthLogin = async (provider: 'github') => {

@@ -29,16 +29,12 @@ vi.mock('next/navigation', () => ({
 import Login from '../page';
 
 describe('app/login/page — server render', () => {
-  it('renders the GitHub login button without a window global', () => {
+  it('renders the GitHub login button and no debug line without a window global', () => {
     expect(typeof window).toBe('undefined');
     // renderToString does not throw for an error inside a Suspense boundary:
     // it emits the fallback (null), which drops the button from the markup.
     const html = renderToString(<Login />);
     expect(html).toContain('login.githubButton');
-  });
-
-  it('omits the oauth debug line from the server markup', () => {
-    const html = renderToString(<Login />);
     expect(html).not.toContain('oauth-redirect-debug');
   });
 });

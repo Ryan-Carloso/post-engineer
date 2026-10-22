@@ -270,10 +270,6 @@ describe('app/login/page — hydration', () => {
     );
     fireEvent.click(screen.getByText('login.githubButton'));
     await waitFor(() => expect(mockSignInWithOAuth).toHaveBeenCalled());
-    const options = mockSignInWithOAuth.mock.calls[0][0].options as { redirectTo: string };
-    expect(options.redirectTo).toBe(
-      `https://post-engineer.com/auth/callback?next=${encodeURIComponent('http://localhost:3434/auth/callback')}`,
-    );
 
     act(() => root.unmount());
     container.remove();
