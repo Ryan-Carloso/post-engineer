@@ -108,6 +108,7 @@ describe('Main Layout — Sidebar', () => {
     cy.contains('a', 'Posts').should('be.visible');
     cy.contains('a', 'Contas').should('be.visible');
     cy.contains('a', 'Personas').should('be.visible');
+    cy.contains('a', 'Métricas').should('be.visible');
     cy.contains('a', 'Tokens').should('be.visible');
     // API Keys is no longer a nav tab — it lives in the profile area
     // (sidebar footer), reachable from every page.

@@ -67,6 +67,10 @@ const ChartContainer = React.forwardRef<
 })
 ChartContainer.displayName = "Chart"
 
+// ChartStyle renders the chart config's colors into a <style> tag.
+// Trust boundary: config keys and colors are developer-supplied constants
+// (see MetricsBarChart's config), never user input — do not pass
+// untrusted values as a ChartConfig.
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
   const colorConfig = Object.entries(config).filter(
     ([, config]) => config.theme || config.color

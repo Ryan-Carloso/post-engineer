@@ -83,7 +83,8 @@ function groupValue(row: MetricsRowView, group: GroupKey): string {
 
 //---------------
 // groupMetrics — average of one metric per group, highest first. Groups
-// where no video reported the metric are omitted.
+// where no video reported the metric are omitted. Returns [] when rows
+// is empty or no row has a non-null value for the metric.
 //---------------
 export function groupMetrics(rows: MetricsRowView[], group: GroupKey, metric: MetricKey): MetricsGroup[] {
   const sums = new Map<string, { total: number; count: number }>();
