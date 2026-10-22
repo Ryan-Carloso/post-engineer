@@ -1,7 +1,9 @@
 import '@testing-library/jest-dom/vitest';
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { renderToString } from 'react-dom/server';
+import { hydrateRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
@@ -244,6 +246,37 @@ describe('app/login/page — resolveLoginRedirectUrl', () => {
     await waitFor(() => expect(mockSignInWithOAuth).toHaveBeenCalled());
     const options = mockSignInWithOAuth.mock.calls[0][0].options as { redirectTo: string };
     expect(options.redirectTo).toContain('https://post-engineer.com/auth/callback?next=');
+  });
+});
+
+describe('app/login/page — hydration', () => {
+  it('hydrates the server markup without a mismatch and keeps the button usable', async () => {
+    const container = document.createElement('div');
+    container.innerHTML = renderToString(<Login />);
+    document.body.appendChild(container);
+    expect(container.querySelector('[data-testid="oauth-redirect-debug"]')).toBeNull();
+
+    const recoverableErrors: unknown[] = [];
+    const root = await act(async () =>
+      hydrateRoot(container, <Login />, {
+        onRecoverableError: (error) => recoverableErrors.push(error),
+      }),
+    );
+
+    expect(recoverableErrors).toEqual([]);
+    // After hydration React re-renders with the browser hostname (localhost).
+    expect(screen.getByTestId('oauth-redirect-debug').textContent).toContain(
+      encodeURIComponent('http://localhost:3434/auth/callback'),
+    );
+    fireEvent.click(screen.getByText('login.githubButton'));
+    await waitFor(() => expect(mockSignInWithOAuth).toHaveBeenCalled());
+    const options = mockSignInWithOAuth.mock.calls[0][0].options as { redirectTo: string };
+    expect(options.redirectTo).toBe(
+      `https://post-engineer.com/auth/callback?next=${encodeURIComponent('http://localhost:3434/auth/callback')}`,
+    );
+
+    act(() => root.unmount());
+    container.remove();
   });
 });
 
