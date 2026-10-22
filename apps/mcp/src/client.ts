@@ -376,7 +376,7 @@ export class PostEngineerClient {
     }
     formData.set('name', input.name);
     formData.set('avatarUrl', input.avatarUrl);
-    formData.set('voiceId', input.voiceId ?? 'chatterbox:en_us_female_01');
+    formData.set('voiceId', input.voiceId);
     formData.set('language', input.language ?? 'en-US');
     formData.set('videoAspect', input.videoAspect ?? '9:16');
     formData.set('videoLayout', input.videoLayout ?? 'standard');

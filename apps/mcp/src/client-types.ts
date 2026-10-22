@@ -33,7 +33,7 @@ export interface CreatePersonaInput {
   name: string;
   /** REQUIRED — every persona has a face. */
   avatarUrl: string;
-  voiceId?: string;
+  voiceId: string;
   language?: string;
   videoAspect?: '9:16' | '16:9';
   videoLayout?: VideoLayout;
