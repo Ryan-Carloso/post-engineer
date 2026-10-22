@@ -22,6 +22,7 @@ from __future__ import annotations
 import io
 import os
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -76,9 +77,25 @@ def _error(status: int, message: str) -> JSONResponse:
 app = FastAPI(title="Local CPU TTS")
 
 
+NANO_SWEEP_SECONDS = 30
+
+
+def _sweep_idle_nano() -> None:
+    while True:
+        time.sleep(NANO_SWEEP_SECONDS)
+        try:
+            if backends.unload_idle_nano():
+                logger.info("local tts: unloaded idle Chatterbox Nano")
+        except Exception:
+            logger.exception("local tts: idle Nano unload failed")
+
+
 @app.on_event("startup")
 def _prepare_voices_dir() -> None:
     VOICES_DIR.mkdir(parents=True, exist_ok=True)
+    # Daemon thread: checks every NANO_SWEEP_SECONDS whether the clone model
+    # has been idle long enough to free its ~3 GB.
+    threading.Thread(target=_sweep_idle_nano, name="nano-idle-sweep", daemon=True).start()
 
 
 @app.get("/health")

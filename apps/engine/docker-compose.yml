@@ -97,7 +97,9 @@ services:
       resources:
         limits:
           cpus: "3.0"
-          memory: 6g
+          # Measured: Phonon + Kokoro resident ~1.5 GB; Chatterbox Nano adds
+          # ~3 GB while clones are in use and is unloaded after 5 idle min.
+          memory: 5g
     logging:
       driver: json-file
       options:

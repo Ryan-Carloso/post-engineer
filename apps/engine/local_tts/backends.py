@@ -5,12 +5,21 @@ q8) and Kokoro (82M) for the house presets, Chatterbox Nano (110M) for
 per-user clones. All three run on CPU only. Generation is serialized by one
 lock — the VPS has a few cores, and parallel runs would only slow each
 other down while multiplying peak memory.
+
+Phonon and Kokoro stay resident (~1.5 GB together). Chatterbox Nano alone
+holds ~3 GB, so it is unloaded after NANO_IDLE_SECONDS without a clone
+request (see unload_idle_nano); the next clone reloads it from the local
+weights cache in a few seconds, without downloading again.
 """
 
 from __future__ import annotations
 
+import ctypes
+import gc
 import os
 import threading
+import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -19,8 +28,11 @@ import numpy as np
 PHONON_REPO = "hf://gradium/phonon-31m-en"
 KOKORO_REPO = "hexgrad/Kokoro-82M"
 
+NANO_IDLE_SECONDS = 300
+
 _lock = threading.Lock()
 _models: dict[str, Any] = {}
+_nano_last_used: float | None = None
 
 
 def _phonon() -> Any:
@@ -109,8 +121,39 @@ def synthesize_preset(provider: str, model_voice: str, text: str) -> tuple[np.nd
 
 
 def synthesize_clone(reference_path: Path, text: str) -> tuple[np.ndarray, int]:
+    global _nano_last_used
     with _lock:
-        return _synth_nano(text, reference_path)
+        try:
+            return _synth_nano(text, reference_path)
+        finally:
+            _nano_last_used = time.monotonic()
+
+
+def _release_freed_memory() -> None:
+    """Hand freed heap pages back to the OS (glibc only; a no-op elsewhere).
+
+    Without this the container's resident size barely drops after the Nano
+    model is deleted: glibc keeps the freed arenas for reuse.
+    """
+    try:
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except OSError:
+        pass
+
+
+def unload_idle_nano(now: Callable[[], float] = time.monotonic, idle_seconds: float = NANO_IDLE_SECONDS) -> bool:
+    """Drop the Nano model when no clone ran for idle_seconds. True if unloaded."""
+    global _nano_last_used
+    with _lock:
+        if "nano" not in _models or _nano_last_used is None:
+            return False
+        if now() - _nano_last_used < idle_seconds:
+            return False
+        del _models["nano"]
+        _nano_last_used = None
+    gc.collect()
+    _release_freed_memory()
+    return True
 
 
 def loaded_models() -> list[str]:
