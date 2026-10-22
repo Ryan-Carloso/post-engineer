@@ -69,6 +69,18 @@ describe('Persona — sample de voz ao clicar no card', () => {
       body: { voices: VOICES },
     }).as('getVoices');
 
+    // The page still gates its load on the sample-languages query (the
+    // clone picker's language select reads it), so stub it too.
+    cy.intercept('GET', '/api/persona/voice-sample-languages', {
+      statusCode: 200,
+      body: {
+        languages: [
+          { code: 'en', label: 'English' },
+          { code: 'pt-br', label: 'Português (BR)' },
+        ],
+      },
+    }).as('getSampleLanguages');
+
     cy.intercept('GET', '/api/persona/list', {
       statusCode: 200,
       body: { personas: [] },
@@ -107,16 +119,16 @@ describe('Persona — sample de voz ao clicar no card', () => {
   });
 
   it('filtro de género e origem estreita a grelha de vozes', () => {
-    cy.contains('button', 'Easton').should('be.visible');
-    cy.contains('button', 'Emma').should('be.visible');
+    cy.contains('button', 'Easton').scrollIntoView().should('be.visible');
+    cy.contains('button', 'Emma').scrollIntoView().should('be.visible');
 
     cy.get('[data-testid=voice-filter-gender-female]').click();
-    cy.contains('button', 'Emma').should('be.visible');
+    cy.contains('button', 'Emma').scrollIntoView().should('be.visible');
     cy.contains('button', 'Easton').should('not.exist');
 
     cy.get('[data-testid=voice-filter-gender-all]').click();
     cy.get('[data-testid=voice-filter-origin-us]').click();
-    cy.contains('button', 'Easton').should('be.visible');
+    cy.contains('button', 'Easton').scrollIntoView().should('be.visible');
     cy.contains('button', 'Emma').should('not.exist');
   });
 });

@@ -40,15 +40,26 @@ const stubFormAudio = (win: Cypress.AUTWindow): void => {
   (win as unknown as { __fakeAudios: FakeAudioRecord[] }).__fakeAudios = created;
 };
 
-// Base read-only intercepts: the voice catalog, an empty persona list,
-// and an empty image library. Tests that need different payloads
-// register their own intercept afterwards (the last matching intercept
-// wins).
+// Base read-only intercepts: the voice catalog, the sample languages
+// (the page gates its load on that query and the clone picker's
+// language select reads it), an empty persona list, and an empty image
+// library. Tests that need different payloads register their own
+// intercept afterwards (the last matching intercept wins).
 function mockBase(): void {
   cy.intercept('GET', '/api/persona/voices', {
     statusCode: 200,
     body: { voices: FORM_VOICES },
   }).as('getVoices');
+
+  cy.intercept('GET', '/api/persona/voice-sample-languages', {
+    statusCode: 200,
+    body: {
+      languages: [
+        { code: 'en', label: 'English' },
+        { code: 'pt-br', label: 'Português (BR)' },
+      ],
+    },
+  }).as('getSampleLanguages');
 
   cy.intercept('GET', '/api/persona/list', {
     statusCode: 200,
@@ -159,7 +170,9 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
     cy.contains('button', 'ryan').click();
     cy.contains('button', 'Criar persona').click();
 
-    cy.contains('Envie uma foto ou gere um avatar por IA.').should('be.visible');
+    cy.contains('Envie uma foto ou gere um avatar por IA.')
+      .scrollIntoView()
+      .should('be.visible');
   });
 
   it('enviar sem voz mostra erro de voz', () => {
