@@ -211,7 +211,7 @@ function VoiceFilterChips<T extends string>({
           className={cn(
             'rounded-full border px-3 py-1 text-xs transition-colors',
             option.value === value
-              ? 'border-accent bg-red-50/50 text-neutral-900'
+              ? 'border-neutral-900 bg-neutral-900 font-medium text-white'
               : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-400',
           )}
         >
