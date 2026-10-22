@@ -39,8 +39,8 @@ from moviepy.audio.io.AudioFileClip import AudioFileClip
 from app.config import config
 from app.services.analytics import scrub_error_text
 from app.services.cloned_voices.local_registry import (
+    is_valid_voice_key,
     local_registry_dir,
-    reference_path_for,
 )
 from app.services.voice_providers import (
     SubMaker,
@@ -310,17 +310,22 @@ def clone_tts(
     voice_volume: float = 1.0,
 ) -> TtsResult:
     """Synthesize with a registered per-user clone (Chatterbox-Nano)."""
-    # The key comes from the persona's voice_id (user-controlled), so
-    # the path comes from the registry's canonical resolver (key
-    # allowlist + file_security containment) — never built by hand
-    # here. The resolved path is then re-checked against the registry
-    # dir at this sink, before any use.
-    try:
-        reference = reference_path_for(voice_key).resolve()
-    except ValueError:
+    # The key comes from the persona's voice_id (user-controlled). The
+    # path is re-derived at this sink with the registry's own rules —
+    # the shared key allowlist (is_valid_voice_key) plus a resolve +
+    # containment guard — instead of via reference_path_for: static
+    # analysis (CodeQL py/path-injection) only credits containment it
+    # can see dominating the use, and it cannot follow the resolver
+    # across modules. The semantics are identical to
+    # local_registry._validated_key_path for the flat registry dir
+    # (separator-free keys, one file per key); the traversal tests pin
+    # both sites, and a registry layout change must update both.
+    if not is_valid_voice_key(voice_key):
         logger.error(f"invalid cloned voice key rejected, voice_key: {voice_key}")
         return TtsResult(error="invalid cloned voice id")
-    if not reference.is_relative_to(local_registry_dir().resolve()):
+    registry_dir = local_registry_dir().resolve()
+    reference = (registry_dir / f"{voice_key.strip()}.wav").resolve()
+    if not reference.is_relative_to(registry_dir):
         logger.error(f"cloned voice key escaped the registry dir, voice_key: {voice_key}")
         return TtsResult(error="invalid cloned voice id")
     if not reference.is_file():

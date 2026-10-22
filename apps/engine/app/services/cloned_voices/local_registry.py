@@ -3,7 +3,13 @@
 Replaces the Modal registry: registering a clone now just persists its
 normalized reference WAV in a local directory (one file per engine
 voice key). Chatterbox-Nano is zero-shot, so the reference file IS the
-registration — generation reads it back via ``reference_path_for``.
+registration. Registration, deletion and the boot reconcile resolve
+paths via ``reference_path_for`` (allowlist + file_security
+containment below); generation (``local_tts.clone_tts``) re-derives
+the same path at its sink with the shared allowlist plus a resolve +
+containment guard, because static analysis cannot credit containment
+it cannot see dominating the use — the two sites must stay
+semantically identical, and both are pinned by traversal tests.
 
 The directory resolves from ``[cloned_voices] local_dir`` in
 config.toml, else the ``CLONED_VOICES_LOCAL_DIR`` env var, else
