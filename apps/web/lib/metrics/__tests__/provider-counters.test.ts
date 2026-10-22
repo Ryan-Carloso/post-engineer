@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@/lib/youtube', () => ({ getYouTubeVideoInfo: vi.fn() }));
 vi.mock('@/lib/upload/handlers', () => ({ getAuthenticatedClient: vi.fn() }));
+vi.mock('@/lib/linkedin', () => ({ getLinkedInSocialActions: vi.fn() }));
 vi.mock('@/lib/social-accounts', () => ({ getSocialAccountTokens: vi.fn() }));
 vi.mock('@/lib/supabase/service', () => ({ createSupabaseServiceClient: vi.fn(() => ({})) }));
 const { getMediaInsights } = vi.hoisted(() => ({ getMediaInsights: vi.fn() }));
@@ -11,7 +12,17 @@ vi.mock('@/lib/instagram', () => ({
   },
 }));
 
-import { fetchProviderCounters, instagramCounters, parseCount, youtubeCounters } from '../provider-counters';
+import {
+  COUNTER_FETCHERS,
+  blueskyCounters,
+  fetchProviderCounters,
+  instagramCounters,
+  linkedinCounters,
+  parseCount,
+  youtubeCounters,
+} from '../provider-counters';
+import { getLinkedInSocialActions } from '@/lib/linkedin';
+import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 import { getYouTubeVideoInfo } from '@/lib/youtube';
 import { getAuthenticatedClient } from '@/lib/upload/handlers';
 import { getSocialAccountTokens } from '@/lib/social-accounts';
@@ -84,5 +95,79 @@ describe('fetchProviderCounters', () => {
       fetchProviderCounters('user-1', { provider: 'instagram', accountId: 'ig', externalId: 'm1' }),
     ).rejects.toThrow('Instagram token expired');
     expect(getMediaInsights).not.toHaveBeenCalled();
+  });
+});
+
+describe('COUNTER_FETCHERS', () => {
+  it('has a fetcher for every provider in SOCIAL_PROVIDERS and nothing else', () => {
+    expect(Object.keys(COUNTER_FETCHERS).sort()).toEqual([...SOCIAL_PROVIDERS].sort());
+  });
+});
+
+describe('blueskyCounters', () => {
+  it('maps likes and replies, views and saves stay null', () => {
+    expect(blueskyCounters({ posts: [{ likeCount: 5, replyCount: 2, repostCount: 1 }] })).toEqual({
+      views: null,
+      likes: 5,
+      comments: 2,
+      saves: null,
+    });
+    expect(blueskyCounters({ posts: [] })).toEqual({ views: null, likes: null, comments: null, saves: null });
+  });
+});
+
+describe('linkedinCounters', () => {
+  it('maps the social actions summaries, missing ones stay null', () => {
+    expect(linkedinCounters({ likesSummary: { totalLikes: 7 }, commentsSummary: { aggregatedTotalComments: 3 } })).toEqual({
+      views: null,
+      likes: 7,
+      comments: 3,
+      saves: null,
+    });
+    expect(linkedinCounters({})).toEqual({ views: null, likes: null, comments: null, saves: null });
+  });
+});
+
+describe('fetchProviderCounters (bluesky, linkedin)', () => {
+  it('reads Bluesky counters from the public AppView by post uri', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ posts: [{ likeCount: 4, replyCount: 1 }] })));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const counters = await fetchProviderCounters('user-1', { provider: 'bluesky', accountId: 'did', externalId: 'at://did/app.bsky.feed.post/r' });
+
+    const url = String((fetchMock.mock.calls[0] as unknown[])[0]);
+    expect(url.startsWith('https://public.api.bsky.app/xrpc/app.bsky.feed.getPosts?')).toBe(true);
+    expect(new URL(url).searchParams.get('uris')).toBe('at://did/app.bsky.feed.post/r');
+    expect(counters).toEqual({ views: null, likes: 4, comments: 1, saves: null });
+    vi.unstubAllGlobals();
+  });
+
+  it('throws when the Bluesky AppView answers non-2xx', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 502 })));
+    await expect(
+      fetchProviderCounters('user-1', { provider: 'bluesky', accountId: 'did', externalId: 'at://x' }),
+    ).rejects.toThrow('Bluesky getPosts failed (502)');
+    vi.unstubAllGlobals();
+  });
+
+  it('reads LinkedIn social actions with the owner token', async () => {
+    vi.mocked(getSocialAccountTokens).mockResolvedValue({ tokens: { access_token: 'li-tok' } } as never);
+    vi.mocked(getLinkedInSocialActions).mockResolvedValue({ likesSummary: { totalLikes: 9 } });
+
+    const counters = await fetchProviderCounters('user-1', { provider: 'linkedin', accountId: 'li', externalId: 'urn:li:share:1' });
+
+    expect(getSocialAccountTokens).toHaveBeenCalledWith({}, 'user-1', 'linkedin', 'li');
+    expect(getLinkedInSocialActions).toHaveBeenCalledWith('li-tok', 'urn:li:share:1');
+    expect(counters).toEqual({ views: null, likes: 9, comments: null, saves: null });
+  });
+
+  it('throws on an expired LinkedIn token without calling the API', async () => {
+    vi.mocked(getSocialAccountTokens).mockResolvedValue({
+      tokens: { access_token: 'li-tok', expiry_date: Date.now() - 1000 },
+    } as never);
+    await expect(
+      fetchProviderCounters('user-1', { provider: 'linkedin', accountId: 'li', externalId: 'urn:li:share:1' }),
+    ).rejects.toThrow('LinkedIn token expired');
+    expect(getLinkedInSocialActions).not.toHaveBeenCalled();
   });
 });

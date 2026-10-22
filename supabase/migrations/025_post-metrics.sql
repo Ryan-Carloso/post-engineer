@@ -28,7 +28,7 @@ create table if not exists public.post_metrics (
   id uuid not null default gen_random_uuid() primary key,
   post_id uuid not null references public.scheduled_posts(id) on delete cascade,
   user_id uuid not null,
-  provider text not null check (provider in ('youtube', 'instagram')),
+  provider text not null check (provider in ('youtube', 'instagram', 'bluesky', 'linkedin')),
   account_id text not null,
   external_id text not null,
   metrics_window text not null check (metrics_window in ('24h', '7d')),

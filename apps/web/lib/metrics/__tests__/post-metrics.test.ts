@@ -19,6 +19,7 @@ import {
   type PostMetricsDeps,
 } from '../post-metrics';
 import { logger } from '@/lib/logger';
+import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 
 const COUNTERS = { views: 1200, likes: 80, comments: 9, saves: null };
 
@@ -71,23 +72,47 @@ describe('youtubeVideoId', () => {
   });
 });
 
+const BSKY_ENTRY = { provider: 'bluesky', status: 'published', accountId: 'did:plc:x', postId: 'at://did:plc:x/app.bsky.feed.post/r1' };
+const LI_ENTRY = { provider: 'linkedin', status: 'published', accountId: 'li-acct', postId: 'urn:li:share:42' };
+
 describe('metricsTargets', () => {
-  it('maps published YouTube and Instagram entries to their video ids and accounts', () => {
-    expect(metricsTargets([YT_ENTRY, IG_ENTRY])).toEqual([
+  it('maps published entries of every provider to their video ids and accounts', () => {
+    expect(metricsTargets([YT_ENTRY, IG_ENTRY, BSKY_ENTRY, LI_ENTRY]).targets).toEqual([
       { provider: 'youtube', accountId: 'yt-acct', externalId: 'abc123' },
       { provider: 'instagram', accountId: 'ig-acct', externalId: 'media-9' },
+      { provider: 'bluesky', accountId: 'did:plc:x', externalId: 'at://did:plc:x/app.bsky.feed.post/r1' },
+      { provider: 'linkedin', accountId: 'li-acct', externalId: 'urn:li:share:42' },
     ]);
   });
 
-  it('skips failed entries, entries without an account, and unmeasured providers', () => {
+  it('extracts a target for every provider in SOCIAL_PROVIDERS', () => {
+    const fixtures: Record<string, unknown> = { youtube: YT_ENTRY, instagram: IG_ENTRY, bluesky: BSKY_ENTRY, linkedin: LI_ENTRY };
+    for (const provider of SOCIAL_PROVIDERS) {
+      const { targets } = metricsTargets([fixtures[provider]]);
+      expect(targets.map((target) => target.provider), provider).toEqual([provider]);
+    }
+  });
+
+  it('skips failed entries and entries without an account', () => {
     expect(
-      metricsTargets([
-        { ...YT_ENTRY, status: 'failed' },
-        { ...IG_ENTRY, accountId: undefined },
-        { provider: 'bluesky', status: 'published', accountId: 'did', postId: 'at://x' },
-        null,
-      ]),
-    ).toEqual([]);
+      metricsTargets([{ ...YT_ENTRY, status: 'failed' }, { ...IG_ENTRY, accountId: undefined }, null]),
+    ).toEqual({ targets: [], unknownProviders: [] });
+  });
+
+  it('reports providers it does not know instead of dropping them', () => {
+    expect(metricsTargets([{ provider: 'tiktok', status: 'published', accountId: 'a', postId: 'p' }])).toEqual({
+      targets: [],
+      unknownProviders: ['tiktok'],
+    });
+  });
+});
+
+describe('post_metrics provider check (migration 025)', () => {
+  it('allows exactly the providers in SOCIAL_PROVIDERS', () => {
+    const sql = readFileSync(join(findRepoRoot(import.meta.url), 'supabase/migrations/025_post-metrics.sql'), 'utf8');
+    const line = sql.split('\n').find((candidate) => candidate.includes('provider text not null check'));
+    const listed = (line ?? '').split("'").filter((_, index) => index % 2 === 1);
+    expect([...listed].sort()).toEqual([...SOCIAL_PROVIDERS].sort());
   });
 });
 
@@ -116,6 +141,15 @@ describe('collectPostMetrics', () => {
       window: '24h',
       ...COUNTERS,
     });
+  });
+
+  it('reports an unknown provider as an error and still snapshots the known ones', async () => {
+    const d = deps({ fetchPublishResults: vi.fn(async () => [YT_ENTRY, { provider: 'tiktok', status: 'published', accountId: 'a', postId: 'p' }]) });
+    const report = await collectPostMetrics(d);
+
+    expect(report.recorded).toBe(1);
+    expect(report.errors).toEqual(['post-1/tiktok: unknown provider']);
+    expect(logger.warn).toHaveBeenCalledWith('[post-metrics] unknown provider in publish results', { postId: 'post-1', provider: 'tiktok' });
   });
 
   it('only retries the videos not yet collected for the window', async () => {

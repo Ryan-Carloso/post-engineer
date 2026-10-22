@@ -57,8 +57,7 @@ export type ContentUploadResponse = ContentUploadSuccess | ContentUploadFailure;
 
 //---------------
 // getAuthenticatedClient — OAuth client with the account's valid tokens
-// (tokens decrypted from Supabase, owner = authenticated userId). Also used
-// by the post-metrics collector to read video statistics.
+// (tokens decrypted from Supabase, owner = authenticated userId); also post-metrics
 //---------------
 export async function getAuthenticatedClient(
   ownerUserId: string,

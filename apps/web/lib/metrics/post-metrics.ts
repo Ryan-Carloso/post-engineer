@@ -2,6 +2,7 @@ import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
+import type { SocialProvider } from '@/lib/providers/registry';
 
 //---------------
 // post-metrics — per-video performance snapshots for A/B content tests.
@@ -13,15 +14,16 @@ import { logger } from '@/lib/logger';
 // number that would not be comparable. The windows live in SQL
 // (public.find_post_metrics_due, migration 025).
 //
-// Only YouTube and Instagram are measured: they are the providers whose
-// per-video counters the connected accounts already grant access to.
+// Every provider in SOCIAL_PROVIDERS is measured: TARGET_EXTRACTORS here
+// and COUNTER_FETCHERS (provider-counters.ts) are exhaustive Records, so a
+// new provider does not typecheck until it is measured too.
 //
 // Pure orchestration: the store and the provider fetchers are injected so
 // tests never reach Supabase, the engine, or a social API.
 //---------------
 
 export type MetricsWindow = '24h' | '7d';
-export type MeasuredProvider = 'youtube' | 'instagram';
+export type MeasuredProvider = SocialProvider;
 
 // Bound the fan-out of one run: each post costs one engine read plus one
 // provider call per published video. Which posts are due (the 24h/7d
@@ -106,29 +108,49 @@ function readString(record: Record<string, unknown>, key: string): string | null
   return typeof value === 'string' && value !== '' ? value : null;
 }
 
+// TARGET_EXTRACTORS — the provider video id recorded in one publish_results
+// entry (see lib/publish-links.ts for the per-provider shapes).
+const TARGET_EXTRACTORS: Record<MeasuredProvider, (record: Record<string, unknown>) => string | null> = {
+  youtube: (record) => {
+    const link = readString(record, 'videoUrl');
+    return link === null ? null : youtubeVideoId(link);
+  },
+  instagram: (record) => readString(record, 'postId'),
+  bluesky: (record) => readString(record, 'postId'),
+  linkedin: (record) => readString(record, 'postId'),
+};
+
+function isMeasuredProvider(value: unknown): value is MeasuredProvider {
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(TARGET_EXTRACTORS, value);
+}
+
+export interface MetricsTargetsResult {
+  targets: MetricsTarget[];
+  // Providers in publish_results this collector does not know: reported,
+  // never silently skipped.
+  unknownProviders: string[];
+}
+
 //---------------
 // metricsTargets — the measurable videos in an engine task's
-// publish_results: published YouTube entries with a video link and
-// published Instagram entries with a media id, each with its account.
+// publish_results: every published entry with an account and a video id.
 //---------------
-export function metricsTargets(publishResults: unknown[]): MetricsTarget[] {
-  const targets: MetricsTarget[] = [];
+export function metricsTargets(publishResults: unknown[]): MetricsTargetsResult {
+  const result: MetricsTargetsResult = { targets: [], unknownProviders: [] };
   for (const entry of publishResults) {
     if (typeof entry !== 'object' || entry === null) continue;
     const record = entry as Record<string, unknown>;
     if (record.status === 'failed') continue;
+    if (!isMeasuredProvider(record.provider)) {
+      result.unknownProviders.push(String(record.provider));
+      continue;
+    }
     const accountId = readString(record, 'accountId');
     if (accountId === null) continue;
-    if (record.provider === 'youtube') {
-      const link = readString(record, 'videoUrl');
-      const videoId = link === null ? null : youtubeVideoId(link);
-      if (videoId !== null) targets.push({ provider: 'youtube', accountId, externalId: videoId });
-    } else if (record.provider === 'instagram') {
-      const mediaId = readString(record, 'postId');
-      if (mediaId !== null) targets.push({ provider: 'instagram', accountId, externalId: mediaId });
-    }
+    const externalId = TARGET_EXTRACTORS[record.provider](record);
+    if (externalId !== null) result.targets.push({ provider: record.provider, accountId, externalId });
   }
-  return targets;
+  return result;
 }
 
 //---------------
@@ -152,7 +174,12 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
 
     let targets: MetricsTarget[];
     try {
-      targets = metricsTargets(await deps.fetchPublishResults(post.taskId, post.userId));
+      const found = metricsTargets(await deps.fetchPublishResults(post.taskId, post.userId));
+      targets = found.targets;
+      for (const provider of found.unknownProviders) {
+        logger.warn('[post-metrics] unknown provider in publish results', { postId: post.id, provider });
+        report.errors.push(`${post.id}/${provider}: unknown provider`);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.warn('[post-metrics] publish results unavailable', { postId: post.id, error: message });
