@@ -1,24 +1,10 @@
 //---------------
- // Persona voice sample E2E — clicar no card de voz da casa na página
-// /persona seleciona a voz E toca o sample de áudio. Rede mockada via
-// cy.intercept; o construtor Audio é stubado antes do load da página.
-//
-// The catalog is the provider-qualified Chatterbox list
-// (chatterbox:<name>) and the picker renders the bare voice name
-// (voiceLabel strips the prefix, underscores become spaces).
+// Persona voice sample E2E — on /persona, the play button of a house voice
+// in the voice picker dialog plays that voice's English sample
+// (/voice-samples/<name>.mp3). Network mocked with cy.intercept; the Audio
+// constructor is stubbed before page load.
 //---------------
-
-// Catalog entry as GET /api/persona/voices returns it (lib/voice-catalog.ts).
-// label null: the picker shows the id without the `chatterbox:` prefix.
-const houseVoice = (name: string, gender: 'female' | 'male') => ({
-  id: `chatterbox:${name}`,
-  label: null,
-  provider: 'chatterbox',
-  gender,
-  accent: 'us',
-  kind: 'standard',
-  description: `American ${gender} voice.`,
-});
+import { houseVoice } from '../support/voices';
 
 const VOICES = [
   houseVoice('en_us_male_01', 'male'),

@@ -1,3 +1,4 @@
+import { houseVoice } from '../support/voices';
 //---------------
 // Persona form E2E — the /persona flows the voice-sample spec does not
 // cover: tabs, photo upload, aspect picker, store-level validation
@@ -10,17 +11,6 @@
 // The session is real (cy.loginE2EUser), like the other specs.
 //---------------
 
-// Catalog entry as GET /api/persona/voices returns it (lib/voice-catalog.ts).
-// label null: the picker shows the id without the `chatterbox:` prefix.
-const houseVoice = (name: string, gender: 'female' | 'male') => ({
-  id: `chatterbox:${name}`,
-  label: null,
-  provider: 'chatterbox',
-  gender,
-  accent: 'us',
-  kind: 'standard',
-  description: `American ${gender} voice.`,
-});
 
 const FORM_VOICES = [
   houseVoice('en_us_male_01', 'male'),
