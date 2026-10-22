@@ -11,6 +11,10 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } f
 //---------------
 
 export interface MetricsBarDatum {
+  // Raw group key, unique per group. Labels are display text and can
+  // repeat (two personas with the same name), so keys and the tooltip
+  // lookup go through this, never through the label.
+  key: string;
   label: string;
   average: number;
   countLabel: string;
@@ -46,14 +50,18 @@ export function MetricsBarChart({ data, metricLabel, formatValue }: MetricsBarCh
         />
         <ChartTooltip
           cursor={false}
-          content={<ChartTooltipContent labelFormatter={(label: string) => {
-            const datum = data.find((entry) => entry.label === label);
+          content={<ChartTooltipContent labelFormatter={(label: string, payload) => {
+            // payload[0].payload is the hovered bar's datum object itself;
+            // matching by identity keeps duplicate labels (same-name
+            // personas/accounts) reporting their own count.
+            const hovered: unknown = payload?.[0]?.payload;
+            const datum = data.find((entry) => entry === hovered) ?? data.find((entry) => entry.label === label);
             return datum === undefined ? label : `${label} · ${datum.countLabel}`;
           }} />}
         />
         <Bar dataKey="average" fill="var(--color-average)" radius={8} maxBarSize={32}>
           {data.map((datum, index) => (
-            <Cell key={datum.label} fill={index === 0 ? LEADER_COLOR : 'var(--color-average)'} />
+            <Cell key={datum.key} fill={index === 0 ? LEADER_COLOR : 'var(--color-average)'} />
           ))}
           <LabelList
             dataKey="average"

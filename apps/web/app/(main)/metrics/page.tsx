@@ -88,6 +88,7 @@ export default function MetricsPage(): React.ReactElement {
   };
   const groups = groupMetrics(rows, group, metric);
   const chartData = groups.map((entry) => ({
+    key: entry.key,
     label: labelFor(entry.key),
     average: entry.average,
     countLabel: t('metrics.videosCount', { count: entry.count }),
