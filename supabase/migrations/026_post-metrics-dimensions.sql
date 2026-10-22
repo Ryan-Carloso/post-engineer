@@ -13,6 +13,8 @@
 --      Null for a faceless post (schedules.persona_id is null).
 --   2. script_angle — written by the web collector from the engine task
 --      record. Null when the engine recorded no angle.
+-- A one-time backfill at the end fills persona_id for snapshots that
+-- migration 025's hourly collector wrote before this trigger existed.
 -- Snapshot values: editing or deleting a persona later never rewrites them.
 --
 -- Idempotent: safe to re-run (IF NOT EXISTS / create or replace / guarded
@@ -55,3 +57,13 @@ begin
       for each row execute function public.post_metrics_set_persona();
   end if;
 end $$;
+
+-- Backfill: snapshots written between migration 025 and this one have no
+-- trigger-filled persona_id (and the collector's upsert never rewrites it),
+-- so fill them from the same join the trigger uses. Rows whose post has no
+-- persona stay null. Idempotent: only null rows are touched.
+update public.post_metrics pm
+set persona_id = s.persona_id
+from public.scheduled_posts sp
+join public.schedules s on s.id = sp.schedule_id
+where pm.post_id = sp.id and pm.persona_id is null;

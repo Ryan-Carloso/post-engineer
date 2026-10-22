@@ -203,7 +203,12 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
         });
         report.recorded += 1;
         // script_angle lets PostHog break performance down by the angle the
-        // script used (the same value the dashboard filters on).
+        // script used (the same value the dashboard filters on). Deliberate
+        // exception to analytics.ts's "ids, counts, validated enums" rule:
+        // the angle is free-text model output, and breaking performance
+        // down by it is the point of collecting it. trackApiEvent still
+        // redacts credential fragments from string values and caps them at
+        // 500 chars before capture.
         deps.track('post_metrics_collected', {
           task_id: post.taskId,
           script_angle: scriptAngle,

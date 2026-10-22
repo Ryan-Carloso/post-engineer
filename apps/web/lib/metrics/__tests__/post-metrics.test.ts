@@ -392,4 +392,10 @@ describe('migration 026 (post metrics dimensions)', () => {
     expect(sql.includes('before insert on public.post_metrics')).toBe(true);
     expect(sql.includes('join public.schedules s on s.id = sp.schedule_id')).toBe(true);
   });
+
+  it('backfills persona_id for snapshots written before the trigger existed', () => {
+    expect(sql.includes('update public.post_metrics pm')).toBe(true);
+    expect(sql.includes('set persona_id = s.persona_id')).toBe(true);
+    expect(sql.includes('where pm.post_id = sp.id and pm.persona_id is null')).toBe(true);
+  });
 });
