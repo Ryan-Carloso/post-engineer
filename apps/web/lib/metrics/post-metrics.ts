@@ -68,6 +68,7 @@ export interface PostMetricsDeps {
   fetchPublishResults: (taskId: string, userId: string) => Promise<unknown[]>;
   fetchCounters: (userId: string, target: MetricsTarget) => Promise<MetricsCounters>;
   saveMetrics: (row: MetricsRow) => Promise<void>;
+  markDone: (postId: string, window: MetricsWindow) => Promise<void>;
   track: (event: string, properties: Record<string, unknown>) => void;
   now: () => Date;
 }
@@ -187,6 +188,7 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
       continue;
     }
 
+    let failed = false;
     for (const target of targets) {
       if (post.collectedKeys.has(targetKey(target))) continue;
       try {
@@ -211,6 +213,18 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
           error: message,
         });
         report.errors.push(`${post.id}/${target.provider}: snapshot failed`);
+        failed = true;
+      }
+    }
+    // Every video is in (or there is none to measure): stop re-reading this
+    // post for the window. A failed video keeps it open for the next run.
+    if (!failed) {
+      try {
+        await deps.markDone(post.id, post.window);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.warn('[post-metrics] mark done failed', { postId: post.id, error: message });
+        report.errors.push(`${post.id}: mark done failed`);
       }
     }
   }
@@ -223,7 +237,7 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
 //---------------
 export function createPostMetricsStore(
   supabase: SupabaseClient,
-): Pick<PostMetricsDeps, 'listDuePosts' | 'saveMetrics'> {
+): Pick<PostMetricsDeps, 'listDuePosts' | 'saveMetrics' | 'markDone'> {
   return {
     async listDuePosts(now, limit) {
       // supabase-js rpc() never throws: the error must be checked.
@@ -273,6 +287,12 @@ export function createPostMetricsStore(
         { onConflict: 'post_id,provider,external_id,metrics_window' },
       );
       if (error) throw new Error(`metrics write failed: ${error.message}`);
+    },
+    async markDone(postId, window) {
+      const { error } = await supabase
+        .from('post_metrics_done')
+        .upsert({ post_id: postId, metrics_window: window }, { onConflict: 'post_id,metrics_window' });
+      if (error) throw new Error(`mark done failed: ${error.message}`);
     },
   };
 }

@@ -48,6 +48,7 @@ function deps(overrides: Partial<PostMetricsDeps> = {}): PostMetricsDeps {
     fetchPublishResults: vi.fn(async () => [YT_ENTRY, IG_ENTRY]),
     fetchCounters: vi.fn(async () => COUNTERS),
     saveMetrics: vi.fn(async () => undefined),
+    markDone: vi.fn(async () => undefined),
     track: vi.fn(),
     now: () => new Date('2026-10-21T12:00:00.000Z'),
     ...overrides,
@@ -150,6 +151,43 @@ describe('collectPostMetrics', () => {
     expect(report.recorded).toBe(1);
     expect(report.errors).toEqual(['post-1/tiktok: unknown provider']);
     expect(logger.warn).toHaveBeenCalledWith('[post-metrics] unknown provider in publish results', { postId: 'post-1', provider: 'tiktok' });
+  });
+
+  it('marks the post done for the window once every video is in', async () => {
+    const d = deps();
+    await collectPostMetrics(d);
+    expect(d.markDone).toHaveBeenCalledWith('post-1', '24h');
+  });
+
+  it('marks a post with nothing to measure done so it stops coming back', async () => {
+    const d = deps({ fetchPublishResults: vi.fn(async () => []) });
+    const report = await collectPostMetrics(d);
+    expect(report.recorded).toBe(0);
+    expect(d.markDone).toHaveBeenCalledWith('post-1', '24h');
+  });
+
+  it('keeps the post open when a video fails', async () => {
+    const d = deps({ fetchCounters: vi.fn().mockRejectedValueOnce(new Error('403')).mockResolvedValueOnce(COUNTERS) });
+    await collectPostMetrics(d);
+    expect(d.saveMetrics).toHaveBeenCalledTimes(1);
+    expect(d.markDone).not.toHaveBeenCalled();
+  });
+
+  it('keeps the post open when publish results are unavailable', async () => {
+    const d = deps({ fetchPublishResults: vi.fn(async () => { throw new Error('engine down'); }) });
+    await collectPostMetrics(d);
+    expect(d.markDone).not.toHaveBeenCalled();
+  });
+
+  it('reports a failed mark-done and still finishes the run', async () => {
+    const d = deps({
+      listDuePosts: vi.fn(async () => [duePost(), duePost({ id: 'post-2' })]),
+      markDone: vi.fn().mockRejectedValueOnce(new Error('db down')).mockResolvedValueOnce(undefined),
+    });
+    const report = await collectPostMetrics(d);
+    expect(report.checked).toBe(2);
+    expect(report.errors).toEqual(['post-1: mark done failed']);
+    expect(d.markDone).toHaveBeenLastCalledWith('post-2', '24h');
   });
 
   it('only retries the videos not yet collected for the window', async () => {
@@ -293,6 +331,31 @@ describe('createPostMetricsStore', () => {
         postId: 'post-1', userId: 'user-1', provider: 'youtube', accountId: 'a', externalId: 'b', window: '7d', ...COUNTERS,
       }),
     ).rejects.toThrow('metrics write failed: denied');
+  });
+
+  it('marks a post done in post_metrics_done and throws on a write error', async () => {
+    const upsert = vi.fn(async () => ({ error: null }));
+    const from = vi.fn(() => ({ upsert }));
+    const store = createPostMetricsStore({ from } as unknown as SupabaseClient);
+    await store.markDone('post-1', '7d');
+
+    expect(from).toHaveBeenCalledWith('post_metrics_done');
+    expect(upsert).toHaveBeenCalledWith(
+      { post_id: 'post-1', metrics_window: '7d' },
+      { onConflict: 'post_id,metrics_window' },
+    );
+
+    upsert.mockResolvedValueOnce({ error: { message: 'denied' } } as never);
+    await expect(store.markDone('post-1', '7d')).rejects.toThrow('mark done failed: denied');
+  });
+
+  it('find_post_metrics_due skips posts already in post_metrics_done (SQL sync)', () => {
+    const sql = readFileSync(join(findRepoRoot(import.meta.url), 'supabase', 'migrations', '025_post-metrics.sql'), 'utf8');
+    expect(sql.includes('create table if not exists public.post_metrics_done')).toBe(true);
+    const fn = sql.slice(sql.indexOf('create or replace function public.find_post_metrics_due'));
+    const due = fn.slice(0, fn.indexOf('select\n    d.id'));
+    expect(due.includes('not exists')).toBe(true);
+    expect(due.includes('from public.post_metrics_done pmd')).toBe(true);
   });
 
   it('writes only columns that exist on public.post_metrics (schema sync)', () => {

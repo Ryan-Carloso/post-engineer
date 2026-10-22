@@ -166,7 +166,8 @@ Provision the database schema in your Supabase project:
     `{userId}/cloned-voices/{cloneId}/reference.wav`.
 
 21. `supabase/migrations/025_post-metrics.sql` — per-video performance
-    snapshots (`post_metrics`) at 24h and 7d after publish, plus the hourly
+    snapshots (`post_metrics`) at 24h and 7d after publish, `post_metrics_done`
+    (posts already finished per window), plus the hourly
     pg_cron job that calls `/api/cron/post-metrics`. Uses the same
     `app.cron_base_url` / `app.cron_secret` settings as migration 004; after
     setting them run `select public.schedule_post_metrics();`.

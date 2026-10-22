@@ -10,7 +10,8 @@
 --      Windows: '24h' (collected 24-48h after publish) and '7d' (168-192h).
 --      Counters are nullable: a provider that does not report a metric
 --      stores null, never a fake 0.
---   2. public.find_post_metrics_due() — the posts each cron run measures.
+--   2. public.find_post_metrics_due() — the posts each cron run measures;
+--      public.post_metrics_done marks the posts already finished per window.
 --   3. public.schedule_post_metrics() — wires an hourly pg_cron job that
 --      POSTs the web cron endpoint /api/cron/post-metrics. Same contract as
 --      migration 004: runs only when pg_cron/pg_net are available AND
@@ -59,10 +60,23 @@ begin
   end if;
 end $$;
 
+-- post_metrics_done — a post whose every video was snapshotted for a
+-- window (or that has none to measure). find_post_metrics_due skips it, so
+-- a finished post costs no engine read on the following hourly runs.
+-- Service role only: RLS on, no policy.
+create table if not exists public.post_metrics_done (
+  post_id uuid not null references public.scheduled_posts(id) on delete cascade,
+  metrics_window text not null check (metrics_window in ('24h', '7d')),
+  done_at timestamptz not null default now(),
+  primary key (post_id, metrics_window)
+);
+
+alter table public.post_metrics_done enable row level security;
+
 -- find_post_metrics_due — published posts inside an open snapshot window
--- that still miss at least one snapshot for it. "Missing" is decided per
--- post here (no row yet for that window); the web re-checks per video, so a
--- post where one provider failed is retried until its window closes.
+-- not yet marked done in post_metrics_done. The web re-checks per video
+-- (collected_keys), so a post where one provider failed is retried until
+-- its window closes, and marked done once every video is in.
 -- Windows: '24h' = 24-48h after publish, '7d' = 168-192h after publish.
 -- Called only by the web cron route with the service role.
 create or replace function public.find_post_metrics_due(p_now timestamptz, p_limit integer)
@@ -90,6 +104,10 @@ as $$
      and sp.published_at > p_now - make_interval(hours => w.start_hours + 24)
     where sp.status = 'published'
       and sp.task_id is not null
+      and not exists (
+        select 1 from public.post_metrics_done pmd
+        where pmd.post_id = sp.id and pmd.metrics_window = w.metrics_window
+      )
   )
   select
     d.id,

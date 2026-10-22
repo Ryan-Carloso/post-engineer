@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@/lib/supabase/service', () => ({ createSupabaseServiceClient: vi.fn(() => ({})) }));
 vi.mock('@/lib/metrics/post-metrics', () => ({
-  createPostMetricsStore: vi.fn(() => ({ listDuePosts: vi.fn(), saveMetrics: vi.fn() })),
+  createPostMetricsStore: vi.fn(() => ({ listDuePosts: vi.fn(), saveMetrics: vi.fn(), markDone: vi.fn() })),
   collectPostMetrics: vi.fn(),
 }));
 vi.mock('@/lib/metrics/provider-counters', () => ({ fetchProviderCounters: vi.fn() }));
