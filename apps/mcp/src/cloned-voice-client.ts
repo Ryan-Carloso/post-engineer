@@ -138,7 +138,7 @@ export async function previewClonedVoice(
   // The preview route answers with raw audio bytes, not JSON, so it cannot
   // go through the client's JSON request path: fetch the bytes here and
   // surface them as base64 (same own-fetch pattern as the download above).
-  // The upload timeout applies: preview synthesis can cold-start the GPU app.
+  // The upload timeout applies: preview synthesis can cold-start the local TTS server.
   const response = await fetch(`${client.baseUrl}${path}`, {
     method: 'POST',
     headers: client.getHeaders(),

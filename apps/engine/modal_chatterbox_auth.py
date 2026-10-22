@@ -1,4 +1,4 @@
-"""Bearer auth helpers for the Modal Chatterbox FastAPI app."""
+"""Bearer auth helpers for the local TTS server (local_tts/server.py)."""
 
 from __future__ import annotations
 

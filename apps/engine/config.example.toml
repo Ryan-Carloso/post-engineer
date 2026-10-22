@@ -580,6 +580,9 @@ upload_post_youtube_privacy_status = "public"
 [chatterbox]
 # Targets the local CPU TTS server (local_tts/server.py; the `tts` service in
 # docker-compose.yml). House voices come from app/services/voice_catalog.json.
+# api_key MUST equal the CHATTERBOX_HTTP_SECRET the tts service was started
+# with (the server 401s without it); same value as [cloned_voices]
+# registry_api_key below.
 base_url = "http://127.0.0.1:4123/v1"
 api_key = ""
 model_id = "chatterbox"
@@ -608,8 +611,8 @@ registry_api_key = ""
 #                          language always selects its own voice (default:
 #                          pt-BR-FranciscaNeural).
 #
-# When Chatterbox (Modal) is unavailable — exhausted credits surface as HTTP
-# 404 — test-account generations fall back to Edge TTS instead of failing.
+# When the local Chatterbox server is unavailable, test-account generations
+# fall back to Edge TTS instead of failing.
 # Every fallback emits a `tts_fallback_used` PostHog event (ids and reason
 # only, never audio text). Production traffic keeps the loud Chatterbox
 # failure so a silent voice switch never reaches real users.

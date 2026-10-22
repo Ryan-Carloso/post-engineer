@@ -1,4 +1,4 @@
-"""HTTP client for the Chatterbox voice registry (Modal admin API or compatible)."""
+"""HTTP client for the Chatterbox voice registry (local TTS server admin API)."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ def _registry_settings() -> tuple[str, str]:
 
 
 class HttpChatterboxVoiceRegistry:
-    """POST/DELETE against a registry service that writes Modal volume references."""
+    """POST/DELETE against a registry service that writes voice-volume references."""
 
     def __init__(
         self,
