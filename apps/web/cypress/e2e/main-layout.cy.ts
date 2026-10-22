@@ -86,9 +86,9 @@ function seedUserMetadata(userMetadata: Record<string, unknown>): void {
 // short viewport the footer (locale, tokens, user, api keys, sign out) is
 // clipped off-screen. Cypress reports the clipped elements as not visible
 // and cannot click them, so these specs use a viewport tall enough for the
-// whole sidebar.
+// whole sidebar. Height covers all six tabs (Metrics added ~80px).
 //---------------
-const TALL_VIEWPORT: [number, number] = [1280, 1100];
+const TALL_VIEWPORT: [number, number] = [1280, 1440];
 
 describe('Main Layout — Sidebar', () => {
   beforeEach(() => {
