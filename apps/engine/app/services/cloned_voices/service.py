@@ -15,7 +15,6 @@ from app.services.cloned_voices.audio_clean import clean_reference_audio
 from app.services.cloned_voices.local_registry import (
     VoiceRegistry,
     default_registry,
-    reference_path_for,
 )
 from app.services.cloned_voices.constants import (
     CHATTERBOX_VOICE_PREFIX,
@@ -197,7 +196,7 @@ def reconcile_missing_references(
         if not (isinstance(voice_key, str) and isinstance(storage_path, str)):
             continue
         try:
-            if reference_path_for(voice_key).is_file():
+            if reg.has_voice(voice_key):
                 continue
             wav_bytes = db.download_reference_wav(storage_path)
             language = row.get("language")

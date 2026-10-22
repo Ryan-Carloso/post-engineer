@@ -31,6 +31,17 @@ class LocalRegistryTests(unittest.TestCase):
         self.assertEqual((self.dir / "key1.wav").read_bytes(), b"two")
         self.assertFalse((self.dir / ".key1.tmp").exists())
 
+    def test_has_voice_reflects_the_registry_directory(self):
+        self.assertFalse(self.registry.has_voice("key1"))
+        self.registry.register_voice("key1", "en", b"one")
+        self.assertTrue(self.registry.has_voice("key1"))
+        self.registry.delete_voice("key1")
+        self.assertFalse(self.registry.has_voice("key1"))
+
+    def test_has_voice_rejects_traversal_keys_without_raising(self):
+        self.assertFalse(self.registry.has_voice("../outside"))
+        self.assertFalse(self.registry.has_voice(""))
+
     def test_delete_removes_and_tolerates_missing(self):
         self.registry.register_voice("key1", "en", b"one")
         self.registry.delete_voice("key1")

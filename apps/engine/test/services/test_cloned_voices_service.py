@@ -294,16 +294,12 @@ class ClonedVoiceServiceTests(unittest.TestCase):
     def test_reconcile_missing_references_restores_lost_files(self):
         self.store.list_ready.return_value = [self._ready_row()]
         self.store.download_reference_wav.return_value = b"wav"
-        with tempfile.TemporaryDirectory() as tmp:
-            missing = Path(tmp) / "uabc_clone1.wav"
-            with patch(
-                "app.services.cloned_voices.service.reference_path_for",
-                return_value=missing,
-            ):
-                restored = reconcile_missing_references(
-                    store=self.store, registry=self.registry
-                )
+        self.registry.has_voice.return_value = False
+        restored = reconcile_missing_references(
+            store=self.store, registry=self.registry
+        )
         self.assertEqual(restored, 1)
+        self.registry.has_voice.assert_called_once_with("uabc_clone1")
         self.store.download_reference_wav.assert_called_once_with(
             "user-1/cloned-voices/clone-1/reference.wav"
         )
@@ -311,31 +307,38 @@ class ClonedVoiceServiceTests(unittest.TestCase):
 
     def test_reconcile_missing_references_skips_present_files(self):
         self.store.list_ready.return_value = [self._ready_row()]
-        with tempfile.TemporaryDirectory() as tmp:
-            present = Path(tmp) / "uabc_clone1.wav"
-            present.write_bytes(b"wav")
-            with patch(
-                "app.services.cloned_voices.service.reference_path_for",
-                return_value=present,
-            ):
-                restored = reconcile_missing_references(
-                    store=self.store, registry=self.registry
-                )
+        self.registry.has_voice.return_value = True
+        restored = reconcile_missing_references(
+            store=self.store, registry=self.registry
+        )
         self.assertEqual(restored, 0)
         self.store.download_reference_wav.assert_not_called()
         self.registry.register_voice.assert_not_called()
 
+    def test_reconcile_missing_references_honors_the_injected_registry(self):
+        # The existence check must go through the injected registry seam:
+        # a real registry rooted in a temp dir already holding the file
+        # suppresses the restore, with no download and no re-register.
+        from app.services.cloned_voices.local_registry import LocalVoiceRegistry
+
+        self.store.list_ready.return_value = [self._ready_row()]
+        self.store.download_reference_wav.return_value = b"wav"
+        with tempfile.TemporaryDirectory() as tmp:
+            real_registry = LocalVoiceRegistry(directory=Path(tmp))
+            real_registry.register_voice("uabc_clone1", "en", b"wav")
+            restored = reconcile_missing_references(
+                store=self.store, registry=real_registry
+            )
+        self.assertEqual(restored, 0)
+        self.store.download_reference_wav.assert_not_called()
+
     def test_reconcile_missing_references_survives_download_failure(self):
         self.store.list_ready.return_value = [self._ready_row()]
         self.store.download_reference_wav.side_effect = RuntimeError("storage 404")
-        with tempfile.TemporaryDirectory() as tmp:
-            with patch(
-                "app.services.cloned_voices.service.reference_path_for",
-                return_value=Path(tmp) / "uabc_clone1.wav",
-            ):
-                restored = reconcile_missing_references(
-                    store=self.store, registry=self.registry
-                )
+        self.registry.has_voice.return_value = False
+        restored = reconcile_missing_references(
+            store=self.store, registry=self.registry
+        )
         self.assertEqual(restored, 0)
         self.registry.register_voice.assert_not_called()
 
@@ -358,14 +361,10 @@ class ClonedVoiceServiceTests(unittest.TestCase):
             self._ready_row(),
         ]
         self.store.download_reference_wav.return_value = b"wav"
-        with tempfile.TemporaryDirectory() as tmp:
-            with patch(
-                "app.services.cloned_voices.service.reference_path_for",
-                return_value=Path(tmp) / "missing.wav",
-            ):
-                restored = reconcile_missing_references(
-                    store=self.store, registry=self.registry
-                )
+        self.registry.has_voice.return_value = False
+        restored = reconcile_missing_references(
+            store=self.store, registry=self.registry
+        )
         self.assertEqual(restored, 1)
 
     @patch("app.services.cloned_voices.service.normalize_reference_audio")

@@ -22,8 +22,16 @@ const storeMocks = vi.hoisted(() => ({
   setVoiceId: vi.fn(),
 }));
 
+const queryMocks = vi.hoisted(() => ({
+  state: {
+    data: undefined as VoiceOption[] | undefined,
+    isLoading: false,
+    isError: false,
+  },
+}));
+
 vi.mock('@/lib/api', () => ({
-  useVoicesQuery: () => ({ data: VOICES, isLoading: false }),
+  useVoicesQuery: () => queryMocks.state,
 }));
 
 vi.mock('@/lib/store', () => {
@@ -93,10 +101,25 @@ describe('PersonaHouseVoicePicker filters', () => {
   beforeEach(() => {
     storeMocks.voiceId = '';
     storeMocks.setVoiceId.mockClear();
+    queryMocks.state = { data: VOICES, isLoading: false, isError: false };
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it('shows a loading state instead of an empty grid while the catalog loads', () => {
+    queryMocks.state = { data: undefined, isLoading: true, isError: false };
+    render(<PersonaHouseVoicePicker />);
+    expect(screen.getByText('persona.voiceListLoading')).toBeInTheDocument();
+    expect(visibleNames()).toHaveLength(0);
+  });
+
+  it('shows an error state when the catalog fails to load', () => {
+    queryMocks.state = { data: undefined, isLoading: false, isError: true };
+    render(<PersonaHouseVoicePicker />);
+    expect(screen.getByText('persona.voiceListError')).toBeInTheDocument();
+    expect(visibleNames()).toHaveLength(0);
   });
 
   it('shows every voice by default, with provider and origin sub-labels', () => {

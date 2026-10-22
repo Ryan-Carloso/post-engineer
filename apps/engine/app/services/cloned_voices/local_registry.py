@@ -68,6 +68,9 @@ class VoiceRegistry(Protocol):
     def delete_voice(self, voice_key: str) -> None:
         ...
 
+    def has_voice(self, voice_key: str) -> bool:
+        ...
+
 
 def local_registry_dir() -> Path:
     section: dict[str, Any] = app_config.cloned_voices or {}
@@ -109,6 +112,14 @@ class LocalVoiceRegistry:
             target.unlink()
         except FileNotFoundError:
             pass
+
+    def has_voice(self, voice_key: str) -> bool:
+        try:
+            target = _validated_key_path(self._dir, voice_key)
+        except ValueError:
+            # A malformed key names no file this registry could hold.
+            return False
+        return target.is_file()
 
 
 def default_registry() -> VoiceRegistry:

@@ -19,6 +19,8 @@ export const personaVoiceCloneEn = {
   voiceClonePending: 'Processing your voice clone…',
   voiceCloneFailed: 'Could not create the clone. Try another recording.',
   voiceCloneListError: 'Could not load your clones.',
+  voiceListError: 'Could not load the voices.',
+  voiceListLoading: 'Loading voices…',
   voiceCloneMicUnavailable: 'Recording is not available in this browser.',
   voiceCloneMicDenied: 'Allow microphone access to record.',
   voiceCloneNeedAudio: 'Record or upload audio before submitting.',

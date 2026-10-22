@@ -19,6 +19,8 @@ export const personaVoiceClonePt = {
   voiceClonePending: 'Processando seu clone de voz…',
   voiceCloneFailed: 'Não foi possível criar o clone. Tente outra gravação.',
   voiceCloneListError: 'Não foi possível carregar seus clones.',
+  voiceListError: 'Não foi possível carregar as vozes.',
+  voiceListLoading: 'Carregando as vozes…',
   voiceCloneMicUnavailable: 'Gravação não disponível neste navegador.',
   voiceCloneMicDenied: 'Permita o microfone para gravar.',
   voiceCloneNeedAudio: 'Grave ou envie um áudio antes de enviar.',

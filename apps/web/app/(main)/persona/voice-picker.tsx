@@ -228,6 +228,12 @@ export const PersonaHouseVoicePicker = () => {
           onSelect={() => setOriginFilter('character')}
         />
       </div>
+      {voicesQuery.isError ? (
+        <p className="mb-3 text-sm text-red-600">{t('persona.voiceListError')}</p>
+      ) : null}
+      {voicesQuery.isLoading ? (
+        <p className="mb-3 text-sm text-neutral-500">{t('persona.voiceListLoading')}</p>
+      ) : null}
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {voices.map((voice) => {
           const isActive = voice.id === voiceId;
