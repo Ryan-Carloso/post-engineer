@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 from app.services import persona as persona_service
 
-CHATTERBOX_VOICES = ["chatterbox:ryan", "chatterbox:en_us_female_01"]
+CHATTERBOX_VOICES = ["chatterbox:en_us_male_01", "chatterbox:en_us_female_01"]
 OPENROUTER_VOICES = [
     "openrouter:x-ai/grok-voice-tts-1.0:eve",
     "openrouter:x-ai/grok-voice-tts-1.0:ara",

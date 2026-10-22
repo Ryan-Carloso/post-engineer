@@ -66,7 +66,3 @@ language_id = "en"
 [en_us_male_01]
 reference = "en_us_male_01/reference.wav"
 language_id = "en"
-
-[ryan]
-reference = "ryan/reference.wav"
-language_id = "pt"

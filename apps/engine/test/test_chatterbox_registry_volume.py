@@ -19,14 +19,14 @@ WAV_HEADER = b"RIFF" + b"\x24\x00\x00\x00" + b"WAVE" + b"fmt " + b"\x00" * 28
 
 class ChatterboxRegistryVolumeTest(unittest.TestCase):
     def test_serialize_roundtrip(self) -> None:
-        voices = upsert_voice({}, "ryan", "pt", "ryan/reference.wav")
+        voices = upsert_voice({}, "test_voice", "pt", "test_voice/reference.wav")
         text = serialize_voices_toml(voices)
         with tempfile.TemporaryDirectory() as work:
             path = Path(work) / "voices.toml"
             path.write_text(text, encoding="utf-8")
             loaded = load_voices_toml(path)
-        self.assertEqual(loaded["ryan"]["reference"], "ryan/reference.wav")
-        self.assertEqual(loaded["ryan"]["language_id"], "pt")
+        self.assertEqual(loaded["test_voice"]["reference"], "test_voice/reference.wav")
+        self.assertEqual(loaded["test_voice"]["language_id"], "pt")
 
     def test_register_and_delete_voice(self) -> None:
         with tempfile.TemporaryDirectory() as work:
@@ -71,30 +71,30 @@ class ChatterboxRegistryVolumeTest(unittest.TestCase):
     def test_voice_name_validation_rejects_trailing_newline(self) -> None:
         from chatterbox_registry_volume import is_valid_voice_name
 
-        self.assertTrue(is_valid_voice_name("ryan"))
+        self.assertTrue(is_valid_voice_name("test_voice"))
         self.assertTrue(is_valid_voice_name("u0123456789ab_0123456789ab"))
-        self.assertFalse(is_valid_voice_name("ryan\n"))
-        self.assertFalse(is_valid_voice_name("ry an"))
-        self.assertFalse(is_valid_voice_name("../ryan"))
+        self.assertFalse(is_valid_voice_name("test_voice\n"))
+        self.assertFalse(is_valid_voice_name("test voice"))
+        self.assertFalse(is_valid_voice_name("../test_voice"))
 
     def test_upsert_accepts_bcp47_language_codes(self) -> None:
         for code in ("pt", "en", "pt-BR", "zh-Hans", "es-419"):
-            voices = upsert_voice({}, "ryan", code, "ryan/reference.wav")
-            self.assertEqual(voices["ryan"]["language_id"], code)
+            voices = upsert_voice({}, "test_voice", code, "test_voice/reference.wav")
+            self.assertEqual(voices["test_voice"]["language_id"], code)
 
     def test_upsert_rejects_language_with_toml_breaking_characters(self) -> None:
         for bad in ("en\n[injected]", 'en"evil', "e", "english", "en us"):
             with self.assertRaisesRegex(ValueError, "not a valid language code"):
-                upsert_voice({}, "ryan", bad, "ryan/reference.wav")
+                upsert_voice({}, "test_voice", bad, "test_voice/reference.wav")
 
     def test_serialize_escapes_control_characters(self) -> None:
         import tomllib
 
-        voices = {"ryan": {"reference": "ryan/reference.wav", "language_id": "e\nvil"}}
+        voices = {"test_voice": {"reference": "test_voice/reference.wav", "language_id": "e\nvil"}}
         text = serialize_voices_toml(voices)
         self.assertIn('language_id = "e\\nvil"', text)
         parsed = tomllib.loads(text)
-        self.assertEqual(parsed["ryan"]["language_id"], "e\nvil")
+        self.assertEqual(parsed["test_voice"]["language_id"], "e\nvil")
 
 
 if __name__ == "__main__":

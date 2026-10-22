@@ -69,7 +69,7 @@ export const CreatePersonaShape = {
     .describe(
       'REQUIRED. Public URL to the persona avatar image (use list_faces for stock face URLs). Every persona has a face; "no face" is chosen per video with generate_persona_videos options.faceless.',
     ),
-  voiceId: z.string().default('chatterbox:ryan').describe('Voice ID to use (see list_voices)'),
+  voiceId: z.string().default('chatterbox:en_us_female_01').describe('Voice ID to use (see list_voices)'),
   language: z
     .string()
     .refine(isEnglishLanguage, { message: ONLY_ENGLISH_VIDEOS_MESSAGE })

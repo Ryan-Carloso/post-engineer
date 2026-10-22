@@ -425,7 +425,7 @@ class TestVoiceService(unittest.TestCase):
             vs, "elevenlabs_tts"
         ) as elevenlabs:
             result = vs.tts(
-                "hello world", "chatterbox:ryan", 1.0, str(Path(tmp_dir) / "v.mp3")
+                "hello world", "chatterbox:en_us_male_01", 1.0, str(Path(tmp_dir) / "v.mp3")
             )
         self.assertIs(result, chatterbox_marker)
         elevenlabs.assert_not_called()

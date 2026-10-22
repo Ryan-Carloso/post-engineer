@@ -60,8 +60,8 @@ describe('persona — layout de abertura real (persona no topo)', () => {
     // The catalog is the Chatterbox voice list, provider-qualified; the picker
     // shows the bare name. Every Chatterbox voice configured is en_us, so the
     // persona and its narration are English.
-    cy.contains('button', 'ryan').click();
-    cy.contains('button', 'ryan').should('have.attr', 'aria-pressed', 'true');
+    cy.contains('button', 'en us male 01').click();
+    cy.contains('button', 'en us male 01').should('have.attr', 'aria-pressed', 'true');
 
     // The layout the whole feature exists for. 'Full screen' is the default, so
     // asserting the click actually moved the selection is the honest gate —

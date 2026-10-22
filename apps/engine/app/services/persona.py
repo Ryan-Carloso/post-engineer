@@ -104,7 +104,7 @@ def get_house_voices(user_id: str | None = None) -> list[dict[str, Any]]:
 
     These are the Chatterbox voices configured under ``[chatterbox] voices``
     plus, when it is configured, the discovered OpenRouter voices — all
-    emitted provider-qualified (``chatterbox:ryan``,
+    emitted provider-qualified (``chatterbox:en_us_male_01``,
     ``openrouter:<model>:<voice>``). That is deliberate: the id is what gets
     stored on the persona and handed straight to ``voice.tts``, which routes on
     the prefix. There is no house-voice layer left to map ids onto Azure names,

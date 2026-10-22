@@ -9,7 +9,7 @@
 //---------------
 
 const VOICES = [
-  { id: 'chatterbox:ryan' },
+  { id: 'chatterbox:en_us_male_01' },
   { id: 'chatterbox:en_us_female_01' },
 ];
 
@@ -59,7 +59,7 @@ describe('Persona — sample de voz ao clicar no card', () => {
   });
 
   it('toca o sample da voz ao clicar no card da casa', () => {
-    cy.contains('button', 'ryan').click();
+    cy.contains('button', 'en us male 01').click();
 
     cy.window().then((win) => {
       const audios = (win as unknown as { __fakeAudios: FakeAudioRecord[] }).__fakeAudios;
@@ -68,13 +68,13 @@ describe('Persona — sample de voz ao clicar no card', () => {
       // (public/voice-samples/<encoded-id>-<lang>.mp3). English-only
       // launch: there is no sample-language picker any more, so the
       // sample always plays the English take (en-us).
-      expect(audios[0].url).to.equal('/voice-samples/chatterbox%3Aryan-en-us.mp3');
+      expect(audios[0].url).to.equal('/voice-samples/chatterbox%3Aen_us_male_01-en-us.mp3');
       expect(audios[0].playCalled).to.be.true;
     });
   });
 
   it('trocar de voz para o sample anterior e toca o da nova', () => {
-    cy.contains('button', 'ryan').click();
+    cy.contains('button', 'en us male 01').click();
     cy.contains('button', 'en us female 01').click();
 
     cy.window().then((win) => {

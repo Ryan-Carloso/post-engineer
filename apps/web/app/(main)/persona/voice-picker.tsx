@@ -6,7 +6,7 @@ import { usePersonaStore } from '@/lib/store';
 import { CheckIcon, MicIcon } from '@/lib/ui';
 
 // Voice ids come from the engine's catalog and are provider-qualified:
-// `chatterbox:ryan`, or `openrouter:<model>:<voice>` for the OpenRouter TTS
+// `chatterbox:en_us_male_01`, or `openrouter:<model>:<voice>` for the OpenRouter TTS
 // provider. There is no house-voice map any more, and no label fallback: a
 // voice with no label must show its raw id, not borrow another voice's name —
 // that fallback used to render every unknown id as "Voz feminina calma".

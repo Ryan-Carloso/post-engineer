@@ -9,7 +9,7 @@ exposing that contract — deploying this app gives you a scale-to-zero one.
 Contract (subset honoured by the engine client):
     POST /v1/audio/speech
     Authorization: Bearer <CHATTERBOX_HTTP_SECRET>
-    {"model": "...", "input": "...", "voice": "ryan",
+    {"model": "...", "input": "...", "voice": "en_us_male_01",
      "response_format": "mp3" | "wav", "speed": 1.0}
 
 ``speed`` is accepted for contract parity but ignored: Chatterbox has no
@@ -19,9 +19,9 @@ transcoded with FFmpeg because the engine client currently requests MP3.
 Voices are logical names resolved from ``/voices/voices.toml`` on the
 ``chatterbox-voices`` volume — the client never sends filesystem paths:
 
-    [ryan]
-    reference = "ryan/reference.wav"   # relative to /voices
-    language_id = "pt"                 # Chatterbox language code
+    [en_us_male_01]
+    reference = "en_us_male_01/reference.wav"   # relative to /voices
+    language_id = "en"                          # Chatterbox language code
 
 One-time setup:
 
@@ -29,17 +29,17 @@ One-time setup:
     uv run modal run modal_chatterbox.py::download_weights
     uv run modal run modal_chatterbox.py::put_voices_config --path voices.toml
     uv run modal run modal_chatterbox.py::upload_reference \
-        --voice ryan --path /path/to/reference.wav
+        --voice en_us_male_01 --path /path/to/reference.wav
 
 Build a new voice from an approved recording (scripts/build_voice_reference.py
 drives upload_reference + generate_to_file + put_voices_config for you):
 
     uv run modal run modal_chatterbox.py::generate_to_file \
-        --voice ryan --text "..." --out sample.wav
+        --voice en_us_male_01 --text "..." --out sample.wav
 
 Validate, then deploy:
 
-    uv run modal run modal_chatterbox.py::validate --voice ryan
+    uv run modal run modal_chatterbox.py::validate --voice en_us_male_01
     uv run modal deploy modal_chatterbox.py
 
 Per-user clone registry: ``POST/DELETE /v1/voices`` (see ``modal_chatterbox_registry_routes``).
@@ -177,7 +177,7 @@ def _resolve_reference_path(reference: str) -> Path:
     The reference comes from our own voices.toml (not the client), but a
     misconfigured absolute path or `../` traversal would silently read
     arbitrary files — fail loudly instead. References may live in
-    subdirectories (e.g. "ryan/reference.wav"), so containment is checked
+    subdirectories (e.g. "en_us_male_01/reference.wav"), so containment is checked
     against the whole subtree, not just the direct parent.
     """
     voices_root = Path(VOICES_DIR).resolve()
@@ -408,7 +408,7 @@ def generate_test(voice: str, text: str, response_format: str = "mp3") -> int:
 
 @app.local_entrypoint()
 def upload_reference(voice: str, path: str) -> None:
-    """Upload a local reference sample: modal run modal_chatterbox.py::upload_reference --voice ryan --path ref.wav"""
+    """Upload a local reference sample: modal run modal_chatterbox.py::upload_reference --voice en_us_male_01 --path ref.wav"""
     data = Path(path).read_bytes()
     print(write_reference.remote(voice, data))
 
@@ -439,7 +439,7 @@ def generate_bytes(voice: str, text: str) -> bytes:
 def generate_to_file(voice: str, text: str, out: str) -> None:
     """Generate audio and save it locally (used by the voice build script).
 
-    modal run modal_chatterbox.py::generate_to_file --voice ryan --text "..." --out out.wav
+    modal run modal_chatterbox.py::generate_to_file --voice en_us_male_01 --text "..." --out out.wav
     """
     audio_bytes = generate_bytes.remote(voice, text)
     Path(out).write_bytes(audio_bytes)
@@ -467,8 +467,8 @@ def generate_many_to_dir(voice: str, texts_json: str, out_dir: str) -> None:
 
 @app.local_entrypoint()
 def validate(
-    voice: str = "ryan",
-    text: str = "Olá, este é um teste de geração de voz com clonagem.",
+    voice: str = "en_us_male_01",
+    text: str = "Hello, this is a voice generation test with cloning.",
     response_format: str = "mp3",
 ) -> None:
     """Smoke-test a deployed voice: modal run modal_chatterbox.py::validate"""

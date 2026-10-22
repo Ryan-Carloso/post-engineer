@@ -20,18 +20,18 @@ class TestVoiceCatalog:
     def test_catalog_is_exactly_the_configured_chatterbox_voices(self):
         """Ids are provider-qualified: the stored id is the routable one."""
         with patch.object(
-            voice_service.config, "chatterbox", {"voices": ["ryan", "en_us_female_01"]}
+            voice_service.config, "chatterbox", {"voices": ["en_us_male_01", "en_us_female_01"]}
         ):
             catalog = persona_service.get_house_voices()
 
         assert [entry["id"] for entry in catalog] == [
-            "chatterbox:ryan",
+            "chatterbox:en_us_male_01",
             "chatterbox:en_us_female_01",
         ]
 
     def test_catalog_never_offers_a_removed_house_voice(self):
         """A voice the pipeline cannot reach must not be pickable."""
-        with patch.object(voice_service.config, "chatterbox", {"voices": ["ryan"]}):
+        with patch.object(voice_service.config, "chatterbox", {"voices": ["en_us_male_01"]}):
             offered = {entry["id"] for entry in persona_service.get_house_voices()}
 
         assert offered.isdisjoint({"calm", "energetic", "young", "deep"})
@@ -44,7 +44,7 @@ class TestVoiceCatalog:
         picker offers a voice that fails loud at generation time — the exact
         class of bug this catalog rewrite is meant to end.
         """
-        with patch.object(voice_service.config, "chatterbox", {"voices": ["ryan"]}):
+        with patch.object(voice_service.config, "chatterbox", {"voices": ["en_us_male_01"]}):
             catalog = persona_service.get_house_voices()
 
         for entry in catalog:

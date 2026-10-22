@@ -11,7 +11,7 @@
 //---------------
 
 const FORM_VOICES = [
-  { id: 'chatterbox:ryan' },
+  { id: 'chatterbox:en_us_male_01' },
   { id: 'chatterbox:en_us_female_01' },
 ];
 
@@ -83,7 +83,7 @@ function visitPersona(path: string): void {
 function fillValidForm(): void {
   cy.get('#persona-name').type('Maya E2E');
   cy.get('button[aria-label="Escolha um personagem 1"]').click();
-  cy.contains('button', 'ryan').click();
+  cy.contains('button', 'en us male 01').click();
 }
 
 describe('Persona — formulário (abas, foto, validação, edição, erros)', () => {
@@ -139,13 +139,13 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
   it('ouvir o sample de uma voz e trocar de voz toca o sample da nova em inglês', () => {
     visitPersona('/persona');
 
-    cy.contains('button', 'ryan').scrollIntoView().click();
+    cy.contains('button', 'en us male 01').scrollIntoView().click();
     cy.contains('button', 'en us female 01').click();
 
     cy.window().then((win) => {
       const audios = (win as unknown as { __fakeAudios: FakeAudioRecord[] }).__fakeAudios;
       expect(audios).to.have.lengthOf(2);
-      expect(audios[0].url).to.equal('/voice-samples/chatterbox%3Aryan-en-us.mp3');
+      expect(audios[0].url).to.equal('/voice-samples/chatterbox%3Aen_us_male_01-en-us.mp3');
       expect(audios[1].url).to.equal('/voice-samples/chatterbox%3Aen_us_female_01-en-us.mp3');
       expect(audios[1].playCalled).to.equal(true);
     });
@@ -155,7 +155,7 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
     visitPersona('/persona');
 
     cy.get('#persona-name').type('Maya E2E');
-    cy.contains('button', 'ryan').click();
+    cy.contains('button', 'en us male 01').click();
     cy.contains('button', 'Criar persona').click();
 
     cy.contains('Envie uma foto ou gere um avatar por IA.').should('be.visible');
@@ -193,7 +193,7 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
             name: 'Maya E2E',
             createdAt: new Date().toISOString(),
             avatarUrl: '/caracter-samples/file-3.png',
-            voiceId: 'chatterbox:ryan',
+            voiceId: 'chatterbox:en_us_male_01',
             videoAspect: '9:16',
             scriptPrompt: '',
             niche: '',
@@ -221,7 +221,7 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
             name: 'Foto',
             createdAt: new Date().toISOString(),
             photoUrl: 'https://example.com/foto.png',
-            voiceId: 'chatterbox:ryan',
+            voiceId: 'chatterbox:en_us_male_01',
             videoAspect: '9:16',
             scriptPrompt: '',
             niche: '',
