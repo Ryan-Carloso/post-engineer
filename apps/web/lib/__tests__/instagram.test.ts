@@ -517,4 +517,37 @@ describe('InstagramService', () => {
       await pending;
     });
   });
+
+  describe('getMediaInsights', () => {
+    it('requests the media insights and maps metric name to value', async () => {
+      mockGet.mockResolvedValueOnce({
+        data: {
+          data: [
+            { name: 'views', values: [{ value: 1200 }] },
+            { name: 'likes', total_value: { value: 80 } },
+            { name: 'saved', values: [{ value: 'x' }] },
+            { values: [{ value: 3 }] },
+          ],
+        },
+      });
+      const service = new InstagramService();
+      const insights = await service.getMediaInsights('media-9', 'token-1');
+
+      expect(insights).toEqual({ views: 1200, likes: 80 });
+      expect(mockGet).toHaveBeenCalledWith(
+        `https://graph.instagram.com/${InstagramService.getApiVersion()}/media-9/insights`,
+        { params: { metric: 'views,likes,comments,saved', access_token: 'token-1' }, timeout: 15_000 },
+      );
+    });
+
+    it('returns an empty map for a body without a data array', async () => {
+      mockGet.mockResolvedValueOnce({ data: {} });
+      await expect(new InstagramService().getMediaInsights('m', 't')).resolves.toEqual({});
+    });
+
+    it('propagates HTTP errors to the caller', async () => {
+      mockGet.mockRejectedValueOnce(new Error('400 Bad Request'));
+      await expect(new InstagramService().getMediaInsights('m', 't')).rejects.toThrow('400 Bad Request');
+    });
+  });
 });
