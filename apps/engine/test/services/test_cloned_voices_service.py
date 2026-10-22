@@ -6,10 +6,8 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from app.services.cloned_voices.local_registry import RegistryNotConfiguredError
 from app.services.cloned_voices.constants import (
     ERROR_REGISTRY_FAILED,
-    ERROR_REGISTRY_NOT_CONFIGURED,
     STATUS_PENDING,
     STATUS_READY,
 )
@@ -98,9 +96,9 @@ class ClonedVoiceServiceTests(unittest.TestCase):
         self.store.mark_ready.assert_called_once_with("user-1", "clone-1")
 
     @patch("app.services.cloned_voices.service.track_event")
-    def test_register_background_marks_failed_when_registry_missing(self, _track):
+    def test_register_background_marks_failed_when_registry_raises(self, _track):
         self.store.get_for_user.return_value = {"engine_voice_key": "uabc_clone1"}
-        self.registry.register_voice.side_effect = RegistryNotConfiguredError()
+        self.registry.register_voice.side_effect = RuntimeError("disk full")
         register_clone_in_background(
             "user-1",
             "clone-1",
@@ -112,7 +110,7 @@ class ClonedVoiceServiceTests(unittest.TestCase):
         self.store.mark_failed.assert_called_once_with(
             "user-1",
             "clone-1",
-            ERROR_REGISTRY_NOT_CONFIGURED,
+            ERROR_REGISTRY_FAILED,
         )
 
     def test_delete_removes_registry_storage_and_row(self):

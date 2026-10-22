@@ -66,6 +66,16 @@ class ClonedVoicesControllerTests(unittest.TestCase):
         # The exception's message must not leak into the response.
         self.assertNotIn("decode", body["message"])
 
+    def test_create_rejects_name_over_limit(self):
+        response = self.client.post(
+            "/api/v1/cloned-voices",
+            headers=self.headers,
+            data={"language": "en", "consent": "true", "name": "x" * 61},
+            files={"file": ("sample.wav", io.BytesIO(b"data"), "audio/wav")},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["body"]["error_code"], "name_too_long")
+
     def test_create_rejects_invalid_use_cleaned(self):
         response = self.client.post(
             "/api/v1/cloned-voices",

@@ -227,14 +227,21 @@ class NanoLoaderAndDirTests(unittest.TestCase):
     def test_convert_raises_on_ffmpeg_failure(self):
         import subprocess as sp
 
-        failed = sp.CompletedProcess(args=[], returncode=1, stdout="", stderr="bad input")
+        # ffmpeg's stderr starts with a long version banner; the raised
+        # message must carry the tail (the real cause), not the banner.
+        banner = "ffmpeg version 7.0 " + ("configuration: --enable-everything " * 20)
+        failed = sp.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr=banner + "\nError: the real cause"
+        )
         with tempfile.TemporaryDirectory() as tmp, patch.object(
             local_tts.subprocess, "run", return_value=failed
         ):
-            with self.assertRaises(RuntimeError):
+            with self.assertRaises(RuntimeError) as ctx:
                 local_tts._convert_to_target(
                     str(Path(tmp) / "in.wav"), str(Path(tmp) / "out.mp3"), 1.0
                 )
+        self.assertIn("the real cause", str(ctx.exception))
+        self.assertNotIn("ffmpeg version 7.0", str(ctx.exception))
 
 
 class KokoroResidualRateTests(unittest.TestCase):

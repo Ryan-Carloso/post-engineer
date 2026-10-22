@@ -13,7 +13,6 @@ from app.services.analytics import track_event
 from app.services.cloned_voices.audio import ReferenceAudioError, normalize_reference_audio
 from app.services.cloned_voices.audio_clean import clean_reference_audio
 from app.services.cloned_voices.local_registry import (
-    RegistryNotConfiguredError,
     VoiceRegistry,
     default_registry,
     reference_path_for,
@@ -25,7 +24,6 @@ from app.services.cloned_voices.constants import (
     ERROR_NOT_READY,
     ERROR_PREVIEW_FAILED,
     ERROR_REGISTRY_FAILED,
-    ERROR_REGISTRY_NOT_CONFIGURED,
     ERROR_STORAGE_UPLOAD_FAILED,
     STATUS_READY,
 )
@@ -90,10 +88,6 @@ def register_clone_in_background(
             return
         try:
             reg.register_voice(voice_key, language, wav_bytes)
-        except RegistryNotConfiguredError:
-            db.mark_failed(user_id, clone_id, ERROR_REGISTRY_NOT_CONFIGURED)
-            _track_clone("voice_clone_failed", user_id, clone_id, ERROR_REGISTRY_NOT_CONFIGURED)
-            return
         except Exception:
             logger.exception(f"cloned voice registry failed, clone_id: {clone_id}")
             db.mark_failed(user_id, clone_id, ERROR_REGISTRY_FAILED)
@@ -326,11 +320,6 @@ class ClonedVoiceService:
         if isinstance(voice_key, str) and voice_key:
             try:
                 reg.delete_voice(voice_key)
-            except RegistryNotConfiguredError:
-                logger.warning(
-                    "cloned voice delete skipped registry (not configured), "
-                    f"clone_id: {clone_id}"
-                )
             except Exception:
                 logger.exception(
                     f"cloned voice registry delete failed, clone_id: {clone_id}"

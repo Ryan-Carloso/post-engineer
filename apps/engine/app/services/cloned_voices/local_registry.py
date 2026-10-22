@@ -63,10 +63,6 @@ class VoiceRegistry(Protocol):
         ...
 
 
-class RegistryNotConfiguredError(RuntimeError):
-    """Raised when cloned-voice registration is not wired for this deployment."""
-
-
 def local_registry_dir() -> Path:
     section: dict[str, Any] = app_config.cloned_voices or {}
     configured = (section.get("local_dir") or os.getenv("CLONED_VOICES_LOCAL_DIR") or "").strip()

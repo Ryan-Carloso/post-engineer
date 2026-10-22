@@ -201,9 +201,12 @@ def _convert_to_target(wav_path: str, voice_file: str, voice_rate: float) -> Non
     command.append(voice_file)
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     if result.returncode != 0:
-        raise RuntimeError(
-            f"ffmpeg convert failed: {(result.stderr or result.stdout or '').strip()[:200]}"
-        )
+        # The head of ffmpeg's stderr is the version/configuration
+        # banner; the actual cause sits in the tail. Scrub first (the
+        # output can carry temp/task paths), then cut the tail — this
+        # string lands in the task error and the PostHog failure reason.
+        detail = scrub_secret_values((result.stderr or result.stdout or "")[-300:])
+        raise RuntimeError(f"ffmpeg convert failed: {detail.strip()}")
 
 
 def _finish(text: str, wav_path: str, voice_file: str, voice_rate: float) -> TtsResult:
