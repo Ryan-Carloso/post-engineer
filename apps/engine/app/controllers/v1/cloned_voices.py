@@ -93,17 +93,25 @@ _PUBLIC_ERROR_MESSAGES: dict[str, str] = {
 }
 
 
-def _public_error_message(error_code: str) -> str:
-    return _PUBLIC_ERROR_MESSAGES.get(error_code, "cloned voice request failed")
+_UNKNOWN_ERROR_CODE = "request_failed"
+
+
+def _public_error(error_code: str) -> tuple[str, str]:
+    """(code, message) taken from the fixed table, never from the exception."""
+    for code, message in _PUBLIC_ERROR_MESSAGES.items():
+        if code == error_code:
+            return code, message
+    return _UNKNOWN_ERROR_CODE, "cloned voice request failed"
 
 
 def _reference_error_response(exc: ReferenceAudioError, status: int = 400) -> JSONResponse:
+    code, message = _public_error(exc.error_code)
     return JSONResponse(
         status_code=status,
         content=utils.get_response(
             status=status,
-            message=_public_error_message(exc.error_code),
-            body={"error_code": exc.error_code},
+            message=message,
+            body={"error_code": code},
         ),
     )
 

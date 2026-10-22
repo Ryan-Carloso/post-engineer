@@ -314,6 +314,7 @@ class ClonedVoicesControllerTests(unittest.TestCase):
         response = self.client.post("/api/v1/cloned-voices/clone-1/preview", headers=self.headers)
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["message"], "cloned voice request failed")
+        self.assertEqual(response.json()["body"]["error_code"], "request_failed")
 
     def test_denoise_preview_requires_auth(self):
         response = self.client.post(

@@ -43,6 +43,12 @@ LEGACY_VOICE_ALIASES: dict[str, str] = {
     "en_us_male_03": "kokoro_am_eric",
     "en_us_male_04": "kokoro_am_liam",
     "default-Female": "kokoro_af_heart",
+    # voice.py strips a display "-Female"/"-Male" suffix before dispatch, so
+    # the old config default arrives at the TTS server as plain "default".
+    "default": "kokoro_af_heart",
+    # The retired personal "ryan" house clone (removed from the shared
+    # catalog in this release); personas that picked it keep a male US voice.
+    "ryan": "kokoro_am_michael",
 }
 
 

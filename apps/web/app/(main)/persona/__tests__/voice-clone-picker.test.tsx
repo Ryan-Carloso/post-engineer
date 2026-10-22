@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 
 import { PersonaVoiceClonePanel, VoiceTabButton } from '../voice-clone-picker';
 import type { ClonedVoicePublicRow } from '@/lib/cloned-voices-types';
+import { clonedVoicePreviewUrl } from '@/lib/cloned-voices-client';
 
 const cloneMocks = vi.hoisted(() => ({
   list: [] as ClonedVoicePublicRow[],
@@ -314,6 +315,9 @@ describe('PersonaVoiceClonePanel', () => {
     expect(cloneMocks.setVoiceId).toHaveBeenCalledWith('chatterbox:uabc_123');
     await user.click(screen.getByRole('button', { name: 'persona.voiceClonePlayPreview' }));
     expect(cloneMocks.audioPlay).toHaveBeenCalled();
+    // No language override: a legacy non-English clone must not hit the
+    // English-only gate; the engine uses the clone's registered language.
+    expect(vi.mocked(clonedVoicePreviewUrl)).toHaveBeenCalledWith('clone-ready', null);
   });
 
   it('deletes a clone from the list', async () => {

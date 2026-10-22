@@ -244,7 +244,10 @@ export const PersonaVoiceClonePanel = () => {
 
   const playServerPreview = (clone: ClonedVoicePublicRow) => {
     previewAudioRef.current?.pause();
-    const audio = new Audio(clonedVoicePreviewUrl(clone.id, clone.language));
+    // No language override: the engine previews in the clone's registered
+    // language, and an override from a legacy non-English clone would be
+    // rejected by the English-only gate.
+    const audio = new Audio(clonedVoicePreviewUrl(clone.id, null));
     previewAudioRef.current = audio;
     void audio.play().catch(() => {
       setError(t('persona.voiceClonePreviewFailed'));
