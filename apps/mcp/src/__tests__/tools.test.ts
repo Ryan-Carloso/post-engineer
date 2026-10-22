@@ -374,6 +374,15 @@ describe('schema bounds', () => {
     expect(updated.success).toBe(false);
   });
 
+  it('persona schemas accept the full English language name', () => {
+    const created = CreatePersonaSchema.safeParse({
+      name: 'x',
+      avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
+      language: 'English',
+    });
+    expect(created.success).toBe(true);
+  });
+
   it('persona schemas accept English regional variants', () => {
     const created = CreatePersonaSchema.safeParse({
       name: 'x',

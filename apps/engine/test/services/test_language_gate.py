@@ -18,8 +18,15 @@ class IsEnglishLanguageTests(unittest.TestCase):
             with self.subTest(language=language):
                 self.assertTrue(is_english_language(language))
 
+    def test_accepts_the_full_english_language_name(self):
+        # Personas may store a language name instead of a code ("English");
+        # edge_tts has always accepted that form, so the gate must too.
+        for language in ("English", "english", "ENGLISH", "inglês", "ingles"):
+            with self.subTest(language=language):
+                self.assertTrue(is_english_language(language))
+
     def test_rejects_other_languages(self):
-        for language in ("pt", "pt-BR", "es", "fr", "de", "enx"):
+        for language in ("pt", "pt-BR", "es", "fr", "de", "enx", "Portuguese"):
             with self.subTest(language=language):
                 self.assertFalse(is_english_language(language))
 
@@ -41,7 +48,7 @@ class EnsureEnglishVideoLanguageTests(unittest.TestCase):
         self.assertEqual(caught.exception.task_id, "task-9")
 
     def test_accepts_english_video_languages(self):
-        for language in ("en", "en-US", "EN-GB"):
+        for language in ("en", "en-US", "EN-GB", "English"):
             with self.subTest(language=language):
                 body = SimpleNamespace(video_language=language)
                 ensure_english_video_language(body, "req-9", "task-9")

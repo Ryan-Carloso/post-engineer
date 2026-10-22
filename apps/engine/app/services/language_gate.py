@@ -17,12 +17,18 @@ ENGLISH_ONLY_VIDEO_MESSAGE = "Only English videos are supported for now"
 ENGLISH_ONLY_CLONE_MESSAGE = "Voice cloning is only available in English for now"
 
 
+# Personas may store a language name instead of a code ("English"); the
+# edge-tts voice selection has always accepted that form, so the gate
+# must too, or legacy personas get rejected for being English.
+_ENGLISH_LANGUAGE_NAMES = {"english", "inglês", "ingles"}
+
+
 def is_english_language(language: str | None) -> bool:
     """True when `language` is English or a regional variant of it."""
     if not language:
         return False
     base = language.strip().lower().replace("_", "-").split("-", 1)[0]
-    return base == "en"
+    return base == "en" or base in _ENGLISH_LANGUAGE_NAMES
 
 
 def ensure_english_video_language(body: object, request_id: str, task_id: str) -> None:

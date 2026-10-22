@@ -9,8 +9,14 @@ describe('isEnglishLanguage', () => {
     }
   });
 
+  it('accepts the full English language name stored by legacy personas', () => {
+    for (const language of ['English', 'english', 'ENGLISH', 'inglês', 'ingles']) {
+      expect(isEnglishLanguage(language)).toBe(true);
+    }
+  });
+
   it('rejects other languages', () => {
-    for (const language of ['pt', 'pt-BR', 'es', 'fr', 'de', 'enx']) {
+    for (const language of ['pt', 'pt-BR', 'es', 'fr', 'de', 'enx', 'Portuguese']) {
       expect(isEnglishLanguage(language)).toBe(false);
     }
   });
