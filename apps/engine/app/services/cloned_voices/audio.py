@@ -92,6 +92,19 @@ def normalize_reference_audio(source_bytes: bytes, denoise: bool) -> NormalizedR
         wav_path = work_path / "reference.wav"
         source_path.write_bytes(source_bytes)
 
+        # Reject over-long sources from the cheap probe before the decode
+        # pass: with the denoise filter chain that pass costs real CPU per
+        # second of audio, and a byte-capped low-bitrate upload can hold
+        # far more than MAX_REFERENCE_SECONDS. A probe that cannot read
+        # the source (None) falls through — the post-decode probe below
+        # still rejects it as invalid.
+        source_duration = _probe_duration_seconds(source_path)
+        if source_duration is not None and source_duration > MAX_REFERENCE_SECONDS:
+            raise ReferenceAudioError(
+                ERROR_AUDIO_TOO_LONG,
+                f"reference audio exceeds {MAX_REFERENCE_SECONDS} seconds",
+            )
+
         filter_args = ["-af", DENOISE_FILTER] if denoise else []
         result = subprocess.run(
             [

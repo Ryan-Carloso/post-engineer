@@ -35,6 +35,26 @@ class ClonedVoiceAudioTests(unittest.TestCase):
                     normalize_reference_audio(b"not-empty", denoise=False)
         self.assertEqual(ctx.exception.error_code, ERROR_AUDIO_TOO_LONG)
 
+    def test_over_duration_source_is_rejected_before_any_ffmpeg_pass(self):
+        # The denoise filter chain is CPU-heavy: an over-long upload must be
+        # rejected from the cheap source probe, not after the full pass.
+        calls = []
+
+        def fake_run(args, **_kwargs):
+            calls.append(args)
+            return subprocess.CompletedProcess(
+                args=args,
+                returncode=0,
+                stdout='{"streams":[{"codec_type":"audio"}],"format":{"duration":"120"}}',
+                stderr="",
+            )
+
+        with patch("app.services.cloned_voices.audio.subprocess.run", side_effect=fake_run):
+            with self.assertRaises(ReferenceAudioError) as ctx:
+                normalize_reference_audio(b"not-empty", denoise=True)
+        self.assertEqual(ctx.exception.error_code, ERROR_AUDIO_TOO_LONG)
+        self.assertFalse([args for args in calls if args[0] == "ffmpeg"])
+
     def _ffmpeg_args(self, denoise):
         calls = []
 
