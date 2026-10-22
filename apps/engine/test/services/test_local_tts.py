@@ -318,22 +318,21 @@ class LocalTtsTests(unittest.TestCase):
         fake = _FakeNano()
         with (
             patch.object(local_tts, "_load_nano", return_value=fake),
-            patch.object(local_tts, "reference_path_for", return_value=Path(reference)),
+            patch.object(local_tts, "local_registry_dir", return_value=Path(self._tmp.name)),
         ):
             result = local_tts.clone_tts("Hello.", "u0123456789ab_c0123456789a", self.voice_file)
         self.assertTrue(result.ok, result.error)
         self.assertEqual(fake.calls[0][1], reference)
 
     def test_clone_tts_fails_loudly_without_a_reference(self):
-        missing = Path(self._tmp.name) / "nope.wav"
-        with patch.object(local_tts, "reference_path_for", return_value=missing):
+        with patch.object(local_tts, "local_registry_dir", return_value=Path(self._tmp.name)):
             result = local_tts.clone_tts("Hello.", "u0123456789ab_c0123456789a", self.voice_file)
         self.assertFalse(result.ok)
         self.assertIn("not available", result.error)
 
     def test_clone_tts_rejects_a_traversal_key(self):
-        # The REAL reference_path_for (registry sink validation) must
-        # refuse the crafted key before any model loads.
+        # The key-shape allowlist must refuse the crafted key before
+        # any model loads.
         with patch.object(local_tts, "_load_nano") as load_nano:
             result = local_tts.clone_tts("Hello.", "../victim", self.voice_file)
         self.assertFalse(result.ok)

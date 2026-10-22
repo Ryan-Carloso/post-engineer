@@ -32,6 +32,11 @@ from app.utils import file_security
 _VOICE_KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 
 
+def is_valid_voice_key(voice_key: str) -> bool:
+    """True for a plain registry key (no separators, dots, or empty)."""
+    return bool(_VOICE_KEY_RE.match((voice_key or "").strip()))
+
+
 def _validated_key_path(directory: Path, voice_key: str) -> Path:
     """The WAV path for ``voice_key`` inside ``directory``.
 

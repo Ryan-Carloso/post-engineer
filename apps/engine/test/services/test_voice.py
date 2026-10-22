@@ -547,12 +547,12 @@ class TestTtsFailureReasons(unittest.TestCase):
     def test_chatterbox_local_failure_reports_model_cause(self):
         """A local Nano failure surfaces its real cause, not a generic string."""
         with tempfile.TemporaryDirectory() as tmp_dir:
-            reference = Path(tmp_dir) / "ref.wav"
+            reference = Path(tmp_dir) / "u0123456789ab_c0123456789a.wav"
             reference.write_bytes(b"RIFF-fake")
             with (
                 patch(
-                    "app.services.local_tts.reference_path_for",
-                    return_value=reference,
+                    "app.services.local_tts.local_registry_dir",
+                    return_value=Path(tmp_dir),
                 ),
                 patch(
                     "app.services.local_tts._load_nano",
