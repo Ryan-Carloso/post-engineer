@@ -85,11 +85,15 @@ services:
     container_name: mpt-tts-cpu
     restart: unless-stopped
     # Not published on the host: only the engine reaches it, over the
-    # compose network. CHATTERBOX_HTTP_SECRET comes from .env.
+    # compose network. Only the two variables the TTS server reads are
+    # passed in (compose interpolates them from .env): the shared bearer
+    # secret, and HF_TOKEN for the gated Chatterbox Nano download — the
+    # engine's other secrets never enter this container.
     expose:
       - "4123"
-    env_file:
-      - .env
+    environment:
+      - CHATTERBOX_HTTP_SECRET=${CHATTERBOX_HTTP_SECRET}
+      - HF_TOKEN=${HF_TOKEN:-}
     volumes:
       - tts_voices:/voices
       - tts_models:/models

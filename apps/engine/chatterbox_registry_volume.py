@@ -1,6 +1,8 @@
-"""Pure helpers for voices.toml on the Modal chatterbox-voices volume.
+"""Pure helpers for voices.toml on the chatterbox-voices volume.
 
-Used by modal_chatterbox.py HTTP registry endpoints and unit tests (no Modal import).
+Used by the local TTS server registry routes
+(modal_chatterbox_registry_routes.py, mounted by local_tts/server.py)
+and unit tests (no Modal import).
 """
 
 from __future__ import annotations
