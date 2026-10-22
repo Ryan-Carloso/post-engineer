@@ -43,7 +43,17 @@ async function getHandler(request: Request): Promise<NextResponse> {
     .eq('user_id', auth.userId)
     .eq('metrics_window', query.window);
 
-  if (isScopedApiKey(auth)) select = select.in('persona_id', auth.personaIds ?? []);
+  // Persona-scoped API keys see their personas' rows plus persona-less
+  // (faceless) rows — same policy as GET /api/schedule/status: a post
+  // with no persona belongs to no persona scope, so it is included like
+  // an unrestricted one, otherwise a scoped key could never see metrics
+  // for a persona-less post it can already list.
+  if (isScopedApiKey(auth)) {
+    const personaIds = auth.personaIds ?? [];
+    select = personaIds.length > 0
+      ? select.or(`persona_id.in.(${personaIds.join(',')}),persona_id.is.null`)
+      : select.is('persona_id', null);
+  }
   if (query.personaId === METRICS_NONE) select = select.is('persona_id', null);
   else if (query.personaId !== null) select = select.eq('persona_id', query.personaId);
   if (query.accountId !== null) select = select.eq('account_id', query.accountId);

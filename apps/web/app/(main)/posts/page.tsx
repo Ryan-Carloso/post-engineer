@@ -440,7 +440,7 @@ export default function PostsPage() {
           >
             {t('posts.refresh')}
           </button>
-          {/* The mobile bottom bar holds five tabs; this is how phones reach metrics. */}
+          {/* The mobile bottom bar has no Metrics tab (pinned at four tabs in layout.test.tsx); this button is how phones reach /metrics. */}
           <Link href="/metrics" className="rounded-xl border border-input bg-white px-4 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb]">
             {t('nav.metrics')}
           </Link>

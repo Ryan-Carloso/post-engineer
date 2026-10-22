@@ -107,6 +107,11 @@ describe('ChartTooltipContent', () => {
     expect(indicator?.style.getPropertyValue('--color-border')).toBe('#0aa0aa');
   });
 
+  it('renders a zero value instead of dropping it as falsy', () => {
+    renderWithConfig(<ChartTooltipContent active payload={[tooltipItem({ value: 0 })] as never} label="Alpha" />);
+    expect(screen.getByText('0')).toBeInTheDocument();
+  });
+
   it('uses a custom labelFormatter and formatter when provided', () => {
     renderWithConfig(
       <ChartTooltipContent

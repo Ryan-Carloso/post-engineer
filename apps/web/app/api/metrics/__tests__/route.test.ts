@@ -29,7 +29,7 @@ function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
 function mockQuery(result: { data: unknown; error: unknown }) {
   const calls: Array<[string, ...unknown[]]> = [];
   const builder: Record<string, unknown> = {};
-  for (const method of ['select', 'eq', 'is', 'in', 'order']) {
+  for (const method of ['select', 'eq', 'is', 'in', 'or', 'order']) {
     builder[method] = vi.fn((...args: unknown[]) => { calls.push([method, ...args]); return builder; });
   }
   builder.limit = vi.fn(async (...args: unknown[]) => { calls.push(['limit', ...args]); return result; });
@@ -86,13 +86,24 @@ describe('GET /api/metrics', () => {
     expect(third.calls).toContainEqual(['eq', 'script_angle', 'none']);
   });
 
-  it('limits a persona-scoped API key to its personas', async () => {
+  it('limits a persona-scoped API key to its personas plus persona-less rows', async () => {
     vi.mocked(requireSupabaseSession).mockResolvedValue({
       auth: { userId: 'user-1', isApiKey: true, personaIds: [PERSONA] }, error: null,
     } as never);
     const { calls } = mockQuery({ data: [], error: null });
     await get('?window=24h');
-    expect(calls).toContainEqual(['in', 'persona_id', [PERSONA]]);
+    // Persona-less (faceless) rows belong to no persona scope and stay
+    // visible, mirroring GET /api/schedule/status.
+    expect(calls).toContainEqual(['or', `persona_id.in.(${PERSONA}),persona_id.is.null`]);
+  });
+
+  it('limits a persona-scoped API key with no personas to persona-less rows', async () => {
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: 'user-1', isApiKey: true, personaIds: [] }, error: null,
+    } as never);
+    const { calls } = mockQuery({ data: [], error: null });
+    await get('?window=24h');
+    expect(calls).toContainEqual(['is', 'persona_id', null]);
   });
 
   it('flags truncation when more rows than the cap exist', async () => {
