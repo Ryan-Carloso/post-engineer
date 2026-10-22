@@ -24,7 +24,7 @@ import { ProviderIcon } from '@/components/provider-icon';
 import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
 import { SpinnerIcon } from '@/lib/ui';
-import { PROVIDER_LABELS, type AccountOption } from '@/lib/account-options';
+import { PROVIDER_LABELS, accountOption, type AccountOption } from '@/lib/account-options';
 import { GENERATION_ERROR_KEY } from '@/lib/generation/generation-errors';
 
 //---------------
@@ -338,26 +338,10 @@ export default function PostsPage() {
 
   const accountOptions: AccountOption[] = useMemo(
     () => [
-      ...(youtubeQuery.data?.accounts ?? []).map((account) => ({
-        id: account.channelId,
-        provider: 'youtube' as const,
-        label: account.channelName,
-      })),
-      ...(instagramQuery.data?.accounts ?? []).map((account) => ({
-        id: account.igUserId,
-        provider: 'instagram' as const,
-        label: `@${account.username}`,
-      })),
-      ...(linkedinQuery.data?.accounts ?? []).map((account) => ({
-        id: account.providerAccountId,
-        provider: 'linkedin' as const,
-        label: account.accountName ?? account.providerAccountId,
-      })),
-      ...(blueskyQuery.data?.accounts ?? []).map((account) => ({
-        id: account.did,
-        provider: 'bluesky' as const,
-        label: `@${account.handle}`,
-      })),
+      ...(youtubeQuery.data?.accounts ?? []).map(accountOption),
+      ...(instagramQuery.data?.accounts ?? []).map(accountOption),
+      ...(linkedinQuery.data?.accounts ?? []).map(accountOption),
+      ...(blueskyQuery.data?.accounts ?? []).map(accountOption),
     ],
     [youtubeQuery.data, instagramQuery.data, linkedinQuery.data, blueskyQuery.data],
   );
