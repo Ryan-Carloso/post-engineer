@@ -316,7 +316,7 @@ def clone_tts(
     # here. The resolved path is then re-checked against the registry
     # dir at this sink, before any use.
     try:
-        reference = reference_path_for(voice_key)
+        reference = reference_path_for(voice_key).resolve()
     except ValueError:
         logger.error(f"invalid cloned voice key rejected, voice_key: {voice_key}")
         return TtsResult(error="invalid cloned voice id")
