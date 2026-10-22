@@ -141,6 +141,41 @@ class ClonedVoiceStoreTest(unittest.TestCase):
         self.assertEqual(call[1]["params"]["status"], "eq.pending")
         self.assertEqual(call[1]["params"]["order"], "created_at.asc")
 
+    def _store_with_response(self, payload):
+        requests = MagicMock()
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = payload
+        requests.request.return_value = response
+        store = ClonedVoiceStore(
+            url="https://supabase.example",
+            service_key="service-key",
+            requests_module=requests,
+        )
+        return store, requests
+
+    def test_list_for_user_selects_name(self) -> None:
+        # The clone list renders clone.name; if the select drops the
+        # column the name silently never reaches the UI (review finding).
+        store, requests = self._store_with_response(
+            [{"id": "clone-1", "status": "ready", "name": "Minha voz"}]
+        )
+        rows = store.list_for_user("user-1")
+        self.assertEqual(rows[0]["name"], "Minha voz")
+        select = requests.request.call_args[1]["params"]["select"]
+        self.assertIn("name", select.split(","))
+
+    def test_list_ready_queries_ready_rows_oldest_first(self) -> None:
+        store, requests = self._store_with_response(
+            [{"id": "clone-1", "status": "ready"}]
+        )
+        rows = store.list_ready()
+        self.assertEqual(len(rows), 1)
+        call = requests.request.call_args
+        self.assertEqual(call[1]["params"]["status"], "eq.ready")
+        self.assertEqual(call[1]["params"]["order"], "created_at.asc")
+        self.assertIn("storage_path", call[1]["params"]["select"])
+
     def test_download_reference_wav_gets_storage_object(self) -> None:
         requests = MagicMock()
         response = MagicMock()

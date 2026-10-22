@@ -162,7 +162,7 @@ class ClonedVoiceStore:
             "cloned_voices",
             params={
                 "user_id": f"eq.{user_id}",
-                "select": "id,status,language,engine_voice_key,error_code,created_at,updated_at,consent_at",
+                "select": "id,status,language,name,engine_voice_key,error_code,created_at,updated_at,consent_at",
                 "order": "created_at.desc",
             },
         )
@@ -188,6 +188,19 @@ class ClonedVoiceStore:
             "cloned_voices",
             params={
                 "status": f"eq.{STATUS_PENDING}",
+                "select": "id,user_id,storage_path,engine_voice_key,language,created_at",
+                "order": "created_at.asc",
+            },
+        )
+        response.raise_for_status()
+        return list(response.json() or [])
+
+    def list_ready(self) -> list[dict[str, Any]]:
+        response = self._rest(
+            "GET",
+            "cloned_voices",
+            params={
+                "status": f"eq.{STATUS_READY}",
                 "select": "id,user_id,storage_path,engine_voice_key,language,created_at",
                 "order": "created_at.asc",
             },

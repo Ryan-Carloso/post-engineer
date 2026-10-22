@@ -9,10 +9,12 @@ time. A user's ready clones are appended only for that user.
 """
 
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from app.services import persona as persona_service
 from app.services import voice_catalog
+from app.services.voice_providers import TtsResult
 
 OPENROUTER_VOICES = [
     "openrouter:x-ai/grok-voice-tts-1.0:eve",
@@ -94,6 +96,44 @@ class TestHouseVoiceCatalog(unittest.TestCase):
                 result = persona_service.get_house_voices()
 
         self.assertEqual(result, PRESET_ENTRIES)
+
+
+class TestVoiceSample(unittest.TestCase):
+    def setUp(self):
+        persona_service._voice_sample_cache.clear()
+
+    def tearDown(self):
+        persona_service._voice_sample_cache.clear()
+
+    def test_non_catalog_id_never_reaches_tts(self):
+        # Paid providers (ElevenLabs/OpenRouter) must not be reachable
+        # through the sample endpoint — catalog voices only.
+        with patch.object(persona_service.voice_service, "tts") as tts:
+            result = persona_service.get_voice_sample("elevenlabs:abc123")
+        self.assertIsNone(result)
+        tts.assert_not_called()
+
+    def test_catalog_voice_synthesizes_and_caches(self):
+        def fake_tts(text, voice_id, rate, path):
+            Path(path).write_bytes(b"mp3-bytes")
+            return TtsResult(sub_maker=object())
+
+        with patch.object(persona_service.voice_service, "tts", side_effect=fake_tts) as tts:
+            first = persona_service.get_voice_sample("phonon:Zoey")
+            second = persona_service.get_voice_sample("phonon:Zoey")
+
+        self.assertEqual(first, b"mp3-bytes")
+        self.assertEqual(second, b"mp3-bytes")
+        tts.assert_called_once()
+
+    def test_failed_synthesis_returns_none(self):
+        with patch.object(
+            persona_service.voice_service,
+            "tts",
+            return_value=TtsResult(error="synthesis broke"),
+        ):
+            result = persona_service.get_voice_sample("kokoro:af_heart")
+        self.assertIsNone(result)
 
 
 if __name__ == "__main__":

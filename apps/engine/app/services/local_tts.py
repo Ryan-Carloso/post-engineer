@@ -23,6 +23,7 @@ Kokoro takes a native ``speed``.
 
 from __future__ import annotations
 
+import math
 import os
 import subprocess
 import tempfile
@@ -54,10 +55,28 @@ KOKORO_MODEL_URL = f"{_KOKORO_RELEASE}/kokoro-v1.0.onnx"
 KOKORO_VOICES_URL = f"{_KOKORO_RELEASE}/voices-v1.0.bin"
 KOKORO_SAMPLE_RATE = 24000
 
-# ffmpeg atempo accepts 0.5-2.0 per instance; voice rates in practice
-# sit well inside that, so a single clamped instance is enough.
+# ffmpeg atempo accepts 0.5-2.0 per instance, but the schema allows
+# voice_rate 0.1-5.0 — _atempo_filter chains instances so any
+# schema-valid rate is honored instead of silently clamped.
 _RATE_MIN = 0.5
 _RATE_MAX = 2.0
+
+
+def _atempo_filter(rate: float) -> str | None:
+    """The ``-af`` value realizing ``rate``, or None for a 1.0 rate.
+
+    Splits the rate into N equal factors (N minimal) so every factor
+    sits inside atempo's 0.5-2.0 window: 3.0 -> atempo=1.732,atempo=1.732.
+    """
+    rate = float(rate or 1.0)
+    if abs(rate - 1.0) < 1e-9:
+        return None
+    if rate > 1.0:
+        count = math.ceil(math.log(rate) / math.log(_RATE_MAX))
+    else:
+        count = math.ceil(math.log(rate) / math.log(_RATE_MIN))
+    factor = rate ** (1.0 / count)
+    return ",".join(f"atempo={factor:.10g}" for _ in range(count))
 
 _phonon_lock = threading.Lock()
 _kokoro_lock = threading.Lock()
@@ -173,9 +192,9 @@ def _convert_to_target(wav_path: str, voice_file: str, voice_rate: float) -> Non
         Path(voice_file).write_bytes(Path(wav_path).read_bytes())
         return
     command = [utils.get_ffmpeg_binary(), "-y", "-i", wav_path]
-    rate = max(_RATE_MIN, min(_RATE_MAX, float(voice_rate or 1.0)))
-    if abs(rate - 1.0) >= 1e-9:
-        command += ["-af", f"atempo={rate}"]
+    atempo = _atempo_filter(voice_rate)
+    if atempo is not None:
+        command += ["-af", atempo]
     command.append(voice_file)
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     if result.returncode != 0:
@@ -236,15 +255,18 @@ def kokoro_tts(
         return TtsResult(error="Kokoro TTS failed: text is empty")
     text = _preprocess_text_for_tts(text)
     lang = "en-gb" if voice.startswith("b") else "en-us"
-    speed = max(_RATE_MIN, min(_RATE_MAX, float(voice_rate or 1.0)))
+    requested = float(voice_rate or 1.0)
+    speed = max(_RATE_MIN, min(_RATE_MAX, requested))
     try:
         model = _load_kokoro()
         samples, sample_rate = model.create(text, voice=voice, speed=speed, lang=lang)
         with tempfile.TemporaryDirectory(prefix="kokoro-tts-") as work:
             wav_path = os.path.join(work, "out.wav")
             _write_float_wav(wav_path, np.asarray(samples, dtype=np.float32), int(sample_rate))
-            # Kokoro already applied the rate natively.
-            return _finish(text, wav_path, voice_file, 1.0)
+            # Kokoro applied the clamped rate natively; _finish applies
+            # only the residual (rate / speed) via atempo, so rates
+            # outside Kokoro's 0.5-2.0 window still land exactly.
+            return _finish(text, wav_path, voice_file, requested / speed)
     except Exception as exc:
         return _fail("Kokoro", exc)
 

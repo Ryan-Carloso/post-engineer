@@ -145,7 +145,14 @@ def get_voice_sample(voice_id: str) -> bytes | None:
     dispatch real jobs use (so a sample can never sound like a
     different provider than the video will) and cached per voice for
     the life of the process. Returns None when synthesis fails.
+
+    Catalog voices only: the id is checked against the preset catalog
+    first, so a caller can never route arbitrary ids (ElevenLabs,
+    OpenRouter) through this endpoint into paid third-party quota —
+    and the cache stays bounded by the catalog size.
     """
+    if voice_catalog.get_voice(voice_id) is None:
+        return None
     cache_key = (voice_id, "en-us")
     cached = _voice_sample_cache.get(cache_key)
     if cached is not None:

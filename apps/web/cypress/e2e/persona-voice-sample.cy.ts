@@ -1,26 +1,37 @@
 //---------------
- // Persona voice sample E2E — clicar no card de voz da casa na página
-// /persona seleciona a voz E toca o sample de áudio. Rede mockada via
+// Persona voice sample E2E — clicar no card de voz na página /persona
+// seleciona a voz E toca o sample sintetizado pela API local
+// (GET /api/persona/voices/sample?voice_id=...). Rede mockada via
 // cy.intercept; o construtor Audio é stubado antes do load da página.
 //
-// The catalog is the provider-qualified Chatterbox list
-// (chatterbox:<name>) and the picker renders the bare voice name
-// (voiceLabel strips the prefix, underscores become spaces).
+// The catalog is the local preset catalog (Phonon + Kokoro) with
+// filter metadata; the picker renders the voice name and the filter
+// chips narrow the grid by gender and origin.
 //---------------
 
 const VOICES = [
-  { id: 'chatterbox:ryan' },
-  { id: 'chatterbox:en_us_female_01' },
-];
-
-const SAMPLE_LANGUAGES = [
-  { code: 'pt-br', label: 'Português (BR)' },
-  { code: 'en-uk', label: 'English (UK)' },
+  {
+    id: 'phonon:Easton',
+    name: 'Easton',
+    provider: 'phonon',
+    gender: 'male',
+    category: 'normal',
+    locale: 'en-US',
+  },
+  {
+    id: 'kokoro:bf_emma',
+    name: 'Emma',
+    provider: 'kokoro',
+    gender: 'female',
+    category: 'normal',
+    locale: 'en-GB',
+  },
 ];
 
 interface FakeAudioRecord {
   url: string;
   playCalled: boolean;
+  pauseCalled: boolean;
 }
 
 const stubAudio = (win: Cypress.AUTWindow): void => {
@@ -28,16 +39,20 @@ const stubAudio = (win: Cypress.AUTWindow): void => {
   class FakeAudio {
     url: string;
     playCalled: boolean;
+    pauseCalled: boolean;
     constructor(url: string) {
       this.url = url;
       this.playCalled = false;
+      this.pauseCalled = false;
       created.push(this);
     }
     play(): Promise<void> {
       this.playCalled = true;
       return Promise.resolve();
     }
-    pause(): void {}
+    pause(): void {
+      this.pauseCalled = true;
+    }
   }
   win.Audio = FakeAudio as unknown as typeof Audio;
   (win as unknown as { __fakeAudios: FakeAudioRecord[] }).__fakeAudios = created;
@@ -54,11 +69,6 @@ describe('Persona — sample de voz ao clicar no card', () => {
       body: { voices: VOICES },
     }).as('getVoices');
 
-    cy.intercept('GET', '/api/persona/voice-sample-languages', {
-      statusCode: 200,
-      body: { languages: SAMPLE_LANGUAGES },
-    }).as('getSampleLanguages');
-
     cy.intercept('GET', '/api/persona/list', {
       statusCode: 200,
       body: { personas: [] },
@@ -68,44 +78,47 @@ describe('Persona — sample de voz ao clicar no card', () => {
     cy.wait('@getVoices');
   });
 
-  it('toca o sample da voz ao clicar no card da casa', () => {
-    cy.contains('button', 'ryan').click();
+  it('toca o sample da voz ao clicar no card', () => {
+    cy.contains('button', 'Easton').click();
 
     cy.window().then((win) => {
       const audios = (win as unknown as { __fakeAudios: FakeAudioRecord[] }).__fakeAudios;
       expect(audios).to.have.length(1);
-      // Sample files are named after the voice id, URL-encoded
-      // (public/voice-samples/<encoded-id>-<lang>.mp3).
-      expect(audios[0].url).to.equal('/voice-samples/chatterbox%3Aryan-pt-br.mp3');
-      expect(audios[0].playCalled).to.be.true;
+      expect(audios[0].url).to.equal(
+        '/api/persona/voices/sample?voice_id=phonon%3AEaston',
+      );
+      expect(audios[0].playCalled).to.equal(true);
     });
   });
 
-  it('trocar de voz para o sample anterior e toca o da nova', () => {
-    cy.contains('button', 'ryan').click();
-    cy.contains('button', 'en us female 01').click();
+  it('trocar de voz pausa o sample anterior e toca o da nova', () => {
+    cy.contains('button', 'Easton').click();
+    cy.contains('button', 'Emma').click();
 
     cy.window().then((win) => {
       const audios = (win as unknown as { __fakeAudios: FakeAudioRecord[] }).__fakeAudios;
       expect(audios).to.have.length(2);
+      expect(audios[0].pauseCalled).to.equal(true);
       expect(audios[1].url).to.equal(
-        '/voice-samples/chatterbox%3Aen_us_female_01-pt-br.mp3',
+        '/api/persona/voices/sample?voice_id=kokoro%3Abf_emma',
       );
-      expect(audios[1].playCalled).to.be.true;
+      expect(audios[1].playCalled).to.equal(true);
     });
   });
 
-  it('mudar o idioma do sample altera a language do áudio tocado', () => {
-    cy.get('select[data-testid=sample-language]')
-      .should(($sel) => expect($sel.find('option').length).to.be.at.least(2))
-      .select('en-uk');
-    cy.contains('button', 'ryan').click();
+  it('filtro de género e origem estreita a grelha de vozes', () => {
+    cy.contains('button', 'Easton').should('be.visible');
+    cy.contains('button', 'Emma').should('be.visible');
 
-    cy.window().then((win) => {
-      const audios = (win as unknown as { __fakeAudios: FakeAudioRecord[] }).__fakeAudios;
-      expect(audios).to.have.length(1);
-      expect(audios[0].url).to.equal('/voice-samples/chatterbox%3Aryan-en-uk.mp3');
-      expect(audios[0].playCalled).to.be.true;
-    });
+    cy.get('[data-testid=voice-filter-gender-female]').click();
+    cy.contains('button', 'Emma').should('be.visible');
+    cy.contains('button', 'Easton').should('not.exist');
+
+    cy.get('[data-testid=voice-filter-gender-all]').click();
+    cy.get('[data-testid=voice-filter-origin-us]').click();
+    cy.contains('button', 'Easton').should('be.visible');
+    cy.contains('button', 'Emma').should('not.exist');
   });
 });
+
+export {};

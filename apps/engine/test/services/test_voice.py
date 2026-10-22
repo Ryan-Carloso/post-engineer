@@ -309,6 +309,13 @@ class TestVoiceService(unittest.TestCase):
         self.assertIs(result, marker)
         self.assertEqual(kokoro.call_args.args[1], "af_heart")
 
+    def test_local_dispatch_rejects_empty_voice_name(self):
+        """phonon:/kokoro: with no name is a clean error, not a crash."""
+        for voice_name, label in (("phonon:", "Phonon"), ("kokoro: ", "Kokoro")):
+            result = vs.tts("hello", voice_name, 1.0, "/tmp/x.mp3")
+            self.assertIsNotNone(result.error)
+            self.assertIn(f"invalid {label} voice name", result.error)
+
     def test_legacy_chatterbox_house_id_dispatches_to_phonon_alias(self):
         """A stored chatterbox:en_us_* id resolves to its Phonon alias."""
         marker = vp.TtsResult(sub_maker=vp.SubMaker())

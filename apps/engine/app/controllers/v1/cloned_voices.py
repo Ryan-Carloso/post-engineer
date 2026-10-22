@@ -120,11 +120,13 @@ def clean_preview_cloned_voice(
     try:
         wav_bytes = service.clean_preview_wav(source)
     except ReferenceAudioError as exc:
+        # The stable error_code is the contract; the message stays
+        # generic so no internal detail leaks through the exception.
         return JSONResponse(
             status_code=400,
             content=utils.get_response(
                 status=400,
-                message=str(exc),
+                message="invalid reference audio",
                 body={"error_code": exc.error_code},
             ),
         )

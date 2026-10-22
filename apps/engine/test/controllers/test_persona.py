@@ -35,6 +35,27 @@ class PersonaEnvelopeTests(unittest.TestCase):
         self.assertIsInstance(resp.body, list)
         self.assertGreater(len(resp.body), 0)
 
+    def test_voice_sample_returns_audio_for_catalog_voice(self):
+        from unittest.mock import patch
+
+        with patch(
+            "app.controllers.v1.persona.persona_service.get_voice_sample",
+            return_value=b"mp3-bytes",
+        ):
+            resp = persona_controller.voice_sample_endpoint("phonon:Zoey")
+        self.assertEqual(resp.media_type, "audio/mpeg")
+        self.assertEqual(resp.body, b"mp3-bytes")
+
+    def test_voice_sample_400_when_unavailable(self):
+        from unittest.mock import patch
+
+        with patch(
+            "app.controllers.v1.persona.persona_service.get_voice_sample",
+            return_value=None,
+        ):
+            resp = persona_controller.voice_sample_endpoint("elevenlabs:nope")
+        self.assertEqual(resp.status_code, 400)
+
     def test_validate_persona_wraps_normalized_in_body(self):
         request = persona_controller.PersonaRequest(
             name="Ana",

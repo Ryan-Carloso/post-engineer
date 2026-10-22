@@ -25,6 +25,91 @@ class ClonedVoicesControllerTests(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
     @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
+    def test_clean_preview_returns_cleaned_wav(self, mock_service_cls):
+        service = MagicMock()
+        mock_service_cls.return_value = service
+        service.clean_preview_wav.return_value = b"cleaned-wav"
+
+        response = self.client.post(
+            "/api/v1/cloned-voices/clean-preview",
+            headers=self.headers,
+            files={"file": ("sample.wav", io.BytesIO(b"data"), "audio/wav")},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["content-type"], "audio/wav")
+        self.assertEqual(response.content, b"cleaned-wav")
+        service.clean_preview_wav.assert_called_once_with(b"data")
+
+    @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
+    def test_clean_preview_invalid_audio_is_400_with_error_code(self, mock_service_cls):
+        from app.services.cloned_voices.audio import (
+            ERROR_INVALID_AUDIO,
+            ReferenceAudioError,
+        )
+
+        service = MagicMock()
+        mock_service_cls.return_value = service
+        service.clean_preview_wav.side_effect = ReferenceAudioError(
+            ERROR_INVALID_AUDIO, "could not decode reference audio"
+        )
+
+        response = self.client.post(
+            "/api/v1/cloned-voices/clean-preview",
+            headers=self.headers,
+            files={"file": ("sample.wav", io.BytesIO(b"data"), "audio/wav")},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        body = response.json()
+        self.assertEqual(body["body"]["error_code"], ERROR_INVALID_AUDIO)
+        # The exception's message must not leak into the response.
+        self.assertNotIn("decode", body["message"])
+
+    def test_create_rejects_invalid_use_cleaned(self):
+        response = self.client.post(
+            "/api/v1/cloned-voices",
+            headers=self.headers,
+            data={"language": "en", "consent": "true", "use_cleaned": "banana"},
+            files={"file": ("sample.wav", io.BytesIO(b"data"), "audio/wav")},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["message"], "use_cleaned is invalid")
+
+    def test_clean_preview_unreadable_upload_is_400(self):
+        import types
+
+        from app.controllers.v1 import cloned_voices as controller
+
+        class _BrokenFile:
+            def read(self, _size):
+                raise OSError("disk gone")
+
+        request = MagicMock()
+        request.state.auth.user_id = "user-uuid-1"
+        upload = types.SimpleNamespace(file=_BrokenFile(), size=4)
+        with patch.object(controller.base, "get_auth_context", return_value=MagicMock()):
+            response = controller.clean_preview_cloned_voice(request, file=upload)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("could not read upload", response.body.decode())
+
+    def test_clean_preview_oversized_upload_is_400(self):
+        import types
+
+        from app.controllers.v1 import cloned_voices as controller
+        from app.services.cloned_voices.constants import MAX_REFERENCE_BYTES
+
+        request = MagicMock()
+        request.state.auth.user_id = "user-uuid-1"
+        upload = types.SimpleNamespace(
+            file=io.BytesIO(b"x" * (MAX_REFERENCE_BYTES + 1)),
+            size=MAX_REFERENCE_BYTES + 1,
+        )
+        with patch.object(controller.base, "get_auth_context", return_value=MagicMock()):
+            response = controller.clean_preview_cloned_voice(request, file=upload)
+        self.assertEqual(response.status_code, 400)
+
+    @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
     def test_create_returns_202_and_schedules_background(self, mock_service_cls):
         service = MagicMock()
         mock_service_cls.return_value = service

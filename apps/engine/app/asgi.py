@@ -433,3 +433,11 @@ def startup_event():
         reconcile_pending_registrations()
     except Exception as exc:  # noqa: BLE001 - startup continues regardless
         logger.warning(f"cloned voice pending reconcile failed: {exc}")
+    # Ready clones whose local reference file was lost with the previous
+    # container get it back from storage, for the same reason.
+    try:
+        from app.services.cloned_voices.service import reconcile_missing_references
+
+        reconcile_missing_references()
+    except Exception as exc:  # noqa: BLE001 - startup continues regardless
+        logger.warning(f"cloned voice reference reconcile failed: {exc}")

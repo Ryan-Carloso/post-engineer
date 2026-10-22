@@ -16,6 +16,7 @@ from app.services.cloned_voices.local_registry import (
     RegistryNotConfiguredError,
     VoiceRegistry,
     default_registry,
+    reference_path_for,
 )
 from app.services.cloned_voices.constants import (
     CHATTERBOX_VOICE_PREFIX,
@@ -164,6 +165,58 @@ def reconcile_pending_registrations(
     if recovered:
         logger.info(f"re-ran registration for {recovered} pending cloned voice(s) at boot")
     return recovered
+
+
+def reconcile_missing_references(
+    store: ClonedVoiceStore | None = None,
+    registry: VoiceRegistry | None = None,
+) -> int:
+    """Rebuild local reference files for ready clones that lost theirs.
+
+    Registration is a local file now (see local_registry), so a fresh
+    container or a wiped registry dir leaves every ready clone without
+    the WAV generation reads. The storage object is the durable copy:
+    at boot, any ready row whose local file is missing gets it back.
+    Same contract as the pending reconcile: env-gated, never raises.
+    Returns how many references were restored.
+    """
+    if store is None and not (
+        os.getenv("SUPABASE_URL") and os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    ):
+        return 0
+    try:
+        db = store or ClonedVoiceStore()
+        ready = db.list_ready()
+    except Exception:
+        logger.exception("cloned voice reference reconcile could not list rows")
+        return 0
+    reg = registry or default_registry()
+    restored = 0
+    for row in ready:
+        voice_key = row.get("engine_voice_key")
+        storage_path = row.get("storage_path")
+        clone_id = row.get("id")
+        if not (isinstance(voice_key, str) and isinstance(storage_path, str)):
+            continue
+        if reference_path_for(voice_key).is_file():
+            continue
+        try:
+            wav_bytes = db.download_reference_wav(storage_path)
+            language = row.get("language")
+            reg.register_voice(
+                voice_key,
+                language if isinstance(language, str) and language else "en",
+                wav_bytes,
+            )
+        except Exception:
+            logger.exception(
+                f"cloned voice reference reconcile failed, clone_id: {clone_id}"
+            )
+            continue
+        restored += 1
+    if restored:
+        logger.info(f"restored {restored} cloned voice reference file(s) at boot")
+    return restored
 
 
 class ClonedVoiceService:
