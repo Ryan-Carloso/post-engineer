@@ -227,11 +227,17 @@ class NanoLoaderAndDirTests(unittest.TestCase):
     def test_convert_raises_on_ffmpeg_failure(self):
         import subprocess as sp
 
-        # ffmpeg's stderr starts with a long version banner; the raised
-        # message must carry the tail (the real cause), not the banner.
-        banner = "ffmpeg version 7.0 " + ("configuration: --enable-everything " * 20)
+        # ffmpeg's stderr starts with a long version banner and echoes
+        # the local input/output paths; the raised message must carry
+        # the diagnostic tail (the real cause) with paths placeholdered
+        # — it lands in the task error and the PostHog failure reason.
+        banner = "ffmpeg version 7.0\n" + ("configuration: --enable-everything\n" * 20)
         failed = sp.CompletedProcess(
-            args=[], returncode=1, stdout="", stderr=banner + "\nError: the real cause"
+            args=[],
+            returncode=1,
+            stdout="",
+            stderr=banner
+            + "Error opening input /tmp/phonon-tts-abc123/out.wav: the real cause",
         )
         with tempfile.TemporaryDirectory() as tmp, patch.object(
             local_tts.subprocess, "run", return_value=failed
@@ -240,8 +246,21 @@ class NanoLoaderAndDirTests(unittest.TestCase):
                 local_tts._convert_to_target(
                     str(Path(tmp) / "in.wav"), str(Path(tmp) / "out.mp3"), 1.0
                 )
-        self.assertIn("the real cause", str(ctx.exception))
-        self.assertNotIn("ffmpeg version 7.0", str(ctx.exception))
+        message = str(ctx.exception)
+        self.assertIn("the real cause", message)
+        self.assertNotIn("/tmp/phonon-tts-abc123", message)
+        self.assertIn("<storage>/out.wav", message)
+
+
+class FailScrubTests(unittest.TestCase):
+    def test_fail_scrubs_local_paths_from_the_reason(self):
+        home = os.path.expanduser("~")
+        result = local_tts._fail(
+            "Phonon", RuntimeError(f"model missing at {home}/models/phonon.bin")
+        )
+        self.assertFalse(result.ok)
+        self.assertNotIn(home, result.error)
+        self.assertIn("<home>/phonon.bin", result.error)
 
 
 class KokoroResidualRateTests(unittest.TestCase):

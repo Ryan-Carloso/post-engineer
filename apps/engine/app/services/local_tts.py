@@ -37,7 +37,7 @@ from loguru import logger
 from moviepy.audio.io.AudioFileClip import AudioFileClip
 
 from app.config import config
-from app.services.analytics import scrub_secret_values
+from app.services.analytics import scrub_error_text
 from app.services.cloned_voices.local_registry import (
     is_valid_voice_key,
     local_registry_dir,
@@ -201,12 +201,13 @@ def _convert_to_target(wav_path: str, voice_file: str, voice_rate: float) -> Non
     command.append(voice_file)
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     if result.returncode != 0:
-        # The head of ffmpeg's stderr is the version/configuration
-        # banner; the actual cause sits in the tail. Scrub first (the
-        # output can carry temp/task paths), then cut the tail — this
-        # string lands in the task error and the PostHog failure reason.
-        detail = scrub_secret_values((result.stderr or result.stdout or "")[-300:])
-        raise RuntimeError(f"ffmpeg convert failed: {detail.strip()}")
+        # This string lands in the task error and the PostHog failure
+        # reason: scrub_error_text redacts secrets, replaces local
+        # paths with placeholders, and keeps the diagnostic tail of
+        # multi-line output (the head of ffmpeg's stderr is just the
+        # version/configuration banner).
+        detail = scrub_error_text(result.stderr or result.stdout or "", max_chars=300)
+        raise RuntimeError(f"ffmpeg convert failed: {detail}")
 
 
 def _finish(text: str, wav_path: str, voice_file: str, voice_rate: float) -> TtsResult:
@@ -221,7 +222,7 @@ def _finish(text: str, wav_path: str, voice_file: str, voice_rate: float) -> Tts
 
 
 def _fail(provider: str, exc: Exception) -> TtsResult:
-    reason = scrub_secret_values(str(exc))[:200]
+    reason = scrub_error_text(str(exc), max_chars=200)
     logger.error(f"{provider} local tts failed: {reason}")
     return TtsResult(error=f"{provider} TTS failed: {reason}")
 

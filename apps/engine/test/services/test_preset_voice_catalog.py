@@ -133,6 +133,13 @@ class LegacyAliasTests(unittest.TestCase):
         ):
             self.assertEqual(voice_catalog.resolve_voice_id(voice_id), voice_id)
 
+    def test_resolve_tolerates_none_and_empty(self):
+        # tts() passes the stored voice id straight here; a missing
+        # voice must fall through to the clean unknown-voice error,
+        # not crash on .startswith.
+        self.assertIsNone(voice_catalog.resolve_voice_id(None))
+        self.assertEqual(voice_catalog.resolve_voice_id(""), "")
+
 
 if __name__ == "__main__":
     unittest.main()

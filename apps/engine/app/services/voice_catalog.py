@@ -189,7 +189,7 @@ def resolve_voice_id(voice_id: str) -> str:
 
     Clone keys and every non-chatterbox id pass through unchanged.
     """
-    if not voice_id.startswith(_CHATTERBOX_PREFIX):
+    if not (voice_id or "").startswith(_CHATTERBOX_PREFIX):
         return voice_id
     name = voice_id[len(_CHATTERBOX_PREFIX):].strip()
     if name.endswith(("-Female", "-Male")):

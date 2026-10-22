@@ -309,6 +309,11 @@ class TestVoiceService(unittest.TestCase):
         self.assertIs(result, marker)
         self.assertEqual(kokoro.call_args.args[1], "af_heart")
 
+    def test_none_voice_name_is_a_clean_error(self):
+        """A missing voice id fails with an error, never an exception."""
+        result = vs.tts("hello", None, 1.0, "/tmp/x.mp3")
+        self.assertIsNotNone(result.error)
+
     def test_local_dispatch_rejects_empty_voice_name(self):
         """phonon:/kokoro: with no name is a clean error, not a crash."""
         for voice_name, label in (("phonon:", "Phonon"), ("kokoro: ", "Kokoro")):
