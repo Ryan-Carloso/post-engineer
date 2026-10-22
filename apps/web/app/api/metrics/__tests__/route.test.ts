@@ -13,7 +13,7 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
-import { METRICS_ROW_LIMIT } from '@/lib/metrics/metrics-query';
+import { METRICS_NONE, METRICS_ROW_LIMIT } from '@/lib/metrics/metrics-query';
 
 const PERSONA = '11111111-2222-4333-8444-555555555555';
 
@@ -68,7 +68,7 @@ describe('GET /api/metrics', () => {
     });
   });
 
-  it('applies every filter, with none mapping to null', async () => {
+  it('applies every filter, with the none sentinel mapping to null', async () => {
     const { calls } = mockQuery({ data: [], error: null });
     await get(`?window=7d&persona=${PERSONA}&account=yt&provider=youtube&angle=myth`);
     expect(calls).toContainEqual(['eq', 'persona_id', PERSONA]);
@@ -77,9 +77,13 @@ describe('GET /api/metrics', () => {
     expect(calls).toContainEqual(['eq', 'script_angle', 'myth']);
 
     const second = mockQuery({ data: [], error: null });
-    await get('?window=7d&persona=none&angle=none');
+    await get(`?window=7d&persona=${encodeURIComponent(METRICS_NONE)}&angle=${encodeURIComponent(METRICS_NONE)}`);
     expect(second.calls).toContainEqual(['is', 'persona_id', null]);
     expect(second.calls).toContainEqual(['is', 'script_angle', null]);
+
+    const third = mockQuery({ data: [], error: null });
+    await get('?window=7d&angle=none');
+    expect(third.calls).toContainEqual(['eq', 'script_angle', 'none']);
   });
 
   it('limits a persona-scoped API key to its personas', async () => {

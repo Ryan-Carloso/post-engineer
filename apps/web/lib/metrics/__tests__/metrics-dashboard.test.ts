@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { distinctAngles, fetchMetrics, groupMetrics, isGroupKey, isMetricKey } from '../metrics-dashboard';
-import { METRICS_FILTER_MAX_LENGTH, metricsSearchParams, parseMetricsQuery, type MetricsRowView } from '../metrics-query';
+import { METRICS_FILTER_MAX_LENGTH, METRICS_NONE, metricsSearchParams, parseMetricsQuery, type MetricsRowView } from '../metrics-query';
 import { accountOption, PROVIDER_LABELS } from '@/lib/account-options';
 import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 
@@ -27,7 +27,7 @@ describe('groupMetrics', () => {
     expect(groupMetrics(rows, 'angle', 'views')).toEqual([
       { key: 'tutorial', average: 400, count: 1 },
       { key: 'myth', average: 151, count: 2 },
-      { key: 'none', average: 50, count: 1 },
+      { key: METRICS_NONE, average: 50, count: 1 },
     ]);
   });
 
@@ -38,7 +38,7 @@ describe('groupMetrics', () => {
 
   it('groups by persona and account', () => {
     const rows = [view({ personaId: null, accountId: 'a' }), view({ personaId: 'x', accountId: 'b', comments: 9 })];
-    expect(groupMetrics(rows, 'persona', 'comments').map((g) => g.key)).toEqual(['x', 'none']);
+    expect(groupMetrics(rows, 'persona', 'comments').map((g) => g.key)).toEqual(['x', METRICS_NONE]);
     expect(groupMetrics(rows, 'account', 'comments').map((g) => g.key)).toEqual(['b', 'a']);
   });
 });
@@ -81,8 +81,16 @@ describe('fetchMetrics', () => {
 
 describe('parseMetricsQuery / metricsSearchParams', () => {
   it('round-trips a full query', () => {
-    const query = { window: '7d' as const, personaId: 'none', accountId: 'a', provider: 'linkedin' as const, angle: 'x' };
+    const query = { window: '7d' as const, personaId: METRICS_NONE, accountId: 'a', provider: 'linkedin' as const, angle: 'x' };
     expect(parseMetricsQuery(metricsSearchParams(query))).toEqual({ ok: true, query });
+  });
+
+  it('treats a literal none angle as an angle, not as the null sentinel', () => {
+    const parsed = parseMetricsQuery(new URLSearchParams({ window: '24h', angle: 'none' }));
+    expect(parsed).toEqual({
+      ok: true,
+      query: { window: '24h', personaId: null, accountId: null, provider: null, angle: 'none' },
+    });
   });
 
   it('rejects over-length filters', () => {

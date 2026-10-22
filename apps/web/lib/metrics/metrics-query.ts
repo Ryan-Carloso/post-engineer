@@ -5,13 +5,17 @@ import type { MetricsWindow } from './post-metrics';
 // metrics-query — the GET /api/metrics contract, shared by the route and
 // the dashboard. Dependency-free so the client can import it.
 //
-// Filters are optional and exact-match. `none` selects the rows whose
-// persona / angle is null (faceless posts, posts without an angle).
+// Filters are optional and exact-match. METRICS_NONE selects the rows
+// whose persona / angle is null (faceless posts, posts without an angle).
 //---------------
 
 export const METRICS_ROW_LIMIT = 500;
 export const METRICS_FILTER_MAX_LENGTH = 200;
-export const METRICS_NONE = 'none';
+// Null-filter sentinel. Not a plain word: script angles are unvalidated
+// engine-generated text, so a literal like 'none' could be a real angle
+// and would become unfilterable (selecting it would filter for null rows
+// instead). Persona ids are uuids, so the sentinel is safe for them too.
+export const METRICS_NONE = '^@none';
 
 export interface MetricsQuery {
   window: MetricsWindow;
@@ -74,7 +78,7 @@ export function parseMetricsQuery(params: URLSearchParams): ParseResult {
   }
   if (window !== '24h' && window !== '7d') return { ok: false, error: 'window must be 24h or 7d.' };
   if (typeof persona === 'string' && persona !== METRICS_NONE && !UUID.test(persona)) {
-    return { ok: false, error: 'persona must be a uuid or none.' };
+    return { ok: false, error: `persona must be a uuid or ${METRICS_NONE}.` };
   }
   if (typeof provider === 'string' && !isSocialProvider(provider)) {
     return { ok: false, error: 'Unknown provider.' };
