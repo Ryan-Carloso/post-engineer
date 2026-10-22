@@ -35,13 +35,17 @@ def _validated_key_path(directory: Path, voice_key: str) -> Path:
     """The WAV path for ``voice_key`` inside ``directory``.
 
     Raises ValueError for any key that is not a plain registry key, or
-    whose resolved path would escape ``directory``.
+    whose resolved path would escape ``directory``. The key is reduced
+    to its basename and allowlist-checked before it ever touches a
+    path, and the joined path is containment-checked after resolving.
     """
-    key = (voice_key or "").strip()
-    if not _VOICE_KEY_RE.match(key):
+    stripped = (voice_key or "").strip()
+    key = os.path.basename(stripped)
+    if key != stripped or not _VOICE_KEY_RE.match(key):
         raise ValueError("invalid cloned voice key")
-    path = directory / f"{key}.wav"
-    if path.resolve().parent != directory.resolve():
+    base = directory.resolve()
+    path = (base / f"{key}.wav").resolve()
+    if path.parent != base:
         raise ValueError("invalid cloned voice key")
     return path
 
