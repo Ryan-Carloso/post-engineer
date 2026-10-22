@@ -45,7 +45,7 @@ const IG_ENTRY = { provider: 'instagram', status: 'published', accountId: 'ig-ac
 function deps(overrides: Partial<PostMetricsDeps> = {}): PostMetricsDeps {
   return {
     listDuePosts: vi.fn(async () => [duePost()]),
-    fetchPublishResults: vi.fn(async () => [YT_ENTRY, IG_ENTRY]),
+    fetchTaskSource: vi.fn(async () => ({ publishResults: [YT_ENTRY, IG_ENTRY], scriptAngle: 'myth' })),
     fetchCounters: vi.fn(async () => COUNTERS),
     saveMetrics: vi.fn(async () => undefined),
     markDone: vi.fn(async () => undefined),
@@ -124,7 +124,7 @@ describe('collectPostMetrics', () => {
 
     expect(report).toEqual({ checked: 1, recorded: 2, errors: [], truncated: false });
     expect(d.listDuePosts).toHaveBeenCalledWith(new Date('2026-10-21T12:00:00.000Z'), MAX_POSTS_PER_RUN + 1);
-    expect(d.fetchPublishResults).toHaveBeenCalledWith('task-1', 'user-1');
+    expect(d.fetchTaskSource).toHaveBeenCalledWith('task-1', 'user-1');
     expect(d.saveMetrics).toHaveBeenCalledWith({
       postId: 'post-1',
       userId: 'user-1',
@@ -132,11 +132,13 @@ describe('collectPostMetrics', () => {
       provider: 'youtube',
       accountId: 'yt-acct',
       externalId: 'abc123',
+      scriptAngle: 'myth',
       ...COUNTERS,
     });
     expect(d.track).toHaveBeenCalledWith('post_metrics_collected', {
       task_id: 'task-1',
       post_id: 'post-1',
+      script_angle: 'myth',
       user_id: 'user-1',
       provider: 'instagram',
       window: '24h',
@@ -145,7 +147,7 @@ describe('collectPostMetrics', () => {
   });
 
   it('reports an unknown provider as an error and still snapshots the known ones', async () => {
-    const d = deps({ fetchPublishResults: vi.fn(async () => [YT_ENTRY, { provider: 'tiktok', status: 'published', accountId: 'a', postId: 'p' }]) });
+    const d = deps({ fetchTaskSource: vi.fn(async () => ({ publishResults: [YT_ENTRY, { provider: 'tiktok', status: 'published', accountId: 'a', postId: 'p' }], scriptAngle: null })) });
     const report = await collectPostMetrics(d);
 
     expect(report.recorded).toBe(1);
@@ -160,7 +162,7 @@ describe('collectPostMetrics', () => {
   });
 
   it('marks a post with nothing to measure done so it stops coming back', async () => {
-    const d = deps({ fetchPublishResults: vi.fn(async () => []) });
+    const d = deps({ fetchTaskSource: vi.fn(async () => ({ publishResults: [], scriptAngle: null })) });
     const report = await collectPostMetrics(d);
     expect(report.recorded).toBe(0);
     expect(d.markDone).toHaveBeenCalledWith('post-1', '24h');
@@ -174,7 +176,7 @@ describe('collectPostMetrics', () => {
   });
 
   it('keeps the post open when publish results are unavailable', async () => {
-    const d = deps({ fetchPublishResults: vi.fn(async () => { throw new Error('engine down'); }) });
+    const d = deps({ fetchTaskSource: vi.fn(async () => { throw new Error('engine down'); }) });
     await collectPostMetrics(d);
     expect(d.markDone).not.toHaveBeenCalled();
   });
@@ -222,13 +224,13 @@ describe('collectPostMetrics', () => {
   });
 
   it('reports an unreachable engine per post without stopping the run', async () => {
-    const fetchPublishResults = vi
+    const fetchTaskSource = vi
       .fn()
       .mockRejectedValueOnce(new Error('engine down'))
-      .mockResolvedValueOnce([YT_ENTRY]);
+      .mockResolvedValueOnce({ publishResults: [YT_ENTRY], scriptAngle: null });
     const d = deps({
       listDuePosts: vi.fn(async () => [duePost(), duePost({ id: 'post-2', taskId: 'task-2' })]),
-      fetchPublishResults,
+      fetchTaskSource,
     });
     const report = await collectPostMetrics(d);
 
@@ -239,7 +241,7 @@ describe('collectPostMetrics', () => {
 
   it('caps the run at MAX_POSTS_PER_RUN and flags truncation', async () => {
     const posts = Array.from({ length: MAX_POSTS_PER_RUN + 1 }, (_, i) => duePost({ id: `post-${i}` }));
-    const d = deps({ listDuePosts: vi.fn(async () => posts), fetchPublishResults: vi.fn(async () => []) });
+    const d = deps({ listDuePosts: vi.fn(async () => posts), fetchTaskSource: vi.fn(async () => ({ publishResults: [], scriptAngle: null })) });
     const report = await collectPostMetrics(d);
 
     expect(report.checked).toBe(MAX_POSTS_PER_RUN);
@@ -305,6 +307,7 @@ describe('createPostMetricsStore', () => {
       accountId: 'yt-acct',
       externalId: 'abc123',
       window: '7d',
+      scriptAngle: 'myth',
       ...COUNTERS,
     });
 
@@ -321,6 +324,7 @@ describe('createPostMetricsStore', () => {
         likes: 80,
         comments: 9,
         saves: null,
+        script_angle: 'myth',
       },
       { onConflict: 'post_id,provider,external_id,metrics_window' },
     );
@@ -328,7 +332,7 @@ describe('createPostMetricsStore', () => {
     upsert.mockResolvedValueOnce({ error: { message: 'denied' } } as never);
     await expect(
       store.saveMetrics({
-        postId: 'post-1', userId: 'user-1', provider: 'youtube', accountId: 'a', externalId: 'b', window: '7d', ...COUNTERS,
+        postId: 'post-1', userId: 'user-1', provider: 'youtube', accountId: 'a', externalId: 'b', window: '7d', scriptAngle: null, ...COUNTERS,
       }),
     ).rejects.toThrow('metrics write failed: denied');
   });
