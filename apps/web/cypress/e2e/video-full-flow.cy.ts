@@ -144,10 +144,6 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
       statusCode: 200,
       body: { voices: [{ id: 'chatterbox:ryan' }, { id: 'chatterbox:en_us_female_01' }] },
     });
-    cy.intercept('GET', '/api/persona/voice-sample-languages', {
-      statusCode: 200,
-      body: { languages: [{ code: 'pt-br', label: 'Português' }] },
-    });
     cy.intercept('GET', '/api/persona/list', {
       statusCode: 200,
       body: { authenticated: true, personas: [PERSONA] },

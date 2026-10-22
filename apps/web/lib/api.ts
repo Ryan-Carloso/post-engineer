@@ -673,28 +673,6 @@ export function useVoicesQuery() {
   });
 }
 
-export interface VoiceSampleLanguage {
-  code: string;
-  label: string;
-}
-
-async function fetchVoiceSampleLanguages(): Promise<VoiceSampleLanguage[]> {
-  const response = await fetch('/api/persona/voice-sample-languages');
-  if (!response.ok) {
-    throw new Error('Failed to fetch voice sample languages');
-  }
-  const data: { languages: VoiceSampleLanguage[] } = await response.json();
-  return data.languages;
-}
-
-export function useVoiceSampleLanguagesQuery() {
-  return useQuery<VoiceSampleLanguage[]>({
-    queryKey: ['persona-voice-sample-languages'],
-    queryFn: fetchVoiceSampleLanguages,
-    staleTime: 24 * 60 * 60_000,
-  });
-}
-
 
 //---------------
 // Fill Schedule — video publishing timetables (days + time window + posts/day).

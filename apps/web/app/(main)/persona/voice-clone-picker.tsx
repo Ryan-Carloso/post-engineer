@@ -17,12 +17,13 @@ import {
   clonedVoicePreviewUrl,
 } from '@/lib/cloned-voices-client';
 import { usePersonaStore } from '@/lib/store';
-import { isEnglishLanguage } from '@/lib/language-gate';
 import { useI18n } from '@/lib/i18n/provider';
 import { CheckIcon, MicIcon, SpinnerIcon, TrashIcon } from '@/lib/ui';
-import { useVoiceSampleLanguagesQuery } from '@/lib/api';
 
 const POLL_MS = 2500;
+// English-only launch: clones are always registered in English — the
+// form has no clone-language picker.
+const CLONE_LANGUAGE = 'en';
 const RECORD_SOFT_LIMIT_SECONDS = 45;
 
 const VoiceTabButton = ({
@@ -56,17 +57,10 @@ function formatTimer(seconds: number): string {
 export { VoiceTabButton };
 
 /** Clone-my-voice tab panel (house grid is rendered by the parent). */
-export const PersonaVoiceClonePanel = ({ personaLanguage }: { personaLanguage?: string }) => {
+export const PersonaVoiceClonePanel = () => {
   const { t } = useI18n();
   const queryClient = useQueryClient();
-  const sampleLanguagesQuery = useVoiceSampleLanguagesQuery();
   const voiceId = usePersonaStore((s) => s.voiceId);
-  // English-only launch: the clone language starts (and stays) English —
-  // a legacy persona language in another language no longer preselects it.
-  const initialLanguage = personaLanguage?.trim();
-  const [language, setLanguage] = useState(
-    initialLanguage && isEnglishLanguage(initialLanguage) ? initialLanguage : 'en',
-  );
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
@@ -108,7 +102,7 @@ export const PersonaVoiceClonePanel = ({ personaLanguage }: { personaLanguage?: 
 
   const createMutation = useMutation({
     mutationFn: async (file: Blob) => {
-      return createClonedVoice(file, language, consent);
+      return createClonedVoice(file, CLONE_LANGUAGE, consent);
     },
     onSuccess: (row) => {
       setActiveCloneId(row.id);
@@ -266,22 +260,6 @@ export const PersonaVoiceClonePanel = ({ personaLanguage }: { personaLanguage?: 
       <p className="rounded-lg bg-neutral-50 p-3 text-sm leading-relaxed text-neutral-800">
         {t('persona.voiceCloneScript')}
       </p>
-
-      <label className="block text-sm font-medium text-neutral-700">
-        {t('persona.sampleLanguage')}
-        <select
-          value={language}
-          onChange={(e) => setLanguage(e.target.value)}
-          className="mt-2 h-11 w-full max-w-sm rounded-xl border border-neutral-300 bg-white px-3 text-sm"
-          disabled={isSubmitting || recording}
-        >
-          {(sampleLanguagesQuery.data ?? [{ code: 'en', label: 'English' }]).map((lang) => (
-            <option key={lang.code} value={lang.code}>
-              {lang.label}
-            </option>
-          ))}
-        </select>
-      </label>
 
       <label className="flex items-start gap-2 text-sm text-neutral-800">
         <input

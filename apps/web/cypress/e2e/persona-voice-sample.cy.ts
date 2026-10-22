@@ -13,11 +13,6 @@ const VOICES = [
   { id: 'chatterbox:en_us_female_01' },
 ];
 
-const SAMPLE_LANGUAGES = [
-  { code: 'pt-br', label: 'Português (BR)' },
-  { code: 'en-uk', label: 'English (UK)' },
-];
-
 interface FakeAudioRecord {
   url: string;
   playCalled: boolean;
@@ -54,11 +49,6 @@ describe('Persona — sample de voz ao clicar no card', () => {
       body: { voices: VOICES },
     }).as('getVoices');
 
-    cy.intercept('GET', '/api/persona/voice-sample-languages', {
-      statusCode: 200,
-      body: { languages: SAMPLE_LANGUAGES },
-    }).as('getSampleLanguages');
-
     cy.intercept('GET', '/api/persona/list', {
       statusCode: 200,
       body: { personas: [] },
@@ -76,9 +66,8 @@ describe('Persona — sample de voz ao clicar no card', () => {
       expect(audios).to.have.length(1);
       // Sample files are named after the voice id, URL-encoded
       // (public/voice-samples/<encoded-id>-<lang>.mp3). English-only
-      // launch: no fixture language matches a new persona's language, so
-      // the picker's fallback sample language applies — en-us now,
-      // pt-br before the launch lock.
+      // launch: there is no sample-language picker any more, so the
+      // sample always plays the English take (en-us).
       expect(audios[0].url).to.equal('/voice-samples/chatterbox%3Aryan-en-us.mp3');
       expect(audios[0].playCalled).to.be.true;
     });
@@ -98,17 +87,7 @@ describe('Persona — sample de voz ao clicar no card', () => {
     });
   });
 
-  it('mudar o idioma do sample altera a language do áudio tocado', () => {
-    cy.get('select[data-testid=sample-language]')
-      .should(($sel) => expect($sel.find('option').length).to.be.at.least(2))
-      .select('en-uk');
-    cy.contains('button', 'ryan').click();
-
-    cy.window().then((win) => {
-      const audios = (win as unknown as { __fakeAudios: FakeAudioRecord[] }).__fakeAudios;
-      expect(audios).to.have.length(1);
-      expect(audios[0].url).to.equal('/voice-samples/chatterbox%3Aryan-en-uk.mp3');
-      expect(audios[0].playCalled).to.be.true;
-    });
+  it('não mostra seletor de idioma do sample', () => {
+    cy.get('select[data-testid=sample-language]').should('not.exist');
   });
 });

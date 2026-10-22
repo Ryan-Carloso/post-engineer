@@ -19,7 +19,6 @@ const cloneMocks = vi.hoisted(() => ({
   audioPause: vi.fn(),
   audioUrls: [] as (string | undefined)[],
   validateResult: { ok: true } as { ok: true } | { ok: false; error: string },
-  sampleLanguages: [{ code: 'pt', label: 'Português' }] as { code: string; label: string }[],
 }));
 
 vi.mock('@/lib/cloned-voices-client', () => ({
@@ -33,14 +32,6 @@ vi.mock('@/lib/cloned-voices-client', () => ({
   createClonedVoice: vi.fn((...args: unknown[]) => cloneMocks.create(...args)),
   deleteClonedVoice: vi.fn((id: string) => cloneMocks.delete(id)),
   clonedVoicePreviewUrl: vi.fn((id: string) => `/api/persona/cloned-voices/${id}/preview`),
-}));
-
-vi.mock('@/lib/api', () => ({
-  useVoiceSampleLanguagesQuery: vi.fn(() => ({
-    data: cloneMocks.sampleLanguages,
-    isPending: false,
-    isError: false,
-  })),
 }));
 
 vi.mock('@/lib/store', () => {
@@ -81,7 +72,7 @@ function renderPanel() {
   });
   const utils = render(
     <QueryClientProvider client={queryClient}>
-      <PersonaVoiceClonePanel personaLanguage="pt" />
+      <PersonaVoiceClonePanel />
     </QueryClientProvider>,
   );
   return { ...utils, queryClient };
@@ -169,7 +160,6 @@ describe('PersonaVoiceClonePanel', () => {
     cloneMocks.delete.mockReset();
     cloneMocks.setVoiceId.mockReset();
     cloneMocks.validateResult = { ok: true };
-    cloneMocks.sampleLanguages = [{ code: 'pt', label: 'Português' }];
     cloneMocks.audioUrls = [];
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:local-preview');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
@@ -501,17 +491,11 @@ describe('PersonaVoiceClonePanel', () => {
     expect(cloneMocks.create).not.toHaveBeenCalled();
   });
 
-  it('submits with the language chosen in the select', async () => {
-    cloneMocks.sampleLanguages = [
-      { code: 'pt', label: 'Português' },
-      { code: 'en', label: 'English' },
-    ];
+  it('renders no language select and submits the clone in English', async () => {
     cloneMocks.create.mockResolvedValue(publicRow({ id: 'clone-en', status: 'pending' }));
     const user = userEvent.setup();
     renderPanel();
-    const select = screen.getByRole('combobox');
-    await user.selectOptions(select, 'en');
-    expect((select as HTMLSelectElement).value).toBe('en');
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     await user.click(screen.getByRole('checkbox'));
     const fileInput = screen.getByTestId('voice-clone-panel').querySelector('input[type="file"]');
     await user.upload(fileInput as HTMLInputElement, makeWavFile());
@@ -581,8 +565,8 @@ describe('PersonaVoiceClonePanel', () => {
     const sentBlob = cloneMocks.create.mock.calls[0]?.[0] as Blob;
     expect(sentBlob.type).toBe('audio/webm;codecs=opus');
     expect(sentBlob.size).toBe(5);
-    // English-only launch: even with a Portuguese persona, the clone
-    // language defaults to English until the user picks otherwise.
+    // English-only launch: the clone language is fixed to English —
+    // the form has no language picker.
     expect(cloneMocks.create.mock.calls[0]?.[1]).toBe('en');
     expect(cloneMocks.create.mock.calls[0]?.[2]).toBe(true);
   });

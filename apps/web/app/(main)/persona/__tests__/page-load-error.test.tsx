@@ -90,9 +90,6 @@ describe('persona page load error (real queries)', () => {
       if (url === '/api/persona/voices') {
         return new Response(JSON.stringify({ error: 'voices down' }), { status: 500 });
       }
-      if (url === '/api/persona/voice-sample-languages') {
-        return new Response(JSON.stringify({ languages: [{ code: 'pt-br', label: 'Portuguese' }] }), { status: 200 });
-      }
       if (url === '/api/persona/list') {
         return new Response(JSON.stringify({ authenticated: true, personas: [] }), { status: 200 });
       }

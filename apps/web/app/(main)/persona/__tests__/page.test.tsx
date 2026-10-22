@@ -52,7 +52,6 @@ vi.mock('@/lib/scroll-to-error', () => ({
 
 vi.mock('@/lib/api', () => ({
   useVoicesQuery: vi.fn(),
-  useVoiceSampleLanguagesQuery: vi.fn(),
   createPersona: vi.fn(),
   useUpdatePersonaMutation: vi.fn(),
   usePersonaListQuery: vi.fn(),
@@ -95,7 +94,7 @@ vi.mock('@/lib/i18n/provider', () => {
 });
 
 import PersonaPage from '../page';
-import { useVoicesQuery, useVoiceSampleLanguagesQuery, createPersona, useUpdatePersonaMutation, usePersonaListQuery, useSchedulesQuery, useYouTubeAccountsQuery, useInstagramAccountsQuery, useBlueskyAccountsQuery, useLinkedinAccountsQuery } from '@/lib/api';
+import { useVoicesQuery, createPersona, useUpdatePersonaMutation, usePersonaListQuery, useSchedulesQuery, useYouTubeAccountsQuery, useInstagramAccountsQuery, useBlueskyAccountsQuery, useLinkedinAccountsQuery } from '@/lib/api';
 import type { AccountData, InstagramAccountData } from '@/lib/types';
 import type { BlueskyAccountData, LinkedinAccountData } from '@/lib/providers/registry';
 import { I18nProvider, useI18n } from '@/lib/i18n/provider';
@@ -211,13 +210,6 @@ beforeEach(() => {
   autoplayOptions.value = undefined;
   vi.mocked(useVoicesQuery).mockReturnValue({
     data: VOICES,
-    isLoading: false,
-  } as never);
-  vi.mocked(useVoiceSampleLanguagesQuery).mockReturnValue({
-    data: [
-      { code: 'pt-br', label: 'Português (BR)' },
-      { code: 'en-uk', label: 'English (UK)' },
-    ],
     isLoading: false,
   } as never);
   vi.mocked(createPersona).mockResolvedValue({ success: true, personaId: 'p-1' } as never);
@@ -494,13 +486,6 @@ describe('app/(main)/persona/page — PersonaPage', () => {
 
   it('erro do servidor mostra feedback de falha com a mensagem', async () => {
     const user = userEvent.setup();
-    vi.mocked(useVoiceSampleLanguagesQuery).mockReturnValue({
-      data: [
-        { code: 'pt-br', label: 'Português (BR)' },
-        { code: 'en-uk', label: 'English (UK)' },
-      ],
-      isLoading: false,
-    } as never);
     vi.mocked(createPersona).mockResolvedValue({ success: false, error: 'deu ruim' } as never);
     render(<PersonaPage />, { wrapper: createWrapper() });
 
@@ -745,57 +730,25 @@ describe('app/(main)/persona/page — modo edição (mesma página do create)', 
     expect(screen.queryByRole('button', { name: 'personas.save' })).toBeNull();
   });
 
-  it('em edição, o idioma da amostra inicia com o idioma da persona (es), não pt-br', () => {
+  it('em edição, não renderiza seletor de idioma da amostra', () => {
     searchParams.value = new URLSearchParams('edit=p-9');
     vi.mocked(usePersonaListQuery).mockReturnValue({
       data: [{ ...EDIT_PERSONA, language: 'es' }],
       isLoading: false,
     } as never);
-    vi.mocked(useVoiceSampleLanguagesQuery).mockReturnValue({
-      data: [
-        { code: 'pt-br', label: 'Português (BR)' },
-        { code: 'es', label: 'Español' },
-        { code: 'en-uk', label: 'English (UK)' },
-      ],
-      isLoading: false,
-    } as never);
 
     render(<PersonaPage />, { wrapper: createWrapper() });
 
-    expect(screen.getByTestId('sample-language')).toHaveValue('es');
+    expect(screen.queryByTestId('sample-language')).toBeNull();
   });
 
-  it('em edição, idioma da persona sem código exato usa o prefixo mais próximo (pt → pt-br)', () => {
-    searchParams.value = new URLSearchParams('edit=p-9');
-    vi.mocked(usePersonaListQuery).mockReturnValue({
-      data: [{ ...EDIT_PERSONA, language: 'pt' }],
-      isLoading: false,
-    } as never);
-
+  it('na criação, não renderiza seletor de idioma da amostra', () => {
     render(<PersonaPage />, { wrapper: createWrapper() });
 
-    expect(screen.getByTestId('sample-language')).toHaveValue('pt-br');
+    expect(screen.queryByTestId('sample-language')).toBeNull();
   });
 
-  it('em edição, idioma da persona sem amostra correspondente mantém o padrão pt-br', () => {
-    searchParams.value = new URLSearchParams('edit=p-9');
-    vi.mocked(usePersonaListQuery).mockReturnValue({
-      data: [{ ...EDIT_PERSONA, language: 'de' }],
-      isLoading: false,
-    } as never);
-
-    render(<PersonaPage />, { wrapper: createWrapper() });
-
-    expect(screen.getByTestId('sample-language')).toHaveValue('pt-br');
-  });
-
-  it('na criação, o idioma da amostra continua pt-br por padrão', () => {
-    render(<PersonaPage />, { wrapper: createWrapper() });
-
-    expect(screen.getByTestId('sample-language')).toHaveValue('pt-br');
-  });
-
-  it('trocar o idioma da amostra em edição toca o áudio no idioma escolhido', async () => {
+  it('em edição, clicar numa voz toca o sample em inglês mesmo com a persona em espanhol', async () => {
     const created: { url: string; play: ReturnType<typeof vi.fn> }[] = [];
     class FakeAudio {
       play = vi.fn().mockResolvedValue(undefined);
@@ -810,30 +763,19 @@ describe('app/(main)/persona/page — modo edição (mesma página do create)', 
       data: [{ ...EDIT_PERSONA, language: 'es' }],
       isLoading: false,
     } as never);
-    vi.mocked(useVoiceSampleLanguagesQuery).mockReturnValue({
-      data: [
-        { code: 'pt-br', label: 'Português (BR)' },
-        { code: 'es', label: 'Español' },
-      ],
-      isLoading: false,
-    } as never);
     const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });
 
-    // Starts at es (the persona's language)…
-    expect(screen.getByTestId('sample-language')).toHaveValue('es');
-    // …but the user's manual choice wins.
-    await user.selectOptions(screen.getByTestId('sample-language'), 'pt-br');
     await user.click(screen.getByRole('button', { name: 'ryan' }));
 
     expect(created).toHaveLength(1);
-    expect(created[0].url).toBe('/voice-samples/chatterbox%3Aryan-pt-br.mp3');
+    expect(created[0].url).toBe('/voice-samples/chatterbox%3Aryan-en-us.mp3');
     vi.unstubAllGlobals();
   });
 });
 
 describe('app/(main)/persona/page — sample language', () => {
-  it('mudar o idioma do sample altera a language do áudio tocado', async () => {
+  it('clicar numa voz toca o sample em inglês (en-us), sem seletor de idioma', async () => {
     const created: { url: string; play: ReturnType<typeof vi.fn> }[] = [];
     class FakeAudio {
       play = vi.fn().mockResolvedValue(undefined);
@@ -846,11 +788,11 @@ describe('app/(main)/persona/page — sample language', () => {
     const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });
 
-    await user.selectOptions(screen.getByTestId('sample-language'), 'en-uk');
+    expect(screen.queryByTestId('sample-language')).toBeNull();
     await user.click(screen.getByRole('button', { name: 'ryan' }));
 
     expect(created).toHaveLength(1);
-    expect(created[0].url).toBe('/voice-samples/chatterbox%3Aryan-en-uk.mp3');
+    expect(created[0].url).toBe('/voice-samples/chatterbox%3Aryan-en-us.mp3');
     vi.unstubAllGlobals();
   });
 
@@ -1195,7 +1137,7 @@ describe('app/(main)/persona/page — validação do submit (guards do store)', 
     expect(screen.getByText('persona.voiceLabel')).toBeTruthy();
     expect(screen.getByText('personas.preferencesLabel')).toBeTruthy();
     expect(screen.getByText('personas.aspectLabel')).toBeTruthy();
-    expect(screen.getAllByText('persona.sampleLanguage').length).toBeGreaterThan(0);
+    expect(screen.queryByText('persona.sampleLanguage')).toBeNull();
     expect(screen.getByText('persona.photoLabel')).toBeTruthy();
   });
 });
@@ -1357,27 +1299,6 @@ describe('app/(main)/persona/page — abas, carrossel e seletor de voz', () => {
     expect(created[0].url).toBe('/voice-samples/chatterbox%3Aryan-en-us.mp3');
   });
 
-  it('trocar o idioma após ouvir repete o sample no novo idioma', async () => {
-    const created = stubAudio();
-    const user = userEvent.setup();
-    render(<PersonaPage />, { wrapper: createWrapper() });
-
-    await user.click(screen.getByText('ryan'));
-    await user.selectOptions(screen.getByTestId('sample-language'), 'en-uk');
-
-    expect(created).toHaveLength(2);
-    expect(created[1].url).toBe('/voice-samples/chatterbox%3Aryan-en-uk.mp3');
-  });
-
-  it('trocar o idioma sem voz ouvida não toca nada', async () => {
-    const created = stubAudio();
-    const user = userEvent.setup();
-    render(<PersonaPage />, { wrapper: createWrapper() });
-
-    await user.selectOptions(screen.getByTestId('sample-language'), 'en-uk');
-
-    expect(created).toHaveLength(0);
-  });
 });
 
 describe('app/(main)/persona/page — seletor de foto', () => {
@@ -1643,58 +1564,6 @@ describe('app/(main)/persona/page — modo edição e sincronização', () => {
     expect(container.querySelectorAll('.skeleton-shimmer').length).toBeGreaterThan(0);
   });
 
-  it('skeleton quando os idiomas carregam mesmo com dados', () => {
-    vi.mocked(useVoiceSampleLanguagesQuery).mockReturnValue({
-      data: [
-        { code: 'pt-br', label: 'Português (BR)' },
-        { code: 'en-uk', label: 'English (UK)' },
-      ],
-      isLoading: true,
-      isPending: false,
-    } as never);
-    const { container } = render(<PersonaPage />, { wrapper: createWrapper() });
-
-    expect(container.querySelectorAll('.skeleton-shimmer').length).toBeGreaterThan(0);
-  });
-
-  it('skeleton quando os idiomas não têm dados nem estão carregando', () => {
-    vi.mocked(useVoiceSampleLanguagesQuery).mockReturnValue({
-      data: undefined,
-      isLoading: false,
-      isPending: false,
-    } as never);
-    const { container } = render(<PersonaPage />, { wrapper: createWrapper() });
-
-    expect(container.querySelectorAll('.skeleton-shimmer').length).toBeGreaterThan(0);
-  });
-
-  it('retry chama só o refetch da query com erro (idiomas)', async () => {
-    const voicesRefetch = vi.fn().mockResolvedValue(undefined);
-    const sampleRefetch = vi.fn().mockResolvedValue(undefined);
-    vi.mocked(useVoicesQuery).mockReturnValue({
-      data: VOICES,
-      isLoading: false,
-      isError: false,
-      isFetching: false,
-      refetch: voicesRefetch,
-    } as never);
-    vi.mocked(useVoiceSampleLanguagesQuery).mockReturnValue({
-      data: undefined,
-      error: new Error('Languages down.'),
-      isError: true,
-      isLoading: false,
-      isFetching: false,
-      refetch: sampleRefetch,
-    } as never);
-    const user = userEvent.setup();
-    render(<PersonaPage />, { wrapper: createWrapper() });
-
-    await user.click(screen.getByRole('button', { name: 'persona.tryAgain' }));
-
-    expect(sampleRefetch).toHaveBeenCalledTimes(1);
-    expect(voicesRefetch).not.toHaveBeenCalled();
-  });
-
   it('retry chama o refetch de personas quando só ela falha', async () => {
     const personasRefetch = vi.fn().mockResolvedValue(undefined);
     vi.mocked(usePersonaListQuery).mockReturnValue({
@@ -1918,56 +1787,6 @@ describe('app/(main)/persona/page — submit em edição', () => {
     vi.mocked(usePersonaListQuery).mockReturnValue({ data: [], isLoading: false } as never);
     render(<PersonaPage />, { wrapper: createWrapper() });
     expect(screen.getByText('persona.submitHint')).toBeTruthy();
-  });
-});
-
-describe('app/(main)/persona/page — idioma da amostra', () => {
-  function mockEditWithLanguage(
-    language: string,
-    languages: Array<{ code: string; label: string }>,
-  ) {
-    mockEditMode({ ...EDIT_PERSONA_FULL, language });
-    vi.mocked(useVoiceSampleLanguagesQuery).mockReturnValue({
-      data: languages,
-      isLoading: false,
-    } as never);
-  }
-
-  it('espaços no idioma da persona são ignorados', () => {
-    mockEditWithLanguage('  es  ', [
-      { code: 'pt-br', label: 'Português (BR)' },
-      { code: 'es', label: 'Español' },
-    ]);
-    render(<PersonaPage />, { wrapper: createWrapper() });
-
-    expect(screen.getByTestId('sample-language')).toHaveValue('es');
-  });
-
-  it('prefixo casa o primeiro grupo (en → en-uk)', () => {
-    mockEditWithLanguage('en', [
-      { code: 'pt-br', label: 'Português (BR)' },
-      { code: 'en-uk', label: 'English (UK)' },
-    ]);
-    render(<PersonaPage />, { wrapper: createWrapper() });
-
-    expect(screen.getByTestId('sample-language')).toHaveValue('en-uk');
-  });
-
-  it('prefixo reverso casa o código mais curto (pt-br → pt)', () => {
-    mockEditWithLanguage('pt-br', [
-      { code: 'es', label: 'Español' },
-      { code: 'pt', label: 'Português' },
-    ]);
-    render(<PersonaPage />, { wrapper: createWrapper() });
-
-    expect(screen.getByTestId('sample-language')).toHaveValue('pt');
-  });
-
-  it('código em maiúsculas casa por prefixo sem case', () => {
-    mockEditWithLanguage('pt', [{ code: 'PT-BR', label: 'Português (BR)' }]);
-    render(<PersonaPage />, { wrapper: createWrapper() });
-
-    expect(screen.getByTestId('sample-language')).toHaveValue('PT-BR');
   });
 });
 

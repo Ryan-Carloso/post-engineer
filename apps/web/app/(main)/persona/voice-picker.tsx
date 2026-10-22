@@ -1,9 +1,8 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { useVoiceSampleLanguagesQuery, useVoicesQuery } from '@/lib/api';
+import { useRef } from 'react';
+import { useVoicesQuery } from '@/lib/api';
 import { usePersonaStore } from '@/lib/store';
-import { useI18n } from '@/lib/i18n/provider';
 import { CheckIcon, MicIcon } from '@/lib/ui';
 
 // Voice ids come from the engine's catalog and are provider-qualified:
@@ -62,50 +61,26 @@ function voiceModelLabel(voiceId: string): string {
 }
 
 //---------------
-// matchSampleLanguage — picks the voice sample code closest to the
-// persona language: exact ('es' → 'es') or by prefix ('pt' → 'pt-br').
-// Returns undefined when there is no match.
+// SAMPLE_LANGUAGE — English-only launch: there is no sample-language
+// picker; house voice samples always play the English take, whatever
+// language the persona being edited was created with.
 //---------------
-const matchSampleLanguage = (
-  personaLanguage: string,
-  samples: Array<{ code: string }>,
-): string | undefined => {
-  const lang = personaLanguage.trim().toLowerCase();
-  if (!lang) return undefined;
-  const codes = samples.map((sample) => sample.code);
-  const exact = codes.find((code) => code.toLowerCase() === lang);
-  if (exact) return exact;
-  return codes.find((code) => {
-    const normalized = code.toLowerCase();
-    return normalized.startsWith(`${lang}-`) || lang.startsWith(`${normalized}-`);
-  });
-};
+const SAMPLE_LANGUAGE = 'en-us';
 
 //---------------
 // PersonaHouseVoicePicker — house voice grid
 //---------------
-export const PersonaHouseVoicePicker = ({ personaLanguage }: { personaLanguage?: string }) => {
+export const PersonaHouseVoicePicker = () => {
   const voicesQuery = useVoicesQuery();
-  const sampleLanguagesQuery = useVoiceSampleLanguagesQuery();
   const voiceId = usePersonaStore((s) => s.voiceId);
-  // Manual user choice (null = not touched yet): wins over the default.
-  const [sampleLanguage, setSampleLanguage] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const lastPickedVoiceRef = useRef<string | null>(null);
-  const { t } = useI18n();
 
   const voices = voicesQuery.data ?? [];
-  const matchedSampleLanguage = personaLanguage
-    ? matchSampleLanguage(personaLanguage, sampleLanguagesQuery.data ?? [])
-    : undefined;
-  // English-only launch: the sample-language list only carries English
-  // codes, and the fallback default is an English sample too.
-  const effectiveSampleLanguage = sampleLanguage ?? matchedSampleLanguage ?? 'en-us';
 
-  const playVoiceSample = (pickedVoiceId: string, language: string): void => {
+  const playVoiceSample = (pickedVoiceId: string): void => {
     audioRef.current?.pause();
     const audio = new Audio(
-      `/voice-samples/${encodeURIComponent(pickedVoiceId)}-${encodeURIComponent(language)}.mp3`,
+      `/voice-samples/${encodeURIComponent(pickedVoiceId)}-${encodeURIComponent(SAMPLE_LANGUAGE)}.mp3`,
     );
     audioRef.current = audio;
     const playResult = audio.play();
@@ -116,41 +91,11 @@ export const PersonaHouseVoicePicker = ({ personaLanguage }: { personaLanguage?:
 
   const handlePickVoice = (pickedVoiceId: string) => {
     usePersonaStore.getState().setVoiceId(pickedVoiceId);
-    lastPickedVoiceRef.current = pickedVoiceId;
-    playVoiceSample(pickedVoiceId, effectiveSampleLanguage);
-  };
-
-  const handleSampleLanguageChange = (language: string) => {
-    setSampleLanguage(language);
-    // Switched language after listening to a sample? Restart the audio in the new language.
-    const lastPickedVoice = lastPickedVoiceRef.current;
-    if (lastPickedVoice) {
-      playVoiceSample(lastPickedVoice, language);
-    }
+    playVoiceSample(pickedVoiceId);
   };
 
   return (
     <div className="mt-4">
-      <label className="mb-4 block max-w-sm text-sm font-medium text-neutral-700">
-        {t('persona.sampleLanguage')}
-        <span className="relative mt-2 block">
-          <select
-            data-testid="sample-language"
-            value={effectiveSampleLanguage}
-            onChange={(e) => handleSampleLanguageChange(e.target.value)}
-            className="h-12 w-full appearance-none rounded-xl border border-neutral-300 bg-white px-4 pr-11 text-sm font-semibold text-neutral-900 shadow-sm transition-colors hover:border-neutral-400 focus:border-accent focus:ring-4 focus:ring-accent/10 focus:outline-none"
-          >
-            {(sampleLanguagesQuery.data ?? []).map((lang) => (
-              <option key={lang.code} value={lang.code}>
-                {lang.label}
-              </option>
-            ))}
-          </select>
-          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className="pointer-events-none absolute top-1/2 right-4 size-5 -translate-y-1/2 text-neutral-500">
-            <path d="m6 8 4 4 4-4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </span>
-      </label>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {voices.map((voice) => {
           const isActive = voice.id === voiceId;
