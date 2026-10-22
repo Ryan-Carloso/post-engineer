@@ -57,6 +57,20 @@ class CleanReferenceAudioTests(unittest.TestCase):
             clean_reference_audio(b"")
         self.assertEqual(ctx.exception.error_code, ERROR_INVALID_AUDIO)
 
+    def test_clean_maps_an_ffmpeg_timeout_to_invalid_audio(self):
+        # A compressed-container bomb inside the byte cap must not keep
+        # a worker busy for the full decode: the ffmpeg call is bounded
+        # and a timeout surfaces as the stable invalid-audio error.
+        from unittest.mock import patch
+
+        with patch(
+            "app.services.cloned_voices.audio_clean.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd="ffmpeg", timeout=120),
+        ):
+            with self.assertRaises(ReferenceAudioError) as ctx:
+                clean_reference_audio(b"fake audio bytes")
+        self.assertEqual(ctx.exception.error_code, ERROR_INVALID_AUDIO)
+
 
 if __name__ == "__main__":
     unittest.main()

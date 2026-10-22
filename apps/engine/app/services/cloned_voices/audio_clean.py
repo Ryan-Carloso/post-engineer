@@ -54,25 +54,34 @@ def clean_reference_audio(source_bytes: bytes) -> NormalizedReferenceAudio:
         wav_path = work_path / "cleaned.wav"
         source_path.write_bytes(source_bytes)
 
-        result = subprocess.run(
-            [
-                utils.get_ffmpeg_binary(),
-                "-y",
-                "-i",
-                str(source_path),
-                "-ac",
-                "1",
-                "-ar",
-                "24000",
-                "-af",
-                _CLEAN_FILTER,
-                "-f",
-                "wav",
-                str(wav_path),
-            ],
-            capture_output=True,
-            text=True,
-        )
+        try:
+            result = subprocess.run(
+                [
+                    utils.get_ffmpeg_binary(),
+                    "-y",
+                    "-i",
+                    str(source_path),
+                    "-ac",
+                    "1",
+                    "-ar",
+                    "24000",
+                    "-af",
+                    _CLEAN_FILTER,
+                    "-f",
+                    "wav",
+                    str(wav_path),
+                ],
+                capture_output=True,
+                text=True,
+                # The duration cap below is only known after decoding, so
+                # bound the decode itself: a small compressed container
+                # can hold hours of audio inside the byte cap.
+                timeout=120,
+            )
+        except subprocess.TimeoutExpired:
+            raise ReferenceAudioError(
+                ERROR_INVALID_AUDIO, "could not decode reference audio"
+            ) from None
         if result.returncode != 0 or not wav_path.is_file():
             raise ReferenceAudioError(ERROR_INVALID_AUDIO, "could not decode reference audio")
 

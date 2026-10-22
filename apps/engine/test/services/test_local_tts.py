@@ -345,22 +345,14 @@ class LocalTtsTests(unittest.TestCase):
         with (
             patch.object(local_tts, "_load_nano", return_value=fake),
             patch.object(local_tts, "local_registry_dir", return_value=Path(self._tmp.name)),
-            patch(
-                "app.services.cloned_voices.local_registry.local_registry_dir",
-                return_value=Path(self._tmp.name),
-            ),
         ):
             result = local_tts.clone_tts("Hello.", "u0123456789ab_c0123456789a", self.voice_file)
         self.assertTrue(result.ok, result.error)
         self.assertEqual(fake.calls[0][1], reference)
 
     def test_clone_tts_fails_loudly_without_a_reference(self):
-        with (
-            patch.object(local_tts, "local_registry_dir", return_value=Path(self._tmp.name)),
-            patch(
-                "app.services.cloned_voices.local_registry.local_registry_dir",
-                return_value=Path(self._tmp.name),
-            ),
+        with patch.object(
+            local_tts, "local_registry_dir", return_value=Path(self._tmp.name)
         ):
             result = local_tts.clone_tts("Hello.", "u0123456789ab_c0123456789a", self.voice_file)
         self.assertFalse(result.ok)
