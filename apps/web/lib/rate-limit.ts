@@ -64,6 +64,8 @@ export const RATE_LIMITS = {
   // Per-persona default publishing accounts: tiny rows, no fan-out. The UI
   // saves on button click (not per keystroke), so 60/min is generous.
   publishingAccounts: { name: 'publishing-accounts', limit: 60, windowMs: 60_000 },
+  // Metrics dashboard: one bounded read per filter change.
+  metrics: { name: 'metrics', limit: 60, windowMs: 60_000 },
 } as const satisfies Record<string, RateLimitProfile>;
 
 //---------------

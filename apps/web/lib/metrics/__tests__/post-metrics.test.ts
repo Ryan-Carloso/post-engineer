@@ -379,3 +379,17 @@ describe('createPostMetricsStore', () => {
     expect(sql).toContain('unique (post_id, provider, external_id, metrics_window)');
   });
 });
+
+describe('migration 026 (post metrics dimensions)', () => {
+  const sql = readFileSync(join(findRepoRoot(import.meta.url), 'supabase', 'migrations', '026_post-metrics-dimensions.sql'), 'utf8');
+
+  it('adds the persona_id and script_angle columns the web reads and writes', () => {
+    expect(sql.includes('add column if not exists persona_id uuid')).toBe(true);
+    expect(sql.includes('add column if not exists script_angle text')).toBe(true);
+  });
+
+  it('fills persona_id on insert from the post schedule', () => {
+    expect(sql.includes('before insert on public.post_metrics')).toBe(true);
+    expect(sql.includes('join public.schedules s on s.id = sp.schedule_id')).toBe(true);
+  });
+});

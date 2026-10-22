@@ -24,6 +24,7 @@ import { ProviderIcon } from '@/components/provider-icon';
 import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
 import { SpinnerIcon } from '@/lib/ui';
+import { PROVIDER_LABELS, type AccountOption } from '@/lib/account-options';
 import { GENERATION_ERROR_KEY } from '@/lib/generation/generation-errors';
 
 //---------------
@@ -35,12 +36,6 @@ import { GENERATION_ERROR_KEY } from '@/lib/generation/generation-errors';
 
 type Tab = 'upcoming' | 'history';
 type ProviderFilter = 'all' | 'youtube' | 'instagram' | 'linkedin' | 'bluesky';
-
-interface AccountOption {
-  id: string;
-  provider: Exclude<ProviderFilter, 'all'>;
-  label: string;
-}
 
 //---------------
 // resolveAccountFilter — a selected account only stays applied when it
@@ -60,15 +55,6 @@ function resolveAccountFilter(
 }
 
 const PROVIDER_FILTERS: ProviderFilter[] = ['all', 'youtube', 'instagram', 'linkedin', 'bluesky'];
-
-// Display names for the provider filter options. A record (not a ternary
-// chain) so every network — including bluesky — gets its own label.
-const PROVIDER_LABELS: Record<Exclude<ProviderFilter, 'all'>, string> = {
-  youtube: 'YouTube',
-  instagram: 'Instagram',
-  linkedin: 'LinkedIn',
-  bluesky: 'Bluesky',
-};
 
 const STATUS_STYLE: Record<string, string> = {
   pending: 'bg-[#e8edf1] text-[#60758a]',
@@ -454,6 +440,10 @@ export default function PostsPage() {
           >
             {t('posts.refresh')}
           </button>
+          {/* The mobile bottom bar holds five tabs; this is how phones reach metrics. */}
+          <Link href="/metrics" className="rounded-xl border border-input bg-white px-4 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb]">
+            {t('nav.metrics')}
+          </Link>
           <Link href="/posts/new" className="rounded-xl bg-[#0d2b45] px-4 py-2 text-sm font-semibold text-white hover:bg-[#123a5e]">
             {t('posts.newPost')}
           </Link>

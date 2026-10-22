@@ -9,6 +9,7 @@ import VersionBadge from '@/components/ui/version-badge';
 import AppLogo from '@/components/ui/app-logo';
 import {
   AccountsIcon,
+  ChartIcon,
   CoinsIcon,
   HistoryIcon,
   HomeIcon,
@@ -20,8 +21,8 @@ import {
 //---------------
 interface NavItem {
   href: string;
-  labelKey: 'nav.home' | 'nav.accounts' | 'nav.persona' | 'nav.posts' | 'nav.billing' | 'nav.debug';
-  hintKey: 'nav.homeHint' | 'nav.accountsHint' | 'nav.personaHint' | 'nav.postsHint' | 'nav.billingHint' | 'nav.debugHint';
+  labelKey: 'nav.home' | 'nav.accounts' | 'nav.persona' | 'nav.posts' | 'nav.metrics' | 'nav.billing' | 'nav.debug';
+  hintKey: 'nav.homeHint' | 'nav.accountsHint' | 'nav.personaHint' | 'nav.postsHint' | 'nav.metricsHint' | 'nav.billingHint' | 'nav.debugHint';
   icon: () => React.JSX.Element;
 }
 
@@ -59,6 +60,7 @@ const MainSidebar = () => {
     { href: '/accounts', labelKey: 'nav.accounts', hintKey: 'nav.accountsHint', icon: AccountsIcon },
     { href: '/personas', labelKey: 'nav.persona', hintKey: 'nav.personaHint', icon: SparklesIcon },
     { href: '/posts', labelKey: 'nav.posts', hintKey: 'nav.postsHint', icon: HistoryIcon },
+    { href: '/metrics', labelKey: 'nav.metrics', hintKey: 'nav.metricsHint', icon: ChartIcon },
     { href: '/billing', labelKey: 'nav.billing', hintKey: 'nav.billingHint', icon: CoinsIcon },
   ];
 
