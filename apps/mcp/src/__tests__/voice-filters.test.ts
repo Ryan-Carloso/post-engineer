@@ -6,9 +6,9 @@ import { filterVoicesPayload, ListVoicesSchema } from '../voice-filters.js';
 
 const PAYLOAD = {
   voices: [
-    { id: 'chatterbox:kokoro_af_heart', gender: 'female', accent: 'us', kind: 'standard' },
-    { id: 'chatterbox:kokoro_bm_george', gender: 'male', accent: 'gb', kind: 'standard' },
-    { id: 'chatterbox:phonon_azgorath', gender: 'male', accent: null, kind: 'character' },
+    { id: 'chatterbox:kokoro_af_heart', label: 'Heart', gender: 'female', accent: 'us', kind: 'standard', description: 'American female voice, bright, high pitch.' },
+    { id: 'chatterbox:kokoro_bm_george', label: 'George', gender: 'male', accent: 'gb', kind: 'standard', description: 'British male voice, mid-range pitch.' },
+    { id: 'chatterbox:phonon_azgorath', label: 'Azgorath', gender: 'male', accent: null, kind: 'character', description: 'An enormous ancient demon. Cavernous, deep bass.' },
     { id: 'chatterbox:u0123_clone', gender: null, accent: null, kind: 'cloned' },
   ],
 };
@@ -33,6 +33,13 @@ describe('filterVoicesPayload', () => {
     expect(ids(filterVoicesPayload(PAYLOAD, { origin: 'character', gender: 'female' }))).toEqual([]);
   });
 
+  it('search matches word prefixes in name, description and tags', () => {
+    expect(ids(filterVoicesPayload(PAYLOAD, { search: 'dem' }))).toEqual(['chatterbox:phonon_azgorath']);
+    expect(ids(filterVoicesPayload(PAYLOAD, { search: 'British man' }))).toEqual(['chatterbox:kokoro_bm_george']);
+    expect(ids(filterVoicesPayload(PAYLOAD, { search: 'male', origin: 'us' }))).toEqual([]);
+    expect(ids(filterVoicesPayload(PAYLOAD, { search: 'heart' }))).toEqual(['chatterbox:kokoro_af_heart']);
+  });
+
   it('fails loudly on a malformed payload when filtering', () => {
     expect(() => filterVoicesPayload({}, { gender: 'male' })).toThrow('Invalid voices response');
     expect(() => filterVoicesPayload({ voices: [{}] }, { gender: 'male' })).toThrow('Invalid voices response');
@@ -41,6 +48,8 @@ describe('filterVoicesPayload', () => {
   it('rejects unknown filter values at parse time', () => {
     expect(ListVoicesSchema.safeParse({ gender: 'other' }).success).toBe(false);
     expect(ListVoicesSchema.safeParse({ origin: 'au' }).success).toBe(false);
+    expect(ListVoicesSchema.safeParse({ search: '   ' }).success).toBe(false);
+    expect(ListVoicesSchema.safeParse({ search: 'x'.repeat(101) }).success).toBe(false);
   });
 });
 

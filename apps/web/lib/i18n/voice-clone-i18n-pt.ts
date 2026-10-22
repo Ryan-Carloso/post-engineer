@@ -44,6 +44,16 @@ export const personaVoiceClonePt = {
   voiceCloneCleaned: 'Limpo',
   voiceCloneCleaning: 'Limpando o áudio…',
   voiceCloneCleanFailed: 'Não foi possível limpar o áudio. Você ainda pode clonar o original.',
+  voicePickerTitle: 'Escolher voz',
+  voicePickerHint: 'Ouça as amostras e busque pelo nome ou estilo (descrições em inglês).',
+  voicePickerSearch: 'Buscar voz (ex.: deep, british, pirate)',
+  voicePickerCount: '{count} vozes',
+  voicePickerNone: 'Nenhuma voz escolhida ainda.',
+  voicePickerChoose: 'Escolher voz',
+  voicePickerChange: 'Trocar voz',
+  voicePlaySample: 'Ouvir {name}',
+  voiceTagCharacter: 'Personagem',
+  voiceTagCloned: 'Minha voz clonada',
 } as const;
 
 export const voiceCloneApiToolDescPt = {

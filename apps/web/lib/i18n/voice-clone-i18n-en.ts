@@ -44,6 +44,16 @@ export const personaVoiceCloneEn = {
   voiceCloneCleaned: 'Cleaned',
   voiceCloneCleaning: 'Cleaning the audio…',
   voiceCloneCleanFailed: 'Could not clean the audio. You can still clone the original.',
+  voicePickerTitle: 'Choose a voice',
+  voicePickerHint: 'Listen to the samples and search by name or style.',
+  voicePickerSearch: 'Search voices (e.g. deep, british, pirate)',
+  voicePickerCount: '{count} voices',
+  voicePickerNone: 'No voice chosen yet.',
+  voicePickerChoose: 'Choose voice',
+  voicePickerChange: 'Change voice',
+  voicePlaySample: 'Play {name}',
+  voiceTagCharacter: 'Character',
+  voiceTagCloned: 'My cloned voice',
 } as const;
 
 export const voiceCloneApiToolDescEn = {

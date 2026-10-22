@@ -104,7 +104,8 @@ def get_house_voices(user_id: str | None = None) -> list[dict[str, Any]]:
 
     House voices come from ``voice_catalog.json`` (Phonon + Kokoro, served by
     the local CPU TTS server) and are emitted as ``chatterbox:<name>`` with
-    their filter metadata (``gender``, ``accent``, ``kind``). The discovered
+    their filter metadata (``gender``, ``accent``, ``kind``) and a text
+    ``description`` so callers who cannot listen (MCP agents) can still choose. The discovered
     OpenRouter voices follow when it is configured, with no metadata. That
     id is what gets stored on the persona and handed straight to
     ``voice.tts``, which routes on the prefix, so a voice the pipeline
@@ -128,6 +129,7 @@ def get_house_voices(user_id: str | None = None) -> list[dict[str, Any]]:
             "gender": voice["gender"],
             "accent": voice["accent"],
             "kind": voice["kind"],
+            "description": voice["description"],
         }
         for voice in load_catalog()
     ]
@@ -153,6 +155,7 @@ def _unclassified_voice(voice_id: str, provider: str) -> dict[str, Any]:
         "gender": None,
         "accent": None,
         "kind": "standard",
+        "description": None,
     }
 
 

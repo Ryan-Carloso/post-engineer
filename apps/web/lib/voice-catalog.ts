@@ -21,6 +21,8 @@ export interface VoiceOption {
   gender: VoiceGender | null;
   accent: VoiceAccent | null;
   kind: VoiceKind;
+  /** English text about how the voice sounds; null for OpenRouter and clones. */
+  description: string | null;
 }
 
 function isOneOf<T extends string>(values: readonly T[], value: unknown): value is T {
@@ -47,7 +49,8 @@ export function isVoiceOption(value: unknown): value is VoiceOption {
     typeof record.provider === 'string' &&
     isNullOr(record.gender, (inner): inner is VoiceGender => isOneOf(VOICE_GENDERS, inner)) &&
     isNullOr(record.accent, (inner): inner is VoiceAccent => isOneOf(VOICE_ACCENTS, inner)) &&
-    isOneOf(VOICE_KINDS, record.kind)
+    isOneOf(VOICE_KINDS, record.kind) &&
+    isNullOr(record.description, isString)
   );
 }
 
@@ -59,6 +62,7 @@ export function toVoiceOption(voice: VoiceOption): VoiceOption {
     gender: voice.gender,
     accent: voice.accent,
     kind: voice.kind,
+    description: voice.description,
   };
 }
 
@@ -94,6 +98,40 @@ export function filterHouseVoices(
       return voice.kind === 'character';
     }
     return voice.kind === 'standard' && voice.accent === origin;
+  });
+}
+
+//---------------
+// searchVoices — case- and accent-insensitive match on every word of the
+// query against the voice's label, description, id and tag words ("deep
+// british" finds a British voice described as deep). Each query word must
+// START a word of the voice text, so typing "pir" finds "pirate" while "male"
+// does not match "female". An empty query keeps every voice.
+//---------------
+// Searchable words for the structured tags, so "british woman" or
+// "character" match even when the description never says so.
+const ACCENT_SEARCH_WORDS: Record<VoiceAccent, string> = { us: 'american usa us', gb: 'british uk england' };
+const GENDER_SEARCH_WORDS: Record<VoiceGender, string> = { female: 'female woman', male: 'male man' };
+
+function normalizeSearchText(text: string): string {
+  return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+export function searchVoices(voices: readonly VoiceOption[], query: string): VoiceOption[] {
+  const words = normalizeSearchText(query).split(/[^a-z0-9]+/).filter((word) => word !== '');
+  if (words.length === 0) {
+    return [...voices];
+  }
+  return voices.filter((voice) => {
+    const tags = [
+      voice.accent === null ? '' : ACCENT_SEARCH_WORDS[voice.accent],
+      voice.gender === null ? '' : GENDER_SEARCH_WORDS[voice.gender],
+      voice.kind,
+    ].join(' ');
+    const voiceWords = normalizeSearchText(`${voice.label ?? ''} ${voice.description ?? ''} ${voice.id} ${tags}`)
+      .split(/[^a-z0-9]+/)
+      .filter((word) => word !== '');
+    return words.every((word) => voiceWords.some((voiceWord) => voiceWord.startsWith(word)));
   });
 }
 

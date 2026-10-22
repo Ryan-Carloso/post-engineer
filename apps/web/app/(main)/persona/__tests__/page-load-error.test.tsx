@@ -36,6 +36,7 @@ vi.mock('@/lib/ui', () => ({
   SpinnerIcon: () => <span data-testid="icon-spinner" />,
   SparklesIcon: () => <span data-testid="icon-sparkles" />,
   MicIcon: () => <span data-testid="icon-mic" />,
+  PlayIcon: () => <span data-testid="icon-play" />,
   FilmIcon: () => <span data-testid="icon-film" />,
   SECTION_LABEL_CLASS: '',
   INPUT_CLASS: '',

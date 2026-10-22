@@ -171,8 +171,8 @@ describe('lib/api — persona', () => {
 
   describe('fetchVoices', () => {
     const CATALOG = [
-      { id: 'chatterbox:kokoro_af_heart', label: 'Heart', provider: 'kokoro', gender: 'female', accent: 'us', kind: 'standard' },
-      { id: 'chatterbox:phonon_azgorath', label: 'Azgorath', provider: 'phonon', gender: 'male', accent: null, kind: 'character' },
+      { id: 'chatterbox:kokoro_af_heart', label: 'Heart', provider: 'kokoro', gender: 'female', accent: 'us', kind: 'standard', description: 'American female voice.' },
+      { id: 'chatterbox:phonon_azgorath', label: 'Azgorath', provider: 'phonon', gender: 'male', accent: null, kind: 'character', description: 'An enormous ancient demon.' },
     ];
 
     it('fetches /api/persona/voices and returns the voice list', async () => {

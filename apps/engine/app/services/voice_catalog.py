@@ -54,6 +54,7 @@ class CatalogVoice(TypedDict):
     gender: Gender
     accent: Accent | None
     kind: Kind
+    description: str
 
 
 def _parse_voice(raw: object) -> CatalogVoice:
@@ -66,6 +67,7 @@ def _parse_voice(raw: object) -> CatalogVoice:
     gender = raw.get("gender")
     accent = raw.get("accent")
     kind = raw.get("kind")
+    description = raw.get("description")
     if not isinstance(name, str) or not name:
         raise ValueError("catalog entry has no name")
     if provider not in PROVIDERS:
@@ -78,6 +80,8 @@ def _parse_voice(raw: object) -> CatalogVoice:
         raise ValueError(f"catalog entry {name} has unknown gender")
     if kind not in KINDS:
         raise ValueError(f"catalog entry {name} has unknown kind")
+    if not isinstance(description, str) or not description.strip():
+        raise ValueError(f"catalog entry {name} has no description")
     # Characters are their own category with no accent; standard voices
     # always carry one, so the origin filter never drops them.
     if kind == "character" and accent is not None:
@@ -92,6 +96,7 @@ def _parse_voice(raw: object) -> CatalogVoice:
         "gender": gender,
         "accent": accent,
         "kind": kind,
+        "description": description,
     }
 
 

@@ -4,15 +4,9 @@ import { useRef, useState } from 'react';
 import { useVoicesQuery } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
 import { usePersonaStore } from '@/lib/store';
-import { CheckIcon, MicIcon } from '@/lib/ui';
-import { cn } from '@/lib/utils';
-import {
-  filterHouseVoices,
-  voiceSampleName,
-  type GenderFilter,
-  type OriginFilter,
-  type VoiceOption,
-} from '@/lib/voice-catalog';
+import { MicIcon, PlayIcon } from '@/lib/ui';
+import { filterHouseVoices, voiceSampleName, type VoiceOption } from '@/lib/voice-catalog';
+import { VoicePickerDialog, VoiceTags } from './voice-picker-dialog';
 
 // Voice ids come from the engine's catalog and are provider-qualified:
 // `chatterbox:kokoro_af_heart`, or `openrouter:<model>:<voice>` for the
@@ -74,29 +68,24 @@ function voiceModelLabel(voiceId: string): string {
 }
 
 //---------------
-// PersonaHouseVoicePicker — house voice grid
+// PersonaHouseVoicePicker — the chosen voice as a card (name, tags,
+// description, play) with a button that opens VoicePickerDialog to search and
+// filter the whole catalog.
 //---------------
 export const PersonaHouseVoicePicker = () => {
   const { t } = useI18n();
   const voicesQuery = useVoicesQuery();
   const voiceId = usePersonaStore((s) => s.voiceId);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [gender, setGender] = useState<GenderFilter>('all');
-  const [origin, setOrigin] = useState<OriginFilter>('all');
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
 
-  const voices = filterHouseVoices(voicesQuery.data ?? [], gender, origin);
-
-  const genderOptions: { value: GenderFilter; label: string }[] = [
-    { value: 'all', label: t('persona.voiceFilterAll') },
-    { value: 'female', label: t('persona.voiceFilterFemale') },
-    { value: 'male', label: t('persona.voiceFilterMale') },
-  ];
-  const originOptions: { value: OriginFilter; label: string }[] = [
-    { value: 'all', label: t('persona.voiceFilterAll') },
-    { value: 'us', label: t('persona.voiceFilterUs') },
-    { value: 'gb', label: t('persona.voiceFilterGb') },
-    { value: 'character', label: t('persona.voiceFilterCharacters') },
-  ];
+  const houseVoices = filterHouseVoices(voicesQuery.data ?? [], 'all', 'all');
+  // Looked up in the full catalog: the persona may use a clone picked in the
+  // "clone my voice" tab, which the house list deliberately leaves out.
+  const selected = (voicesQuery.data ?? []).find((voice) => voice.id === voiceId) ?? null;
+  const selectedLabel = (voice: VoiceOption): string =>
+    voice.kind === 'cloned' ? t('persona.voiceTagCloned') : voiceLabel(voice);
 
   // House samples are English takes rendered by the local TTS server, one
   // per catalog voice; OpenRouter voices have none and play nothing.
@@ -108,116 +97,76 @@ export const PersonaHouseVoicePicker = () => {
     audioRef.current?.pause();
     const audio = new Audio(`/voice-samples/${encodeURIComponent(sampleName)}.mp3`);
     audioRef.current = audio;
+    setPlayingVoiceId(voice.id);
+    audio.onended = () => setPlayingVoiceId(null);
     const playResult = audio.play();
     if (playResult) {
-      void playResult.catch(() => {});
+      void playResult.catch(() => setPlayingVoiceId(null));
     }
   };
 
   const handlePickVoice = (voice: VoiceOption) => {
     usePersonaStore.getState().setVoiceId(voice.id);
-    playVoiceSample(voice);
+    setDialogOpen(false);
   };
 
   return (
     <div className="mt-4">
-      <VoiceFilterChips
-        label={t('persona.voiceFilterGender')}
-        options={genderOptions}
-        value={gender}
-        onChange={setGender}
-      />
-      <VoiceFilterChips
-        label={t('persona.voiceFilterOrigin')}
-        options={originOptions}
-        value={origin}
-        onChange={setOrigin}
-      />
-      {voices.length === 0 && voicesQuery.isSuccess && (
-        <p className="mt-3 text-sm text-neutral-500">{t('persona.voiceFilterEmpty')}</p>
-      )}
-      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {voices.map((voice) => {
-          const isActive = voice.id === voiceId;
-          return (
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-neutral-200 bg-white p-4">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-neutral-600">
+          <MicIcon />
+        </span>
+        <div className="min-w-0 flex-1 basis-0 space-y-1" data-testid="selected-voice">
+          {selected === null ? (
+            <p className="text-sm text-neutral-500">{t('persona.voicePickerNone')}</p>
+          ) : (
+            <>
+              <span className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-semibold text-neutral-900">{selectedLabel(selected)}</span>
+                <VoiceTags voice={selected} />
+              </span>
+              {selected.description !== null && (
+                <p className="line-clamp-2 text-xs leading-relaxed text-neutral-500">{selected.description}</p>
+              )}
+            </>
+          )}
+        </div>
+        <div className="flex w-full shrink-0 gap-2 sm:w-auto">
+          {selected !== null && voiceSampleName(selected) !== null && (
             <button
-              key={voice.id}
               type="button"
-              aria-pressed={isActive}
-              // The raw id is the only complete label: both lines above are
-              // display and the model line is hidden for single-word voices.
-              title={voice.id}
-              onClick={() => handlePickVoice(voice)}
-              className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-colors ${
-                isActive
-                  ? 'border-accent bg-red-50/50'
-                  : 'border-neutral-200 bg-white hover:border-neutral-400'
+              onClick={() => playVoiceSample(selected)}
+              aria-label={t('persona.voicePlaySample', { name: selectedLabel(selected) })}
+              className={`flex size-10 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                playingVoiceId === selected.id
+                  ? 'border-neutral-900 bg-neutral-900 text-white'
+                  : 'border-neutral-200 text-neutral-700 hover:border-neutral-400'
               }`}
             >
-              <span
-                className={`flex size-8 shrink-0 items-center justify-center rounded-full ${
-                  isActive ? 'bg-accent text-white' : 'bg-neutral-100 text-neutral-500'
-                }`}
-              >
-                <MicIcon />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-neutral-900">
-                  {voiceLabel(voice)}
-                </span>
-                {voiceModelLabel(voice.id) !== '' && (
-                  <span className="block truncate text-xs text-neutral-500">
-                    {voiceModelLabel(voice.id)}
-                  </span>
-                )}
-              </span>
-              {isActive && (
-                <span className="text-accent">
-                  <CheckIcon />
-                </span>
-              )}
+              <PlayIcon />
             </button>
-          );
-        })}
+          )}
+          <button
+            type="button"
+            onClick={() => setDialogOpen(true)}
+            disabled={voicesQuery.data === undefined}
+            className="flex-1 rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-800 disabled:opacity-50 sm:flex-none"
+          >
+            {selected === null ? t('persona.voicePickerChoose') : t('persona.voicePickerChange')}
+          </button>
+        </div>
       </div>
+      <VoicePickerDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        voices={houseVoices}
+        selectedVoiceId={voiceId}
+        playingVoiceId={playingVoiceId}
+        onPlay={playVoiceSample}
+        onPick={handlePickVoice}
+        labelFor={voiceLabel}
+        modelFor={(voice) => voiceModelLabel(voice.id)}
+      />
     </div>
   );
 };
-
-//---------------
-// VoiceFilterChips — one labelled row of single-select chips (gender or
-// origin). aria-pressed marks the active chip for assistive tech.
-//---------------
-function VoiceFilterChips<T extends string>({
-  label,
-  options,
-  value,
-  onChange,
-}: {
-  label: string;
-  options: { value: T; label: string }[];
-  value: T;
-  onChange: (next: T) => void;
-}) {
-  return (
-    <div className="mb-2 flex flex-wrap items-center gap-1.5" role="group" aria-label={label}>
-      <span className="mr-1 text-xs font-medium tracking-wide text-neutral-500 uppercase">{label}</span>
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          aria-pressed={option.value === value}
-          onClick={() => onChange(option.value)}
-          className={cn(
-            'rounded-full border px-3 py-1 text-xs transition-colors',
-            option.value === value
-              ? 'border-neutral-900 bg-neutral-900 font-medium text-white'
-              : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-400',
-          )}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
-  );
-}

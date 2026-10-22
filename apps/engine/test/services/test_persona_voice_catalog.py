@@ -39,8 +39,10 @@ class TestHouseVoiceCatalog(unittest.TestCase):
                 "gender": "female",
                 "accent": "us",
                 "kind": "standard",
+                "description": heart["description"],
             },
         )
+        self.assertIn("American female", heart["description"])
 
     def test_configured_openrouter_voices_are_appended_without_metadata(self):
         with patch.object(persona_service, "get_openrouter_voices", return_value=OPENROUTER_VOICES):
@@ -56,6 +58,7 @@ class TestHouseVoiceCatalog(unittest.TestCase):
                 "gender": None,
                 "accent": None,
                 "kind": "standard",
+                "description": None,
             },
         )
 

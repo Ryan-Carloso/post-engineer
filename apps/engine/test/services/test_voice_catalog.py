@@ -28,6 +28,7 @@ def _entry(**overrides):
         "gender": "female",
         "accent": "us",
         "kind": "standard",
+        "description": "American female voice.",
     }
     base.update(overrides)
     return base
@@ -84,6 +85,8 @@ def test_parse_catalog_accepts_a_valid_entry():
         {"accent": "au"},
         {"accent": None},
         {"kind": "character", "accent": "us"},
+        {"description": ""},
+        {"description": None},
     ],
 )
 def test_parse_catalog_rejects_invalid_entries(overrides):
@@ -131,3 +134,9 @@ def test_every_catalog_voice_is_routable_by_tts():
         catalog = persona_service.get_house_voices()
     for entry in catalog:
         assert voice_service.is_chatterbox_voice(entry["id"]), entry["id"]
+
+
+def test_every_catalog_voice_has_a_description():
+    """MCP agents cannot listen to samples; the description is how they choose."""
+    assert all(len(voice["description"]) > 20 for voice in load_catalog())
+

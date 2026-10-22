@@ -57,6 +57,7 @@ const voice = (id: string) => ({
   gender: 'female',
   accent: 'us',
   kind: 'standard',
+  description: 'American female voice, bright, high pitch.',
 });
 
 describe('GET /api/persona/voices', () => {

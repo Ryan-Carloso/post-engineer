@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { filterHouseVoices, isVoiceOption, voiceSampleName, type VoiceOption } from '../voice-catalog';
+import { filterHouseVoices, isVoiceOption, searchVoices, voiceSampleName, type VoiceOption } from '../voice-catalog';
 
 const v = (overrides: Partial<VoiceOption> & { id: string }): VoiceOption => ({
   label: 'X',
@@ -8,6 +8,7 @@ const v = (overrides: Partial<VoiceOption> & { id: string }): VoiceOption => ({
   gender: 'female',
   accent: 'us',
   kind: 'standard',
+  description: null,
   ...overrides,
 });
 
@@ -49,6 +50,31 @@ describe('filterHouseVoices', () => {
   });
 });
 
+describe('searchVoices', () => {
+  const voices: VoiceOption[] = [
+    v({ id: 'chatterbox:phonon_captain', label: 'Captain Silas', provider: 'phonon', gender: 'male', accent: null, kind: 'character', description: 'An old British pirate captain.' }),
+    v({ id: 'chatterbox:kokoro_bf_emma', label: 'Emma', gender: 'female', accent: 'gb', description: 'British female voice, mid-range pitch.' }),
+    v({ id: 'chatterbox:kokoro_am_onyx', label: 'Onyx', gender: 'male', accent: 'us', description: 'American male voice, very deep pitch.' }),
+    v({ id: 'chatterbox:phonon_elodie_rose', label: 'Élodie-Rose', provider: 'phonon', accent: 'gb', description: 'Soft and warm.' }),
+  ];
+
+  it('matches every query word as a word prefix across label, description and tags', () => {
+    expect(ids(searchVoices(voices, 'pir'))).toEqual(['chatterbox:phonon_captain']);
+    expect(ids(searchVoices(voices, 'deep american'))).toEqual(['chatterbox:kokoro_am_onyx']);
+    expect(ids(searchVoices(voices, 'british woman'))).toEqual(['chatterbox:kokoro_bf_emma', 'chatterbox:phonon_elodie_rose']);
+    expect(ids(searchVoices(voices, 'character'))).toEqual(['chatterbox:phonon_captain']);
+  });
+
+  it('does not match "male" inside "female" and ignores case, accents and punctuation', () => {
+    expect(ids(searchVoices(voices, 'male'))).toEqual(['chatterbox:phonon_captain', 'chatterbox:kokoro_am_onyx']);
+    expect(ids(searchVoices(voices, 'ELODIE-rose'))).toEqual(['chatterbox:phonon_elodie_rose']);
+  });
+
+  it('returns every voice for an empty or blank query', () => {
+    expect(searchVoices(voices, '   ')).toHaveLength(4);
+  });
+});
+
 describe('isVoiceOption', () => {
   it('accepts a full entry and rejects missing or unknown metadata', () => {
     expect(isVoiceOption(CATALOG[0])).toBe(true);
@@ -59,6 +85,8 @@ describe('isVoiceOption', () => {
     expect(isVoiceOption({ ...CATALOG[0], kind: 'robot' })).toBe(false);
     expect(isVoiceOption({ ...CATALOG[0], id: '' })).toBe(false);
     expect(isVoiceOption({ ...CATALOG[0], label: 3 })).toBe(false);
+    expect(isVoiceOption({ ...CATALOG[0], description: 3 })).toBe(false);
+    expect(isVoiceOption({ ...CATALOG[0], description: 'Warm.' })).toBe(true);
     expect(isVoiceOption(null)).toBe(false);
   });
 });
@@ -80,12 +108,12 @@ describe('engine catalog <-> web samples sync', () => {
     const catalog: unknown = JSON.parse(
       readFileSync(join(root, 'apps/engine/app/services/voice_catalog.json'), 'utf8'),
     );
-    const voices = (catalog as { voices: { name: string; label: string; provider: string; gender: string; accent: string | null; kind: string }[] }).voices;
+    const voices = (catalog as { voices: { name: string; label: string; provider: string; gender: string; accent: string | null; kind: string; description: string }[] }).voices;
     const samples = new Set(readdirSync(join(root, 'apps/web/public/voice-samples')));
 
     expect(voices).toHaveLength(65);
     for (const entry of voices) {
-      const option = { id: `chatterbox:${entry.name}`, label: entry.label, provider: entry.provider, gender: entry.gender, accent: entry.accent, kind: entry.kind };
+      const option = { id: `chatterbox:${entry.name}`, label: entry.label, provider: entry.provider, gender: entry.gender, accent: entry.accent, kind: entry.kind, description: entry.description };
       expect(isVoiceOption(option)).toBe(true);
       expect(samples.has(`${entry.name}.mp3`)).toBe(true);
     }
