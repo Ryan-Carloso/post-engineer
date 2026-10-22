@@ -11,6 +11,7 @@ from unittest.mock import patch
 # add project root to python path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+from app.config import config as app_config
 from app.utils import utils
 from app.services import voice as vs
 from app.services import voice_providers as vp
@@ -202,7 +203,7 @@ class TestVoiceService(unittest.TestCase):
         # runtime code reads the same config source. This must use that
         # same source so the test is not wrongly skipped when credentials
         # are configured correctly.
-        if not vs.config.siliconflow.get("api_key"):
+        if not app_config.siliconflow.get("api_key"):
             self.skipTest("siliconflow_api_key is not configured")
 
         voice_name = "siliconflow:FunAudioLLM/CosyVoice2-0.5B:alex-Male"
@@ -259,7 +260,7 @@ class TestVoiceService(unittest.TestCase):
         "MPT_RUN_INTEGRATION_TESTS not set",
     )
     def test_azure_tts_v2(self):
-        if not vs.config.azure.get("speech_key") or not vs.config.azure.get("speech_region"):
+        if not app_config.azure.get("speech_key") or not app_config.azure.get("speech_region"):
             self.skipTest("Azure speech key or region is not configured")
 
         voice_name = "zh-CN-XiaoxiaoMultilingualNeural-V2-Female"
@@ -312,7 +313,7 @@ class TestVoiceService(unittest.TestCase):
             return _FakeResponse()
 
         with tempfile.TemporaryDirectory() as tmp_dir, patch.object(
-            vs.config,
+            app_config,
             "chatterbox",
             {
                 "base_url": "http://localhost:4123/v1/",
@@ -354,7 +355,7 @@ class TestVoiceService(unittest.TestCase):
     def test_chatterbox_tts_requires_base_url(self):
         """Missing base_url short-circuits without any network call."""
         with patch.object(
-            vs.config, "chatterbox", {"base_url": ""}
+            app_config, "chatterbox", {"base_url": ""}
         ), patch.object(vs.requests, "post") as post:
             result = vp.chatterbox_tts(
                 text="hi", voice="default", voice_file="unused.mp3"
@@ -373,7 +374,7 @@ class TestVoiceService(unittest.TestCase):
             text = "boom"
 
         with tempfile.TemporaryDirectory() as tmp_dir, patch.object(
-            vs.config, "chatterbox", {"base_url": "http://localhost:4123/v1"}
+            app_config, "chatterbox", {"base_url": "http://localhost:4123/v1"}
         ), patch.object(
             vs.requests, "post", return_value=_FakeResponse()
         ) as post:
@@ -395,7 +396,7 @@ class TestVoiceService(unittest.TestCase):
         """
         chatterbox_marker = vs.SubMaker()
         with tempfile.TemporaryDirectory() as tmp_dir, patch.object(
-            vs.config, "chatterbox", {}
+            app_config, "chatterbox", {}
         ), patch(
             "app.services.edge_tts.chatterbox_tts", return_value=chatterbox_marker
         ), patch.object(
@@ -594,7 +595,7 @@ class TestTtsFailureReasons(unittest.TestCase):
             json=lambda: {"detail": {"status": "unauthorized"}},
         )
         with (
-            patch.object(vs.config, "elevenlabs", {"api_key": "test-key"}),
+            patch.object(app_config, "elevenlabs", {"api_key": "test-key"}),
             patch.object(vs.requests, "post", return_value=unauthorized),
         ):
             result = vs.tts(
@@ -611,7 +612,7 @@ class TestTtsFailureReasons(unittest.TestCase):
     def test_chatterbox_network_failure_reports_network_cause(self):
         with (
             patch.object(
-                vs.config,
+                app_config,
                 "chatterbox",
                 {"base_url": "http://127.0.0.1:9", "api_key": ""},
             ),

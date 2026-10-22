@@ -290,6 +290,31 @@ class ClonedVoicesControllerTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["body"]["error_code"], "invalid_audio")
 
+    @patch("app.controllers.v1.cloned_voices.normalize_reference_audio")
+    def test_reference_errors_never_echo_the_exception_text(self, mock_normalize):
+        from app.services.cloned_voices.audio import ReferenceAudioError
+
+        mock_normalize.side_effect = ReferenceAudioError("invalid_audio", "ffmpeg: /tmp/secret-path failed")
+        response = self.client.post(
+            "/api/v1/cloned-voices/denoise-preview",
+            headers=self.headers,
+            files={"file": ("sample.webm", io.BytesIO(b"raw"), "audio/webm")},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["message"], "could not decode reference audio")
+        self.assertNotIn("secret-path", response.text)
+
+    @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
+    def test_preview_unknown_error_code_gets_generic_message(self, mock_service_cls):
+        from app.services.cloned_voices.audio import ReferenceAudioError
+
+        service = MagicMock()
+        mock_service_cls.return_value = service
+        service.preview_mp3.side_effect = ReferenceAudioError("something_new", "internal detail")
+        response = self.client.post("/api/v1/cloned-voices/clone-1/preview", headers=self.headers)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["message"], "cloned voice request failed")
+
     def test_denoise_preview_requires_auth(self):
         response = self.client.post(
             "/api/v1/cloned-voices/denoise-preview",

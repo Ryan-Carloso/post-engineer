@@ -15,9 +15,15 @@ from app.services.cloned_voices.audio import ReferenceAudioError, normalize_refe
 from app.services.cloned_voices.constants import (
     CHATTERBOX_VOICE_PREFIX,
     ERROR_AUDIO_TOO_LARGE,
+    ERROR_AUDIO_TOO_LONG,
+    ERROR_CONSENT_REQUIRED,
+    ERROR_INVALID_AUDIO,
     ERROR_NOT_FOUND,
     ERROR_NOT_READY,
+    ERROR_PREVIEW_FAILED,
+    ERROR_STORAGE_UPLOAD_FAILED,
     MAX_REFERENCE_BYTES,
+    MAX_REFERENCE_SECONDS,
 )
 from app.services.cloned_voices.service import ClonedVoiceService
 from app.services.language_gate import ENGLISH_ONLY_CLONE_MESSAGE, is_english_language
@@ -73,12 +79,30 @@ def _read_bounded_upload(file: UploadFile) -> bytes | JSONResponse:
     return source_bytes
 
 
-def _reference_error_response(exc: ReferenceAudioError) -> JSONResponse:
+# Client-facing text per stable error code. The exception's own message is
+# never echoed: responses carry only these fixed strings plus the code.
+_PUBLIC_ERROR_MESSAGES: dict[str, str] = {
+    ERROR_INVALID_AUDIO: "could not decode reference audio",
+    ERROR_AUDIO_TOO_LARGE: f"reference audio exceeds {MAX_REFERENCE_BYTES // 1024 // 1024} MB",
+    ERROR_AUDIO_TOO_LONG: f"reference audio exceeds {MAX_REFERENCE_SECONDS} seconds",
+    ERROR_CONSENT_REQUIRED: "voice cloning consent is required",
+    ERROR_STORAGE_UPLOAD_FAILED: "could not store reference audio",
+    ERROR_NOT_FOUND: "cloned voice not found",
+    ERROR_NOT_READY: "cloned voice is not ready",
+    ERROR_PREVIEW_FAILED: "cloned voice preview failed",
+}
+
+
+def _public_error_message(error_code: str) -> str:
+    return _PUBLIC_ERROR_MESSAGES.get(error_code, "cloned voice request failed")
+
+
+def _reference_error_response(exc: ReferenceAudioError, status: int = 400) -> JSONResponse:
     return JSONResponse(
-        status_code=400,
+        status_code=status,
         content=utils.get_response(
-            status=400,
-            message=str(exc),
+            status=status,
+            message=_public_error_message(exc.error_code),
             body={"error_code": exc.error_code},
         ),
     )
@@ -243,14 +267,7 @@ def preview_cloned_voice(request: Request, clone_id: str, language: str | None =
         status = 404 if exc.error_code == ERROR_NOT_FOUND else 400
         if exc.error_code == ERROR_NOT_READY:
             status = 409
-        return JSONResponse(
-            status_code=status,
-            content=utils.get_response(
-                status=status,
-                message=str(exc),
-                body={"error_code": exc.error_code},
-            ),
-        )
+        return _reference_error_response(exc, status)
     return Response(content=audio_bytes, media_type="audio/mpeg")
 
 

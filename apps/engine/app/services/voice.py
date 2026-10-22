@@ -11,7 +11,6 @@ from loguru import logger
 from moviepy.audio.io.AudioFileClip import AudioFileClip
 from moviepy.video.tools import subtitles
 
-from app.config import config
 from app.services.edge_tts import chatterbox_tts_with_fallback
 from app.services.openrouter_tts import dispatch_openrouter_tts
 from app.services.voice_providers import (

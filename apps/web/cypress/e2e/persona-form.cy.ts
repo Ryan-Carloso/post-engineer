@@ -10,9 +10,21 @@
 // The session is real (cy.loginE2EUser), like the other specs.
 //---------------
 
+// Catalog entry as GET /api/persona/voices returns it (lib/voice-catalog.ts).
+// label null: the picker shows the id without the `chatterbox:` prefix.
+const houseVoice = (name: string, gender: 'female' | 'male') => ({
+  id: `chatterbox:${name}`,
+  label: null,
+  provider: 'chatterbox',
+  gender,
+  accent: 'us',
+  kind: 'standard',
+  description: `American ${gender} voice.`,
+});
+
 const FORM_VOICES = [
-  { id: 'chatterbox:en_us_male_01' },
-  { id: 'chatterbox:en_us_female_01' },
+  houseVoice('en_us_male_01', 'male'),
+  houseVoice('en_us_female_01', 'female'),
 ];
 
 interface FakeAudioRecord {
@@ -83,7 +95,7 @@ function visitPersona(path: string): void {
 function fillValidForm(): void {
   cy.get('#persona-name').type('Maya E2E');
   cy.get('button[aria-label="Escolha um personagem 1"]').click();
-  cy.contains('button', 'en us male 01').click();
+  cy.pickHouseVoice('en us male 01');
 }
 
 describe('Persona — formulário (abas, foto, validação, edição, erros)', () => {
@@ -139,14 +151,14 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
   it('ouvir o sample de uma voz e trocar de voz toca o sample da nova em inglês', () => {
     visitPersona('/persona');
 
-    cy.contains('button', 'en us male 01').scrollIntoView().click();
-    cy.contains('button', 'en us female 01').click();
+    cy.playHouseVoiceSample('en us male 01');
+    cy.playHouseVoiceSample('en us female 01');
 
     cy.window().then((win) => {
       const audios = (win as unknown as { __fakeAudios: FakeAudioRecord[] }).__fakeAudios;
       expect(audios).to.have.lengthOf(2);
-      expect(audios[0].url).to.equal('/voice-samples/chatterbox%3Aen_us_male_01-en-us.mp3');
-      expect(audios[1].url).to.equal('/voice-samples/chatterbox%3Aen_us_female_01-en-us.mp3');
+      expect(audios[0].url).to.equal('/voice-samples/en_us_male_01.mp3');
+      expect(audios[1].url).to.equal('/voice-samples/en_us_female_01.mp3');
       expect(audios[1].playCalled).to.equal(true);
     });
   });
@@ -155,7 +167,7 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
     visitPersona('/persona');
 
     cy.get('#persona-name').type('Maya E2E');
-    cy.contains('button', 'en us male 01').click();
+    cy.pickHouseVoice('en us male 01');
     cy.contains('button', 'Criar persona').click();
 
     cy.contains('Envie uma foto ou gere um avatar por IA.').should('be.visible');

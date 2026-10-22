@@ -8,9 +8,21 @@
 // (voiceLabel strips the prefix, underscores become spaces).
 //---------------
 
+// Catalog entry as GET /api/persona/voices returns it (lib/voice-catalog.ts).
+// label null: the picker shows the id without the `chatterbox:` prefix.
+const houseVoice = (name: string, gender: 'female' | 'male') => ({
+  id: `chatterbox:${name}`,
+  label: null,
+  provider: 'chatterbox',
+  gender,
+  accent: 'us',
+  kind: 'standard',
+  description: `American ${gender} voice.`,
+});
+
 const VOICES = [
-  { id: 'chatterbox:en_us_male_01' },
-  { id: 'chatterbox:en_us_female_01' },
+  houseVoice('en_us_male_01', 'male'),
+  houseVoice('en_us_female_01', 'female'),
 ];
 
 interface FakeAudioRecord {
@@ -58,30 +70,29 @@ describe('Persona — sample de voz ao clicar no card', () => {
     cy.wait('@getVoices');
   });
 
-  it('toca o sample da voz ao clicar no card da casa', () => {
-    cy.contains('button', 'en us male 01').click();
+  it('plays the house voice sample from its play button', () => {
+    cy.playHouseVoiceSample('en us male 01');
 
     cy.window().then((win) => {
       const audios = (win as unknown as { __fakeAudios: FakeAudioRecord[] }).__fakeAudios;
       expect(audios).to.have.length(1);
-      // Sample files are named after the voice id, URL-encoded
-      // (public/voice-samples/<encoded-id>-<lang>.mp3). English-only
-      // launch: there is no sample-language picker any more, so the
-      // sample always plays the English take (en-us).
-      expect(audios[0].url).to.equal('/voice-samples/chatterbox%3Aen_us_male_01-en-us.mp3');
+      // Sample files are named after the catalog voice name, without the
+      // `chatterbox:` prefix (public/voice-samples/<name>.mp3); every
+      // sample is the English take.
+      expect(audios[0].url).to.equal('/voice-samples/en_us_male_01.mp3');
       expect(audios[0].playCalled).to.be.true;
     });
   });
 
-  it('trocar de voz para o sample anterior e toca o da nova', () => {
-    cy.contains('button', 'en us male 01').click();
-    cy.contains('button', 'en us female 01').click();
+  it('playing another voice plays the new sample', () => {
+    cy.playHouseVoiceSample('en us male 01');
+    cy.playHouseVoiceSample('en us female 01');
 
     cy.window().then((win) => {
       const audios = (win as unknown as { __fakeAudios: FakeAudioRecord[] }).__fakeAudios;
       expect(audios).to.have.length(2);
       expect(audios[1].url).to.equal(
-        '/voice-samples/chatterbox%3Aen_us_female_01-en-us.mp3',
+        '/voice-samples/en_us_female_01.mp3',
       );
       expect(audios[1].playCalled).to.be.true;
     });
