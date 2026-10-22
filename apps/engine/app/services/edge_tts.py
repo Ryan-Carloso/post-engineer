@@ -5,9 +5,8 @@ feature. It is free, requires no API key, and supports 100+ locales
 (including ``pt-BR`` and ``pt-PT``).
 
 This provider exists as an automatic safety net: when the primary TTS
-provider (Chatterbox, hosted on Modal) is unavailable — e.g. Modal credits
-exhausted, which surfaces as HTTP 404 — test accounts fall back to Edge TTS
-instead of failing the whole video generation.
+provider (Chatterbox-Nano, running locally) fails, test accounts fall
+back to Edge TTS instead of failing the whole video generation.
 
 Deliberately NOT exposed in the UI: this is an invisible fallback, not a
 provider choice. The voice follows the video's language (see
@@ -29,10 +28,10 @@ from loguru import logger
 from moviepy.audio.io.AudioFileClip import AudioFileClip
 
 from app.services.analytics import scrub_error_text, track_event
+from app.services.local_tts import clone_tts
 from app.services.voice_providers import (
     SubMaker,
     TtsResult,
-    chatterbox_tts,
     ensure_file_path_exists,
     populate_legacy_submaker_with_full_text,
 )
@@ -294,19 +293,19 @@ def chatterbox_tts_with_fallback(
     task_id: str | None = None,
     language: str | None = None,
 ) -> TtsResult:
-    """Chatterbox TTS with Edge TTS fallback for test accounts.
+    """Chatterbox clone TTS with Edge TTS fallback for test accounts.
 
-    Chatterbox runs on Modal; exhausted credits (HTTP 404) or outages must
-    not kill test generations. On failure, test accounts (see
-    ``TEST_ACCOUNT_USER_IDS``) transparently retry with the free Edge TTS
-    provider; production keeps the loud Chatterbox failure.
+    Clones run locally on Chatterbox-Nano. A local failure (missing
+    reference, model error) must not kill test generations: test
+    accounts (see ``TEST_ACCOUNT_USER_IDS``) transparently retry with
+    the free Edge TTS provider; production keeps the loud failure.
     """
     from app.services.cloned_voices.ownership import chatterbox_voice_allowed_for_user
 
     if not chatterbox_voice_allowed_for_user(user_id, voice):
         return TtsResult(error="cloned voice is not available for this user")
 
-    result = chatterbox_tts(text, voice, voice_file, voice_rate, voice_volume)
+    result = clone_tts(text, voice, voice_file, voice_rate, voice_volume)
     # A non-TtsResult (e.g. a test marker) is treated as success.
     if getattr(result, "ok", True):
         return result

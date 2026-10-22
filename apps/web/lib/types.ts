@@ -112,6 +112,13 @@ export interface GeneratePersonaAvatarResult {
 
 export interface VoiceOption {
   id: string;
+  // Picker metadata, present for the local preset catalog (Phonon +
+  // Kokoro). Absent for OpenRouter/clone entries, which carry only an id.
+  name?: string;
+  provider?: string;
+  gender?: 'male' | 'female';
+  category?: 'normal' | 'character';
+  locale?: 'en-US' | 'en-GB' | null;
 }
 
 //---------------

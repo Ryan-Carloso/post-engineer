@@ -39,9 +39,7 @@ vi.mock('@/lib/i18n/provider', () => {
 });
 
 vi.mock('../voice-picker', () => ({
-  PersonaHouseVoicePicker: ({ personaLanguage }: { personaLanguage?: string }) => (
-    <div data-testid="house-picker">{personaLanguage ?? 'no-language'}</div>
-  ),
+  PersonaHouseVoicePicker: () => <div data-testid="house-picker">house</div>,
 }));
 
 vi.mock('../voice-clone-picker', () => ({
@@ -74,7 +72,7 @@ describe('PersonaVoiceSection', () => {
     const cloneTab = screen.getByRole('tab', { name: 'persona.voiceCloneTab' });
     expect(houseTab).toHaveAttribute('aria-selected', 'true');
     expect(cloneTab).toHaveAttribute('aria-selected', 'false');
-    expect(screen.getByTestId('house-picker')).toHaveTextContent('en');
+    expect(screen.getByTestId('house-picker')).toHaveTextContent('house');
     expect(screen.getByTestId('clone-panel')).toHaveTextContent('en');
     const houseWrapper = screen.getByTestId('house-picker').parentElement;
     const cloneWrapper = screen.getByTestId('clone-panel').parentElement;

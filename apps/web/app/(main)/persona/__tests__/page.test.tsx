@@ -745,112 +745,44 @@ describe('app/(main)/persona/page — modo edição (mesma página do create)', 
     expect(screen.queryByRole('button', { name: 'personas.save' })).toBeNull();
   });
 
-  it('em edição, o idioma da amostra inicia com o idioma da persona (es), não pt-br', () => {
+
+
+
+
+  it('clicking a voice plays its sample from the sample endpoint', async () => {
+    const created = stubAudio();
     searchParams.value = new URLSearchParams('edit=p-9');
     vi.mocked(usePersonaListQuery).mockReturnValue({
       data: [{ ...EDIT_PERSONA, language: 'es' }],
-      isLoading: false,
-    } as never);
-    vi.mocked(useVoiceSampleLanguagesQuery).mockReturnValue({
-      data: [
-        { code: 'pt-br', label: 'Português (BR)' },
-        { code: 'es', label: 'Español' },
-        { code: 'en-uk', label: 'English (UK)' },
-      ],
-      isLoading: false,
-    } as never);
-
-    render(<PersonaPage />, { wrapper: createWrapper() });
-
-    expect(screen.getByTestId('sample-language')).toHaveValue('es');
-  });
-
-  it('em edição, idioma da persona sem código exato usa o prefixo mais próximo (pt → pt-br)', () => {
-    searchParams.value = new URLSearchParams('edit=p-9');
-    vi.mocked(usePersonaListQuery).mockReturnValue({
-      data: [{ ...EDIT_PERSONA, language: 'pt' }],
-      isLoading: false,
-    } as never);
-
-    render(<PersonaPage />, { wrapper: createWrapper() });
-
-    expect(screen.getByTestId('sample-language')).toHaveValue('pt-br');
-  });
-
-  it('em edição, idioma da persona sem amostra correspondente mantém o padrão pt-br', () => {
-    searchParams.value = new URLSearchParams('edit=p-9');
-    vi.mocked(usePersonaListQuery).mockReturnValue({
-      data: [{ ...EDIT_PERSONA, language: 'de' }],
-      isLoading: false,
-    } as never);
-
-    render(<PersonaPage />, { wrapper: createWrapper() });
-
-    expect(screen.getByTestId('sample-language')).toHaveValue('pt-br');
-  });
-
-  it('na criação, o idioma da amostra continua pt-br por padrão', () => {
-    render(<PersonaPage />, { wrapper: createWrapper() });
-
-    expect(screen.getByTestId('sample-language')).toHaveValue('pt-br');
-  });
-
-  it('trocar o idioma da amostra em edição toca o áudio no idioma escolhido', async () => {
-    const created: { url: string; play: ReturnType<typeof vi.fn> }[] = [];
-    class FakeAudio {
-      play = vi.fn().mockResolvedValue(undefined);
-      pause = vi.fn();
-      constructor(url: string) {
-        created.push({ url, play: this.play });
-      }
-    }
-    vi.stubGlobal('Audio', FakeAudio);
-    searchParams.value = new URLSearchParams('edit=p-9');
-    vi.mocked(usePersonaListQuery).mockReturnValue({
-      data: [{ ...EDIT_PERSONA, language: 'es' }],
-      isLoading: false,
-    } as never);
-    vi.mocked(useVoiceSampleLanguagesQuery).mockReturnValue({
-      data: [
-        { code: 'pt-br', label: 'Português (BR)' },
-        { code: 'es', label: 'Español' },
-      ],
       isLoading: false,
     } as never);
     const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });
 
-    // Starts at es (the persona's language)…
-    expect(screen.getByTestId('sample-language')).toHaveValue('es');
-    // …but the user's manual choice wins.
-    await user.selectOptions(screen.getByTestId('sample-language'), 'pt-br');
     await user.click(screen.getByRole('button', { name: 'ryan' }));
 
     expect(created).toHaveLength(1);
-    expect(created[0].url).toBe('/voice-samples/chatterbox%3Aryan-pt-br.mp3');
+    expect(created[0].url).toBe(
+      '/api/persona/voices/sample?voice_id=chatterbox%3Aryan',
+    );
+    expect(created[0].play).toHaveBeenCalledTimes(1);
     vi.unstubAllGlobals();
   });
 });
 
 describe('app/(main)/persona/page — sample language', () => {
-  it('mudar o idioma do sample altera a language do áudio tocado', async () => {
-    const created: { url: string; play: ReturnType<typeof vi.fn> }[] = [];
-    class FakeAudio {
-      play = vi.fn().mockResolvedValue(undefined);
-      pause = vi.fn();
-      constructor(url: string) {
-        created.push({ url, play: this.play });
-      }
-    }
-    vi.stubGlobal('Audio', FakeAudio);
+  it('re-picking a voice replays its sample from the endpoint', async () => {
+    const created = stubAudio();
     const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });
 
-    await user.selectOptions(screen.getByTestId('sample-language'), 'en-uk');
+    await user.click(screen.getByRole('button', { name: 'ryan' }));
     await user.click(screen.getByRole('button', { name: 'ryan' }));
 
-    expect(created).toHaveLength(1);
-    expect(created[0].url).toBe('/voice-samples/chatterbox%3Aryan-en-uk.mp3');
+    expect(created).toHaveLength(2);
+    expect(created[1].url).toBe(
+      '/api/persona/voices/sample?voice_id=chatterbox%3Aryan',
+    );
     vi.unstubAllGlobals();
   });
 
@@ -1346,7 +1278,7 @@ describe('app/(main)/persona/page — abas, carrossel e seletor de voz', () => {
     expect(screen.getByText('xxopenrouter:foo')).toBeTruthy();
   });
 
-  it('áudio padrão do sample é pt-br na criação', async () => {
+  it('voice sample on create plays from the sample endpoint', async () => {
     const created = stubAudio();
     const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });
@@ -1354,30 +1286,12 @@ describe('app/(main)/persona/page — abas, carrossel e seletor de voz', () => {
     await user.click(screen.getByText('ryan'));
 
     expect(created).toHaveLength(1);
-    expect(created[0].url).toBe('/voice-samples/chatterbox%3Aryan-pt-br.mp3');
+    expect(created[0].url).toBe(
+      '/api/persona/voices/sample?voice_id=chatterbox%3Aryan',
+    );
   });
 
-  it('trocar o idioma após ouvir repete o sample no novo idioma', async () => {
-    const created = stubAudio();
-    const user = userEvent.setup();
-    render(<PersonaPage />, { wrapper: createWrapper() });
 
-    await user.click(screen.getByText('ryan'));
-    await user.selectOptions(screen.getByTestId('sample-language'), 'en-uk');
-
-    expect(created).toHaveLength(2);
-    expect(created[1].url).toBe('/voice-samples/chatterbox%3Aryan-en-uk.mp3');
-  });
-
-  it('trocar o idioma sem voz ouvida não toca nada', async () => {
-    const created = stubAudio();
-    const user = userEvent.setup();
-    render(<PersonaPage />, { wrapper: createWrapper() });
-
-    await user.selectOptions(screen.getByTestId('sample-language'), 'en-uk');
-
-    expect(created).toHaveLength(0);
-  });
 });
 
 describe('app/(main)/persona/page — seletor de foto', () => {
@@ -1921,55 +1835,6 @@ describe('app/(main)/persona/page — submit em edição', () => {
   });
 });
 
-describe('app/(main)/persona/page — idioma da amostra', () => {
-  function mockEditWithLanguage(
-    language: string,
-    languages: Array<{ code: string; label: string }>,
-  ) {
-    mockEditMode({ ...EDIT_PERSONA_FULL, language });
-    vi.mocked(useVoiceSampleLanguagesQuery).mockReturnValue({
-      data: languages,
-      isLoading: false,
-    } as never);
-  }
-
-  it('espaços no idioma da persona são ignorados', () => {
-    mockEditWithLanguage('  es  ', [
-      { code: 'pt-br', label: 'Português (BR)' },
-      { code: 'es', label: 'Español' },
-    ]);
-    render(<PersonaPage />, { wrapper: createWrapper() });
-
-    expect(screen.getByTestId('sample-language')).toHaveValue('es');
-  });
-
-  it('prefixo casa o primeiro grupo (en → en-uk)', () => {
-    mockEditWithLanguage('en', [
-      { code: 'pt-br', label: 'Português (BR)' },
-      { code: 'en-uk', label: 'English (UK)' },
-    ]);
-    render(<PersonaPage />, { wrapper: createWrapper() });
-
-    expect(screen.getByTestId('sample-language')).toHaveValue('en-uk');
-  });
-
-  it('prefixo reverso casa o código mais curto (pt-br → pt)', () => {
-    mockEditWithLanguage('pt-br', [
-      { code: 'es', label: 'Español' },
-      { code: 'pt', label: 'Português' },
-    ]);
-    render(<PersonaPage />, { wrapper: createWrapper() });
-
-    expect(screen.getByTestId('sample-language')).toHaveValue('pt');
-  });
-
-  it('código em maiúsculas casa por prefixo sem case', () => {
-    mockEditWithLanguage('pt', [{ code: 'PT-BR', label: 'Português (BR)' }]);
-    render(<PersonaPage />, { wrapper: createWrapper() });
-
-    expect(screen.getByTestId('sample-language')).toHaveValue('PT-BR');
-  });
-});
 
 describe('app/(main)/persona/page — índice do personagem', () => {
   it('carrossel começa no avatar de dois dígitos (file-12 → 11)', () => {

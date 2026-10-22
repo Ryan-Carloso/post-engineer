@@ -3,6 +3,8 @@
 export const MAX_CLONE_REFERENCE_BYTES = 20 * 1024 * 1024;
 export const MAX_CLONE_REFERENCE_SECONDS = 60;
 export const MIN_CLONE_REFERENCE_SECONDS = 1;
+// Mirrors MAX_CLONE_NAME_LENGTH in the engine's cloned_voices constants.
+export const MAX_CLONE_NAME_LENGTH = 60;
 
 export const ALLOWED_CLONE_REFERENCE_MIME_TYPES = [
   'audio/mpeg',

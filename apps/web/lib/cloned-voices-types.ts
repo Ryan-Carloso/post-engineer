@@ -2,6 +2,7 @@ export interface ClonedVoicePublicRow {
   id: string;
   status: string;
   language: string | null;
+  name: string | null;
   voice_id: string | null;
   error_code: string | null;
   consent_at: string | null;
@@ -21,6 +22,7 @@ export function narrowClonedVoiceRow(value: unknown): ClonedVoicePublicRow | nul
     id: row.id,
     status: row.status,
     language: typeof row.language === 'string' ? row.language : null,
+    name: typeof row.name === 'string' ? row.name : null,
     voice_id: typeof row.voice_id === 'string' ? row.voice_id : null,
     error_code: typeof row.error_code === 'string' ? row.error_code : null,
     consent_at: typeof row.consent_at === 'string' ? row.consent_at : null,

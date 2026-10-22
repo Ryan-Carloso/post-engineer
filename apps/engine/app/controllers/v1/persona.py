@@ -7,7 +7,7 @@ GET  /api/v1/personas/voices  — house voice catalog
 from typing import Optional
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from app.controllers import base
 from pydantic import BaseModel
@@ -74,20 +74,22 @@ def list_sample_languages_endpoint():
 
 @persona_router.get(
     "/personas/voices/{voice_id}/sample",
-    summary="Short TTS sample for a house voice (audio/mpeg)",
+    summary="Short TTS sample for a catalog voice (audio/mpeg)",
 )
-def voice_sample_endpoint(voice_id: str, language: str = "pt"):
-    # Explicit 501, not a silent degradation: the preview used to come from the
-    # Azure house-voice matrix, which no longer exists. Returning silence or a
-    # redirect would let the UI render a "sample" the user never asked for.
-    return JSONResponse(
-        status_code=501,
-        content=utils.get_response(
-            status=501,
-            message="voice previews are unavailable: the voice catalog no longer "
-            "maps per-language samples",
-        ),
-    )
+def voice_sample_endpoint(voice_id: str, language: str = "en"):
+    # Samples are synthesized on demand by the local providers (the
+    # catalog is English-only, so the sample text is the en-us one
+    # regardless of the legacy `language` param) and cached per voice.
+    sample = persona_service.get_voice_sample(voice_id)
+    if sample is None:
+        return JSONResponse(
+            status_code=400,
+            content=utils.get_response(
+                status=400,
+                message=f"voice sample unavailable for {voice_id}",
+            ),
+        )
+    return Response(content=sample, media_type="audio/mpeg")
 
 
 router.include_router(persona_router)

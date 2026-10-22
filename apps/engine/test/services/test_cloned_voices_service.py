@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from app.services.cloned_voices.chatterbox_registry import RegistryNotConfiguredError
+from app.services.cloned_voices.local_registry import RegistryNotConfiguredError
 from app.services.cloned_voices.constants import (
     ERROR_REGISTRY_FAILED,
     ERROR_REGISTRY_NOT_CONFIGURED,
@@ -26,10 +26,11 @@ class ClonedVoiceServiceTests(unittest.TestCase):
         self.registry = MagicMock()
         self.service = ClonedVoiceService(store=self.store, registry=self.registry)
 
-    @patch("app.services.cloned_voices.service.normalize_reference_audio")
+    @patch("app.services.cloned_voices.service.clean_reference_audio")
     @patch("app.services.cloned_voices.service._track_clone")
-    def test_create_from_upload_starts_pending(self, _track, mock_normalize):
-        mock_normalize.return_value = MagicMock(wav_bytes=b"wav", duration_seconds=3.0)
+    def test_create_from_upload_starts_pending(self, _track, mock_clean):
+        # Cleaning is the default: the stored reference is the cleaned WAV.
+        mock_clean.return_value = MagicMock(wav_bytes=b"wav", duration_seconds=3.0)
         self.store.new_clone_id.return_value = "clone-1"
         self.store.make_engine_voice_key.return_value = "uabc_clone1"
         self.store.storage_path_for.return_value = "user/cloned-voices/clone-1/reference.wav"
@@ -44,11 +45,41 @@ class ClonedVoiceServiceTests(unittest.TestCase):
             b"source",
             "en",
             consent_acknowledged=True,
+            name="  My voice  ",
         )
 
+        mock_clean.assert_called_once_with(b"source")
         self.store.upload_reference_wav.assert_called_once()
         self.store.insert_pending.assert_called_once()
+        self.assertEqual(
+            self.store.insert_pending.call_args.kwargs["name"], "My voice"
+        )
         self.assertEqual(result["row"]["status"], STATUS_PENDING)
+
+    @patch("app.services.cloned_voices.service.normalize_reference_audio")
+    @patch("app.services.cloned_voices.service._track_clone")
+    def test_create_from_upload_without_cleaning_uses_plain_normalize(self, _track, mock_normalize):
+        mock_normalize.return_value = MagicMock(wav_bytes=b"wav", duration_seconds=3.0)
+        self.store.new_clone_id.return_value = "clone-1"
+        self.store.make_engine_voice_key.return_value = "uabc_clone1"
+        self.store.storage_path_for.return_value = "user/cloned-voices/clone-1/reference.wav"
+        self.store.insert_pending.return_value = {"id": "clone-1", "status": STATUS_PENDING}
+
+        self.service.create_from_upload(
+            "user-1",
+            b"source",
+            "en",
+            consent_acknowledged=True,
+            use_cleaned=False,
+        )
+
+        mock_normalize.assert_called_once_with(b"source")
+
+    @patch("app.services.cloned_voices.service.clean_reference_audio")
+    def test_clean_preview_wav_returns_cleaned_bytes(self, mock_clean):
+        mock_clean.return_value = MagicMock(wav_bytes=b"clean-wav")
+        self.assertEqual(self.service.clean_preview_wav(b"source"), b"clean-wav")
+        mock_clean.assert_called_once_with(b"source")
 
     @patch("app.services.cloned_voices.service.track_event")
     def test_register_background_marks_ready(self, _track):
@@ -106,7 +137,7 @@ class ClonedVoiceServiceTests(unittest.TestCase):
         )
         self.store.delete_row.assert_called_once_with("user-1", "clone-1")
 
-    @patch("app.services.cloned_voices.service.chatterbox_tts")
+    @patch("app.services.cloned_voices.service.clone_tts")
     def test_preview_requires_ready_status(self, mock_tts):
         self.store.get_for_user.return_value = {
             "status": STATUS_PENDING,
@@ -119,7 +150,7 @@ class ClonedVoiceServiceTests(unittest.TestCase):
 
         mock_tts.assert_not_called()
 
-    @patch("app.services.cloned_voices.service.chatterbox_tts")
+    @patch("app.services.cloned_voices.service.clone_tts")
     def test_preview_returns_mp3_bytes(self, mock_tts):
         from app.services.voice_providers import TtsResult
 
@@ -267,6 +298,7 @@ class ClonedVoiceServiceTests(unittest.TestCase):
                 b"source",
                 "en",
                 consent_acknowledged=True,
+                use_cleaned=False,
             )
 
         self.store.delete_storage_object.assert_called_once_with(

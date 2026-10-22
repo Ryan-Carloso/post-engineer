@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { validateCloneReferenceBuffer } from '@/lib/cloned-voice-audio';
+import { MAX_CLONE_NAME_LENGTH, validateCloneReferenceBuffer } from '@/lib/cloned-voice-audio';
 import { narrowClonedVoiceRow, type ClonedVoicePublicRow } from '@/lib/cloned-voices-types';
 import { engineBaseUrl, parseEngineJson } from '@/lib/engine-proxy';
 import { logger } from '@/lib/logger';
@@ -79,6 +79,19 @@ async function postHandler(request: Request): Promise<NextResponse> {
   if (typeof language !== 'string' || !language.trim()) {
     return NextResponse.json({ success: false, error: 'Language is required.' }, { status: 400 });
   }
+  const nameEntry = formData.get('name');
+  if (nameEntry !== null && typeof nameEntry !== 'string') {
+    return NextResponse.json({ success: false, error: 'Name is invalid.' }, { status: 400 });
+  }
+  const name = typeof nameEntry === 'string' ? nameEntry.trim() : '';
+  if (name.length > MAX_CLONE_NAME_LENGTH) {
+    return NextResponse.json({ success: false, error: 'Name is too long.' }, { status: 400 });
+  }
+  const useCleanedEntry = formData.get('use_cleaned');
+  if (useCleanedEntry !== null && useCleanedEntry !== 'true' && useCleanedEntry !== 'false') {
+    return NextResponse.json({ success: false, error: 'Invalid cleaning choice.' }, { status: 400 });
+  }
+  const useCleaned = useCleanedEntry ?? 'true';
   if (typeof fileEntry === 'string' || fileEntry === null) {
     return NextResponse.json({ success: false, error: 'Reference audio file is required.' }, { status: 400 });
   }
@@ -100,6 +113,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
   const upstreamForm = new FormData();
   upstreamForm.set('consent', 'true');
   upstreamForm.set('language', language.trim());
+  upstreamForm.set('name', name);
+  upstreamForm.set('use_cleaned', useCleaned);
   upstreamForm.set('file', new Blob([buffer], { type: file.type || 'application/octet-stream' }), file.name || 'reference.bin');
 
   try {

@@ -11,9 +11,11 @@ from loguru import logger
 from moviepy.audio.io.AudioFileClip import AudioFileClip
 from moviepy.video.tools import subtitles
 
-from app.config import config
+from app.config import config  # noqa: F401 — re-exported: tests patch config sections via this module
 from app.services.edge_tts import chatterbox_tts_with_fallback
+from app.services.local_tts import kokoro_tts, phonon_tts
 from app.services.openrouter_tts import dispatch_openrouter_tts
+from app.services.voice_catalog import resolve_voice_id
 from app.services.voice_providers import (
     SubMaker,
     TtsResult,
@@ -73,29 +75,6 @@ def get_elevenlabs_voices(api_key: str) -> list[str]:
         return []
 
 
-def get_chatterbox_voices() -> list[str]:
-    """Return the configured Chatterbox voices.
-
-    Chatterbox is self-hosted, so there is no global voice catalog. Operators
-    list the voice names exposed by their server via ``[chatterbox] voices``
-    (a TOML array, or a comma-separated string). Each entry is normalised to
-    the ``chatterbox:<name>`` format used by the TTS dispatcher.
-    """
-    voices = config.chatterbox.get("voices", []) or []
-    if isinstance(voices, str):
-        voices = [v.strip() for v in voices.split(",") if v.strip()]
-    result = []
-    for v in voices:
-        v = str(v).strip()
-        if not v:
-            continue
-        result.append(v if v.startswith("chatterbox:") else f"chatterbox:{v}")
-    if not result:
-        # keep the dropdown usable even before any voice is configured
-        result = ["chatterbox:default-Female"]
-    return result
-
-
 def parse_voice_name(name: str):
     # zh-CN-XiaoyiNeural-Female
     # zh-CN-YunxiNeural-Male
@@ -109,6 +88,14 @@ def is_elevenlabs_voice(voice_name: str) -> bool:
 
 def is_chatterbox_voice(voice_name: str) -> bool:
     return (voice_name or "").startswith("chatterbox:")
+
+
+def is_phonon_voice(voice_name: str) -> bool:
+    return (voice_name or "").startswith("phonon:")
+
+
+def is_kokoro_voice(voice_name: str) -> bool:
+    return (voice_name or "").startswith("kokoro:")
 
 
 def is_no_voice(voice_name: str | None) -> bool:
@@ -236,6 +223,16 @@ def tts(
             )
         )
 
+    # Legacy personas store retired Modal house ids (chatterbox:en_us_*): alias them.
+    voice_name = resolve_voice_id(voice_name)
+    if is_phonon_voice(voice_name) or is_kokoro_voice(voice_name):
+        provider, _, raw_name = voice_name.partition(":")
+        if not raw_name.strip():
+            logger.error(f"Invalid {provider} voice name format: {voice_name}")
+            label, hint = ("Phonon", "<name>") if provider == "phonon" else ("Kokoro", "<voice_id>")
+            return TtsResult(error=f"invalid {label} voice name (expected '{provider}:{hint}')")
+        synthesize = phonon_tts if provider == "phonon" else kokoro_tts
+        return synthesize(text, raw_name.strip(), voice_file, voice_rate, voice_volume)
     if is_elevenlabs_voice(voice_name):
         # Format: elevenlabs:<voice_id>
         parts = voice_name.split(":", 1)
@@ -271,14 +268,16 @@ def tts(
     # into silent network failures. Fail loud: the caller picked a voice
     # that no longer exists.
     logger.error(
-        f"unknown voice: {voice_name!r}. Providers are ElevenLabs (`elevenlabs:<id>`), "
-        "Chatterbox (`chatterbox:<name>`) and OpenRouter (`openrouter:<model>:<voice>`); "
+        f"unknown voice: {voice_name!r}. Providers are Phonon (`phonon:<name>`), "
+        "Kokoro (`kokoro:<id>`), ElevenLabs (`elevenlabs:<id>`), "
+        "Chatterbox clones (`chatterbox:<name>`) and OpenRouter (`openrouter:<model>:<voice>`); "
         f"use the explicit {NO_VOICE_NAME!r} sentinel for silence."
     )
     return TtsResult(
         error=(
-            f"unknown voice {voice_name!r}; providers are ElevenLabs ('elevenlabs:<id>'), "
-            "Chatterbox ('chatterbox:<name>') and OpenRouter ('openrouter:<model>:<voice>'); "
+            f"unknown voice {voice_name!r}; providers are Phonon ('phonon:<name>'), "
+            "Kokoro ('kokoro:<id>'), ElevenLabs ('elevenlabs:<id>'), "
+            "Chatterbox clones ('chatterbox:<name>') and OpenRouter ('openrouter:<model>:<voice>'); "
             f"use {NO_VOICE_NAME!r} for silence"
         )
     )

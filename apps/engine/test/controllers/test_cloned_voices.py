@@ -120,7 +120,12 @@ class ClonedVoicesControllerTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 202)
         service.create_from_upload.assert_called_once_with(
-            "user-uuid-1", b"data", "pt-BR", consent_acknowledged=True
+            "user-uuid-1",
+            b"data",
+            "pt-BR",
+            consent_acknowledged=True,
+            name=None,
+            use_cleaned=True,
         )
 
     def test_list_requires_auth(self):

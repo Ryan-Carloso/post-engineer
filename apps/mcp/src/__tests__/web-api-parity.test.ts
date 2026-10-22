@@ -110,6 +110,10 @@ const EXCLUDED_ENDPOINTS: Record<string, string> = {
     'Dashboard engine-task cleanup; MCP polls status but never cancels engine tasks.',
   'GET /api/persona/voice-sample-languages':
     'Dashboard voice-sample UI proxy (session-only); MCP list_voices covers voice listing.',
+  'GET /api/persona/voices/sample':
+    'Dashboard voice-picker sample playback proxy (session-only, streams audio bytes); MCP surfaces voice ids via list_voices instead of proxying audio.',
+  'POST /api/persona/cloned-voices/clean-preview':
+    'Dashboard clone-panel A/B cleaning preview proxy (session-only, streams audio bytes); MCP create_cloned_voice cleans by default (use_cleaned defaults to true on the create endpoint).',
   'GET /api/persona/cloned-voices/[cloneId]':
     'Dashboard clone status polling; MCP list_cloned_voices returns every clone row.',
   'GET /api/posts/[id]':

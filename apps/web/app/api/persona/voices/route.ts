@@ -2,6 +2,34 @@ import { NextResponse } from 'next/server';
 import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import type { VoiceOption } from '@/lib/types';
+
+//---------------
+// narrowVoiceOption — keep the engine's picker metadata (name, provider,
+// gender, category, locale) when it is well-typed; drop anything else so
+// a malformed upstream field can never reach the picker. Entries without
+// metadata (OpenRouter, clones) pass through as bare ids.
+//---------------
+function narrowVoiceOption(item: { id: string }): VoiceOption {
+  const source = item as Record<string, unknown>;
+  const voice: VoiceOption = { id: item.id };
+  if (typeof source.name === 'string') {
+    voice.name = source.name;
+  }
+  if (typeof source.provider === 'string') {
+    voice.provider = source.provider;
+  }
+  if (source.gender === 'male' || source.gender === 'female') {
+    voice.gender = source.gender;
+  }
+  if (source.category === 'normal' || source.category === 'character') {
+    voice.category = source.category;
+  }
+  if (source.locale === 'en-US' || source.locale === 'en-GB' || source.locale === null) {
+    voice.locale = source.locale;
+  }
+  return voice;
+}
 
 //---------------
 // GET /api/persona/voices — proxy of the house voice catalog to
@@ -67,7 +95,7 @@ async function getHandler(request?: Request): Promise<NextResponse> {
     }
 
     return NextResponse.json({
-      voices: data.map(({ id }) => ({ id })),
+      voices: data.map(narrowVoiceOption),
     });
   } catch (error) {
     logger.error('[api/persona/voices] money-print unreachable', error);

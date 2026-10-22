@@ -29,6 +29,27 @@ export const personaVoiceClonePt = {
   voiceCloneStatusReady: 'Pronto',
   voiceCloneStatusPending: 'Processando',
   voiceCloneStatusFailed: 'Falhou',
+  voiceCloneNameLabel: 'Nome do clone (opcional)',
+  voiceCloneNamePlaceholder: 'ex.: A minha voz',
+  voiceCloneCleanLabel: 'Limpar a gravação',
+  voiceCloneCleanHint:
+    'Remove o ruído de fundo e o ruído grave, normaliza o volume e corta o silêncio no fim antes de clonar.',
+  voiceCloneCleanPreviewButton: 'Ouvir a versão limpa',
+  voiceCloneCleanLoading: 'A limpar…',
+  voiceCloneCleanFailed: 'Não foi possível limpar a gravação.',
+  voiceCloneOriginalLabel: 'Original',
+  voiceCloneCleanedLabel: 'Limpa',
+  voiceFilterGenderLabel: 'Género',
+  voiceFilterOriginLabel: 'Origem',
+  voiceFilterAll: 'Todas',
+  voiceFilterMale: 'Masculino',
+  voiceFilterFemale: 'Feminino',
+  voiceFilterUS: 'EUA',
+  voiceFilterGB: 'Inglaterra',
+  voiceFilterCharacters: 'Personagens',
+  voiceBadgeUS: 'EUA',
+  voiceBadgeGB: 'Inglaterra',
+  voiceBadgeCharacter: 'Personagem',
 } as const;
 
 export const voiceCloneApiToolDescPt = {

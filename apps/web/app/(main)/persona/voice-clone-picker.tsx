@@ -8,17 +8,24 @@ import {
   MIN_CLONE_REFERENCE_SECONDS,
   validateCloneReferenceBuffer,
 } from '@/lib/cloned-voice-audio';
+import {
+  CleanedPreviewSection,
+  ClonedVoiceRow,
+  CloneCleanToggle,
+  CloneNameField,
+} from './voice-clone-parts';
 import type { ClonedVoicePublicRow } from '@/lib/cloned-voices-types';
 import {
   createClonedVoice,
   deleteClonedVoice,
+  fetchCleanedReferencePreview,
   fetchClonedVoice,
   fetchClonedVoices,
   clonedVoicePreviewUrl,
 } from '@/lib/cloned-voices-client';
 import { usePersonaStore } from '@/lib/store';
 import { useI18n } from '@/lib/i18n/provider';
-import { CheckIcon, MicIcon, SpinnerIcon, TrashIcon } from '@/lib/ui';
+import { SpinnerIcon } from '@/lib/ui';
 import { useVoiceSampleLanguagesQuery } from '@/lib/api';
 
 const POLL_MS = 2500;
@@ -61,6 +68,12 @@ export const PersonaVoiceClonePanel = ({ personaLanguage }: { personaLanguage?: 
   const sampleLanguagesQuery = useVoiceSampleLanguagesQuery();
   const voiceId = usePersonaStore((s) => s.voiceId);
   const [language, setLanguage] = useState(personaLanguage?.trim() || 'pt');
+  const [cloneName, setCloneName] = useState('');
+  // Cleaning is the product default (user spec): the toggle starts ON and
+  // the create call tells the engine to clone from the cleaned reference.
+  const [useCleaned, setUseCleaned] = useState(true);
+  const [cleanedBlobUrl, setCleanedBlobUrl] = useState<string | null>(null);
+  const [cleaning, setCleaning] = useState(false);
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
@@ -102,14 +115,22 @@ export const PersonaVoiceClonePanel = ({ personaLanguage }: { personaLanguage?: 
 
   const createMutation = useMutation({
     mutationFn: async (file: Blob) => {
-      return createClonedVoice(file, language, consent);
+      return createClonedVoice(file, language, consent, {
+        name: cloneName,
+        useCleaned,
+      });
     },
     onSuccess: (row) => {
       setActiveCloneId(row.id);
       setPendingBlob(null);
+      setCloneName('');
       if (previewBlobUrl) {
         URL.revokeObjectURL(previewBlobUrl);
         setPreviewBlobUrl(null);
+      }
+      if (cleanedBlobUrl) {
+        URL.revokeObjectURL(cleanedBlobUrl);
+        setCleanedBlobUrl(null);
       }
       void queryClient.invalidateQueries({ queryKey: ['cloned-voices'] });
     },
@@ -117,6 +138,32 @@ export const PersonaVoiceClonePanel = ({ personaLanguage }: { personaLanguage?: 
       setError(err.message);
     },
   });
+
+  const clearCleanedPreview = () => {
+    if (cleanedBlobUrl) {
+      URL.revokeObjectURL(cleanedBlobUrl);
+      setCleanedBlobUrl(null);
+    }
+  };
+
+  const requestCleanedPreview = async () => {
+    if (!pendingBlob) {
+      return;
+    }
+    setError(null);
+    setCleaning(true);
+    try {
+      const cleaned = await fetchCleanedReferencePreview(pendingBlob);
+      if (cleanedBlobUrl) {
+        URL.revokeObjectURL(cleanedBlobUrl);
+      }
+      setCleanedBlobUrl(URL.createObjectURL(cleaned));
+    } catch {
+      setError(t('persona.voiceCloneCleanFailed'));
+    } finally {
+      setCleaning(false);
+    }
+  };
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteClonedVoice(id),
@@ -177,6 +224,7 @@ export const PersonaVoiceClonePanel = ({ personaLanguage }: { personaLanguage?: 
         stream.getTracks().forEach((track) => track.stop());
         const blob = new Blob(recordChunksRef.current, { type: mimeType });
         setPendingBlob(blob);
+        clearCleanedPreview();
         setPreviewBlobUrl(URL.createObjectURL(blob));
         setRecordSeconds(0);
       };
@@ -216,6 +264,7 @@ export const PersonaVoiceClonePanel = ({ personaLanguage }: { personaLanguage?: 
       return;
     }
     setPendingBlob(file);
+    clearCleanedPreview();
     if (previewBlobUrl) {
       URL.revokeObjectURL(previewBlobUrl);
     }
@@ -277,6 +326,23 @@ export const PersonaVoiceClonePanel = ({ personaLanguage }: { personaLanguage?: 
         </select>
       </label>
 
+      <CloneNameField
+        value={cloneName}
+        onChange={setCloneName}
+        disabled={isSubmitting || recording}
+      />
+
+      <CloneCleanToggle
+        checked={useCleaned}
+        onChange={(checked) => {
+          setUseCleaned(checked);
+          if (!checked) {
+            clearCleanedPreview();
+          }
+        }}
+        disabled={isSubmitting || recording}
+      />
+
       <label className="flex items-start gap-2 text-sm text-neutral-800">
         <input
           type="checkbox"
@@ -330,7 +396,18 @@ export const PersonaVoiceClonePanel = ({ personaLanguage }: { personaLanguage?: 
       {previewBlobUrl ? (
         <div className="rounded-lg border border-neutral-200 p-3">
           <p className="mb-2 text-sm font-medium text-neutral-800">{t('persona.voiceCloneLocalPreview')}</p>
+          <p className="mb-1 text-xs font-semibold tracking-wide text-neutral-500 uppercase">
+            {t('persona.voiceCloneOriginalLabel')}
+          </p>
           <audio controls src={previewBlobUrl} className="w-full" />
+          {useCleaned ? (
+            <CleanedPreviewSection
+              cleanedBlobUrl={cleanedBlobUrl}
+              cleaning={cleaning}
+              disabled={isSubmitting}
+              onRequest={() => void requestCleanedPreview()}
+            />
+          ) : null}
           <div className="mt-2 flex flex-wrap gap-2">
             <button
               type="button"
@@ -340,6 +417,7 @@ export const PersonaVoiceClonePanel = ({ personaLanguage }: { personaLanguage?: 
                 }
                 setPreviewBlobUrl(null);
                 setPendingBlob(null);
+                clearCleanedPreview();
               }}
               className="text-sm text-neutral-600 hover:underline"
               disabled={isSubmitting}
@@ -386,57 +464,17 @@ export const PersonaVoiceClonePanel = ({ personaLanguage }: { personaLanguage?: 
       ) : null}
 
       <ul className="space-y-2">
-        {voices.map((clone) => {
-          const isActive = clone.voice_id !== null && clone.voice_id === voiceId;
-          const statusLabel =
-            clone.status === 'ready'
-              ? t('persona.voiceCloneStatusReady')
-              : clone.status === 'pending'
-                ? t('persona.voiceCloneStatusPending')
-                : t('persona.voiceCloneStatusFailed');
-          return (
-            <li
-              key={clone.id}
-              className={`flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 ${
-                isActive ? 'border-accent bg-red-50/40' : 'border-neutral-200'
-              }`}
-            >
-              <MicIcon />
-              <span className="min-w-0 flex-1 text-sm">
-                <span className="font-medium">{clone.language ?? '—'}</span>
-                <span className="ml-2 text-neutral-500">{statusLabel}</span>
-              </span>
-              {clone.status === 'ready' ? (
-                <>
-                  <button
-                    type="button"
-                    className="text-sm font-medium text-accent hover:underline"
-                    onClick={() => playServerPreview(clone)}
-                  >
-                    {t('persona.voiceClonePlayPreview')}
-                  </button>
-                  <button
-                    type="button"
-                    className="text-sm font-medium text-neutral-900 hover:underline"
-                    onClick={() => selectCloneForPersona(clone)}
-                  >
-                    {t('persona.voiceCloneUseOnPersona')}
-                  </button>
-                </>
-              ) : null}
-              {isActive ? <CheckIcon /> : null}
-              <button
-                type="button"
-                aria-label={t('persona.voiceCloneDelete')}
-                onClick={() => deleteMutation.mutate(clone.id)}
-                disabled={deleteMutation.isPending}
-                className="text-neutral-500 hover:text-red-600"
-              >
-                <TrashIcon />
-              </button>
-            </li>
-          );
-        })}
+        {voices.map((clone) => (
+          <ClonedVoiceRow
+            key={clone.id}
+            clone={clone}
+            isActive={clone.voice_id !== null && clone.voice_id === voiceId}
+            deleting={deleteMutation.isPending}
+            onPlayPreview={() => playServerPreview(clone)}
+            onUse={() => selectCloneForPersona(clone)}
+            onDelete={() => deleteMutation.mutate(clone.id)}
+          />
+        ))}
       </ul>
     </div>
   );

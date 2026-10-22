@@ -91,6 +91,85 @@ describe('GET /api/persona/voices', () => {
     expect(headers.get('x-user-id')).toBe(USER_ID);
   });
 
+  it('passes catalog metadata (name/provider/gender/category/locale) through', async () => {
+    fetchMock.mockResolvedValue(
+      Response.json({
+        status: 200,
+        message: 'success',
+        body: [
+          {
+            id: 'phonon:Zoey',
+            name: 'Zoey',
+            provider: 'phonon',
+            gender: 'female',
+            category: 'normal',
+            locale: 'en-US',
+          },
+          {
+            id: 'phonon:Azgorath',
+            name: 'Azgorath',
+            provider: 'phonon',
+            gender: 'male',
+            category: 'character',
+            locale: null,
+          },
+          { id: 'openrouter:x-ai/grok-voice-tts-1:eve' },
+        ],
+      }),
+    );
+
+    const res = await GET();
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      voices: [
+        {
+          id: 'phonon:Zoey',
+          name: 'Zoey',
+          provider: 'phonon',
+          gender: 'female',
+          category: 'normal',
+          locale: 'en-US',
+        },
+        {
+          id: 'phonon:Azgorath',
+          name: 'Azgorath',
+          provider: 'phonon',
+          gender: 'male',
+          category: 'character',
+          locale: null,
+        },
+        { id: 'openrouter:x-ai/grok-voice-tts-1:eve' },
+      ],
+    });
+  });
+
+  it('drops malformed metadata fields instead of passing them through', async () => {
+    fetchMock.mockResolvedValue(
+      Response.json({
+        status: 200,
+        message: 'success',
+        body: [
+          {
+            id: 'phonon:Zoey',
+            name: 42,
+            provider: 'phonon',
+            gender: 'unknown',
+            category: 'weird',
+            locale: 'fr-FR',
+          },
+        ],
+      }),
+    );
+
+    const res = await GET();
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      voices: [{ id: 'phonon:Zoey', provider: 'phonon' }],
+    });
+  });
+
   it('aceita API key pessoal via Authorization Bearer (MCP)', async () => {
     vi.mocked(createSupabaseServiceClient).mockReturnValue({} as never);
     vi.mocked(resolveApiKey).mockResolvedValue({

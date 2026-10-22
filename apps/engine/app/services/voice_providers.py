@@ -1,10 +1,11 @@
 """TTS provider implementations for the engine.
 
-ElevenLabs (hosted API) and Chatterbox (self-hosted, OpenAI-compatible)
-live here so ``voice.py`` stays the thin dispatch + subtitle layer. The
-shared pieces the providers need (``SubMaker``, the text preprocessor,
-the file-path guard, the legacy subtitle filler, ``TtsResult``) live here
-too; ``voice.py`` re-imports them for the ``tts()`` dispatcher.
+ElevenLabs (hosted API) lives here so ``voice.py`` stays the thin
+dispatch + subtitle layer; the local CPU providers (Phonon, Kokoro,
+Chatterbox-Nano) live in ``local_tts.py``. The shared pieces the
+providers need (``SubMaker``, the text preprocessor, the file-path
+guard, the legacy subtitle filler, ``TtsResult``) live here too;
+``voice.py`` re-imports them for the ``tts()`` dispatcher.
 """
 
 import os
@@ -309,100 +310,4 @@ def elevenlabs_tts(
 
     return TtsResult(
         error=f"ElevenLabs TTS failed after 3 attempts ({last_error or 'unknown error'})"
-    )
-def chatterbox_tts(
-    text: str,
-    voice: str,
-    voice_file: str,
-    voice_rate: float = 1.0,
-    voice_volume: float = 1.0,
-    model_id: str = "",
-) -> TtsResult:
-    """Generate speech with a self-hosted Chatterbox TTS server.
-
-    Chatterbox (Resemble AI, MIT) is an open-source, locally hosted TTS model
-    with zero-shot voice cloning — a self-hostable alternative to ElevenLabs.
-    This talks to an OpenAI-compatible ``/audio/speech`` endpoint, so it works
-    with the common community servers (e.g. devnen/Chatterbox-TTS-Server,
-    travisvn/chatterbox-tts-api). Configure ``[chatterbox] base_url`` (and an
-    optional ``api_key``).
-
-    Like ElevenLabs, Chatterbox does not return word-level timestamps, so the
-    subtitle path falls back to the full-text SubMaker. For tighter subtitle
-    sync set ``subtitle_provider = "whisper"``.
-    """
-    text = (text or "").strip()
-    if not text:
-        logger.error("Chatterbox TTS text is empty")
-        return TtsResult(error="Chatterbox TTS failed: text is empty")
-
-    # Preprocess text to avoid TTS reading "ponto" ("period") in Portuguese
-    text = _preprocess_text_for_tts(text)
-    base_url = (config.chatterbox.get("base_url", "") or "").strip().rstrip("/")
-    if not base_url:
-        logger.error(
-            "Chatterbox base_url is not set, please configure [chatterbox] base_url in config.toml"
-        )
-        return TtsResult(error="Chatterbox TTS failed: base_url is not set")
-
-    api_key = config.chatterbox.get("api_key", "")
-    if not model_id:
-        model_id = config.chatterbox.get("model_id", "chatterbox") or "chatterbox"
-
-    url = f"{base_url}/audio/speech"
-    headers = {"Content-Type": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-    payload = {
-        "model": model_id,
-        "input": text,
-        "voice": voice,
-        "response_format": "mp3",
-        # OpenAI speech API accepts speed 0.25-4.0; MoneyPrinterTurbo's rate is a
-        # 1.0-centred multiplier, so it maps directly (clamped to the valid range).
-        "speed": max(0.25, min(4.0, float(voice_rate or 1.0))),
-    }
-    # voice_volume is accepted for parity with the other TTS providers but is
-    # intentionally not sent: the OpenAI /audio/speech contract has no volume
-    # field, so Chatterbox servers ignore it. Adjust loudness via voice_rate
-    # (speed) or in post-processing instead.
-
-    last_error: str | None = None
-    for i in range(3):
-        try:
-            logger.info(f"start chatterbox tts, voice: {voice}, try: {i + 1}")
-            ensure_file_path_exists(voice_file)
-
-            response = requests.post(url, json=payload, headers=headers, timeout=120)
-            if response.status_code != 200:
-                last_error = f"status {response.status_code}"
-                logger.error(
-                    f"chatterbox tts failed with status {response.status_code}: {response.text[:200]}"
-                )
-                continue
-
-            with open(voice_file, "wb") as f:
-                f.write(response.content)
-
-            audio_clip = AudioFileClip(voice_file)
-            audio_duration = audio_clip.duration
-            audio_clip.close()
-
-            sub_maker = SubMaker()
-            logger.success(f"chatterbox tts succeeded: {voice_file}")
-            return TtsResult(
-                sub_maker=populate_legacy_submaker_with_full_text(
-                    sub_maker=sub_maker,
-                    text=text,
-                    audio_duration_seconds=audio_duration,
-                )
-            )
-        except Exception as e:
-            # Scrub before the 200-cut: a cut landing mid-secret defeats the
-            # scrubber and leaks the raw remainder.
-            last_error = scrub_secret_values(str(e))[:200]
-            logger.error(f"chatterbox tts failed: {str(e)}")
-
-    return TtsResult(
-        error=f"Chatterbox TTS failed after 3 attempts ({last_error or 'unknown error'})"
     )

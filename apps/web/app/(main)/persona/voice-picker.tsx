@@ -1,15 +1,18 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { useVoiceSampleLanguagesQuery, useVoicesQuery } from '@/lib/api';
+import { useVoicesQuery } from '@/lib/api';
 import { usePersonaStore } from '@/lib/store';
 import { useI18n } from '@/lib/i18n/provider';
+import type { VoiceOption } from '@/lib/types';
 import { CheckIcon, MicIcon } from '@/lib/ui';
 
 // Voice ids come from the engine's catalog and are provider-qualified:
-// `chatterbox:ryan`, or `openrouter:<model>:<voice>` for the OpenRouter TTS
-// provider. There is no house-voice map any more, and no label fallback: a
-// voice with no label must show its raw id, not borrow another voice's name —
+// `phonon:<Name>` / `kokoro:<voice_id>` for the local preset catalog,
+// `chatterbox:<engine_voice_key>` for the caller's own clones, or
+// `openrouter:<model>:<voice>` for the OpenRouter TTS provider. There is
+// no house-voice map any more, and no label fallback: a voice with no
+// catalog name must show its raw id, not borrow another voice's name —
 // that fallback used to render every unknown id as "Voz feminina calma".
 //
 // The underscore-to-space rewrite is Chatterbox-shaped (`en_us_female_01` →
@@ -18,12 +21,15 @@ import { CheckIcon, MicIcon } from '@/lib/ui';
 // voice-2.1:en-US-Harper:MAI-Voice-2.1` must not become "en US Harper:MAI...".
 // The model stays in the label because two entries can share a voice name and
 // differ only by model.
-const voiceLabel = (voiceId: string): string => {
-  const openrouter = parseOpenrouterVoiceId(voiceId);
+const voiceLabel = (voice: VoiceOption): string => {
+  if (voice.name) {
+    return voice.name;
+  }
+  const openrouter = parseOpenrouterVoiceId(voice.id);
   if (openrouter) {
     return openrouter.voice;
   }
-  return voiceId.replace(/^chatterbox:/, '').replace(/_/g, ' ');
+  return voice.id.replace(/^chatterbox:/, '').replace(/_/g, ' ');
 };
 
 //---------------
@@ -62,48 +68,78 @@ function voiceModelLabel(voiceId: string): string {
 }
 
 //---------------
-// matchSampleLanguage — picks the voice sample code closest to the
-// persona language: exact ('es' → 'es') or by prefix ('pt' → 'pt-br').
-// Returns undefined when there is no match.
+// Voice filters (user spec): gender — all/male/female; origin — all/US/
+// England/Characters. 'Characters' is a CATEGORY, not an accent:
+// character voices carry a gender (the gender filter still applies to
+// them) but no locale, so they never match the US/England origins.
+// Voices without catalog metadata (OpenRouter) have no known gender or
+// origin, so they only appear when both filters are on 'all'.
 //---------------
-const matchSampleLanguage = (
-  personaLanguage: string,
-  samples: Array<{ code: string }>,
-): string | undefined => {
-  const lang = personaLanguage.trim().toLowerCase();
-  if (!lang) return undefined;
-  const codes = samples.map((sample) => sample.code);
-  const exact = codes.find((code) => code.toLowerCase() === lang);
-  if (exact) return exact;
-  return codes.find((code) => {
-    const normalized = code.toLowerCase();
-    return normalized.startsWith(`${lang}-`) || lang.startsWith(`${normalized}-`);
+export type VoiceGenderFilter = 'all' | 'male' | 'female';
+export type VoiceOriginFilter = 'all' | 'en-US' | 'en-GB' | 'character';
+
+export function filterVoices(
+  voices: VoiceOption[],
+  gender: VoiceGenderFilter,
+  origin: VoiceOriginFilter,
+): VoiceOption[] {
+  return voices.filter((voice) => {
+    if (gender !== 'all' && voice.gender !== gender) {
+      return false;
+    }
+    if (origin === 'character') {
+      return voice.category === 'character';
+    }
+    if (origin !== 'all') {
+      return voice.category !== 'character' && voice.locale === origin;
+    }
+    return true;
   });
-};
+}
+
+const FilterChip = ({
+  active,
+  label,
+  testId,
+  onSelect,
+}: {
+  active: boolean;
+  label: string;
+  testId: string;
+  onSelect: () => void;
+}) => (
+  <button
+    type="button"
+    data-testid={testId}
+    aria-pressed={active}
+    onClick={onSelect}
+    className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+      active
+        ? 'border-accent bg-red-50/50 text-accent'
+        : 'border-neutral-300 bg-white text-neutral-600 hover:border-neutral-400'
+    }`}
+  >
+    {label}
+  </button>
+);
 
 //---------------
-// PersonaHouseVoicePicker — house voice grid
+// PersonaHouseVoicePicker — preset voice grid with filters
 //---------------
-export const PersonaHouseVoicePicker = ({ personaLanguage }: { personaLanguage?: string }) => {
+export const PersonaHouseVoicePicker = () => {
   const voicesQuery = useVoicesQuery();
-  const sampleLanguagesQuery = useVoiceSampleLanguagesQuery();
   const voiceId = usePersonaStore((s) => s.voiceId);
-  // Manual user choice (null = not touched yet): wins over the default.
-  const [sampleLanguage, setSampleLanguage] = useState<string | null>(null);
+  const [genderFilter, setGenderFilter] = useState<VoiceGenderFilter>('all');
+  const [originFilter, setOriginFilter] = useState<VoiceOriginFilter>('all');
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const lastPickedVoiceRef = useRef<string | null>(null);
   const { t } = useI18n();
 
-  const voices = voicesQuery.data ?? [];
-  const matchedSampleLanguage = personaLanguage
-    ? matchSampleLanguage(personaLanguage, sampleLanguagesQuery.data ?? [])
-    : undefined;
-  const effectiveSampleLanguage = sampleLanguage ?? matchedSampleLanguage ?? 'pt-br';
+  const voices = filterVoices(voicesQuery.data ?? [], genderFilter, originFilter);
 
-  const playVoiceSample = (pickedVoiceId: string, language: string): void => {
+  const playVoiceSample = (pickedVoiceId: string): void => {
     audioRef.current?.pause();
     const audio = new Audio(
-      `/voice-samples/${encodeURIComponent(pickedVoiceId)}-${encodeURIComponent(language)}.mp3`,
+      `/api/persona/voices/sample?voice_id=${encodeURIComponent(pickedVoiceId)}`,
     );
     audioRef.current = audio;
     const playResult = audio.play();
@@ -114,44 +150,88 @@ export const PersonaHouseVoicePicker = ({ personaLanguage }: { personaLanguage?:
 
   const handlePickVoice = (pickedVoiceId: string) => {
     usePersonaStore.getState().setVoiceId(pickedVoiceId);
-    lastPickedVoiceRef.current = pickedVoiceId;
-    playVoiceSample(pickedVoiceId, effectiveSampleLanguage);
+    playVoiceSample(pickedVoiceId);
   };
 
-  const handleSampleLanguageChange = (language: string) => {
-    setSampleLanguage(language);
-    // Switched language after listening to a sample? Restart the audio in the new language.
-    const lastPickedVoice = lastPickedVoiceRef.current;
-    if (lastPickedVoice) {
-      playVoiceSample(lastPickedVoice, language);
+  const subLabel = (voice: VoiceOption): string => {
+    const model = voiceModelLabel(voice.id);
+    if (model !== '') {
+      return model;
     }
+    if (!voice.provider) {
+      return '';
+    }
+    const provider = voice.provider === 'phonon' ? 'Phonon' : voice.provider === 'kokoro' ? 'Kokoro' : voice.provider;
+    if (voice.category === 'character') {
+      return `${provider} · ${t('persona.voiceBadgeCharacter')}`;
+    }
+    if (voice.locale === 'en-US') {
+      return `${provider} · ${t('persona.voiceBadgeUS')}`;
+    }
+    if (voice.locale === 'en-GB') {
+      return `${provider} · ${t('persona.voiceBadgeGB')}`;
+    }
+    return provider;
   };
 
   return (
     <div className="mt-4">
-      <label className="mb-4 block max-w-sm text-sm font-medium text-neutral-700">
-        {t('persona.sampleLanguage')}
-        <span className="relative mt-2 block">
-          <select
-            data-testid="sample-language"
-            value={effectiveSampleLanguage}
-            onChange={(e) => handleSampleLanguageChange(e.target.value)}
-            className="h-12 w-full appearance-none rounded-xl border border-neutral-300 bg-white px-4 pr-11 text-sm font-semibold text-neutral-900 shadow-sm transition-colors hover:border-neutral-400 focus:border-accent focus:ring-4 focus:ring-accent/10 focus:outline-none"
-          >
-            {(sampleLanguagesQuery.data ?? []).map((lang) => (
-              <option key={lang.code} value={lang.code}>
-                {lang.label}
-              </option>
-            ))}
-          </select>
-          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className="pointer-events-none absolute top-1/2 right-4 size-5 -translate-y-1/2 text-neutral-500">
-            <path d="m6 8 4 4 4-4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
+          {t('persona.voiceFilterGenderLabel')}
         </span>
-      </label>
+        <FilterChip
+          testId="voice-filter-gender-all"
+          label={t('persona.voiceFilterAll')}
+          active={genderFilter === 'all'}
+          onSelect={() => setGenderFilter('all')}
+        />
+        <FilterChip
+          testId="voice-filter-gender-male"
+          label={t('persona.voiceFilterMale')}
+          active={genderFilter === 'male'}
+          onSelect={() => setGenderFilter('male')}
+        />
+        <FilterChip
+          testId="voice-filter-gender-female"
+          label={t('persona.voiceFilterFemale')}
+          active={genderFilter === 'female'}
+          onSelect={() => setGenderFilter('female')}
+        />
+      </div>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
+          {t('persona.voiceFilterOriginLabel')}
+        </span>
+        <FilterChip
+          testId="voice-filter-origin-all"
+          label={t('persona.voiceFilterAll')}
+          active={originFilter === 'all'}
+          onSelect={() => setOriginFilter('all')}
+        />
+        <FilterChip
+          testId="voice-filter-origin-us"
+          label={t('persona.voiceFilterUS')}
+          active={originFilter === 'en-US'}
+          onSelect={() => setOriginFilter('en-US')}
+        />
+        <FilterChip
+          testId="voice-filter-origin-gb"
+          label={t('persona.voiceFilterGB')}
+          active={originFilter === 'en-GB'}
+          onSelect={() => setOriginFilter('en-GB')}
+        />
+        <FilterChip
+          testId="voice-filter-origin-characters"
+          label={t('persona.voiceFilterCharacters')}
+          active={originFilter === 'character'}
+          onSelect={() => setOriginFilter('character')}
+        />
+      </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {voices.map((voice) => {
           const isActive = voice.id === voiceId;
+          const sub = subLabel(voice);
           return (
             <button
               key={voice.id}
@@ -176,12 +256,10 @@ export const PersonaHouseVoicePicker = ({ personaLanguage }: { personaLanguage?:
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium text-neutral-900">
-                  {voiceLabel(voice.id)}
+                  {voiceLabel(voice)}
                 </span>
-                {voiceModelLabel(voice.id) !== '' && (
-                  <span className="block truncate text-xs text-neutral-500">
-                    {voiceModelLabel(voice.id)}
-                  </span>
+                {sub !== '' && (
+                  <span className="block truncate text-xs text-neutral-500">{sub}</span>
                 )}
               </span>
               {isActive && (

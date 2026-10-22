@@ -56,10 +56,13 @@ export async function createClonedVoice(
   file: Blob,
   language: string,
   consent: boolean,
+  options?: { name?: string; useCleaned?: boolean },
 ): Promise<ClonedVoicePublicRow> {
   const formData = new FormData();
   formData.set('consent', consent ? 'true' : 'false');
   formData.set('language', language);
+  formData.set('name', options?.name?.trim() ?? '');
+  formData.set('use_cleaned', options?.useCleaned === false ? 'false' : 'true');
   formData.set('file', file, 'reference.webm');
   const response = await fetch('/api/persona/cloned-voices', {
     method: 'POST',
@@ -95,6 +98,24 @@ export async function deleteClonedVoice(cloneId: string): Promise<void> {
         : 'Could not delete cloned voice.';
     throw new Error(message);
   }
+}
+
+export async function fetchCleanedReferencePreview(file: Blob): Promise<Blob> {
+  const formData = new FormData();
+  formData.set('file', file, 'reference.webm');
+  const response = await fetch('/api/persona/cloned-voices/clean-preview', {
+    method: 'POST',
+    body: formData,
+  });
+  if (!response.ok) {
+    const data = await parseJson(response);
+    const message =
+      typeof data === 'object' && data !== null && 'error' in data && typeof data.error === 'string'
+        ? data.error
+        : 'Could not clean the reference audio.';
+    throw new Error(message);
+  }
+  return response.blob();
 }
 
 export function clonedVoicePreviewUrl(cloneId: string, language: string | null): string {

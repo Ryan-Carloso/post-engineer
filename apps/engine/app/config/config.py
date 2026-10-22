@@ -154,6 +154,7 @@ def save_config():
         _cfg["siliconflow"] = siliconflow
         _cfg["elevenlabs"] = elevenlabs
         _cfg["chatterbox"] = chatterbox
+        _cfg["kokoro"] = kokoro
         _cfg["cloned_voices"] = cloned_voices
         _cfg["openrouter"] = openrouter
         _cfg["longcat"] = longcat
@@ -169,6 +170,7 @@ azure = _cfg.get("azure", {})
 siliconflow = _cfg.get("siliconflow", {})
 elevenlabs = _cfg.get("elevenlabs", {})
 chatterbox = _cfg.get("chatterbox", {})
+kokoro = _cfg.get("kokoro", {})
 cloned_voices = _cfg.get("cloned_voices", {})
 openrouter = _cfg.get("openrouter", {})
 longcat = _cfg.get("longcat", {})

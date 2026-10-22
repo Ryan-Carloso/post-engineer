@@ -75,6 +75,7 @@ class ClonedVoiceStore:
         storage_path: str,
         engine_voice_key: str,
         language: str,
+        name: str | None = None,
     ) -> dict[str, Any]:
         row = {
             "id": clone_id,
@@ -84,6 +85,7 @@ class ClonedVoiceStore:
             "storage_path": storage_path,
             "engine_voice_key": engine_voice_key,
             "language": language,
+            "name": name,
         }
         response = self._rest(
             "POST",

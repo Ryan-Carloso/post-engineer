@@ -19,6 +19,7 @@ const cloneMocks = vi.hoisted(() => ({
   audioPause: vi.fn(),
   audioUrls: [] as (string | undefined)[],
   validateResult: { ok: true } as { ok: true } | { ok: false; error: string },
+  cleanPreview: vi.fn(),
   sampleLanguages: [{ code: 'pt', label: 'Português' }] as { code: string; label: string }[],
 }));
 
@@ -31,6 +32,7 @@ vi.mock('@/lib/cloned-voices-client', () => ({
   }),
   fetchClonedVoice: vi.fn((id: string) => cloneMocks.fetchById(id)),
   createClonedVoice: vi.fn((...args: unknown[]) => cloneMocks.create(...args)),
+  fetchCleanedReferencePreview: vi.fn((...args: unknown[]) => cloneMocks.cleanPreview(...args)),
   deleteClonedVoice: vi.fn((id: string) => cloneMocks.delete(id)),
   clonedVoicePreviewUrl: vi.fn((id: string) => `/api/persona/cloned-voices/${id}/preview`),
 }));
@@ -150,6 +152,7 @@ function publicRow(
   overrides: Partial<ClonedVoicePublicRow> & Pick<ClonedVoicePublicRow, 'id' | 'status'>,
 ): ClonedVoicePublicRow {
   return {
+    name: null,
     language: 'pt',
     voice_id: null,
     error_code: null,
@@ -166,6 +169,7 @@ describe('PersonaVoiceClonePanel', () => {
     cloneMocks.listError = false;
     cloneMocks.fetchById.mockReset();
     cloneMocks.create.mockReset();
+    cloneMocks.cleanPreview.mockReset();
     cloneMocks.delete.mockReset();
     cloneMocks.setVoiceId.mockReset();
     cloneMocks.validateResult = { ok: true };
@@ -242,7 +246,7 @@ describe('PersonaVoiceClonePanel', () => {
     const user = userEvent.setup();
     cloneMocks.create.mockResolvedValue(publicRow({ id: 'clone-pending', status: 'pending' }));
     renderPanel();
-    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('checkbox', { name: 'persona.voiceCloneConsent' }));
     const panel = screen.getByTestId('voice-clone-panel');
     const fileInput = panel.querySelector('input[type="file"]');
     expect(fileInput).toBeTruthy();
@@ -257,7 +261,7 @@ describe('PersonaVoiceClonePanel', () => {
     cloneMocks.create.mockResolvedValue(publicRow({ id: 'clone-pending', status: 'pending' }));
     const user = userEvent.setup();
     renderPanel();
-    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('checkbox', { name: 'persona.voiceCloneConsent' }));
     const fileInput = screen.getByTestId('voice-clone-panel').querySelector('input[type="file"]');
     await user.upload(fileInput as HTMLInputElement, makeWavFile());
     await user.click(screen.getByRole('button', { name: 'persona.voiceCloneSubmit' }));
@@ -403,7 +407,7 @@ describe('PersonaVoiceClonePanel', () => {
     cloneMocks.create.mockRejectedValue(new Error('Quota exceeded.'));
     const user = userEvent.setup();
     renderPanel();
-    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('checkbox', { name: 'persona.voiceCloneConsent' }));
     const fileInput = screen.getByTestId('voice-clone-panel').querySelector('input[type="file"]');
     await user.upload(fileInput as HTMLInputElement, makeWavFile());
     await user.click(screen.getByRole('button', { name: 'persona.voiceCloneSubmit' }));
@@ -428,7 +432,7 @@ describe('PersonaVoiceClonePanel', () => {
     const { queryClient } = renderPanel();
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
     const user = userEvent.setup();
-    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('checkbox', { name: 'persona.voiceCloneConsent' }));
     const fileInput = screen.getByTestId('voice-clone-panel').querySelector('input[type="file"]');
     await user.upload(fileInput as HTMLInputElement, makeWavFile());
     await user.click(screen.getByRole('button', { name: 'persona.voiceCloneSubmit' }));
@@ -447,7 +451,7 @@ describe('PersonaVoiceClonePanel', () => {
     const { queryClient } = renderPanel();
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
     const user = userEvent.setup();
-    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('checkbox', { name: 'persona.voiceCloneConsent' }));
     const fileInput = screen.getByTestId('voice-clone-panel').querySelector('input[type="file"]');
     await user.upload(fileInput as HTMLInputElement, makeWavFile());
     await user.click(screen.getByRole('button', { name: 'persona.voiceCloneSubmit' }));
@@ -512,7 +516,7 @@ describe('PersonaVoiceClonePanel', () => {
     const select = screen.getByRole('combobox');
     await user.selectOptions(select, 'en');
     expect((select as HTMLSelectElement).value).toBe('en');
-    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('checkbox', { name: 'persona.voiceCloneConsent' }));
     const fileInput = screen.getByTestId('voice-clone-panel').querySelector('input[type="file"]');
     await user.upload(fileInput as HTMLInputElement, makeWavFile());
     await user.click(screen.getByRole('button', { name: 'persona.voiceCloneSubmit' }));
@@ -575,7 +579,7 @@ describe('PersonaVoiceClonePanel', () => {
       screen.getByRole('button', { name: 'persona.voiceCloneSubmit' }),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('checkbox', { name: 'persona.voiceCloneConsent' }));
     await user.click(screen.getByRole('button', { name: 'persona.voiceCloneSubmit' }));
     await waitFor(() => expect(cloneMocks.create).toHaveBeenCalledTimes(1));
     const sentBlob = cloneMocks.create.mock.calls[0]?.[0] as Blob;
@@ -597,7 +601,7 @@ describe('PersonaVoiceClonePanel', () => {
       recorder.ondataavailable?.({ data: new Blob(['xy']) });
     });
     await user.click(stopButton);
-    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('checkbox', { name: 'persona.voiceCloneConsent' }));
     cloneMocks.create.mockResolvedValue(publicRow({ id: 'clone-rec2', status: 'pending' }));
     await user.click(screen.getByRole('button', { name: 'persona.voiceCloneSubmit' }));
     await waitFor(() => expect(cloneMocks.create).toHaveBeenCalledTimes(1));
@@ -676,7 +680,7 @@ describe('PersonaVoiceClonePanel', () => {
     cloneMocks.delete.mockResolvedValue(undefined);
     const user = userEvent.setup();
     renderPanel();
-    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('checkbox', { name: 'persona.voiceCloneConsent' }));
     const fileInput = screen.getByTestId('voice-clone-panel').querySelector('input[type="file"]');
     await user.upload(fileInput as HTMLInputElement, makeWavFile());
     await user.click(screen.getByRole('button', { name: 'persona.voiceCloneSubmit' }));
@@ -729,5 +733,80 @@ describe('PersonaVoiceClonePanel', () => {
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['cloned-voices'] }),
     );
     expect(cloneMocks.setVoiceId).not.toHaveBeenCalled();
+  });
+
+  it('clean toggle defaults on and create forwards the name and useCleaned', async () => {
+    cloneMocks.create.mockResolvedValue(publicRow({ id: 'clone-new', status: 'pending' }));
+    const user = userEvent.setup();
+    renderPanel();
+    expect(screen.getByTestId('voice-clone-clean-toggle')).toBeChecked();
+    await user.type(screen.getByTestId('voice-clone-name'), '  Minha voz  ');
+    await user.click(screen.getByRole('checkbox', { name: 'persona.voiceCloneConsent' }));
+    const fileInput = screen.getByTestId('voice-clone-panel').querySelector('input[type="file"]');
+    await user.upload(fileInput as HTMLInputElement, makeWavFile());
+    await user.click(screen.getByRole('button', { name: 'persona.voiceCloneSubmit' }));
+    await waitFor(() => expect(cloneMocks.create).toHaveBeenCalledTimes(1));
+    const args = cloneMocks.create.mock.calls[0] as unknown[];
+    expect(args[1]).toBe('pt');
+    expect(args[2]).toBe(true);
+    expect(args[3]).toEqual({ name: '  Minha voz  ', useCleaned: true });
+  });
+
+  it('turning the clean toggle off forwards useCleaned=false', async () => {
+    cloneMocks.create.mockResolvedValue(publicRow({ id: 'clone-new', status: 'pending' }));
+    const user = userEvent.setup();
+    renderPanel();
+    await user.click(screen.getByTestId('voice-clone-clean-toggle'));
+    expect(screen.getByTestId('voice-clone-clean-toggle')).not.toBeChecked();
+    await user.click(screen.getByRole('checkbox', { name: 'persona.voiceCloneConsent' }));
+    const fileInput = screen.getByTestId('voice-clone-panel').querySelector('input[type="file"]');
+    await user.upload(fileInput as HTMLInputElement, makeWavFile());
+    await user.click(screen.getByRole('button', { name: 'persona.voiceCloneSubmit' }));
+    await waitFor(() => expect(cloneMocks.create).toHaveBeenCalledTimes(1));
+    const args = cloneMocks.create.mock.calls[0] as unknown[];
+    expect(args[3]).toEqual({ name: '', useCleaned: false });
+  });
+
+  it('shows the cleaned A/B player after requesting the cleaned preview', async () => {
+    cloneMocks.cleanPreview.mockResolvedValue(new Blob(['cleaned'], { type: 'audio/wav' }));
+    const user = userEvent.setup();
+    renderPanel();
+    const fileInput = screen.getByTestId('voice-clone-panel').querySelector('input[type="file"]');
+    await user.upload(fileInput as HTMLInputElement, makeWavFile());
+    expect(screen.getByText('persona.voiceCloneOriginalLabel')).toBeInTheDocument();
+    expect(screen.queryByTestId('voice-clone-cleaned-preview')).not.toBeInTheDocument();
+    await user.click(screen.getByTestId('voice-clone-clean-preview-button'));
+    await waitFor(() =>
+      expect(screen.getByTestId('voice-clone-cleaned-preview')).toBeInTheDocument(),
+    );
+    expect(cloneMocks.cleanPreview).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('persona.voiceCloneCleanedLabel')).toBeInTheDocument();
+  });
+
+  it('hides the cleaned preview controls when the toggle is off', async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    const fileInput = screen.getByTestId('voice-clone-panel').querySelector('input[type="file"]');
+    await user.upload(fileInput as HTMLInputElement, makeWavFile());
+    await user.click(screen.getByTestId('voice-clone-clean-toggle'));
+    expect(screen.queryByTestId('voice-clone-clean-preview-button')).not.toBeInTheDocument();
+  });
+
+  it('shows the localized error when the cleaned preview fails', async () => {
+    cloneMocks.cleanPreview.mockRejectedValue(new Error('boom'));
+    const user = userEvent.setup();
+    renderPanel();
+    const fileInput = screen.getByTestId('voice-clone-panel').querySelector('input[type="file"]');
+    await user.upload(fileInput as HTMLInputElement, makeWavFile());
+    await user.click(screen.getByTestId('voice-clone-clean-preview-button'));
+    expect(await screen.findByRole('alert')).toHaveTextContent('persona.voiceCloneCleanFailed');
+  });
+
+  it('shows the clone name in the list when the clone has one', async () => {
+    cloneMocks.list = [
+      publicRow({ id: 'clone-named', status: 'ready', name: 'Estúdio', voice_id: 'chatterbox:named' }),
+    ];
+    renderPanel();
+    expect(await screen.findByText('Estúdio')).toBeInTheDocument();
   });
 });

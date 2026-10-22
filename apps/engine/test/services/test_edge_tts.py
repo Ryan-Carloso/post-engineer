@@ -106,6 +106,12 @@ class TestEdgeTts(_VoiceFileTestCase):
         self.assertEqual(voice, et.DEFAULT_EDGE_TTS_VOICE)
 
 
+# A stored user-clone id: routes to the clone wrapper, and the uuid
+# below owns it (its first 12 hex chars are the key's user prefix).
+CLONE_VOICE_ID = "chatterbox:u0123456789ab_c0123456789a"
+CLONE_OWNER_ID = "01234567-89ab-cdef-0123-456789abcdef"
+
+
 class TestChatterboxFallback(_VoiceFileTestCase):
     """voice.tts falls back to Edge TTS for test accounts on Chatterbox failure."""
 
@@ -113,58 +119,58 @@ class TestChatterboxFallback(_VoiceFileTestCase):
         return TtsResult(error="Chatterbox TTS failed after 3 attempts (status 404)")
 
     @patch("app.services.edge_tts.maybe_fallback_to_edge_tts")
-    @patch("app.services.edge_tts.chatterbox_tts")
+    @patch("app.services.edge_tts.clone_tts")
     def test_test_account_falls_back_on_chatterbox_failure(
         self, mock_chatterbox, mock_fallback
     ):
         mock_chatterbox.return_value = self._chatterbox_fails()
         fallback_result = TtsResult(sub_maker=MagicMock())
         mock_fallback.return_value = fallback_result
-        with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "user-123"}):
+        with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": CLONE_OWNER_ID}):
             result = voice_service.tts(
                 "hello",
-                "chatterbox:ryan",
+                CLONE_VOICE_ID,
                 1.0,
                 self.voice_file,
-                user_id="user-123",
+                user_id=CLONE_OWNER_ID,
                 task_id="task-1",
             )
         self.assertIs(result, fallback_result)
         mock_fallback.assert_called_once()
 
     @patch("app.services.edge_tts.maybe_fallback_to_edge_tts")
-    @patch("app.services.edge_tts.chatterbox_tts")
+    @patch("app.services.edge_tts.clone_tts")
     def test_production_account_keeps_original_error(
         self, mock_chatterbox, mock_fallback
     ):
         original = self._chatterbox_fails()
         mock_chatterbox.return_value = original
         mock_fallback.return_value = None  # not a test account
-        with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "user-123"}):
+        with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": CLONE_OWNER_ID}):
             result = voice_service.tts(
                 "hello",
-                "chatterbox:ryan",
+                CLONE_VOICE_ID,
                 1.0,
                 self.voice_file,
-                user_id="someone-else",
+                user_id=CLONE_OWNER_ID,
                 task_id="task-1",
             )
         self.assertIs(result, original)
 
-    @patch("app.services.edge_tts.chatterbox_tts")
+    @patch("app.services.edge_tts.clone_tts")
     def test_chatterbox_success_never_falls_back(self, mock_chatterbox):
         ok_result = TtsResult(sub_maker=MagicMock())
         mock_chatterbox.return_value = ok_result
-        with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "user-123"}):
+        with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": CLONE_OWNER_ID}):
             with patch(
                 "app.services.edge_tts.maybe_fallback_to_edge_tts"
             ) as mock_fallback:
                 result = voice_service.tts(
                     "hello",
-                    "chatterbox:ryan",
+                    CLONE_VOICE_ID,
                     1.0,
                     self.voice_file,
-                    user_id="user-123",
+                    user_id=CLONE_OWNER_ID,
                 )
         self.assertIs(result, ok_result)
         mock_fallback.assert_not_called()
@@ -321,7 +327,7 @@ class TestFallbackLanguageForwarding(_VoiceFileTestCase):
         self.assertEqual(props["voice"], "en-US-AriaNeural")
 
     @patch("app.services.edge_tts.maybe_fallback_to_edge_tts")
-    @patch("app.services.edge_tts.chatterbox_tts")
+    @patch("app.services.edge_tts.clone_tts")
     def test_wrapper_forwards_language(self, mock_chatterbox, mock_fallback):
         mock_chatterbox.return_value = TtsResult(error="status 404")
         mock_fallback.return_value = TtsResult(sub_maker=MagicMock())
@@ -335,7 +341,7 @@ class TestFallbackLanguageForwarding(_VoiceFileTestCase):
         mock_fallback.return_value = TtsResult(sub_maker=MagicMock())
         voice_service.tts(
             "hello",
-            "chatterbox:ryan",
+            "chatterbox:u0123456789ab_c0123456789a",
             1.0,
             self.voice_file,
             user_id="u1",
@@ -343,7 +349,7 @@ class TestFallbackLanguageForwarding(_VoiceFileTestCase):
         )
         self.assertEqual(mock_fallback.call_args.kwargs.get("language"), "en")
 
-    @patch("app.services.edge_tts.chatterbox_tts")
+    @patch("app.services.edge_tts.clone_tts")
     def test_chatterbox_clone_denied_before_tts_call(self, mock_chatterbox):
         other = "ffffffff-bbbb-cccc-dddd-eeeeeeeeeeee"
         clone_key = "uaaaaaaaabbbb_cccccccccccc"
@@ -356,7 +362,7 @@ class TestFallbackLanguageForwarding(_VoiceFileTestCase):
         mock_chatterbox.assert_not_called()
         self.assertIn("cloned voice is not available", result.error or "")
 
-    @patch("app.services.edge_tts.chatterbox_tts")
+    @patch("app.services.edge_tts.clone_tts")
     def test_chatterbox_clone_allowed_for_owner_calls_tts(self, mock_chatterbox):
         owner = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
         clone_key = "uaaaaaaaabbbb_cccccccccccc"

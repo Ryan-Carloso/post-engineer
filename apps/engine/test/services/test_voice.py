@@ -283,155 +283,61 @@ class TestVoiceService(unittest.TestCase):
 
 
     def test_chatterbox_voice_helpers(self):
-        """is_chatterbox_voice / get_chatterbox_voices basics and normalisation."""
+        """Provider-prefix helpers for the local stack."""
         self.assertTrue(vs.is_chatterbox_voice("chatterbox:default-Female"))
         self.assertFalse(vs.is_chatterbox_voice("elevenlabs:abc:Rachel"))
         self.assertFalse(vs.is_chatterbox_voice(""))
         self.assertFalse(vs.is_chatterbox_voice(None))
+        self.assertTrue(vs.is_phonon_voice("phonon:Easton"))
+        self.assertFalse(vs.is_phonon_voice("kokoro:af_heart"))
+        self.assertTrue(vs.is_kokoro_voice("kokoro:af_heart"))
+        self.assertFalse(vs.is_kokoro_voice("phonon:Easton"))
 
-        # list entries are normalised to the chatterbox:<name> dispatcher format,
-        # and entries that are already prefixed are left untouched
-        with patch.object(
-            vs.config,
-            "chatterbox",
-            {"voices": ["narrator-Male", "chatterbox:host"]},
-        ):
-            self.assertEqual(
-                vs.get_chatterbox_voices(),
-                ["chatterbox:narrator-Male", "chatterbox:host"],
-            )
+    def test_phonon_dispatch(self):
+        """phonon:<name> routes to the local Phonon provider."""
+        marker = vp.TtsResult(sub_maker=vp.SubMaker())
+        with patch.object(vs, "phonon_tts", return_value=marker) as phonon:
+            result = vs.tts("hello", "phonon:Easton", 1.0, "/tmp/phonon.mp3")
+        self.assertIs(result, marker)
+        self.assertEqual(phonon.call_args.args[1], "Easton")
 
-        # a comma-separated string is also accepted (TOML-friendly)
-        with patch.object(vs.config, "chatterbox", {"voices": "alpha, beta ,"}):
-            self.assertEqual(
-                vs.get_chatterbox_voices(),
-                ["chatterbox:alpha", "chatterbox:beta"],
-            )
+    def test_kokoro_dispatch(self):
+        """kokoro:<id> routes to the local Kokoro provider."""
+        marker = vp.TtsResult(sub_maker=vp.SubMaker())
+        with patch.object(vs, "kokoro_tts", return_value=marker) as kokoro:
+            result = vs.tts("hello", "kokoro:af_heart", 1.0, "/tmp/kokoro.mp3")
+        self.assertIs(result, marker)
+        self.assertEqual(kokoro.call_args.args[1], "af_heart")
 
-        # with nothing configured the dropdown still gets a usable default
-        with patch.object(vs.config, "chatterbox", {}):
-            self.assertEqual(vs.get_chatterbox_voices(), ["chatterbox:default-Female"])
-
-    def test_chatterbox_tts_posts_to_openai_compatible_endpoint(self):
-        """Success path: POST /audio/speech, write audio, return legacy SubMaker."""
-
-        class _FakeResponse:
-            status_code = 200
-            content = b"RIFF-fake-wav"
-            text = ""
-
-        class _FakeClip:
-            duration = 3.5
-
-            def close(self):
-                pass
-
-        captured = {}
-
-        def _fake_post(url, json=None, headers=None, timeout=None):
-            captured["url"] = url
-            captured["json"] = json
-            captured["headers"] = headers
-            return _FakeResponse()
-
-        with tempfile.TemporaryDirectory() as tmp_dir, patch.object(
-            vs.config,
-            "chatterbox",
-            {
-                "base_url": "http://localhost:4123/v1/",
-                "api_key": "secret",
-                "model_id": "chatterbox",
-            },
-        ), patch.object(
-            vs.requests, "post", side_effect=_fake_post
-        ) as post, patch(
-            "app.services.voice_providers.AudioFileClip", return_value=_FakeClip()
-        ):
-            voice_file = str(Path(tmp_dir) / "chatterbox.mp3")
-            result = vp.chatterbox_tts(
-                text="Hello world. Second sentence.",
-                voice="default",
-                voice_file=voice_file,
-                voice_rate=1.2,
-                voice_volume=1.0,
-            )
-            generated_audio = Path(voice_file).read_bytes()
-
-        post.assert_called_once()
-        # trailing slash on base_url is stripped before appending /audio/speech
-        self.assertEqual(captured["url"], "http://localhost:4123/v1/audio/speech")
-        self.assertEqual(captured["json"]["model"], "chatterbox")
-        self.assertEqual(captured["json"]["voice"], "default")
-        self.assertEqual(captured["json"]["input"], "Hello world. Second sentence.")
-        self.assertAlmostEqual(captured["json"]["speed"], 1.2)
-        # api_key is forwarded as a bearer token
-        self.assertEqual(captured["headers"].get("Authorization"), "Bearer secret")
-        # volume is intentionally not part of the OpenAI speech payload
-        self.assertNotIn("volume", captured["json"])
-        self.assertEqual(generated_audio, b"RIFF-fake-wav")
-        self.assertIsNone(result.error)
-        sub_maker = result.sub_maker
-        self.assertIsNotNone(sub_maker)
-        self.assertTrue(getattr(sub_maker, "subs", []))
-
-    def test_chatterbox_tts_requires_base_url(self):
-        """Missing base_url short-circuits without any network call."""
-        with patch.object(
-            vs.config, "chatterbox", {"base_url": ""}
-        ), patch.object(vs.requests, "post") as post:
-            result = vp.chatterbox_tts(
-                text="hi", voice="default", voice_file="unused.mp3"
-            )
-        self.assertIsNone(result.sub_maker)
-        self.assertIn("base_url", result.error or "")
-        post.assert_not_called()
-
-    def test_chatterbox_tts_reports_reason_on_http_error(self):
-        """A non-200 response is retried up to 3 times, then reports the
-        last status as the failure reason."""
-
-        class _FakeResponse:
-            status_code = 500
-            content = b""
-            text = "boom"
-
-        with tempfile.TemporaryDirectory() as tmp_dir, patch.object(
-            vs.config, "chatterbox", {"base_url": "http://localhost:4123/v1"}
-        ), patch.object(
-            vs.requests, "post", return_value=_FakeResponse()
-        ) as post:
-            voice_file = str(Path(tmp_dir) / "chatterbox.mp3")
-            result = vp.chatterbox_tts(
-                text="hi", voice="default", voice_file=voice_file
-            )
-        self.assertIsNone(result.sub_maker)
-        self.assertIn("500", result.error or "")
-        self.assertEqual(post.call_count, 3)
-
-
+    def test_legacy_chatterbox_house_id_dispatches_to_phonon_alias(self):
+        """A stored chatterbox:en_us_* id resolves to its Phonon alias."""
+        marker = vp.TtsResult(sub_maker=vp.SubMaker())
+        with patch.object(vs, "phonon_tts", return_value=marker) as phonon:
+            result = vs.tts("hello", "chatterbox:en_us_female_01", 1.0, "/tmp/legacy.mp3")
+        self.assertIs(result, marker)
+        self.assertEqual(phonon.call_args.args[1], "Zoey")
 
     def test_chatterbox_success_is_returned_as_is(self):
-        """A successful Chatterbox result is returned untouched.
+        """A successful clone result is returned untouched.
 
         No other provider may be consulted on success — the Edge TTS
         fallback only triggers on failure, for test accounts.
         """
         chatterbox_marker = vs.SubMaker()
-        with tempfile.TemporaryDirectory() as tmp_dir, patch.object(
-            vs.config, "chatterbox", {}
-        ), patch(
-            "app.services.edge_tts.chatterbox_tts", return_value=chatterbox_marker
+        with tempfile.TemporaryDirectory() as tmp_dir, patch(
+            "app.services.edge_tts.clone_tts", return_value=chatterbox_marker
         ), patch.object(
             vs, "elevenlabs_tts"
         ) as elevenlabs:
             result = vs.tts(
-                "hello world", "chatterbox:ryan", 1.0, str(Path(tmp_dir) / "v.mp3")
+                "hello world",
+                "chatterbox:u0123456789ab_c0123456789a",
+                1.0,
+                str(Path(tmp_dir) / "v.mp3"),
+                user_id="01234567-89ab-cdef-0123-456789abcdef",
             )
         self.assertIs(result, chatterbox_marker)
         elevenlabs.assert_not_called()
-
-
-
 
     def test_script_split_keeps_thousand_separator_comma(self):
         """
@@ -631,28 +537,31 @@ class TestTtsFailureReasons(unittest.TestCase):
         self.assertIn("401", result.error or "")
         self.assertNotIn("voice/subtitle mismatch", result.error or "")
 
-    def test_chatterbox_network_failure_reports_network_cause(self):
-        with (
-            patch.object(
-                vs.config,
-                "chatterbox",
-                {"base_url": "http://127.0.0.1:9", "api_key": ""},
-            ),
-            patch.object(
-                vs.requests,
-                "post",
-                side_effect=vs.requests.ConnectionError("connection refused"),
-            ),
-        ):
-            result = vs.tts(
-                text="hello",
-                voice_name="chatterbox:test-voice",
-                voice_rate=1.0,
-                voice_file="/tmp/chatterbox-network.mp3",
-            )
+    def test_chatterbox_local_failure_reports_model_cause(self):
+        """A local Nano failure surfaces its real cause, not a generic string."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            reference = Path(tmp_dir) / "ref.wav"
+            reference.write_bytes(b"RIFF-fake")
+            with (
+                patch(
+                    "app.services.local_tts.reference_path_for",
+                    return_value=reference,
+                ),
+                patch(
+                    "app.services.local_tts._load_nano",
+                    side_effect=RuntimeError("nano weights corrupted"),
+                ),
+            ):
+                result = vs.tts(
+                    text="hello",
+                    voice_name="chatterbox:u0123456789ab_c0123456789a",
+                    voice_rate=1.0,
+                    voice_file="/tmp/chatterbox-local.mp3",
+                    user_id="01234567-89ab-cdef-0123-456789abcdef",
+                )
 
         self.assertIsNone(result.sub_maker)
-        self.assertIn("connection refused", result.error or "")
+        self.assertIn("nano weights corrupted", result.error or "")
         self.assertNotIn("voice/subtitle mismatch", result.error or "")
 
     def test_no_voice_silent_audio_failure_reports_silent_audio_reason(self):

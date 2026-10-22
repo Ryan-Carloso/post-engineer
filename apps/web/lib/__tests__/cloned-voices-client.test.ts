@@ -4,6 +4,7 @@ import {
   clonedVoicePreviewUrl,
   createClonedVoice,
   deleteClonedVoice,
+  fetchCleanedReferencePreview,
   fetchClonedVoice,
   fetchClonedVoices,
 } from '@/lib/cloned-voices-client';
@@ -92,6 +93,65 @@ describe('cloned-voices-client', () => {
     );
   });
 
+  it('createClonedVoice sends the trimmed name and use_cleaned from options', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ voice: sampleRow }),
+    } as Response);
+
+    const file = new Blob([new Uint8Array(8)], { type: 'audio/wav' });
+    await createClonedVoice(file, 'en', true, { name: '  My voice  ', useCleaned: false });
+
+    const init = vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit;
+    const form = init.body as FormData;
+    expect(form.get('name')).toBe('My voice');
+    expect(form.get('use_cleaned')).toBe('false');
+  });
+
+  it('createClonedVoice defaults use_cleaned to true without options', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ voice: sampleRow }),
+    } as Response);
+
+    const file = new Blob([new Uint8Array(8)], { type: 'audio/wav' });
+    await createClonedVoice(file, 'pt', true);
+
+    const init = vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit;
+    const form = init.body as FormData;
+    expect(form.get('name')).toBe('');
+    expect(form.get('use_cleaned')).toBe('true');
+  });
+
+  it('fetchCleanedReferencePreview posts the file and returns the audio blob', async () => {
+    const cleaned = new Blob([new Uint8Array([1, 2])], { type: 'audio/wav' });
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      blob: async () => cleaned,
+    } as Response);
+
+    const file = new Blob([new Uint8Array(8)], { type: 'audio/wav' });
+    const result = await fetchCleanedReferencePreview(file);
+
+    expect(result).toBe(cleaned);
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/persona/cloned-voices/clean-preview',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('fetchCleanedReferencePreview throws on a non-ok response', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: 'Could not clean the reference audio.' }),
+    } as Response);
+
+    const file = new Blob([new Uint8Array(8)], { type: 'audio/wav' });
+    await expect(fetchCleanedReferencePreview(file)).rejects.toThrow(
+      'Could not clean the reference audio.',
+    );
+  });
+
   it('createClonedVoice surfaces server error message', async () => {
     vi.mocked(fetch).mockResolvedValue({
       ok: false,
@@ -146,7 +206,7 @@ describe('cloned-voices-client error and encoding branches', () => {
 
     const voices = await fetchClonedVoices();
     expect(fetch).toHaveBeenCalledWith('/api/persona/cloned-voices');
-    expect(voices).toEqual([sampleRow]);
+    expect(voices).toEqual([{ ...sampleRow, name: null }]);
   });
 
   it('fetchClonedVoices falls back when a non-ok body has no error string', async () => {

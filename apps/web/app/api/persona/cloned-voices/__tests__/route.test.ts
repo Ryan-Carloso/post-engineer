@@ -24,6 +24,7 @@ vi.mock('@/lib/api-error-reporting', () => ({
 }));
 
 vi.mock('@/lib/cloned-voice-audio', () => ({
+  MAX_CLONE_NAME_LENGTH: 60,
   validateCloneReferenceBuffer: vi.fn(() => ({ ok: true as const })),
 }));
 
@@ -131,6 +132,106 @@ describe('POST /api/persona/cloned-voices', () => {
     expect(json.success).toBe(true);
     expect(json.voice.id).toBe('clone-1');
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('forwards name and use_cleaned to the engine, defaulting use_cleaned to true', async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => ({
+      ok: true,
+      status: 201,
+      json: async () => ({
+        body: {
+          id: 'clone-1',
+          status: 'pending',
+          name: 'Minha voz',
+          language: 'pt',
+          voice_id: null,
+          error_code: null,
+          consent_at: '2026-01-01T00:00:00Z',
+          created_at: null,
+          updated_at: null,
+        },
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const form = new FormData();
+    form.set('consent', 'true');
+    form.set('language', 'pt');
+    form.set('name', '  Minha voz  ');
+    form.set('file', new Blob([new Uint8Array(44)], { type: 'audio/wav' }), 'a.wav');
+    const response = await POST(
+      new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: form }),
+    );
+    expect(response.status).toBe(201);
+    const upstreamForm = fetchMock.mock.calls[0]?.[1]?.body as FormData;
+    expect(upstreamForm.get('name')).toBe('Minha voz');
+    expect(upstreamForm.get('use_cleaned')).toBe('true');
+    const json = await response.json();
+    expect(json.voice.name).toBe('Minha voz');
+  });
+
+  it('forwards use_cleaned=false when the client opts out', async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => ({
+      ok: true,
+      status: 201,
+      json: async () => ({
+        body: {
+          id: 'clone-1',
+          status: 'pending',
+          language: 'pt',
+          voice_id: null,
+          error_code: null,
+          consent_at: null,
+          created_at: null,
+          updated_at: null,
+        },
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const form = new FormData();
+    form.set('consent', 'true');
+    form.set('language', 'pt');
+    form.set('use_cleaned', 'false');
+    form.set('file', new Blob([new Uint8Array(44)], { type: 'audio/wav' }), 'a.wav');
+    const response = await POST(
+      new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: form }),
+    );
+    expect(response.status).toBe(201);
+    const upstreamForm = fetchMock.mock.calls[0]?.[1]?.body as FormData;
+    expect(upstreamForm.get('use_cleaned')).toBe('false');
+  });
+
+  it('rejects a name longer than the engine limit with 400', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const form = new FormData();
+    form.set('consent', 'true');
+    form.set('language', 'pt');
+    form.set('name', 'x'.repeat(61));
+    form.set('file', new Blob([new Uint8Array(44)], { type: 'audio/wav' }), 'a.wav');
+    const response = await POST(
+      new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: form }),
+    );
+    expect(response.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects an invalid use_cleaned value with 400', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const form = new FormData();
+    form.set('consent', 'true');
+    form.set('language', 'pt');
+    form.set('use_cleaned', 'yes');
+    form.set('file', new Blob([new Uint8Array(44)], { type: 'audio/wav' }), 'a.wav');
+    const response = await POST(
+      new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: form }),
+    );
+    expect(response.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('rejects missing consent', async () => {
@@ -314,6 +415,7 @@ describe('GET /api/persona/cloned-voices error branches', () => {
           id: 'c1',
           status: 'ready',
           language: 'pt',
+          name: null,
           voice_id: 'chatterbox:u1',
           error_code: null,
           consent_at: null,

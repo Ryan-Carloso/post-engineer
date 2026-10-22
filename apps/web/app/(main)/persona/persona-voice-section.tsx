@@ -34,7 +34,7 @@ export const PersonaVoiceSection = ({ personaLanguage }: { personaLanguage?: str
         />
       </div>
       <div hidden={voiceTab !== 'house'}>
-        <PersonaHouseVoicePicker personaLanguage={personaLanguage} />
+        <PersonaHouseVoicePicker />
       </div>
       <div hidden={voiceTab !== 'clone'}>
         <PersonaVoiceClonePanel personaLanguage={personaLanguage} />

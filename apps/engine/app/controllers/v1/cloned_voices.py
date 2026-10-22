@@ -15,8 +15,10 @@ from app.services.cloned_voices.audio import ReferenceAudioError
 from app.services.cloned_voices.constants import (
     CHATTERBOX_VOICE_PREFIX,
     ERROR_AUDIO_TOO_LARGE,
+    ERROR_NAME_TOO_LONG,
     ERROR_NOT_FOUND,
     ERROR_NOT_READY,
+    MAX_CLONE_NAME_LENGTH,
     MAX_REFERENCE_BYTES,
 )
 from app.services.cloned_voices.service import ClonedVoiceService
@@ -37,6 +39,7 @@ def _public_row(row: dict[str, Any]) -> dict[str, Any]:
         "id": row.get("id"),
         "status": row.get("status"),
         "language": row.get("language"),
+        "name": row.get("name"),
         "voice_id": voice_id,
         "error_code": row.get("error_code"),
         "consent_at": row.get("consent_at"),
@@ -85,39 +88,8 @@ def get_cloned_voice(request: Request, clone_id: str):
     return BaseResponse(body=_public_row(row))
 
 
-@cloned_router.post(
-    "/cloned-voices",
-    response_model=BaseResponse,
-    summary="Register reference audio as a cloned Chatterbox voice",
-)
-def create_cloned_voice(
-    request: Request,
-    background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
-    language: str = Form(...),
-    consent: str = Form(...),
-):
-    auth = base.get_auth_context(request)
-    request_id = base.get_task_id(request)
-    consent_acknowledged = consent.strip().lower() == "true"
-    lang = (language or "").strip()
-    if not lang:
-        return JSONResponse(
-            status_code=400,
-            content=utils.get_response(status=400, message="language is required"),
-        )
-    # The language is persisted and later written into the Chatterbox
-    # voices.toml registry; only BCP-47-shaped codes are accepted (the
-    # registry volume re-validates the same shape at the sink). Keep this
-    # pattern in sync with _LANGUAGE_ID_RE in chatterbox_registry_volume.py.
-    if not re.fullmatch(r"[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?", lang):
-        return JSONResponse(
-            status_code=400,
-            content=utils.get_response(status=400, message="language is invalid"),
-        )
-
-    # Bound the read itself: normalize_reference_audio enforces the same
-    # limit, but only after the upload is fully buffered in memory.
+def _read_bounded_upload(file: UploadFile) -> bytes | JSONResponse:
+    """Read an upload bounded by MAX_REFERENCE_BYTES (never buffer unbounded)."""
     if file.size is not None and file.size > MAX_REFERENCE_BYTES:
         return _audio_too_large_response()
     try:
@@ -129,14 +101,96 @@ def create_cloned_voice(
         )
     if len(source_bytes) > MAX_REFERENCE_BYTES:
         return _audio_too_large_response()
+    return source_bytes
+
+
+@cloned_router.post(
+    "/cloned-voices/clean-preview",
+    summary="Cleaned reference audio for A/B preview (audio/wav)",
+)
+def clean_preview_cloned_voice(
+    request: Request,
+    file: UploadFile = File(...),
+):
+    base.get_auth_context(request)
+    source = _read_bounded_upload(file)
+    if isinstance(source, JSONResponse):
+        return source
+    service = ClonedVoiceService()
+    try:
+        wav_bytes = service.clean_preview_wav(source)
+    except ReferenceAudioError as exc:
+        return JSONResponse(
+            status_code=400,
+            content=utils.get_response(
+                status=400,
+                message=str(exc),
+                body={"error_code": exc.error_code},
+            ),
+        )
+    return Response(content=wav_bytes, media_type="audio/wav")
+
+
+@cloned_router.post(
+    "/cloned-voices",
+    response_model=BaseResponse,
+    summary="Register reference audio as a cloned Chatterbox voice",
+)
+def create_cloned_voice(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    language: str = Form(...),
+    consent: str = Form(...),
+    name: str = Form(""),
+    use_cleaned: str = Form("true"),
+):
+    auth = base.get_auth_context(request)
+    request_id = base.get_task_id(request)
+    consent_acknowledged = consent.strip().lower() == "true"
+    lang = (language or "").strip()
+    if not lang:
+        return JSONResponse(
+            status_code=400,
+            content=utils.get_response(status=400, message="language is required"),
+        )
+    # The language is persisted on the clone row; only BCP-47-shaped
+    # codes are accepted.
+    if not re.fullmatch(r"[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?", lang):
+        return JSONResponse(
+            status_code=400,
+            content=utils.get_response(status=400, message="language is invalid"),
+        )
+    clone_name = (name or "").strip()
+    if len(clone_name) > MAX_CLONE_NAME_LENGTH:
+        return JSONResponse(
+            status_code=400,
+            content=utils.get_response(
+                status=400,
+                message=f"name exceeds {MAX_CLONE_NAME_LENGTH} characters",
+                body={"error_code": ERROR_NAME_TOO_LONG},
+            ),
+        )
+    use_cleaned_flag = use_cleaned.strip().lower()
+    if use_cleaned_flag not in ("true", "false"):
+        return JSONResponse(
+            status_code=400,
+            content=utils.get_response(status=400, message="use_cleaned is invalid"),
+        )
+
+    source = _read_bounded_upload(file)
+    if isinstance(source, JSONResponse):
+        return source
 
     service = ClonedVoiceService()
     try:
         created = service.create_from_upload(
             auth.user_id,
-            source_bytes,
+            source,
             lang,
             consent_acknowledged=consent_acknowledged,
+            name=clone_name or None,
+            use_cleaned=use_cleaned_flag == "true",
         )
     except ReferenceAudioError as exc:
         return JSONResponse(

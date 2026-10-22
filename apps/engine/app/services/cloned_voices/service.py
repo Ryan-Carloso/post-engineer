@@ -1,4 +1,4 @@
-"""Orchestration for per-user Chatterbox voice cloning."""
+"""Orchestration for per-user Chatterbox voice cloning (local Nano)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,8 @@ from loguru import logger
 
 from app.services.analytics import track_event
 from app.services.cloned_voices.audio import ReferenceAudioError, normalize_reference_audio
-from app.services.cloned_voices.chatterbox_registry import (
+from app.services.cloned_voices.audio_clean import clean_reference_audio
+from app.services.cloned_voices.local_registry import (
     RegistryNotConfiguredError,
     VoiceRegistry,
     default_registry,
@@ -28,8 +29,8 @@ from app.services.cloned_voices.constants import (
     STATUS_READY,
 )
 from app.services.cloned_voices.store import ClonedVoiceStore
+from app.services.local_tts import clone_tts
 from app.services.persona import VOICE_SAMPLE_TEXTS
-from app.services.voice_providers import chatterbox_tts
 
 
 def _catalog_voice_id(engine_voice_key: str) -> str:
@@ -174,17 +175,34 @@ class ClonedVoiceService:
         self._store = store or ClonedVoiceStore()
         self._registry = registry
 
+    def clean_preview_wav(self, source_bytes: bytes) -> bytes:
+        """Cleaned reference WAV for the picker's A/B preview.
+
+        Pure preview: nothing is stored. Clone creation re-runs the
+        same chain when the user confirms with cleaning on, so what
+        they heard is what gets cloned.
+        """
+        return clean_reference_audio(source_bytes).wav_bytes
+
     def create_from_upload(
         self,
         user_id: str,
         source_bytes: bytes,
         language: str,
         consent_acknowledged: bool,
+        name: str | None = None,
+        use_cleaned: bool = True,
     ) -> dict[str, Any]:
         if not consent_acknowledged:
             raise ReferenceAudioError(ERROR_CONSENT_REQUIRED, "voice cloning consent is required")
 
-        normalized = normalize_reference_audio(source_bytes)
+        # Default ON per product spec: clone from the cleaned reference
+        # (denoise chain). Opt-outs clone from the plainly normalized one.
+        normalized = (
+            clean_reference_audio(source_bytes)
+            if use_cleaned
+            else normalize_reference_audio(source_bytes)
+        )
         clone_id = self._store.new_clone_id()
         engine_voice_key = self._store.make_engine_voice_key(user_id, clone_id)
         storage_path = self._store.storage_path_for(user_id, clone_id)
@@ -207,6 +225,7 @@ class ClonedVoiceService:
                 storage_path=storage_path,
                 engine_voice_key=engine_voice_key,
                 language=language.strip(),
+                name=name.strip() if isinstance(name, str) and name.strip() else None,
             )
         except Exception:
             # The reference WAV is already in storage; without the row it
@@ -290,7 +309,7 @@ class ClonedVoiceService:
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
             tmp_path = tmp.name
         try:
-            result = chatterbox_tts(
+            result = clone_tts(
                 sample_text,
                 voice_key,
                 tmp_path,

@@ -568,34 +568,28 @@ upload_post_auto_upload = false
 # YouTube Shorts privacy status (options: "public", "unlisted", "private")
 upload_post_youtube_privacy_status = "public"
 
-# Chatterbox TTS (self-hosted, OpenAI-compatible) ##########################
-# Chatterbox (https://github.com/resemble-ai/chatterbox, MIT) is an open-source,
-# locally hosted TTS model with zero-shot voice cloning — a self-hostable
-# alternative to ElevenLabs. Run a server that exposes an OpenAI-compatible
-# endpoint at POST {base_url}/audio/speech (e.g. devnen/Chatterbox-TTS-Server
-# or travisvn/chatterbox-tts-api), then set base_url below. In the WebUI pick
-# "Chatterbox TTS" as the TTS server, or via the API pass a voice_name like
-# "chatterbox:<voice>". Subtitles use the full-text fallback (no word-level
-# timestamps); set subtitle_provider = "whisper" for tighter sync.
-[chatterbox]
-# Defaults target travisvn/chatterbox-tts-api running locally on port 4123.
-base_url = "http://127.0.0.1:4123/v1"
-api_key = ""
-model_id = "chatterbox"
-# Voices exposed by your server; shown in the WebUI dropdown as chatterbox:<name>
-voices = ["default-Female"]
+# Local TTS (in-process, CPU) #################################################
+# All preset and clone voices run locally — there is no TTS server to
+# configure. Presets: Phonon-31m-en (ptts, model downloads from Hugging
+# Face on first use) and Kokoro-82M (kokoro-onnx; the model + voices
+# files download on first use into the Kokoro model dir below).
+# Clones: Chatterbox-Nano, zero-shot from the locally registered
+# reference WAV (see [cloned_voices]).
+[kokoro]
+# Directory holding kokoro-v1.0.onnx + voices-v1.0.bin. Empty = the
+# engine's models/kokoro dir; KOKORO_MODEL_DIR env overrides.
+model_dir = ""
 
 # Per-user Chatterbox voice cloning (TRUE cloning) #############################
-# The engine registers each user's reference audio on the Chatterbox voice
-# volume via an admin registry service (not the public /audio/speech TTS URL).
-# Leave registry_base_url empty to disable registration (rows stay failed with
-# error_code registry_not_configured). When using Modal, set registry_base_url
-# to the deployed modal_chatterbox.py app URL (hosts POST/DELETE /v1/voices).
-# Secrets may also be set via env: CHATTERBOX_REGISTRY_BASE_URL,
-# CHATTERBOX_REGISTRY_API_KEY (typically the same value as CHATTERBOX_HTTP_SECRET).
+# Registration is local: the engine writes each user's normalized
+# reference WAV into the registry dir below (one file per clone) and
+# Chatterbox-Nano reads it back at generation time. The Supabase row +
+# storage object stay the durable record; the boot reconcile rebuilds
+# local files from storage after a restart.
 [cloned_voices]
-registry_base_url = ""
-registry_api_key = ""
+# Registry directory. Empty = the engine's cloned_voices dir;
+# CLONED_VOICES_LOCAL_DIR env overrides.
+local_dir = ""
 
 # Edge TTS fallback (free, no API key) ########################################
 # Microsoft Edge TTS is the automatic fallback when Chatterbox fails, for test

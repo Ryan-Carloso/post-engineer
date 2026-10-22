@@ -5,11 +5,14 @@ database (Supabase). This module only validates and normalizes the
 persona payload that arrives inline on a video job.
 """
 
+import os
+import tempfile
 from typing import Any, Optional
 
 from loguru import logger
 
 from app.services import voice as voice_service
+from app.services import voice_catalog
 from app.services.openrouter_tts import get_openrouter_voices
 
 # Short Instagram/TikTok-style video hook used for the house voice
@@ -102,13 +105,13 @@ class PersonaValidationError(Exception):
 def get_house_voices(user_id: str | None = None) -> list[dict[str, Any]]:
     """The voice catalog the UI offers.
 
-    These are the Chatterbox voices configured under ``[chatterbox] voices``
-    plus, when it is configured, the discovered OpenRouter voices — all
-    emitted provider-qualified (``chatterbox:ryan``,
-    ``openrouter:<model>:<voice>``). That is deliberate: the id is what gets
-    stored on the persona and handed straight to ``voice.tts``, which routes on
-    the prefix. There is no house-voice layer left to map ids onto Azure names,
-    and a voice the pipeline cannot reach is a voice the picker must not show.
+    The local preset catalog (Phonon + Kokoro, see
+    ``voice_catalog.PRESET_CATALOG``) with full picker metadata
+    (name/provider/gender/category/locale), plus, when it is configured,
+    the discovered OpenRouter voices — those carry only their
+    provider-qualified id (``openrouter:<model>:<voice>``). The id is
+    what gets stored on the persona and handed straight to
+    ``voice.tts``, which routes on the prefix.
 
     OpenRouter contributes nothing until it is configured (``[openrouter]``
     with both a key and at least one model); see
@@ -118,21 +121,53 @@ def get_house_voices(user_id: str | None = None) -> list[dict[str, Any]]:
     as ``chatterbox:<engine_voice_key>`` entries (see
     ``cloned_voices.service.list_catalog_entries``). That merge reads
     Supabase; if the store is unconfigured or unreachable the catalog
-    degrades to the house voices above instead of failing the picker.
+    degrades to the preset voices above instead of failing the picker.
     """
-    voice_ids = list(voice_service.get_chatterbox_voices())
-    voice_ids.extend(get_openrouter_voices())
+    entries: list[dict[str, Any]] = list(voice_catalog.catalog_entries())
+    entries.extend({"id": voice_id} for voice_id in get_openrouter_voices())
     if user_id:
         try:
             from app.services.cloned_voices.service import list_catalog_entries
 
             for entry in list_catalog_entries(user_id):
-                voice_ids.append(entry["id"])
+                entries.append({"id": entry["id"]})
         except Exception:
             logger.warning(
-                "cloned voice catalog merge failed; serving house voices only"
+                "cloned voice catalog merge failed; serving preset voices only"
             )
-    return [{"id": voice_id} for voice_id in voice_ids]
+    return entries
+
+
+def get_voice_sample(voice_id: str) -> bytes | None:
+    """Short mp3 preview for a catalog voice, synthesized locally.
+
+    Samples are generated on demand with the same ``voice.tts``
+    dispatch real jobs use (so a sample can never sound like a
+    different provider than the video will) and cached per voice for
+    the life of the process. Returns None when synthesis fails.
+    """
+    cache_key = (voice_id, "en-us")
+    cached = _voice_sample_cache.get(cache_key)
+    if cached is not None:
+        return cached
+    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
+        tmp_path = tmp.name
+    try:
+        result = voice_service.tts(
+            VOICE_SAMPLE_TEXTS["en-us"], voice_id, 1.0, tmp_path
+        )
+        if not result.ok:
+            logger.error(f"voice sample synthesis failed for {voice_id}: {result.error}")
+            return None
+        with open(tmp_path, "rb") as audio_file:
+            data = audio_file.read()
+    finally:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+    _voice_sample_cache[cache_key] = data
+    return data
 
 
 

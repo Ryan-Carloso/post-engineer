@@ -23,5 +23,9 @@ ERROR_PREVIEW_FAILED = "preview_failed"
 MAX_REFERENCE_BYTES = PERSONA_VOICE_MAX_BYTES
 MAX_REFERENCE_SECONDS = PERSONA_VOICE_MAX_SECONDS
 
+# Display name for a clone (picker list); mirrors the web form limit.
+MAX_CLONE_NAME_LENGTH = 60
+ERROR_NAME_TOO_LONG = "name_too_long"
+
 # Catalog id prefix: full voice_id stored on personas is chatterbox:<engine_voice_key>.
 CHATTERBOX_VOICE_PREFIX = "chatterbox:"

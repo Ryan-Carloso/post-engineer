@@ -172,24 +172,25 @@ Provision the database schema in your Supabase project:
     `app.cron_base_url` / `app.cron_secret` settings as migration 004; after
     setting them run `select public.schedule_post_metrics();`.
 
-### Voice cloning (Chatterbox on Modal)
+### Voice cloning (Chatterbox-Nano, local)
 
-Per-user clones need the engine registry client **and** the Modal Chatterbox
-service registry API:
+All voices run locally in the engine on CPU — there is no Modal TTS
+service to deploy. Presets are Phonon-31m-en and Kokoro-82M; clones use
+Chatterbox-Nano, zero-shot from the user's reference recording.
 
-1. Deploy `apps/engine/modal_chatterbox.py` (see module docstring). Create the
-   `chatterbox-http` secret with `CHATTERBOX_HTTP_SECRET`, run
-   `download_weights`, seed house voices, then `modal deploy`.
-2. Set engine `[cloned_voices]` in `config.toml` (or env):
-   - `registry_base_url` = your deployed Modal app URL (same host as
-     `/v1/audio/speech`, no trailing slash)
-   - `registry_api_key` = the same bearer value as `CHATTERBOX_HTTP_SECRET`
+1. First use downloads model weights: Phonon from Hugging Face (ptts),
+   Kokoro's `kokoro-v1.0.onnx` + `voices-v1.0.bin` from the kokoro-onnx
+   GitHub release into `[kokoro] model_dir` (default
+   `apps/engine/models/kokoro`), and Chatterbox-Nano from Hugging Face.
+   The engine host needs `ffmpeg` on PATH (also used for the clone
+   reference cleaning chain).
+2. Clone registration is a local file write: `[cloned_voices] local_dir`
+   (default `apps/engine/cloned_voices`, env `CLONED_VOICES_LOCAL_DIR`)
+   holds one reference WAV per clone. Keep the dir on a persistent
+   volume; if it is lost, the boot reconcile rebuilds it from the
+   Supabase storage objects.
 3. Set web `MONEYPRINT_API_URL` / `MONEYPRINT_API_SECRET` as usual so
    `/api/persona/cloned-voices` proxies to the engine.
-
-New clones call `POST /v1/voices` on Modal (reference WAV + `voices.toml`
-update) without redeploying the TTS app; warm containers reload the volume on
-each speech request.
 
 Paste each file into the Supabase Dashboard > SQL Editor and run, in order
 (the numeric prefixes encode the order — always apply the
