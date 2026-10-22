@@ -97,6 +97,15 @@ describe('voiceSampleName', () => {
     expect(voiceSampleName(CATALOG[4])).toBeNull();
     expect(voiceSampleName(v({ id: 'openrouter:m:eve', provider: 'openrouter' }))).toBeNull();
   });
+
+  it('resolves legacy voice ids through the engine alias map to a sample that exists', () => {
+    // The old sample files were deleted with the Modal catalog; the engine
+    // aliases a stored legacy id to a Kokoro voice at render time, so the
+    // picker must play that voice's sample, not the missing legacy file.
+    expect(voiceSampleName(v({ id: 'chatterbox:en_us_male_01', provider: 'chatterbox' }))).toBe('kokoro_am_michael');
+    expect(voiceSampleName(v({ id: 'chatterbox:en_us_female_01', provider: 'chatterbox' }))).toBe('kokoro_af_heart');
+    expect(voiceSampleName(v({ id: 'chatterbox:ryan', provider: 'chatterbox' }))).toBe('kokoro_am_michael');
+  });
 });
 
 describe('engine catalog <-> web samples sync', () => {
@@ -116,6 +125,25 @@ describe('engine catalog <-> web samples sync', () => {
       const option = { id: `chatterbox:${entry.name}`, label: entry.label, provider: entry.provider, gender: entry.gender, accent: entry.accent, kind: entry.kind, description: entry.description };
       expect(isVoiceOption(option)).toBe(true);
       expect(samples.has(`${entry.name}.mp3`)).toBe(true);
+    }
+  });
+
+  it('web sample aliases match the engine LEGACY_VOICE_ALIASES map', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { findRepoRoot } = await import('../../test/repo-root');
+    const root = findRepoRoot(import.meta.url);
+    const engineSource = readFileSync(
+      join(root, 'apps/engine/app/services/voice_catalog.py'),
+      'utf8',
+    );
+    const block = engineSource.split('LEGACY_VOICE_ALIASES')[1].split('}')[0];
+    const pairs = [...block.matchAll(/"([^"]+)":\s*"([^"]+)"/g)];
+    expect(pairs.length).toBeGreaterThan(0);
+    for (const [, legacy, target] of pairs) {
+      expect(
+        voiceSampleName(v({ id: `chatterbox:${legacy}`, provider: 'chatterbox' })),
+      ).toBe(target);
     }
   });
 });

@@ -65,7 +65,7 @@ describe('Persona — sample de voz ao clicar no card', () => {
       // Sample files are named after the catalog voice name, without the
       // `chatterbox:` prefix (public/voice-samples/<name>.mp3); every
       // sample is the English take.
-      expect(audios[0].url).to.equal('/voice-samples/en_us_male_01.mp3');
+      expect(audios[0].url).to.equal('/voice-samples/kokoro_am_michael.mp3');
       expect(audios[0].playCalled).to.be.true;
     });
   });
@@ -78,7 +78,7 @@ describe('Persona — sample de voz ao clicar no card', () => {
       const audios = (win as unknown as { __fakeAudios: FakeAudioRecord[] }).__fakeAudios;
       expect(audios).to.have.length(2);
       expect(audios[1].url).to.equal(
-        '/voice-samples/en_us_female_01.mp3',
+        '/voice-samples/kokoro_af_heart.mp3',
       );
       expect(audios[1].playCalled).to.be.true;
     });

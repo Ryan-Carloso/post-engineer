@@ -803,7 +803,7 @@ describe('app/(main)/persona/page — modo edição (mesma página do create)', 
     await user.click(voiceRowPlayButton('en us male 01'));
 
     expect(created).toHaveLength(1);
-    expect(created[0].url).toBe('/voice-samples/en_us_male_01.mp3');
+    expect(created[0].url).toBe('/voice-samples/kokoro_am_michael.mp3');
     vi.unstubAllGlobals();
   });
 });
@@ -827,7 +827,7 @@ describe('app/(main)/persona/page — sample language', () => {
     await user.click(voiceRowPlayButton('en us male 01'));
 
     expect(created).toHaveLength(1);
-    expect(created[0].url).toBe('/voice-samples/en_us_male_01.mp3');
+    expect(created[0].url).toBe('/voice-samples/kokoro_am_michael.mp3');
     vi.unstubAllGlobals();
   });
 
@@ -1348,7 +1348,7 @@ describe('app/(main)/persona/page — abas, carrossel e seletor de voz', () => {
     await user.click(voiceRowPlayButton('en us male 01'));
 
     expect(created).toHaveLength(1);
-    expect(created[0].url).toBe('/voice-samples/en_us_male_01.mp3');
+    expect(created[0].url).toBe('/voice-samples/kokoro_am_michael.mp3');
   });
 
 });

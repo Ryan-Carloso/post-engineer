@@ -136,6 +136,28 @@ export function searchVoices(voices: readonly VoiceOption[], query: string): Voi
 }
 
 //---------------
+// LEGACY_VOICE_SAMPLE_ALIASES — mirrors the engine LEGACY_VOICE_ALIASES
+// (apps/engine/app/services/voice_catalog.py): personas may still store a
+// retired Modal voice id, the engine renders it through the alias target,
+// and the old sample files were deleted with the Modal catalog. Playing the
+// alias target's sample is both the file that exists and the voice the
+// persona will actually speak with.
+//---------------
+const LEGACY_VOICE_SAMPLE_ALIASES: Record<string, string> = {
+  en_us_female_01: 'kokoro_af_heart',
+  en_us_female_02: 'kokoro_af_bella',
+  en_us_female_03: 'kokoro_af_nicole',
+  en_us_female_04: 'kokoro_af_sarah',
+  en_us_male_01: 'kokoro_am_michael',
+  en_us_male_02: 'kokoro_am_adam',
+  en_us_male_03: 'kokoro_am_eric',
+  en_us_male_04: 'kokoro_am_liam',
+  'default-Female': 'kokoro_af_heart',
+  default: 'kokoro_af_heart',
+  ryan: 'kokoro_am_michael',
+};
+
+//---------------
 // voiceSampleName — house voice samples live at /voice-samples/<name>.mp3,
 // keyed by the catalog name without the `chatterbox:` routing prefix (a colon
 // is not a portable file name). Only catalog voices have a sample.
@@ -144,5 +166,9 @@ export function voiceSampleName(voice: VoiceOption): string | null {
   if (voice.kind === 'cloned' || voice.provider === 'openrouter') {
     return null;
   }
-  return voice.id.startsWith('chatterbox:') ? voice.id.slice('chatterbox:'.length) : null;
+  if (!voice.id.startsWith('chatterbox:')) {
+    return null;
+  }
+  const name = voice.id.slice('chatterbox:'.length);
+  return LEGACY_VOICE_SAMPLE_ALIASES[name] ?? name;
 }

@@ -147,8 +147,8 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
     cy.window().then((win) => {
       const audios = (win as unknown as { __fakeAudios: FakeAudioRecord[] }).__fakeAudios;
       expect(audios).to.have.lengthOf(2);
-      expect(audios[0].url).to.equal('/voice-samples/en_us_male_01.mp3');
-      expect(audios[1].url).to.equal('/voice-samples/en_us_female_01.mp3');
+      expect(audios[0].url).to.equal('/voice-samples/kokoro_am_michael.mp3');
+      expect(audios[1].url).to.equal('/voice-samples/kokoro_af_heart.mp3');
       expect(audios[1].playCalled).to.equal(true);
     });
   });
