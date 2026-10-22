@@ -578,19 +578,19 @@ upload_post_youtube_privacy_status = "public"
 # "chatterbox:<voice>". Subtitles use the full-text fallback (no word-level
 # timestamps); set subtitle_provider = "whisper" for tighter sync.
 [chatterbox]
-# Defaults target travisvn/chatterbox-tts-api running locally on port 4123.
+# Targets the local CPU TTS server (local_tts/server.py; the `tts` service in
+# docker-compose.yml). House voices come from app/services/voice_catalog.json.
 base_url = "http://127.0.0.1:4123/v1"
 api_key = ""
 model_id = "chatterbox"
-# Voices exposed by your server; shown in the WebUI dropdown as chatterbox:<name>
-voices = ["default-Female"]
 
 # Per-user Chatterbox voice cloning (TRUE cloning) #############################
 # The engine registers each user's reference audio on the Chatterbox voice
 # volume via an admin registry service (not the public /audio/speech TTS URL).
 # Leave registry_base_url empty to disable registration (rows stay failed with
-# error_code registry_not_configured). When using Modal, set registry_base_url
-# to the deployed modal_chatterbox.py app URL (hosts POST/DELETE /v1/voices).
+# error_code registry_not_configured). Point registry_base_url at the local CPU
+# TTS server (http://127.0.0.1:4123 locally, http://tts:4123 in docker-compose),
+# which hosts POST/DELETE /v1/voices and clones with Chatterbox Nano.
 # Secrets may also be set via env: CHATTERBOX_REGISTRY_BASE_URL,
 # CHATTERBOX_REGISTRY_API_KEY (typically the same value as CHATTERBOX_HTTP_SECRET).
 [cloned_voices]

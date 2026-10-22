@@ -72,10 +72,14 @@ async function postHandler(request: Request): Promise<NextResponse> {
   }
 
   const consent = formData.get('consent');
+  const denoise = formData.get('denoise');
   const language = formData.get('language');
   const fileEntry = formData.get('file');
   if (consent !== 'true') {
     return NextResponse.json({ success: false, error: 'Voice cloning consent is required.' }, { status: 400 });
+  }
+  if (denoise !== 'true' && denoise !== 'false') {
+    return NextResponse.json({ success: false, error: 'denoise must be "true" or "false".' }, { status: 400 });
   }
   if (typeof language !== 'string' || !language.trim()) {
     return NextResponse.json({ success: false, error: 'Language is required.' }, { status: 400 });
@@ -105,6 +109,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   const upstreamForm = new FormData();
   upstreamForm.set('consent', 'true');
+  upstreamForm.set('denoise', denoise);
   upstreamForm.set('language', language.trim());
   upstreamForm.set('file', new Blob([buffer], { type: file.type || 'application/octet-stream' }), file.name || 'reference.bin');
 

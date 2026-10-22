@@ -73,29 +73,6 @@ def get_elevenlabs_voices(api_key: str) -> list[str]:
         return []
 
 
-def get_chatterbox_voices() -> list[str]:
-    """Return the configured Chatterbox voices.
-
-    Chatterbox is self-hosted, so there is no global voice catalog. Operators
-    list the voice names exposed by their server via ``[chatterbox] voices``
-    (a TOML array, or a comma-separated string). Each entry is normalised to
-    the ``chatterbox:<name>`` format used by the TTS dispatcher.
-    """
-    voices = config.chatterbox.get("voices", []) or []
-    if isinstance(voices, str):
-        voices = [v.strip() for v in voices.split(",") if v.strip()]
-    result = []
-    for v in voices:
-        v = str(v).strip()
-        if not v:
-            continue
-        result.append(v if v.startswith("chatterbox:") else f"chatterbox:{v}")
-    if not result:
-        # keep the dropdown usable even before any voice is configured
-        result = ["chatterbox:default-Female"]
-    return result
-
-
 def parse_voice_name(name: str):
     # zh-CN-XiaoyiNeural-Female
     # zh-CN-YunxiNeural-Male

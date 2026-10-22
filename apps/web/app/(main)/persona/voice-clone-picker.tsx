@@ -19,6 +19,7 @@ import {
 import { usePersonaStore } from '@/lib/store';
 import { useI18n } from '@/lib/i18n/provider';
 import { CheckIcon, MicIcon, SpinnerIcon, TrashIcon } from '@/lib/ui';
+import { useDenoisePreview } from './use-denoise-preview';
 
 const POLL_MS = 2500;
 // English-only launch: clones are always registered in English — the
@@ -68,6 +69,10 @@ export const PersonaVoiceClonePanel = () => {
   const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
   const [pendingBlob, setPendingBlob] = useState<Blob | null>(null);
   const [activeCloneId, setActiveCloneId] = useState<string | null>(null);
+  // Clean (denoise) is on by default: phone recordings carry noise the clone
+  // would copy. The cleaned take is fetched for an A/B listen; the engine
+  // applies the same filter when the clone is created with denoise on.
+  const [denoise, setDenoise] = useState(true);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordChunksRef = useRef<Blob[]>([]);
   const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -100,9 +105,11 @@ export const PersonaVoiceClonePanel = () => {
     }
   }, [pollQuery.data?.status, queryClient]);
 
+  const { cleanedUrl, cleaning, cleanFailed } = useDenoisePreview(pendingBlob, denoise);
+
   const createMutation = useMutation({
     mutationFn: async (file: Blob) => {
-      return createClonedVoice(file, CLONE_LANGUAGE, consent);
+      return createClonedVoice(file, CLONE_LANGUAGE, consent, denoise);
     },
     onSuccess: (row) => {
       setActiveCloneId(row.id);
@@ -314,7 +321,33 @@ export const PersonaVoiceClonePanel = () => {
       {previewBlobUrl ? (
         <div className="rounded-lg border border-neutral-200 p-3">
           <p className="mb-2 text-sm font-medium text-neutral-800">{t('persona.voiceCloneLocalPreview')}</p>
+          <label className="mb-2 flex items-start gap-2 text-sm text-neutral-800">
+            <input
+              type="checkbox"
+              checked={denoise}
+              onChange={(e) => setDenoise(e.target.checked)}
+              disabled={isSubmitting}
+              className="mt-1"
+            />
+            <span>
+              {t('persona.voiceCloneCleanToggle')}
+              <span className="block text-xs text-neutral-500">{t('persona.voiceCloneCleanHint')}</span>
+            </span>
+          </label>
+          <p className="text-xs font-medium text-neutral-600">{t('persona.voiceCloneOriginal')}</p>
           <audio controls src={previewBlobUrl} className="w-full" />
+          {denoise ? (
+            <div className="mt-2" data-testid="voice-clone-cleaned">
+              <p className="text-xs font-medium text-neutral-600">{t('persona.voiceCloneCleaned')}</p>
+              {cleaning ? (
+                <p className="flex items-center gap-2 text-sm text-neutral-600" role="status">
+                  <SpinnerIcon /> {t('persona.voiceCloneCleaning')}
+                </p>
+              ) : null}
+              {cleanedUrl !== null && !cleaning ? <audio controls src={cleanedUrl} className="w-full" /> : null}
+              {cleanFailed ? <p className="text-sm text-amber-700">{t('persona.voiceCloneCleanFailed')}</p> : null}
+            </div>
+          ) : null}
           <div className="mt-2 flex flex-wrap gap-2">
             <button
               type="button"

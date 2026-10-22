@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import type { VoiceOption } from '@/lib/voice-catalog';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -122,10 +123,16 @@ function createWrapper() {
 // The engine's Chatterbox catalog, provider-qualified. The picker shows the
 // bare name (the `chatterbox:` prefix and underscores stripped), which is what
 // the assertions below click on.
-const VOICES = [
-  { id: 'chatterbox:en_us_male_01' },
-  { id: 'chatterbox:en_us_female_01' },
-];
+const voice = (id: string): VoiceOption => ({
+  id,
+  label: null,
+  provider: id.startsWith('openrouter:') ? 'openrouter' : 'chatterbox',
+  gender: null,
+  accent: null,
+  kind: 'standard',
+});
+
+const VOICES = [voice('chatterbox:en_us_male_01'), voice('chatterbox:en_us_female_01')];
 
 const YOUTUBE_ACCOUNTS: AccountData[] = [
   { provider: 'youtube', recordId: 'yt-record', channelId: 'yt-1', channelName: 'Meu canal', connectedAt: 0, lastUsed: 0 },
@@ -769,7 +776,7 @@ describe('app/(main)/persona/page — modo edição (mesma página do create)', 
     await user.click(screen.getByRole('button', { name: 'en us male 01' }));
 
     expect(created).toHaveLength(1);
-    expect(created[0].url).toBe('/voice-samples/chatterbox%3Aen_us_male_01-en-us.mp3');
+    expect(created[0].url).toBe('/voice-samples/en_us_male_01.mp3');
     vi.unstubAllGlobals();
   });
 });
@@ -792,7 +799,7 @@ describe('app/(main)/persona/page — sample language', () => {
     await user.click(screen.getByRole('button', { name: 'en us male 01' }));
 
     expect(created).toHaveLength(1);
-    expect(created[0].url).toBe('/voice-samples/chatterbox%3Aen_us_male_01-en-us.mp3');
+    expect(created[0].url).toBe('/voice-samples/en_us_male_01.mp3');
     vi.unstubAllGlobals();
   });
 
@@ -1228,7 +1235,7 @@ describe('app/(main)/persona/page — abas, carrossel e seletor de voz', () => {
 
   it('voz com prefixo no meio do id não perde o prefixo', () => {
     vi.mocked(useVoicesQuery).mockReturnValue({
-      data: [{ id: 'xxchatterbox:foo' }, { id: 'chatterbox:en_us_male_01' }],
+      data: [voice('xxchatterbox:foo'), voice('chatterbox:en_us_male_01')],
       isLoading: false,
     } as never);
     render(<PersonaPage />, { wrapper: createWrapper() });
@@ -1244,9 +1251,9 @@ describe('app/(main)/persona/page — abas, carrossel e seletor de voz', () => {
     // truncates mid-slug, so it gets its own line.
     vi.mocked(useVoicesQuery).mockReturnValue({
       data: [
-        { id: 'chatterbox:en_us_male_01' },
-        { id: 'openrouter:x-ai/grok-voice-tts-1.0:eve' },
-        { id: 'openrouter:microsoft/mai-voice-2.1:en-US-Harper:MAI-Voice-2.1' },
+        voice('chatterbox:en_us_male_01'),
+        voice('openrouter:x-ai/grok-voice-tts-1.0:eve'),
+        voice('openrouter:microsoft/mai-voice-2.1:en-US-Harper:MAI-Voice-2.1'),
       ],
       isLoading: false,
     } as never);
@@ -1266,7 +1273,7 @@ describe('app/(main)/persona/page — abas, carrossel e seletor de voz', () => {
   it('cada voz do OpenRouter carrega o id bruto no title', () => {
     // The visible lines are display; the raw id is what gets submitted.
     vi.mocked(useVoicesQuery).mockReturnValue({
-      data: [{ id: 'openrouter:x-ai/grok-voice-tts-1.0:eve' }],
+      data: [voice('openrouter:x-ai/grok-voice-tts-1.0:eve')],
       isLoading: false,
     } as never);
     render(<PersonaPage />, { wrapper: createWrapper() });
@@ -1278,7 +1285,7 @@ describe('app/(main)/persona/page — abas, carrossel e seletor de voz', () => {
 
   it('prefixo openrouter no meio do id não é removido', () => {
     vi.mocked(useVoicesQuery).mockReturnValue({
-      data: [{ id: 'xxopenrouter:foo' }, { id: 'chatterbox:en_us_male_01' }],
+      data: [voice('xxopenrouter:foo'), voice('chatterbox:en_us_male_01')],
       isLoading: false,
     } as never);
     render(<PersonaPage />, { wrapper: createWrapper() });
@@ -1296,7 +1303,7 @@ describe('app/(main)/persona/page — abas, carrossel e seletor de voz', () => {
     await user.click(screen.getByText('en us male 01'));
 
     expect(created).toHaveLength(1);
-    expect(created[0].url).toBe('/voice-samples/chatterbox%3Aen_us_male_01-en-us.mp3');
+    expect(created[0].url).toBe('/voice-samples/en_us_male_01.mp3');
   });
 
 });

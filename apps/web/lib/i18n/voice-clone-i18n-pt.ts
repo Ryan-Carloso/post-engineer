@@ -29,6 +29,21 @@ export const personaVoiceClonePt = {
   voiceCloneStatusReady: 'Pronto',
   voiceCloneStatusPending: 'Processando',
   voiceCloneStatusFailed: 'Falhou',
+  voiceFilterGender: 'Gênero',
+  voiceFilterOrigin: 'Origem',
+  voiceFilterAll: 'Todas',
+  voiceFilterFemale: 'Feminino',
+  voiceFilterMale: 'Masculino',
+  voiceFilterUs: 'EUA',
+  voiceFilterGb: 'Inglaterra',
+  voiceFilterCharacters: 'Personagens',
+  voiceFilterEmpty: 'Nenhuma voz com esses filtros.',
+  voiceCloneCleanToggle: 'Limpar o áudio antes de clonar (recomendado)',
+  voiceCloneCleanHint: 'Remove ruído de fundo. Desligue se gravou em estúdio.',
+  voiceCloneOriginal: 'Original',
+  voiceCloneCleaned: 'Limpo',
+  voiceCloneCleaning: 'Limpando o áudio…',
+  voiceCloneCleanFailed: 'Não foi possível limpar o áudio. Você ainda pode clonar o original.',
 } as const;
 
 export const voiceCloneApiToolDescPt = {

@@ -1,53 +1,133 @@
-"""The voice catalog is the provider's own list.
+"""Direct tests for the house voice catalog (voice_catalog.json + loader).
 
-There is no house-voice layer any more. `calm`/`energetic`/`young`/`deep` used
-to resolve, per video language, to an Azure name; that matrix is gone with the
-Azure providers, so the catalog is now exactly the Chatterbox voices configured
-under `[chatterbox] voices`.
-
-Why it matters: the picker used to offer voices the pipeline could not reach.
-`calm` resolved to `pt-BR-FranciscaNeural`, which only edge_tts could speak —
-and with edge_tts unreachable every video died at the `audio` stage.
+The picker only offers voices the pipeline can reach: every house voice is a
+Phonon or Kokoro preset served by the local CPU TTS server.
 """
 
+import json
+from collections import Counter
 from unittest.mock import patch
 
-from app.services import persona as persona_service
-from app.services import voice as voice_service
+import pytest
+
+from app.services import voice_catalog
+from app.services.voice_catalog import (
+    LEGACY_VOICE_ALIASES,
+    find_voice,
+    load_catalog,
+    parse_catalog,
+)
 
 
-class TestVoiceCatalog:
-    def test_catalog_is_exactly_the_configured_chatterbox_voices(self):
-        """Ids are provider-qualified: the stored id is the routable one."""
-        with patch.object(
-            voice_service.config, "chatterbox", {"voices": ["en_us_male_01", "en_us_female_01"]}
-        ):
-            catalog = persona_service.get_house_voices()
+def _entry(**overrides):
+    base = {
+        "name": "kokoro_af_heart",
+        "provider": "kokoro",
+        "model_voice": "af_heart",
+        "label": "Heart",
+        "gender": "female",
+        "accent": "us",
+        "kind": "standard",
+    }
+    base.update(overrides)
+    return base
 
-        assert [entry["id"] for entry in catalog] == [
-            "chatterbox:en_us_male_01",
-            "chatterbox:en_us_female_01",
-        ]
 
-    def test_catalog_never_offers_a_removed_house_voice(self):
-        """A voice the pipeline cannot reach must not be pickable."""
-        with patch.object(voice_service.config, "chatterbox", {"voices": ["en_us_male_01"]}):
-            offered = {entry["id"] for entry in persona_service.get_house_voices()}
+def _doc(*entries):
+    return json.dumps({"voices": list(entries)})
 
-        assert offered.isdisjoint({"calm", "energetic", "young", "deep"})
 
-    def test_every_catalog_voice_is_routable_by_tts(self):
-        """Each id the catalog offers must actually reach a provider.
+def test_catalog_has_65_english_voices_with_the_agreed_split():
+    voices = load_catalog()
+    standard = [v for v in voices if v["kind"] == "standard"]
+    characters = [v for v in voices if v["kind"] == "character"]
 
-        `voice.tts` only dispatches on the `chatterbox:`/`elevenlabs:`
-        prefixes. If the catalog ever emits an id the router would reject, the
-        picker offers a voice that fails loud at generation time — the exact
-        class of bug this catalog rewrite is meant to end.
-        """
-        with patch.object(voice_service.config, "chatterbox", {"voices": ["en_us_male_01"]}):
-            catalog = persona_service.get_house_voices()
+    assert len(voices) == 65
+    assert len(characters) == 12
+    assert Counter(v["gender"] for v in standard) == {"female": 28, "male": 25}
+    assert Counter(v["accent"] for v in standard) == {"us": 32, "gb": 21}
+    assert Counter(v["provider"] for v in standard) == {"phonon": 25, "kokoro": 28}
+    assert all(v["provider"] == "phonon" and v["accent"] is None for v in characters)
+    assert Counter(v["gender"] for v in characters) == {"male": 9, "female": 3}
 
-        for entry in catalog:
-            assert voice_service.is_chatterbox_voice(entry["id"]), (
-                f"{entry['id']} is in the catalog but tts() would not route it"
-            )
+
+def test_catalog_has_no_personal_voice():
+    names = [v["name"] for v in load_catalog()]
+    assert not any("ryan" in name for name in names)
+
+
+def test_every_legacy_alias_resolves_to_a_catalog_voice():
+    for legacy, target in LEGACY_VOICE_ALIASES.items():
+        voice = find_voice(legacy)
+        assert voice is not None, legacy
+        assert voice["name"] == target
+
+
+def test_find_voice_returns_none_for_unknown_name():
+    assert find_voice("nope") is None
+    assert find_voice("kokoro_bm_george")["model_voice"] == "bm_george"
+
+
+def test_parse_catalog_accepts_a_valid_entry():
+    assert parse_catalog(_doc(_entry())) == [_entry()]
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"name": ""},
+        {"provider": "modal"},
+        {"model_voice": ""},
+        {"label": ""},
+        {"gender": "other"},
+        {"kind": "robot"},
+        {"accent": "au"},
+        {"accent": None},
+        {"kind": "character", "accent": "us"},
+    ],
+)
+def test_parse_catalog_rejects_invalid_entries(overrides):
+    with pytest.raises(ValueError):
+        parse_catalog(_doc(_entry(**overrides)))
+
+
+def test_parse_catalog_accepts_character_without_accent():
+    entry = _entry(kind="character", accent=None, provider="phonon")
+    assert parse_catalog(_doc(entry))[0]["accent"] is None
+
+
+def test_parse_catalog_rejects_duplicates_and_bad_shape():
+    with pytest.raises(ValueError):
+        parse_catalog(_doc(_entry(), _entry()))
+    with pytest.raises(ValueError):
+        parse_catalog(json.dumps({"voices": {}}))
+    with pytest.raises(ValueError):
+        parse_catalog(json.dumps([]))
+    with pytest.raises(ValueError):
+        parse_catalog(_doc("not-an-object"))
+
+
+def test_catalog_path_is_next_to_module():
+    assert voice_catalog.CATALOG_PATH.name == "voice_catalog.json"
+    assert voice_catalog.CATALOG_PATH.is_file()
+
+
+def test_catalog_never_offers_a_removed_house_voice():
+    """`calm`/`energetic`/`young`/`deep` used to resolve to Azure names only
+    edge_tts could speak; a voice the pipeline cannot reach must not be pickable."""
+    from app.services import persona as persona_service
+
+    with patch.object(persona_service, "get_openrouter_voices", return_value=[]):
+        offered = {entry["id"] for entry in persona_service.get_house_voices()}
+    assert offered.isdisjoint({"calm", "energetic", "young", "deep"})
+
+
+def test_every_catalog_voice_is_routable_by_tts():
+    """`voice.tts` dispatches on the prefix: every house id must reach a provider."""
+    from app.services import persona as persona_service
+    from app.services import voice as voice_service
+
+    with patch.object(persona_service, "get_openrouter_voices", return_value=[]):
+        catalog = persona_service.get_house_voices()
+    for entry in catalog:
+        assert voice_service.is_chatterbox_voice(entry["id"]), entry["id"]

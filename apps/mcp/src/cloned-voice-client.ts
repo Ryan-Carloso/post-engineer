@@ -97,6 +97,7 @@ export async function createClonedVoiceFromUrl(
   audioUrl: string,
   language: string,
   consent: boolean,
+  denoise: boolean,
 ): Promise<unknown> {
   if (!consent) {
     throw new Error('consent must be true to create a voice clone');
@@ -104,6 +105,7 @@ export async function createClonedVoiceFromUrl(
   const blob = await fetchCloneReferenceAudio(audioUrl);
   const formData = new FormData();
   formData.set('consent', 'true');
+  formData.set('denoise', denoise ? 'true' : 'false');
   formData.set('language', language);
   formData.set('file', blob, 'reference.bin');
   return client.request(

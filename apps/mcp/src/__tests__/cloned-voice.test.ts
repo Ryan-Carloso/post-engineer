@@ -264,7 +264,7 @@ describe('createClonedVoiceFromUrl', () => {
     const host = fakeHost(request);
     global.fetch = vi.fn();
     await expect(
-      createClonedVoiceFromUrl(host, 'https://cdn.example.com/ref.wav', 'pt', false)
+      createClonedVoiceFromUrl(host, 'https://cdn.example.com/ref.wav', 'pt', false, true)
     ).rejects.toThrow('consent must be true to create a voice clone');
     expect(global.fetch).not.toHaveBeenCalled();
     expect(request).not.toHaveBeenCalled();
@@ -278,7 +278,8 @@ describe('createClonedVoiceFromUrl', () => {
       host,
       'https://cdn.example.com/ref.wav',
       'pt',
-      true
+      true,
+      false
     );
     expect(result).toEqual({ success: true, body: { id: 'clone-1' } });
     expect(request).toHaveBeenCalledTimes(1);
@@ -294,6 +295,7 @@ describe('createClonedVoiceFromUrl', () => {
     expect(timeout).toBe(120_000);
     const form = init.body as FormData;
     expect(form.get('consent')).toBe('true');
+    expect(form.get('denoise')).toBe('false');
     expect(form.get('language')).toBe('pt');
     expect(form.get('file')).toBeInstanceOf(Blob);
   });
@@ -328,9 +330,12 @@ describe('cloned voice tool handlers', () => {
       audioUrl: 'https://cdn.example.com/ref.wav',
       language: 'en',
       consent: true,
+      denoise: true,
     });
     expect(result.isError).toBeFalsy();
     expect(firstText(result)).toContain('Voice clone registration started');
+    const form = (request.mock.calls[0] as [string, RequestInit])[1].body as FormData;
+    expect(form.get('denoise')).toBe('true');
   });
 
   it('handleDeleteClonedVoice prefixes the success message', async () => {
@@ -417,7 +422,7 @@ describe('cloned voice tools run through the MCP server', () => {
     global.fetch = vi.fn().mockResolvedValue(audioResponse([5, 5, 5]));
     const result = await callTool(
       'create_cloned_voice',
-      { audioUrl: 'https://cdn.example.com/ref.wav', language: 'en', consent: true },
+      { audioUrl: 'https://cdn.example.com/ref.wav', language: 'en', consent: true, denoise: true },
       request
     );
     expect(firstText(result as { content?: unknown })).toContain(

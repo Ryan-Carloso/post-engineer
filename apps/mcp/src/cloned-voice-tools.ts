@@ -22,6 +22,9 @@ export const CreateClonedVoiceShape = {
     .refine(isEnglishLanguage, { message: ONLY_ENGLISH_CLONE_MESSAGE })
     .describe('Language code for the clone — English only for now (e.g. en, en-us)'),
   consent: z.literal(true).describe('Must be true: caller confirms consent to voice cloning'),
+  denoise: z
+    .boolean()
+    .describe('Clean background noise from the recording before cloning (recommended true; false for studio audio)'),
 };
 
 export const CreateClonedVoiceSchema = z.object(CreateClonedVoiceShape);
@@ -54,7 +57,7 @@ export async function handleCreateClonedVoice(
   args: z.infer<typeof CreateClonedVoiceSchema>,
 ): Promise<McpToolResponse> {
   return handleLibraryCall(
-    () => createClonedVoiceFromUrl(client, args.audioUrl, args.language, args.consent),
+    () => createClonedVoiceFromUrl(client, args.audioUrl, args.language, args.consent, args.denoise),
     'creating cloned voice',
     'Voice clone registration started',
   );

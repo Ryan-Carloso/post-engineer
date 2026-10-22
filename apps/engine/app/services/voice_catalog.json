@@ -1,0 +1,590 @@
+{
+  "_comment": "House voice catalog served by the local CPU TTS server (local_tts/server.py) and listed by the engine picker. Phonon ids come from huggingface.co/gradium/phonon-voices voices.jsonl; character genders are read from each character's description.",
+  "voices": [
+    {
+      "name": "phonon_zoey",
+      "provider": "phonon",
+      "model_voice": "NbpkqMVS3CJeq2j8",
+      "label": "Zoey",
+      "gender": "female",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "phonon_juniper",
+      "provider": "phonon",
+      "model_voice": "NIWIOv5vTi5eRMj8",
+      "label": "Juniper",
+      "gender": "female",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "phonon_everly",
+      "provider": "phonon",
+      "model_voice": "vjFyp2BcCyTlUmYb",
+      "label": "Everly",
+      "gender": "female",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "phonon_harper",
+      "provider": "phonon",
+      "model_voice": "4SZHfMpw-p46Ywgs",
+      "label": "Harper",
+      "gender": "female",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "phonon_hadley",
+      "provider": "phonon",
+      "model_voice": "bXwrkHhURL1VFJdG",
+      "label": "Hadley",
+      "gender": "female",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "phonon_delia",
+      "provider": "phonon",
+      "model_voice": "nGzMHMPAWGaJFHOo",
+      "label": "Delia",
+      "gender": "female",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "phonon_easton",
+      "provider": "phonon",
+      "model_voice": "LMDIYE0Oa377Qh6Z",
+      "label": "Easton",
+      "gender": "male",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "phonon_micah",
+      "provider": "phonon",
+      "model_voice": "40QrMVgAxFiUnP9f",
+      "label": "Micah",
+      "gender": "male",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "phonon_trevor",
+      "provider": "phonon",
+      "model_voice": "0zLApsZfVLLNaEGl",
+      "label": "Trevor",
+      "gender": "male",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "phonon_russell",
+      "provider": "phonon",
+      "model_voice": "_6Aslh2DxfmnRLmP",
+      "label": "Russell",
+      "gender": "male",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "phonon_preston",
+      "provider": "phonon",
+      "model_voice": "qIxlZ7Ei8KvWlyQH",
+      "label": "Preston",
+      "gender": "male",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "phonon_miles",
+      "provider": "phonon",
+      "model_voice": "d9XCyhjo4JhkHF1d",
+      "label": "Miles",
+      "gender": "male",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "phonon_maeve",
+      "provider": "phonon",
+      "model_voice": "6PWnV0Nq4wu7RVBT",
+      "label": "Maeve",
+      "gender": "female",
+      "accent": "gb",
+      "kind": "standard"
+    },
+    {
+      "name": "phonon_freya",
+      "provider": "phonon",
+      "model_voice": "GgfEkEJtxZR7gnpy",
+      "label": "Freya",
+      "gender": "female",
+      "accent": "gb",
+      "kind": "standard"
+    },
+    {
+      "name": "phonon_pippa",
+      "provider": "phonon",
+      "model_voice": "uem82D50GRv2Dwma",
+      "label": "Pippa",
+      "gender": "female",
+      "accent": "gb",
+      "kind": "standard"
+    },
+    {
+      "name": "phonon_elodie_rose",
+      "provider": "phonon",
+      "model_voice": "y9bQqIDnyxwqK01t",
+      "label": "Elodie-Rose",
+      "gender": "female",
+      "accent": "gb",
+      "kind": "standard"
+    },
+    {
+      "name": "phonon_imogen",
+      "provider": "phonon",
+      "model_voice": "gDT1nz7Ie36ZhL-C",
+      "label": "Imogen",
+      "gender": "female",
+      "accent": "gb",
+      "kind": "standard"
+    },
+    {
+      "name": "phonon_lottie",
+      "provider": "phonon",
+      "model_voice": "m9MxpY6IUGXtWp76",
+      "label": "Lottie",
+      "gender": "female",
+      "accent": "gb",
+      "kind": "standard"
+    },
+    {
+      "name": "phonon_alfie",
+      "provider": "phonon",
+      "model_voice": "X6NceqF285Gr04gb",
+      "label": "Alfie",
+      "gender": "male",
+      "accent": "gb",
+      "kind": "standard"
+    },
+    {
+      "name": "phonon_hugh",
+      "provider": "phonon",
+      "model_voice": "YyKcxPG7iIgS3jsK",
+      "label": "Hugh",
+      "gender": "male",
+      "accent": "gb",
+      "kind": "standard"
+    },
+    {
+      "name": "phonon_edwin",
+      "provider": "phonon",
+      "model_voice": "zUCxzrOrugTSis03",
+      "label": "Edwin",
+      "gender": "male",
+      "accent": "gb",
+      "kind": "standard"
+    },
+    {
+      "name": "phonon_spencer",
+      "provider": "phonon",
+      "model_voice": "JOW0vchyswkQUMDS",
+      "label": "Spencer",
+      "gender": "male",
+      "accent": "gb",
+      "kind": "standard"
+    },
+    {
+      "name": "phonon_toby",
+      "provider": "phonon",
+      "model_voice": "dME3IWyZBvmh1n1q",
+      "label": "Toby",
+      "gender": "male",
+      "accent": "gb",
+      "kind": "standard"
+    },
+    {
+      "name": "phonon_teddy",
+      "provider": "phonon",
+      "model_voice": "Zn7g6NxLqXlJb7Qi",
+      "label": "Teddy",
+      "gender": "male",
+      "accent": "gb",
+      "kind": "standard"
+    },
+    {
+      "name": "phonon_bryony",
+      "provider": "phonon",
+      "model_voice": "gfP44RlHwr2kEwk7",
+      "label": "Bryony",
+      "gender": "female",
+      "accent": "gb",
+      "kind": "standard"
+    },
+    {
+      "name": "phonon_captain_silas_blackwater",
+      "provider": "phonon",
+      "model_voice": "xPDpsV3F592srkjA",
+      "label": "Captain Silas Blackwater",
+      "gender": "male",
+      "accent": null,
+      "kind": "character"
+    },
+    {
+      "name": "phonon_morwenna_of_the_deep",
+      "provider": "phonon",
+      "model_voice": "nOykTmcH9ydsGGIc",
+      "label": "Morwenna of the Deep",
+      "gender": "female",
+      "accent": null,
+      "kind": "character"
+    },
+    {
+      "name": "phonon_old_mortlake",
+      "provider": "phonon",
+      "model_voice": "lX3LavMNdlIbgEHH",
+      "label": "Old Mortlake",
+      "gender": "male",
+      "accent": null,
+      "kind": "character"
+    },
+    {
+      "name": "phonon_azgorath",
+      "provider": "phonon",
+      "model_voice": "dGyGDKo2osj7h3s7",
+      "label": "Azgorath",
+      "gender": "male",
+      "accent": null,
+      "kind": "character"
+    },
+    {
+      "name": "phonon_fennick_the_young_elf",
+      "provider": "phonon",
+      "model_voice": "cXoIXJ2llS8S0WOW",
+      "label": "Fennick the Young Elf",
+      "gender": "male",
+      "accent": null,
+      "kind": "character"
+    },
+    {
+      "name": "phonon_the_thing_under_the_stairs",
+      "provider": "phonon",
+      "model_voice": "GXaSqMEmOg12OIYb",
+      "label": "The Thing Under the Stairs",
+      "gender": "male",
+      "accent": null,
+      "kind": "character"
+    },
+    {
+      "name": "phonon_vyrmathrax_the_ancient",
+      "provider": "phonon",
+      "model_voice": "xO8xQo3BrB8FuI6J",
+      "label": "Vyrmathrax the Ancient",
+      "gender": "male",
+      "accent": null,
+      "kind": "character"
+    },
+    {
+      "name": "phonon_grub_the_ogre",
+      "provider": "phonon",
+      "model_voice": "cYtsRSxV5q9IMehn",
+      "label": "Grub the Ogre",
+      "gender": "male",
+      "accent": null,
+      "kind": "character"
+    },
+    {
+      "name": "phonon_master_aldric",
+      "provider": "phonon",
+      "model_voice": "gSgG5Tor0GPEnqzC",
+      "label": "Master Aldric",
+      "gender": "male",
+      "accent": null,
+      "kind": "character"
+    },
+    {
+      "name": "phonon_the_snow_queen",
+      "provider": "phonon",
+      "model_voice": "NIWoEurJHMJjyUTe",
+      "label": "The Snow Queen",
+      "gender": "female",
+      "accent": null,
+      "kind": "character"
+    },
+    {
+      "name": "phonon_sir_bramwell",
+      "provider": "phonon",
+      "model_voice": "y2eiKxtQo2B67deU",
+      "label": "Sir Bramwell",
+      "gender": "male",
+      "accent": null,
+      "kind": "character"
+    },
+    {
+      "name": "phonon_fairy_godmother",
+      "provider": "phonon",
+      "model_voice": "QXNr0SvkukLB4wPq",
+      "label": "Fairy Godmother",
+      "gender": "female",
+      "accent": null,
+      "kind": "character"
+    },
+    {
+      "name": "kokoro_af_heart",
+      "provider": "kokoro",
+      "model_voice": "af_heart",
+      "label": "Heart",
+      "gender": "female",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "kokoro_af_alloy",
+      "provider": "kokoro",
+      "model_voice": "af_alloy",
+      "label": "Alloy",
+      "gender": "female",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "kokoro_af_aoede",
+      "provider": "kokoro",
+      "model_voice": "af_aoede",
+      "label": "Aoede",
+      "gender": "female",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "kokoro_af_bella",
+      "provider": "kokoro",
+      "model_voice": "af_bella",
+      "label": "Bella",
+      "gender": "female",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "kokoro_af_jessica",
+      "provider": "kokoro",
+      "model_voice": "af_jessica",
+      "label": "Jessica",
+      "gender": "female",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "kokoro_af_kore",
+      "provider": "kokoro",
+      "model_voice": "af_kore",
+      "label": "Kore",
+      "gender": "female",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "kokoro_af_nicole",
+      "provider": "kokoro",
+      "model_voice": "af_nicole",
+      "label": "Nicole",
+      "gender": "female",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "kokoro_af_nova",
+      "provider": "kokoro",
+      "model_voice": "af_nova",
+      "label": "Nova",
+      "gender": "female",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "kokoro_af_river",
+      "provider": "kokoro",
+      "model_voice": "af_river",
+      "label": "River",
+      "gender": "female",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "kokoro_af_sarah",
+      "provider": "kokoro",
+      "model_voice": "af_sarah",
+      "label": "Sarah",
+      "gender": "female",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "kokoro_af_sky",
+      "provider": "kokoro",
+      "model_voice": "af_sky",
+      "label": "Sky",
+      "gender": "female",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "kokoro_am_adam",
+      "provider": "kokoro",
+      "model_voice": "am_adam",
+      "label": "Adam",
+      "gender": "male",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "kokoro_am_echo",
+      "provider": "kokoro",
+      "model_voice": "am_echo",
+      "label": "Echo",
+      "gender": "male",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "kokoro_am_eric",
+      "provider": "kokoro",
+      "model_voice": "am_eric",
+      "label": "Eric",
+      "gender": "male",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "kokoro_am_fenrir",
+      "provider": "kokoro",
+      "model_voice": "am_fenrir",
+      "label": "Fenrir",
+      "gender": "male",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "kokoro_am_liam",
+      "provider": "kokoro",
+      "model_voice": "am_liam",
+      "label": "Liam",
+      "gender": "male",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "kokoro_am_michael",
+      "provider": "kokoro",
+      "model_voice": "am_michael",
+      "label": "Michael",
+      "gender": "male",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "kokoro_am_onyx",
+      "provider": "kokoro",
+      "model_voice": "am_onyx",
+      "label": "Onyx",
+      "gender": "male",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "kokoro_am_puck",
+      "provider": "kokoro",
+      "model_voice": "am_puck",
+      "label": "Puck",
+      "gender": "male",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "kokoro_am_santa",
+      "provider": "kokoro",
+      "model_voice": "am_santa",
+      "label": "Santa",
+      "gender": "male",
+      "accent": "us",
+      "kind": "standard"
+    },
+    {
+      "name": "kokoro_bf_alice",
+      "provider": "kokoro",
+      "model_voice": "bf_alice",
+      "label": "Alice",
+      "gender": "female",
+      "accent": "gb",
+      "kind": "standard"
+    },
+    {
+      "name": "kokoro_bf_emma",
+      "provider": "kokoro",
+      "model_voice": "bf_emma",
+      "label": "Emma",
+      "gender": "female",
+      "accent": "gb",
+      "kind": "standard"
+    },
+    {
+      "name": "kokoro_bf_isabella",
+      "provider": "kokoro",
+      "model_voice": "bf_isabella",
+      "label": "Isabella",
+      "gender": "female",
+      "accent": "gb",
+      "kind": "standard"
+    },
+    {
+      "name": "kokoro_bf_lily",
+      "provider": "kokoro",
+      "model_voice": "bf_lily",
+      "label": "Lily",
+      "gender": "female",
+      "accent": "gb",
+      "kind": "standard"
+    },
+    {
+      "name": "kokoro_bm_daniel",
+      "provider": "kokoro",
+      "model_voice": "bm_daniel",
+      "label": "Daniel",
+      "gender": "male",
+      "accent": "gb",
+      "kind": "standard"
+    },
+    {
+      "name": "kokoro_bm_fable",
+      "provider": "kokoro",
+      "model_voice": "bm_fable",
+      "label": "Fable",
+      "gender": "male",
+      "accent": "gb",
+      "kind": "standard"
+    },
+    {
+      "name": "kokoro_bm_george",
+      "provider": "kokoro",
+      "model_voice": "bm_george",
+      "label": "George",
+      "gender": "male",
+      "accent": "gb",
+      "kind": "standard"
+    },
+    {
+      "name": "kokoro_bm_lewis",
+      "provider": "kokoro",
+      "model_voice": "bm_lewis",
+      "label": "Lewis",
+      "gender": "male",
+      "accent": "gb",
+      "kind": "standard"
+    }
+  ]
+}

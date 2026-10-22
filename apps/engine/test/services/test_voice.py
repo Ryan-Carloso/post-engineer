@@ -283,34 +283,11 @@ class TestVoiceService(unittest.TestCase):
 
 
     def test_chatterbox_voice_helpers(self):
-        """is_chatterbox_voice / get_chatterbox_voices basics and normalisation."""
-        self.assertTrue(vs.is_chatterbox_voice("chatterbox:default-Female"))
+        """is_chatterbox_voice recognises only the chatterbox: prefix."""
+        self.assertTrue(vs.is_chatterbox_voice("chatterbox:kokoro_af_heart"))
         self.assertFalse(vs.is_chatterbox_voice("elevenlabs:abc:Rachel"))
         self.assertFalse(vs.is_chatterbox_voice(""))
         self.assertFalse(vs.is_chatterbox_voice(None))
-
-        # list entries are normalised to the chatterbox:<name> dispatcher format,
-        # and entries that are already prefixed are left untouched
-        with patch.object(
-            vs.config,
-            "chatterbox",
-            {"voices": ["narrator-Male", "chatterbox:host"]},
-        ):
-            self.assertEqual(
-                vs.get_chatterbox_voices(),
-                ["chatterbox:narrator-Male", "chatterbox:host"],
-            )
-
-        # a comma-separated string is also accepted (TOML-friendly)
-        with patch.object(vs.config, "chatterbox", {"voices": "alpha, beta ,"}):
-            self.assertEqual(
-                vs.get_chatterbox_voices(),
-                ["chatterbox:alpha", "chatterbox:beta"],
-            )
-
-        # with nothing configured the dropdown still gets a usable default
-        with patch.object(vs.config, "chatterbox", {}):
-            self.assertEqual(vs.get_chatterbox_voices(), ["chatterbox:default-Female"])
 
     def test_chatterbox_tts_posts_to_openai_compatible_endpoint(self):
         """Success path: POST /audio/speech, write audio, return legacy SubMaker."""

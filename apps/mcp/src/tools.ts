@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { filterVoicesPayload, ListVoicesSchema, type ListVoicesArgs } from './voice-filters.js';
 import {
   CancelScheduleSchema,
   CancelScheduleShape,
@@ -96,9 +97,7 @@ export const ListPersonasShape = {};
 
 export const ListPersonasSchema = z.object(ListPersonasShape);
 
-export const ListVoicesShape = {};
-
-export const ListVoicesSchema = z.object(ListVoicesShape);
+export { ListVoicesShape, ListVoicesSchema } from './voice-filters.js';
 
 export {
   ListClonedVoicesShape,
@@ -383,9 +382,13 @@ export async function handleListPersonas(
 }
 
 export async function handleListVoices(
-  client: PostEngineerClient
+  client: PostEngineerClient,
+  args: ListVoicesArgs = {}
 ): Promise<McpToolResponse> {
-  return handleLibraryCall(() => client.listVoices(), 'listing voices');
+  return handleLibraryCall(
+    async () => filterVoicesPayload(await client.listVoices(), ListVoicesSchema.parse(args)),
+    'listing voices'
+  );
 }
 
 export {

@@ -45,7 +45,7 @@ class ClonedVoicesControllerTests(unittest.TestCase):
         response = self.client.post(
             "/api/v1/cloned-voices",
             headers=self.headers,
-            data={"language": "en", "consent": "true"},
+            data={"language": "en", "consent": "true", "denoise": "true"},
             files={"file": ("sample.wav", io.BytesIO(b"data"), "audio/wav")},
         )
 
@@ -68,7 +68,7 @@ class ClonedVoicesControllerTests(unittest.TestCase):
         response = self.client.post(
             "/api/v1/cloned-voices",
             headers=self.headers,
-            data={"language": "en\n[injected]", "consent": "true"},
+            data={"language": "en\n[injected]", "consent": "true", "denoise": "true"},
             files={"file": ("sample.wav", io.BytesIO(b"data"), "audio/wav")},
         )
 
@@ -86,7 +86,7 @@ class ClonedVoicesControllerTests(unittest.TestCase):
                 response = self.client.post(
                     "/api/v1/cloned-voices",
                     headers=self.headers,
-                    data={"language": language, "consent": "true"},
+                    data={"language": language, "consent": "true", "denoise": "true"},
                     files={"file": ("sample.wav", io.BytesIO(b"data"), "audio/wav")},
                 )
                 self.assertEqual(response.status_code, 400)
@@ -114,13 +114,13 @@ class ClonedVoicesControllerTests(unittest.TestCase):
         response = self.client.post(
             "/api/v1/cloned-voices",
             headers=self.headers,
-            data={"language": "en-GB", "consent": "true"},
+            data={"language": "en-GB", "consent": "true", "denoise": "true"},
             files={"file": ("sample.wav", io.BytesIO(b"data"), "audio/wav")},
         )
 
         self.assertEqual(response.status_code, 202)
         service.create_from_upload.assert_called_once_with(
-            "user-uuid-1", b"data", "en-GB", consent_acknowledged=True
+            "user-uuid-1", b"data", "en-GB", consent_acknowledged=True, denoise=True
         )
 
     @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
@@ -133,7 +133,7 @@ class ClonedVoicesControllerTests(unittest.TestCase):
                 response = self.client.post(
                     "/api/v1/cloned-voices",
                     headers=self.headers,
-                    data={"language": language, "consent": "true"},
+                    data={"language": language, "consent": "true", "denoise": "true"},
                     files={"file": ("sample.wav", io.BytesIO(b"data"), "audio/wav")},
                 )
                 self.assertEqual(response.status_code, 400)
@@ -167,7 +167,7 @@ class ClonedVoicesControllerTests(unittest.TestCase):
                 response = self.client.post(
                     "/api/v1/cloned-voices",
                     headers=self.headers,
-                    data={"language": language, "consent": "true"},
+                    data={"language": language, "consent": "true", "denoise": "true"},
                     files={"file": ("sample.wav", io.BytesIO(b"data"), "audio/wav")},
                 )
                 self.assertEqual(response.status_code, 202)
@@ -186,7 +186,7 @@ class ClonedVoicesControllerTests(unittest.TestCase):
         response = self.client.post(
             "/api/v1/cloned-voices",
             headers=self.headers,
-            data={"language": "en", "consent": "true"},
+            data={"language": "en", "consent": "true", "denoise": "true"},
             files={"file": ("sample.wav", io.BytesIO(b"0123456789"), "audio/wav")},
         )
 
@@ -226,6 +226,76 @@ class ClonedVoicesControllerTests(unittest.TestCase):
         service.delete.return_value = False
         response = self.client.delete("/api/v1/cloned-voices/clone-1", headers=self.headers)
         self.assertEqual(response.status_code, 404)
+
+    @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
+    def test_create_passes_denoise_flag_to_service(self, mock_service_cls):
+        service = MagicMock()
+        mock_service_cls.return_value = service
+        service.create_from_upload.return_value = {
+            "row": {"id": "clone-1", "status": "pending"},
+            "wav_bytes": b"wav",
+            "language": "en",
+        }
+        for raw, expected in (("true", True), ("FALSE", False)):
+            service.create_from_upload.reset_mock()
+            response = self.client.post(
+                "/api/v1/cloned-voices",
+                headers=self.headers,
+                data={"language": "en", "consent": "true", "denoise": raw},
+                files={"file": ("sample.wav", io.BytesIO(b"data"), "audio/wav")},
+            )
+            self.assertEqual(response.status_code, 202)
+            self.assertIs(service.create_from_upload.call_args.kwargs["denoise"], expected)
+
+    @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
+    def test_create_rejects_missing_or_malformed_denoise(self, mock_service_cls):
+        service = MagicMock()
+        mock_service_cls.return_value = service
+        for data in (
+            {"language": "en", "consent": "true"},
+            {"language": "en", "consent": "true", "denoise": "yes"},
+        ):
+            response = self.client.post(
+                "/api/v1/cloned-voices",
+                headers=self.headers,
+                data=data,
+                files={"file": ("sample.wav", io.BytesIO(b"data"), "audio/wav")},
+            )
+            self.assertIn(response.status_code, (400, 422))
+        service.create_from_upload.assert_not_called()
+
+    @patch("app.controllers.v1.cloned_voices.normalize_reference_audio")
+    def test_denoise_preview_returns_cleaned_wav(self, mock_normalize):
+        mock_normalize.return_value = MagicMock(wav_bytes=b"clean-wav")
+        response = self.client.post(
+            "/api/v1/cloned-voices/denoise-preview",
+            headers=self.headers,
+            files={"file": ("sample.webm", io.BytesIO(b"raw"), "audio/webm")},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b"clean-wav")
+        self.assertEqual(response.headers.get("content-type"), "audio/wav")
+        mock_normalize.assert_called_once_with(b"raw", denoise=True)
+
+    @patch("app.controllers.v1.cloned_voices.normalize_reference_audio")
+    def test_denoise_preview_maps_reference_errors_to_400(self, mock_normalize):
+        from app.services.cloned_voices.audio import ReferenceAudioError
+
+        mock_normalize.side_effect = ReferenceAudioError("invalid_audio", "could not decode reference audio")
+        response = self.client.post(
+            "/api/v1/cloned-voices/denoise-preview",
+            headers=self.headers,
+            files={"file": ("sample.webm", io.BytesIO(b"raw"), "audio/webm")},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["body"]["error_code"], "invalid_audio")
+
+    def test_denoise_preview_requires_auth(self):
+        response = self.client.post(
+            "/api/v1/cloned-voices/denoise-preview",
+            files={"file": ("sample.webm", io.BytesIO(b"raw"), "audio/webm")},
+        )
+        self.assertIn(response.status_code, (401, 403))
 
     @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
     def test_preview_returns_mpeg(self, mock_service_cls):

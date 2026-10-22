@@ -132,10 +132,10 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
 
   server.tool(
     'list_voices',
-    'List all available persona voices (voiceId options) for the authenticated user.',
+    'List persona voices (voiceId options): 65 English house voices with gender/accent/kind, plus your ready clones. Filter with gender and origin.',
     ListVoicesShape,
-    withTracking('list_voices', async () => {
-      return handleListVoices(apiClient);
+    withTracking('list_voices', async (args) => {
+      return handleListVoices(apiClient, args);
     })
   );
 

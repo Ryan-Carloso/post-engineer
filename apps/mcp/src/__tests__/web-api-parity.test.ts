@@ -106,6 +106,8 @@ const EXCLUDED_ENDPOINTS: Record<string, string> = {
     'Browser-only SSE proxy; MCP polls via get_video_task_progress.',
   'DELETE /api/persona/video-task/[taskId]':
     'Dashboard engine-task cleanup; MCP polls status but never cancels engine tasks.',
+  'POST /api/persona/cloned-voices/denoise-preview':
+    'UI-only A/B listen of the cleaned recording before cloning; agents pass denoise to create_cloned_voice instead.',
   'GET /api/persona/cloned-voices/[cloneId]':
     'Dashboard clone status polling; MCP list_cloned_voices returns every clone row.',
   'GET /api/posts/[id]':

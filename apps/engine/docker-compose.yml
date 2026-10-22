@@ -1,4 +1,7 @@
 # Engine CPU on the VPS — ffmpeg/TTS/render only (no GPU).
+# TTS (Phonon + Kokoro presets, Chatterbox Nano clones) runs in the `tts`
+# service below, also CPU-only; config.toml points [chatterbox] base_url and
+# [cloned_voices] registry_base_url at http://tts:4123.
 # LongCat/H200 stays on Modal and is reached over HTTP.
 #
 # Secrets come from .env next to this file (never committed):
@@ -71,6 +74,37 @@ services:
       timeout: 5s
       start_period: 20s
       retries: 3
+    depends_on:
+      - tts
+
+  tts:
+    image: mpt-tts-cpu:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.tts
+    container_name: mpt-tts-cpu
+    restart: unless-stopped
+    # Not published on the host: only the engine reaches it, over the
+    # compose network. CHATTERBOX_HTTP_SECRET comes from .env.
+    expose:
+      - "4123"
+    env_file:
+      - .env
+    volumes:
+      - tts_voices:/voices
+      - tts_models:/models
+    deploy:
+      resources:
+        limits:
+          cpus: "3.0"
+          memory: 6g
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
 
 volumes:
   engine_storage:
+  tts_voices:
+  tts_models:

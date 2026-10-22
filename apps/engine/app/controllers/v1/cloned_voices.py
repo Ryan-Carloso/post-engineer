@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, Response
 from app.controllers import base
 from app.controllers.v1.base import new_router
 from app.models.schema import BaseResponse
-from app.services.cloned_voices.audio import ReferenceAudioError
+from app.services.cloned_voices.audio import ReferenceAudioError, normalize_reference_audio
 from app.services.cloned_voices.constants import (
     CHATTERBOX_VOICE_PREFIX,
     ERROR_AUDIO_TOO_LARGE,
@@ -44,6 +44,44 @@ def _public_row(row: dict[str, Any]) -> dict[str, Any]:
         "created_at": row.get("created_at"),
         "updated_at": row.get("updated_at"),
     }
+
+
+def _parse_denoise(raw: str) -> bool | None:
+    """Strict "true"/"false" form flag; anything else is None (a 400)."""
+    value = raw.strip().lower()
+    if value == "true":
+        return True
+    if value == "false":
+        return False
+    return None
+
+
+def _read_bounded_upload(file: UploadFile) -> bytes | JSONResponse:
+    # Bound the read itself: normalize_reference_audio enforces the same
+    # limit, but only after the upload is fully buffered in memory.
+    if file.size is not None and file.size > MAX_REFERENCE_BYTES:
+        return _audio_too_large_response()
+    try:
+        source_bytes = file.file.read(MAX_REFERENCE_BYTES + 1)
+    except Exception:
+        return JSONResponse(
+            status_code=400,
+            content=utils.get_response(status=400, message="could not read upload"),
+        )
+    if len(source_bytes) > MAX_REFERENCE_BYTES:
+        return _audio_too_large_response()
+    return source_bytes
+
+
+def _reference_error_response(exc: ReferenceAudioError) -> JSONResponse:
+    return JSONResponse(
+        status_code=400,
+        content=utils.get_response(
+            status=400,
+            message=str(exc),
+            body={"error_code": exc.error_code},
+        ),
+    )
 
 
 def _audio_too_large_response() -> JSONResponse:
@@ -97,10 +135,17 @@ def create_cloned_voice(
     file: UploadFile = File(...),
     language: str = Form(...),
     consent: str = Form(...),
+    denoise: str = Form(...),
 ):
     auth = base.get_auth_context(request)
     request_id = base.get_task_id(request)
     consent_acknowledged = consent.strip().lower() == "true"
+    denoise_flag = _parse_denoise(denoise)
+    if denoise_flag is None:
+        return JSONResponse(
+            status_code=400,
+            content=utils.get_response(status=400, message='denoise must be "true" or "false"'),
+        )
     lang = (language or "").strip()
     if not lang:
         return JSONResponse(
@@ -124,19 +169,9 @@ def create_cloned_voice(
             content=utils.get_response(status=400, message=ENGLISH_ONLY_CLONE_MESSAGE),
         )
 
-    # Bound the read itself: normalize_reference_audio enforces the same
-    # limit, but only after the upload is fully buffered in memory.
-    if file.size is not None and file.size > MAX_REFERENCE_BYTES:
-        return _audio_too_large_response()
-    try:
-        source_bytes = file.file.read(MAX_REFERENCE_BYTES + 1)
-    except Exception:
-        return JSONResponse(
-            status_code=400,
-            content=utils.get_response(status=400, message="could not read upload"),
-        )
-    if len(source_bytes) > MAX_REFERENCE_BYTES:
-        return _audio_too_large_response()
+    source_bytes = _read_bounded_upload(file)
+    if isinstance(source_bytes, JSONResponse):
+        return source_bytes
 
     service = ClonedVoiceService()
     try:
@@ -145,16 +180,10 @@ def create_cloned_voice(
             source_bytes,
             lang,
             consent_acknowledged=consent_acknowledged,
+            denoise=denoise_flag,
         )
     except ReferenceAudioError as exc:
-        return JSONResponse(
-            status_code=400,
-            content=utils.get_response(
-                status=400,
-                message=str(exc),
-                body={"error_code": exc.error_code},
-            ),
-        )
+        return _reference_error_response(exc)
 
     row = created["row"]
     clone_id = row.get("id")
@@ -173,6 +202,24 @@ def create_cloned_voice(
         body=_public_row(row),
     )
     return JSONResponse(status_code=202, content=payload.model_dump())
+
+
+@cloned_router.post(
+    "/cloned-voices/denoise-preview",
+    summary="Cleaned version of a reference recording (audio/wav), for A/B before cloning",
+)
+def denoise_preview(request: Request, file: UploadFile = File(...)):
+    # Auth only: nothing is stored, the cleaned WAV goes straight back so the
+    # user can compare it with the original before confirming the clone.
+    base.get_auth_context(request)
+    source_bytes = _read_bounded_upload(file)
+    if isinstance(source_bytes, JSONResponse):
+        return source_bytes
+    try:
+        cleaned = normalize_reference_audio(source_bytes, denoise=True)
+    except ReferenceAudioError as exc:
+        return _reference_error_response(exc)
+    return Response(content=cleaned.wav_bytes, media_type="audio/wav")
 
 
 @cloned_router.post(

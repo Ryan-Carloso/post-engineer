@@ -15,6 +15,7 @@ import type {
   SocialProvider,
   VoiceOption,
 } from '@/lib/types';
+import { isVoiceOption } from './voice-catalog';
 import { logger } from '@/lib/logger';
 import type { PublishLink } from '@/lib/publish-links';
 import { narrowGeneration, narrowProgressHistory, narrowPublishLinks, type GenerationFacts, type ProgressHistoryEntry } from './slot-detail';
@@ -143,13 +144,7 @@ async function fetchVoices(): Promise<VoiceOption[]> {
     data === null ||
     !('voices' in data) ||
     !Array.isArray(data.voices) ||
-    !data.voices.every(
-      (voice): voice is VoiceOption =>
-        typeof voice === 'object' &&
-        voice !== null &&
-        'id' in voice &&
-        typeof voice.id === 'string',
-    )
+    !data.voices.every(isVoiceOption)
   ) {
     throw new Error('Invalid voices response.');
   }

@@ -1,15 +1,24 @@
 'use client';
 
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useVoicesQuery } from '@/lib/api';
+import { useI18n } from '@/lib/i18n/provider';
 import { usePersonaStore } from '@/lib/store';
 import { CheckIcon, MicIcon } from '@/lib/ui';
+import { cn } from '@/lib/utils';
+import {
+  filterHouseVoices,
+  voiceSampleName,
+  type GenderFilter,
+  type OriginFilter,
+  type VoiceOption,
+} from '@/lib/voice-catalog';
 
 // Voice ids come from the engine's catalog and are provider-qualified:
-// `chatterbox:en_us_male_01`, or `openrouter:<model>:<voice>` for the OpenRouter TTS
-// provider. There is no house-voice map any more, and no label fallback: a
-// voice with no label must show its raw id, not borrow another voice's name —
-// that fallback used to render every unknown id as "Voz feminina calma".
+// `chatterbox:kokoro_af_heart`, or `openrouter:<model>:<voice>` for the
+// OpenRouter TTS provider. House voices carry their own catalog label; a voice
+// with no label shows its raw id, never another voice's name — that fallback
+// used to render every unknown id as "Voz feminina calma".
 //
 // The underscore-to-space rewrite is Chatterbox-shaped (`en_us_female_01` →
 // "en us female 01") and is deliberately NOT applied to OpenRouter, whose ids
@@ -17,7 +26,11 @@ import { CheckIcon, MicIcon } from '@/lib/ui';
 // voice-2.1:en-US-Harper:MAI-Voice-2.1` must not become "en US Harper:MAI...".
 // The model stays in the label because two entries can share a voice name and
 // differ only by model.
-const voiceLabel = (voiceId: string): string => {
+const voiceLabel = (voice: VoiceOption): string => {
+  if (voice.label !== null) {
+    return voice.label;
+  }
+  const voiceId = voice.id;
   const openrouter = parseOpenrouterVoiceId(voiceId);
   if (openrouter) {
     return openrouter.voice;
@@ -61,27 +74,39 @@ function voiceModelLabel(voiceId: string): string {
 }
 
 //---------------
-// SAMPLE_LANGUAGE — English-only launch: there is no sample-language
-// picker; house voice samples always play the English take, whatever
-// language the persona being edited was created with.
-//---------------
-const SAMPLE_LANGUAGE = 'en-us';
-
-//---------------
 // PersonaHouseVoicePicker — house voice grid
 //---------------
 export const PersonaHouseVoicePicker = () => {
+  const { t } = useI18n();
   const voicesQuery = useVoicesQuery();
   const voiceId = usePersonaStore((s) => s.voiceId);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [gender, setGender] = useState<GenderFilter>('all');
+  const [origin, setOrigin] = useState<OriginFilter>('all');
 
-  const voices = voicesQuery.data ?? [];
+  const voices = filterHouseVoices(voicesQuery.data ?? [], gender, origin);
 
-  const playVoiceSample = (pickedVoiceId: string): void => {
+  const genderOptions: { value: GenderFilter; label: string }[] = [
+    { value: 'all', label: t('persona.voiceFilterAll') },
+    { value: 'female', label: t('persona.voiceFilterFemale') },
+    { value: 'male', label: t('persona.voiceFilterMale') },
+  ];
+  const originOptions: { value: OriginFilter; label: string }[] = [
+    { value: 'all', label: t('persona.voiceFilterAll') },
+    { value: 'us', label: t('persona.voiceFilterUs') },
+    { value: 'gb', label: t('persona.voiceFilterGb') },
+    { value: 'character', label: t('persona.voiceFilterCharacters') },
+  ];
+
+  // House samples are English takes rendered by the local TTS server, one
+  // per catalog voice; OpenRouter voices have none and play nothing.
+  const playVoiceSample = (voice: VoiceOption): void => {
+    const sampleName = voiceSampleName(voice);
+    if (sampleName === null) {
+      return;
+    }
     audioRef.current?.pause();
-    const audio = new Audio(
-      `/voice-samples/${encodeURIComponent(pickedVoiceId)}-${encodeURIComponent(SAMPLE_LANGUAGE)}.mp3`,
-    );
+    const audio = new Audio(`/voice-samples/${encodeURIComponent(sampleName)}.mp3`);
     audioRef.current = audio;
     const playResult = audio.play();
     if (playResult) {
@@ -89,14 +114,29 @@ export const PersonaHouseVoicePicker = () => {
     }
   };
 
-  const handlePickVoice = (pickedVoiceId: string) => {
-    usePersonaStore.getState().setVoiceId(pickedVoiceId);
-    playVoiceSample(pickedVoiceId);
+  const handlePickVoice = (voice: VoiceOption) => {
+    usePersonaStore.getState().setVoiceId(voice.id);
+    playVoiceSample(voice);
   };
 
   return (
     <div className="mt-4">
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <VoiceFilterChips
+        label={t('persona.voiceFilterGender')}
+        options={genderOptions}
+        value={gender}
+        onChange={setGender}
+      />
+      <VoiceFilterChips
+        label={t('persona.voiceFilterOrigin')}
+        options={originOptions}
+        value={origin}
+        onChange={setOrigin}
+      />
+      {voices.length === 0 && voicesQuery.isSuccess && (
+        <p className="mt-3 text-sm text-neutral-500">{t('persona.voiceFilterEmpty')}</p>
+      )}
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {voices.map((voice) => {
           const isActive = voice.id === voiceId;
           return (
@@ -107,7 +147,7 @@ export const PersonaHouseVoicePicker = () => {
               // The raw id is the only complete label: both lines above are
               // display and the model line is hidden for single-word voices.
               title={voice.id}
-              onClick={() => handlePickVoice(voice.id)}
+              onClick={() => handlePickVoice(voice)}
               className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-colors ${
                 isActive
                   ? 'border-accent bg-red-50/50'
@@ -123,7 +163,7 @@ export const PersonaHouseVoicePicker = () => {
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium text-neutral-900">
-                  {voiceLabel(voice.id)}
+                  {voiceLabel(voice)}
                 </span>
                 {voiceModelLabel(voice.id) !== '' && (
                   <span className="block truncate text-xs text-neutral-500">
@@ -143,3 +183,41 @@ export const PersonaHouseVoicePicker = () => {
     </div>
   );
 };
+
+//---------------
+// VoiceFilterChips — one labelled row of single-select chips (gender or
+// origin). aria-pressed marks the active chip for assistive tech.
+//---------------
+function VoiceFilterChips<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (next: T) => void;
+}) {
+  return (
+    <div className="mb-2 flex flex-wrap items-center gap-1.5" role="group" aria-label={label}>
+      <span className="mr-1 text-xs font-medium tracking-wide text-neutral-500 uppercase">{label}</span>
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          aria-pressed={option.value === value}
+          onClick={() => onChange(option.value)}
+          className={cn(
+            'rounded-full border px-3 py-1 text-xs transition-colors',
+            option.value === value
+              ? 'border-accent bg-red-50/50 text-neutral-900'
+              : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-400',
+          )}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}

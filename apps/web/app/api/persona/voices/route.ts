@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
 import { logger } from '@/lib/logger';
+import { isVoiceOption, toVoiceOption } from '@/lib/voice-catalog';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 //---------------
@@ -51,15 +52,7 @@ async function getHandler(request?: Request): Promise<NextResponse> {
     // ({ status, message, body }); the catalog lives under `body`.
     const envelope: { body?: unknown } = await upstream.json();
     const data = envelope.body;
-    if (
-      !Array.isArray(data) ||
-      !data.every(
-        (item): item is { id: string } =>
-          typeof item === 'object' &&
-          item !== null &&
-          typeof (item as { id?: unknown }).id === 'string',
-      )
-    ) {
+    if (!Array.isArray(data) || !data.every(isVoiceOption)) {
       return NextResponse.json(
         { success: false, error: 'Invalid voices payload.' },
         { status: 502 },
@@ -67,7 +60,7 @@ async function getHandler(request?: Request): Promise<NextResponse> {
     }
 
     return NextResponse.json({
-      voices: data.map(({ id }) => ({ id })),
+      voices: data.map(toVoiceOption),
     });
   } catch (error) {
     logger.error('[api/persona/voices] money-print unreachable', error);
