@@ -40,7 +40,8 @@ function mockAuthErrorOnce(): void {
 function validForm(overrides?: { language?: string }): FormData {
   const form = new FormData();
   form.set('consent', 'true');
-  form.set('language', overrides?.language ?? 'pt');
+  form.set('denoise', 'true');
+  form.set('language', overrides?.language ?? 'en');
   form.set('file', new Blob([new Uint8Array(44)], { type: 'audio/wav' }), 'a.wav');
   return form;
 }
@@ -121,7 +122,8 @@ describe('POST /api/persona/cloned-voices', () => {
 
     const form = new FormData();
     form.set('consent', 'true');
-    form.set('language', 'pt');
+    form.set('denoise', 'true');
+    form.set('language', 'en');
     form.set('file', new Blob([new Uint8Array(44)], { type: 'audio/wav' }), 'a.wav');
     const response = await POST(
       new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: form }),
@@ -133,10 +135,28 @@ describe('POST /api/persona/cloned-voices', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('rejects a missing or malformed denoise flag without calling the engine', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    for (const value of [null, 'yes']) {
+      const form = validForm();
+      if (value === null) {
+        form.delete('denoise');
+      } else {
+        form.set('denoise', value);
+      }
+      const response = await POST(
+        new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: form }),
+      );
+      expect(response.status).toBe(400);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('rejects missing consent', async () => {
     const form = new FormData();
     form.set('consent', 'false');
-    form.set('language', 'pt');
+    form.set('language', 'en');
     form.set('file', new Blob([new Uint8Array(12)], { type: 'audio/wav' }), 'a.wav');
     const response = await POST(
       new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: form }),
@@ -147,6 +167,7 @@ describe('POST /api/persona/cloned-voices', () => {
   it('rejects missing language', async () => {
     const form = new FormData();
     form.set('consent', 'true');
+    form.set('denoise', 'true');
     form.set('language', '   ');
     form.set('file', new Blob([new Uint8Array(12)], { type: 'audio/wav' }), 'a.wav');
     const response = await POST(
@@ -157,6 +178,21 @@ describe('POST /api/persona/cloned-voices', () => {
     expect(json.error).toBe('Language is required.');
   });
 
+  it('rejects a non-English language without calling the engine (English-only launch)', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const response = await POST(
+      new Request('http://localhost/api/persona/cloned-voices', {
+        method: 'POST',
+        body: validForm({ language: 'pt' }),
+      }),
+    );
+    expect(response.status).toBe(400);
+    const json = await response.json();
+    expect(json.error).toBe('Voice cloning is only available in English for now.');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('rejects invalid reference audio', async () => {
     const { validateCloneReferenceBuffer } = await import('@/lib/cloned-voice-audio');
     vi.mocked(validateCloneReferenceBuffer).mockReturnValueOnce({
@@ -165,7 +201,8 @@ describe('POST /api/persona/cloned-voices', () => {
     });
     const form = new FormData();
     form.set('consent', 'true');
-    form.set('language', 'pt');
+    form.set('denoise', 'true');
+    form.set('language', 'en');
     form.set('file', new Blob([], { type: 'audio/wav' }), 'a.wav');
     const response = await POST(
       new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: form }),
@@ -379,7 +416,8 @@ describe('POST /api/persona/cloned-voices error branches', () => {
   it('rejects a missing file entry', async () => {
     const form = new FormData();
     form.set('consent', 'true');
-    form.set('language', 'pt');
+    form.set('denoise', 'true');
+    form.set('language', 'en');
     const response = await POST(
       new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: form }),
     );
@@ -390,7 +428,8 @@ describe('POST /api/persona/cloned-voices error branches', () => {
   it('rejects a file entry that is a plain string', async () => {
     const form = new FormData();
     form.set('consent', 'true');
-    form.set('language', 'pt');
+    form.set('denoise', 'true');
+    form.set('language', 'en');
     form.set('file', 'not-a-file');
     const response = await POST(
       new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: form }),
@@ -402,6 +441,7 @@ describe('POST /api/persona/cloned-voices error branches', () => {
   it('rejects a missing language field', async () => {
     const form = new FormData();
     form.set('consent', 'true');
+    form.set('denoise', 'true');
     form.set('file', new Blob([new Uint8Array(12)], { type: 'audio/wav' }), 'a.wav');
     const response = await POST(
       new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: form }),
@@ -428,7 +468,7 @@ describe('POST /api/persona/cloned-voices error branches', () => {
       ok: true,
       status: 201,
       json: async () => ({
-        body: { id: 'clone-9', status: 'pending', language: 'pt', voice_id: null },
+        body: { id: 'clone-9', status: 'pending', language: 'en', voice_id: null },
       }),
     }));
     vi.stubGlobal('fetch', fetchMock);
@@ -436,7 +476,7 @@ describe('POST /api/persona/cloned-voices error branches', () => {
     const response = await POST(
       new Request('http://localhost/api/persona/cloned-voices', {
         method: 'POST',
-        body: validForm({ language: ' pt ' }),
+        body: validForm({ language: ' en ' }),
       }),
     );
     expect(response.status).toBe(201);
@@ -447,7 +487,8 @@ describe('POST /api/persona/cloned-voices error branches', () => {
     expect(init.headers).toEqual({ Authorization: 'Bearer secret', 'x-user-id': 'user-1' });
     const sent = init.body as FormData;
     expect(sent.get('consent')).toBe('true');
-    expect(sent.get('language')).toBe('pt');
+    expect(sent.get('denoise')).toBe('true');
+    expect(sent.get('language')).toBe('en');
     const sentFile = sent.get('file') as File;
     expect(sentFile.name).toBe('a.wav');
     expect(sentFile.type).toBe('audio/wav');

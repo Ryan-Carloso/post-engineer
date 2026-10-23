@@ -14,7 +14,7 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from '@/components/ui/carousel';
-import { useVoicesQuery, useVoiceSampleLanguagesQuery, createPersona, useUpdatePersonaMutation, usePersonaListQuery } from '@/lib/api';
+import { useVoicesQuery, createPersona, useUpdatePersonaMutation, usePersonaListQuery } from '@/lib/api';
 import { resolveScriptLanguage, usePersonaStore } from '@/lib/store';
 import { personaFormSchema } from '@/lib/persona-schema';
 import { useI18n } from '@/lib/i18n/provider';
@@ -65,14 +65,13 @@ const PersonaPageContent = () => {
   const editingPersonaId = resolveEditingPersonaId(pathname, editId);
   const personasQuery = usePersonaListQuery();
   // Derived from the resolved id (not the raw ?edit= param): on the legacy
-  // path the old derivation left editingPersona undefined, so the language
-  // silently fell back to the default instead of the persona's saved one.
+  // /personas/<id>/edit path the old derivation left editingPersona undefined, so
+  // the form never loaded its saved fields and the language fell back to default.
   const editingPersona = useMemo(
     () => (editingPersonaId ? personasQuery.data?.find((item) => item.id === editingPersonaId) : undefined),
     [editingPersonaId, personasQuery.data],
   );
   const voicesQuery = useVoicesQuery();
-  const sampleLanguagesQuery = useVoiceSampleLanguagesQuery();
 
   // RHF: text fields validate onBlur with the SAME server zod schema
   // (lib/persona-schema.ts) and block submit. Zustand remains
@@ -119,17 +118,16 @@ const PersonaPageContent = () => {
   // second observer, refetchOnMount refetches the errored query, and the
   // error page unmounts again — an infinite loop. Retry lives here instead.
   const retryFailedQueries = async (): Promise<void> => {
-    const failed = [voicesQuery, sampleLanguagesQuery, personasQuery].filter((query) => query.isError);
+    const failed = [voicesQuery, personasQuery].filter((query) => query.isError);
     await Promise.all(failed.map((query) => query.refetch()));
   };
 
-  if (voicesQuery.isError || sampleLanguagesQuery.isError || personasQuery.isError) {
+  if (voicesQuery.isError || personasQuery.isError) {
     return <PersonaPageError onRetry={retryFailedQueries} isRetrying={voicesQuery.isFetching} />;
   }
 
   if (
-    voicesQuery.isPending || voicesQuery.isLoading || voicesQuery.data === undefined ||
-    sampleLanguagesQuery.isPending || sampleLanguagesQuery.isLoading || sampleLanguagesQuery.data === undefined
+    voicesQuery.isPending || voicesQuery.isLoading || voicesQuery.data === undefined
   ) {
     return <PersonaPageSkeleton />;
   }
@@ -158,7 +156,7 @@ const PersonaPageContent = () => {
             <PersonaTokensSection />
           </section>
           <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
-            <PersonaVoiceSection personaLanguage={editingPersona?.language} />
+            <PersonaVoiceSection />
           </section>
           <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
             <PersonaPreferencesSection />

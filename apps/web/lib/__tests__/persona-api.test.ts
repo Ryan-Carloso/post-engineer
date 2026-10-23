@@ -170,23 +170,22 @@ describe('lib/api — persona', () => {
   });
 
   describe('fetchVoices', () => {
+    const CATALOG = [
+      { id: 'chatterbox:kokoro_af_heart', label: 'Heart', provider: 'kokoro', gender: 'female', accent: 'us', kind: 'standard', description: 'American female voice.' },
+      { id: 'chatterbox:phonon_azgorath', label: 'Azgorath', provider: 'phonon', gender: 'male', accent: null, kind: 'character', description: 'An enormous ancient demon.' },
+    ];
+
     it('fetches /api/persona/voices and returns the voice list', async () => {
       fetchMock.mockResolvedValue(
         jsonResponse({
-          voices: [
-            { id: 'calm' },
-            { id: 'energetic' },
-          ],
+          voices: CATALOG,
         }),
       );
 
       const voices = await fetchVoices();
 
       expect(fetchMock).toHaveBeenCalledWith('/api/persona/voices');
-      expect(voices).toEqual([
-        { id: 'calm' },
-        { id: 'energetic' },
-      ]);
+      expect(voices).toEqual(CATALOG);
     });
 
     it('throws the API error instead of returning undefined', async () => {
@@ -200,6 +199,12 @@ describe('lib/api — persona', () => {
       await expect(fetchVoices()).rejects.toThrow(
         'Voices service unreachable.',
       );
+    });
+
+    it('rejects a voice without catalog metadata', async () => {
+      fetchMock.mockResolvedValue(jsonResponse({ voices: [{ id: 'chatterbox:kokoro_af_heart' }] }));
+
+      await expect(fetchVoices()).rejects.toThrow('Invalid voices response.');
     });
 
     it('rejects a success payload without a voice list', async () => {

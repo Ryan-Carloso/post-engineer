@@ -1,9 +1,11 @@
 import { z } from 'zod';
+import { filterVoicesPayload, ListVoicesSchema, type ListVoicesArgs } from './voice-filters.js';
 import {
   CancelScheduleSchema,
   CancelScheduleShape,
   DeleteSlotSchema,
   DeleteSlotShape,
+  GeneratePersonaVideosOptionsShape,
   GetSlotSchema,
   GetSlotShape,
   ListPostsSchema,
@@ -20,6 +22,7 @@ export {
   CancelScheduleShape,
   DeleteSlotSchema,
   DeleteSlotShape,
+  GeneratePersonaVideosOptionsShape,
   GetSlotSchema,
   GetSlotShape,
   ListPostsSchema,
@@ -40,6 +43,7 @@ import {
   VIDEO_LAYOUTS,
 } from './client.js';
 import { getErrorMessage, ApiError } from './errors.js';
+import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
 
 export type { McpToolResponse } from './tools-call.js';
 
@@ -66,8 +70,12 @@ export const CreatePersonaShape = {
     .describe(
       'REQUIRED. Public URL to the persona avatar image (use list_faces for stock face URLs). Every persona has a face; "no face" is chosen per video with generate_persona_videos options.faceless.',
     ),
-  voiceId: z.string().default('chatterbox:ryan').describe('Voice ID to use (see list_voices)'),
-  language: z.string().default('en-US').describe('Language code (e.g. pt-BR, en-US)'),
+  voiceId: z.string().min(1, 'voiceId is required').describe('Voice ID to use (see list_voices)'),
+  language: z
+    .string()
+    .refine(isEnglishLanguage, { message: ONLY_ENGLISH_VIDEOS_MESSAGE })
+    .default('en-US')
+    .describe('Language code — English only for now (e.g. en-US, en-GB)'),
   videoAspect: z.enum(['9:16', '16:9']).default('9:16').describe('Video aspect ratio'),
   videoLayout: z
     .enum(VIDEO_LAYOUTS)
@@ -89,9 +97,7 @@ export const ListPersonasShape = {};
 
 export const ListPersonasSchema = z.object(ListPersonasShape);
 
-export const ListVoicesShape = {};
-
-export const ListVoicesSchema = z.object(ListVoicesShape);
+export { ListVoicesShape, ListVoicesSchema } from './voice-filters.js';
 
 export {
   ListClonedVoicesShape,
@@ -114,7 +120,11 @@ export const UpdatePersonaShape = {
   // No .nullable(): the API has no "clear avatar" sentinel — null would be silently ignored.
   avatarUrl: z.string().url().optional().describe('New public avatar image URL'),
   voiceId: z.string().optional().describe('New voice ID (see list_voices)'),
-  language: z.string().optional().describe('New language code (e.g. pt-BR, en-US)'),
+  language: z
+    .string()
+    .refine(isEnglishLanguage, { message: ONLY_ENGLISH_VIDEOS_MESSAGE })
+    .optional()
+    .describe('New language code — English only for now (e.g. en-US, en-GB)'),
   videoAspect: z.enum(['9:16', '16:9']).optional().describe('New video aspect ratio'),
   videoLayout: z.enum(VIDEO_LAYOUTS).optional().describe('New persona-hook layout (standard or react)'),
   scriptPrompt: z.string().optional().describe('New system prompt instructions for video scripts'),
@@ -214,32 +224,6 @@ export const GetTokenBalanceShape = {};
 
 export const GetTokenBalanceSchema = z.object(GetTokenBalanceShape);
 
-// Loopback hosts for which a plain http: media/webhook URL is tolerated
-// (local dev callbacks). Anything else must be https so the URL's content
-// never travels in cleartext.
-const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
-
-function isHttpsOrLoopbackHttp(url: string): boolean {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return false;
-  }
-  if (parsed.protocol === 'https:') return true;
-  return parsed.protocol === 'http:' && LOOPBACK_HOSTS.has(parsed.hostname);
-}
-
-/** URL field for user-supplied media/webhook URLs: https, or http on loopback only. */
-function httpsUrlField(fieldName: string) {
-  return z
-    .string()
-    .url(`${fieldName} must be a valid URL`)
-    .refine(isHttpsOrLoopbackHttp, {
-      message: `${fieldName} must be an https URL (http is allowed only for loopback hosts like localhost)`,
-    });
-}
-
 // Shared per-provider account-id fields for generate_persona_videos.
 // Defined once so the four provider blocks can't drift apart; the server
 // enforces which providers need accounts, the client only maps them.
@@ -298,26 +282,7 @@ export const GeneratePersonaVideosShape = {
     .optional()
     .describe('Daily publish times in HH:MM 24-hour format. Required unless mode is \'asap\'.'),
   timezone: z.string().min(1).default('UTC').describe('IANA timezone for a naive startAt and the HH:MM times, e.g. "Europe/Lisbon". Defaults to UTC. Display-only when mode is \'asap\'.'),
-  options: z
-    .object({
-      faceless: z.boolean().optional().describe('Generate faceless (no face). With a persona this drops only the face — the persona voice, niche and script prompt still apply. Without a persona it is REQUIRED.'),
-      audioUrl: httpsUrlField('audioUrl').optional().describe('Public URL of custom audio for the videos (overrides the persona voice).'),
-      imageId: z.string().min(1, 'imageId must be a non-empty string').optional().describe('Library image ID to use for every video (overrides the deterministic per-video selection; see list_persona_images).'),
-      scriptPrompt: z.string().optional().describe('Script prompt override applied to every video in this call.'),
-      scriptPrompts: z.array(z.string().min(1)).optional().describe('Per-topic script prompt overrides; must have one entry per topic.'),
-      voiceId: z.string().min(1, 'voiceId must be a non-empty string').optional().describe('Voice ID override (see list_voices).'),
-      webhookUrl: httpsUrlField('webhookUrl').optional().describe('Callback URL the server POSTs to when each video reaches a terminal state (completed/failed).'),
-      videoAspect: z.enum(['9:16', '16:9']).optional().describe('Frame shape. Overrides the persona when one is given; a post without a persona defaults to 9:16.'),
-      videoLayout: z
-        .enum(VIDEO_LAYOUTS)
-        .optional()
-        .describe('How the persona hook is composed with the b-roll. Overrides the persona when one is given; a post without a persona defaults to "standard". Same render cost either way.'),
-      paragraphNumber: z.number().int().min(1).max(10).optional().describe('Paragraph count (1-10). Overrides the persona when one is given.'),
-      language: z.string().min(1).max(32).optional().describe('Spoken language code, e.g. pt-BR. Overrides the persona when one is given.'),
-      niche: z.string().min(1).max(300).optional().describe('Content niche. Overrides the persona when one is given.'),
-    })
-    .optional()
-    .describe('Generation options applied to the videos in this call.'),
+  options: z.object(GeneratePersonaVideosOptionsShape).optional().describe('Generation options applied to the videos in this call.'),
   idempotencyKey: z.string().min(1).optional().describe('Idempotency key: retrying the call with the same key returns the original schedule (replayed: true) instead of generating again. A UUID is generated automatically when omitted.'),
 };
 
@@ -417,9 +382,13 @@ export async function handleListPersonas(
 }
 
 export async function handleListVoices(
-  client: PostEngineerClient
+  client: PostEngineerClient,
+  args: ListVoicesArgs = {}
 ): Promise<McpToolResponse> {
-  return handleLibraryCall(() => client.listVoices(), 'listing voices');
+  return handleLibraryCall(
+    async () => filterVoicesPayload(await client.listVoices(), ListVoicesSchema.parse(args)),
+    'listing voices'
+  );
 }
 
 export {

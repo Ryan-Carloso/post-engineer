@@ -44,6 +44,7 @@ class ClonedVoiceServiceTests(unittest.TestCase):
             b"source",
             "en",
             consent_acknowledged=True,
+                denoise=False,
         )
 
         self.store.upload_reference_wav.assert_called_once()
@@ -142,7 +143,7 @@ class ClonedVoiceServiceTests(unittest.TestCase):
         from app.services.cloned_voices.audio import ReferenceAudioError
 
         with self.assertRaises(ReferenceAudioError):
-            self.service.create_from_upload("user-1", b"x", "en", consent_acknowledged=False)
+            self.service.create_from_upload("user-1", b"x", "en", consent_acknowledged=False, denoise=False)
 
     def test_list_catalog_entries_maps_ready_rows(self):
         self.store.list_ready_for_user.return_value = [
@@ -267,6 +268,7 @@ class ClonedVoiceServiceTests(unittest.TestCase):
                 b"source",
                 "en",
                 consent_acknowledged=True,
+                denoise=False,
             )
 
         self.store.delete_storage_object.assert_called_once_with(

@@ -86,9 +86,9 @@ function seedUserMetadata(userMetadata: Record<string, unknown>): void {
 // short viewport the footer (locale, tokens, user, api keys, sign out) is
 // clipped off-screen. Cypress reports the clipped elements as not visible
 // and cannot click them, so these specs use a viewport tall enough for the
-// whole sidebar.
+// whole sidebar. Height covers all five tabs (Metrics added ~80px).
 //---------------
-const TALL_VIEWPORT: [number, number] = [1280, 1100];
+const TALL_VIEWPORT: [number, number] = [1280, 1440];
 
 describe('Main Layout — Sidebar', () => {
   beforeEach(() => {
@@ -97,17 +97,18 @@ describe('Main Layout — Sidebar', () => {
     interceptShellData();
   });
 
-  it('renderiza marca, subtítulo e as abas de navegação', () => {
+  it('renders brand, subtitle and nav tabs, without a Home tab', () => {
     cy.visit('/');
 
     cy.get('[data-testid=nav-brand]').should('be.visible');
     cy.contains('Post Engineer').should('be.visible');
     cy.contains('YouTube · Instagram').should('be.visible');
 
-    cy.contains('a', 'Início').should('be.visible');
+    cy.contains('a', 'Início').should('not.exist');
     cy.contains('a', 'Posts').should('be.visible');
     cy.contains('a', 'Contas').should('be.visible');
     cy.contains('a', 'Personas').should('be.visible');
+    cy.contains('a', 'Métricas').should('be.visible');
     cy.contains('a', 'Tokens').should('be.visible');
     // API Keys is no longer a nav tab — it lives in the profile area
     // (sidebar footer), reachable from every page.

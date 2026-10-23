@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { engineBaseUrl } from '@/lib/engine-proxy';
+import { isEnglishLanguage, ONLY_ENGLISH_CLONE_MESSAGE } from '@/lib/language-gate';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
@@ -35,6 +36,14 @@ async function postHandler(request: Request, context: RouteContext): Promise<Nex
   const url = new URL(`${baseUrl}/api/v1/cloned-voices/${encodeURIComponent(cloneId)}/preview`);
   const language = new URL(request.url).searchParams.get('language');
   if (language && language.trim()) {
+    // English-only launch: a preview renders the cloned voice speaking, so
+    // a non-English override is rejected before it reaches the engine.
+    if (!isEnglishLanguage(language)) {
+      return NextResponse.json(
+        { success: false, error: ONLY_ENGLISH_CLONE_MESSAGE },
+        { status: 400 },
+      );
+    }
     url.searchParams.set('language', language.trim());
   }
 

@@ -22,6 +22,10 @@ import { scrubSecrets, redactCredentialFragments } from './scrub';
 // Track a successful API operation (e.g. 'schedule_created').
 // eventName should be snake_case. properties carries safe context only:
 // ids, counts, validated enums — never credentials or raw bodies.
+// Deliberate exception: 'post_metrics_collected' carries script_angle,
+// the model-generated angle string, so angle performance can be grouped
+// in PostHog; values still pass scrubSecrets + credential-fragment
+// redaction + the 500-char cap above (see lib/metrics/post-metrics.ts).
 //---------------
 
 export function trackApiEvent(eventName: string, properties?: Record<string, unknown>): void {

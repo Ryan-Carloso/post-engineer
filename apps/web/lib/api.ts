@@ -15,6 +15,7 @@ import type {
   SocialProvider,
   VoiceOption,
 } from '@/lib/types';
+import { isVoiceOption } from './voice-catalog';
 import { logger } from '@/lib/logger';
 import type { PublishLink } from '@/lib/publish-links';
 import { narrowGeneration, narrowProgressHistory, narrowPublishLinks, type GenerationFacts, type ProgressHistoryEntry } from './slot-detail';
@@ -144,13 +145,7 @@ async function fetchVoices(): Promise<VoiceOption[]> {
     data === null ||
     !('voices' in data) ||
     !Array.isArray(data.voices) ||
-    !data.voices.every(
-      (voice): voice is VoiceOption =>
-        typeof voice === 'object' &&
-        voice !== null &&
-        'id' in voice &&
-        typeof voice.id === 'string',
-    )
+    !data.voices.every(isVoiceOption)
   ) {
     throw new Error('Invalid voices response.');
   }
@@ -673,28 +668,6 @@ export function useVoicesQuery() {
     queryFn: fetchVoices,
     retry: false,
     staleTime: 5 * 60_000,
-  });
-}
-
-export interface VoiceSampleLanguage {
-  code: string;
-  label: string;
-}
-
-async function fetchVoiceSampleLanguages(): Promise<VoiceSampleLanguage[]> {
-  const response = await fetch('/api/persona/voice-sample-languages');
-  if (!response.ok) {
-    throw new Error('Failed to fetch voice sample languages');
-  }
-  const data: { languages: VoiceSampleLanguage[] } = await response.json();
-  return data.languages;
-}
-
-export function useVoiceSampleLanguagesQuery() {
-  return useQuery<VoiceSampleLanguage[]>({
-    queryKey: ['persona-voice-sample-languages'],
-    queryFn: fetchVoiceSampleLanguages,
-    staleTime: 24 * 60 * 60_000,
   });
 }
 

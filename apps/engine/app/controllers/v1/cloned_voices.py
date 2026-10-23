@@ -11,15 +11,22 @@ from fastapi.responses import JSONResponse, Response
 from app.controllers import base
 from app.controllers.v1.base import new_router
 from app.models.schema import BaseResponse
-from app.services.cloned_voices.audio import ReferenceAudioError
+from app.services.cloned_voices.audio import ReferenceAudioError, normalize_reference_audio
 from app.services.cloned_voices.constants import (
     CHATTERBOX_VOICE_PREFIX,
     ERROR_AUDIO_TOO_LARGE,
+    ERROR_AUDIO_TOO_LONG,
+    ERROR_CONSENT_REQUIRED,
+    ERROR_INVALID_AUDIO,
     ERROR_NOT_FOUND,
     ERROR_NOT_READY,
+    ERROR_PREVIEW_FAILED,
+    ERROR_STORAGE_UPLOAD_FAILED,
     MAX_REFERENCE_BYTES,
+    MAX_REFERENCE_SECONDS,
 )
 from app.services.cloned_voices.service import ClonedVoiceService
+from app.services.language_gate import ENGLISH_ONLY_CLONE_MESSAGE, is_english_language
 from app.utils import utils
 
 router = new_router()
@@ -43,6 +50,70 @@ def _public_row(row: dict[str, Any]) -> dict[str, Any]:
         "created_at": row.get("created_at"),
         "updated_at": row.get("updated_at"),
     }
+
+
+def _parse_denoise(raw: str) -> bool | None:
+    """Strict "true"/"false" form flag; anything else is None (a 400)."""
+    value = raw.strip().lower()
+    if value == "true":
+        return True
+    if value == "false":
+        return False
+    return None
+
+
+def _read_bounded_upload(file: UploadFile) -> bytes | JSONResponse:
+    # Bound the read itself: normalize_reference_audio enforces the same
+    # limit, but only after the upload is fully buffered in memory.
+    if file.size is not None and file.size > MAX_REFERENCE_BYTES:
+        return _audio_too_large_response()
+    try:
+        source_bytes = file.file.read(MAX_REFERENCE_BYTES + 1)
+    except Exception:
+        return JSONResponse(
+            status_code=400,
+            content=utils.get_response(status=400, message="could not read upload"),
+        )
+    if len(source_bytes) > MAX_REFERENCE_BYTES:
+        return _audio_too_large_response()
+    return source_bytes
+
+
+# Client-facing text per stable error code. The exception's own message is
+# never echoed: responses carry only these fixed strings plus the code.
+_PUBLIC_ERROR_MESSAGES: dict[str, str] = {
+    ERROR_INVALID_AUDIO: "could not decode reference audio",
+    ERROR_AUDIO_TOO_LARGE: f"reference audio exceeds {MAX_REFERENCE_BYTES // 1024 // 1024} MB",
+    ERROR_AUDIO_TOO_LONG: f"reference audio exceeds {MAX_REFERENCE_SECONDS} seconds",
+    ERROR_CONSENT_REQUIRED: "voice cloning consent is required",
+    ERROR_STORAGE_UPLOAD_FAILED: "could not store reference audio",
+    ERROR_NOT_FOUND: "cloned voice not found",
+    ERROR_NOT_READY: "cloned voice is not ready",
+    ERROR_PREVIEW_FAILED: "cloned voice preview failed",
+}
+
+
+_UNKNOWN_ERROR_CODE = "request_failed"
+
+
+def _public_error(error_code: str) -> tuple[str, str]:
+    """(code, message) taken from the fixed table, never from the exception."""
+    for code, message in _PUBLIC_ERROR_MESSAGES.items():
+        if code == error_code:
+            return code, message
+    return _UNKNOWN_ERROR_CODE, "cloned voice request failed"
+
+
+def _reference_error_response(exc: ReferenceAudioError, status: int = 400) -> JSONResponse:
+    code, message = _public_error(exc.error_code)
+    return JSONResponse(
+        status_code=status,
+        content=utils.get_response(
+            status=status,
+            message=message,
+            body={"error_code": code},
+        ),
+    )
 
 
 def _audio_too_large_response() -> JSONResponse:
@@ -96,10 +167,17 @@ def create_cloned_voice(
     file: UploadFile = File(...),
     language: str = Form(...),
     consent: str = Form(...),
+    denoise: str = Form(...),
 ):
     auth = base.get_auth_context(request)
     request_id = base.get_task_id(request)
     consent_acknowledged = consent.strip().lower() == "true"
+    denoise_flag = _parse_denoise(denoise)
+    if denoise_flag is None:
+        return JSONResponse(
+            status_code=400,
+            content=utils.get_response(status=400, message='denoise must be "true" or "false"'),
+        )
     lang = (language or "").strip()
     if not lang:
         return JSONResponse(
@@ -115,20 +193,17 @@ def create_cloned_voice(
             status_code=400,
             content=utils.get_response(status=400, message="language is invalid"),
         )
-
-    # Bound the read itself: normalize_reference_audio enforces the same
-    # limit, but only after the upload is fully buffered in memory.
-    if file.size is not None and file.size > MAX_REFERENCE_BYTES:
-        return _audio_too_large_response()
-    try:
-        source_bytes = file.file.read(MAX_REFERENCE_BYTES + 1)
-    except Exception:
+    # English-only launch: cloning only ever worked well in English, so a
+    # non-English registration is rejected before any row or file exists.
+    if not is_english_language(lang):
         return JSONResponse(
             status_code=400,
-            content=utils.get_response(status=400, message="could not read upload"),
+            content=utils.get_response(status=400, message=ENGLISH_ONLY_CLONE_MESSAGE),
         )
-    if len(source_bytes) > MAX_REFERENCE_BYTES:
-        return _audio_too_large_response()
+
+    source_bytes = _read_bounded_upload(file)
+    if isinstance(source_bytes, JSONResponse):
+        return source_bytes
 
     service = ClonedVoiceService()
     try:
@@ -137,16 +212,10 @@ def create_cloned_voice(
             source_bytes,
             lang,
             consent_acknowledged=consent_acknowledged,
+            denoise=denoise_flag,
         )
     except ReferenceAudioError as exc:
-        return JSONResponse(
-            status_code=400,
-            content=utils.get_response(
-                status=400,
-                message=str(exc),
-                body={"error_code": exc.error_code},
-            ),
-        )
+        return _reference_error_response(exc)
 
     row = created["row"]
     clone_id = row.get("id")
@@ -168,11 +237,37 @@ def create_cloned_voice(
 
 
 @cloned_router.post(
+    "/cloned-voices/denoise-preview",
+    summary="Cleaned version of a reference recording (audio/wav), for A/B before cloning",
+)
+def denoise_preview(request: Request, file: UploadFile = File(...)):
+    # Auth only: nothing is stored, the cleaned WAV goes straight back so the
+    # user can compare it with the original before confirming the clone.
+    base.get_auth_context(request)
+    source_bytes = _read_bounded_upload(file)
+    if isinstance(source_bytes, JSONResponse):
+        return source_bytes
+    try:
+        cleaned = normalize_reference_audio(source_bytes, denoise=True)
+    except ReferenceAudioError as exc:
+        return _reference_error_response(exc)
+    return Response(content=cleaned.wav_bytes, media_type="audio/wav")
+
+
+@cloned_router.post(
     "/cloned-voices/{clone_id}/preview",
     summary="TTS preview for a ready cloned voice (audio/mpeg)",
 )
 def preview_cloned_voice(request: Request, clone_id: str, language: str | None = None):
     auth = base.get_auth_context(request)
+    # English-only launch: a preview renders the cloned voice speaking, so a
+    # non-English language override is rejected like a non-English
+    # registration. No override keeps the clone's registered language.
+    if language and language.strip() and not is_english_language(language):
+        return JSONResponse(
+            status_code=400,
+            content=utils.get_response(status=400, message=ENGLISH_ONLY_CLONE_MESSAGE),
+        )
     service = ClonedVoiceService()
     try:
         audio_bytes = service.preview_mp3(auth.user_id, clone_id, language=language)
@@ -180,14 +275,7 @@ def preview_cloned_voice(request: Request, clone_id: str, language: str | None =
         status = 404 if exc.error_code == ERROR_NOT_FOUND else 400
         if exc.error_code == ERROR_NOT_READY:
             status = 409
-        return JSONResponse(
-            status_code=status,
-            content=utils.get_response(
-                status=status,
-                message=str(exc),
-                body={"error_code": exc.error_code},
-            ),
-        )
+        return _reference_error_response(exc, status)
     return Response(content=audio_bytes, media_type="audio/mpeg")
 
 

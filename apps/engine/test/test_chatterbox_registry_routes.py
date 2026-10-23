@@ -113,14 +113,14 @@ class ChatterboxRegistryRoutesTest(unittest.TestCase):
         self.assertEqual(self.events, ["reload", "commit"])
 
     def test_register_rejects_house_voice_name(self) -> None:
-        response = self.client.post("/v1/voices", json=self._payload(voice="ryan"))
+        response = self.client.post("/v1/voices", json=self._payload(voice="en_us_male_01"))
         self.assertEqual(response.status_code, 400)
         self.assertIn("user clone key", response.json()["error"])
         self.assertFalse(self.config_path.is_file())
         self.assertEqual(self.events, [])
 
     def test_delete_rejects_house_voice_name(self) -> None:
-        response = self.client.delete("/v1/voices/ryan")
+        response = self.client.delete("/v1/voices/en_us_male_01")
         self.assertEqual(response.status_code, 400)
         self.assertIn("user clone key", response.json()["error"])
         self.assertEqual(self.events, [])

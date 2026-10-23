@@ -39,15 +39,11 @@ vi.mock('@/lib/i18n/provider', () => {
 });
 
 vi.mock('../voice-picker', () => ({
-  PersonaHouseVoicePicker: ({ personaLanguage }: { personaLanguage?: string }) => (
-    <div data-testid="house-picker">{personaLanguage ?? 'no-language'}</div>
-  ),
+  PersonaHouseVoicePicker: () => <div data-testid="house-picker" />,
 }));
 
 vi.mock('../voice-clone-picker', () => ({
-  PersonaVoiceClonePanel: ({ personaLanguage }: { personaLanguage?: string }) => (
-    <div data-testid="clone-panel">{personaLanguage ?? 'no-language'}</div>
-  ),
+  PersonaVoiceClonePanel: () => <div data-testid="clone-panel" />,
   VoiceTabButton: ({
     active,
     label,
@@ -69,13 +65,11 @@ describe('PersonaVoiceSection', () => {
   });
 
   it('shows the house picker by default and hides the clone panel', () => {
-    const { container } = render(<PersonaVoiceSection personaLanguage="en" />);
+    const { container } = render(<PersonaVoiceSection />);
     const houseTab = screen.getByRole('tab', { name: 'persona.voiceHouseTab' });
     const cloneTab = screen.getByRole('tab', { name: 'persona.voiceCloneTab' });
     expect(houseTab).toHaveAttribute('aria-selected', 'true');
     expect(cloneTab).toHaveAttribute('aria-selected', 'false');
-    expect(screen.getByTestId('house-picker')).toHaveTextContent('en');
-    expect(screen.getByTestId('clone-panel')).toHaveTextContent('en');
     const houseWrapper = screen.getByTestId('house-picker').parentElement;
     const cloneWrapper = screen.getByTestId('clone-panel').parentElement;
     expect(houseWrapper?.hidden).toBe(false);
@@ -85,7 +79,7 @@ describe('PersonaVoiceSection', () => {
 
   it('switches to the clone tab and back when the tab buttons are clicked', async () => {
     const user = userEvent.setup();
-    render(<PersonaVoiceSection personaLanguage="pt" />);
+    render(<PersonaVoiceSection />);
 
     await user.click(screen.getByRole('tab', { name: 'persona.voiceCloneTab' }));
     expect(screen.getByRole('tab', { name: 'persona.voiceCloneTab' })).toHaveAttribute(

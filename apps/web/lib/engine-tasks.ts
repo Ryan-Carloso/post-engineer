@@ -212,3 +212,23 @@ async function fetchEngineTaskRecord(
     clearTimeout(timeout);
   }
 }
+
+//---------------
+// fetchEnginePostMetricsSource — publish_results and script_angle from ONE
+// task read: the post-metrics collector needs both per post and must not
+// double its engine reads. Same parsing as fetchEnginePublishResults and
+// fetchEngineScriptAngle; throws on the same conditions.
+//---------------
+export async function fetchEnginePostMetricsSource(
+  taskId: string,
+  userId: string,
+): Promise<{ publishResults: unknown[]; scriptAngle: string | null }> {
+  const task = await fetchEngineTaskRecord(taskId, userId);
+  const results = task ? task.publish_results : null;
+  const angle = task ? task.script_angle : null;
+  const trimmed = typeof angle === 'string' ? angle.trim() : '';
+  return {
+    publishResults: Array.isArray(results) ? results : [],
+    scriptAngle: trimmed.length > 0 ? trimmed : null,
+  };
+}

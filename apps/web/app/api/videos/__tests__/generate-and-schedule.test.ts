@@ -1444,6 +1444,25 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(json.field).toBe('personaId');
     });
 
+    it('rejects a non-English persona language (English-only launch)', async () => {
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, language: 'pt' } });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.error).toBe('Only English videos are supported for now.');
+      expect(json.field).toBe('personaId');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it('accepts a non-English persona when the request overrides the language with English', async () => {
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, language: 'pt' } });
+      const res = await post(baseBody({ options: { language: 'en' } }));
+      expect(res.status).toBe(200);
+      const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
+      expect(scheduleRows[0].post_language).toBe('en');
+    });
+
     it('rejects an out-of-range paragraph_number', async () => {
       setup({ ...DEFAULT_CFG, persona: { ...PERSONA, paragraph_number: 11 } });
       const res = await post(baseBody());
@@ -2004,6 +2023,23 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(json.field).toBe('options.language');
     });
 
+    it('rejects a non-English options.language (English-only launch)', async () => {
+      const res = await post(baseBody({ options: { language: 'pt-BR' } }));
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.error).toBe('Only English videos are supported for now.');
+      expect(json.field).toBe('options.language');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it('accepts English regional variants in options.language', async () => {
+      const res = await post(baseBody({ options: { language: 'en-GB' } }));
+      expect(res.status).toBe(200);
+      const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
+      expect(scheduleRows[0].post_language).toBe('en-GB');
+    });
+
     it('rejects options.niche over 300 characters', async () => {
       const res = await post(baseBody({ options: { niche: 'x'.repeat(301) } }));
       expect(res.status).toBe(400);
@@ -2030,7 +2066,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
           options: {
             faceless: true,
             voiceId: 'voice-eleven',
-            language: 'pt',
+            language: 'en',
             niche: 'comedy',
             videoAspect: '16:9',
             paragraphNumber: 3,
@@ -2048,7 +2084,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(scheduleRows).toHaveLength(1);
       expect(scheduleRows[0].persona_id).toBeNull();
       expect(scheduleRows[0].post_voice_id).toBe('voice-eleven');
-      expect(scheduleRows[0].post_language).toBe('pt');
+      expect(scheduleRows[0].post_language).toBe('en');
       expect(scheduleRows[0].post_niche).toBe('comedy');
       expect(scheduleRows[0].post_video_aspect).toBe('16:9');
       expect(scheduleRows[0].post_paragraph_number).toBe(3);
@@ -2063,7 +2099,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const persona = payload.persona as Record<string, unknown>;
       expect(persona.name).toBe('Post');
       expect(persona.voice_id).toBe('voice-eleven');
-      expect(payload.video_language).toBe('pt');
+      expect(payload.video_language).toBe('en');
       expect(payload.video_aspect).toBe('16:9');
       expect(payload.paragraph_number).toBe(3);
       expect(payload.lipsync_enabled).toBe(false);
@@ -2139,7 +2175,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
     it('prefers per-request editorial fields over the persona values', async () => {
       const res = await post(
         baseBody({
-          options: { niche: 'tech', language: 'pt', videoAspect: '16:9', paragraphNumber: 2, scriptPrompt: 'Custom script' },
+          options: { niche: 'tech', language: 'en-US', videoAspect: '16:9', paragraphNumber: 2, scriptPrompt: 'Custom script' },
         }),
       );
       expect(res.status).toBe(200);
@@ -2147,13 +2183,13 @@ describe('POST /api/videos/generate-and-schedule', () => {
       // over the persona's stored definition.
       const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
       expect(scheduleRows[0].post_niche).toBe('tech');
-      expect(scheduleRows[0].post_language).toBe('pt');
+      expect(scheduleRows[0].post_language).toBe('en-US');
       expect(scheduleRows[0].post_video_aspect).toBe('16:9');
       expect(scheduleRows[0].post_paragraph_number).toBe(2);
       expect(scheduleRows[0].post_script_prompt).toBe('Custom script');
       // And the engine payload carries the same resolved values.
       const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
-      expect(payload.video_language).toBe('pt');
+      expect(payload.video_language).toBe('en-US');
       expect(payload.video_aspect).toBe('16:9');
       expect(payload.paragraph_number).toBe(2);
     });

@@ -28,6 +28,7 @@ export const RATE_LIMITS = {
   mediaUpload: { name: 'media-upload', limit: 10, windowMs: 60_000 },
   // Voice clone registration: GPU/registry cost — stricter than media upload.
   voiceCloneCreate: { name: 'voice-clone-create', limit: 3, windowMs: 60 * 60 * 1000 },
+  voiceCloneDenoisePreview: { name: 'voice-clone-denoise-preview', limit: 20, windowMs: 60 * 60 * 1000 },
   // Instagram content posting
   instagramPost: { name: 'instagram-post', limit: 10, windowMs: 60_000 },
   // OAuth token endpoint: brute-force / token-farming protection
@@ -64,6 +65,8 @@ export const RATE_LIMITS = {
   // Per-persona default publishing accounts: tiny rows, no fan-out. The UI
   // saves on button click (not per keystroke), so 60/min is generous.
   publishingAccounts: { name: 'publishing-accounts', limit: 60, windowMs: 60_000 },
+  // Metrics dashboard: one bounded read per filter change.
+  metrics: { name: 'metrics', limit: 60, windowMs: 60_000 },
 } as const satisfies Record<string, RateLimitProfile>;
 
 //---------------

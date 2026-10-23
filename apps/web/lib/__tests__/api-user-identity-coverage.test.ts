@@ -35,6 +35,7 @@ const ANONYMOUS_ROUTES = new Set([
   'coverage/route.ts',
   // Vercel-style cron: CRON_SECRET bearer, service identity.
   'cron/billing-reconcile/route.ts',
+  'cron/post-metrics/route.ts',
   // OAuth flows: run before the user has a session.
   'google-oauth/callback/route.ts',
   'google-oauth/start/route.ts',

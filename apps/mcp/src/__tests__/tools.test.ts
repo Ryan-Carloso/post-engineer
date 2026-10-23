@@ -341,7 +341,7 @@ describe('schema bounds', () => {
   it('CreatePersonaSchema accepts paragraphNumber up to 10 (matches the API)', () => {
     const result = CreatePersonaSchema.safeParse({
       name: 'x',
-      avatarUrl: 'https://example.com/a.png',
+      avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
       paragraphNumber: 10,
     });
     expect(result.success).toBe(true);
@@ -353,6 +353,48 @@ describe('schema bounds', () => {
       avatarUrl: null,
     });
     expect(result.success).toBe(false);
+  });
+
+  it('persona schemas reject non-English languages (English-only launch)', () => {
+    const created = CreatePersonaSchema.safeParse({
+      name: 'x',
+      avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
+      language: 'pt-BR',
+    });
+    expect(created.success).toBe(false);
+    if (!created.success) {
+      expect(created.error.issues.map((issue) => issue.message)).toContain(
+        'Only English videos are supported for now',
+      );
+    }
+    const updated = UpdatePersonaSchema.safeParse({
+      personaId: 'p1',
+      language: 'es',
+    });
+    expect(updated.success).toBe(false);
+  });
+
+  it('persona schemas accept the full English language name', () => {
+    const created = CreatePersonaSchema.safeParse({
+      name: 'x',
+      avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
+      language: 'English',
+    });
+    expect(created.success).toBe(true);
+  });
+
+  it('persona schemas accept English regional variants', () => {
+    const created = CreatePersonaSchema.safeParse({
+      name: 'x',
+      avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
+      language: 'en-GB',
+    });
+    expect(created.success).toBe(true);
+    const updated = UpdatePersonaSchema.safeParse({
+      personaId: 'p1',
+      language: 'EN',
+    });
+    expect(updated.success).toBe(true);
   });
 
   it('handleConnectAccount errors clearly when the response has no auth_url', async () => {
@@ -383,7 +425,7 @@ describe('persona image library tools', () => {
     vi.mocked(mockClient.createPersona).mockResolvedValue({ success: true, personaId: 'p-1' });
     const args = CreatePersonaSchema.parse({
       name: 'Alex AI',
-      avatarUrl: 'https://example.com/alex.png',
+      avatarUrl: 'https://example.com/alex.png', voiceId: 'chatterbox:en_us_male_01',
       images: [
         { path: '/tmp/a.jpg', tag: 'casual', description: 'at the beach' },
         { path: '/tmp/b.png' },
@@ -400,7 +442,7 @@ describe('persona image library tools', () => {
   it('create_persona rejects more than 10 images at the schema level', () => {
     const images = Array.from({ length: 11 }, (_, i) => ({ path: `/tmp/img-${i}.jpg` }));
     expect(() =>
-      CreatePersonaSchema.parse({ name: 'X', avatarUrl: 'https://example.com/a.png', images })
+      CreatePersonaSchema.parse({ name: 'X', avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01', images })
     ).toThrow();
   });
 
@@ -419,14 +461,14 @@ describe('persona image library tools', () => {
     expect(() =>
       CreatePersonaSchema.parse({
         name: 'X',
-        avatarUrl: 'https://example.com/a.png',
+        avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
         images: [{ path: '/tmp/a.jpg' }],
       })
     ).not.toThrow();
     expect(() =>
       CreatePersonaSchema.parse({
         name: 'X',
-        avatarUrl: 'https://example.com/a.png',
+        avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
         images: [],
       })
     ).not.toThrow();
@@ -445,6 +487,26 @@ describe('persona image library tools', () => {
     const response = await handleCreatePersona(mockClient, sdkArgs);
     expect(response.isError).toBe(true);
     expect(textOf(response)).toMatch(/avatarUrl/);
+    expect(mockClient.createPersona).not.toHaveBeenCalled();
+  });
+
+  it('CreatePersonaSchema rejects a missing or empty voiceId (no default voice)', () => {
+    // Fail fast: the MCP never picks a voice on the agent's behalf.
+    const base = { name: 'X', avatarUrl: 'https://example.com/a.png' };
+    expect(() => CreatePersonaSchema.parse(base)).toThrow(/Required/);
+    expect(() => CreatePersonaSchema.parse({ ...base, voiceId: '' })).toThrow(/voiceId is required/);
+  });
+
+  it('create_persona handler fails on a missing voiceId before the client call', async () => {
+    vi.clearAllMocks();
+    vi.mocked(mockClient.createPersona).mockResolvedValue({ success: true });
+    const sdkArgs = {
+      name: 'X',
+      avatarUrl: 'https://example.com/a.png',
+    } as unknown as z.infer<typeof CreatePersonaSchema>;
+    const response = await handleCreatePersona(mockClient, sdkArgs);
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toMatch(/voiceId/);
     expect(mockClient.createPersona).not.toHaveBeenCalled();
   });
 
@@ -725,11 +787,25 @@ describe('generate_persona_videos tool', () => {
         scriptPrompt: 'Be direct.',
         videoAspect: '16:9',
         paragraphNumber: 3,
-        language: 'pt-BR',
+        language: 'en-US',
         niche: 'tech',
       },
     });
     expect(result.success).toBe(true);
+  });
+
+  it('GeneratePersonaVideosSchema rejects a non-English options.language (English-only launch)', () => {
+    const { personaId: _personaId, ...rest } = baseArgs;
+    const result = GeneratePersonaVideosSchema.safeParse({
+      ...rest,
+      options: { faceless: true, voiceId: 'calm', language: 'pt-BR' },
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.map((issue) => issue.message)).toContain(
+        'Only English videos are supported for now',
+      );
+    }
   });
 
   it('GeneratePersonaVideosSchema rejects an out-of-range identity option', () => {
@@ -1067,7 +1143,7 @@ describe('handleLibraryCall message contracts', () => {
       mockClient,
       CreatePersonaSchema.parse({
         name: 'Alex AI',
-        avatarUrl: 'https://example.com/alex.png',
+        avatarUrl: 'https://example.com/alex.png', voiceId: 'chatterbox:en_us_male_01',
       })
     );
     expect(response.isError).toBe(true);
@@ -1080,7 +1156,7 @@ describe('handleLibraryCall message contracts', () => {
       mockClient,
       CreatePersonaSchema.parse({
         name: 'Alex AI',
-        avatarUrl: 'https://example.com/alex.png',
+        avatarUrl: 'https://example.com/alex.png', voiceId: 'chatterbox:en_us_male_01',
       })
     );
     expect(response.isError).toBeUndefined();

@@ -1,0 +1,13 @@
+# Local CPU TTS server (local_tts/server.py). CPU-only torch wheels come from
+# the PyTorch CPU index in Dockerfile.tts.
+ptts
+kokoro
+# Nano support (`from_pretrained(..., nano=True)`) is only on master, not on
+# PyPI 0.1.7; pinned to the tested commit.
+chatterbox-tts @ git+https://github.com/resemble-ai/chatterbox.git@5de7a54aa4e5e2baadb0182dde554908b48b85c2
+# Kokoro's English G2P (misaki) loads this spaCy model at first use.
+en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
+soundfile
+numpy
+fastapi[standard]
+loguru

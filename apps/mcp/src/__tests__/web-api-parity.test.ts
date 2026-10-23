@@ -88,6 +88,8 @@ const EXCLUDED_ENDPOINTS: Record<string, string> = {
   'GET /api/coverage': 'CI-only coverage endpoint.',
   'POST /api/cron/billing-reconcile':
     'Cron-internal: authenticated by cron secret, not by API key.',
+  'POST /api/cron/post-metrics':
+    'Cron-internal: authenticated by cron secret, not by API key.',
   'GET /api/google-oauth/callback': 'Browser OAuth callback.',
   'GET /api/google-oauth/start': 'Browser OAuth start (redirect flow).',
   'GET /api/health':
@@ -97,6 +99,8 @@ const EXCLUDED_ENDPOINTS: Record<string, string> = {
   'GET /api/linkedin-auth/callback': 'Browser OAuth callback.',
   'GET /api/linkedin-auth/start': 'Browser OAuth start (redirect flow).',
   'POST /api/logout': 'Browser-only session logout (clears the auth cookie).',
+  'GET /api/metrics':
+    'Dashboard-only metrics aggregation for the /metrics page; no MCP tool exposes per-video performance snapshots.',
   'GET /api/moneyprint/health': 'Ops engine health proxy.',
   'POST /api/persona/avatar':
     'Dashboard-only mock AI avatar generator placeholder, not a programmatic API.',
@@ -106,8 +110,8 @@ const EXCLUDED_ENDPOINTS: Record<string, string> = {
     'Browser-only SSE proxy; MCP polls via get_video_task_progress.',
   'DELETE /api/persona/video-task/[taskId]':
     'Dashboard engine-task cleanup; MCP polls status but never cancels engine tasks.',
-  'GET /api/persona/voice-sample-languages':
-    'Dashboard voice-sample UI proxy (session-only); MCP list_voices covers voice listing.',
+  'POST /api/persona/cloned-voices/denoise-preview':
+    'UI-only A/B listen of the cleaned recording before cloning; agents pass denoise to create_cloned_voice instead.',
   'GET /api/persona/cloned-voices/[cloneId]':
     'Dashboard clone status polling; MCP list_cloned_voices returns every clone row.',
   'GET /api/posts/[id]':
