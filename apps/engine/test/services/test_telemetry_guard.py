@@ -42,5 +42,5 @@ def test_track_ai_request_with_api_key_set_never_builds_real_client(
     analytics.track_ai_request({"backend": "llm", "success": True})
     client = analytics._get_client()
     assert isinstance(client, MagicMock)
-    client.capture.assert_called_once()
-    assert client.capture.call_args.kwargs["event"] == "ai_request"
+    events = [call.kwargs["event"] for call in client.capture.call_args_list]
+    assert events == ["ai_request", "$ai_generation"]
