@@ -90,6 +90,7 @@
 - Data-dependent failures fail the item once, not the whole stage every tick. Bound boot-time loops. The engine assumes a single writer (stop-then-start deploys, never rolling).
 - No import-time side effects; warm clients in the startup hook.
 - Storage backends share `STORAGE_BUCKET = "videos"` as the literal bucket name.
+- Script prompts that combine a user prompt with a mandatory contract (or injected context like the script body) put the contract/context FIRST and the user prompt last: `llm` caps `video_script_prompt` at 2000 chars by keeping the head, so anything appended after a near-limit user prompt is silently truncated. Partial-script regenerations reuse the task's persisted `script_angle`, never the bare topic.
 
 ## MCP
 

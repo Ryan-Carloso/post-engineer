@@ -234,8 +234,32 @@ def _limit_generated_script(script: str) -> str:
     return _cut_to_budget(normalized, limit)
 
 
+def _persisted_script_angle(task_id: str) -> str:
+    """Return the script angle persisted on the task record, or "".
+
+    resolve_script_angle stored the angle when the script was first
+    generated; the timing retry runs later (after audio/subtitles), in a
+    different call frame that never received it. A read failure degrades
+    to no angle — the retry still works, just on the bare topic — but it
+    is logged, never silently swallowed.
+    """
+    from app.services import state as sm
+
+    try:
+        task = sm.state.get_task(task_id)
+    except Exception as exc:  # noqa: BLE001 - degrade to no angle, logged
+        logger.warning(f"could not read the persisted script angle for {task_id}: {exc}")
+        return ""
+    angle = task.get("script_angle") if task is not None else None
+    return angle if isinstance(angle, str) else ""
+
+
 def _regenerate_fitting_hook(
-    task_id: str, params: VideoParams, video_script: str, measured_seconds: float
+    task_id: str,
+    params: VideoParams,
+    video_script: str,
+    measured_seconds: float,
+    angle: str | None = None,
 ) -> str:
     """Regenerate only the hook paragraph, sized toward the configured window.
 
@@ -244,7 +268,14 @@ def _regenerate_fitting_hook(
     retry loop that never converges is diagnosable from PostHog without
     reaching for VPS logs. Only counts and timings are reported — never the
     script text, which is user content.
+
+    The regenerated hook is built around the same angle as the original
+    script: an explicit `angle` wins, otherwise the angle persisted on the
+    task record is reused. Dropping it would drift the retry onto the bare
+    topic the angle was chosen to replace.
     """
+    if angle is None:
+        angle = _persisted_script_angle(task_id)
     window_min = PERSONA_HOOK_MIN_SECONDS
     window_max = PERSONA_HOOK_MAX_SECONDS
     words_min = PERSONA_HOOK_TARGET_WORDS_MIN
@@ -277,20 +308,28 @@ def _regenerate_fitting_hook(
         },
     )
     body = "\n\n".join(paragraphs[1:])
+    # Contract and body come FIRST, the user prompt last: llm.generate_script
+    # caps video_script_prompt at MAX_SCRIPT_PROMPT_LENGTH by keeping the
+    # head, so a near-limit user prompt placed first would silently truncate
+    # away the contract and the body the hook must open.
+    hook_prompt = (
+        f"Return only a standalone hook paragraph: "
+        f"one complete sentence of at most {word_cap} words ending with terminal "
+        f"punctuation, designed to take {window_min:g} to {window_max:g} seconds "
+        "when spoken. It must open this exact video, whose remaining "
+        f"narration is: {body}"
+    )
+    if params.video_script_prompt:
+        hook_prompt += f"\n\nAdditional user requirements: {params.video_script_prompt}"
     hook = llm.generate_script(
         video_subject=params.video_subject,
         language=params.video_language,
         paragraph_number=1,
-        video_script_prompt=(
-            f"{params.video_script_prompt} Return only a standalone hook paragraph: "
-            f"one complete sentence of at most {word_cap} words ending with terminal "
-            f"punctuation, designed to take {window_min:g} to {window_max:g} seconds "
-            "when spoken. It must open this exact video, whose remaining "
-            f"narration is: {body}"
-        ),
+        video_script_prompt=hook_prompt,
         custom_system_prompt=params.custom_system_prompt,
         target_words_min=words_min,
         target_words_max=word_cap,
+        angle=angle,
         include_cta=False,
     )
     return _limit_generated_script(f"{hook.strip()}\n\n{body}")

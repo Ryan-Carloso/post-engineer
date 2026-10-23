@@ -547,12 +547,12 @@ def generate_script(task_id, params):
             # The lip-sync intro paragraph doubles as the retention hook, so
             # the timing contract and the scroll-stopping opener coincide.
             script_prompt = (
-                f"{script_prompt} Start with a standalone hook paragraph of "
+                f"Start with a standalone hook paragraph of "
                 f"{PERSONA_HOOK_TARGET_WORDS_MIN} to {PERSONA_HOOK_TARGET_WORDS_MAX} words, "
                 f"designed to take {PERSONA_HOOK_MIN_SECONDS:g} to {PERSONA_HOOK_MAX_SECONDS:g} "
                 "seconds when spoken. This paragraph is the scroll-stopping hook. "
                 "End the hook with terminal "
-                "punctuation, then add exactly one blank line before the main content."
+                f"punctuation, then add exactly one blank line before the main content. {script_prompt}"
             ).strip()
         video_script = llm.generate_script(
             video_subject=params.video_subject,
@@ -581,11 +581,11 @@ def generate_script(task_id, params):
                 language=params.video_language,
                 paragraph_number=1,
                 video_script_prompt=(
-                    f"{params.video_script_prompt} Regenerate the entire script. "
+                    f"Regenerate the entire script. "
                     "Return only the standalone first paragraph: a complete "
                     f"{PERSONA_HOOK_MIN_SECONDS:g} to {PERSONA_HOOK_MAX_SECONDS:g} second hook "
                     f"of {PERSONA_HOOK_TARGET_WORDS_MIN} to {PERSONA_HOOK_TARGET_WORDS_MAX} words "
-                    "ending with terminal punctuation."
+                    f"ending with terminal punctuation. {params.video_script_prompt}"
                 ),
                 custom_system_prompt=params.custom_system_prompt,
                 target_words_min=PERSONA_HOOK_TARGET_WORDS_MIN,
@@ -597,9 +597,9 @@ def generate_script(task_id, params):
                 language=params.video_language,
                 paragraph_number=1,
                 video_script_prompt=(
-                    f"{params.video_script_prompt} Return only the main content "
+                    f"Return only the main content "
                     "paragraph that follows the hook. Do not include a heading or "
-                    "repeat the hook."
+                    f"repeat the hook. {params.video_script_prompt}"
                 ),
                 custom_system_prompt=params.custom_system_prompt,
                 target_words_min=72,
