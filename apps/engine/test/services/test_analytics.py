@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import os
+import uuid
 from unittest import mock
 
 import pytest
@@ -306,12 +307,18 @@ def test_track_event_tags_environment_production_when_app_env_production():
 def test_track_ai_request_carries_origin_tags():
     # track_ai_request delegates to track_event, so it inherits the tags —
     # pin it so a future bypass of track_event cannot silently drop them.
+    # backend=llm also emits the AI-observability $ai_generation event,
+    # which carries the same tags (covered in the AI observability tests).
     with mock.patch.dict(os.environ, {"POSTHOG_API_KEY": "phc_test_key"}):
         with mock.patch("posthog.Posthog") as mock_cls:
             instance = mock_cls.return_value
             analytics.track_ai_request({"backend": "llm", "success": True})
-            instance.capture.assert_called_once()
-            props = instance.capture.call_args.kwargs["properties"]
+            captures = instance.capture.call_args_list
+            assert [call.kwargs["event"] for call in captures] == [
+                "ai_request",
+                "$ai_generation",
+            ]
+            props = captures[0].kwargs["properties"]
             assert props["source"] == "engine"
             assert props["environment"] == "development"
 
@@ -397,3 +404,159 @@ def test_scrub_error_text_long_first_line_keeps_tail():
     assert result.endswith("final diagnostic detail")
     assert len(result) <= 100
     assert "B" * 100 not in result
+
+
+class TestAIObservabilityGeneration:
+    """The $ai_generation event derived from ai_request (backend=llm).
+
+    Pins the standard AI-observability shape (trace id, latency, tokens,
+    cost) and the two deliberate deviations: prompts are never sent and
+    the session id is explicitly null.
+    """
+
+    def _llm_props(self, **overrides):
+        # Uniform ai_request schema the llm paths build (values here are
+        # already scrubbed/truncated by the caller, like production).
+        props = {
+            "backend": "llm",
+            "provider": "openrouter",
+            "model": "openrouter/free",
+            "primary_provider": "groq",
+            "fallback_used": True,
+            "duration_ms": 1500,
+            "success": True,
+            "error": "",
+            "response_chars": 300,
+            "response_preview": "script body",
+            "prompt_tokens": 10,
+            "completion_tokens": 20,
+            "total_tokens": 30,
+            "cost_usd": 0.0004,
+        }
+        props.update(overrides)
+        return props
+
+    def _capture(self, **props_overrides):
+        with mock.patch.dict(os.environ, {"POSTHOG_API_KEY": "phc_test_key"}):
+            with mock.patch("posthog.Posthog") as mock_cls:
+                instance = mock_cls.return_value
+                analytics.track_ai_request(self._llm_props(**props_overrides))
+                events = [call.kwargs["event"] for call in instance.capture.call_args_list]
+                generation_calls = [
+                    call
+                    for call in instance.capture.call_args_list
+                    if call.kwargs["event"] == "$ai_generation"
+                ]
+        return events, generation_calls
+
+    def test_llm_call_emits_standard_generation_event(self):
+        events, generations = self._capture()
+        assert events == ["ai_request", "$ai_generation"]
+        assert len(generations) == 1
+        props = generations[0].kwargs["properties"]
+        # A trace id and an explicit null session id (one-shot workload).
+        uuid.UUID(props["$ai_trace_id"])
+        assert props["$ai_session_id"] is None
+        assert props["$ai_provider"] == "openrouter"
+        assert props["$ai_model"] == "openrouter/free"
+        assert props["$ai_latency"] == 1.5
+
+    def test_generation_never_carries_prompt_input(self):
+        # Prompts never leave the machine (module rule, 2026-10-01).
+        _, generations = self._capture()
+        props = generations[0].kwargs["properties"]
+        assert "$ai_input" not in props
+
+    def test_generation_tokens_and_cost_pass_through(self):
+        _, generations = self._capture()
+        props = generations[0].kwargs["properties"]
+        assert props["$ai_input_tokens"] == 10
+        assert props["$ai_output_tokens"] == 20
+        # Real reported spend (OpenRouter) passes through and is marked as
+        # provider-reported so PostHog keeps it instead of estimating.
+        assert props["$ai_total_cost_usd"] == 0.0004
+        assert props["$ai_cost_passthrough"] is True
+
+    def test_generation_omits_unknown_counters_never_fake_zero(self):
+        # A provider that reports nothing contributes no counter at all —
+        # a 0 would lie in the dashboards (engine nullable-metrics rule).
+        _, generations = self._capture(
+            prompt_tokens=0,
+            completion_tokens=0,
+            total_tokens=0,
+            cost_usd=None,
+            model="",
+        )
+        props = generations[0].kwargs["properties"]
+        assert "$ai_input_tokens" not in props
+        assert "$ai_output_tokens" not in props
+        assert "$ai_total_cost_usd" not in props
+        assert "$ai_cost_passthrough" not in props
+        # Same for a provider without a resolvable model name.
+        assert "$ai_model" not in props
+
+    def test_failed_generation_carries_scrubbed_error_not_preview(self):
+        _, generations = self._capture(
+            success=False,
+            error="call failed: token=[redacted]",
+            response_preview="",
+            response_chars=0,
+            prompt_tokens=0,
+            completion_tokens=0,
+            total_tokens=0,
+            cost_usd=None,
+        )
+        props = generations[0].kwargs["properties"]
+        assert props["$ai_is_error"] is True
+        assert props["$ai_error"] == "call failed: token=[redacted]"
+        assert "response_preview" not in props
+
+    def test_successful_generation_carries_response_preview_not_full_text(self):
+        # response_preview is the ai_request property: scrubbed and capped
+        # at the call site. $ai_output_choices (the full model output) is
+        # deliberately not sent for the same reason.
+        _, generations = self._capture(response_preview="script body")
+        props = generations[0].kwargs["properties"]
+        assert props["response_preview"] == "script body"
+        assert "$ai_output_choices" not in props
+
+    def test_generation_carries_origin_tags_and_engine_distinct_id(self):
+        # LLM calls carry no user context at the llm.py call site, so the
+        # generation lands on the engine pseudo-person, tagged like every
+        # engine event.
+        _, generations = self._capture()
+        call = generations[0]
+        props = call.kwargs["properties"]
+        assert call.kwargs["distinct_id"] == "post-engineer-engine"
+        assert props["source"] == "engine"
+        assert props["environment"] == "development"
+
+    def test_modal_backend_emits_no_generation_event(self):
+        # Modal renders are not LLM generations.
+        with mock.patch.dict(os.environ, {"POSTHOG_API_KEY": "phc_test_key"}):
+            with mock.patch("posthog.Posthog") as mock_cls:
+                instance = mock_cls.return_value
+                analytics.track_ai_request(
+                    {"backend": "modal", "operation": "lipsync", "success": True}
+                )
+        events = [call.kwargs["event"] for call in instance.capture.call_args_list]
+        assert events == ["ai_request"]
+
+    def test_noop_without_api_key(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            with mock.patch("posthog.Posthog") as mock_cls:
+                # Must not raise and must not construct the client.
+                analytics.track_ai_request(self._llm_props())
+                mock_cls.assert_not_called()
+
+    def test_capture_failure_never_raises(self):
+        with mock.patch.dict(os.environ, {"POSTHOG_API_KEY": "phc_test_key"}):
+            with mock.patch("posthog.Posthog") as mock_cls:
+                instance = mock_cls.return_value
+                instance.capture.side_effect = RuntimeError("posthog down")
+                # Must not raise: a downed PostHog must not break generation.
+                analytics.track_ai_request(self._llm_props())
+        events = [call.kwargs["event"] for call in instance.capture.call_args_list]
+        # Both events were attempted (mocks record even a raising call);
+        # the point is the side_effect propagated to nobody.
+        assert events == ["ai_request", "$ai_generation"]
