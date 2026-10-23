@@ -220,6 +220,14 @@ describe('app/login/page — resolveLoginRedirectUrl', () => {
     expect(resolveLoginRedirectUrl('attacker-app.vercel.app', 'https://attacker-app.vercel.app', null)).toBe(PROD);
   });
 
+  it('opaque origin (hostname "", origin "null") falls through to the production callback', async () => {
+    const { resolveLoginRedirectUrl } = await import('../page');
+    expect(resolveLoginRedirectUrl('', 'null', null)).toBe(PROD);
+    expect(resolveLoginRedirectUrl('', 'null', '/oauth/authorize')).toBe(
+      `${PROD}?next=${encodeURIComponent('/oauth/authorize')}`,
+    );
+  });
+
   it('production keeps the plain production callback', async () => {
     const { resolveLoginRedirectUrl } = await import('../page');
     expect(resolveLoginRedirectUrl('post-engineer.com', 'https://post-engineer.com', null)).toBe(PROD);
