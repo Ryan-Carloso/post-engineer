@@ -18,6 +18,7 @@ from app.services import (
     longcat,
     material,
     persona_hook,
+    script_angle,
     subtitle,
     twelvelabs,
     video,
@@ -48,26 +49,18 @@ from app.utils import file_security, ssrf, utils
 
 #---------------
 # Remote material sources, always used in cascade with per-task shuffled
-# order: the starting source is drawn at random (variety across videos)
-# and the rest serve as fallback when a source returns no material.
-# Fixed on purpose — no API field and no configuration.
+# order (random start for variety, rest as fallback). Fixed — no API field.
 #---------------
 REMOTE_VIDEO_SOURCES: list[str] = ["pexels", "pixabay", "coverr"]
 
 #---------------
 # _fail_task — marks a task FAILED and sends one Discord alert per task.
 # Failure sites are scattered (phase helpers mark FAILED and start()
-# re-checks the result), so recent-ids dedupes: the user gets a single
-# alert per failed task, not one per phase that noticed it.
-# The cache is a bounded deque (not a set) so the process can't grow it
-# forever. Note the bound only evicts after MAX_FAILED_ALERTS *other
-# distinct* failures — a task retried under the same id inside that
-# window still dedupes (no new alert). In practice retries use fresh
-# task ids, and a process restart resets the cache, so a retried task
-# then alerts again.
-# Check-and-add is guarded by a lock with a short blocking acquire, so
-# concurrent failures of the same task dedupe to one alert instead of
-# every thread slipping through.
+# re-checks), so recent-ids dedupes to one alert per task. The cache is a
+# bounded deque; the bound only evicts after MAX_FAILED_ALERTS *other
+# distinct* failures, so a same-id retry inside the window still dedupes
+# (retries use fresh ids in practice; a restart resets the cache).
+# Check-and-add holds a lock so concurrent failures dedupe to one alert.
 #---------------
 MAX_FAILED_ALERTS = 1000
 # The critical section is microseconds; the timeout only matters if a
@@ -79,10 +72,8 @@ _discord_notified_failed_tasks_lock = Lock()
 
 #---------------
 # Terminal-event emission dedup: the FIRST _fail_task notice for a task
-# always emits video_generation_failed, even when the FAILED state was
-# already written. Later notices stay deduped. Bounded like the
-# alert cache above: task ids are never reused, so eviction only drops
-# ids whose terminal event was long since emitted.
+# always emits video_generation_failed, even when FAILED was already
+# written; later notices stay deduped. Bounded like the alert cache.
 #---------------
 MAX_FAILED_EVENT_IDS = 1000
 _failed_event_emitted_tasks: deque[str] = deque(maxlen=MAX_FAILED_EVENT_IDS)
@@ -110,15 +101,11 @@ def _should_emit_failed_event(task_id: str) -> bool:
 #---------------
 # Dispatch-failure emission dedup: the batch dispatch-failure path emits
 # video_generation_failed for incidents that never started a task, so it
-# must NOT share the pipeline terminal guard above. A transient dispatch
-# failure followed by a successful re-dispatch and a genuine pipeline
-# failure are two real incidents for one deterministic id, and both must
-# emit — a shared guard suppresses one side or the other. Kept separate,
-# neither path can arm, suppress, or re-arm the other's terminal event.
-# Funnel trade-off, named: video_generation_requested stays deduped for
-# the re-dispatched id, so the failure % can briefly exceed 100% in this
-# window. Both failures are real; growing the denominator to match would
-# reintroduce the double-count this guard prevents.
+# must NOT share the pipeline terminal guard above — a transient dispatch
+# failure and a later genuine pipeline failure are two real incidents for
+# one deterministic id, and both must emit. Trade-off, named:
+# video_generation_requested stays deduped for the re-dispatched id, so
+# the failure % can briefly exceed 100% in this window.
 #---------------
 MAX_DISPATCH_FAILED_EVENT_IDS = 1000
 _dispatch_failed_event_emitted_tasks: deque[str] = deque(maxlen=MAX_DISPATCH_FAILED_EVENT_IDS)
@@ -234,21 +221,17 @@ def _first_http_url(paths: object) -> str | None:
 
 
 #---------------
-# PostHog lifecycle funnel: the user watches these events to compute the
-# failure % per flow (direct API vs batch fill_schedule):
-#   video_generation_requested (at task acceptance, BEFORE the pipeline
-#     starts) -> video_generation_started -> video_generation_progress
-#     (50%/70% only) -> video_generation_failed / video_generated.
-# track_event never raises (analytics.py), so telemetry can't break the pipeline —
-# and the task-state reads below degrade to "unknown" instead of raising.
+# PostHog lifecycle funnel: video_generation_requested (at acceptance,
+# BEFORE the pipeline starts) -> video_generation_started ->
+# video_generation_progress (50%/70% only) -> video_generation_failed /
+# video_generated. track_event never raises, so telemetry can't break the
+# pipeline; task-state reads below degrade to "unknown" instead.
 #---------------
-# The progress milestones worth an analytics event, and the highest one already
-# reported per task. Process-local: the dict starts empty in every process and
-# direct task ids are uuid4 (never reused). Batch task ids are uuid5 and CAN
-# be re-dispatched after a crash (see generate.py new_task_id) — requested and
-# failed emission are therefore deduped per process by the bounded
-# check-and-record guards above, and terminal transitions pop the milestone
-# entry, so a stale entry can never double-report in one process lifetime.
+# Progress milestones already reported per task. Process-local: direct
+# ids are uuid4 (never reused); batch ids are uuid5 and CAN be
+# re-dispatched after a crash (see generate.py new_task_id), so emission
+# is deduped per process by the bounded guards above and terminal
+# transitions pop the entry — no double-report in one process lifetime.
 PROGRESS_MILESTONES = (50, 70)
 _progress_milestones: dict[str, int] = {}
 
@@ -468,16 +451,12 @@ def persona_lipsync_active(params: VideoParams) -> bool:
 _PERSONA_HOOK_MAX_RETRIES = 2
 
 # Product-fixed persona pacing ("always this way"): the face-fill outro
-# closes the video. Deliberately NOT config-driven — these values were
-# validated against GPU intro cost and lipsync quality windows, and tunable
-# knobs reopen those failure modes (tails that eat the hook). Hook pacing
-# (PERSONA_HOOK_*) lives in app/services/persona_hook.py. Stock adhesion
-# uses the offline token-overlap judge; weak terms never enter the download
-# queue.
-# The GPU ceiling, not the product ceiling: LongCat's MAX_SEGMENTS=5 renders
-# 16.52s (longcat.clip_seconds), but a 5-segment render died inside the Modal
-# container with no Python traceback (SIGKILL) on the first real run. 12s is
-# the highest segment count observed to survive there.
+# closes the video. Deliberately NOT config-driven — validated against GPU
+# intro cost and lipsync quality windows; tunable knobs reopen those
+# failure modes. Hook pacing (PERSONA_HOOK_*) lives in persona_hook.py.
+# GPU ceiling, not product ceiling: LongCat MAX_SEGMENTS=5 renders 16.52s,
+# but a 5-segment render SIGKILLed inside the Modal container on the first
+# real run; 12s is the highest segment count observed to survive there.
 PERSONA_LIPSYNC_MAX_SECONDS = 12.0
 FACE_FILL_MIN_SECONDS = 5.0
 FACE_FILL_MAX_SECONDS = 8.0
@@ -544,18 +523,36 @@ def _ensure_persona_hook_fits(
     raise AssertionError("unreachable: hook retry loop always returns or raises")
 
 
+def _resolve_script_angle(task_id: str, params: VideoParams) -> str:
+    """Pick a specific angle for the topic, or "" to script the bare topic.
+
+    The implementation lives in script_angle.py (this module is
+    grandfathered over the file-size cap and may not grow); the event sink
+    and tracking context stay bound here so callers/tests keep patching
+    them on this module.
+    """
+    return script_angle.resolve_script_angle(
+        task_id, params, track_event=track_event, tracking_context=_task_tracking_context(task_id)
+    )
+
+
 def generate_script(task_id, params):
     logger.info("\n\n## generating video script")
     video_script = params.video_script.strip()
+    angle = ""
     if not video_script:
+        angle = _resolve_script_angle(task_id, params)
         script_prompt = params.video_script_prompt
         if persona_lipsync_active(params):
+            # The lip-sync intro paragraph doubles as the retention hook, so
+            # the timing contract and the scroll-stopping opener coincide.
             script_prompt = (
-                f"{script_prompt} Start with a standalone hook paragraph of "
+                f"Start with a standalone hook paragraph of "
                 f"{PERSONA_HOOK_TARGET_WORDS_MIN} to {PERSONA_HOOK_TARGET_WORDS_MAX} words, "
                 f"designed to take {PERSONA_HOOK_MIN_SECONDS:g} to {PERSONA_HOOK_MAX_SECONDS:g} "
-                "seconds when spoken. End the hook with terminal "
-                "punctuation, then add exactly one blank line before the main content."
+                "seconds when spoken. This paragraph is the scroll-stopping hook. "
+                "End the hook with terminal "
+                f"punctuation, then add exactly one blank line before the main content. {script_prompt}"
             ).strip()
         video_script = llm.generate_script(
             video_subject=params.video_subject,
@@ -563,6 +560,7 @@ def generate_script(task_id, params):
             paragraph_number=params.paragraph_number,
             video_script_prompt=script_prompt,
             custom_system_prompt=params.custom_system_prompt,
+            angle=angle, cta=params.video_cta,
         )
     else:
         # Log only the size — the script itself is user content and must not
@@ -583,28 +581,30 @@ def generate_script(task_id, params):
                 language=params.video_language,
                 paragraph_number=1,
                 video_script_prompt=(
-                    f"{params.video_script_prompt} Regenerate the entire script. "
+                    f"Regenerate the entire script. "
                     "Return only the standalone first paragraph: a complete "
                     f"{PERSONA_HOOK_MIN_SECONDS:g} to {PERSONA_HOOK_MAX_SECONDS:g} second hook "
                     f"of {PERSONA_HOOK_TARGET_WORDS_MIN} to {PERSONA_HOOK_TARGET_WORDS_MAX} words "
-                    "ending with terminal punctuation."
+                    f"ending with terminal punctuation. {params.video_script_prompt}"
                 ),
                 custom_system_prompt=params.custom_system_prompt,
                 target_words_min=PERSONA_HOOK_TARGET_WORDS_MIN,
                 target_words_max=PERSONA_HOOK_TARGET_WORDS_MAX,
+                angle=angle, include_cta=False,
             )
             body = llm.generate_script(
                 video_subject=params.video_subject,
                 language=params.video_language,
                 paragraph_number=1,
                 video_script_prompt=(
-                    f"{params.video_script_prompt} Return only the main content "
+                    f"Return only the main content "
                     "paragraph that follows the hook. Do not include a heading or "
-                    "repeat the hook."
+                    f"repeat the hook. {params.video_script_prompt}"
                 ),
                 custom_system_prompt=params.custom_system_prompt,
                 target_words_min=72,
                 target_words_max=94,
+                angle=angle, cta=params.video_cta,
             )
             video_script = _limit_generated_script(f"{hook.strip()}\n\n{body.strip()}")
             paragraphs = [paragraph.strip() for paragraph in re.split(r"\n\s*\n", video_script) if paragraph.strip()]

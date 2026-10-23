@@ -97,7 +97,15 @@ describe('buildJobPayload — request allowlist', () => {
       photo_url: 'https://cdn.test/photo.png',
       voice_id: 'voice-1',
       voice_audio_url: 'https://cdn.test/voice.mp3',
+      // The niche rides the persona record: the engine's script-angle step
+      // reads PersonaParams.niche as its channel context.
+      niche: 'finance',
     });
+  });
+
+  it('omits the persona niche when the persona has none', () => {
+    const payload = buildJobPayload(persona({ niche: null }), {});
+    expect(payload.persona).not.toHaveProperty('niche');
   });
 });
 
@@ -130,6 +138,11 @@ describe('buildJobPayload — persona preference defaults', () => {
     });
     expect(payload.video_language).toBe('pt');
     expect(payload).not.toHaveProperty('video_aspect');
+  });
+
+  it('maps the persona call to action to video_cta, and omits a missing one', () => {
+    expect(buildJobPayload(persona({ cta_text: 'Link na bio' }), {}).video_cta).toBe('Link na bio');
+    expect(buildJobPayload(persona({ cta_text: null }), {})).not.toHaveProperty('video_cta');
   });
 
   it('never forwards null or empty persona preferences verbatim', () => {

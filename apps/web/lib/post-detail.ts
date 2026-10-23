@@ -1,6 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { enrichSlot } from './schedule-slot-presentation';
-import { fetchEnginePublishResults, fetchEngineTaskProgress } from './engine-tasks';
+import {
+  fetchEnginePostMetricsSource,
+  fetchEnginePublishResults,
+  fetchEngineScriptAngle,
+  fetchEngineTaskProgress,
+  type EngineTaskProgress,
+} from './engine-tasks';
 import { resolvePublishLinks, type PublishLink } from './publish-links';
 import { buildGenerationFacts } from './generation-facts';
 import { logger } from './logger';
@@ -29,6 +35,7 @@ export interface SlotPostDetail {
     progress: number;
     stage: string | null;
     retryable: boolean | null;
+    scriptAngle: string | null;
     publishLinks: PublishLink[];
     progressHistory: Array<{ progress: number; stage: string | null; recordedAt: string }>;
     queuePosition: null;
@@ -71,6 +78,7 @@ export interface GenerationPostDetail {
   completedAt: string | null;
   progress: number;
   stage: string | null;
+  scriptAngle: string | null;
 }
 
 function isNotFound(error: unknown): boolean {
@@ -92,6 +100,47 @@ async function resolveSlotPublishLinks(
       error: error instanceof Error ? error.message : String(error),
     });
     return [];
+  }
+}
+
+//---------------
+// resolvePublishedSlotEngineData — publish links and script angle for a
+// published slot from ONE engine task read (fetchEnginePostMetricsSource):
+// both live on the same record, so reading it twice per detail view would
+// double the engine traffic on a rate-limited endpoint. A failed lookup
+// degrades both to empty/null with both warnings, mirroring the separate
+// resolvers below.
+//---------------
+async function resolvePublishedSlotEngineData(
+  taskId: string,
+  userId: string,
+): Promise<{ publishLinks: PublishLink[]; scriptAngle: string | null }> {
+  try {
+    const source = await fetchEnginePostMetricsSource(taskId, userId);
+    return { publishLinks: resolvePublishLinks(source.publishResults), scriptAngle: source.scriptAngle };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn('[post-detail] publish results unavailable', { taskId, error: message });
+    logger.warn('[post-detail] script angle unavailable', { taskId, error: message });
+    return { publishLinks: [], scriptAngle: null };
+  }
+}
+
+//---------------
+// resolveScriptAngle — the angle the engine built the script around, read
+// from the engine task record. Cosmetic on the detail page: no task yet or
+// a failed lookup degrades to null, but a failure is never silent.
+//---------------
+async function resolveScriptAngle(taskId: string | null, userId: string): Promise<string | null> {
+  if (taskId === null || taskId.length === 0) return null;
+  try {
+    return await fetchEngineScriptAngle(taskId, userId);
+  } catch (error) {
+    logger.warn('[post-detail] script angle unavailable', {
+      taskId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
   }
 }
 
@@ -178,8 +227,54 @@ export async function getSlotPost(
     personaRow = persona as { id: string; name: string } | null;
   }
 
-  const enrichment = await enrichSlot(row, userId);
-  const publishLinks = await resolveSlotPublishLinks(row, userId);
+  const slotTaskId = typeof row.task_id === 'string' && row.task_id.length > 0 ? row.task_id : null;
+  // For a live slot, progress and the script angle live on the same engine
+  // task record: fetch it once here, hand it to enrichSlot (which would
+  // otherwise fetch it again), and take the angle from it. A failed
+  // prefetch degrades exactly like enrichSlot's own lookup (progress 0,
+  // logged) — enrichSlot is told not to fetch a second time.
+  let prefetchedTask: EngineTaskProgress | undefined;
+  let prefetchFailed = false;
+  if ((row.status === 'generating' || row.status === 'failed') && slotTaskId !== null) {
+    try {
+      prefetchedTask = await fetchEngineTaskProgress(slotTaskId, userId);
+    } catch (error) {
+      prefetchFailed = true;
+      logger.warn('[post-detail] engine task progress unavailable', {
+        taskId: slotTaskId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  const enrichment = await enrichSlot(
+    row,
+    userId,
+    new Map(),
+    prefetchedTask !== undefined
+      ? { task: prefetchedTask }
+      : prefetchFailed
+        ? { allowEngineLookup: false }
+        : {},
+  );
+  // A published slot needs publish links AND the angle, both on the same
+  // engine task record: one read serves both. Any other status needs at
+  // most the angle (publish links are published-only).
+  let publishLinks: PublishLink[];
+  let scriptAngle: string | null;
+  if (row.status === 'published' && slotTaskId !== null) {
+    ({ publishLinks, scriptAngle } = await resolvePublishedSlotEngineData(slotTaskId, userId));
+  } else {
+    publishLinks = await resolveSlotPublishLinks(row, userId);
+    // One task-record read per view: a prefetched task carries the angle,
+    // and a failed prefetch already burned the view's one read — the angle
+    // degrades to null instead of reading the same record a second time.
+    scriptAngle =
+      prefetchedTask !== undefined
+        ? prefetchedTask.scriptAngle
+        : prefetchFailed
+          ? null
+          : await resolveScriptAngle(row.task_id, userId);
+  }
 
   // Progress history: every observed (progress, stage) transition recorded
   // while the post was live. A failed lookup degrades to an empty list —
@@ -241,6 +336,7 @@ export async function getSlotPost(
       progress: progressOut,
       stage: stageOut,
       retryable: retryableOut,
+      scriptAngle,
       publishLinks,
       progressHistory,
       // Queue position is a list concept (position among the schedule's
@@ -304,9 +400,16 @@ export async function getGenerationPost(
 
   let progress = 0;
   let stage: string | null = null;
+  // The angle lives on the same task record the progress read fetches: when
+  // that read happens, the angle comes from it instead of a second read.
+  // Undefined means no read was attempted (terminal generation or no task
+  // id) — the angle then gets its own read below. A failed read sets it to
+  // null: that attempt was this view's one read.
+  let angleFromProgress: string | null | undefined;
   if ((row.status === 'pending' || row.status === 'running') && row.engine_task_id) {
     try {
       const task = await fetchEngineTaskProgress(row.engine_task_id, userId);
+      angleFromProgress = task.scriptAngle;
       if (!task.gone) {
         progress = task.progress;
         stage = task.stage;
@@ -314,7 +417,10 @@ export async function getGenerationPost(
     } catch (taskError) {
       // Transient (5xx, abort, network): degrade, keep progress 0 so the
       // next poll retries. Only a 404 is terminal, and generations never
-      // settle tasks from a read path.
+      // settle tasks from a read path. The failed read was this view's one
+      // task-record read, so the angle degrades to null with it instead of
+      // reading the same record a second time.
+      angleFromProgress = null;
       logger.warn('[post-detail] engine task progress unavailable', {
         taskId: row.engine_task_id,
         error: taskError instanceof Error ? taskError.message : String(taskError),
@@ -348,5 +454,9 @@ export async function getGenerationPost(
     completedAt: completedAtOut,
     progress,
     stage,
+    scriptAngle:
+      angleFromProgress !== undefined
+        ? angleFromProgress
+        : await resolveScriptAngle(row.engine_task_id, userId),
   };
 }

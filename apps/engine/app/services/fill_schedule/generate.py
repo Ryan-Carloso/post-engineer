@@ -116,6 +116,7 @@ class BatchGenerator:
                 # the behaviour every existing video already has.
                 video_layout=identity.get("video_layout") or "standard",
                 video_script_prompt=identity.get("script_prompt") or "",
+                video_cta=identity.get("cta_text") or "",
                 # Snapshot (post_language) already resolved by post_identity();
                 # without this the prompt carries no "- language:" line and
                 # the script language falls back to the LLM's guess from the

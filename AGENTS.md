@@ -73,6 +73,7 @@
 - Insert keys must exist in the schema; NOT NULL-without-default columns must be supplied (schema-sync tests pin both).
 - Route files export only handlers. Decode percent-encoded route params before pattern-matching.
 - Engine responses use the `BaseResponse` envelope `{ status, message, body }` — payload is `body`, never `data`. Mocks must use the real envelope.
+- One engine task record per view: when a page needs several fields from the same task record (publish results, script angle, progress), read it once via a combined helper (`fetchEnginePostMetricsSource` pattern), never one GET per field on a rate-limited user-facing endpoint.
 - SSRF: server fetches of user URLs resolve DNS and reject any non-public address, fail closed, `redirect: 'error'`, https + timeout; inject the lookup for tests.
 
 ## Billing
@@ -90,6 +91,9 @@
 - Data-dependent failures fail the item once, not the whole stage every tick. Bound boot-time loops. The engine assumes a single writer (stop-then-start deploys, never rolling).
 - No import-time side effects; warm clients in the startup hook.
 - Storage backends share `STORAGE_BUCKET = "videos"` as the literal bucket name.
+- Script prompts that combine a user prompt with a mandatory contract (or injected context like the script body) put the contract/context FIRST and the user prompt last: `llm` caps `video_script_prompt` at 2000 chars by keeping the head, so anything appended after a near-limit user prompt is silently truncated. Partial-script regenerations reuse the task's persisted `script_angle`, never the bare topic.
+- A trim/limit helper that exists to preserve a trailing element (the CTA) must preserve it on EVERY path, fallbacks included: when no body fits next to it, the element ships alone — a plain-cut fallback that ends before it silently drops exactly what the helper protects. Pin the fallback paths, not just the length cap.
+- A persona field the engine consumes (e.g. `niche` for the script angle) must be forwarded on EVERY dispatch path — web direct payload (`buildJobPayload`), engine batch (`build_persona_params`), MCP — a field populated on only one path is silently dead on the others. Pin each path with a dispatch test, not a hand-built params object.
 
 ## MCP
 

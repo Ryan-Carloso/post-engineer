@@ -24,14 +24,12 @@ export const enDictionary: Dictionary = {
     primaryNavigation: 'Primary navigation',
     profile: 'Profile',
   },
-
   // Account area — Profile page (mobile header avatar + /account route)
   account: {
     title: 'Profile',
     subtitle: 'Your info, tokens and preferences.',
     version: 'Version',
   },
-
   // Posts page — history + upcoming posts from all accounts
   posts: {
     title: 'Posts',
@@ -85,6 +83,7 @@ export const enDictionary: Dictionary = {
     accountsLabel: 'Accounts',
     publishedLinksTitle: 'Published to',
     progressHistoryTitle: 'Progress history',
+    scriptAngleLabel: 'Script angle',
     generationFactsLabel: 'How it was generated',
     generationPersonaLabel: 'Persona',
     generationFaceLabel: 'Face',
@@ -110,7 +109,6 @@ export const enDictionary: Dictionary = {
     videoLoadError: 'The video could not be loaded.',
     detailLoadError: 'Could not load this post. Please try again.',
   },
-
   // /posts/new — create post (persona + topics + accounts + publish times)
   newPost: {
     title: 'New post',
@@ -194,11 +192,9 @@ export const enDictionary: Dictionary = {
     successHintAsap: 'The video is generating now and will be published to the selected accounts the moment it is ready.',
     successPartial: 'Scheduled, but some videos failed to start. Check each post for details.',
   },
-
   publishing: {
     mustSelectAccount: 'Select at least one account to publish to.',
   },
-
 
   accounts: {
     title: 'Accounts',
@@ -552,6 +548,10 @@ export const enDictionary: Dictionary = {
     scriptLabel: 'Script style',
     scriptPlaceholder: 'E.g. storytelling, educational, direct…',
     scriptMaxError: 'Script is too long (max. 2000 characters).',
+    ctaLabel: 'Call to action (end of video)',
+    ctaPlaceholder: 'E.g. link in bio, follow @yourchannel…',
+    ctaHint: 'Optional. Empty = we pick a call to action that fits the video.',
+    ctaMaxError: 'Call to action is too long (max. {max} characters).',
     detailsTitle: 'Persona details',
     details: 'View details',
     createdAt: 'Created on',

@@ -18,6 +18,7 @@ from loguru import logger
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.services import fill_schedule as fs
+from app.services.fill_schedule.store import ScheduleStore
 from app.services import notify as nf
 from app.utils.supabase_retry import build_retrying_session
 from app.models import const as model_const
@@ -274,6 +275,27 @@ class BatchScheduleTests(unittest.TestCase):
         self.assertIsNone(request.persona.photo_url)
         self.assertEqual(request.video_aspect, "16:9")
         self.assertEqual(request.video_script_prompt, "Be direct and short.")
+
+    def test_generate_slot_forwards_the_snapshot_call_to_action(self):
+        slot = self._batch_slot()
+        del slot["schedules"]["personas"]
+        slot["faceless"] = True
+        slot["schedules"].update(
+            {
+                "post_voice_id": "energetic",
+                "post_face_quality": "ok",
+                "post_cta_text": "Link na bio",
+            }
+        )
+        store = _FakeStore()
+        store.pending_slots = lambda now: [slot]
+        scheduler = self._scheduler(store)
+        scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
+
+        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch_generation:
+            scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+
+        self.assertEqual(dispatch_generation.call_args.args[1].video_cta, "Link na bio")
 
     def test_generate_slot_without_any_voice_fails_before_dispatch(self):
         # A persona with no voice and no audio cannot produce a job:
@@ -1731,6 +1753,16 @@ class CoverageGapTests(unittest.TestCase):
         self.assertEqual(params["voice_id"], "calm")
         self.assertNotIn("photo_url", params)
 
+    def test_persona_params_forwards_the_identity_niche(self):
+        # The identity carries the niche (schedule snapshot post_niche or the
+        # persona embed); the engine needs it on PersonaParams or the script
+        # angle is generated without its channel-niche context.
+        params = fs.build_persona_params(
+            {"name": "Ana", "voice_id": "calm", "niche": "barista caseiro"},
+            store=MagicMock(),
+        )
+        self.assertEqual(params["niche"], "barista caseiro")
+
     def test_persona_params_photo_path_and_voice_audio(self):
         store = MagicMock(return_value="https://signed/x")
         store.signed_url = MagicMock(side_effect=lambda bucket, path: f"https://signed/{path}")
@@ -2542,6 +2574,20 @@ class PostIdentityTests(unittest.TestCase):
         self.assertEqual(identity["voice_id"], "energetic")
         self.assertEqual(identity["video_aspect"], "16:9")
         self.assertEqual(identity["script_prompt"], "new")
+
+    def test_snapshot_call_to_action_overrides_the_persona_embed(self):
+        identity = fs.post_identity(
+            {
+                "id": "sched-cta",
+                "personas": {"voice_id": "calm", "cta_text": "old ask"},
+                "post_cta_text": "new ask",
+            }
+        )
+        self.assertEqual(identity["cta_text"], "new ask")
+
+    def test_slot_select_reads_the_call_to_action_columns(self):
+        self.assertIn("post_cta_text", ScheduleStore.SLOT_IDENTITY_SELECT)
+        self.assertIn("personas(name,niche,script_prompt,cta_text,", ScheduleStore.SLOT_IDENTITY_SELECT)
 
     def test_a_null_snapshot_column_does_not_erase_the_persona_value(self):
         # NULL on a snapshot means "not provided", never "inherit blank":

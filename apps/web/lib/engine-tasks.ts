@@ -39,6 +39,10 @@ export interface EngineTaskProgress {
   progress: number;
   stage: string | null;
   state: number | null;
+  // The script angle recorded on the same task record, carried here so a
+  // caller that already paid for this read never fetches the record again
+  // just for the angle. Null when the engine recorded none.
+  scriptAngle: string | null;
   //---------------
   // gone — the engine answered 404: it no longer knows this task (an engine
   // restart dropped it, or the state backend lost it). This is TERMINAL,
@@ -118,7 +122,7 @@ export async function fetchEngineTaskProgress(
     // forgot the task. Report it as gone (state -1) so callers stop
     // polling instead of retrying a resource that can never come back.
     if (response.status === 404) {
-      return { progress: 0, stage: null, state: TASK_STATE_FAILED, gone: true };
+      return { progress: 0, stage: null, state: TASK_STATE_FAILED, gone: true, scriptAngle: null };
     }
     if (!response.ok) {
       throw new Error(`Engine task lookup failed with status ${response.status}`);
@@ -130,6 +134,7 @@ export async function fetchEngineTaskProgress(
       stage: task ? taskStage(task.stage) : null,
       state: task ? taskState(task) : null,
       gone: false,
+      scriptAngle: task ? scriptAngleFromTask(task) : null,
     };
   } finally {
     clearTimeout(timeout);
@@ -170,7 +175,16 @@ export async function fetchEngineScriptAngle(
   userId: string,
 ): Promise<string | null> {
   const task = await fetchEngineTaskRecord(taskId, userId);
-  const angle = task ? task.script_angle : null;
+  return task ? scriptAngleFromTask(task) : null;
+}
+
+//---------------
+// scriptAngleFromTask — the angle on a raw task record: the trimmed string,
+// or null when absent, not a string, or blank (angle generation fell back
+// to the bare topic). The one parsing every task-record reader shares.
+//---------------
+function scriptAngleFromTask(task: Record<string, unknown>): string | null {
+  const angle = task.script_angle;
   if (typeof angle !== 'string') return null;
   const trimmed = angle.trim();
   return trimmed.length > 0 ? trimmed : null;
@@ -225,8 +239,7 @@ export async function fetchEnginePostMetricsSource(
 ): Promise<{ publishResults: unknown[]; scriptAngle: string | null }> {
   const task = await fetchEngineTaskRecord(taskId, userId);
   const results = task ? task.publish_results : null;
-  const angle = task ? task.script_angle : null;
-  const trimmed = typeof angle === 'string' ? angle.trim() : '';
+  const trimmed = task ? (scriptAngleFromTask(task) ?? '') : '';
   return {
     publishResults: Array.isArray(results) ? results : [],
     scriptAngle: trimmed.length > 0 ? trimmed : null,

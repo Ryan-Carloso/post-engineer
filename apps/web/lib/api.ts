@@ -19,6 +19,7 @@ import { isVoiceOption } from './voice-catalog';
 import { logger } from '@/lib/logger';
 import type { PublishLink } from '@/lib/publish-links';
 import { narrowGeneration, narrowProgressHistory, narrowPublishLinks, type GenerationFacts, type ProgressHistoryEntry } from './slot-detail';
+import { narrowScriptAngle } from './script-angle';
 
 // Re-exported so existing import sites (`@/lib/api`) keep working.
 export type { ProgressHistoryEntry };
@@ -164,6 +165,8 @@ export interface PersonaRecord {
   videoAspect?: string;
   videoLayout?: string;
   scriptPrompt?: string;
+  // The persona's call to action; absent = the engine picks a generic one.
+  ctaText?: string;
   paragraphNumber?: number;
   niche?: string;
   // Billing input for the per-video token cost estimate (the persona's face
@@ -671,10 +674,9 @@ export function useVoicesQuery() {
 
 //---------------
 // Fill Schedule — video publishing timetables (days + time window + posts/day).
-// Schedules are created by POST /api/videos/generate-and-schedule (1-10
-// topics, each becoming a video + slot + task); the engine reads these
-// tables via the service role and does the rest: video generation per slot,
-// then publishing at each slot's time via /api/upload-content.
+// Created by POST /api/videos/generate-and-schedule (1-10 topics, each a
+// video + slot + task); the engine does generation per slot, then
+// publishing at each slot's time via /api/upload-content.
 //---------------
 
 export interface ScheduleConfig {
@@ -946,8 +948,7 @@ export function useVideoGenerationsQuery(limit?: number) {
 
 //---------------
 // parseJsonBody — reads a JSON response body, tolerating non-JSON error
-// pages (e.g. a Vercel 502 HTML body). Returns null instead of throwing
-// parse noise like "Unexpected token '<'".
+// pages (e.g. a Vercel 502 HTML body). Returns null instead of throwing.
 //---------------
 async function parseJsonBody<T>(response: Response): Promise<T | null> {
   try {
@@ -968,9 +969,8 @@ async function throwForBadResponse(response: Response, fallback: string): Promis
 }
 
 //---------------
-// Per-slot operations (Posts page). Only slots not yet dispatched to the
-// engine can be edited/deleted — the API returns 409 otherwise and the
-// error message is surfaced to the user, never swallowed.
+// Per-slot operations (Posts page). Only slots not yet dispatched can be
+// edited/deleted — the API returns 409 otherwise, surfaced to the user.
 //---------------
 
 export async function updateSlotTopic(slotId: string, topic: string): Promise<string> {
@@ -1019,10 +1019,8 @@ export function useDeleteSlotMutation() {
 }
 
 //---------------
-// Detail endpoints — one post per request, so the Posts detail page never
-// needs to pull the whole history to find a single id. A 404 resolves to
-// null (not found — unknown id or another user's row); any other failure
-// throws and is surfaced by the page's error state.
+// Detail endpoints — one post per request. A 404 resolves to null (not
+// found — unknown id or another user's row); other failures throw.
 //---------------
 
 export interface SlotDetailPayload {
@@ -1040,6 +1038,9 @@ export interface SlotDetailPayload {
     retryable: boolean | null;
     queuePosition: number | null;
     queueTotal: number | null;
+    // The specific angle the engine built the script around (derived from
+    // the topic). Null until generation starts, or when none was recorded.
+    scriptAngle: string | null;
     // Where the post went, one entry per provider. Empty until the slot is
     // published (nothing exists to link to before that).
     publishLinks: PublishLink[];
@@ -1072,13 +1073,12 @@ export interface SlotDetailPayload {
 
 //---------------
 // PostDetail — the unified detail payload from GET /api/posts/[id]: one
-// endpoint resolves any post id, so the page never guesses between the
-// slot and generation endpoints (issue #208). The generation branch now
-// carries live progress like slots do.
+// endpoint resolves any post id (issue #208); both branches carry live
+// progress.
 //---------------
 export type PostDetail =
   | (SlotDetailPayload & { kind: 'slot' })
-  | { kind: 'generation'; generation: VideoGeneration & { progress: number; stage: string | null } };
+  | { kind: 'generation'; generation: VideoGeneration & { progress: number; stage: string | null; scriptAngle: string | null } };
 
 export async function fetchPostDetail(id: string): Promise<PostDetail | null> {
   const response = await fetch(`/api/posts/${encodeURIComponent(id)}`, {
@@ -1092,7 +1092,8 @@ export async function fetchPostDetail(id: string): Promise<PostDetail | null> {
     const record = (typeof data.generation === 'object' && data.generation !== null ? data.generation : {}) as Record<string, unknown>;
     const progress = typeof record.progress === 'number' ? record.progress : 0;
     const stage = typeof record.stage === 'string' ? record.stage : null;
-    return { kind: 'generation', generation: { ...(record as unknown as VideoGeneration), progress, stage } };
+    const scriptAngle = narrowScriptAngle(record.scriptAngle);
+    return { kind: 'generation', generation: { ...(record as unknown as VideoGeneration), progress, stage, scriptAngle } };
   }
   if (data.kind === 'slot') {
     const payload = data as unknown as SlotDetailPayload;
@@ -1102,6 +1103,7 @@ export async function fetchPostDetail(id: string): Promise<PostDetail | null> {
       kind: 'slot',
       slot: {
         ...payload.slot,
+        scriptAngle: narrowScriptAngle((payload.slot as { scriptAngle?: unknown }).scriptAngle),
         publishLinks: narrowPublishLinks(payload.slot.publishLinks),
         progressHistory: narrowProgressHistory(payload.slot.progressHistory),
       },
@@ -1297,11 +1299,9 @@ export function useCreatePostMutation() {
 
 //---------------
 // seedCreatedPostCaches — write the mutation response straight into the
-// list caches so the new post is visible the instant the user lands back on
-// /posts. Seeded slots merge into `upcoming` (deduped by id, sorted by slot
-// time); the schedule seed keeps the page's
-// slots-against-schedules join from dropping them. Progress starts at 0 —
-// nothing has generated yet — and the next poll fills in live values.
+// list caches so the new post is visible the instant the user lands back
+// on /posts. Seeded slots merge into `upcoming` (deduped by id, sorted
+// by slot time); progress starts at 0 and the next poll fills live values.
 //---------------
 export function seedCreatedPostCaches(
   queryClient: QueryClient,

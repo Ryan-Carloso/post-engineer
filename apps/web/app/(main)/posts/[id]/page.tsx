@@ -20,6 +20,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import AccountCard from '@/components/account-card';
 import { DetailProgressBar } from './detail-progress-bar';
+import { ScriptAngleSection } from './script-angle-section';
 import { ExternalLinkIcon } from '@/lib/ui';
 import type { PublishLink } from '@/lib/publish-links';
 import { useI18n } from '@/lib/i18n/provider';
@@ -27,11 +28,9 @@ import type { TranslationKey } from '@/lib/i18n';
 
 //---------------
 // PostDetailPage (/posts/[id]) — the full-page post detail: big video
-// player when the engine produced one, live progress while generating,
-// topic editing for awaiting slots, delete for awaiting/failed slots.
-// The entity is resolved by id through the single unified detail endpoint
-// (GET /api/posts/[id]) — never by scanning the history lists, so any
-// post is reachable no matter how deep it sits in the history.
+// player, live progress while generating, topic editing and delete for
+// awaiting/failed slots. Resolved by id through the unified detail
+// endpoint (GET /api/posts/[id]), never by scanning the history lists.
 //---------------
 
 interface AccountCardData {
@@ -82,9 +81,8 @@ const SLOT_VIDEO_STATUSES = new Set<ScheduledSlot['status']>(['ready', 'publishi
 
 //---------------
 // PUBLISH_LINK_LABEL — the display name per provider. A fixed literal map
-// rather than the raw provider id so the UI never shows an internal slug,
-// and rather than the slug's capitalization so a new provider cannot leak
-// untranslated into the page.
+// rather than the raw provider id, so the UI never shows an internal slug
+// or an untranslated new provider.
 //---------------
 const PUBLISH_LINK_LABEL: Record<PublishLink['provider'], string> = {
   youtube: 'YouTube',
@@ -214,6 +212,7 @@ export default function PostDetailPage() {
           statusStyle={STATUS_STYLE[generation.status] ?? STATUS_STYLE.pending}
         />
         <PostIdSection postId={generation.generationId} />
+        <ScriptAngleSection angle={generation.scriptAngle} />
         <section aria-label={t('posts.detailsTitle')} className="mt-6">
           <p className="text-sm text-muted-foreground">
             {formatDateTime(generation.createdAt, locale)} · {generation.videoSubject ?? t('posts.unknownTopic')}
@@ -269,8 +268,7 @@ export default function PostDetailPage() {
 ------------------ */
 
 //---------------
-// DetailHeader — back link, title and the status pill, shared by the slot
-// and generation views.
+// DetailHeader — back link, title and status pill, shared by both views.
 //---------------
 const DetailHeader = ({
   title,
@@ -669,6 +667,8 @@ export const SlotDetail = ({
           </p>
         )}
       </div>
+
+      <ScriptAngleSection angle={slot.scriptAngle} />
 
       <PostIdSection postId={slot.id} />
 

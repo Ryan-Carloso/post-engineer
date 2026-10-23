@@ -42,6 +42,8 @@ export interface PersonaPrep {
   photoPath: string | null;
   niche: string | null;
   scriptPrompt: string | null;
+  /** The persona's call to action (null = the engine picks a generic one). */
+  ctaText: string | null;
   language: string | null;
   videoAspect: string | null;
   videoLayout: string | null;
@@ -101,6 +103,8 @@ export function resolvePostWithoutPersona(opts: {
     photoPath: null,
     niche: opts.niche ?? null,
     scriptPrompt: opts.scriptPrompt ?? null,
+    // No persona, no persona call to action: the engine picks a generic one.
+    ctaText: null,
     language: opts.language ?? null,
     videoAspect: opts.videoAspect ?? null,
     videoLayout: opts.videoLayout ?? null,

@@ -80,6 +80,7 @@ describe('GET /api/posts/[id]', () => {
       completedAt: null,
       progress: 67,
       stage: 'audio',
+      scriptAngle: 'The myth that keeps coming back',
     });
     const response = await get('gen-1:slot:slot-1');
     expect(response.status).toBe(200);
@@ -105,6 +106,7 @@ describe('GET /api/posts/[id]', () => {
         progress: 42,
         stage: 'video',
         retryable: null,
+        scriptAngle: null,
         publishLinks: [],
         progressHistory: [],
         queuePosition: null,

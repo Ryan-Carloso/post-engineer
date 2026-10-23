@@ -17,6 +17,7 @@ const PERSONA_PREFERENCE_FIELDS: ReadonlyArray<{
   { personaKey: 'video_aspect', jobKey: 'video_aspect' },
   { personaKey: 'video_layout', jobKey: 'video_layout' },
   { personaKey: 'script_prompt', jobKey: 'video_script_prompt' },
+  { personaKey: 'cta_text', jobKey: 'video_cta' },
   { personaKey: 'paragraph_number', jobKey: 'paragraph_number' },
 ];
 
@@ -61,6 +62,7 @@ export interface JobPersona {
   video_aspect?: string | null;
   video_layout?: string | null;
   script_prompt?: string | null;
+  cta_text?: string | null;
   paragraph_number?: number | null;
   niche?: string | null;
   face_quality?: string | null;
@@ -104,8 +106,20 @@ export function buildJobPayload(
     logger.warn(`[video-job] dropping ${droppedKeys.length} unknown request field(s): ${shown}${remainder}`);
   }
   const personaRecord: Record<string, unknown> = { ...persona };
+  // The niche rides the engine-facing persona record: the engine's
+  // script-angle step reads PersonaParams.niche as its channel context.
+  // Absent/blank niches are omitted, never forwarded verbatim.
+  const enginePersona: Record<string, unknown> = {
+    name: persona.name,
+    photo_url: persona.photo_url,
+    voice_id: persona.voice_id,
+    voice_audio_url: persona.voice_audio_url,
+  };
+  if (hasNonEmptyString(persona.niche)) {
+    enginePersona.niche = persona.niche;
+  }
   const jobPayload = applyPersonaPreferences(
-    { ...forwardedRequest, persona: { name: persona.name, photo_url: persona.photo_url, voice_id: persona.voice_id, voice_audio_url: persona.voice_audio_url } },
+    { ...forwardedRequest, persona: enginePersona },
     personaRecord,
   );
 

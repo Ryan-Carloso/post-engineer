@@ -87,6 +87,16 @@ describe('enrichSlot — gone engine task', () => {
     expect(result.retryable).not.toBeNull();
   });
 
+  it('uses a prefetched task from options instead of fetching the record again', async () => {
+    const result = await enrichSlot(GENERATING_SLOT, 'user-1', new Map(), {
+      task: { progress: 33, stage: 'render', state: 4, gone: false, scriptAngle: 'Myth' },
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(selectVideoGeneration).not.toHaveBeenCalled();
+    expect(result.progress).toBe(33);
+    expect(result.stage).toBe('render');
+  });
+
   it('does not settle anything when the task is still alive', async () => {
     fetchMock.mockResolvedValue(engineResponse(200, { body: { progress: 50, state: 4, stage: 'render' } }));
     const result = await enrichSlot(GENERATING_SLOT, 'user-1');

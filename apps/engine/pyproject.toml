@@ -140,6 +140,9 @@ fail_under = 60
 [tool.pytest.ini_options]
 testpaths = ["test"]
 norecursedirs = ["mutants"]
+markers = [
+    "real_script_angle: run the real llm.generate_script_angle instead of the autouse stub",
+]
 
 [tool.mutmut]
 # Python mutation testing for the engine (mutmut 3.x), wired into

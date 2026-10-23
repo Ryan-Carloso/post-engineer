@@ -24,14 +24,12 @@ export const ptDictionary = {
     primaryNavigation: 'Navegação principal',
     profile: 'Perfil',
   },
-
   // Account area — Perfil page (mobile header avatar + /account route)
   account: {
     title: 'Perfil',
     subtitle: 'Suas informações, tokens e preferências.',
     version: 'Versão',
   },
-
   // Posts page — history + upcoming posts from all accounts
   posts: {
     title: 'Posts',
@@ -85,6 +83,7 @@ export const ptDictionary = {
     accountsLabel: 'Contas',
     publishedLinksTitle: 'Publicado em',
     progressHistoryTitle: 'Histórico de progresso',
+    scriptAngleLabel: 'Ângulo do roteiro',
     generationFactsLabel: 'Como foi gerado',
     generationPersonaLabel: 'Persona',
     generationFaceLabel: 'Rosto',
@@ -110,7 +109,6 @@ export const ptDictionary = {
     videoLoadError: 'Não foi possível carregar o vídeo.',
     detailLoadError: 'Não foi possível carregar este post. Tente novamente.',
   },
-
   // /posts/new — create post (persona + topics + accounts + publish times)
   newPost: {
     title: 'Novo post',
@@ -194,12 +192,10 @@ export const ptDictionary = {
     successHintAsap: 'O vídeo está sendo gerado e será publicado nas contas selecionadas assim que estiver pronto.',
     successPartial: 'Agendado, mas alguns vídeos falharam ao iniciar. Veja o detalhe em cada post.',
   },
-
   // Home / dashboard
   publishing: {
     mustSelectAccount: 'Selecione pelo menos uma conta para publicar.',
   },
-
 
   // Accounts
   accounts: {
@@ -550,6 +546,10 @@ export const ptDictionary = {
     scriptLabel: 'Estilo do roteiro',
     scriptPlaceholder: 'Ex.: storytelling, educativo, direto ao ponto…',
     scriptMaxError: 'Roteiro muito longo (máx. 2000 caracteres).',
+    ctaLabel: 'Chamada pra ação (fim do vídeo)',
+    ctaPlaceholder: 'Ex.: link na bio, segue @seucanal…',
+    ctaHint: 'Opcional. Vazio = escolhemos uma chamada que combina com o vídeo.',
+    ctaMaxError: 'Chamada pra ação muito longa (máx. {max} caracteres).',
     detailsTitle: 'Detalhes da persona',
     details: 'Ver detalhes',
     createdAt: 'Criada em',

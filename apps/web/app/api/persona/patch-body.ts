@@ -2,7 +2,7 @@
 //
 // Extracted from route.ts so the route module stays under the file-size
 // ratchet. All fields are optional on edit; missing fields parse as null.
-import { photoExtensionOf, VALID_VIDEO_ASPECTS, VIDEO_LAYOUTS } from '@/lib/persona-schema';
+import { PERSONA_CTA_MAX_LENGTH, photoExtensionOf, VALID_VIDEO_ASPECTS, VIDEO_LAYOUTS } from '@/lib/persona-schema';
 import { isFileLike } from '@/lib/persona-images';
 
 // parsePatchBody — all fields are optional on edit; returns
@@ -18,6 +18,7 @@ interface PersonaPatchBody {
   videoAspect: string | null;
   videoLayout: string | null;
   scriptPrompt: string | null;
+  ctaText: string | null;
   paragraphNumber: number | null;
   niche: string | null;
 }
@@ -56,6 +57,15 @@ export async function parsePatchBody(request: Request): Promise<ParsePatchResult
     return { ok: false, error: `Invalid videoLayout: ${videoLayout}. Use one of ${VIDEO_LAYOUTS.join(', ')}.` };
   }
   const scriptPrompt = optionalString(formData.get('scriptPrompt'));
+  // ctaText is the one field the user can also clear: a present but blank
+  // value means "remove the CTA" (''), not "leave unchanged" — the generic
+  // optionalString blank-to-null mapping would silently drop the clear.
+  const rawCtaText = formData.get('ctaText');
+  const ctaText =
+    typeof rawCtaText === 'string' ? (rawCtaText.trim().length === 0 ? '' : rawCtaText) : null;
+  if (ctaText !== null && ctaText.length > PERSONA_CTA_MAX_LENGTH) {
+    return { ok: false, error: `Invalid ctaText: use at most ${PERSONA_CTA_MAX_LENGTH} characters.` };
+  }
   const niche = optionalString(formData.get('niche'));
   if (niche !== null && niche.length > 300) {
     return { ok: false, error: 'Invalid niche: use at most 300 characters.' };
@@ -82,6 +92,7 @@ export async function parsePatchBody(request: Request): Promise<ParsePatchResult
       videoAspect,
       videoLayout,
       scriptPrompt,
+      ctaText,
       paragraphNumber,
       niche,
     },

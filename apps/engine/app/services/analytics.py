@@ -26,6 +26,11 @@ error response, so publish failures are diagnosable in PostHog from both
 publish paths (task_publish, fill_schedule). It is scrubbed with
 scrub_error_text (secrets + machine-local paths) before capture and never
 reaches Discord or the task error string.
+
+Deliberate exception (PR #250): the script_angle_generated event carries
+angle, LLM output derived from the user's own topic and already persisted
+as product data on the task record (the user sees it in post detail). The
+call site passes it through scrub_secret_values before capture.
 """
 
 from __future__ import annotations

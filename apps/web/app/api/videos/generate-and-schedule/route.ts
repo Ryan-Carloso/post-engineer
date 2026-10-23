@@ -9,16 +9,13 @@
 // to its slot. No orphan videos, no schedule-only creation, no per-video
 // manual times, no recurrence.
 //
-// Backend flow:
-//   validate input -> auth -> rate limit -> persona scope + ownership ->
-//   providers + accounts -> distribute slots -> window check -> cost ->
-//   idempotency pre-checks -> ONE atomic spend_tokens -> insert schedule ->
-//   insert slots -> dispatch engine tasks per slot
-//   (slot -> generating + task_id, or failed + per-slot refund).
-//
-// The engine's 60s tick reconciles generating -> ready/failed and publishes
-// ready slots at slot_at; the tick never sees our slots while pending:
-// scheduled_at is a legacy column that always stays NULL now.
+// Backend flow: validate input -> auth -> rate limit -> persona scope +
+// ownership -> providers + accounts -> distribute slots -> window check
+// -> cost -> idempotency pre-checks -> ONE atomic spend_tokens -> insert
+// schedule -> insert slots -> dispatch engine tasks per slot (slot ->
+// generating + task_id, or failed + per-slot refund).
+// The engine's 60s tick reconciles generating -> ready/failed and
+// publishes ready slots at slot_at; scheduled_at stays NULL now.
 //---------------
 
 import { NextResponse } from 'next/server';
@@ -595,7 +592,7 @@ async function preparePersona(
   const { data: persona, error: personaError } = await supabase
     .from('personas')
     .select(
-      'id, name, photo_path, avatar_url, voice_id, voice_audio_path, language, video_aspect, video_layout, script_prompt, paragraph_number, niche, face_quality',
+      'id, name, photo_path, avatar_url, voice_id, voice_audio_path, language, video_aspect, video_layout, script_prompt, cta_text, paragraph_number, niche, face_quality',
     )
     .eq('id', personaId)
     .eq('user_id', userId)
@@ -676,6 +673,7 @@ async function preparePersona(
     // time), so a persona edited after this moment cannot rewrite this video.
     niche: opts.niche ?? niche,
     scriptPrompt: opts.scriptPrompt ?? ((persona.script_prompt as string | null) ?? null),
+    ctaText: (persona.cta_text as string | null) ?? null,
     language: effectiveLanguage,
     videoAspect: opts.videoAspect ?? ((persona.video_aspect as string | null) ?? null),
     // Layout is snapshotted like aspect: a persona edited after this moment
@@ -1060,6 +1058,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     // stable remote URL (validated + SSRF-checked above).
     post_voice_audio_url: validatedOptions.audioUrl ?? null,
     post_script_prompt: prep.scriptPrompt,
+    post_cta_text: prep.ctaText,
     post_niche: prep.niche,
     post_language: prep.language,
     post_video_aspect: prep.videoAspect,
@@ -1284,6 +1283,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         video_aspect: prep.videoAspect,
         video_layout: prep.videoLayout,
         script_prompt: prep.scriptPrompt,
+        cta_text: prep.ctaText,
         paragraph_number: prep.paragraphNumber,
         niche: prep.niche,
         face_quality: prep.faceQuality,

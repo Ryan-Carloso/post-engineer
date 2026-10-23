@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.services import analytics
+from app.services import analytics, llm
 
 
 TEST_ROOT = Path(__file__).resolve().parent.parent
@@ -32,3 +32,17 @@ def _no_real_posthog_client(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("posthog.Posthog", MagicMock(name="Posthog"))
     yield
     analytics.reset_for_testing()
+
+
+@pytest.fixture(autouse=True)
+def _no_real_script_angle_call(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch):
+    """Never let a pipeline test reach the real LLM for the script angle.
+
+    task.generate_script asks the LLM for an angle before scripting; tests
+    that only patch llm.generate_script would otherwise hit a real provider.
+    The stub returns "" (bare-topic fallback). Tests of the angle itself opt
+    out with @pytest.mark.real_script_angle; test-level patches still stack.
+    """
+    if request.node.get_closest_marker("real_script_angle") is None:
+        monkeypatch.setattr(llm, "generate_script_angle", MagicMock(name="generate_script_angle", return_value=""))
+    yield

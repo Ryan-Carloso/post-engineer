@@ -13,6 +13,7 @@ from openai.types.chat import ChatCompletion
 from app.config import config
 from app.services.analytics import scrub_error_text, scrub_secret_values, track_ai_request
 from app.services.llm_providers import validate_llm_provider
+from app.services.script_prompts import DEFAULT_SCRIPT_CTA_INSTRUCTION, DEFAULT_SCRIPT_SYSTEM_PROMPT
 from app.utils import secret_redaction
 
 _max_retries = 5
@@ -23,6 +24,8 @@ MIN_SCRIPT_PARAGRAPH_NUMBER = 1
 MAX_SCRIPT_PARAGRAPH_NUMBER = 10
 MAX_SCRIPT_PROMPT_LENGTH = 2000
 MAX_SCRIPT_SYSTEM_PROMPT_LENGTH = 8000
+MAX_SCRIPT_ANGLE_LENGTH = 200
+MAX_SCRIPT_CTA_LENGTH = 200
 _THINK_BLOCK_RE = re.compile(r"<think\b[^>]*>.*?</think>", re.IGNORECASE | re.DOTALL)
 _UNCLOSED_THINK_BLOCK_RE = re.compile(r"<think\b[^>]*>.*$", re.IGNORECASE | re.DOTALL)
 _URL_USERINFO_RE = re.compile(r"((?:https?|wss?)://)([^/\s?#@]*:[^/\s?#@]*@)", re.IGNORECASE)
@@ -30,22 +33,6 @@ _SENSITIVE_QUERY_RE = re.compile(
     r"([?&](?:api[_-]?key|access[_-]?token|token|key|secret|password)=)([^&#\s]+)",
     re.IGNORECASE,
 )
-
-DEFAULT_SCRIPT_SYSTEM_PROMPT = """
-# Role: Video Script Generator
-
-## Goals:
-Generate a script for a video, depending on the subject of the video.
-
-## Constrains:
-1. do not under any circumstance reference this prompt in your response.
-2. get straight to the point, don't start with unnecessary things like, "welcome to this video".
-3. you must not include any type of markdown or formatting in the script, never use a title.
-4. only return the raw content of the script.
-5. do not include "voiceover", "narrator" or similar indicators of what should be spoken at the beginning of each paragraph or line.
-6. you must not mention the prompt, or anything about the script itself. also, never talk about the amount of paragraphs or lines. just write the script.
-7. respond in the same language as the video subject.
-""".strip()
 
 
 def _normalize_text_response(content, llm_provider: str) -> str:
@@ -678,12 +665,8 @@ def _generate_response_inner(
                     candidates = response.candidates
                     generated_text = candidates[0].content.parts[0].text
                 except (AttributeError, IndexError) as e:
-                    logger.warning(
-                        f"gemini returned invalid response content: {str(e)}"
-                    )
-                    raise ValueError(
-                        f"[{llm_provider}] returned invalid response content"
-                    )
+                    logger.warning(f"gemini returned invalid response content: {str(e)}")
+                    raise ValueError(f"[{llm_provider}] returned invalid response content")
 
                 return _normalize_text_response(generated_text, llm_provider), {}
 
@@ -1028,6 +1011,7 @@ def build_script_prompt(
     custom_system_prompt: str = "",
     target_words_min: int | None = None,
     target_words_max: int | None = None,
+    angle: str = "", cta: str = "", include_cta: bool = True,
 ) -> str:
     paragraph_number = _normalize_script_paragraph_number(paragraph_number)
     video_script_prompt = _limit_script_text(
@@ -1036,6 +1020,8 @@ def build_script_prompt(
     custom_system_prompt = _limit_script_text(
         custom_system_prompt, MAX_SCRIPT_SYSTEM_PROMPT_LENGTH, "custom_system_prompt"
     )
+    angle = _limit_script_text(angle, MAX_SCRIPT_ANGLE_LENGTH, "angle")
+    cta = _limit_script_text(cta, MAX_SCRIPT_CTA_LENGTH, "cta")
 
     # Keep the "script generation rules" and the "runtime context" as separate
     # blocks. Advanced users overriding the default system prompt still get
@@ -1049,10 +1035,23 @@ def build_script_prompt(
 - video subject: {video_subject}
 - target length: {minimum_words} to {maximum_words} words
 """.rstrip()
+    if angle:
+        prompt += f"\n- angle (build the hook and body around it): {angle}"
     if paragraph_number is not None:
         prompt += f"\n- number of paragraphs: {paragraph_number}"
     if language:
         prompt += f"\n- language: {language}"
+    # A partial script (a standalone hook regenerated for timing) must not
+    # end with a call to action: the rest of the script already has one.
+    if not include_cta:
+        prompt += "\n- call to action: none, this is not the end of the video"
+        prompt += "\n- the structure rule about ending with a call to action does not apply here"
+    elif cta:
+        prompt += (
+            f"\n- call to action (keep the idea, adapt the wording to the language): {cta}"
+        )
+    else:
+        prompt += f"\n- call to action: {DEFAULT_SCRIPT_CTA_INSTRUCTION}"
     if video_script_prompt:
         prompt += f"""
 
@@ -1099,6 +1098,7 @@ def generate_script(
     custom_system_prompt: str = "",
     target_words_min: int | None = None,
     target_words_max: int | None = None,
+    angle: str = "", cta: str = "", include_cta: bool = True,
 ) -> str:
     paragraph_number = _normalize_script_paragraph_number(paragraph_number)
     video_script_prompt = _limit_script_text(
@@ -1115,13 +1115,15 @@ def generate_script(
         custom_system_prompt=custom_system_prompt,
         target_words_min=target_words_min,
         target_words_max=target_words_max,
+        angle=angle, cta=cta, include_cta=include_cta,
     )
     final_script = ""
     logger.info(
         "generating video script: "
         f"subject={video_subject}, paragraph_number={paragraph_number}, "
         f"has_custom_prompt={bool(video_script_prompt.strip())}, "
-        f"has_custom_system_prompt={bool(custom_system_prompt.strip())}"
+        f"has_custom_system_prompt={bool(custom_system_prompt.strip())}, "
+        f"has_angle={bool(angle)}, has_cta={bool(cta)}"
     )
 
     def format_response(response):
@@ -1489,12 +1491,8 @@ def build_social_metadata_prompt(
     language: str = DEFAULT_SOCIAL_LANGUAGE,
     platform: str = DEFAULT_SOCIAL_PLATFORM,
 ) -> str:
-    video_subject = _limit_social_text(
-        video_subject, MAX_SOCIAL_SUBJECT_LENGTH, "video_subject"
-    )
-    video_script = _limit_social_text(
-        video_script, MAX_SOCIAL_SCRIPT_LENGTH, "video_script"
-    )
+    video_subject = _limit_social_text(video_subject, MAX_SOCIAL_SUBJECT_LENGTH, "video_subject")
+    video_script = _limit_social_text(video_script, MAX_SOCIAL_SCRIPT_LENGTH, "video_script")
     platform = _resolve_social_platform(platform)
     spec = SOCIAL_PLATFORMS[platform]
     label = SOCIAL_PLATFORM_LABELS.get(platform, platform)
@@ -1592,12 +1590,8 @@ def generate_social_metadata(
     """
     platform = _resolve_social_platform(platform)
     language = _normalize_social_language(language)
-    video_subject = _limit_social_text(
-        video_subject, MAX_SOCIAL_SUBJECT_LENGTH, "video_subject"
-    )
-    video_script = _limit_social_text(
-        video_script, MAX_SOCIAL_SCRIPT_LENGTH, "video_script"
-    )
+    video_subject = _limit_social_text(video_subject, MAX_SOCIAL_SUBJECT_LENGTH, "video_subject")
+    video_script = _limit_social_text(video_script, MAX_SOCIAL_SCRIPT_LENGTH, "video_script")
     prompt = build_social_metadata_prompt(
         video_subject=video_subject,
         video_script=video_script,
@@ -1629,3 +1623,7 @@ def generate_social_metadata(
     logger.warning("falling back to heuristic social metadata")
     return _fallback_social_metadata(video_subject, video_script, platform)
 
+
+# Re-exported for existing callers/tests: the implementation lives in
+# script_angle.py so this grandfathered module stays under its baseline.
+from app.services.script_angle import generate_script_angle  # noqa: E402,F401

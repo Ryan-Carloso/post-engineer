@@ -62,8 +62,8 @@ class ScheduleStore:
         "instagram_account_ids,linkedin_account_ids,bluesky_account_ids,"
         "post_voice_id,post_script_prompt,post_niche,post_language,"
         "post_video_aspect,post_video_layout,post_paragraph_number,post_face_quality,"
-        "post_voice_audio_url,"
-        "personas(name,niche,script_prompt,language,video_aspect,video_layout,"
+        "post_voice_audio_url,post_cta_text,"
+        "personas(name,niche,script_prompt,cta_text,language,video_aspect,video_layout,"
         "photo_path,avatar_url,voice_id,voice_audio_path,paragraph_number,face_quality)"
     )
 
