@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { clampProgress, fetchEngineTaskProgress, ENGINE_TASK_PROGRESS_TIMEOUT_MS } from '../engine-tasks';
+import {
+  clampProgress,
+  fetchEnginePublishResults,
+  fetchEngineScriptAngle,
+  fetchEnginePostMetricsSource,
+  fetchEngineTaskProgress,
+  ENGINE_TASK_PROGRESS_TIMEOUT_MS,
+} from '../engine-tasks';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -161,5 +168,91 @@ describe('fetchEngineTaskProgress', () => {
     mockEngine({ body: { progress: 45, stage: 42 } });
     const result = await fetchEngineTaskProgress(TASK_ID, 'user-1');
     expect(result.stage).toBeNull();
+  });
+});
+describe('fetchEngineScriptAngle', () => {
+  const TASK_ID = 'abc-123_DEF.4';
+
+  function mockEngine(body: unknown, ok = true, status = 200) {
+    vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
+    vi.stubEnv('MONEYPRINT_API_SECRET', 'secret');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok,
+        status,
+        json: async () => body,
+      })),
+    );
+  }
+
+  it('reads script_angle from the body-wrapped task record', async () => {
+    mockEngine({ status: 200, body: { script_angle: '  The myth that keeps coming back ' } });
+    await expect(fetchEngineScriptAngle(TASK_ID, 'user-1')).resolves.toBe('The myth that keeps coming back');
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      `https://engine.test/api/v1/tasks/${TASK_ID}`,
+      expect.objectContaining({ cache: 'no-store' }),
+    );
+  });
+
+  it('returns null when the task carries no angle', async () => {
+    mockEngine({ body: { progress: 100 } });
+    await expect(fetchEngineScriptAngle(TASK_ID, 'user-1')).resolves.toBeNull();
+  });
+
+  it('returns null for blank or non-string angles', async () => {
+    mockEngine({ body: { script_angle: '   ' } });
+    await expect(fetchEngineScriptAngle(TASK_ID, 'user-1')).resolves.toBeNull();
+    mockEngine({ body: { script_angle: 42 } });
+    await expect(fetchEngineScriptAngle(TASK_ID, 'user-1')).resolves.toBeNull();
+  });
+
+  it('throws on non-OK engine responses so the caller can degrade', async () => {
+    mockEngine({}, false, 500);
+    await expect(fetchEngineScriptAngle(TASK_ID, 'user-1')).rejects.toThrow(/status 500/);
+  });
+
+  it('rejects unsafe task ids without touching the network', async () => {
+    mockEngine({});
+    await expect(fetchEngineScriptAngle('../evil', 'user-1')).rejects.toThrow(/taskId/i);
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+});
+
+describe('fetchEnginePublishResults', () => {
+  it('still returns the publish_results array through the shared task fetch', async () => {
+    vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
+    vi.stubEnv('MONEYPRINT_API_SECRET', 'secret');
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ body: { publish_results: [{ provider: 'youtube' }] } }) })));
+    await expect(fetchEnginePublishResults('abc-123', 'user-1')).resolves.toEqual([{ provider: 'youtube' }]);
+  });
+});
+
+describe('fetchEnginePostMetricsSource', () => {
+  const TASK_ID = 'abc-123_DEF.4';
+
+  function mockEngine(body: unknown, ok = true, status = 200) {
+    vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
+    vi.stubEnv('MONEYPRINT_API_SECRET', 'secret');
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok, status, json: async () => body })));
+  }
+
+  it('returns publish results and the trimmed angle from one task read', async () => {
+    mockEngine({ status: 200, body: { publish_results: [{ provider: 'youtube' }], script_angle: ' Myth ' } });
+    await expect(fetchEnginePostMetricsSource(TASK_ID, 'user-1')).resolves.toEqual({
+      publishResults: [{ provider: 'youtube' }],
+      scriptAngle: 'Myth',
+    });
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+  });
+
+  it('defaults to no results and a null angle when the task carries neither', async () => {
+    mockEngine({ body: { progress: 100, script_angle: '  ' } });
+    await expect(fetchEnginePostMetricsSource(TASK_ID, 'user-1')).resolves.toEqual({ publishResults: [], scriptAngle: null });
+  });
+
+  it('throws on non-OK engine responses', async () => {
+    mockEngine({}, false, 503);
+    await expect(fetchEnginePostMetricsSource(TASK_ID, 'user-1')).rejects.toThrow(/status 503/);
   });
 });

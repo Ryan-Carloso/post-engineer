@@ -201,16 +201,19 @@ describe('Account area — desktop sidebar footer', () => {
     interceptShellData();
   });
 
-  it('sidebar has four tabs starting at /posts and has no API Keys tab', () => {
+  it('sidebar has five tabs starting at /posts and has no API Keys tab', () => {
     cy.visit('/');
 
     // Sidebar nav: Posts first, API Keys moved to the profile area.
+    // Five tabs since Metrics joined the sidebar (the mobile bottom
+    // bar stays at four tabs, without Metrics).
     cy.get('aside nav')
       .first()
       .find('a')
-      .should('have.length', 4)
+      .should('have.length', 5)
       .first()
       .should('have.attr', 'href', '/posts');
+    cy.get('aside nav').first().find('a[href="/metrics"]').should('have.length', 1);
     cy.get('aside nav').first().contains('a', 'API Keys').should('not.exist');
   });
 

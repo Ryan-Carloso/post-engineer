@@ -1,5 +1,4 @@
 import '@testing-library/jest-dom/vitest';
-import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -35,6 +34,7 @@ vi.mock('@/lib/ui', () => ({
   CoinsIcon: () => <span data-testid="icon-coins" />,
   ProfileIcon: () => <span data-testid="icon-profile" />,
   HistoryIcon: () => <span data-testid="icon-history" />,
+  ChartIcon: () => <span data-testid="icon-chart" />,
   SparklesIcon: () => <span data-testid="icon-sparkles" />,
   MicIcon: () => <span data-testid="icon-mic" />,
   SECTION_LABEL_CLASS: '',
@@ -165,14 +165,14 @@ describe('app/(main)/layout — MainLayout', () => {
     }
   });
 
-  it('renders the sidebar tabs in order: Posts, Accounts, Personas, Tokens', () => {
+  it('renders the sidebar tabs in order: Posts, Accounts, Personas, Metrics, Tokens', () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     const sidebar = screen.getByTestId('nav-brand').closest('aside');
     const nav = within(sidebar as HTMLElement).getByRole('navigation');
     const titles = within(nav)
       .getAllByRole('link')
       .map((link) => link.getAttribute('title'));
-    expect(titles).toEqual(['nav.posts', 'nav.accounts', 'nav.persona', 'nav.billing']);
+    expect(titles).toEqual(['nav.posts', 'nav.accounts', 'nav.persona', 'nav.metrics', 'nav.billing']);
   });
 
   it('lists Posts as the first navigation tab, linking to /posts', () => {

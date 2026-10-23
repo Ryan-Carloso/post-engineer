@@ -11,7 +11,7 @@ vi.mock('@/lib/metrics/post-metrics', () => ({
   collectPostMetrics: vi.fn(),
 }));
 vi.mock('@/lib/metrics/provider-counters', () => ({ fetchProviderCounters: vi.fn() }));
-vi.mock('@/lib/engine-tasks', () => ({ fetchEnginePublishResults: vi.fn() }));
+vi.mock('@/lib/engine-tasks', () => ({ fetchEnginePostMetricsSource: vi.fn() }));
 vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn() }));
 vi.mock('@/lib/posthog-server', () => ({ flushPostHog: vi.fn(async () => undefined) }));
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() } }));
@@ -19,7 +19,7 @@ vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn(), warn: vi.fn(), info: 
 import { POST } from '../post-metrics/route';
 import { collectPostMetrics } from '@/lib/metrics/post-metrics';
 import { fetchProviderCounters } from '@/lib/metrics/provider-counters';
-import { fetchEnginePublishResults } from '@/lib/engine-tasks';
+import { fetchEnginePostMetricsSource } from '@/lib/engine-tasks';
 import { trackApiEvent } from '@/lib/analytics';
 import { flushPostHog } from '@/lib/posthog-server';
 import { logger } from '@/lib/logger';
@@ -45,7 +45,7 @@ describe('POST /api/cron/post-metrics', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ success: true, report: REPORT });
     const deps = vi.mocked(collectPostMetrics).mock.calls[0][0];
-    expect(deps.fetchPublishResults).toBe(fetchEnginePublishResults);
+    expect(deps.fetchTaskSource).toBe(fetchEnginePostMetricsSource);
     expect(deps.fetchCounters).toBe(fetchProviderCounters);
     expect(deps.track).toBe(trackApiEvent);
     expect(flushPostHog).toHaveBeenCalledTimes(1);

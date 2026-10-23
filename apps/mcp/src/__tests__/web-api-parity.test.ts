@@ -99,6 +99,8 @@ const EXCLUDED_ENDPOINTS: Record<string, string> = {
   'GET /api/linkedin-auth/callback': 'Browser OAuth callback.',
   'GET /api/linkedin-auth/start': 'Browser OAuth start (redirect flow).',
   'POST /api/logout': 'Browser-only session logout (clears the auth cookie).',
+  'GET /api/metrics':
+    'Dashboard-only metrics aggregation for the /metrics page; no MCP tool exposes per-video performance snapshots.',
   'GET /api/moneyprint/health': 'Ops engine health proxy.',
   'POST /api/persona/avatar':
     'Dashboard-only mock AI avatar generator placeholder, not a programmatic API.',

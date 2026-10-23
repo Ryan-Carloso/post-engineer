@@ -50,6 +50,8 @@ export interface DuePost {
 
 export interface MetricsRow extends MetricsCounters {
   postId: string;
+  // The engine's script angle for the post (null when none was recorded).
+  scriptAngle: string | null;
   userId: string;
   provider: MeasuredProvider;
   accountId: string;
@@ -65,7 +67,7 @@ export interface MetricsTarget {
 
 export interface PostMetricsDeps {
   listDuePosts: (now: Date, limit: number) => Promise<DuePost[]>;
-  fetchPublishResults: (taskId: string, userId: string) => Promise<unknown[]>;
+  fetchTaskSource: (taskId: string, userId: string) => Promise<{ publishResults: unknown[]; scriptAngle: string | null }>;
   fetchCounters: (userId: string, target: MetricsTarget) => Promise<MetricsCounters>;
   saveMetrics: (row: MetricsRow) => Promise<void>;
   markDone: (postId: string, window: MetricsWindow) => Promise<void>;
@@ -174,8 +176,11 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
     report.checked += 1;
 
     let targets: MetricsTarget[];
+    let scriptAngle: string | null;
     try {
-      const found = metricsTargets(await deps.fetchPublishResults(post.taskId, post.userId));
+      const source = await deps.fetchTaskSource(post.taskId, post.userId);
+      scriptAngle = source.scriptAngle;
+      const found = metricsTargets(source.publishResults);
       targets = found.targets;
       for (const provider of found.unknownProviders) {
         logger.warn('[post-metrics] unknown provider in publish results', { postId: post.id, provider });
@@ -193,12 +198,21 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
       if (post.collectedKeys.has(targetKey(target))) continue;
       try {
         const counters = await deps.fetchCounters(post.userId, target);
-        await deps.saveMetrics({ postId: post.id, userId: post.userId, window: post.window, ...target, ...counters });
+        await deps.saveMetrics({
+          postId: post.id, userId: post.userId, window: post.window, scriptAngle, ...target, ...counters,
+        });
         report.recorded += 1;
-        // task_id joins this event with script_angle_generated in PostHog,
-        // so performance can be broken down by the angle the script used.
+        // script_angle lets PostHog break performance down by the angle the
+        // script used (the same value the dashboard filters on). Deliberate
+        // exception to analytics.ts's "ids, counts, validated enums" rule:
+        // the angle is free-text model output, and breaking performance
+        // down by it is the point of collecting it. trackApiEvent applies
+        // scrubSecrets (key-name redaction), then redacts credential
+        // fragments from string values and caps them at 500 chars before
+        // capture.
         deps.track('post_metrics_collected', {
           task_id: post.taskId,
+          script_angle: scriptAngle,
           post_id: post.id,
           user_id: post.userId,
           provider: target.provider,
@@ -283,6 +297,7 @@ export function createPostMetricsStore(
           likes: row.likes,
           comments: row.comments,
           saves: row.saves,
+          script_angle: row.scriptAngle,
         },
         { onConflict: 'post_id,provider,external_id,metrics_window' },
       );
