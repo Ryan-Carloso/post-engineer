@@ -1753,6 +1753,16 @@ class CoverageGapTests(unittest.TestCase):
         self.assertEqual(params["voice_id"], "calm")
         self.assertNotIn("photo_url", params)
 
+    def test_persona_params_forwards_the_identity_niche(self):
+        # The identity carries the niche (schedule snapshot post_niche or the
+        # persona embed); the engine needs it on PersonaParams or the script
+        # angle is generated without its channel-niche context.
+        params = fs.build_persona_params(
+            {"name": "Ana", "voice_id": "calm", "niche": "barista caseiro"},
+            store=MagicMock(),
+        )
+        self.assertEqual(params["niche"], "barista caseiro")
+
     def test_persona_params_photo_path_and_voice_audio(self):
         store = MagicMock(return_value="https://signed/x")
         store.signed_url = MagicMock(side_effect=lambda bucket, path: f"https://signed/{path}")

@@ -106,8 +106,20 @@ export function buildJobPayload(
     logger.warn(`[video-job] dropping ${droppedKeys.length} unknown request field(s): ${shown}${remainder}`);
   }
   const personaRecord: Record<string, unknown> = { ...persona };
+  // The niche rides the engine-facing persona record: the engine's
+  // script-angle step reads PersonaParams.niche as its channel context.
+  // Absent/blank niches are omitted, never forwarded verbatim.
+  const enginePersona: Record<string, unknown> = {
+    name: persona.name,
+    photo_url: persona.photo_url,
+    voice_id: persona.voice_id,
+    voice_audio_url: persona.voice_audio_url,
+  };
+  if (hasNonEmptyString(persona.niche)) {
+    enginePersona.niche = persona.niche;
+  }
   const jobPayload = applyPersonaPreferences(
-    { ...forwardedRequest, persona: { name: persona.name, photo_url: persona.photo_url, voice_id: persona.voice_id, voice_audio_url: persona.voice_audio_url } },
+    { ...forwardedRequest, persona: enginePersona },
     personaRecord,
   );
 

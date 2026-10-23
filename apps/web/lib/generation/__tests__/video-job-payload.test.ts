@@ -97,7 +97,15 @@ describe('buildJobPayload — request allowlist', () => {
       photo_url: 'https://cdn.test/photo.png',
       voice_id: 'voice-1',
       voice_audio_url: 'https://cdn.test/voice.mp3',
+      // The niche rides the persona record: the engine's script-angle step
+      // reads PersonaParams.niche as its channel context.
+      niche: 'finance',
     });
+  });
+
+  it('omits the persona niche when the persona has none', () => {
+    const payload = buildJobPayload(persona({ niche: null }), {});
+    expect(payload.persona).not.toHaveProperty('niche');
   });
 });
 

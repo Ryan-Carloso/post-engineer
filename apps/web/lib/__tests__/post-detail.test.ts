@@ -201,10 +201,9 @@ describe('getSlotPost', () => {
   it('degrades the slot angle to null and warns when the engine lookup throws', async () => {
     const { fetchEngineScriptAngle, fetchEngineTaskProgress } = await import('../engine-tasks');
     const { logger } = await import('../logger');
-    // Both reads of the task record fail: the progress prefetch and the
-    // angle fallback lookup.
+    // The one read of the task record fails: no second read is issued for
+    // the angle — it degrades to null off the same failure.
     vi.mocked(fetchEngineTaskProgress).mockRejectedValueOnce(new Error('engine down'));
-    vi.mocked(fetchEngineScriptAngle).mockRejectedValueOnce(new Error('engine down'));
     const { supabase } = mockSupabase({
       scheduled_posts: { data: SLOT_ROW, error: null },
       schedules: { data: SCHEDULE_ROW, error: null },
@@ -212,7 +211,8 @@ describe('getSlotPost', () => {
     });
     const detail = await getSlotPost(supabase, 'slot-1', 'user-1');
     expect(detail?.slot.scriptAngle).toBeNull();
-    expect(logger.warn).toHaveBeenCalledWith('[post-detail] script angle unavailable', {
+    expect(fetchEngineScriptAngle).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith('[post-detail] engine task progress unavailable', {
       taskId: 'task-1',
       error: 'engine down',
     });
@@ -349,7 +349,7 @@ describe('getGenerationPost', () => {
   });
 
   it('degrades to 0/null when the engine progress lookup throws', async () => {
-    const { fetchEngineTaskProgress } = await import('../engine-tasks');
+    const { fetchEngineTaskProgress, fetchEngineScriptAngle } = await import('../engine-tasks');
     vi.mocked(fetchEngineTaskProgress).mockRejectedValueOnce(new Error('engine down'));
     const { supabase } = mockSupabase({
       video_generations: { data: GENERATION_ROW, error: null },
@@ -357,6 +357,10 @@ describe('getGenerationPost', () => {
     const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1');
     expect(detail?.progress).toBe(0);
     expect(detail?.stage).toBeNull();
+    // The failed progress read was the view's one task-record read: the
+    // angle degrades to null instead of issuing a second read.
+    expect(fetchEngineScriptAngle).not.toHaveBeenCalled();
+    expect(detail?.scriptAngle).toBeNull();
   });
 
   it('returns the script angle for a completed generation', async () => {

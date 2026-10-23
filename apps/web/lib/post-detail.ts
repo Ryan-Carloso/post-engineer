@@ -265,10 +265,15 @@ export async function getSlotPost(
     ({ publishLinks, scriptAngle } = await resolvePublishedSlotEngineData(slotTaskId, userId));
   } else {
     publishLinks = await resolveSlotPublishLinks(row, userId);
+    // One task-record read per view: a prefetched task carries the angle,
+    // and a failed prefetch already burned the view's one read — the angle
+    // degrades to null instead of reading the same record a second time.
     scriptAngle =
-      prefetchedTask !== undefined && prefetchedTask.scriptAngle !== undefined
+      prefetchedTask !== undefined
         ? prefetchedTask.scriptAngle
-        : await resolveScriptAngle(row.task_id, userId);
+        : prefetchFailed
+          ? null
+          : await resolveScriptAngle(row.task_id, userId);
   }
 
   // Progress history: every observed (progress, stage) transition recorded
@@ -397,8 +402,9 @@ export async function getGenerationPost(
   let stage: string | null = null;
   // The angle lives on the same task record the progress read fetches: when
   // that read happens, the angle comes from it instead of a second read.
-  // Undefined means no read happened (terminal generation, no task id, or a
-  // failed lookup) — the angle then gets its own read below.
+  // Undefined means no read was attempted (terminal generation or no task
+  // id) — the angle then gets its own read below. A failed read sets it to
+  // null: that attempt was this view's one read.
   let angleFromProgress: string | null | undefined;
   if ((row.status === 'pending' || row.status === 'running') && row.engine_task_id) {
     try {
@@ -411,7 +417,10 @@ export async function getGenerationPost(
     } catch (taskError) {
       // Transient (5xx, abort, network): degrade, keep progress 0 so the
       // next poll retries. Only a 404 is terminal, and generations never
-      // settle tasks from a read path.
+      // settle tasks from a read path. The failed read was this view's one
+      // task-record read, so the angle degrades to null with it instead of
+      // reading the same record a second time.
+      angleFromProgress = null;
       logger.warn('[post-detail] engine task progress unavailable', {
         taskId: row.engine_task_id,
         error: taskError instanceof Error ? taskError.message : String(taskError),

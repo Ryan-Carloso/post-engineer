@@ -93,6 +93,7 @@
 - Storage backends share `STORAGE_BUCKET = "videos"` as the literal bucket name.
 - Script prompts that combine a user prompt with a mandatory contract (or injected context like the script body) put the contract/context FIRST and the user prompt last: `llm` caps `video_script_prompt` at 2000 chars by keeping the head, so anything appended after a near-limit user prompt is silently truncated. Partial-script regenerations reuse the task's persisted `script_angle`, never the bare topic.
 - A trim/limit helper that exists to preserve a trailing element (the CTA) must preserve it on EVERY path, fallbacks included: when no body fits next to it, the element ships alone — a plain-cut fallback that ends before it silently drops exactly what the helper protects. Pin the fallback paths, not just the length cap.
+- A persona field the engine consumes (e.g. `niche` for the script angle) must be forwarded on EVERY dispatch path — web direct payload (`buildJobPayload`), engine batch (`build_persona_params`), MCP — a field populated on only one path is silently dead on the others. Pin each path with a dispatch test, not a hand-built params object.
 
 ## MCP
 

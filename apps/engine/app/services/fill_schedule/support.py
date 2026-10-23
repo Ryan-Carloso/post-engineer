@@ -155,6 +155,10 @@ def build_persona_params(
     with the web's direct dispatch of the same slot.
     """
     params: dict[str, Any] = {"name": persona.get("name") or "Persona"}
+    # The niche is editorial context, not visual identity: it rides even for
+    # faceless posts, because the script angle is generated from it.
+    if persona.get("niche"):
+        params["niche"] = persona["niche"]
     if not faceless:
         if persona.get("avatar_url"):
             params["avatar_url"] = persona["avatar_url"]
