@@ -131,6 +131,9 @@ const GithubLogin = () => {
   const handleOAuthLogin = async (provider: 'github') => {
     if (pending) return;
     setPending(true);
+    // Opaque origins (sandboxed iframes, srcdoc) report hostname "" and
+    // origin "null": neither local nor a preview host, so they fall
+    // through to the production callback, same as any unknown host.
     const redirectTo = resolveLoginRedirectUrl(
       window.location.hostname,
       window.location.origin,
