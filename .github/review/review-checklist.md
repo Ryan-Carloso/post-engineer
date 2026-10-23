@@ -109,13 +109,17 @@ Trigger: `apps/web/**`, `apps/mcp/**`.
   components. Supabase RLS / service-role usage only server-side.
 - UI changes: loading/empty/error states exist.
 - **MCP parity:** a new or changed `apps/web/app/api/**/route.ts` endpoint
-  has an MCP tool or a typed exclusion in
-  `apps/mcp/src/__tests__/parity-exclusions.json`, and the exclusion kind is
-  true of the route (the parity test checks it mechanically). A PR that
-  adds or changes an exclusion must carry `parity-exclusion-approved`
-  applied by a code owner — verify in the PR timeline, not just the label
-  list. Never suggest weakening the test or adding a free-text exemption;
-  the fix is the tool.
+  has an MCP tool that calls it (mapped in
+  `apps/mcp/src/__tests__/parity-endpoint-tools.json`; the parity test
+  proves the tool reaches that method and path) or a typed exclusion in
+  `apps/mcp/src/__tests__/parity-exclusions.json` whose kind the parity
+  test verifies against the route per handler. A PR that adds or changes an
+  exclusion, or touches the parity test, its `parity/` verifier, the
+  behavioural bearer test, the guard scripts/workflow or CODEOWNERS, fails
+  `parity-exclusion-guard` until the code owner approves the current head
+  in a review and applies `parity-exclusion-approved` (the guard checks the
+  timeline and the review SHA, not just the label list). Never suggest
+  weakening the test or adding a free-text exemption; the fix is the tool.
 
 ## 8. Migrations and config
 

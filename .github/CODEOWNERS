@@ -1,13 +1,32 @@
-# Code owners for the MCP parity gate.
+# Code owners for the MCP parity gate and the workflows that enforce it.
 #
-# The parity test decides which web endpoints may stay out of the MCP. Its
-# exclusion list and the CI guard are security-adjacent: weakening either
-# lets an API-key-callable endpoint skip the MCP. Changes need a code owner
-# review, and the guard also requires the `parity-exclusion-approved` label
-# to be applied by a code owner (see
-# .github/workflows/parity-exclusion-guard.yml).
+# The parity test decides which web endpoints may stay out of the MCP.
+# Weakening it (an exclusion, the verifier, the behavioural bearer test,
+# the guard) lets an API-key-callable endpoint skip the MCP. Changes need a
+# code-owner review, and parity-exclusion-guard additionally requires the
+# code owner's approving review on the current head plus the
+# `parity-exclusion-approved` label applied by the code owner
+# (.github/workflows/parity-exclusion-guard.yml).
+#
+# All workflows are owned: a PR could otherwise add a look-alike workflow
+# whose job reports the same check name as the guard.
+#
+# The test-runner wiring of the MCP is owned too: dropping or filtering the
+# parity test from the run would bypass it without touching the test.
+#
+# parity-endpoint-tools.json is deliberately not owned: every mapping in it
+# is proven by the parity test, so adding an MCP tool needs no approval.
 
 /apps/mcp/src/__tests__/web-api-parity.test.ts @Ryan-Carloso
+/apps/mcp/src/__tests__/parity-verifier.test.ts @Ryan-Carloso
 /apps/mcp/src/__tests__/parity-exclusions.json @Ryan-Carloso
+/apps/mcp/src/__tests__/parity/ @Ryan-Carloso
+/apps/web/app/api/__tests__/parity-exclusion-bearer.test.ts @Ryan-Carloso
+/apps/mcp/package.json @Ryan-Carloso
+/apps/mcp/project.json @Ryan-Carloso
+/apps/mcp/tsconfig.spec.json @Ryan-Carloso
+/apps/mcp/vitest.config.* @Ryan-Carloso
+/apps/mcp/vite.config.* @Ryan-Carloso
 /.github/scripts/parity-exclusions/ @Ryan-Carloso
-/.github/workflows/parity-exclusion-guard.yml @Ryan-Carloso
+/.github/workflows/ @Ryan-Carloso
+/.github/CODEOWNERS @Ryan-Carloso
