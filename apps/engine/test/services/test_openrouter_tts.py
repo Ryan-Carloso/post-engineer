@@ -63,7 +63,7 @@ class TestOpenRouterVoiceId(unittest.TestCase):
 
     def test_is_openrouter_voice_matches_only_the_prefix(self):
         self.assertTrue(vs.is_openrouter_voice("openrouter:x-ai/grok-voice-tts-1.0:eve"))
-        self.assertFalse(vs.is_openrouter_voice("chatterbox:ryan"))
+        self.assertFalse(vs.is_openrouter_voice("chatterbox:en_us_male_01"))
         self.assertFalse(vs.is_openrouter_voice("elevenlabs:abc:Rachel"))
         self.assertFalse(vs.is_openrouter_voice(""))
         self.assertFalse(vs.is_openrouter_voice(None))
@@ -411,7 +411,7 @@ class TestOpenRouterDispatch(unittest.TestCase):
 
     def test_dispatch_ignores_other_providers(self):
         self.assertIsNone(
-            vs.dispatch_openrouter_tts("chatterbox:ryan", "Hello", self.voice_file, 1.0)
+            vs.dispatch_openrouter_tts("chatterbox:en_us_male_01", "Hello", self.voice_file, 1.0)
         )
         self.assertIsNone(
             vs.dispatch_openrouter_tts(None, "Hello", self.voice_file, 1.0)

@@ -97,6 +97,7 @@ export async function createClonedVoiceFromUrl(
   audioUrl: string,
   language: string,
   consent: boolean,
+  denoise: boolean,
 ): Promise<unknown> {
   if (!consent) {
     throw new Error('consent must be true to create a voice clone');
@@ -104,6 +105,7 @@ export async function createClonedVoiceFromUrl(
   const blob = await fetchCloneReferenceAudio(audioUrl);
   const formData = new FormData();
   formData.set('consent', 'true');
+  formData.set('denoise', denoise ? 'true' : 'false');
   formData.set('language', language);
   formData.set('file', blob, 'reference.bin');
   return client.request(
@@ -136,7 +138,7 @@ export async function previewClonedVoice(
   // The preview route answers with raw audio bytes, not JSON, so it cannot
   // go through the client's JSON request path: fetch the bytes here and
   // surface them as base64 (same own-fetch pattern as the download above).
-  // The upload timeout applies: preview synthesis can cold-start the GPU app.
+  // The upload timeout applies: preview synthesis can cold-start the local TTS server.
   const response = await fetch(`${client.baseUrl}${path}`, {
     method: 'POST',
     headers: client.getHeaders(),

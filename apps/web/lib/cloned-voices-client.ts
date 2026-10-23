@@ -56,9 +56,11 @@ export async function createClonedVoice(
   file: Blob,
   language: string,
   consent: boolean,
+  denoise: boolean,
 ): Promise<ClonedVoicePublicRow> {
   const formData = new FormData();
   formData.set('consent', consent ? 'true' : 'false');
+  formData.set('denoise', denoise ? 'true' : 'false');
   formData.set('language', language);
   formData.set('file', file, 'reference.webm');
   const response = await fetch('/api/persona/cloned-voices', {
@@ -103,4 +105,30 @@ export function clonedVoicePreviewUrl(cloneId: string, language: string | null):
     return `${base}?language=${encodeURIComponent(language.trim())}`;
   }
   return base;
+}
+
+// Cleaned (denoised) WAV of a reference recording, for the A/B listen
+// before cloning. Never throws on HTTP errors.
+export async function fetchDenoisePreview(
+  file: Blob,
+): Promise<{ success: true; audio: Blob } | { success: false; error: string }> {
+  const formData = new FormData();
+  formData.set('file', file, 'reference.webm');
+  try {
+    const response = await fetch('/api/persona/cloned-voices/denoise-preview', {
+      method: 'POST',
+      body: formData,
+    });
+    if (!response.ok || !(response.headers.get('content-type') ?? '').startsWith('audio/')) {
+      const data = await parseJson(response);
+      const error =
+        typeof data === 'object' && data !== null && 'error' in data && typeof data.error === 'string'
+          ? data.error
+          : 'Could not clean the audio.';
+      return { success: false, error };
+    }
+    return { success: true, audio: await response.blob() };
+  } catch {
+    return { success: false, error: 'Could not clean the audio.' };
+  }
 }

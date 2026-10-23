@@ -375,6 +375,14 @@ describe('createPostMetricsStore', () => {
     ]) {
       expect(columns.has(key)).toBe(true);
     }
+    // The upsert also writes script_angle, added by migration 026 (the
+    // final schema is 025 + 026); persona_id is trigger-filled from 026.
+    const sql026 = readFileSync(
+      join(findRepoRoot(import.meta.url), 'supabase', 'migrations', '026_post-metrics-dimensions.sql'),
+      'utf8',
+    );
+    expect(sql026).toContain('add column if not exists script_angle');
+    expect(sql026).toContain('add column if not exists persona_id');
     // The upsert's onConflict target must be the table's unique key.
     expect(sql).toContain('unique (post_id, provider, external_id, metrics_window)');
   });

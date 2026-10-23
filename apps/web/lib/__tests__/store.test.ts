@@ -275,26 +275,22 @@ describe('useUploadStore', () => {
 });
 
 describe('resolveScriptLanguage', () => {
-  it('maps supported locales to the script language', () => {
-    expect(resolveScriptLanguage('pt')).toBe('pt');
-    expect(resolveScriptLanguage('pt-BR')).toBe('pt');
-    expect(resolveScriptLanguage('es')).toBe('es');
-    expect(resolveScriptLanguage('es-ES')).toBe('es');
-    expect(resolveScriptLanguage('fr')).toBe('fr');
-    expect(resolveScriptLanguage('fr-FR')).toBe('fr');
+  // English-only launch: the locale derivation is suspended — every new
+  // persona starts in English whatever the UI locale is. These cases pin
+  // the lock; when the other languages launch, the pt/es/fr locales map
+  // to their own script language again.
+  it('resolves every locale to English during the English-only launch', () => {
+    expect(resolveScriptLanguage('pt')).toBe('en');
+    expect(resolveScriptLanguage('pt-BR')).toBe('en');
+    expect(resolveScriptLanguage('es')).toBe('en');
+    expect(resolveScriptLanguage('es-ES')).toBe('en');
+    expect(resolveScriptLanguage('fr')).toBe('en');
+    expect(resolveScriptLanguage('fr-FR')).toBe('en');
     expect(resolveScriptLanguage('en')).toBe('en');
     expect(resolveScriptLanguage('en-US')).toBe('en');
-  });
-
-  it('falls back to English when the base language is not supported', () => {
     expect(resolveScriptLanguage('de')).toBe('en');
-    expect(resolveScriptLanguage('de-DE')).toBe('en');
     expect(resolveScriptLanguage('ja-JP')).toBe('en');
     expect(resolveScriptLanguage('')).toBe('en');
-  });
-
-  it('normalizes uppercase before resolving', () => {
-    expect(resolveScriptLanguage('PT')).toBe('pt');
-    expect(resolveScriptLanguage('Pt-bR')).toBe('pt');
+    expect(resolveScriptLanguage('PT')).toBe('en');
   });
 });

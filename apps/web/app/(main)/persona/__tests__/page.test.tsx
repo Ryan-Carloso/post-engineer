@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, within, waitFor, fireEvent } from '@testing-library/react';
+import type { VoiceOption } from '@/lib/voice-catalog';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -52,7 +53,6 @@ vi.mock('@/lib/scroll-to-error', () => ({
 
 vi.mock('@/lib/api', () => ({
   useVoicesQuery: vi.fn(),
-  useVoiceSampleLanguagesQuery: vi.fn(),
   createPersona: vi.fn(),
   useUpdatePersonaMutation: vi.fn(),
   usePersonaListQuery: vi.fn(),
@@ -75,6 +75,7 @@ vi.mock('@/lib/ui', () => ({
   SpinnerIcon: () => <span data-testid="icon-spinner" />,
   SparklesIcon: () => <span data-testid="icon-sparkles" />,
   MicIcon: () => <span data-testid="icon-mic" />,
+  PlayIcon: () => <span data-testid="icon-play" />,
   FilmIcon: () => <span data-testid="icon-film" />,
   SECTION_LABEL_CLASS: '',
   INPUT_CLASS: '',
@@ -95,7 +96,7 @@ vi.mock('@/lib/i18n/provider', () => {
 });
 
 import PersonaPage from '../page';
-import { useVoicesQuery, useVoiceSampleLanguagesQuery, createPersona, useUpdatePersonaMutation, usePersonaListQuery, useSchedulesQuery, useYouTubeAccountsQuery, useInstagramAccountsQuery, useBlueskyAccountsQuery, useLinkedinAccountsQuery } from '@/lib/api';
+import { useVoicesQuery, createPersona, useUpdatePersonaMutation, usePersonaListQuery, useSchedulesQuery, useYouTubeAccountsQuery, useInstagramAccountsQuery, useBlueskyAccountsQuery, useLinkedinAccountsQuery } from '@/lib/api';
 import type { AccountData, InstagramAccountData } from '@/lib/types';
 import type { BlueskyAccountData, LinkedinAccountData } from '@/lib/providers/registry';
 import { I18nProvider, useI18n } from '@/lib/i18n/provider';
@@ -105,6 +106,28 @@ import { scrollToErrorField } from '@/lib/scroll-to-error';
 // The QueryClient of the most recent render: spying on its
 // invalidateQueries pins the exact query key the submit path invalidates.
 let lastQueryClient: QueryClient | null = null;
+
+//---------------
+// Voice picker helpers: house voices live in a dialog opened from the
+// "choose/change voice" button. pickVoice selects a row; voiceRowPlayButton
+// is the round play button on that row.
+//---------------
+async function openVoicePicker(user: ReturnType<typeof userEvent.setup>) {
+  const trigger =
+    screen.queryByRole('button', { name: 'persona.voicePickerChoose' }) ??
+    screen.getByRole('button', { name: 'persona.voicePickerChange' });
+  await user.click(trigger);
+  return screen.getByRole('dialog');
+}
+
+async function pickVoice(user: ReturnType<typeof userEvent.setup>, label: string) {
+  const dialog = await openVoicePicker(user);
+  await user.click(within(dialog).getByText(label).closest('button') as HTMLButtonElement);
+}
+
+function voiceRowPlayButton(label: string): HTMLButtonElement {
+  return within(screen.getByRole('dialog')).getByText(label).closest('li')?.querySelector('button') as HTMLButtonElement;
+}
 
 function createWrapper() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -123,10 +146,17 @@ function createWrapper() {
 // The engine's Chatterbox catalog, provider-qualified. The picker shows the
 // bare name (the `chatterbox:` prefix and underscores stripped), which is what
 // the assertions below click on.
-const VOICES = [
-  { id: 'chatterbox:ryan' },
-  { id: 'chatterbox:en_us_female_01' },
-];
+const voice = (id: string): VoiceOption => ({
+  id,
+  label: null,
+  provider: id.startsWith('openrouter:') ? 'openrouter' : 'chatterbox',
+  gender: null,
+  accent: null,
+  kind: 'standard',
+  description: null,
+});
+
+const VOICES = [voice('chatterbox:en_us_male_01'), voice('chatterbox:en_us_female_01')];
 
 const YOUTUBE_ACCOUNTS: AccountData[] = [
   { provider: 'youtube', recordId: 'yt-record', channelId: 'yt-1', channelName: 'Meu canal', connectedAt: 0, lastUsed: 0 },
@@ -211,13 +241,6 @@ beforeEach(() => {
   autoplayOptions.value = undefined;
   vi.mocked(useVoicesQuery).mockReturnValue({
     data: VOICES,
-    isLoading: false,
-  } as never);
-  vi.mocked(useVoiceSampleLanguagesQuery).mockReturnValue({
-    data: [
-      { code: 'pt-br', label: 'Português (BR)' },
-      { code: 'en-uk', label: 'English (UK)' },
-    ],
     isLoading: false,
   } as never);
   vi.mocked(createPersona).mockResolvedValue({ success: true, personaId: 'p-1' } as never);
@@ -357,9 +380,11 @@ describe('app/(main)/persona/page — PersonaPage', () => {
     expect(screen.getByRole('button', { name: 'persona.characterLabel 1' })).toBe(anaImage);
   });
 
-  it('lista as vozes da casa para escolha', () => {
+  it('lista as vozes da casa para escolha', async () => {
+    const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });
-    expect(screen.getByText('ryan')).toBeTruthy();
+    await openVoicePicker(user);
+    expect(screen.getByText('en us male 01')).toBeTruthy();
     expect(screen.getByText('en us female 01')).toBeTruthy();
   });
 
@@ -367,7 +392,7 @@ describe('app/(main)/persona/page — PersonaPage', () => {
     const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });
 
-    await user.click(screen.getByText('en us female 01'));
+    await pickVoice(user, 'en us female 01');
 
     expect(usePersonaStore.getState().voiceId).toBe('chatterbox:en_us_female_01');
   });
@@ -398,7 +423,7 @@ describe('app/(main)/persona/page — PersonaPage', () => {
     });
     const formData = vi.mocked(createPersona).mock.calls[0][0] as FormData;
     expect(formData.get('name')).toBe('Zé Persona');
-    expect(formData.get('voiceId')).toBe('chatterbox:ryan');
+    expect(formData.get('voiceId')).toBe('chatterbox:en_us_male_01');
     expect(formData.get('videoAspect')).toBe('9:16');
     expect(await screen.findByText('persona.created')).toBeTruthy();
     // Creating a persona lands on the personas list, where the user sees
@@ -435,7 +460,7 @@ describe('app/(main)/persona/page — PersonaPage', () => {
     await waitFor(() => expect(createPersona).toHaveBeenCalledTimes(1));
     const formData = vi.mocked(createPersona).mock.calls[0][0] as FormData;
     expect(formData.get('videoAspect')).toBe('16:9');
-    expect(formData.get('language')).toBe('pt');
+    expect(formData.get('language')).toBe('en');
     expect(formData.has('paragraphNumber')).toBe(false);
     expect(formData.get('scriptPrompt')).toBe('Storytelling forte');
   });
@@ -494,13 +519,6 @@ describe('app/(main)/persona/page — PersonaPage', () => {
 
   it('erro do servidor mostra feedback de falha com a mensagem', async () => {
     const user = userEvent.setup();
-    vi.mocked(useVoiceSampleLanguagesQuery).mockReturnValue({
-      data: [
-        { code: 'pt-br', label: 'Português (BR)' },
-        { code: 'en-uk', label: 'English (UK)' },
-      ],
-      isLoading: false,
-    } as never);
     vi.mocked(createPersona).mockResolvedValue({ success: false, error: 'deu ruim' } as never);
     render(<PersonaPage />, { wrapper: createWrapper() });
 
@@ -529,7 +547,7 @@ describe('app/(main)/persona/page — PersonaPage', () => {
 async function preencherFormularioValido(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'persona.characterLabel 1' }));
   await user.type(screen.getByLabelText('persona.name'), 'Zé Persona');
-  await user.click(screen.getByText('ryan'));
+  await pickVoice(user, 'en us male 01');
 }
 
 describe('app/(main)/persona/page — persona enxuta (sem schedule)', () => {
@@ -588,7 +606,7 @@ describe('app/(main)/persona/page — modo edição (mesma página do create)', 
     id: 'p-9',
     name: 'Persona editada',
     avatarUrl: '/caracter-samples/file-3.png',
-    voiceId: 'chatterbox:ryan',
+    voiceId: 'chatterbox:en_us_male_01',
     videoAspect: '9:16',
     scriptPrompt: '',
     niche: '',
@@ -745,57 +763,25 @@ describe('app/(main)/persona/page — modo edição (mesma página do create)', 
     expect(screen.queryByRole('button', { name: 'personas.save' })).toBeNull();
   });
 
-  it('em edição, o idioma da amostra inicia com o idioma da persona (es), não pt-br', () => {
+  it('em edição, não renderiza seletor de idioma da amostra', () => {
     searchParams.value = new URLSearchParams('edit=p-9');
     vi.mocked(usePersonaListQuery).mockReturnValue({
       data: [{ ...EDIT_PERSONA, language: 'es' }],
       isLoading: false,
     } as never);
-    vi.mocked(useVoiceSampleLanguagesQuery).mockReturnValue({
-      data: [
-        { code: 'pt-br', label: 'Português (BR)' },
-        { code: 'es', label: 'Español' },
-        { code: 'en-uk', label: 'English (UK)' },
-      ],
-      isLoading: false,
-    } as never);
 
     render(<PersonaPage />, { wrapper: createWrapper() });
 
-    expect(screen.getByTestId('sample-language')).toHaveValue('es');
+    expect(screen.queryByTestId('sample-language')).toBeNull();
   });
 
-  it('em edição, idioma da persona sem código exato usa o prefixo mais próximo (pt → pt-br)', () => {
-    searchParams.value = new URLSearchParams('edit=p-9');
-    vi.mocked(usePersonaListQuery).mockReturnValue({
-      data: [{ ...EDIT_PERSONA, language: 'pt' }],
-      isLoading: false,
-    } as never);
-
+  it('na criação, não renderiza seletor de idioma da amostra', () => {
     render(<PersonaPage />, { wrapper: createWrapper() });
 
-    expect(screen.getByTestId('sample-language')).toHaveValue('pt-br');
+    expect(screen.queryByTestId('sample-language')).toBeNull();
   });
 
-  it('em edição, idioma da persona sem amostra correspondente mantém o padrão pt-br', () => {
-    searchParams.value = new URLSearchParams('edit=p-9');
-    vi.mocked(usePersonaListQuery).mockReturnValue({
-      data: [{ ...EDIT_PERSONA, language: 'de' }],
-      isLoading: false,
-    } as never);
-
-    render(<PersonaPage />, { wrapper: createWrapper() });
-
-    expect(screen.getByTestId('sample-language')).toHaveValue('pt-br');
-  });
-
-  it('na criação, o idioma da amostra continua pt-br por padrão', () => {
-    render(<PersonaPage />, { wrapper: createWrapper() });
-
-    expect(screen.getByTestId('sample-language')).toHaveValue('pt-br');
-  });
-
-  it('trocar o idioma da amostra em edição toca o áudio no idioma escolhido', async () => {
+  it('em edição, clicar numa voz toca o sample em inglês mesmo com a persona em espanhol', async () => {
     const created: { url: string; play: ReturnType<typeof vi.fn> }[] = [];
     class FakeAudio {
       play = vi.fn().mockResolvedValue(undefined);
@@ -810,30 +796,20 @@ describe('app/(main)/persona/page — modo edição (mesma página do create)', 
       data: [{ ...EDIT_PERSONA, language: 'es' }],
       isLoading: false,
     } as never);
-    vi.mocked(useVoiceSampleLanguagesQuery).mockReturnValue({
-      data: [
-        { code: 'pt-br', label: 'Português (BR)' },
-        { code: 'es', label: 'Español' },
-      ],
-      isLoading: false,
-    } as never);
     const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });
 
-    // Starts at es (the persona's language)…
-    expect(screen.getByTestId('sample-language')).toHaveValue('es');
-    // …but the user's manual choice wins.
-    await user.selectOptions(screen.getByTestId('sample-language'), 'pt-br');
-    await user.click(screen.getByRole('button', { name: 'ryan' }));
+    await openVoicePicker(user);
+    await user.click(voiceRowPlayButton('en us male 01'));
 
     expect(created).toHaveLength(1);
-    expect(created[0].url).toBe('/voice-samples/chatterbox%3Aryan-pt-br.mp3');
+    expect(created[0].url).toBe('/voice-samples/kokoro_am_michael.mp3');
     vi.unstubAllGlobals();
   });
 });
 
 describe('app/(main)/persona/page — sample language', () => {
-  it('mudar o idioma do sample altera a language do áudio tocado', async () => {
+  it('clicar numa voz toca o sample em inglês (en-us), sem seletor de idioma', async () => {
     const created: { url: string; play: ReturnType<typeof vi.fn> }[] = [];
     class FakeAudio {
       play = vi.fn().mockResolvedValue(undefined);
@@ -846,11 +822,12 @@ describe('app/(main)/persona/page — sample language', () => {
     const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });
 
-    await user.selectOptions(screen.getByTestId('sample-language'), 'en-uk');
-    await user.click(screen.getByRole('button', { name: 'ryan' }));
+    expect(screen.queryByTestId('sample-language')).toBeNull();
+    await openVoicePicker(user);
+    await user.click(voiceRowPlayButton('en us male 01'));
 
     expect(created).toHaveLength(1);
-    expect(created[0].url).toBe('/voice-samples/chatterbox%3Aryan-en-uk.mp3');
+    expect(created[0].url).toBe('/voice-samples/kokoro_am_michael.mp3');
     vi.unstubAllGlobals();
   });
 
@@ -939,7 +916,7 @@ const EDIT_PERSONA_FULL = {
   id: 'p-9',
   name: 'Persona editada',
   avatarUrl: '/caracter-samples/file-3.png',
-  voiceId: 'chatterbox:ryan',
+  voiceId: 'chatterbox:en_us_male_01',
   videoAspect: '9:16',
   scriptPrompt: '',
   niche: '',
@@ -964,7 +941,7 @@ describe('app/(main)/persona/page — validação do submit (guards do store)', 
 
     await user.type(screen.getByLabelText('persona.name'), 'Zé Persona');
     await user.click(screen.getByRole('button', { name: 'persona.characterLabel 1' }));
-    await user.click(screen.getByText('ryan'));
+    await pickVoice(user, 'en us male 01');
     // The store name diverges from the field behind the form's back (the
     // form field still holds a valid name, so RHF passes and the
     // store-level trim guard is the one that must fire).
@@ -981,7 +958,7 @@ describe('app/(main)/persona/page — validação do submit (guards do store)', 
     render(<PersonaPage />, { wrapper: createWrapper() });
 
     await user.type(screen.getByLabelText('persona.name'), 'Zé Persona');
-    await user.click(screen.getByText('ryan'));
+    await pickVoice(user, 'en us male 01');
     await user.click(screen.getByText('persona.submit'));
 
     expect(createPersona).not.toHaveBeenCalled();
@@ -1009,7 +986,7 @@ describe('app/(main)/persona/page — validação do submit (guards do store)', 
     await user.click(screen.getByRole('tab', { name: 'persona.uploadTab' }));
     await user.upload(fileInput(container), new File(['conteudo'], 'foto.png', { type: 'image/png' }));
     await user.type(screen.getByLabelText('persona.name'), 'Zé Persona');
-    await user.click(screen.getByText('ryan'));
+    await pickVoice(user, 'en us male 01');
     await user.click(screen.getByText('persona.submit'));
 
     await waitFor(() => expect(createPersona).toHaveBeenCalledTimes(1));
@@ -1195,7 +1172,7 @@ describe('app/(main)/persona/page — validação do submit (guards do store)', 
     expect(screen.getByText('persona.voiceLabel')).toBeTruthy();
     expect(screen.getByText('personas.preferencesLabel')).toBeTruthy();
     expect(screen.getByText('personas.aspectLabel')).toBeTruthy();
-    expect(screen.getAllByText('persona.sampleLanguage').length).toBeGreaterThan(0);
+    expect(screen.queryByText('persona.sampleLanguage')).toBeNull();
     expect(screen.getByText('persona.photoLabel')).toBeTruthy();
   });
 });
@@ -1265,50 +1242,62 @@ describe('app/(main)/persona/page — abas, carrossel e seletor de voz', () => {
     expect(screen.getByTestId('icon-check')).toBeTruthy();
   });
 
-  it('voz selecionada marca aria-pressed, destaca o card e mostra o selo', async () => {
+  it('a persona voice outside the catalog is still shown on the card', () => {
+    usePersonaStore.getState().setVoiceId('chatterbox:legacy_voice_01');
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('selected-voice')).toHaveTextContent('legacy voice 01');
+    expect(screen.getByRole('button', { name: 'persona.voicePickerChange' })).toBeTruthy();
+  });
+
+  it('selected voice is aria-pressed in the dialog and shown on the card', async () => {
     const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });
 
-    const ryanButton = screen.getByText('ryan').closest('button') as HTMLButtonElement;
-    const otherButton = screen.getByText('en us female 01').closest('button') as HTMLButtonElement;
-    expect(screen.queryByTestId('icon-check')).toBeNull();
+    expect(screen.getByTestId('selected-voice')).toHaveTextContent('persona.voicePickerNone');
+    await pickVoice(user, 'en us male 01');
 
-    await user.click(ryanButton);
+    // Picking closes the dialog and the card shows the chosen voice.
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByTestId('selected-voice')).toHaveTextContent('en us male 01');
 
-    expect(ryanButton).toHaveAttribute('aria-pressed', 'true');
-    expect(otherButton).toHaveAttribute('aria-pressed', 'false');
-    expect(ryanButton.className).toContain('border-accent');
-    expect(otherButton.className).toContain('border-neutral-200');
-    expect(ryanButton.querySelector('span')?.className).toContain('bg-accent');
-    expect(otherButton.querySelector('span')?.className).toContain('bg-neutral-100');
-    expect(screen.getByTestId('icon-check')).toBeTruthy();
+    const dialog = await openVoicePicker(user);
+    const male = within(dialog).getByText('en us male 01').closest('button') as HTMLButtonElement;
+    const female = within(dialog).getByText('en us female 01').closest('button') as HTMLButtonElement;
+    expect(male).toHaveAttribute('aria-pressed', 'true');
+    expect(female).toHaveAttribute('aria-pressed', 'false');
+    expect(within(male).getByTestId('icon-check')).toBeTruthy();
   });
 
-  it('voz com prefixo no meio do id não perde o prefixo', () => {
+  it('voz com prefixo no meio do id não perde o prefixo', async () => {
+    const user = userEvent.setup();
     vi.mocked(useVoicesQuery).mockReturnValue({
-      data: [{ id: 'xxchatterbox:foo' }, { id: 'chatterbox:ryan' }],
+      data: [voice('xxchatterbox:foo'), voice('chatterbox:en_us_male_01')],
       isLoading: false,
     } as never);
     render(<PersonaPage />, { wrapper: createWrapper() });
+    await openVoicePicker(user);
 
     // voiceLabel only strips a LEADING chatterbox: — the anchored ^ matters.
     expect(screen.getByText('xxchatterbox:foo')).toBeTruthy();
     expect(screen.queryByText('xxfoo')).toBeNull();
   });
 
-  it('voz do OpenRouter mostra o nome e o modelo em linhas separadas', () => {
+  it('voz do OpenRouter mostra o nome e o modelo em linhas separadas', async () => {
+    const user = userEvent.setup();
     // The model must be visible or two entries sharing a voice name render as
     // identical rows — but appending it to the name overflows the card and
     // truncates mid-slug, so it gets its own line.
     vi.mocked(useVoicesQuery).mockReturnValue({
       data: [
-        { id: 'chatterbox:ryan' },
-        { id: 'openrouter:x-ai/grok-voice-tts-1.0:eve' },
-        { id: 'openrouter:microsoft/mai-voice-2.1:en-US-Harper:MAI-Voice-2.1' },
+        voice('chatterbox:en_us_male_01'),
+        voice('openrouter:x-ai/grok-voice-tts-1.0:eve'),
+        voice('openrouter:microsoft/mai-voice-2.1:en-US-Harper:MAI-Voice-2.1'),
       ],
       isLoading: false,
     } as never);
     render(<PersonaPage />, { wrapper: createWrapper() });
+    await openVoicePicker(user);
 
     expect(screen.getByText('eve')).toBeTruthy();
     expect(screen.getByText('x-ai/grok-voice-tts-1.0')).toBeTruthy();
@@ -1317,67 +1306,51 @@ describe('app/(main)/persona/page — abas, carrossel e seletor de voz', () => {
     expect(screen.getByText('en-US-Harper:MAI-Voice-2.1')).toBeTruthy();
     expect(screen.getByText('microsoft/mai-voice-2.1')).toBeTruthy();
     // Chatterbox is unaffected: no model line, underscores still spaced.
-    expect(screen.getByText('ryan')).toBeTruthy();
-    expect(screen.queryByText('chatterbox:ryan')).toBeNull();
+    expect(screen.getByText('en us male 01')).toBeTruthy();
+    expect(screen.queryByText('chatterbox:en_us_male_01')).toBeNull();
   });
 
-  it('cada voz do OpenRouter carrega o id bruto no title', () => {
+  it('cada voz do OpenRouter carrega o id bruto no title', async () => {
+    const user = userEvent.setup();
     // The visible lines are display; the raw id is what gets submitted.
     vi.mocked(useVoicesQuery).mockReturnValue({
-      data: [{ id: 'openrouter:x-ai/grok-voice-tts-1.0:eve' }],
+      data: [voice('openrouter:x-ai/grok-voice-tts-1.0:eve')],
       isLoading: false,
     } as never);
     render(<PersonaPage />, { wrapper: createWrapper() });
+    await openVoicePicker(user);
 
     expect(
       screen.getByTitle('openrouter:x-ai/grok-voice-tts-1.0:eve'),
     ).toBeTruthy();
   });
 
-  it('prefixo openrouter no meio do id não é removido', () => {
+  it('prefixo openrouter no meio do id não é removido', async () => {
+    const user = userEvent.setup();
     vi.mocked(useVoicesQuery).mockReturnValue({
-      data: [{ id: 'xxopenrouter:foo' }, { id: 'chatterbox:ryan' }],
+      data: [voice('xxopenrouter:foo'), voice('chatterbox:en_us_male_01')],
       isLoading: false,
     } as never);
     render(<PersonaPage />, { wrapper: createWrapper() });
+    await openVoicePicker(user);
 
     // The strip is anchored to the start, so an id merely containing the
     // provider name is left alone.
     expect(screen.getByText('xxopenrouter:foo')).toBeTruthy();
   });
 
-  it('áudio padrão do sample é pt-br na criação', async () => {
+  it('áudio padrão do sample é en-us na criação', async () => {
     const created = stubAudio();
     const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });
 
-    await user.click(screen.getByText('ryan'));
+    await openVoicePicker(user);
+    await user.click(voiceRowPlayButton('en us male 01'));
 
     expect(created).toHaveLength(1);
-    expect(created[0].url).toBe('/voice-samples/chatterbox%3Aryan-pt-br.mp3');
+    expect(created[0].url).toBe('/voice-samples/kokoro_am_michael.mp3');
   });
 
-  it('trocar o idioma após ouvir repete o sample no novo idioma', async () => {
-    const created = stubAudio();
-    const user = userEvent.setup();
-    render(<PersonaPage />, { wrapper: createWrapper() });
-
-    await user.click(screen.getByText('ryan'));
-    await user.selectOptions(screen.getByTestId('sample-language'), 'en-uk');
-
-    expect(created).toHaveLength(2);
-    expect(created[1].url).toBe('/voice-samples/chatterbox%3Aryan-en-uk.mp3');
-  });
-
-  it('trocar o idioma sem voz ouvida não toca nada', async () => {
-    const created = stubAudio();
-    const user = userEvent.setup();
-    render(<PersonaPage />, { wrapper: createWrapper() });
-
-    await user.selectOptions(screen.getByTestId('sample-language'), 'en-uk');
-
-    expect(created).toHaveLength(0);
-  });
 });
 
 describe('app/(main)/persona/page — seletor de foto', () => {
@@ -1643,58 +1616,6 @@ describe('app/(main)/persona/page — modo edição e sincronização', () => {
     expect(container.querySelectorAll('.skeleton-shimmer').length).toBeGreaterThan(0);
   });
 
-  it('skeleton quando os idiomas carregam mesmo com dados', () => {
-    vi.mocked(useVoiceSampleLanguagesQuery).mockReturnValue({
-      data: [
-        { code: 'pt-br', label: 'Português (BR)' },
-        { code: 'en-uk', label: 'English (UK)' },
-      ],
-      isLoading: true,
-      isPending: false,
-    } as never);
-    const { container } = render(<PersonaPage />, { wrapper: createWrapper() });
-
-    expect(container.querySelectorAll('.skeleton-shimmer').length).toBeGreaterThan(0);
-  });
-
-  it('skeleton quando os idiomas não têm dados nem estão carregando', () => {
-    vi.mocked(useVoiceSampleLanguagesQuery).mockReturnValue({
-      data: undefined,
-      isLoading: false,
-      isPending: false,
-    } as never);
-    const { container } = render(<PersonaPage />, { wrapper: createWrapper() });
-
-    expect(container.querySelectorAll('.skeleton-shimmer').length).toBeGreaterThan(0);
-  });
-
-  it('retry chama só o refetch da query com erro (idiomas)', async () => {
-    const voicesRefetch = vi.fn().mockResolvedValue(undefined);
-    const sampleRefetch = vi.fn().mockResolvedValue(undefined);
-    vi.mocked(useVoicesQuery).mockReturnValue({
-      data: VOICES,
-      isLoading: false,
-      isError: false,
-      isFetching: false,
-      refetch: voicesRefetch,
-    } as never);
-    vi.mocked(useVoiceSampleLanguagesQuery).mockReturnValue({
-      data: undefined,
-      error: new Error('Languages down.'),
-      isError: true,
-      isLoading: false,
-      isFetching: false,
-      refetch: sampleRefetch,
-    } as never);
-    const user = userEvent.setup();
-    render(<PersonaPage />, { wrapper: createWrapper() });
-
-    await user.click(screen.getByRole('button', { name: 'persona.tryAgain' }));
-
-    expect(sampleRefetch).toHaveBeenCalledTimes(1);
-    expect(voicesRefetch).not.toHaveBeenCalled();
-  });
-
   it('retry chama o refetch de personas quando só ela falha', async () => {
     const personasRefetch = vi.fn().mockResolvedValue(undefined);
     vi.mocked(usePersonaListQuery).mockReturnValue({
@@ -1807,7 +1728,7 @@ describe('app/(main)/persona/page — submit em edição', () => {
     const formData = vi.mocked(mutateAsync).mock.calls[0][0].formData as FormData;
     expect(formData.get('name')).toBe('Nova');
     expect(formData.get('avatarUrl')).toBe('/caracter-samples/file-3.png');
-    expect(formData.get('voiceId')).toBe('chatterbox:ryan');
+    expect(formData.get('voiceId')).toBe('chatterbox:en_us_male_01');
     expect(formData.get('videoAspect')).toBe('9:16');
     expect(formData.get('scriptPrompt')).toBe('Roteiro');
     expect(formData.get('niche')).toBe('Nicho');
@@ -1918,56 +1839,6 @@ describe('app/(main)/persona/page — submit em edição', () => {
     vi.mocked(usePersonaListQuery).mockReturnValue({ data: [], isLoading: false } as never);
     render(<PersonaPage />, { wrapper: createWrapper() });
     expect(screen.getByText('persona.submitHint')).toBeTruthy();
-  });
-});
-
-describe('app/(main)/persona/page — idioma da amostra', () => {
-  function mockEditWithLanguage(
-    language: string,
-    languages: Array<{ code: string; label: string }>,
-  ) {
-    mockEditMode({ ...EDIT_PERSONA_FULL, language });
-    vi.mocked(useVoiceSampleLanguagesQuery).mockReturnValue({
-      data: languages,
-      isLoading: false,
-    } as never);
-  }
-
-  it('espaços no idioma da persona são ignorados', () => {
-    mockEditWithLanguage('  es  ', [
-      { code: 'pt-br', label: 'Português (BR)' },
-      { code: 'es', label: 'Español' },
-    ]);
-    render(<PersonaPage />, { wrapper: createWrapper() });
-
-    expect(screen.getByTestId('sample-language')).toHaveValue('es');
-  });
-
-  it('prefixo casa o primeiro grupo (en → en-uk)', () => {
-    mockEditWithLanguage('en', [
-      { code: 'pt-br', label: 'Português (BR)' },
-      { code: 'en-uk', label: 'English (UK)' },
-    ]);
-    render(<PersonaPage />, { wrapper: createWrapper() });
-
-    expect(screen.getByTestId('sample-language')).toHaveValue('en-uk');
-  });
-
-  it('prefixo reverso casa o código mais curto (pt-br → pt)', () => {
-    mockEditWithLanguage('pt-br', [
-      { code: 'es', label: 'Español' },
-      { code: 'pt', label: 'Português' },
-    ]);
-    render(<PersonaPage />, { wrapper: createWrapper() });
-
-    expect(screen.getByTestId('sample-language')).toHaveValue('pt');
-  });
-
-  it('código em maiúsculas casa por prefixo sem case', () => {
-    mockEditWithLanguage('pt', [{ code: 'PT-BR', label: 'Português (BR)' }]);
-    render(<PersonaPage />, { wrapper: createWrapper() });
-
-    expect(screen.getByTestId('sample-language')).toHaveValue('PT-BR');
   });
 });
 

@@ -172,24 +172,37 @@ Provision the database schema in your Supabase project:
     `app.cron_base_url` / `app.cron_secret` settings as migration 004; after
     setting them run `select public.schedule_post_metrics();`.
 
-### Voice cloning (Chatterbox on Modal)
+### Voices and cloning (local CPU TTS server)
 
-Per-user clones need the engine registry client **and** the Modal Chatterbox
-service registry API:
+All voices run on CPU in the `tts` service next to the engine
+(`apps/engine/local_tts/server.py`, built from `apps/engine/Dockerfile.tts`):
 
-1. Deploy `apps/engine/modal_chatterbox.py` (see module docstring). Create the
-   `chatterbox-http` secret with `CHATTERBOX_HTTP_SECRET`, run
-   `download_weights`, seed house voices, then `modal deploy`.
-2. Set engine `[cloned_voices]` in `config.toml` (or env):
-   - `registry_base_url` = your deployed Modal app URL (same host as
-     `/v1/audio/speech`, no trailing slash)
-   - `registry_api_key` = the same bearer value as `CHATTERBOX_HTTP_SECRET`
-3. Set web `MONEYPRINT_API_URL` / `MONEYPRINT_API_SECRET` as usual so
+- **House voices** — 65 English presets listed in
+  `apps/engine/app/services/voice_catalog.json`: Phonon-31m-en (25 US/UK
+  voices + 12 characters, Apache 2.0) and Kokoro-82M (28 US/UK voices,
+  Apache 2.0).
+- **Per-user clones** — Chatterbox Nano (MIT), zero-shot from the user's
+  reference WAV, registered through `POST/DELETE /v1/voices` on the same
+  server. Users can clean (denoise) the recording before cloning.
+
+Setup:
+
+1. Set `CHATTERBOX_HTTP_SECRET` in `apps/engine/.env` (the `tts` service reads
+   it; the engine sends the same value).
+2. In `apps/engine/config.toml`:
+   - `[chatterbox] base_url = "http://tts:4123/v1"`, `api_key` = the secret
+   - `[cloned_voices] registry_base_url = "http://tts:4123"`,
+     `registry_api_key` = the secret
+3. `docker compose up -d --build` in `apps/engine`. Models download to the
+   `tts_models` volume on first use (Chatterbox Nano is a gated Hugging Face
+   repo: accept its terms and set `HF_TOKEN` in `.env` if the download is
+   refused). Clone references persist on the `tts_voices` volume.
+4. Set web `MONEYPRINT_API_URL` / `MONEYPRINT_API_SECRET` as usual so
    `/api/persona/cloned-voices` proxies to the engine.
 
-New clones call `POST /v1/voices` on Modal (reference WAV + `voices.toml`
-update) without redeploying the TTS app; warm containers reload the volume on
-each speech request.
+Picker samples live in `apps/web/public/voice-samples/<name>.mp3`; re-render
+them with `python -m local_tts.render_samples ../web/public/voice-samples`
+whenever the catalog changes.
 
 Paste each file into the Supabase Dashboard > SQL Editor and run, in order
 (the numeric prefixes encode the order — always apply the

@@ -1,16 +1,18 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { useVoiceSampleLanguagesQuery, useVoicesQuery } from '@/lib/api';
-import { usePersonaStore } from '@/lib/store';
+import { useVoicesQuery } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
-import { CheckIcon, MicIcon } from '@/lib/ui';
+import { usePersonaStore } from '@/lib/store';
+import { MicIcon, PlayIcon } from '@/lib/ui';
+import { filterHouseVoices, voiceSampleName, type VoiceOption } from '@/lib/voice-catalog';
+import { VoicePickerDialog, VoiceTags } from './voice-picker-dialog';
 
 // Voice ids come from the engine's catalog and are provider-qualified:
-// `chatterbox:ryan`, or `openrouter:<model>:<voice>` for the OpenRouter TTS
-// provider. There is no house-voice map any more, and no label fallback: a
-// voice with no label must show its raw id, not borrow another voice's name —
-// that fallback used to render every unknown id as "Voz feminina calma".
+// `chatterbox:kokoro_af_heart`, or `openrouter:<model>:<voice>` for the
+// OpenRouter TTS provider. House voices carry their own catalog label; a voice
+// with no label shows its raw id, never another voice's name — that fallback
+// used to render every unknown id as "Voz feminina calma".
 //
 // The underscore-to-space rewrite is Chatterbox-shaped (`en_us_female_01` →
 // "en us female 01") and is deliberately NOT applied to OpenRouter, whose ids
@@ -18,7 +20,11 @@ import { CheckIcon, MicIcon } from '@/lib/ui';
 // voice-2.1:en-US-Harper:MAI-Voice-2.1` must not become "en US Harper:MAI...".
 // The model stays in the label because two entries can share a voice name and
 // differ only by model.
-const voiceLabel = (voiceId: string): string => {
+const voiceLabel = (voice: VoiceOption): string => {
+  if (voice.label !== null) {
+    return voice.label;
+  }
+  const voiceId = voice.id;
   const openrouter = parseOpenrouterVoiceId(voiceId);
   if (openrouter) {
     return openrouter.voice;
@@ -61,138 +67,115 @@ function voiceModelLabel(voiceId: string): string {
   return parseOpenrouterVoiceId(voiceId)?.model ?? '';
 }
 
-//---------------
-// matchSampleLanguage — picks the voice sample code closest to the
-// persona language: exact ('es' → 'es') or by prefix ('pt' → 'pt-br').
-// Returns undefined when there is no match.
-//---------------
-const matchSampleLanguage = (
-  personaLanguage: string,
-  samples: Array<{ code: string }>,
-): string | undefined => {
-  const lang = personaLanguage.trim().toLowerCase();
-  if (!lang) return undefined;
-  const codes = samples.map((sample) => sample.code);
-  const exact = codes.find((code) => code.toLowerCase() === lang);
-  if (exact) return exact;
-  return codes.find((code) => {
-    const normalized = code.toLowerCase();
-    return normalized.startsWith(`${lang}-`) || lang.startsWith(`${normalized}-`);
-  });
-};
+function legacyVoice(voiceId: string): VoiceOption {
+  return { id: voiceId, label: null, provider: 'chatterbox', gender: null, accent: null, kind: 'standard', description: null };
+}
 
 //---------------
-// PersonaHouseVoicePicker — house voice grid
+// PersonaHouseVoicePicker — the chosen voice as a card (name, tags,
+// description, play) with a button that opens VoicePickerDialog to search and
+// filter the whole catalog.
 //---------------
-export const PersonaHouseVoicePicker = ({ personaLanguage }: { personaLanguage?: string }) => {
-  const voicesQuery = useVoicesQuery();
-  const sampleLanguagesQuery = useVoiceSampleLanguagesQuery();
-  const voiceId = usePersonaStore((s) => s.voiceId);
-  // Manual user choice (null = not touched yet): wins over the default.
-  const [sampleLanguage, setSampleLanguage] = useState<string | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const lastPickedVoiceRef = useRef<string | null>(null);
+export const PersonaHouseVoicePicker = () => {
   const { t } = useI18n();
+  const voicesQuery = useVoicesQuery();
+  const voiceId = usePersonaStore((s) => s.voiceId);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
 
-  const voices = voicesQuery.data ?? [];
-  const matchedSampleLanguage = personaLanguage
-    ? matchSampleLanguage(personaLanguage, sampleLanguagesQuery.data ?? [])
-    : undefined;
-  const effectiveSampleLanguage = sampleLanguage ?? matchedSampleLanguage ?? 'pt-br';
+  const houseVoices = filterHouseVoices(voicesQuery.data ?? [], 'all', 'all');
+  // Looked up in the full catalog: the persona may use a clone picked in the
+  // "clone my voice" tab, which the house list deliberately leaves out.
+  // A legacy id outside the catalog (e.g. chatterbox:en_us_male_01, which the
+  // TTS server aliases) still is the persona's voice: show it by id rather
+  // than "no voice chosen".
+  const selected =
+    (voicesQuery.data ?? []).find((voice) => voice.id === voiceId) ??
+    (voiceId === null ? null : legacyVoice(voiceId));
+  const selectedLabel = (voice: VoiceOption): string =>
+    voice.kind === 'cloned' ? t('persona.voiceTagCloned') : voiceLabel(voice);
 
-  const playVoiceSample = (pickedVoiceId: string, language: string): void => {
+  // House samples are English takes rendered by the local TTS server, one
+  // per catalog voice; OpenRouter voices have none and play nothing.
+  const playVoiceSample = (voice: VoiceOption): void => {
+    const sampleName = voiceSampleName(voice);
+    if (sampleName === null) {
+      return;
+    }
     audioRef.current?.pause();
-    const audio = new Audio(
-      `/voice-samples/${encodeURIComponent(pickedVoiceId)}-${encodeURIComponent(language)}.mp3`,
-    );
+    const audio = new Audio(`/voice-samples/${encodeURIComponent(sampleName)}.mp3`);
     audioRef.current = audio;
+    setPlayingVoiceId(voice.id);
+    audio.onended = () => setPlayingVoiceId(null);
     const playResult = audio.play();
     if (playResult) {
-      void playResult.catch(() => {});
+      void playResult.catch(() => setPlayingVoiceId(null));
     }
   };
 
-  const handlePickVoice = (pickedVoiceId: string) => {
-    usePersonaStore.getState().setVoiceId(pickedVoiceId);
-    lastPickedVoiceRef.current = pickedVoiceId;
-    playVoiceSample(pickedVoiceId, effectiveSampleLanguage);
-  };
-
-  const handleSampleLanguageChange = (language: string) => {
-    setSampleLanguage(language);
-    // Switched language after listening to a sample? Restart the audio in the new language.
-    const lastPickedVoice = lastPickedVoiceRef.current;
-    if (lastPickedVoice) {
-      playVoiceSample(lastPickedVoice, language);
-    }
+  const handlePickVoice = (voice: VoiceOption) => {
+    usePersonaStore.getState().setVoiceId(voice.id);
+    setDialogOpen(false);
   };
 
   return (
     <div className="mt-4">
-      <label className="mb-4 block max-w-sm text-sm font-medium text-neutral-700">
-        {t('persona.sampleLanguage')}
-        <span className="relative mt-2 block">
-          <select
-            data-testid="sample-language"
-            value={effectiveSampleLanguage}
-            onChange={(e) => handleSampleLanguageChange(e.target.value)}
-            className="h-12 w-full appearance-none rounded-xl border border-neutral-300 bg-white px-4 pr-11 text-sm font-semibold text-neutral-900 shadow-sm transition-colors hover:border-neutral-400 focus:border-accent focus:ring-4 focus:ring-accent/10 focus:outline-none"
-          >
-            {(sampleLanguagesQuery.data ?? []).map((lang) => (
-              <option key={lang.code} value={lang.code}>
-                {lang.label}
-              </option>
-            ))}
-          </select>
-          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className="pointer-events-none absolute top-1/2 right-4 size-5 -translate-y-1/2 text-neutral-500">
-            <path d="m6 8 4 4 4-4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-neutral-200 bg-white p-4">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-neutral-600">
+          <MicIcon />
         </span>
-      </label>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {voices.map((voice) => {
-          const isActive = voice.id === voiceId;
-          return (
+        <div className="min-w-0 flex-1 basis-0 space-y-1" data-testid="selected-voice">
+          {selected === null ? (
+            <p className="text-sm text-neutral-500">{t('persona.voicePickerNone')}</p>
+          ) : (
+            <>
+              <span className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-semibold text-neutral-900">{selectedLabel(selected)}</span>
+                <VoiceTags voice={selected} />
+              </span>
+              {selected.description !== null && (
+                <p className="line-clamp-2 text-xs leading-relaxed text-neutral-500">{selected.description}</p>
+              )}
+            </>
+          )}
+        </div>
+        <div className="flex w-full shrink-0 gap-2 sm:w-auto">
+          {selected !== null && voiceSampleName(selected) !== null && (
             <button
-              key={voice.id}
               type="button"
-              aria-pressed={isActive}
-              // The raw id is the only complete label: both lines above are
-              // display and the model line is hidden for single-word voices.
-              title={voice.id}
-              onClick={() => handlePickVoice(voice.id)}
-              className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-colors ${
-                isActive
-                  ? 'border-accent bg-red-50/50'
-                  : 'border-neutral-200 bg-white hover:border-neutral-400'
+              onClick={() => playVoiceSample(selected)}
+              aria-label={t('persona.voicePlaySample', { name: selectedLabel(selected) })}
+              className={`flex size-10 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                playingVoiceId === selected.id
+                  ? 'border-neutral-900 bg-neutral-900 text-white'
+                  : 'border-neutral-200 text-neutral-700 hover:border-neutral-400'
               }`}
             >
-              <span
-                className={`flex size-8 shrink-0 items-center justify-center rounded-full ${
-                  isActive ? 'bg-accent text-white' : 'bg-neutral-100 text-neutral-500'
-                }`}
-              >
-                <MicIcon />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-neutral-900">
-                  {voiceLabel(voice.id)}
-                </span>
-                {voiceModelLabel(voice.id) !== '' && (
-                  <span className="block truncate text-xs text-neutral-500">
-                    {voiceModelLabel(voice.id)}
-                  </span>
-                )}
-              </span>
-              {isActive && (
-                <span className="text-accent">
-                  <CheckIcon />
-                </span>
-              )}
+              <PlayIcon />
             </button>
-          );
-        })}
+          )}
+          <button
+            type="button"
+            onClick={() => setDialogOpen(true)}
+            disabled={voicesQuery.data === undefined}
+            className="flex-1 rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-800 disabled:opacity-50 sm:flex-none"
+          >
+            {selected === null ? t('persona.voicePickerChoose') : t('persona.voicePickerChange')}
+          </button>
+        </div>
       </div>
+      <VoicePickerDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        voices={houseVoices}
+        selectedVoiceId={voiceId}
+        playingVoiceId={playingVoiceId}
+        onPlay={playVoiceSample}
+        onPick={handlePickVoice}
+        labelFor={voiceLabel}
+        modelFor={(voice) => voiceModelLabel(voice.id)}
+      />
     </div>
   );
 };

@@ -50,6 +50,16 @@ function mockSession(opts?: { noSession?: boolean; noToken?: boolean }): void {
 
 const fetchMock = vi.fn<typeof fetch>();
 
+const voice = (id: string) => ({
+  id,
+  label: 'Heart',
+  provider: 'kokoro',
+  gender: 'female',
+  accent: 'us',
+  kind: 'standard',
+  description: 'American female voice, bright, high pitch.',
+});
+
 describe('GET /api/persona/voices', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -64,14 +74,14 @@ describe('GET /api/persona/voices', () => {
     vi.unstubAllEnvs();
   });
 
-  it('proxifica o catálogo de vozes do money-print com o token da sessão', async () => {
+  it('proxies the engine voice catalog with the session token', async () => {
     fetchMock.mockResolvedValue(
       Response.json({
         status: 200,
         message: 'success',
         body: [
-          { id: 'calm' },
-          { id: 'energetic' },
+          voice('chatterbox:kokoro_af_heart'),
+          voice('chatterbox:phonon_zoey'),
         ],
       }),
     );
@@ -81,8 +91,8 @@ describe('GET /api/persona/voices', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       voices: [
-        { id: 'calm' },
-        { id: 'energetic' },
+        voice('chatterbox:kokoro_af_heart'),
+        voice('chatterbox:phonon_zoey'),
       ],
     });
     const headers = new Headers(fetchMock.mock.calls[0]?.[1]?.headers as HeadersInit);
@@ -91,7 +101,7 @@ describe('GET /api/persona/voices', () => {
     expect(headers.get('x-user-id')).toBe(USER_ID);
   });
 
-  it('aceita API key pessoal via Authorization Bearer (MCP)', async () => {
+  it('accepts a personal API key via Authorization Bearer (MCP)', async () => {
     vi.mocked(createSupabaseServiceClient).mockReturnValue({} as never);
     vi.mocked(resolveApiKey).mockResolvedValue({
       userId: USER_ID,
@@ -102,7 +112,7 @@ describe('GET /api/persona/voices', () => {
       Response.json({
         status: 200,
         message: 'success',
-        body: [{ id: 'calm' }, { id: 'energetic' }],
+        body: [voice('chatterbox:kokoro_af_heart'), voice('chatterbox:phonon_zoey')],
       }),
     );
 
@@ -113,13 +123,13 @@ describe('GET /api/persona/voices', () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      voices: [{ id: 'calm' }, { id: 'energetic' }],
+      voices: [voice('chatterbox:kokoro_af_heart'), voice('chatterbox:phonon_zoey')],
     });
     const headers = new Headers(fetchMock.mock.calls[0]?.[1]?.headers as HeadersInit);
     expect(headers.get('x-user-id')).toBe(USER_ID);
   });
 
-  it('retorna 401 com API key inválida', async () => {
+  it('returns 401 for an invalid API key', async () => {
     vi.mocked(createSupabaseServiceClient).mockReturnValue({} as never);
     vi.mocked(resolveApiKey).mockResolvedValue(null);
 
@@ -132,7 +142,7 @@ describe('GET /api/persona/voices', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('retorna 401 sem sessão', async () => {
+  it('returns 401 without a session', async () => {
     mockSession({ noSession: true });
 
     const res = await GET();
@@ -141,7 +151,7 @@ describe('GET /api/persona/voices', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('retorna 401 com sessão sem access token', async () => {
+  it('returns 401 for a session without an access token', async () => {
     mockSession({ noToken: true });
 
     const res = await GET();
@@ -150,7 +160,7 @@ describe('GET /api/persona/voices', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('retorna 500 quando MONEYPRINT_API_URL não está definida', async () => {
+  it('returns 500 when MONEYPRINT_API_URL is not defined', async () => {
     vi.stubEnv('MONEYPRINT_API_URL', '');
 
     const res = await GET();
@@ -159,7 +169,7 @@ describe('GET /api/persona/voices', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('retorna 502 quando o money-print falha', async () => {
+  it('returns 502 when the engine fails', async () => {
     fetchMock.mockResolvedValue(new Response('erro', { status: 500 }));
 
     const res = await GET();
@@ -167,7 +177,7 @@ describe('GET /api/persona/voices', () => {
     expect(res.status).toBe(502);
   });
 
-  it('retorna 502 com payload de vozes inválido', async () => {
+  it('returns 502 for an invalid voices payload', async () => {
     fetchMock.mockResolvedValue(Response.json({ status: 200, message: 'success', body: 'not-an-array' }));
 
     const res = await GET();
@@ -175,7 +185,7 @@ describe('GET /api/persona/voices', () => {
     expect(res.status).toBe(502);
   });
 
-  it('retorna 502 quando o money-print está inacessível', async () => {
+  it('returns 502 when the engine is unreachable', async () => {
     fetchMock.mockRejectedValue(new Error('connection refused'));
 
     const res = await GET();
@@ -183,7 +193,7 @@ describe('GET /api/persona/voices', () => {
     expect(res.status).toBe(502);
   });
 
-  it('inclui o corpo de erro exato na falha de configuração', async () => {
+  it('includes the exact error body on a configuration failure', async () => {
     vi.stubEnv('MONEYPRINT_API_URL', '');
 
     const res = await GET();
@@ -195,7 +205,7 @@ describe('GET /api/persona/voices', () => {
     });
   });
 
-  it('inclui o corpo de erro exato quando o money-print falha', async () => {
+  it('includes the exact error body when the engine fails', async () => {
     fetchMock.mockResolvedValue(new Response('erro', { status: 500 }));
 
     const res = await GET();
@@ -204,7 +214,7 @@ describe('GET /api/persona/voices', () => {
     expect(await res.json()).toEqual({ success: false, error: 'Voices unavailable.' });
   });
 
-  it('inclui o corpo de erro exato quando o money-print está inacessível', async () => {
+  it('includes the exact error body when the engine is unreachable', async () => {
     fetchMock.mockRejectedValue(new Error('connection refused'));
 
     const res = await GET();
@@ -214,13 +224,13 @@ describe('GET /api/persona/voices', () => {
   });
 
   it.each([
-    ['corpo não é array', 'not-an-array'],
-    ['id não é string', [{ id: 123 }]],
-    ['item nulo', [null]],
-    ['item não é objeto', ['x']],
-    ['item sem id', [{}]],
-    ['corpo ausente no envelope', undefined],
-  ])('retorna 502 com payload de vozes inválido (%s)', async (_label, body) => {
+    ['body is not an array', 'not-an-array'],
+    ['id is not a string', [{ id: 123 }]],
+    ['null item', [null]],
+    ['item is not an object', ['x']],
+    ['item without id', [{}]],
+    ['envelope without body', undefined],
+  ])('returns 502 for an invalid voices payload (%s)', async (_label, body) => {
     fetchMock.mockResolvedValue(Response.json({ status: 200, message: 'success', body }));
 
     const res = await GET();
@@ -229,9 +239,9 @@ describe('GET /api/persona/voices', () => {
     expect(await res.json()).toEqual({ success: false, error: 'Invalid voices payload.' });
   });
 
-  it('rejeita o formato antigo do envelope com chave data', async () => {
+  it('rejects the legacy envelope with a data key', async () => {
     fetchMock.mockResolvedValue(
-      Response.json({ status: 200, message: 'success', data: [{ id: 'calm' }] }),
+      Response.json({ status: 200, message: 'success', data: [voice('chatterbox:kokoro_af_heart')] }),
     );
 
     const res = await GET();
@@ -240,10 +250,10 @@ describe('GET /api/persona/voices', () => {
     expect(await res.json()).toEqual({ success: false, error: 'Invalid voices payload.' });
   });
 
-  it('chama o endpoint do money-print sem barras finais e com cache no-store', async () => {
+  it('calls the engine endpoint without trailing slashes and with cache no-store', async () => {
     vi.stubEnv('MONEYPRINT_API_URL', 'http://moneyprint.internal:8080///');
     fetchMock.mockResolvedValue(
-      Response.json({ status: 200, message: 'success', body: [{ id: 'calm' }] }),
+      Response.json({ status: 200, message: 'success', body: [voice('chatterbox:kokoro_af_heart')] }),
     );
 
     const res = await GET();
@@ -255,18 +265,32 @@ describe('GET /api/persona/voices', () => {
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ cache: 'no-store' });
   });
 
-  it('projeta apenas o id das vozes no catálogo', async () => {
+  it('projects only the catalog fields and drops extras', async () => {
     fetchMock.mockResolvedValue(
       Response.json({
         status: 200,
         message: 'success',
-        body: [{ id: 'calm', extra: 'ignored' }],
+        body: [{ ...voice('chatterbox:kokoro_af_heart'), extra: 'ignored' }],
       }),
     );
 
     const res = await GET();
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ voices: [{ id: 'calm' }] });
+    expect(await res.json()).toEqual({ voices: [voice('chatterbox:kokoro_af_heart')] });
+  });
+
+  it('returns 502 when a catalog entry has an unknown gender', async () => {
+    fetchMock.mockResolvedValue(
+      Response.json({
+        status: 200,
+        message: 'success',
+        body: [{ ...voice('chatterbox:kokoro_af_heart'), gender: 'other' }],
+      }),
+    );
+
+    const res = await GET();
+
+    expect(res.status).toBe(502);
   });
 });

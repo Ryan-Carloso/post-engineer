@@ -11,7 +11,6 @@ from loguru import logger
 from moviepy.audio.io.AudioFileClip import AudioFileClip
 from moviepy.video.tools import subtitles
 
-from app.config import config
 from app.services.edge_tts import chatterbox_tts_with_fallback
 from app.services.openrouter_tts import dispatch_openrouter_tts
 from app.services.voice_providers import (
@@ -71,29 +70,6 @@ def get_elevenlabs_voices(api_key: str) -> list[str]:
     except Exception as e:
         logger.warning(f"ElevenLabs voices fetch failed: {str(e)}")
         return []
-
-
-def get_chatterbox_voices() -> list[str]:
-    """Return the configured Chatterbox voices.
-
-    Chatterbox is self-hosted, so there is no global voice catalog. Operators
-    list the voice names exposed by their server via ``[chatterbox] voices``
-    (a TOML array, or a comma-separated string). Each entry is normalised to
-    the ``chatterbox:<name>`` format used by the TTS dispatcher.
-    """
-    voices = config.chatterbox.get("voices", []) or []
-    if isinstance(voices, str):
-        voices = [v.strip() for v in voices.split(",") if v.strip()]
-    result = []
-    for v in voices:
-        v = str(v).strip()
-        if not v:
-            continue
-        result.append(v if v.startswith("chatterbox:") else f"chatterbox:{v}")
-    if not result:
-        # keep the dropdown usable even before any voice is configured
-        result = ["chatterbox:default-Female"]
-    return result
 
 
 def parse_voice_name(name: str):

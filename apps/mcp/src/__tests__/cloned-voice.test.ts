@@ -264,7 +264,7 @@ describe('createClonedVoiceFromUrl', () => {
     const host = fakeHost(request);
     global.fetch = vi.fn();
     await expect(
-      createClonedVoiceFromUrl(host, 'https://cdn.example.com/ref.wav', 'pt', false)
+      createClonedVoiceFromUrl(host, 'https://cdn.example.com/ref.wav', 'pt', false, true)
     ).rejects.toThrow('consent must be true to create a voice clone');
     expect(global.fetch).not.toHaveBeenCalled();
     expect(request).not.toHaveBeenCalled();
@@ -278,7 +278,8 @@ describe('createClonedVoiceFromUrl', () => {
       host,
       'https://cdn.example.com/ref.wav',
       'pt',
-      true
+      true,
+      false
     );
     expect(result).toEqual({ success: true, body: { id: 'clone-1' } });
     expect(request).toHaveBeenCalledTimes(1);
@@ -294,6 +295,7 @@ describe('createClonedVoiceFromUrl', () => {
     expect(timeout).toBe(120_000);
     const form = init.body as FormData;
     expect(form.get('consent')).toBe('true');
+    expect(form.get('denoise')).toBe('false');
     expect(form.get('language')).toBe('pt');
     expect(form.get('file')).toBeInstanceOf(Blob);
   });
@@ -328,9 +330,12 @@ describe('cloned voice tool handlers', () => {
       audioUrl: 'https://cdn.example.com/ref.wav',
       language: 'en',
       consent: true,
+      denoise: true,
     });
     expect(result.isError).toBeFalsy();
     expect(firstText(result)).toContain('Voice clone registration started');
+    const form = (request.mock.calls[0] as [string, RequestInit])[1].body as FormData;
+    expect(form.get('denoise')).toBe('true');
   });
 
   it('handleDeleteClonedVoice prefixes the success message', async () => {
@@ -417,7 +422,7 @@ describe('cloned voice tools run through the MCP server', () => {
     global.fetch = vi.fn().mockResolvedValue(audioResponse([5, 5, 5]));
     const result = await callTool(
       'create_cloned_voice',
-      { audioUrl: 'https://cdn.example.com/ref.wav', language: 'pt', consent: true },
+      { audioUrl: 'https://cdn.example.com/ref.wav', language: 'en', consent: true, denoise: true },
       request
     );
     expect(firstText(result as { content?: unknown })).toContain(
@@ -429,6 +434,57 @@ describe('cloned voice tools run through the MCP server', () => {
       'create cloned voice',
       120_000
     );
+  });
+
+  it('create_cloned_voice rejects a non-English language (English-only launch)', async () => {
+    const request = vi.fn().mockResolvedValue({ success: true, body: { id: 'clone-1' } });
+    global.fetch = vi.fn().mockResolvedValue(audioResponse([5, 5, 5]));
+    // callTool asserts success, so this rejection case drives the linked
+    // pair directly: the schema gate must error before any handler runs.
+    const apiClient = fakeHost(request) as unknown as PostEngineerClient;
+    const server = createPostEngineerMcpServer(apiClient);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'test-client', version: '0.0.0' });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const result = await client.callTool({
+        name: 'create_cloned_voice',
+        arguments: { audioUrl: 'https://cdn.example.com/ref.wav', language: 'pt', consent: true },
+      });
+      expect(result.isError).toBe(true);
+      expect(firstText(result as { content?: unknown })).toContain(
+        'Voice cloning is only available in English for now'
+      );
+      expect(request).not.toHaveBeenCalled();
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('preview_cloned_voice rejects a non-English language (English-only launch)', async () => {
+    const request = vi.fn();
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock as typeof fetch;
+    // Same direct linked-pair drive as the create rejection above: the
+    // schema gate must error before the preview handler fetches anything.
+    const apiClient = fakeHost(request) as unknown as PostEngineerClient;
+    const server = createPostEngineerMcpServer(apiClient);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'test-client', version: '0.0.0' });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const result = await client.callTool({
+        name: 'preview_cloned_voice',
+        arguments: { cloneId: 'clone-1', language: 'pt' },
+      });
+      expect(result.isError).toBe(true);
+      expect(firstText(result as { content?: unknown })).toContain(
+        'Voice cloning is only available in English for now'
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      await client.close();
+    }
   });
 
   it('delete_cloned_voice calls the client request', async () => {

@@ -1,4 +1,4 @@
-"""Registry admin routes for Modal Chatterbox (POST/DELETE /v1/voices)."""
+"""Registry admin routes for the local TTS server (POST/DELETE /v1/voices)."""
 
 from __future__ import annotations
 

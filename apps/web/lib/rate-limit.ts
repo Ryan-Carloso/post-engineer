@@ -28,6 +28,7 @@ export const RATE_LIMITS = {
   mediaUpload: { name: 'media-upload', limit: 10, windowMs: 60_000 },
   // Voice clone registration: GPU/registry cost — stricter than media upload.
   voiceCloneCreate: { name: 'voice-clone-create', limit: 3, windowMs: 60 * 60 * 1000 },
+  voiceCloneDenoisePreview: { name: 'voice-clone-denoise-preview', limit: 20, windowMs: 60 * 60 * 1000 },
   // Instagram content posting
   instagramPost: { name: 'instagram-post', limit: 10, windowMs: 60_000 },
   // OAuth token endpoint: brute-force / token-farming protection

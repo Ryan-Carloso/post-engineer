@@ -9,6 +9,8 @@
 
 - Never push to `main` — always open a PR. Small, focused PRs; CI green and review threads resolved before merge.
 - TDD by default: every change ships with new/updated tests; the relevant suite is green before committing.
+- **File-size ratchet (CI `file-size`): files already over the 500-line cap are grandfathered and may not grow by a single line** — a feature that adds lines to one must extract existing code into a new small module in the same change so the file ends at or below its base size (precedents: `apps/mcp/src/schedule-shapes.ts`, engine `app/services/` helpers, route-sibling modules like `app/api/persona/form-parsing.ts`). Check before pushing: `node .github/scripts/file-size/check.mjs --base <merge-base> --head HEAD`.
+- **Extracted engine helpers need direct unit tests or their mutmut shard fails** — mutmut attributes endpoint/TestClient tests to the file they were written against; a helper moved into its own module (e.g. `app/services/upload_filenames.py` out of `controllers/v1/video.py`) can end up with zero attributed tests, and the per-file `mutation (engine shard)` job exits 1 with "could not find any test case for any mutant" even though the suite passes. Give the new module a direct test file (`test/services/test_<module>.py`) in the same change.
 - **Look at the UI you changed.** After editing `apps/web`, load the `preview-ui` skill (`.opencode/skills/preview-ui/SKILL.md`) and check the running dev server — screenshots, both locales (PT is default), console. Never schedule a real post or spend tokens for a screenshot.
 - **Versioning is generated at deploy time; never bump by hand.** `VERSION` holds only MAJOR.MINOR (edited when cutting a release line). Deployed version = `MAJOR.MINOR.PR_NUMBER`, resolved on the VPS from the merged PR of the deployed commit (deploy fails if unresolvable). No version commits/PRs. `package.json`/`pyproject.toml`/MCP versions are hand-maintained and independent. Build metadata (`VERSION`/`PR_NUMBER`/`BUILD`/`COMMIT`) is reported by engine `/version` + `/health` and web `/api/version`.
 - After a rebase touching any `package.json`, run `pnpm install --frozen-lockfile` locally before pushing and diff the dependency blocks (conflict resolution has silently dropped deps and duplicated `"version"` keys).
@@ -37,6 +39,7 @@
 - When fixing a flagged pattern, grep the whole repo for siblings (callers and callees) before calling it fixed.
 - Comments, test names, and docs must describe what the code actually does — update them in the same change.
 - Pin the same literal everywhere it lives: values duplicated across files/apps (SQL limits vs TS constants, pricing tables, cross-app copy, `SAFE_TASK_ID`) get a file-parsing sync test. No dynamic `new RegExp(interpolated)` even in tests (CodeQL) — use `includes`.
+- A new gate or check on stored data must accept every form the product already stores, not just the current canonical one: personas store language as a code (`en-US`) or a full name (`English`, see the edge-tts name map), and the English-only gates in engine/web/MCP initially rejected the name form (PR #252 review). Before adding a validator, grep the other subsystems for the forms they already accept.
 - This repo pins a specific Next.js version: check `apps/web/package.json` and `node_modules/next/dist/docs/` before framework-level code.
 
 ## Web UI

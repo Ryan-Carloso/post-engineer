@@ -206,9 +206,10 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
         // script used (the same value the dashboard filters on). Deliberate
         // exception to analytics.ts's "ids, counts, validated enums" rule:
         // the angle is free-text model output, and breaking performance
-        // down by it is the point of collecting it. trackApiEvent still
-        // redacts credential fragments from string values and caps them at
-        // 500 chars before capture.
+        // down by it is the point of collecting it. trackApiEvent applies
+        // scrubSecrets (key-name redaction), then redacts credential
+        // fragments from string values and caps them at 500 chars before
+        // capture.
         deps.track('post_metrics_collected', {
           task_id: post.taskId,
           script_angle: scriptAngle,

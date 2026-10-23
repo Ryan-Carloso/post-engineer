@@ -57,11 +57,10 @@ describe('persona — layout de abertura real (persona no topo)', () => {
     cy.get('#persona-name').type(PERSONA_NAME);
     cy.get('button[aria-label="Choose a character 1"]').click();
 
-    // The catalog is the Chatterbox voice list, provider-qualified; the picker
-    // shows the bare name. Every Chatterbox voice configured is en_us, so the
-    // persona and its narration are English.
-    cy.contains('button', 'ryan').click();
-    cy.contains('button', 'ryan').should('have.attr', 'aria-pressed', 'true');
+    // The real engine serves the catalog (voice_catalog.json): pick Kokoro's
+    // American "Michael" through the dialog, then the card shows it.
+    cy.pickHouseVoice('Michael');
+    cy.get('[data-testid="selected-voice"]').should('contain.text', 'Michael');
 
     // The layout the whole feature exists for. 'Full screen' is the default, so
     // asserting the click actually moved the selection is the honest gate —
