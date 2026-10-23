@@ -36,6 +36,11 @@ describe('groupMetrics', () => {
     expect(groupMetrics(rows, 'provider', 'views')).toEqual([{ key: 'youtube', average: 10, count: 1 }]);
   });
 
+  it('returns an empty array for empty rows or all-null metric values', () => {
+    expect(groupMetrics([], 'angle', 'views')).toEqual([]);
+    expect(groupMetrics([view({ views: null }), view({ views: null })], 'angle', 'views')).toEqual([]);
+  });
+
   it('groups by persona and account', () => {
     const rows = [view({ personaId: null, accountId: 'a' }), view({ personaId: 'x', accountId: 'b', comments: 9 })];
     expect(groupMetrics(rows, 'persona', 'comments').map((g) => g.key)).toEqual(['x', METRICS_NONE]);
