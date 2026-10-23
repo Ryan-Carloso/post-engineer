@@ -7,6 +7,7 @@ import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
+import { isEnglishLanguage, ONLY_ENGLISH_CLONE_MESSAGE } from '@/lib/language-gate';
 
 const GET_ROUTE = 'GET /api/persona/cloned-voices';
 const POST_ROUTE = 'POST /api/persona/cloned-voices';
@@ -71,13 +72,22 @@ async function postHandler(request: Request): Promise<NextResponse> {
   }
 
   const consent = formData.get('consent');
+  const denoise = formData.get('denoise');
   const language = formData.get('language');
   const fileEntry = formData.get('file');
   if (consent !== 'true') {
     return NextResponse.json({ success: false, error: 'Voice cloning consent is required.' }, { status: 400 });
   }
+  if (denoise !== 'true' && denoise !== 'false') {
+    return NextResponse.json({ success: false, error: 'denoise must be "true" or "false".' }, { status: 400 });
+  }
   if (typeof language !== 'string' || !language.trim()) {
     return NextResponse.json({ success: false, error: 'Language is required.' }, { status: 400 });
+  }
+  // English-only launch: cloning only ever worked well in English. The
+  // engine enforces the same rule; rejecting here saves the round-trip.
+  if (!isEnglishLanguage(language)) {
+    return NextResponse.json({ success: false, error: ONLY_ENGLISH_CLONE_MESSAGE }, { status: 400 });
   }
   if (typeof fileEntry === 'string' || fileEntry === null) {
     return NextResponse.json({ success: false, error: 'Reference audio file is required.' }, { status: 400 });
@@ -99,6 +109,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   const upstreamForm = new FormData();
   upstreamForm.set('consent', 'true');
+  upstreamForm.set('denoise', denoise);
   upstreamForm.set('language', language.trim());
   upstreamForm.set('file', new Blob([buffer], { type: file.type || 'application/octet-stream' }), file.name || 'reference.bin');
 

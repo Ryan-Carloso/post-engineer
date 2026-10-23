@@ -5,9 +5,9 @@ feature. It is free, requires no API key, and supports 100+ locales
 (including ``pt-BR`` and ``pt-PT``).
 
 This provider exists as an automatic safety net: when the primary TTS
-provider (Chatterbox, hosted on Modal) is unavailable — e.g. Modal credits
-exhausted, which surfaces as HTTP 404 — test accounts fall back to Edge TTS
-instead of failing the whole video generation.
+provider (the local CPU Chatterbox server) is unavailable — e.g. the `tts`
+service is down or its bearer secret is misconfigured — test accounts
+fall back to Edge TTS instead of failing the whole video generation.
 
 Deliberately NOT exposed in the UI: this is an invisible fallback, not a
 provider choice. The voice follows the video's language (see
@@ -296,7 +296,7 @@ def chatterbox_tts_with_fallback(
 ) -> TtsResult:
     """Chatterbox TTS with Edge TTS fallback for test accounts.
 
-    Chatterbox runs on Modal; exhausted credits (HTTP 404) or outages must
+    Chatterbox runs on the local CPU TTS server; its outages must
     not kill test generations. On failure, test accounts (see
     ``TEST_ACCOUNT_USER_IDS``) transparently retry with the free Edge TTS
     provider; production keeps the loud Chatterbox failure.

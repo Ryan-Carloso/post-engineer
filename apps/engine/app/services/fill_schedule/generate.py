@@ -20,6 +20,7 @@ from app.services.fill_schedule.constants import (
 )
 from app.services.fill_schedule.metadata import validate_publish_plan
 from app.services.fill_schedule.store import ScheduleStore
+from app.services.language_gate import ENGLISH_ONLY_VIDEO_MESSAGE, is_english_language
 from app.services.fill_schedule.support import (
     build_persona_params,
     notify_safe,
@@ -135,17 +136,25 @@ class BatchGenerator:
             # refund if dispatch itself fails.
             generation_id = f"batch:{schedule['id']}"
             task_id = new_task_id(slot)
-            # Funnel entry: requested BEFORE dispatch, so a dispatch failure
-            # still counts as requested -> failed in the failure % funnel.
-            tm.track_generation_requested(
-                task_id,
-                user_id=user_id,
-                flow="batch",
-                pipeline="video",
-                slot_id=slot["id"],
-                persona_id=identity.get("id"),
-            )
             try:
+                # English-only launch: a slot scheduled before the launch can
+                # still carry a non-English language. It fails here, inside
+                # the refund block, so its prepaid cost comes back — and
+                # before the funnel entry below, because a language-gated
+                # slot is a data error, not a generation attempt.
+                if request.video_language.strip() and not is_english_language(request.video_language):
+                    raise ValueError(ENGLISH_ONLY_VIDEO_MESSAGE)
+                # Funnel entry: requested BEFORE dispatch, so a dispatch
+                # failure still counts as requested -> failed in the
+                # failure % funnel.
+                tm.track_generation_requested(
+                    task_id,
+                    user_id=user_id,
+                    flow="batch",
+                    pipeline="video",
+                    slot_id=slot["id"],
+                    persona_id=identity.get("id"),
+                )
                 self._dispatch_generation(
                     task_id,
                     request,

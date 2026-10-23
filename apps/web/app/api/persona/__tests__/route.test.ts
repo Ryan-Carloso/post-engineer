@@ -509,7 +509,7 @@ describe('POST /api/persona', () => {
       formRequest({
         name: 'Ana',
         voiceId: 'voz-1',
-        language: 'pt',
+        language: 'en',
         videoAspect: '16:9',
         scriptPrompt: 'Storytelling com hook forte.',
         paragraphNumber: '3',
@@ -518,11 +518,29 @@ describe('POST /api/persona', () => {
 
     expect(res.status).toBe(200);
     expect(inserted[0]).toMatchObject({
-      language: 'pt',
+      language: 'en',
       video_aspect: '16:9',
       script_prompt: 'Storytelling com hook forte.',
       paragraph_number: 3,
     });
+  });
+
+  it('rejects a persona with a non-English language (English-only launch)', async () => {
+    const { inserted } = mockSupabase();
+
+    const res = await POST(
+      formRequest({
+        name: 'Ana',
+        voiceId: 'voz-1',
+        language: 'pt',
+      }, [photo()]),
+    );
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { success: boolean; error: string };
+    expect(body.success).toBe(false);
+    expect(body.error).toBe('Only English videos are supported for now.');
+    expect(inserted).toHaveLength(0);
   });
 
   it('creates a persona without preferences: columns stay null (house default)', async () => {
@@ -1080,11 +1098,22 @@ describe('PATCH /api/persona', () => {
     it('preferences: updating language preserves photo and voice intact', async () => {
       const { uploaded, removed, updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
 
-      await PATCH(patchRequest('persona-uuid-1', { language: 'es' }));
+      await PATCH(patchRequest('persona-uuid-1', { language: 'en-GB' }));
 
       expect(Object.keys(updated[0])).toEqual(['language']);
       expect(uploaded).toEqual([]);
       expect(removed).toEqual([]);
+    });
+
+    it('preferences: rejects a non-English language (English-only launch)', async () => {
+      const { updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
+
+      const res = await PATCH(patchRequest('persona-uuid-1', { language: 'pt' }));
+
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toBe('Only English videos are supported for now.');
+      expect(updated).toHaveLength(0);
     });
 
     it('preferences: returns 400 with an invalid videoAspect on PATCH', async () => {

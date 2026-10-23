@@ -9,7 +9,7 @@ import { InlineFieldError, SectionDivider } from './persona-section-parts';
 import { PersonaHouseVoicePicker } from './voice-picker';
 import { PersonaVoiceClonePanel, VoiceTabButton } from './voice-clone-picker';
 
-export const PersonaVoiceSection = ({ personaLanguage }: { personaLanguage?: string }) => {
+export const PersonaVoiceSection = () => {
   const result = usePersonaStore((s) => s.result);
   const { t } = useI18n();
   const [voiceTab, setVoiceTab] = useState<'house' | 'clone'>('house');
@@ -34,10 +34,10 @@ export const PersonaVoiceSection = ({ personaLanguage }: { personaLanguage?: str
         />
       </div>
       <div hidden={voiceTab !== 'house'}>
-        <PersonaHouseVoicePicker personaLanguage={personaLanguage} />
+        <PersonaHouseVoicePicker />
       </div>
       <div hidden={voiceTab !== 'clone'}>
-        <PersonaVoiceClonePanel personaLanguage={personaLanguage} />
+        <PersonaVoiceClonePanel />
       </div>
       {result && !result.success && result.error === t('persona.errVoice') ? (
         <InlineFieldError message={result.error} />

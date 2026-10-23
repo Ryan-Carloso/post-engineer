@@ -83,3 +83,6 @@ apps/web/supabase/.temp/
 
 # Nx
 .nx/
+
+# Local Claude Code preview config (per-machine)
+.claude/launch.json

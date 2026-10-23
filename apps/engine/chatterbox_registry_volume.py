@@ -1,6 +1,8 @@
-"""Pure helpers for voices.toml on the Modal chatterbox-voices volume.
+"""Pure helpers for voices.toml on the chatterbox-voices volume.
 
-Used by modal_chatterbox.py HTTP registry endpoints and unit tests (no Modal import).
+Used by the local TTS server registry routes
+(modal_chatterbox_registry_routes.py, mounted by local_tts/server.py)
+and unit tests (no Modal import).
 """
 
 from __future__ import annotations
@@ -23,7 +25,7 @@ def is_valid_voice_name(name: str) -> bool:
 
 # Per-user clone keys minted by the engine store: u{12 hex of the user
 # uuid}_{12 hex of the clone uuid}. The registry HTTP routes exist only for
-# these keys — house voices (ryan, ...) are seeded by ops entrypoints and
+# these keys — house voices (en_us_male_01, ...) are seeded by ops entrypoints and
 # must never be overwritten or deleted through the routes.
 _USER_CLONE_VOICE_RE = re.compile(r"^u[0-9a-f]{12}_[0-9a-f]{12}$", re.IGNORECASE)
 

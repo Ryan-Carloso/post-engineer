@@ -12,8 +12,8 @@ from app.services.cloned_voices.ownership import (
 
 class CloneVoiceOwnershipTest(unittest.TestCase):
     def test_house_voice_always_allowed(self) -> None:
-        self.assertTrue(chatterbox_voice_allowed_for_user("any-user", "ryan"))
-        self.assertFalse(is_user_clone_engine_key("ryan"))
+        self.assertTrue(chatterbox_voice_allowed_for_user("any-user", "en_us_male_01"))
+        self.assertFalse(is_user_clone_engine_key("en_us_male_01"))
 
     def test_user_clone_key_shape(self) -> None:
         user_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
@@ -41,7 +41,7 @@ class CloneVoiceOwnershipTest(unittest.TestCase):
     def test_ownership_check_rejects_malformed_key(self) -> None:
         user_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
         self.assertFalse(user_owns_clone_engine_key(user_id, "not_a_clone"))
-        self.assertFalse(user_owns_clone_engine_key(user_id, "ryan"))
+        self.assertFalse(user_owns_clone_engine_key(user_id, "en_us_male_01"))
 
     def test_user_id_prefix_strips_hyphens(self) -> None:
         user_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"

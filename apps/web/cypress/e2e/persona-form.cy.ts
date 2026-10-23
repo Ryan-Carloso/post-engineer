@@ -1,8 +1,9 @@
+import { houseVoice } from '../support/voices';
 //---------------
 // Persona form E2E — the /persona flows the voice-sample spec does not
-// cover: tabs, photo upload, aspect picker, sample replay on language
-// change, store-level validation errors, edit mode, the load-error page,
-// prompt_rejected, the server-error dialog, and a network failure.
+// cover: tabs, photo upload, aspect picker, store-level validation
+// errors, edit mode, the load-error page, prompt_rejected, the
+// server-error dialog, and a network failure.
 //
 // Every mutating call is intercepted (CI must never write production
 // data): POST /api/persona is stubbed per test, the persona list is a
@@ -10,14 +11,10 @@
 // The session is real (cy.loginE2EUser), like the other specs.
 //---------------
 
-const FORM_VOICES = [
-  { id: 'chatterbox:ryan' },
-  { id: 'chatterbox:en_us_female_01' },
-];
 
-const FORM_SAMPLE_LANGUAGES = [
-  { code: 'pt-br', label: 'Português (BR)' },
-  { code: 'en-uk', label: 'English (UK)' },
+const FORM_VOICES = [
+  houseVoice('en_us_male_01', 'male'),
+  houseVoice('en_us_female_01', 'female'),
 ];
 
 interface FakeAudioRecord {
@@ -45,20 +42,14 @@ const stubFormAudio = (win: Cypress.AUTWindow): void => {
   (win as unknown as { __fakeAudios: FakeAudioRecord[] }).__fakeAudios = created;
 };
 
-// Base read-only intercepts: the voice catalog, the sample languages, an
-// empty persona list, and an empty image library. Tests that need
-// different payloads register their own intercept afterwards (the last
-// matching intercept wins).
+// Base read-only intercepts: the voice catalog, an empty persona list,
+// and an empty image library. Tests that need different payloads register
+// their own intercept afterwards (the last matching intercept wins).
 function mockBase(): void {
   cy.intercept('GET', '/api/persona/voices', {
     statusCode: 200,
     body: { voices: FORM_VOICES },
   }).as('getVoices');
-
-  cy.intercept('GET', '/api/persona/voice-sample-languages', {
-    statusCode: 200,
-    body: { languages: FORM_SAMPLE_LANGUAGES },
-  }).as('getSampleLanguages');
 
   cy.intercept('GET', '/api/persona/list', {
     statusCode: 200,
@@ -94,7 +85,7 @@ function visitPersona(path: string): void {
 function fillValidForm(): void {
   cy.get('#persona-name').type('Maya E2E');
   cy.get('button[aria-label="Escolha um personagem 1"]').click();
-  cy.contains('button', 'ryan').click();
+  cy.pickHouseVoice('en us male 01');
 }
 
 describe('Persona — formulário (abas, foto, validação, edição, erros)', () => {
@@ -147,18 +138,17 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
     cy.contains('button', '9:16').should('have.attr', 'aria-pressed', 'false');
   });
 
-  it('ouvir sample e trocar o idioma repete no novo idioma', () => {
+  it('ouvir o sample de uma voz e trocar de voz toca o sample da nova em inglês', () => {
     visitPersona('/persona');
 
-    cy.contains('button', 'ryan').scrollIntoView().click();
-    cy.get('select[data-testid=sample-language]')
-      .should(($sel) => expect($sel.find('option').length).to.be.at.least(2))
-      .select('en-uk');
+    cy.playHouseVoiceSample('en us male 01');
+    cy.playHouseVoiceSample('en us female 01');
 
     cy.window().then((win) => {
       const audios = (win as unknown as { __fakeAudios: FakeAudioRecord[] }).__fakeAudios;
       expect(audios).to.have.lengthOf(2);
-      expect(audios[1].url).to.equal('/voice-samples/chatterbox%3Aryan-en-uk.mp3');
+      expect(audios[0].url).to.equal('/voice-samples/kokoro_am_michael.mp3');
+      expect(audios[1].url).to.equal('/voice-samples/kokoro_af_heart.mp3');
       expect(audios[1].playCalled).to.equal(true);
     });
   });
@@ -167,7 +157,7 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
     visitPersona('/persona');
 
     cy.get('#persona-name').type('Maya E2E');
-    cy.contains('button', 'ryan').click();
+    cy.pickHouseVoice('en us male 01');
     cy.contains('button', 'Criar persona').click();
 
     cy.contains('Envie uma foto ou gere um avatar por IA.').should('be.visible');
@@ -194,7 +184,7 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
       .should('contain.text', 'Escolha uma voz para a persona.');
   });
 
-  it('edição carrega a persona e casa o idioma da amostra por prefixo', () => {
+  it('edição carrega a persona e não mostra seletor de idioma da amostra', () => {
     cy.intercept('GET', '/api/persona/list', {
       statusCode: 200,
       body: {
@@ -205,7 +195,7 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
             name: 'Maya E2E',
             createdAt: new Date().toISOString(),
             avatarUrl: '/caracter-samples/file-3.png',
-            voiceId: 'chatterbox:ryan',
+            voiceId: 'chatterbox:en_us_male_01',
             videoAspect: '9:16',
             scriptPrompt: '',
             niche: '',
@@ -217,9 +207,9 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
 
     visitPersona('/persona?edit=p-1');
 
-    // The pt → pt-br prefix match picks the closest sample language.
+    // English-only launch: no sample-language selector exists any more.
     cy.get('#persona-name').should('have.value', 'Maya E2E');
-    cy.get('select[data-testid=sample-language]').should('have.value', 'pt-br');
+    cy.get('select[data-testid=sample-language]').should('not.exist');
   });
 
   it('edição de persona com foto mostra a foto atual', () => {
@@ -233,7 +223,7 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
             name: 'Foto',
             createdAt: new Date().toISOString(),
             photoUrl: 'https://example.com/foto.png',
-            voiceId: 'chatterbox:ryan',
+            voiceId: 'chatterbox:en_us_male_01',
             videoAspect: '9:16',
             scriptPrompt: '',
             niche: '',

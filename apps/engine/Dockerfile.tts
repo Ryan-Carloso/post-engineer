@@ -1,0 +1,31 @@
+# Local CPU TTS server: Phonon + Kokoro (house voices), Chatterbox Nano (clones).
+# No GPU. Models download to the hf_cache volume on first use.
+FROM python:3.11-slim-bookworm
+
+# ffmpeg (mp3 transcode), espeak-ng (Kokoro phonemizer fallback), git (the
+# pinned chatterbox-tts install).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg espeak-ng ca-certificates git \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -s "$(find / -name 'libespeak-ng.so.1' -not -path '/proc/*' | head -n 1)" /usr/local/lib/libespeak-ng.so.1 \
+    && ln -s "$(find /usr -type d -name 'espeak-ng-data' | head -n 1)" /usr/local/share/espeak-ng-data
+
+WORKDIR /app
+COPY local_tts/requirements.txt ./local_tts/requirements.txt
+RUN pip install --no-cache-dir torch torchaudio --index-url https://download.pytorch.org/whl/cpu \
+    && pip install --no-cache-dir -r local_tts/requirements.txt
+
+# Only the pure modules the server needs: the shared voice catalog, the
+# clone-registry helpers and bearer auth. Never the engine app itself.
+COPY app/__init__.py ./app/__init__.py
+COPY app/services/__init__.py ./app/services/__init__.py
+COPY app/services/voice_catalog.py app/services/voice_catalog.json ./app/services/
+COPY chatterbox_registry_volume.py modal_chatterbox_auth.py modal_chatterbox_registry_routes.py ./
+COPY local_tts ./local_tts
+
+# ESPEAK_*: system espeak-ng for Kokoro (see local_tts/backends.py).
+ENV HF_HOME=/models/hf HF_HUB_DISABLE_TELEMETRY=1 TTS_VOICES_DIR=/voices \
+    ESPEAK_NG_LIBRARY=/usr/local/lib/libespeak-ng.so.1 \
+    ESPEAK_NG_DATA=/usr/local/share/espeak-ng-data
+EXPOSE 4123
+CMD ["uvicorn", "local_tts.server:app", "--host", "0.0.0.0", "--port", "4123"]

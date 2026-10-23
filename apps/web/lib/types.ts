@@ -110,9 +110,7 @@ export interface GeneratePersonaAvatarResult {
   error?: string;
 }
 
-export interface VoiceOption {
-  id: string;
-}
+export type { VoiceOption } from './voice-catalog';
 
 //---------------
 // SocialProvider — single source in lib/providers/registry.ts.

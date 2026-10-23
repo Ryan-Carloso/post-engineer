@@ -6,6 +6,7 @@ import {
   deleteClonedVoice,
   fetchClonedVoice,
   fetchClonedVoices,
+  fetchDenoisePreview,
 } from '@/lib/cloned-voices-client';
 
 const sampleRow = {
@@ -84,8 +85,10 @@ describe('cloned-voices-client', () => {
     } as Response);
 
     const file = new Blob([new Uint8Array(8)], { type: 'audio/wav' });
-    const voice = await createClonedVoice(file, 'pt', true);
+    const voice = await createClonedVoice(file, 'pt', true, false);
     expect(voice.id).toBe('clone-1');
+    const sent = vi.mocked(fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(sent.get('denoise')).toBe('false');
     expect(fetch).toHaveBeenCalledWith(
       '/api/persona/cloned-voices',
       expect.objectContaining({ method: 'POST' }),
@@ -99,7 +102,7 @@ describe('cloned-voices-client', () => {
     } as Response);
 
     const file = new Blob([new Uint8Array(8)], { type: 'audio/wav' });
-    await expect(createClonedVoice(file, 'pt', true)).rejects.toThrow('Quota exceeded.');
+    await expect(createClonedVoice(file, 'pt', true, true)).rejects.toThrow('Quota exceeded.');
   });
 
   it('deleteClonedVoice succeeds on ok', async () => {
@@ -244,7 +247,7 @@ describe('cloned-voices-client error and encoding branches', () => {
     } as Response);
 
     const file = new Blob(['abc'], { type: 'audio/wav' });
-    await createClonedVoice(file, 'en', false);
+    await createClonedVoice(file, 'en', false, true);
     const init = vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit;
     const body = init.body as FormData;
     expect(body.get('consent')).toBe('false');
@@ -262,7 +265,7 @@ describe('cloned-voices-client error and encoding branches', () => {
     } as Response);
 
     const file = new Blob([new Uint8Array(8)], { type: 'audio/wav' });
-    await expect(createClonedVoice(file, 'pt', true)).rejects.toThrow(
+    await expect(createClonedVoice(file, 'pt', true, true)).rejects.toThrow(
       'Could not create voice clone.',
     );
   });
@@ -274,7 +277,7 @@ describe('cloned-voices-client error and encoding branches', () => {
     } as Response);
 
     const file = new Blob([new Uint8Array(8)], { type: 'audio/wav' });
-    await expect(createClonedVoice(file, 'pt', true)).rejects.toThrow(
+    await expect(createClonedVoice(file, 'pt', true, true)).rejects.toThrow(
       'Invalid clone create response.',
     );
   });
@@ -286,7 +289,7 @@ describe('cloned-voices-client error and encoding branches', () => {
     } as Response);
 
     const file = new Blob([new Uint8Array(8)], { type: 'audio/wav' });
-    await expect(createClonedVoice(file, 'pt', true)).rejects.toThrow(
+    await expect(createClonedVoice(file, 'pt', true, true)).rejects.toThrow(
       'Invalid clone create response.',
     );
   });
@@ -329,5 +332,26 @@ describe('cloned-voices-client error and encoding branches', () => {
   it('clonedVoicePreviewUrl omits the query for blank languages', () => {
     expect(clonedVoicePreviewUrl('abc', '')).toBe('/api/persona/cloned-voices/abc/preview');
     expect(clonedVoicePreviewUrl('abc', '   ')).toBe('/api/persona/cloned-voices/abc/preview');
+  });
+
+  it('fetchDenoisePreview returns the cleaned audio blob', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(new Uint8Array([1]), { headers: { 'content-type': 'audio/wav' } }),
+    );
+    const result = await fetchDenoisePreview(new Blob([new Uint8Array(8)]));
+    expect(result.success).toBe(true);
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/persona/cloned-voices/denoise-preview',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('fetchDenoisePreview never throws on HTTP or network errors', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ error: 'Too many requests.' }, { status: 429 }));
+    expect(await fetchDenoisePreview(new Blob([]))).toEqual({ success: false, error: 'Too many requests.' });
+    vi.mocked(fetch).mockResolvedValueOnce(new Response('<html>', { headers: { 'content-type': 'text/html' } }));
+    expect(await fetchDenoisePreview(new Blob([]))).toEqual({ success: false, error: 'Could not clean the audio.' });
+    vi.mocked(fetch).mockRejectedValueOnce(new Error('offline'));
+    expect(await fetchDenoisePreview(new Blob([]))).toEqual({ success: false, error: 'Could not clean the audio.' });
   });
 });

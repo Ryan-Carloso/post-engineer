@@ -72,7 +72,7 @@ describe('PostEngineerClient', () => {
 
     await client.createPersona({
       name: 'No Layout',
-      avatarUrl: 'https://example.com/avatar.png',
+      avatarUrl: 'https://example.com/avatar.png', voiceId: 'chatterbox:en_us_male_01',
     });
 
     const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
@@ -91,7 +91,7 @@ describe('PostEngineerClient', () => {
 
     await client.createPersona({
       name: 'Reacts',
-      avatarUrl: 'https://example.com/avatar.png',
+      avatarUrl: 'https://example.com/avatar.png', voiceId: 'chatterbox:en_us_male_01',
       videoLayout: 'react',
     });
 
@@ -1206,7 +1206,7 @@ describe('PostEngineerClient persona image library', () => {
     const second = await writeTempImage('b.png');
     await client.createPersona({
       name: 'Tech Creator',
-      avatarUrl: 'https://example.com/avatar.png',
+      avatarUrl: 'https://example.com/avatar.png', voiceId: 'chatterbox:en_us_male_01',
       images: [
         { path: first, tag: 'casual', description: 'smiling at the beach' },
         { path: second, tag: 'formal' },
@@ -1224,7 +1224,7 @@ describe('PostEngineerClient persona image library', () => {
   it('createPersona rejects more than 10 library images', async () => {
     const images = Array.from({ length: 11 }, (_, i) => ({ path: `/tmp/img-${i}.jpg` }));
     await expect(
-      client.createPersona({ name: 'X', avatarUrl: 'https://example.com/a.png', images })
+      client.createPersona({ name: 'X', avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01', images })
     ).rejects.toThrow(/At most 10 library images/);
     expect(global.fetch).not.toHaveBeenCalled();
   });
@@ -1234,7 +1234,7 @@ describe('PostEngineerClient persona image library', () => {
     await expect(
       client.createPersona({
         name: 'X',
-        avatarUrl: 'https://example.com/a.png',
+        avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
         images: [{ path }],
         imagePrimaryIndex: 1,
       })
@@ -1248,7 +1248,7 @@ describe('PostEngineerClient persona image library', () => {
     await expect(
       client.createPersona({
         name: 'X',
-        avatarUrl: 'https://example.com/a.png',
+        avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
         images: [{ path: '/tmp/does-not-exist.jpg' }],
         imagePrimaryIndex: 5,
       })
@@ -1260,7 +1260,7 @@ describe('PostEngineerClient persona image library', () => {
     const path = await writeTempImage('a.jpg');
     await client.createPersona({
       name: 'Tech Creator',
-      avatarUrl: 'https://example.com/avatar.png',
+      avatarUrl: 'https://example.com/avatar.png', voiceId: 'chatterbox:en_us_male_01',
       images: [{ path, tag: '  casual  ', description: '   ' }],
     });
 
@@ -1274,7 +1274,7 @@ describe('PostEngineerClient persona image library', () => {
     await expect(
       client.createPersona({
         name: 'X',
-        avatarUrl: 'https://example.com/a.png',
+        avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
         images: [{ path, tag: 'x'.repeat(101) }],
       })
     ).rejects.toThrow(/exceeds 100 characters/);
@@ -1286,7 +1286,7 @@ describe('PostEngineerClient persona image library', () => {
     await expect(
       client.createPersona({
         name: 'X',
-        avatarUrl: 'https://example.com/a.png',
+        avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
         images: [{ path, description: 'x'.repeat(501) }],
       })
     ).rejects.toThrow(/exceeds 500 characters/);
@@ -1299,7 +1299,7 @@ describe('PostEngineerClient persona image library', () => {
     await expect(
       client.createPersona({
         name: 'X',
-        avatarUrl: 'https://example.com/a.png',
+        avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
         imagePrimaryIndex: 0,
       })
     ).rejects.toThrow(/requires images/);
@@ -1313,7 +1313,7 @@ describe('PostEngineerClient persona image library', () => {
     await expect(
       client.createPersona({
         name: 'X',
-        avatarUrl: 'https://example.com/a.png',
+        avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
         images: [{ path }],
       })
     ).rejects.toThrow(path);
@@ -1325,7 +1325,7 @@ describe('PostEngineerClient persona image library', () => {
     await expect(
       client.createPersona({
         name: 'X',
-        avatarUrl: 'https://example.com/a.png',
+        avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
         images: [{ path }],
       })
     ).rejects.toThrow(/10MB/);
@@ -1340,7 +1340,7 @@ describe('PostEngineerClient persona image library', () => {
     const error: unknown = await client
       .createPersona({
         name: 'X',
-        avatarUrl: 'https://example.com/a.png',
+        avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
         images: [{ path }],
       })
       .catch((e: unknown) => e);
@@ -1360,7 +1360,7 @@ describe('PostEngineerClient persona image library', () => {
     await expect(
       client.createPersona({
         name: 'X',
-        avatarUrl: 'https://example.com/a.png',
+        avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
         images: [{ path: '/tmp/pe-mcp-test-does-not-exist.jpg' }],
       })
     ).rejects.toThrow(/Failed to read image/);
@@ -1528,7 +1528,7 @@ describe('PostEngineerClient persona image library', () => {
     try {
       await client.createPersona({
         name: 'X',
-        avatarUrl: 'https://example.com/a.png',
+        avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
         images: [{ path }],
       });
     } finally {
@@ -1547,7 +1547,7 @@ describe('PostEngineerClient persona image library', () => {
         return realTimeout(ms);
       });
     try {
-      await client.createPersona({ name: 'X', avatarUrl: 'https://example.com/a.png' });
+      await client.createPersona({ name: 'X', avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01' });
     } finally {
       spy.mockRestore();
     }

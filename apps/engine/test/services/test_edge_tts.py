@@ -123,7 +123,7 @@ class TestChatterboxFallback(_VoiceFileTestCase):
         with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "user-123"}):
             result = voice_service.tts(
                 "hello",
-                "chatterbox:ryan",
+                "chatterbox:en_us_male_01",
                 1.0,
                 self.voice_file,
                 user_id="user-123",
@@ -143,7 +143,7 @@ class TestChatterboxFallback(_VoiceFileTestCase):
         with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "user-123"}):
             result = voice_service.tts(
                 "hello",
-                "chatterbox:ryan",
+                "chatterbox:en_us_male_01",
                 1.0,
                 self.voice_file,
                 user_id="someone-else",
@@ -161,7 +161,7 @@ class TestChatterboxFallback(_VoiceFileTestCase):
             ) as mock_fallback:
                 result = voice_service.tts(
                     "hello",
-                    "chatterbox:ryan",
+                    "chatterbox:en_us_male_01",
                     1.0,
                     self.voice_file,
                     user_id="user-123",
@@ -326,7 +326,7 @@ class TestFallbackLanguageForwarding(_VoiceFileTestCase):
         mock_chatterbox.return_value = TtsResult(error="status 404")
         mock_fallback.return_value = TtsResult(sub_maker=MagicMock())
         et.chatterbox_tts_with_fallback(
-            "hello", "ryan", self.voice_file, user_id="u1", language="en"
+            "hello", "en_us_male_01", self.voice_file, user_id="u1", language="en"
         )
         self.assertEqual(mock_fallback.call_args.kwargs.get("language"), "en")
 
@@ -335,7 +335,7 @@ class TestFallbackLanguageForwarding(_VoiceFileTestCase):
         mock_fallback.return_value = TtsResult(sub_maker=MagicMock())
         voice_service.tts(
             "hello",
-            "chatterbox:ryan",
+            "chatterbox:en_us_male_01",
             1.0,
             self.voice_file,
             user_id="u1",

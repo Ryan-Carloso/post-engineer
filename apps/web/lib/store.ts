@@ -7,6 +7,7 @@ import type {
   SocialProvider,
   UploadContentResult,
 } from '@/lib/types';
+import { isEnglishLanguage } from '@/lib/language-gate';
 import { SOCIAL_PROVIDERS } from '@/lib/types';
 import type { FaceQuality } from '@/lib/tokens';
 import type { TranslationKey } from '@/lib/i18n';
@@ -178,16 +179,20 @@ export type ScriptLanguage = (typeof SCRIPT_LANGUAGES)[number];
 const DEFAULT_SCRIPT_LANGUAGE: ScriptLanguage = 'en';
 
 //---------------
-// resolveScriptLanguage — derives the script language from a
-// locale (e.g. 'pt-BR', 'en-US'). If the base language is not among
-// supported ones, falls back to English (safe default).
+// resolveScriptLanguage — derives the script language a NEW persona is
+// created with from a locale (e.g. 'pt-BR', 'en-US'); a base language
+// outside SCRIPT_LANGUAGES falls back to English. English-only launch:
+// the derived language is then passed through the language gate, so
+// every persona starts in English until the other languages launch.
+// When the lock lifts, return `derived` directly again.
 //---------------
 
 export function resolveScriptLanguage(locale: string): ScriptLanguage {
   const base = locale.split('-')[0].toLowerCase();
-  return (SCRIPT_LANGUAGES as readonly string[]).includes(base)
+  const derived: ScriptLanguage = (SCRIPT_LANGUAGES as readonly string[]).includes(base)
     ? (base as ScriptLanguage)
     : DEFAULT_SCRIPT_LANGUAGE;
+  return isEnglishLanguage(derived) ? derived : DEFAULT_SCRIPT_LANGUAGE;
 }
 
 //---------------
