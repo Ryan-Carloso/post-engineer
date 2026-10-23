@@ -2,21 +2,23 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
 // Web -> MCP parity: every web API endpoint (apps/web/app/api/**/route.ts)
-// must either map to at least one MCP tool or carry an explicit, justified
-// exclusion below. A new endpoint with no entry fails this test, so adding
-// a function without adding it to the MCP (or consciously excluding it)
-// breaks the pipeline instead of shipping silently.
+// must either map to at least one MCP tool or carry an exclusion whose
+// typed kind is verified mechanically against the route below. A new
+// endpoint with no entry fails this test, and so does an exclusion whose
+// claim is not true of the code (issue #209/#245/#256: free-text reasons
+// like "dashboard-only" let agents skip the tool).
 //
 // Discovery reads the withApiErrorReporting('METHOD /api/...') label each
 // handler is exported with, so a new handler is discovered even when its
 // file already existed. The label must match the exported method and the
 // file-derived path, so a stale label fails instead of hiding the endpoint.
 //
-// Exclusions are grandfathered decisions, not free passes: each one states
-// why the endpoint stays out of the MCP. A reviewer should challenge any
-// new exclusion that only says "not yet" — that is a gap, not a design.
+// The exclusion set is closed: only the kinds below exist, each with the
+// exact check it must pass. Adding a kind is a reviewed change to this
+// file (see .github/CODEOWNERS and the parity-exclusion-guard workflow).
 
 const here = dirname(fileURLToPath(import.meta.url));
 const webAppDir = join(here, '..', '..', '..', 'web', 'app');
@@ -26,6 +28,53 @@ const indexTs = readFileSync(join(here, '..', 'index.ts'), 'utf8');
 const toolNames = [...indexTs.matchAll(/server\.tool\(\s*'([a-z_]+)'/g)].map(
   (m) => m[1],
 );
+
+// Every exclusion is one of these kinds, and every kind has a mechanical
+// check in `verifyExclusion` below:
+// - session-only: only the browser cookie session authenticates; bearer
+//   headers are never resolved, so an API key/OAuth token cannot call it.
+// - bearer-rejected: the route accepts `request` but every handler returns
+//   403 for `auth.isApiKey` and `auth.isOAuth` (credential management must
+//   never be reachable with a bearer credential).
+// - secret-auth: the only gate is a shared secret (cron secret, engine
+//   secret, or a Stripe signature); the cookie session is not consulted.
+// - oauth-redirect: a browser OAuth start/callback flow that issues a
+//   popup response and/or a nonce cookie; not a programmatic JSON API.
+// - ops-public: unauthenticated operations/diagnostics endpoint, listed in
+//   OPS_PUBLIC_ENDPOINTS (the closed list) and not session-gated.
+// - covered-by: an MCP tool already exposes the same capability; every
+//   listed tool must be registered in index.ts.
+const ExclusionSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('session-only') }).strict(),
+  z.object({ kind: z.literal('bearer-rejected') }).strict(),
+  z
+    .object({
+      kind: z.literal('secret-auth'),
+      mechanism: z.enum(['cron-secret', 'engine-secret', 'stripe-signature']),
+    })
+    .strict(),
+  z.object({ kind: z.literal('oauth-redirect') }).strict(),
+  z.object({ kind: z.literal('ops-public') }).strict(),
+  z
+    .object({
+      kind: z.literal('covered-by'),
+      tools: z.array(z.string().min(1)).min(1),
+    })
+    .strict(),
+]);
+
+type Exclusion = z.infer<typeof ExclusionSchema>;
+
+const EXCLUDED_ENDPOINTS: Record<string, Exclusion> = z
+  .record(z.string(), ExclusionSchema)
+  .parse(
+    JSON.parse(readFileSync(join(here, 'parity-exclusions.json'), 'utf8')),
+  );
+
+const OPS_PUBLIC_ENDPOINTS: readonly string[] = [
+  'GET /api/coverage',
+  'GET /api/version',
+];
 
 // Endpoint key -> MCP tools that expose it. One endpoint can map to several
 // tools (connect_account serves both OAuth and Bluesky; both video-status
@@ -67,59 +116,24 @@ const ENDPOINT_TOOLS: Record<string, string[]> = {
   'DELETE /api/persona': ['delete_persona'],
   'DELETE /api/account': ['disconnect_account'],
   'GET /api/persona/video-generations': ['list_video_generations'],
-  'GET /api/persona/video-generations/[generationId]': ['get_video_generation'],
+  'GET /api/persona/video-generations/[generationId]': [
+    'get_video_generation',
+  ],
   'GET /api/billing/transactions': ['list_token_transactions'],
   'POST /api/upload-content': ['publish_video_direct'],
   'POST /api/videos/generate-and-schedule': ['generate_persona_videos'],
-};
-
-// Endpoint key -> why it stays out of the MCP. Keep each reason concrete:
-// the auth it uses, the surface it serves, or the tool that covers it.
-const EXCLUDED_ENDPOINTS: Record<string, string> = {
-  'DELETE /api/api-keys/[id]':
-    'API keys are dashboard-only: an API-key caller must never manage keys.',
-  'GET /api/api-keys':
-    'API keys are dashboard-only: an API-key caller must never manage keys.',
-  'POST /api/api-keys':
-    'API keys are dashboard-only: an API-key caller must never manage keys.',
-  'POST /api/billing/check-tokens':
-    'Engine-internal: authenticated by x-engine-secret, not by API key.',
-  'POST /api/billing/checkout':
-    'Browser-only Stripe Checkout session creation; requires a web session.',
-  'POST /api/billing/webhook':
-    'Stripe webhook: signature-verified, not API-key callable.',
-  'GET /api/coverage': 'CI-only coverage endpoint.',
-  'POST /api/cron/billing-reconcile':
-    'Cron-internal: authenticated by cron secret, not by API key.',
-  'POST /api/cron/post-metrics':
-    'Cron-internal: authenticated by cron secret, not by API key.',
-  'GET /api/google-oauth/callback': 'Browser OAuth callback.',
-  'GET /api/google-oauth/start': 'Browser OAuth start (redirect flow).',
-  'GET /api/health':
-    'Ops health check: session-authenticated Supabase reachability probe.',
-  'GET /api/instagram-auth/callback': 'Browser OAuth callback.',
-  'GET /api/instagram-auth/start': 'Browser OAuth start (redirect flow).',
-  'GET /api/linkedin-auth/callback': 'Browser OAuth callback.',
-  'GET /api/linkedin-auth/start': 'Browser OAuth start (redirect flow).',
-  'POST /api/logout': 'Browser-only session logout (clears the auth cookie).',
-  'GET /api/moneyprint/health': 'Ops engine health proxy.',
-  'POST /api/persona/avatar':
-    'Dashboard-only mock AI avatar generator placeholder, not a programmatic API.',
-  'GET /api/persona/video-download/[taskId]/[...path]':
-    'Binary download proxy for the dashboard; MCP surfaces video URLs instead of proxying bytes.',
-  'GET /api/persona/video-events/[taskId]':
-    'Browser-only SSE proxy; MCP polls via get_video_task_progress.',
-  'DELETE /api/persona/video-task/[taskId]':
-    'Dashboard engine-task cleanup; MCP polls status but never cancels engine tasks.',
-  'POST /api/persona/cloned-voices/denoise-preview':
-    'UI-only A/B listen of the cleaned recording before cloning; agents pass denoise to create_cloned_voice instead.',
-  'GET /api/version': 'Public version endpoint for ops/diagnostics.',
 };
 
 // Tools with no backing web endpoint. Empty today: every tool calls the
 // web API through the MCP client. Kept so a future local-only tool has a
 // declared home instead of breaking the reverse check.
 const WEBLESS_TOOLS: Record<string, string> = {};
+
+interface RouteSource {
+  label: string;
+  file: string;
+  content: string;
+}
 
 function collectRouteFiles(dir: string): string[] {
   const out: string[] = [];
@@ -134,8 +148,8 @@ function collectRouteFiles(dir: string): string[] {
   return out.sort();
 }
 
-function discoverEndpoints(): string[] {
-  const endpoints: string[] = [];
+function discoverEndpoints(): RouteSource[] {
+  const endpoints: RouteSource[] = [];
   for (const file of collectRouteFiles(apiDir)) {
     const content = readFileSync(file, 'utf8');
     // String constants (e.g. `const ROUTE = 'POST /api/...'`) that a
@@ -177,7 +191,7 @@ function discoverEndpoints(): string[] {
           `${file}: withApiErrorReporting label path ${labelPath} does not match file-derived path ${expectedPath}`,
         );
       }
-      endpoints.push(label);
+      endpoints.push({ label, file, content });
     }
     if (!found) {
       throw new Error(
@@ -185,24 +199,130 @@ function discoverEndpoints(): string[] {
       );
     }
   }
-  return endpoints.sort();
+  return endpoints.sort((a, b) => a.label.localeCompare(b.label));
 }
 
-const discovered = discoverEndpoints();
+const routes = discoverEndpoints();
+const discovered = routes.map((route) => route.label);
+const routeByLabel = new Map(routes.map((route) => [route.label, route]));
 const mappedTools = new Set(Object.values(ENDPOINT_TOOLS).flat());
+const registeredTools = new Set(toolNames);
+
+const REGEX_SESSION_ONLY_NO_BEARER = /\b(?:isApiKey|isScopedApiKey|isOAuth)\b/;
+const REGEX_SESSION_ONLY_COOKIE =
+  /requireSupabaseSession\(\s*\)|\.auth\.getUser\(\s*\)/;
+
+function countHandlers(content: string): number {
+  return [
+    ...content.matchAll(
+      /export const (?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS) = withApiErrorReporting\(/g,
+    ),
+  ].length;
+}
+
+function verifyExclusion(key: string, exclusion: Exclusion): void {
+  const route = routeByLabel.get(key);
+  if (!route) {
+    throw new Error(`${key}: exclusion has no matching route file`);
+  }
+  const { content } = route;
+  switch (exclusion.kind) {
+    case 'session-only':
+      expect(
+        REGEX_SESSION_ONLY_NO_BEARER.test(content),
+        `${key}: session-only route must not inspect API-key/OAuth auth (found isApiKey/isScopedApiKey/isOAuth)`,
+      ).toBe(false);
+      expect(
+        REGEX_SESSION_ONLY_COOKIE.test(content),
+        `${key}: session-only route must authenticate with the cookie session only (requireSupabaseSession() with no argument or supabase.auth.getUser())`,
+      ).toBe(true);
+      break;
+    case 'bearer-rejected': {
+      expect(
+        content.includes('requireSupabaseSession(request)'),
+        `${key}: bearer-rejected route must pass the request to requireSupabaseSession`,
+      ).toBe(true);
+      const handlers = countHandlers(content);
+      expect(handlers, `${key}: expected at least one handler`).toBeGreaterThan(0);
+      expect(
+        [...content.matchAll(/auth\.isApiKey === true/g)].length,
+        `${key}: every handler must reject auth.isApiKey === true`,
+      ).toBeGreaterThanOrEqual(handlers);
+      expect(
+        [...content.matchAll(/auth\.isOAuth === true/g)].length,
+        `${key}: every handler must reject auth.isOAuth === true`,
+      ).toBeGreaterThanOrEqual(handlers);
+      break;
+    }
+    case 'secret-auth':
+      expect(
+        content.includes('requireSupabaseSession'),
+        `${key}: secret-auth route must not consult the cookie session`,
+      ).toBe(false);
+      if (exclusion.mechanism === 'cron-secret') {
+        expect(
+          content.includes('rejectUnauthorizedCron(') ||
+            content.includes('process.env.CRON_SECRET'),
+          `${key}: cron-secret route must verify the cron secret`,
+        ).toBe(true);
+      } else if (exclusion.mechanism === 'engine-secret') {
+        expect(
+          content.includes('x-engine-secret') && content.includes('secretsMatch('),
+          `${key}: engine-secret route must compare x-engine-secret in constant time`,
+        ).toBe(true);
+      } else {
+        expect(
+          content.includes('stripe-signature') &&
+            content.includes('constructEvent('),
+          `${key}: stripe-signature route must verify the Stripe signature`,
+        ).toBe(true);
+      }
+      break;
+    case 'oauth-redirect':
+      expect(
+        key,
+        `${key}: oauth-redirect only applies to a */start or */callback route`,
+      ).toMatch(/-(?:auth|oauth)\/(?:start|callback)$/);
+      expect(
+        content.includes('oauthPopupResponse(') ||
+          content.includes('setOAuthNonceCookie('),
+        `${key}: oauth-redirect route must use the popup response or nonce cookie helper`,
+      ).toBe(true);
+      break;
+    case 'ops-public':
+      expect(
+        OPS_PUBLIC_ENDPOINTS,
+        `${key}: ops-public is a closed list; add the endpoint to OPS_PUBLIC_ENDPOINTS with a reviewed reason`,
+      ).toContain(key);
+      expect(
+        content.includes('requireSupabaseSession') ||
+          content.includes('.auth.getUser('),
+        `${key}: ops-public route must be unauthenticated`,
+      ).toBe(false);
+      break;
+    case 'covered-by':
+      for (const tool of exclusion.tools) {
+        expect(
+          registeredTools.has(tool),
+          `${key}: covered-by tool ${tool} is not registered in index.ts`,
+        ).toBe(true);
+      }
+      break;
+  }
+}
 
 describe('Web -> MCP parity', () => {
   it('discovers at least one web endpoint', () => {
     expect(discovered.length).toBeGreaterThan(0);
   });
 
-  it('maps every discovered endpoint to an MCP tool or an explicit exclusion', () => {
+  it('maps every discovered endpoint to an MCP tool or a typed exclusion', () => {
     const uncovered = discovered.filter(
       (key) => !(key in ENDPOINT_TOOLS) && !(key in EXCLUDED_ENDPOINTS),
     );
     expect(
       uncovered,
-      `New web endpoint(s) with no MCP coverage. Add a tool mapping in ENDPOINT_TOOLS, or a justified exclusion in EXCLUDED_ENDPOINTS: ${uncovered.join(', ')}`,
+      `New web endpoint(s) with no MCP coverage. Add a tool mapping in ENDPOINT_TOOLS, or an exclusion in parity-exclusions.json whose kind is true of the route: ${uncovered.join(', ')}`,
     ).toEqual([]);
   });
 
@@ -231,8 +351,7 @@ describe('Web -> MCP parity', () => {
   });
 
   it('maps only to tools registered in the MCP server', () => {
-    const registered = new Set(toolNames);
-    const unknown = [...mappedTools].filter((tool) => !registered.has(tool));
+    const unknown = [...mappedTools].filter((tool) => !registeredTools.has(tool));
     expect(
       unknown,
       `Mapped tools not registered in index.ts: ${unknown.join(', ')}`,
@@ -250,16 +369,27 @@ describe('Web -> MCP parity', () => {
   });
 
   it('declares webless tools that are actually registered', () => {
-    const registered = new Set(toolNames);
     const unknown = Object.keys(WEBLESS_TOOLS).filter(
-      (tool) => !registered.has(tool),
+      (tool) => !registeredTools.has(tool),
     );
     expect(unknown).toEqual([]);
   });
 
-  it('gives every exclusion a non-empty reason', () => {
-    for (const [key, reason] of Object.entries(EXCLUDED_ENDPOINTS)) {
-      expect(reason.trim().length, `${key} has an empty exclusion reason`).toBeGreaterThan(0);
-    }
+  // The exclusion file is parsed by ExclusionSchema above, so an unknown
+  // kind, a free-text reason, or an extra field already fails before this
+  // point. These per-entry checks prove the claim against the route body.
+  it.each(Object.entries(EXCLUDED_ENDPOINTS))(
+    'verifies the %s exclusion against its route',
+    (key, exclusion) => {
+      verifyExclusion(key, exclusion);
+    },
+  );
+
+  it('keeps the ops-public list closed and in sync with the exclusions', () => {
+    const declared = Object.entries(EXCLUDED_ENDPOINTS)
+      .filter(([, exclusion]) => exclusion.kind === 'ops-public')
+      .map(([key]) => key)
+      .sort();
+    expect(declared).toEqual([...OPS_PUBLIC_ENDPOINTS].sort());
   });
 });
