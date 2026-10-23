@@ -1,4 +1,4 @@
-import { fetchEngineTaskProgress } from './engine-tasks';
+import { fetchEngineTaskProgress, type EngineTaskProgress } from './engine-tasks';
 import { isRetryableGenerationError } from './generation/generation-errors';
 import { resolveGoneGenerationId } from './generation/gone-generation-reconcile';
 import { recordGenerationUpdate } from './generation/video-generation';
@@ -87,7 +87,7 @@ export async function enrichSlot(
   slot: { status?: unknown; task_id?: unknown; error?: unknown; schedule_id?: unknown; id?: unknown },
   userId: string,
   queuePositions: QueuePositions = new Map(),
-  options: { allowEngineLookup?: boolean } = {},
+  options: { allowEngineLookup?: boolean; task?: EngineTaskProgress } = {},
 ): Promise<SlotEnrichment> {
   const dbStatus = typeof slot.status === 'string' ? slot.status : 'pending';
   const enrichment: SlotEnrichment = {
@@ -111,9 +111,11 @@ export async function enrichSlot(
     case 'failed': {
       const taskId = typeof slot.task_id === 'string' ? slot.task_id : null;
       // allowEngineLookup false degrades past the fan-out cap (progress 0).
+      // A prefetched task (options.task) is used as-is: the caller already
+      // paid for the read and needs other fields from the same record.
       if (taskId && options.allowEngineLookup !== false) {
         try {
-          const task = await fetchEngineTaskProgress(taskId, userId);
+          const task = options.task ?? (await fetchEngineTaskProgress(taskId, userId));
           if (task.gone) {
             // The engine no longer knows this task and never will: settle the
             // history row once so the slot stops reporting `running` and the

@@ -5,6 +5,7 @@ import {
   fetchEnginePublishResults,
   fetchEngineScriptAngle,
   fetchEngineTaskProgress,
+  type EngineTaskProgress,
 } from './engine-tasks';
 import { resolvePublishLinks, type PublishLink } from './publish-links';
 import { buildGenerationFacts } from './generation-facts';
@@ -226,18 +227,48 @@ export async function getSlotPost(
     personaRow = persona as { id: string; name: string } | null;
   }
 
-  const enrichment = await enrichSlot(row, userId);
+  const slotTaskId = typeof row.task_id === 'string' && row.task_id.length > 0 ? row.task_id : null;
+  // For a live slot, progress and the script angle live on the same engine
+  // task record: fetch it once here, hand it to enrichSlot (which would
+  // otherwise fetch it again), and take the angle from it. A failed
+  // prefetch degrades exactly like enrichSlot's own lookup (progress 0,
+  // logged) — enrichSlot is told not to fetch a second time.
+  let prefetchedTask: EngineTaskProgress | undefined;
+  let prefetchFailed = false;
+  if ((row.status === 'generating' || row.status === 'failed') && slotTaskId !== null) {
+    try {
+      prefetchedTask = await fetchEngineTaskProgress(slotTaskId, userId);
+    } catch (error) {
+      prefetchFailed = true;
+      logger.warn('[post-detail] engine task progress unavailable', {
+        taskId: slotTaskId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  const enrichment = await enrichSlot(
+    row,
+    userId,
+    new Map(),
+    prefetchedTask !== undefined
+      ? { task: prefetchedTask }
+      : prefetchFailed
+        ? { allowEngineLookup: false }
+        : {},
+  );
   // A published slot needs publish links AND the angle, both on the same
   // engine task record: one read serves both. Any other status needs at
   // most the angle (publish links are published-only).
-  const slotTaskId = typeof row.task_id === 'string' && row.task_id.length > 0 ? row.task_id : null;
   let publishLinks: PublishLink[];
   let scriptAngle: string | null;
   if (row.status === 'published' && slotTaskId !== null) {
     ({ publishLinks, scriptAngle } = await resolvePublishedSlotEngineData(slotTaskId, userId));
   } else {
     publishLinks = await resolveSlotPublishLinks(row, userId);
-    scriptAngle = await resolveScriptAngle(row.task_id, userId);
+    scriptAngle =
+      prefetchedTask !== undefined && prefetchedTask.scriptAngle !== undefined
+        ? prefetchedTask.scriptAngle
+        : await resolveScriptAngle(row.task_id, userId);
   }
 
   // Progress history: every observed (progress, stage) transition recorded
@@ -364,9 +395,15 @@ export async function getGenerationPost(
 
   let progress = 0;
   let stage: string | null = null;
+  // The angle lives on the same task record the progress read fetches: when
+  // that read happens, the angle comes from it instead of a second read.
+  // Undefined means no read happened (terminal generation, no task id, or a
+  // failed lookup) — the angle then gets its own read below.
+  let angleFromProgress: string | null | undefined;
   if ((row.status === 'pending' || row.status === 'running') && row.engine_task_id) {
     try {
       const task = await fetchEngineTaskProgress(row.engine_task_id, userId);
+      angleFromProgress = task.scriptAngle;
       if (!task.gone) {
         progress = task.progress;
         stage = task.stage;
@@ -408,6 +445,9 @@ export async function getGenerationPost(
     completedAt: completedAtOut,
     progress,
     stage,
-    scriptAngle: await resolveScriptAngle(row.engine_task_id, userId),
+    scriptAngle:
+      angleFromProgress !== undefined
+        ? angleFromProgress
+        : await resolveScriptAngle(row.engine_task_id, userId),
   };
 }

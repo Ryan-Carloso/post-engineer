@@ -107,6 +107,25 @@ describe('fetchEngineTaskProgress', () => {
     expect(result.progress).toBe(30);
   });
 
+  it('carries the trimmed script angle from the same task read', async () => {
+    mockEngine({ body: { progress: 45, state: 4, script_angle: '  Myth  ' } });
+    const result = await fetchEngineTaskProgress(TASK_ID, 'user-1');
+    expect(result.scriptAngle).toBe('Myth');
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a null script angle when the task record has none', async () => {
+    mockEngine({ body: { progress: 45, state: 4, script_angle: '   ' } });
+    const result = await fetchEngineTaskProgress(TASK_ID, 'user-1');
+    expect(result.scriptAngle).toBeNull();
+  });
+
+  it('reports a null script angle for a gone task', async () => {
+    mockEngine({ message: 'req-1: task not found' }, false, 404);
+    const result = await fetchEngineTaskProgress(TASK_ID, 'user-1');
+    expect(result.scriptAngle).toBeNull();
+  });
+
   it('clamps the engine progress defensively', async () => {
     mockEngine({ body: { progress: 250 } });
     const result = await fetchEngineTaskProgress(TASK_ID, 'user-1');

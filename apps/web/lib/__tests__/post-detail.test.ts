@@ -15,7 +15,13 @@ vi.mock('../schedule-slot-presentation', () => ({
 
 vi.mock('../engine-tasks', () => ({
   fetchEnginePublishResults: vi.fn(async () => ({})),
-  fetchEngineTaskProgress: vi.fn(async () => ({ gone: false, progress: 67, stage: 'audio' })),
+  fetchEngineTaskProgress: vi.fn(async () => ({
+    gone: false,
+    progress: 67,
+    stage: 'audio',
+    state: 4,
+    scriptAngle: 'The myth that keeps coming back',
+  })),
   fetchEngineScriptAngle: vi.fn(async () => 'The myth that keeps coming back'),
   fetchEnginePostMetricsSource: vi.fn(async () => ({
     publishResults: [{ provider: 'youtube' }],
@@ -133,7 +139,8 @@ describe('getSlotPost', () => {
       scheduled_post_progress_history: { data: [], error: null },
     });
     const detail = await getSlotPost(supabase, 'slot-1', 'user-1');
-    expect(fetchEngineScriptAngle).toHaveBeenCalledWith('task-1', 'user-1');
+    // The generating slot's angle rides the progress read — no second lookup.
+    expect(fetchEngineScriptAngle).not.toHaveBeenCalled();
     expect(detail?.slot.scriptAngle).toBe('The myth that keeps coming back');
   });
 
@@ -161,6 +168,24 @@ describe('getSlotPost', () => {
     expect(detail?.slot.scriptAngle).toBe('The myth that keeps coming back');
   });
 
+  it('reads a generating slot task once: progress carries the angle, no second lookup', async () => {
+    const { fetchEngineTaskProgress, fetchEngineScriptAngle } = await import('../engine-tasks');
+    const { enrichSlot } = await import('../schedule-slot-presentation');
+    const { supabase } = mockSupabase({
+      scheduled_posts: { data: SLOT_ROW, error: null },
+      schedules: { data: SCHEDULE_ROW, error: null },
+      scheduled_post_progress_history: { data: [], error: null },
+    });
+    const detail = await getSlotPost(supabase, 'slot-1', 'user-1');
+    expect(fetchEngineTaskProgress).toHaveBeenCalledTimes(1);
+    expect(fetchEngineScriptAngle).not.toHaveBeenCalled();
+    // The prefetched progress is handed to enrichSlot so it does not fetch again.
+    expect(vi.mocked(enrichSlot).mock.calls[0]?.[3]).toEqual({
+      task: expect.objectContaining({ scriptAngle: 'The myth that keeps coming back' }),
+    });
+    expect(detail?.slot.scriptAngle).toBe('The myth that keeps coming back');
+  });
+
   it('does not look up an angle for a slot that never dispatched', async () => {
     const { fetchEngineScriptAngle } = await import('../engine-tasks');
     const { supabase } = mockSupabase({
@@ -174,8 +199,11 @@ describe('getSlotPost', () => {
   });
 
   it('degrades the slot angle to null and warns when the engine lookup throws', async () => {
-    const { fetchEngineScriptAngle } = await import('../engine-tasks');
+    const { fetchEngineScriptAngle, fetchEngineTaskProgress } = await import('../engine-tasks');
     const { logger } = await import('../logger');
+    // Both reads of the task record fail: the progress prefetch and the
+    // angle fallback lookup.
+    vi.mocked(fetchEngineTaskProgress).mockRejectedValueOnce(new Error('engine down'));
     vi.mocked(fetchEngineScriptAngle).mockRejectedValueOnce(new Error('engine down'));
     const { supabase } = mockSupabase({
       scheduled_posts: { data: SLOT_ROW, error: null },
@@ -273,6 +301,17 @@ describe('getGenerationPost', () => {
     expect(detail?.progress).toBe(67);
     expect(detail?.stage).toBe('audio');
     expect(fetchEngineTaskProgress).toHaveBeenCalledWith('task-1', 'user-1');
+  });
+
+  it('takes the script angle from the progress read for a running generation (one engine read)', async () => {
+    const { fetchEngineTaskProgress, fetchEngineScriptAngle } = await import('../engine-tasks');
+    const { supabase } = mockSupabase({
+      video_generations: { data: { ...GENERATION_ROW, status: 'running' }, error: null },
+    });
+    const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1');
+    expect(fetchEngineTaskProgress).toHaveBeenCalledTimes(1);
+    expect(fetchEngineScriptAngle).not.toHaveBeenCalled();
+    expect(detail?.scriptAngle).toBe('The myth that keeps coming back');
   });
 
   it('does not call the engine for a pending generation with no task id', async () => {
