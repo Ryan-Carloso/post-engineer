@@ -5,8 +5,8 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 //---------------
-// Testes de DELETE /api/persona/video-task/:taskId — cancela/remove task
-// no motor. Auth = sessão Supabase.
+// DELETE /api/persona/video-task/:taskId — cancels/removes the task on the
+// engine. Auth: Supabase cookie session.
 //---------------
 
 import { DELETE } from '../video-task/[taskId]/route';
@@ -22,7 +22,7 @@ function mockSession(opts?: { noSession?: boolean; noToken?: boolean }): void {
       getUser: vi.fn(async () =>
         opts?.noSession
           ? { data: { user: null }, error: null }
-          : { data: { user: { id: 'user-1' } }, error: null },
+          : { data: { user: { id: USER_ID } }, error: null },
       ),
       getSession: vi.fn(async () =>
         opts?.noToken
@@ -42,7 +42,7 @@ describe('DELETE /api/persona/video-task/:taskId', () => {
     mockSession();
   });
 
-  it('retorna 401 sem sessão', async () => {
+  it('returns 401 without a session', async () => {
     mockSession({ noSession: true });
     const fetchMock = vi.fn<typeof fetch>();
     vi.stubGlobal('fetch', fetchMock);
@@ -56,7 +56,7 @@ describe('DELETE /api/persona/video-task/:taskId', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('retorna 401 com sessão sem access token', async () => {
+  it('returns 401 with a session that has no access token', async () => {
     mockSession({ noToken: true });
     const fetchMock = vi.fn<typeof fetch>();
     vi.stubGlobal('fetch', fetchMock);
@@ -70,7 +70,7 @@ describe('DELETE /api/persona/video-task/:taskId', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('cancela a task no motor com o token da sessão', async () => {
+  it('cancels the task on the engine with the caller user id', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(JSON.stringify({ status: 'deleted' }), { status: 200 }),
     );
@@ -92,7 +92,21 @@ describe('DELETE /api/persona/video-task/:taskId', () => {
     expect(headers.get('x-user-id')).toBe(USER_ID);
   });
 
-  it('retorna 500 quando MONEYPRINT_API_URL não está definida', async () => {
+  it('returns 404 when the engine does not know the task', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ message: 'task not found' }), { status: 404 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await DELETE(
+      new Request('http://localhost/api/persona/video-task/task-1', { method: 'DELETE' }) as never,
+      { params: Promise.resolve({ taskId: 'task-1' }) },
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  it('returns 500 when MONEYPRINT_API_URL is not defined', async () => {
     vi.stubEnv('MONEYPRINT_API_URL', '');
     const fetchMock = vi.fn<typeof fetch>();
     vi.stubGlobal('fetch', fetchMock);
@@ -106,7 +120,7 @@ describe('DELETE /api/persona/video-task/:taskId', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('retorna 502 quando o motor falha ou está indisponível', async () => {
+  it('returns 502 when the engine fails or is unreachable', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       new Response('nope', { status: 500 }),
     );

@@ -83,6 +83,10 @@ import {
   handleGetPost,
   handleGetPostMetrics,
 } from './tools-posts.js';
+import {
+  CancelVideoTaskShape,
+  handleCancelVideoTask,
+} from './video-task-tools.js';
 import { trackEvent } from './analytics.js';
 
 //---------------
@@ -314,6 +318,15 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
     GetVideoGenerationShape,
     withTracking('get_video_generation', async (args) => {
       return handleGetVideoGeneration(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'cancel_video_task',
+    'Cancel/remove one of your video tasks on the generation engine by task id (from get_video_status, get_video_task_progress, get_post or list_posts). Only the caller\'s own task can be cancelled; a persona-scoped API key can only cancel tasks belonging to its personas. Unknown or already-finished tasks return an error. No token refund is issued by this call.',
+    CancelVideoTaskShape,
+    withTracking('cancel_video_task', async (args) => {
+      return handleCancelVideoTask(apiClient, args);
     })
   );
 

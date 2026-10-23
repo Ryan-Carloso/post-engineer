@@ -8,4 +8,5 @@ export const postToolDescEn = {
   toolDescGetVideoGeneration: 'Get one video generation\'s detail',
   toolDescGetPost: "Get one post's detail (slot or generation)",
   toolDescGetPostMetrics: 'Get per-video performance metrics',
+  toolDescCancelVideoTask: 'Cancel/remove one of your video tasks',
 } as const;

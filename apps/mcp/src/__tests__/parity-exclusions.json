@@ -76,9 +76,6 @@
       "kind": "event-stream",
       "polledBy": "GET /api/persona/video-status/[taskId]"
     },
-    "DELETE /api/persona/video-task/[taskId]": {
-      "kind": "session-only"
-    },
     "GET /api/version": {
       "kind": "ops-public"
     }

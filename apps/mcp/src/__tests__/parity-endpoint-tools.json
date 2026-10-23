@@ -102,6 +102,9 @@
   "GET /api/persona/video-generations/[generationId]": [
     "get_video_generation"
   ],
+  "DELETE /api/persona/video-task/[taskId]": [
+    "cancel_video_task"
+  ],
   "GET /api/billing/transactions": [
     "list_token_transactions"
   ],

@@ -37,7 +37,7 @@ describe('DELETE /api/persona/video-task/:taskId — taskId validation', () => {
     mockSession();
   });
 
-  it('retorna 400 quando taskId contém caracteres inválidos (ex: ../)', async () => {
+  it('returns 400 when taskId contains invalid characters (e.g. ../)', async () => {
     const fetchMock = vi.fn<typeof fetch>();
     vi.stubGlobal('fetch', fetchMock);
 
@@ -50,7 +50,7 @@ describe('DELETE /api/persona/video-task/:taskId — taskId validation', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('retorna 400 quando taskId é vazio', async () => {
+  it('returns 400 when taskId is empty', async () => {
     const fetchMock = vi.fn<typeof fetch>();
     vi.stubGlobal('fetch', fetchMock);
 
@@ -63,7 +63,7 @@ describe('DELETE /api/persona/video-task/:taskId — taskId validation', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('retorna 400 quando taskId tem mais de 128 caracteres', async () => {
+  it('returns 400 when taskId is longer than 128 characters', async () => {
     const longTaskId = 'a'.repeat(129);
     const fetchMock = vi.fn<typeof fetch>();
     vi.stubGlobal('fetch', fetchMock);
@@ -77,7 +77,7 @@ describe('DELETE /api/persona/video-task/:taskId — taskId validation', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('aceita taskId válido (alphanum + ._-)', async () => {
+  it('accepts a valid taskId (alphanumeric + ._-)', async () => {
     const validTaskIds = ['task-1', 'task_1', 'task.1', 'Task1', 't1'];
     for (const taskId of validTaskIds) {
       const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
