@@ -1,10 +1,13 @@
 name: Deploy
 
-# Applies pending Supabase migrations right after a PR merges to main.
+# Applies pending Supabase migrations right after a PR merges to main (or
+# via workflow_dispatch, e.g. to recover after a failed deploy).
 #
 # Flow:
-#   1. This workflow runs `supabase db push --linked`, which applies ONLY
-#      pending migrations (tracked in supabase_migrations.schema_migrations).
+#   1. This workflow runs `supabase db push --linked --include-all`, which
+#      applies migrations missing from the remote history table
+#      (supabase_migrations.schema_migrations) in migration-file order,
+#      including out-of-order ones (see the push step comment).
 #   2. The web app itself is deployed to our own VPS (see
 #      apps/web/docker-compose.yml, deployed with deploy.sh on the host) —
 #      migrations land first, then the host is redeployed.
@@ -31,6 +34,7 @@ on:
   pull_request:
     types: [closed]
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: deploy-main
@@ -38,13 +42,16 @@ concurrency:
 
 jobs:
   migrate:
-    # Only for merged PRs (not plain closes), and only for PRs from this
-    # repo: the pull_request event does not expose secrets to fork PRs, so
+    # Merged PRs only (not plain closes), and only for PRs from this repo:
+    # the pull_request event does not expose secrets to fork PRs, so
     # without the repo guard a fork merge would fail loudly on the secret
-    # checks below instead of skipping quietly.
+    # checks below instead of skipping quietly. workflow_dispatch runs from
+    # the main branch (the default when dispatching) to re-run a failed
+    # deploy without waiting for the next merge.
     if: >-
-      github.event.pull_request.merged == true &&
-      github.event.pull_request.head.repo.full_name == github.repository
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -52,7 +59,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
         with:
-          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.ref }}
 
       - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1 pinned 2026-10-03
         with:
@@ -69,8 +76,18 @@ jobs:
           : "${SUPABASE_PROJECT_ID:?SUPABASE_PROJECT_ID secret is not set}"
           : "${SUPABASE_DB_PASSWORD:?SUPABASE_DB_PASSWORD secret is not set}"
           supabase link --project-ref "$SUPABASE_PROJECT_ID" --password "$SUPABASE_DB_PASSWORD"
-          # Applies ONLY migrations missing from the remote history table.
-          # (--yes: non-interactive; safety comes from CI validation on the
-          # PR plus pending-only semantics, not from an interactive prompt.)
-          supabase db push --yes --linked
+          # Applies exactly the migrations missing from the remote history
+          # table, in file order. --include-all also accepts pending
+          # migrations that sort BEFORE the newest one applied on the
+          # remote: after out-of-order merges (an older-numbered migration
+          # whose PR merged after a newer one), plain db push fails with
+          # "Found local migration files to be inserted before the last
+          # migration on remote database" and repeats that failure on every
+          # merge until the flag is added. This left migration 024 pending
+          # while 025/026 were already applied, so production lacked
+          # personas.cta_text (deploy run 39980975841). Applied files stay
+          # skipped: pending-only semantics and the CI-validated idempotent
+          # SQL are unchanged, so safety does not depend on the flag.
+          # (--yes: non-interactive.)
+          supabase db push --yes --linked --include-all
           echo "production migrations up to date"

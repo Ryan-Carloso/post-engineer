@@ -45,8 +45,13 @@ manually. After a PR merges to `main`:
    `db:destructive-approved` label, and the whole chain applies cleanly to
    a fresh Postgres.
 2. The Deploy workflow (`.github/workflows/deploy.yml`) runs
-   `supabase db push --linked`, which applies **only pending migrations**
-   (tracked in `supabase_migrations.schema_migrations`).
+   `supabase db push --linked --include-all`, which applies **migrations
+   missing from the remote history table** (tracked in
+   `supabase_migrations.schema_migrations`), including out-of-order ones:
+   `--include-all` also applies an older-numbered migration whose PR merged
+   after a newer one (plain `db push` would refuse those even though the
+   SQL is idempotent). Without this flag a pending out-of-order migration
+   fails every subsequent deploy until the flag is added.
 3. The web app itself is deployed to our own VPS
    (`apps/web/docker-compose.yml`, via `deploy.sh` on the host) — migrations
    land first, then the host is redeployed.
