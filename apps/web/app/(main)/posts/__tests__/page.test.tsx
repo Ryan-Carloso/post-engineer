@@ -120,10 +120,10 @@ function mockQueries(overrides: {
     refetch: vi.fn(),
   } as never);
   vi.mocked(useYouTubeAccountsQuery).mockReturnValue({
-    data: { authenticated: true, accounts: [{ channelId: 'ch1', channelName: 'Europa Na Estrada' }] },
+    data: { authenticated: true, accounts: [{ provider: 'youtube', channelId: 'ch1', channelName: 'Europa Na Estrada' }] },
   } as never);
   vi.mocked(useInstagramAccountsQuery).mockReturnValue({
-    data: { authenticated: true, accounts: [{ igUserId: 'ig1', username: 'vivalave' }] },
+    data: { authenticated: true, accounts: [{ provider: 'instagram', igUserId: 'ig1', username: 'vivalave' }] },
   } as never);
   vi.mocked(useLinkedinAccountsQuery).mockReturnValue({
     data: { authenticated: true, accounts: [] },
