@@ -329,6 +329,17 @@ jobs:
                 [ -e "$rel" ] || rm -f "mutants/$rel"
               done
           fi
+          # mutmut copies every source file one-by-one into mutants/ and
+          # never creates the parent directory itself. A directory that came
+          # to exist after the restored cache was saved (e.g. local_tts,
+          # added on main after earlier PR caches) is missing from the
+          # restored tree, and the copy crashes the shard with
+          # "No such file or directory: 'mutants/local_tts/__init__.py'".
+          # Mirror every tracked file's directory into mutants/ up front so
+          # the copy never hits an absent parent.
+          while IFS= read -r -d '' f; do
+            mkdir -p "mutants/$(dirname "$f")"
+          done < <(git ls-files -z .)
 
       - name: Install system dependencies
         run: |
