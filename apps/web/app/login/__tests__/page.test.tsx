@@ -254,25 +254,32 @@ describe('app/login/page — hydration', () => {
     const container = document.createElement('div');
     container.innerHTML = renderToString(<Login />);
     document.body.appendChild(container);
-    expect(container.querySelector('[data-testid="oauth-redirect-debug"]')).toBeNull();
+    // The container is appended manually, outside Testing Library cleanup:
+    // unmount and remove it in a finally so a failed assertion cannot leak
+    // a second Login instance into later tests.
+    let root: { unmount: () => void } | undefined;
+    try {
+      expect(container.querySelector('[data-testid="oauth-redirect-debug"]')).toBeNull();
 
-    const recoverableErrors: unknown[] = [];
-    const root = await act(async () =>
-      hydrateRoot(container, <Login />, {
-        onRecoverableError: (error) => recoverableErrors.push(error),
-      }),
-    );
+      const recoverableErrors: unknown[] = [];
+      root = await act(async () =>
+        hydrateRoot(container, <Login />, {
+          onRecoverableError: (error) => recoverableErrors.push(error),
+        }),
+      );
 
-    expect(recoverableErrors).toEqual([]);
-    // After hydration React re-renders with the browser hostname (localhost).
-    expect(screen.getByTestId('oauth-redirect-debug').textContent).toContain(
-      encodeURIComponent('http://localhost:3434/auth/callback'),
-    );
-    fireEvent.click(screen.getByText('login.githubButton'));
-    await waitFor(() => expect(mockSignInWithOAuth).toHaveBeenCalled());
-
-    act(() => root.unmount());
-    container.remove();
+      expect(recoverableErrors).toEqual([]);
+      // After hydration React re-renders with the browser hostname (localhost).
+      expect(screen.getByTestId('oauth-redirect-debug').textContent).toContain(
+        encodeURIComponent('http://localhost:3434/auth/callback'),
+      );
+      fireEvent.click(screen.getByText('login.githubButton'));
+      await waitFor(() => expect(mockSignInWithOAuth).toHaveBeenCalled());
+    } finally {
+      const mountedRoot = root;
+      if (mountedRoot !== undefined) act(() => mountedRoot.unmount());
+      container.remove();
+    }
   });
 });
 
