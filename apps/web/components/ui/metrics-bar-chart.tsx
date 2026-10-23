@@ -51,11 +51,12 @@ export function MetricsBarChart({ data, metricLabel, formatValue }: MetricsBarCh
         <ChartTooltip
           cursor={false}
           content={<ChartTooltipContent labelFormatter={(label: string, payload) => {
-            // payload[0].payload is the hovered bar's datum object itself;
-            // matching by identity keeps duplicate labels (same-name
-            // personas/accounts) reporting their own count.
-            const hovered: unknown = payload?.[0]?.payload;
-            const datum = data.find((entry) => entry === hovered) ?? data.find((entry) => entry.label === label);
+            // payload[0].payload is the hovered bar's datum; match it by
+            // its stable group key (recharts may hand back a copy, so
+            // object identity is not reliable) so duplicate labels
+            // (same-name personas/accounts) report their own count.
+            const hovered = payload?.[0]?.payload as MetricsBarDatum | undefined;
+            const datum = data.find((entry) => entry.key === hovered?.key) ?? data.find((entry) => entry.label === label);
             return datum === undefined ? label : `${label} · ${datum.countLabel}`;
           }} />}
         />

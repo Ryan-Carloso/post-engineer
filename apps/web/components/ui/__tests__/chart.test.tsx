@@ -236,8 +236,14 @@ describe('ChartLegendContent', () => {
 
 describe('useChart consumers outside a container', () => {
   it('throws when rendered without a ChartContainer', () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-    expect(() => render(<ChartTooltipContent active payload={[]} />)).toThrow('useChart must be used within');
+    // React logs the render error to console.error; silence it for this
+    // test only and restore the spy afterwards.
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(() => render(<ChartTooltipContent active payload={[]} />)).toThrow('useChart must be used within');
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 
