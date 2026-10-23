@@ -46,6 +46,7 @@ from app.services.lipsync_layout import (
     _build_lipsync_intro_command,
 )
 from app.services.subtitle_text import wrap_text
+from app.services.ffmpeg_failure import FfmpegReencodeError, raise_reencode_failure
 
 DEFAULT_SUBTITLE_FONT = "BeVietnamPro-Medium.ttf"
 
@@ -1233,36 +1234,24 @@ def _reencode_clip_with_ffmpeg(
     except (OSError, subprocess.TimeoutExpired, subprocess.CalledProcessError) as exc:
         # Reuse the existing codec fallback machinery: only disable the
         # hardware encoder when libx264 can write the file successfully.
-        if effective_codec != _DEFAULT_VIDEO_CODEC:
-            logger.warning(
-                f"[ffmpeg] re-encode with {effective_codec} failed, "
-                f"retrying with {_DEFAULT_VIDEO_CODEC}: {str(exc)}"
-            )
-            cmd[cmd.index("-c:v") + 1] = _DEFAULT_VIDEO_CODEC
-            try:
-                subprocess.run(cmd, capture_output=True, check=True, timeout=600)
-                _disable_runtime_video_codec(effective_codec, str(exc))
-                elapsed = time.monotonic() - start
-                logger.info(
-                    f"[ffmpeg] re-encoded {os.path.basename(src)} "
-                    f"({duration:.2f}s -> {target_w}x{target_h}) with "
-                    f"{_DEFAULT_VIDEO_CODEC} in {elapsed:.2f}s"
-                )
-            except (OSError, subprocess.TimeoutExpired, subprocess.CalledProcessError) as exc2:
-                logger.error(
-                    f"[ffmpeg] re-encode failed for {os.path.basename(src)}: {str(exc2)}"
-                )
-                raise RuntimeError(
-                    f"ffmpeg re-encode failed for {src}: {str(exc2)}"
-                ) from exc2
-        logger.error(
-            f"[ffmpeg] re-encode failed for {os.path.basename(src)}: {str(exc)}"
+        if effective_codec == _DEFAULT_VIDEO_CODEC:
+            raise_reencode_failure(src, exc)
+        logger.warning(
+            f"[ffmpeg] re-encode with {effective_codec} failed, "
+            f"retrying with {_DEFAULT_VIDEO_CODEC}: {str(exc)}"
         )
-        raise RuntimeError(f"ffmpeg re-encode failed for {src}: {str(exc)}") from exc
+        cmd[cmd.index("-c:v") + 1] = _DEFAULT_VIDEO_CODEC
+        try:
+            subprocess.run(cmd, capture_output=True, check=True, timeout=600)
+        except (OSError, subprocess.TimeoutExpired, subprocess.CalledProcessError) as exc2:
+            raise_reencode_failure(src, exc2)
+        _disable_runtime_video_codec(effective_codec, str(exc))
+        effective_codec = _DEFAULT_VIDEO_CODEC
     elapsed = time.monotonic() - start
     logger.info(
         f"[ffmpeg] re-encoded {os.path.basename(src)} "
-        f"({duration:.2f}s -> {target_w}x{target_h}) in {elapsed:.2f}s"
+        f"({duration:.2f}s -> {target_w}x{target_h}) with "
+        f"{effective_codec} in {elapsed:.2f}s"
     )
 
 
@@ -1488,6 +1477,8 @@ def combine_videos(
             )
             video_duration += clip_duration_saved
             
+        except FfmpegReencodeError as e:
+            logger.warning(f"skipping clip: {str(e)}")
         except Exception as e:
             logger.error(f"failed to process clip: {str(e)}")
 

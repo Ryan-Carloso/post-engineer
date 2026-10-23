@@ -1191,6 +1191,90 @@ class TestFfmpegReencode(unittest.TestCase):
             else:
                 self.assertGreater(os.path.getsize(out), 0)
 
+    def test_reencode_clip_with_ffmpeg_failure_carries_ffmpeg_stderr(self):
+        """A real ffmpeg failure must surface ffmpeg's own cause, not only the exit code."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            src = os.path.join(temp_dir, "input.mp4")
+            Path(src).write_text("not a video")
+            with self.assertRaises(vd.FfmpegReencodeError) as ctx:
+                vd._reencode_clip_with_ffmpeg(
+                    src=src, out=os.path.join(temp_dir, "output.mp4"),
+                    start_time=0, end_time=2,
+                    target_w=640, target_h=480,
+                    codec="libx264", fps=30, threads=2,
+                )
+        self.assertIn("ffmpeg stderr:", str(ctx.exception))
+        self.assertIn("Invalid data found", str(ctx.exception))
+
+    def test_reencode_clip_with_ffmpeg_returns_after_successful_codec_fallback(self):
+        """A libx264 retry that succeeds must not raise after the hardware codec failed."""
+        hw_failure = subprocess.CalledProcessError(1, ["ffmpeg"], stderr=b"No NVENC capable devices found")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            src = os.path.join(temp_dir, "input.mp4")
+            Path(src).write_bytes(b"x")
+            with patch.object(vd, "_get_effective_video_codec", return_value="h264_nvenc"), \
+                    patch.object(vd.subprocess, "run", side_effect=[hw_failure, None]) as run_mock, \
+                    patch.object(vd, "_disable_runtime_video_codec") as disable_mock:
+                vd._reencode_clip_with_ffmpeg(
+                    src=src, out=os.path.join(temp_dir, "output.mp4"),
+                    start_time=0, end_time=2,
+                    target_w=640, target_h=480,
+                    codec="h264_nvenc", fps=30, threads=2,
+                )
+        self.assertEqual(run_mock.call_count, 2)
+        retry_cmd = run_mock.call_args_list[1].args[0]
+        self.assertEqual(retry_cmd[retry_cmd.index("-c:v") + 1], "libx264")
+        disable_mock.assert_called_once()
+        self.assertEqual(disable_mock.call_args.args[0], "h264_nvenc")
+
+    def _combine_with_reencode_failure(self, failure):
+        from loguru import logger
+
+        class _FakeAudioClip:
+            duration = 10.0
+            def close(self):
+                pass
+
+        class _FakeSubClip:
+            duration = 6.0
+            size = (1080, 1920)
+
+        records = []
+        handler_id = logger.add(lambda message: records.append(message.record))
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir, \
+                    patch.object(vd, "AudioFileClip", return_value=_FakeAudioClip()), \
+                    patch.object(vd, "_open_video_clip_quietly", return_value=_FakeSubClip()), \
+                    patch.object(vd, "_needs_moviepy_effects", return_value=False), \
+                    patch.object(vd, "_reencode_clip_with_ffmpeg", side_effect=failure) as ffmpeg_mock:
+                with self.assertRaisesRegex(ValueError, "no usable clips"):
+                    vd.combine_videos(
+                        combined_video_path=os.path.join(temp_dir, "combined.mp4"),
+                        video_paths=["/tmp/clip1.mp4"],
+                        audio_file=os.path.join(temp_dir, "audio.mp3"),
+                        video_concat_mode=vd.VideoConcatMode.sequential,
+                        max_clip_duration=10,
+                    )
+        finally:
+            logger.remove(handler_id)
+        ffmpeg_mock.assert_called_once()
+        return records
+
+    def test_combine_videos_skips_reencode_failure_at_warning(self):
+        """The re-encode already logged the failure at ERROR: the skip must not open a second issue."""
+        records = self._combine_with_reencode_failure(
+            vd.FfmpegReencodeError("ffmpeg re-encode failed for /tmp/clip1.mp4: exit 1")
+        )
+        self.assertEqual([r for r in records if r["level"].name == "ERROR"], [])
+        warnings = [r["message"] for r in records if r["level"].name == "WARNING"]
+        self.assertIn("skipping clip: ffmpeg re-encode failed for /tmp/clip1.mp4: exit 1", warnings)
+
+    def test_combine_videos_logs_other_clip_failures_at_error(self):
+        """Failures the re-encode did not log itself keep the ERROR log."""
+        records = self._combine_with_reencode_failure(FileNotFoundError("source video not found"))
+        errors = [r["message"] for r in records if r["level"].name == "ERROR"]
+        self.assertEqual(errors, ["failed to process clip: source video not found"])
+
     def test_combine_videos_uses_ffmpeg_when_no_transition(self):
         """When _needs_moviepy_effects returns False, combine_videos should
         call _reencode_clip_with_ffmpeg and NOT _write_videofile_with_codec_fallback."""
