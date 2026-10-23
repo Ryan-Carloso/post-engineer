@@ -39,4 +39,6 @@ def raise_reencode_failure(src: str, exc: BaseException) -> NoReturn:
     if tail:
         detail = f"{detail}; ffmpeg stderr: {tail}"
     logger.error(f"[ffmpeg] re-encode failed for {os.path.basename(src)}: {detail}")
-    raise FfmpegReencodeError(f"ffmpeg re-encode failed for {src}: {detail}") from exc
+    raise FfmpegReencodeError(
+        f"ffmpeg re-encode failed for {os.path.basename(src)}: {detail}"
+    ) from exc

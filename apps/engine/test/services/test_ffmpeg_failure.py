@@ -56,7 +56,8 @@ class TestRaiseReencodeFailure(unittest.TestCase):
             ff.raise_reencode_failure("/cache/clip.mp4", exc)
 
         self.assertIs(ctx.exception.__cause__, exc)
-        self.assertIn("ffmpeg re-encode failed for /cache/clip.mp4", str(ctx.exception))
+        self.assertIn("ffmpeg re-encode failed for clip.mp4", str(ctx.exception))
+        self.assertNotIn("/cache/", str(ctx.exception))
         self.assertIn("returned non-zero exit status 1", str(ctx.exception))
         self.assertIn("Invalid data found", str(ctx.exception))
         errors = [r for r in self.records if r["level"].name == "ERROR"]
@@ -68,10 +69,10 @@ class TestRaiseReencodeFailure(unittest.TestCase):
     def test_omits_stderr_label_when_there_is_no_stderr(self):
         with self.assertRaises(ff.FfmpegReencodeError) as ctx:
             ff.raise_reencode_failure("/cache/clip.mp4", OSError("no such binary"))
+        self.assertEqual(str(ctx.exception), "ffmpeg re-encode failed for clip.mp4: no such binary")
         self.assertEqual(
-            str(ctx.exception), "ffmpeg re-encode failed for /cache/clip.mp4: no such binary"
+            self.records[-1]["message"], "[ffmpeg] re-encode failed for clip.mp4: no such binary"
         )
-        self.assertEqual(self.records[-1]["message"], "[ffmpeg] re-encode failed for clip.mp4: no such binary")
 
     def test_error_is_a_runtime_error(self):
         self.assertTrue(issubclass(ff.FfmpegReencodeError, RuntimeError))

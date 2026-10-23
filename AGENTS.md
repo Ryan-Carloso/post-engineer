@@ -87,6 +87,7 @@
 
 ## Engine
 
+- An exception message built next to a log line carries the same scrubbed form as the log (e.g. `os.path.basename(src)`, never the full path): callers re-log `str(exc)` verbatim, so a raw path in the raised message leaks on surfaces the log line was careful about.
 - Scrub secrets before truncating, on every surface (telemetry, logs, stored/client-visible errors). Redact known credentials (e.g. webhook URLs) by exact replacement including transport-encoded variants; use the pattern scrubber only for unknown text. Don't scrub typed ints.
 - Funnel: `video_generation_requested` fires only on acceptance (`on_accepted`). Dedup terminal events per incident family. Degraded identity props use `"unknown"` (`task.get(x) or "unknown"` — `.get` default doesn't fire on explicit None).
 - Data-dependent failures fail the item once, not the whole stage every tick. Bound boot-time loops. The engine assumes a single writer (stop-then-start deploys, never rolling).
