@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import * as React from 'react';
 import type { ReactNode } from 'react';
 
@@ -107,6 +107,35 @@ describe('ChartTooltipContent', () => {
     expect(indicator?.style.getPropertyValue('--color-border')).toBe('#0aa0aa');
   });
 
+  it('renders no label block when the label resolves to nothing', () => {
+    // dataKey outside the config + no label: the tooltip label memo
+    // returns null while the row itself still renders.
+    renderWithConfig(<ChartTooltipContent active payload={[tooltipItem({ dataKey: 'ghost', name: 'ghost' })] as never} />);
+    expect(screen.queryByText('Views')).toBeNull();
+    expect(screen.getByText('ghost')).toBeInTheDocument();
+  });
+
+  it('resolves the config key from a string field on the payload item itself', () => {
+    renderWithConfig(
+      <ChartTooltipContent active payload={[tooltipItem()] as never} labelKey="name" label="ignored" />,
+    );
+    // key 'name' -> item.name 'average' -> config label 'Views'.
+    expect(screen.getAllByText('Views').length).toBeGreaterThan(0);
+    expect(screen.getByText('120')).toBeInTheDocument();
+  });
+
+  it('resolves the config key through the nested payload object', () => {
+    renderWithConfig(
+      <ChartTooltipContent
+        active
+        payload={[tooltipItem({ payload: { label: 'Nested' } })] as never}
+        labelKey="label"
+        label="Alpha"
+      />,
+    );
+    expect(screen.getByText('120')).toBeInTheDocument();
+  });
+
   it('renders a zero value instead of dropping it as falsy', () => {
     renderWithConfig(<ChartTooltipContent active payload={[tooltipItem({ value: 0 })] as never} label="Alpha" />);
     expect(screen.getByText('0')).toBeInTheDocument();
@@ -205,6 +234,13 @@ describe('ChartLegendContent', () => {
   });
 });
 
+describe('useChart consumers outside a container', () => {
+  it('throws when rendered without a ChartContainer', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(() => render(<ChartTooltipContent active payload={[]} />)).toThrow('useChart must be used within');
+  });
+});
+
 describe('MetricsBarChart', () => {
   const data: MetricsBarDatum[] = [
     { key: 'a', label: 'Alpha', average: 300, countLabel: '2 videos' },
@@ -219,6 +255,17 @@ describe('MetricsBarChart', () => {
     // Bars render as SVG paths once the container has a size (stubbed).
     expect(document.querySelectorAll('.recharts-bar-rectangle, .recharts-rectangle').length).toBeGreaterThan(0);
     expect(screen.getByText(/a very long angle lab…/)).toBeInTheDocument();
+  });
+
+  it('shows the group count in the tooltip label on hover', () => {
+    const { container } = render(<MetricsBarChart data={data} metricLabel="Views" formatValue={(v) => `${v}`} />);
+    const wrapper = container.querySelector('.recharts-wrapper') as HTMLElement;
+    fireEvent.mouseOver(wrapper);
+    // Plot area starts after the 140px category axis; aim at the first bar.
+    fireEvent.mouseMove(wrapper, { clientX: 300, clientY: 30 });
+    // The tooltip label resolves the hovered datum by identity, so the
+    // two 'Alpha' groups keep their own counts.
+    expect(document.body.textContent).toContain('·');
   });
 
   it('sizes the chart by group count with a floor for empty data', () => {

@@ -220,6 +220,36 @@ describe('MetricsPage', () => {
     expect(screen.getByLabelText(/metrics\.filterProvider/)).toHaveValue('all');
   });
 
+  it('labels groups by persona name and account label in the chart data', async () => {
+    stubMetricsFetch({
+      success: true,
+      rows: [
+        row(),
+        row({ postId: 'post-2', provider: 'instagram', accountId: 'ig1', externalId: 'v2', views: 50 }),
+        // An account the accounts query no longer returns: labelFor
+        // falls back to the raw account id.
+        row({ postId: 'post-3', accountId: 'UC-gone', externalId: 'v3', views: 10 }),
+      ],
+      truncated: false,
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText(/metrics\.groupLabel/), { target: { value: 'persona' } });
+    // 'Alpha' now appears in the filter select, the top-group stat and
+    // the chart axis (labelFor's persona branch).
+    await waitFor(() => expect(screen.getAllByText('Alpha').length).toBeGreaterThan(1));
+
+    fireEvent.change(screen.getByLabelText(/metrics\.groupLabel/), { target: { value: 'account' } });
+    await waitFor(() => expect(screen.getAllByText('Chan One').length).toBeGreaterThan(1));
+    // The unknown account's raw id labels its chart group (tick text may
+    // be split across tspans, so match on the rendered HTML).
+    expect(document.body.innerHTML).toContain('UC-gone');
+
+    fireEvent.change(screen.getByLabelText(/metrics\.groupLabel/), { target: { value: 'provider' } });
+    await waitFor(() => expect(screen.getAllByText('YouTube').length).toBeGreaterThan(1));
+  });
+
   it('keeps a selected angle listed after filtering hides the other angles', async () => {
     // First fetch lists the 'myth' angle; the filtered fetch returns no
     // rows at all, so 'myth' can only stay in the select via the page's

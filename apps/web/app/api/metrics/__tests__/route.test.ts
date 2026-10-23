@@ -122,6 +122,14 @@ describe('GET /api/metrics', () => {
     expect(second.calls).toContainEqual(['is', 'persona_id', null]);
   });
 
+  it('returns the rate-limit response before parsing or querying', async () => {
+    vi.mocked(applyRateLimit).mockResolvedValueOnce(new Response('slow down', { status: 429 }) as never);
+    const { calls } = mockQuery({ data: [], error: null });
+    const response = await get('?window=24h');
+    expect(response.status).toBe(429);
+    expect(calls).toHaveLength(0);
+  });
+
   it('logs a stable template for 400s instead of the caller-controlled detail', async () => {
     mockQuery({ data: [], error: null });
     const response = await get('?window=24h&bogus=1');
