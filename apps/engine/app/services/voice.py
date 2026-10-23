@@ -17,6 +17,15 @@ from app.services.edge_tts import chatterbox_tts_with_fallback
 from app.services.local_tts import kokoro_tts, phonon_tts
 from app.services.openrouter_tts import dispatch_openrouter_tts
 from app.services.voice_catalog import resolve_voice_id
+from app.services.voice_ids import (  # noqa: F401 — re-exported for existing callers
+    NO_VOICE_NAME,
+    is_chatterbox_voice,
+    is_elevenlabs_voice,
+    is_kokoro_voice,
+    is_no_voice,
+    is_phonon_voice,
+    parse_voice_name,
+)
 from app.services.voice_providers import (
     SubMaker,
     TtsResult,
@@ -25,12 +34,6 @@ from app.services.voice_providers import (
     populate_legacy_submaker_with_full_text,
 )
 from app.utils import utils
-
-NO_VOICE_NAME = "no-voice"
-# `none` was the no-voice sentinel used on PR #981's branch. Keep it as a
-# short-term alias so API users who called that branch directly don't break
-# on upgrade; the WebUI and new code use the clearer `no-voice`.
-_NO_VOICE_ALIASES = {NO_VOICE_NAME, "none"}
 
 # 100-nanosecond units per second; `mktimestamp` is integer-based on it.
 SUB_TIME_UNITS_PER_SECOND = 10000000
@@ -74,40 +77,6 @@ def get_elevenlabs_voices(api_key: str) -> list[str]:
     except Exception as e:
         logger.warning(f"ElevenLabs voices fetch failed: {str(e)}")
         return []
-
-
-def parse_voice_name(name: str):
-    # zh-CN-XiaoyiNeural-Female
-    # zh-CN-YunxiNeural-Male
-    # zh-CN-XiaoxiaoMultilingualNeural-V2-Female
-    name = name.replace("-Female", "").replace("-Male", "").strip()
-    return name
-
-def is_elevenlabs_voice(voice_name: str) -> bool:
-    return (voice_name or "").startswith("elevenlabs:")
-
-
-def is_chatterbox_voice(voice_name: str) -> bool:
-    return (voice_name or "").startswith("chatterbox:")
-
-
-def is_phonon_voice(voice_name: str) -> bool:
-    return (voice_name or "").startswith("phonon:")
-
-
-def is_kokoro_voice(voice_name: str) -> bool:
-    return (voice_name or "").startswith("kokoro:")
-
-
-def is_no_voice(voice_name: str | None) -> bool:
-    """Whether the user explicitly picked the no-voice mode.
-
-    An empty string is deliberately NOT no-voice: an empty voice more likely
-    means a broken config, a stale WebUI state, or a missing API parameter.
-    Only an explicit sentinel enters the silent branch, so a real error is
-    never disguised as a successful generation.
-    """
-    return str(voice_name or "").strip().lower() in _NO_VOICE_ALIASES
 
 
 def estimate_no_voice_duration(text: str) -> float:
