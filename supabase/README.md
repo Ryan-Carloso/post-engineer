@@ -23,12 +23,14 @@ the order — you never need to guess or read docs to know what comes next:
 | 015 | `migrations/015_schedules-publish-mode.sql` | `schedules.publish_mode` (`scheduled` default, CHECK-pinned to `scheduled`/`asap`): records whether a post publishes at its slot times or ASAP (the moment generation finishes, no scheduled time) |
 | 016 | `migrations/016_scheduled-posts-publish-attempts.sql` | `scheduled_posts.publish_attempts` (NOT NULL DEFAULT 0): counts publish attempts per slot so the engine auto-cancels (failed) with a token refund after 3 failures instead of retrying forever |
 | 017 | `migrations/017_refund-batch-tokens.sql` | Create the missing `public.refund_batch_tokens` RPC: per-slot refund of a batch prepaid under `batch:<scheduleId>`. Idempotent per refund key (`token_transactions.reference_id`), total refunds capped at the batch charge, restores the free/paid split, answers `{refunded}` like `refund_generation_tokens`. Both the engine's fill_schedule store and the web's generate-and-schedule route already call it — every call 404'd until this migration |
+| 018 | `migrations/018_refund-task-id.sql` | Extend `refund_batch_tokens` (017) with an optional `p_engine_task_id`, written to `token_transactions.engine_task_id` so a refund links back to the engine task that failed. Callers that omit it keep working (defaults to NULL) |
 | 019 | `migrations/019_personas-video-layout.sql` | `personas.video_layout` + `schedules.post_video_layout` (`standard` / `react`, NULL = `standard`, CHECK-pinned): how the persona hook is composed with the b-roll — the avatar filling the frame, or a 50/50 split with the b-roll below. Presentation only; the hook render and its cost are identical |
 | 020 | `migrations/020_engine-heartbeat.sql` | `engine_heartbeat` (single row, id=1 CHECK-pinned): engine liveness for death diagnosis — pid, uptime, RSS/VRAM rewritten every ~45s, plus `clean_shutdown_at` stamped by the ASGI shutdown hook. The boot reads it for the PostHog `engine_boot` autopsy event |
 | 021 | `migrations/021_video-generations-params.sql` | `video_generations.params` (JSONB: full engine job payload), `publish_mode` (`asap`/`scheduled`, CHECK-pinned, default `asap`), `scheduled_at` (timestamptz): the boot triage rebuilds orphaned direct generations from the row instead of failing them (issue #205). Partial index on `engine_task_id` where params is not null |
 | 022 | `migrations/022_persona-default-accounts.sql` | Per-persona default publishing accounts (`persona_default_accounts`) with owner-scoped RLS |
 | 023 | `migrations/023_cloned-voices.sql` | Per-user Chatterbox cloned voices (`cloned_voices`): async registration status, consent, storage path, engine voice key, language, error_code; owner-scoped RLS |
 | 025 | `migrations/025_post-metrics.sql` | Per-video performance snapshots (`post_metrics`: views/likes/comments/saves at 24h and 7d) with owner-read RLS, `post_metrics_done` (posts finished per window, service-role only), plus the hourly `post-metrics-hourly` pg_cron job (`schedule_post_metrics()`) |
+| 026 | `migrations/026_post-metrics-dimensions.sql` | Metrics dimensions on `post_metrics`: `persona_id` (filled by a BEFORE INSERT trigger from the post's schedule; NULL for faceless posts) and `script_angle` (written by the web collector from the engine task record), so the metrics dashboard filters by persona, account, network and script angle without joins. Existing snapshots are backfilled for `persona_id` |
 
 ## How to apply
 
@@ -65,6 +67,7 @@ Objects live under the user's folder, then the persona's:
 ```
 personas/{userId}/{personaId}/photo.{jpg|png}        the persona's single visual identity
 personas/{userId}/{personaId}/images/{uuid}.{ext}    the image library (0-10 items)
+personas/{userId}/cloned-voices/{cloneId}/reference.wav  cloned-voice reference audio (migration 023)
 ```
 
 The persona folder is for **debugging in this dashboard** (you can tell whose
@@ -103,7 +106,8 @@ builds these paths, and the tests pin the shape per writer.
   test that parses the SQL file and asserts the literals (see the
   `supabase/migrations/002_persona-images.sql literals` describe block in
   `apps/web/lib/__tests__/persona-images.test.ts` for the pattern).
-- Update the table above and `docs/SELF_HOSTING.md`.
+- Update the table above. It is the single migration list:
+  `docs/SELF_HOSTING.md` links here instead of duplicating it.
 
 ## Pipeline secrets (repo settings → Secrets and variables → Actions)
 
