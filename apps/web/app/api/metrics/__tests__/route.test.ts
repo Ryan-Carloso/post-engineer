@@ -106,6 +106,32 @@ describe('GET /api/metrics', () => {
     expect(calls).toContainEqual(['is', 'persona_id', null]);
   });
 
+  it('drops malformed stored persona ids before building the scope filter', async () => {
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: 'user-1', isApiKey: true, personaIds: ['bad,id)', PERSONA] }, error: null,
+    } as never);
+    const { calls } = mockQuery({ data: [], error: null });
+    await get('?window=24h');
+    expect(calls).toContainEqual(['or', `persona_id.in.(${PERSONA}),persona_id.is.null`]);
+
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: 'user-1', isApiKey: true, personaIds: ['bad,id)'] }, error: null,
+    } as never);
+    const second = mockQuery({ data: [], error: null });
+    await get('?window=24h');
+    expect(second.calls).toContainEqual(['is', 'persona_id', null]);
+  });
+
+  it('logs a stable template for 400s instead of the caller-controlled detail', async () => {
+    mockQuery({ data: [], error: null });
+    const response = await get('?window=24h&bogus=1');
+    expect(response.status).toBe(400);
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[GET /api/metrics] 400 Invalid metrics query.',
+      expect.objectContaining({ detail: expect.stringContaining('bogus') }),
+    );
+  });
+
   it('flags truncation when more rows than the cap exist', async () => {
     mockQuery({ data: Array.from({ length: METRICS_ROW_LIMIT + 1 }, (_, i) => row({ external_id: `v${i}` })), error: null });
     const body = await (await get('?window=24h')).json();

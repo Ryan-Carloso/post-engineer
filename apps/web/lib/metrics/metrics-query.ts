@@ -45,7 +45,10 @@ export interface MetricsResponse {
   truncated: boolean;
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Exported for the metrics route, which validates stored API-key
+// persona ids with the same pattern before interpolating them into a
+// PostgREST filter string.
+export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const KNOWN_PARAMS = new Set(['window', 'persona', 'account', 'provider', 'angle']);
 
 type ParseResult = { ok: true; query: MetricsQuery } | { ok: false; error: string };

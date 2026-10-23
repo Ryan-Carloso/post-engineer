@@ -10,6 +10,7 @@ import { isSocialProvider } from '@/lib/providers/registry';
 import {
   METRICS_NONE,
   METRICS_ROW_LIMIT,
+  UUID,
   parseMetricsQuery,
   type MetricsRowView,
 } from '@/lib/metrics/metrics-query';
@@ -30,7 +31,15 @@ async function getHandler(request: Request): Promise<NextResponse> {
   if (limited) return limited;
 
   const parsed = parseMetricsQuery(new URL(request.url).searchParams);
-  if (!parsed.ok) return apiErrorResponse(400, parsed.error, { route: 'GET /api/metrics' });
+  if (!parsed.ok) {
+    // The parse error embeds caller-controlled parameter names; log a
+    // stable template so PostHog groups these 400s into one issue.
+    return apiErrorResponse(400, parsed.error, {
+      route: 'GET /api/metrics',
+      logMessage: 'Invalid metrics query.',
+      metadata: { detail: parsed.error.slice(0, 200) },
+    });
+  }
   const { query } = parsed;
 
   const supabase = createSupabaseServiceClient();
@@ -49,7 +58,11 @@ async function getHandler(request: Request): Promise<NextResponse> {
   // an unrestricted one, otherwise a scoped key could never see metrics
   // for a persona-less post it can already list.
   if (isScopedApiKey(auth)) {
-    const personaIds = auth.personaIds ?? [];
+    // Stored persona ids are only string-checked at key creation; drop
+    // anything that is not a UUID before interpolating into the filter
+    // string, so a malformed stored id cannot corrupt the PostgREST
+    // syntax (it just narrows the scope).
+    const personaIds = (auth.personaIds ?? []).filter((id) => UUID.test(id));
     select = personaIds.length > 0
       ? select.or(`persona_id.in.(${personaIds.join(',')}),persona_id.is.null`)
       : select.is('persona_id', null);
