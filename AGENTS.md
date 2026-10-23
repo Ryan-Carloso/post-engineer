@@ -129,3 +129,4 @@
 - Don't pass flags via `pnpm <script> -- <flags>` in workflows (pnpm forwards a literal `--`); use `pnpm exec <bin>`.
 - API naming lint (`.github/workflows/api-naming.yml`) checks only new names in the contract surface; never rename shipped fields to satisfy it.
 - The AI reviewer often cites stale or nonexistent lines and invents contracts: verify every finding (grep the cited code) before changing anything; decline false positives. A red review job with no findings is usually provider throttling — re-run.
+- `openbot-notify.yml` is a pure event relay to the OpenBot webhook (no checkout, `permissions: {}`, nothing from the PR executed; failures are warnings, never a red check).

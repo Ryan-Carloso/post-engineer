@@ -1,0 +1,99 @@
+name: openbot-notify
+
+# Relays PR CI events to the OpenBot webhook, so the babysit agent reacts
+# to events instead of polling every 15 minutes.
+#
+# Pure relay by construction:
+# - no checkout at all — nothing from the PR is read or executed;
+# - permissions: {} — no GitHub API access;
+# - the body is a compact (< 2 KB) envelope of low-cardinality facts only
+#   (event/action, PR number, head sha, workflow name, conclusion): no
+#   titles, bodies, logs or actor identities.
+#
+# Secret handling: fork pull_request events do not carry secrets, so the
+# single step exits successfully without sending when
+# OPENBOT_WEBHOOK_SECRET is not available — a missing secret can never
+# turn this relay into a red check. Network or endpoint failures are
+# warnings too (continue-on-error): telemetry must never fail a build it
+# is only observing.
+#
+# Signature: x-openbot-signature = "sha256=" + hex HMAC-SHA256 over
+# "<timestamp>.<delivery-id>.<exact body bytes>", keyed by the secret —
+# the same envelope format the webhook route validates.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review, closed]
+  workflow_run:
+    # The exact workflow names that run on PRs in this repo (name: fields
+    # of .github/workflows/*.yml); parity-exclusion-guard uses
+    # pull_request_target, which still triggers workflow_run.
+    workflows:
+      - CI
+      - mutation
+      - opencode-review
+      - file-size
+      - api-naming
+      - parity-exclusion-guard
+      - CodeQL Advanced
+      - Deploy
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Relay to OpenBot
+        env:
+          OPENBOT_WEBHOOK_URL: https://signal.openbot.run/v1/webhooks/5cadd23b-8b61-4f24-b295-0ebdae7c45fc
+          # Empty on fork pull_request events (and until Ryan creates the
+          # repository secret): the step exits successfully, sending nothing.
+          OPENBOT_WEBHOOK_SECRET: ${{ secrets.OPENBOT_WEBHOOK_SECRET }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number || '' }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha || '' }}
+          WORKFLOW_NAME: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.name || '' }}
+          CONCLUSION: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion || '' }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          if [ -z "${OPENBOT_WEBHOOK_SECRET:-}" ]; then
+            echo "OPENBOT_WEBHOOK_SECRET not available (fork PR or unset) — nothing sent"
+            exit 0
+          fi
+          body=$(jq -nc \
+            --arg occurredAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg event "$EVENT_NAME" \
+            --arg action "${EVENT_ACTION:-}" \
+            --arg pr "${PR_NUMBER:-}" \
+            --arg sha "${HEAD_SHA:-}" \
+            --arg workflow "$WORKFLOW_NAME" \
+            --arg conclusion "$CONCLUSION" \
+            '{type: "github.ci", occurredAt: $occurredAt, data: {
+              event: $event,
+              action: (if $action == "" then null else $action end),
+              pr: (if $pr == "" then null else ($pr | tonumber) end),
+              sha: (if $sha == "" then null else $sha end),
+              workflow: (if $workflow == "" then null else $workflow end),
+              conclusion: (if $conclusion == "" then null else $conclusion end)
+            }}')
+          ts=$(date +%s)
+          delivery="gh-$RUN_ID-$RUN_ATTEMPT"
+          # Sign "<timestamp>.<delivery-id>.<body bytes>"; the key comes from
+          # the environment, never a process argument.
+          sig=$(printf '%s.%s.%s' "$ts" "$delivery" "$body" | python3 -c 'import sys, hmac, hashlib, os; key = os.environ.get("OPENBOT_WEBHOOK_SECRET", "").encode(); print(hmac.new(key, sys.stdin.buffer.read(), hashlib.sha256).hexdigest())')
+          curl -fsS --max-time 15 --retry 2 \
+            -H "Content-Type: application/json" \
+            -H "x-openbot-timestamp: $ts" \
+            -H "x-openbot-delivery-id: $delivery" \
+            -H "x-openbot-signature: sha256=$sig" \
+            --data-binary "$body" \
+            "$OPENBOT_WEBHOOK_URL" > /dev/null
+          echo "relayed $delivery ($EVENT_NAME)"
