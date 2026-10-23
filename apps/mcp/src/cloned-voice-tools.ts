@@ -8,6 +8,7 @@ import {
   previewClonedVoice,
 } from './cloned-voice-client.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
+import { isEnglishLanguage, ONLY_ENGLISH_CLONE_MESSAGE } from './language.js';
 
 export const ListClonedVoicesShape = {};
 
@@ -15,8 +16,15 @@ export const ListClonedVoicesSchema = z.object(ListClonedVoicesShape);
 
 export const CreateClonedVoiceShape = {
   audioUrl: z.string().url().describe('HTTPS URL of a short reference recording (MP3, WAV, M4A, or WebM, max 20MB)'),
-  language: z.string().min(1).describe('Language code for the clone (e.g. pt, en-us)'),
+  language: z
+    .string()
+    .min(1)
+    .refine(isEnglishLanguage, { message: ONLY_ENGLISH_CLONE_MESSAGE })
+    .describe('Language code for the clone — English only for now (e.g. en, en-us)'),
   consent: z.literal(true).describe('Must be true: caller confirms consent to voice cloning'),
+  denoise: z
+    .boolean()
+    .describe('Clean background noise from the recording before cloning (recommended true; false for studio audio)'),
 };
 
 export const CreateClonedVoiceSchema = z.object(CreateClonedVoiceShape);
@@ -29,7 +37,11 @@ export const DeleteClonedVoiceSchema = z.object(DeleteClonedVoiceShape);
 
 export const PreviewClonedVoiceShape = {
   cloneId: z.string().min(1).describe('Ready cloned voice id'),
-  language: z.string().optional().describe('Optional preview language override'),
+  language: z
+    .string()
+    .refine(isEnglishLanguage, { message: ONLY_ENGLISH_CLONE_MESSAGE })
+    .optional()
+    .describe('Optional preview language override — English only for now'),
 };
 
 export const PreviewClonedVoiceSchema = z.object(PreviewClonedVoiceShape);
@@ -45,7 +57,7 @@ export async function handleCreateClonedVoice(
   args: z.infer<typeof CreateClonedVoiceSchema>,
 ): Promise<McpToolResponse> {
   return handleLibraryCall(
-    () => createClonedVoiceFromUrl(client, args.audioUrl, args.language, args.consent),
+    () => createClonedVoiceFromUrl(client, args.audioUrl, args.language, args.consent, args.denoise),
     'creating cloned voice',
     'Voice clone registration started',
   );

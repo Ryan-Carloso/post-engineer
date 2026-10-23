@@ -180,11 +180,12 @@ class ClonedVoiceService:
         source_bytes: bytes,
         language: str,
         consent_acknowledged: bool,
+        denoise: bool,
     ) -> dict[str, Any]:
         if not consent_acknowledged:
             raise ReferenceAudioError(ERROR_CONSENT_REQUIRED, "voice cloning consent is required")
 
-        normalized = normalize_reference_audio(source_bytes)
+        normalized = normalize_reference_audio(source_bytes, denoise=denoise)
         clone_id = self._store.new_clone_id()
         engine_voice_key = self._store.make_engine_voice_key(user_id, clone_id)
         storage_path = self._store.storage_path_for(user_id, clone_id)

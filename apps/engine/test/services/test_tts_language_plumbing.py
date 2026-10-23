@@ -23,7 +23,7 @@ class TestGenerateAudioForwardsLanguage(unittest.TestCase):
         params = VideoParams(
             video_subject="Port wine cellars",
             video_language="en",
-            voice_name="chatterbox:ryan",
+            voice_name="chatterbox:en_us_male_01",
         )
         ok_result = TtsResult(sub_maker=MagicMock())
         with (

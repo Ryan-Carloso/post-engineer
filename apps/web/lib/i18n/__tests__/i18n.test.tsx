@@ -42,9 +42,8 @@ describe('i18n dictionaries', () => {
   });
 
   //---------------
-  // The scheduling screen is gone: its copy must go with it. The home tab
-  // was deliberately restored (user decision — the removal made no sense),
-  // so nav.home/nav.homeHint are live keys again.
+  // The scheduling screen is gone: its copy must go with it. The root route
+  // redirects to /posts, so there is no separate home tab or copy.
   //---------------
   it('carries no scheduling copy', () => {
     for (const key of ['schedule', 'scheduleHint'] as const) {
@@ -55,11 +54,11 @@ describe('i18n dictionaries', () => {
     expect(enDictionary).not.toHaveProperty('fillSchedule');
   });
 
-  it('restores the home tab copy', () => {
-    expect(ptDictionary.nav.home).toBe('Início');
-    expect(ptDictionary.nav.homeHint).toBe('Visão geral');
-    expect(enDictionary.nav.home).toBe('Home');
-    expect(enDictionary.nav.homeHint).toBe('Overview');
+  it('carries no home tab copy', () => {
+    for (const key of ['home', 'homeHint'] as const) {
+      expect(ptDictionary.nav).not.toHaveProperty(key);
+      expect(enDictionary.nav).not.toHaveProperty(key);
+    }
   });
 });
 

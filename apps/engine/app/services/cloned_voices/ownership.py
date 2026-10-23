@@ -25,7 +25,7 @@ def user_owns_clone_engine_key(user_id: str, engine_key: str) -> bool:
 
 
 def chatterbox_voice_allowed_for_user(user_id: str | None, chatterbox_voice: str) -> bool:
-    """House voices (ryan, etc.) are allowed; user clone keys require ownership."""
+    """House voices (en_us_male_01, etc.) are allowed; user clone keys require ownership."""
     name = chatterbox_voice.strip()
     if not is_user_clone_engine_key(name):
         return True

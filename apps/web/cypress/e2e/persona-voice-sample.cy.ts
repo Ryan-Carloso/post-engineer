@@ -1,21 +1,14 @@
 //---------------
- // Persona voice sample E2E — clicar no card de voz da casa na página
-// /persona seleciona a voz E toca o sample de áudio. Rede mockada via
-// cy.intercept; o construtor Audio é stubado antes do load da página.
-//
-// The catalog is the provider-qualified Chatterbox list
-// (chatterbox:<name>) and the picker renders the bare voice name
-// (voiceLabel strips the prefix, underscores become spaces).
+// Persona voice sample E2E — on /persona, the play button of a house voice
+// in the voice picker dialog plays that voice's English sample
+// (/voice-samples/<name>.mp3). Network mocked with cy.intercept; the Audio
+// constructor is stubbed before page load.
 //---------------
+import { houseVoice } from '../support/voices';
 
 const VOICES = [
-  { id: 'chatterbox:ryan' },
-  { id: 'chatterbox:en_us_female_01' },
-];
-
-const SAMPLE_LANGUAGES = [
-  { code: 'pt-br', label: 'Português (BR)' },
-  { code: 'en-uk', label: 'English (UK)' },
+  houseVoice('en_us_male_01', 'male'),
+  houseVoice('en_us_female_01', 'female'),
 ];
 
 interface FakeAudioRecord {
@@ -54,11 +47,6 @@ describe('Persona — sample de voz ao clicar no card', () => {
       body: { voices: VOICES },
     }).as('getVoices');
 
-    cy.intercept('GET', '/api/persona/voice-sample-languages', {
-      statusCode: 200,
-      body: { languages: SAMPLE_LANGUAGES },
-    }).as('getSampleLanguages');
-
     cy.intercept('GET', '/api/persona/list', {
       statusCode: 200,
       body: { personas: [] },
@@ -68,44 +56,35 @@ describe('Persona — sample de voz ao clicar no card', () => {
     cy.wait('@getVoices');
   });
 
-  it('toca o sample da voz ao clicar no card da casa', () => {
-    cy.contains('button', 'ryan').click();
+  it('plays the house voice sample from its play button', () => {
+    cy.playHouseVoiceSample('en us male 01');
 
     cy.window().then((win) => {
       const audios = (win as unknown as { __fakeAudios: FakeAudioRecord[] }).__fakeAudios;
       expect(audios).to.have.length(1);
-      // Sample files are named after the voice id, URL-encoded
-      // (public/voice-samples/<encoded-id>-<lang>.mp3).
-      expect(audios[0].url).to.equal('/voice-samples/chatterbox%3Aryan-pt-br.mp3');
+      // Sample files are named after the catalog voice name, without the
+      // `chatterbox:` prefix (public/voice-samples/<name>.mp3); every
+      // sample is the English take.
+      expect(audios[0].url).to.equal('/voice-samples/kokoro_am_michael.mp3');
       expect(audios[0].playCalled).to.be.true;
     });
   });
 
-  it('trocar de voz para o sample anterior e toca o da nova', () => {
-    cy.contains('button', 'ryan').click();
-    cy.contains('button', 'en us female 01').click();
+  it('playing another voice plays the new sample', () => {
+    cy.playHouseVoiceSample('en us male 01');
+    cy.playHouseVoiceSample('en us female 01');
 
     cy.window().then((win) => {
       const audios = (win as unknown as { __fakeAudios: FakeAudioRecord[] }).__fakeAudios;
       expect(audios).to.have.length(2);
       expect(audios[1].url).to.equal(
-        '/voice-samples/chatterbox%3Aen_us_female_01-pt-br.mp3',
+        '/voice-samples/kokoro_af_heart.mp3',
       );
       expect(audios[1].playCalled).to.be.true;
     });
   });
 
-  it('mudar o idioma do sample altera a language do áudio tocado', () => {
-    cy.get('select[data-testid=sample-language]')
-      .should(($sel) => expect($sel.find('option').length).to.be.at.least(2))
-      .select('en-uk');
-    cy.contains('button', 'ryan').click();
-
-    cy.window().then((win) => {
-      const audios = (win as unknown as { __fakeAudios: FakeAudioRecord[] }).__fakeAudios;
-      expect(audios).to.have.length(1);
-      expect(audios[0].url).to.equal('/voice-samples/chatterbox%3Aryan-en-uk.mp3');
-      expect(audios[0].playCalled).to.be.true;
-    });
+  it('não mostra seletor de idioma do sample', () => {
+    cy.get('select[data-testid=sample-language]').should('not.exist');
   });
 });

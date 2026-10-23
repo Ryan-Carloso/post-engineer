@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 
 import { PersonaVoiceClonePanel, VoiceTabButton } from '../voice-clone-picker';
 import type { ClonedVoicePublicRow } from '@/lib/cloned-voices-types';
+import { clonedVoicePreviewUrl } from '@/lib/cloned-voices-client';
 
 const cloneMocks = vi.hoisted(() => ({
   list: [] as ClonedVoicePublicRow[],
@@ -14,12 +15,12 @@ const cloneMocks = vi.hoisted(() => ({
   fetchById: vi.fn(),
   create: vi.fn(),
   delete: vi.fn(),
+  denoise: vi.fn(),
   setVoiceId: vi.fn(),
   audioPlay: vi.fn(),
   audioPause: vi.fn(),
   audioUrls: [] as (string | undefined)[],
   validateResult: { ok: true } as { ok: true } | { ok: false; error: string },
-  sampleLanguages: [{ code: 'pt', label: 'Português' }] as { code: string; label: string }[],
 }));
 
 vi.mock('@/lib/cloned-voices-client', () => ({
@@ -33,14 +34,7 @@ vi.mock('@/lib/cloned-voices-client', () => ({
   createClonedVoice: vi.fn((...args: unknown[]) => cloneMocks.create(...args)),
   deleteClonedVoice: vi.fn((id: string) => cloneMocks.delete(id)),
   clonedVoicePreviewUrl: vi.fn((id: string) => `/api/persona/cloned-voices/${id}/preview`),
-}));
-
-vi.mock('@/lib/api', () => ({
-  useVoiceSampleLanguagesQuery: vi.fn(() => ({
-    data: cloneMocks.sampleLanguages,
-    isPending: false,
-    isError: false,
-  })),
+  fetchDenoisePreview: vi.fn((blob: Blob) => cloneMocks.denoise(blob)),
 }));
 
 vi.mock('@/lib/store', () => {
@@ -81,7 +75,7 @@ function renderPanel() {
   });
   const utils = render(
     <QueryClientProvider client={queryClient}>
-      <PersonaVoiceClonePanel personaLanguage="pt" />
+      <PersonaVoiceClonePanel />
     </QueryClientProvider>,
   );
   return { ...utils, queryClient };
@@ -167,9 +161,12 @@ describe('PersonaVoiceClonePanel', () => {
     cloneMocks.fetchById.mockReset();
     cloneMocks.create.mockReset();
     cloneMocks.delete.mockReset();
+    cloneMocks.denoise.mockReset();
+    // Default: cleaning never settles, so tests about the original take see
+    // no extra object URL. A/B tests resolve it explicitly.
+    cloneMocks.denoise.mockReturnValue(new Promise(() => {}));
     cloneMocks.setVoiceId.mockReset();
     cloneMocks.validateResult = { ok: true };
-    cloneMocks.sampleLanguages = [{ code: 'pt', label: 'Português' }];
     cloneMocks.audioUrls = [];
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:local-preview');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
@@ -242,7 +239,7 @@ describe('PersonaVoiceClonePanel', () => {
     const user = userEvent.setup();
     cloneMocks.create.mockResolvedValue(publicRow({ id: 'clone-pending', status: 'pending' }));
     renderPanel();
-    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('checkbox', { name: 'persona.voiceCloneConsent' }));
     const panel = screen.getByTestId('voice-clone-panel');
     const fileInput = panel.querySelector('input[type="file"]');
     expect(fileInput).toBeTruthy();
@@ -250,6 +247,44 @@ describe('PersonaVoiceClonePanel', () => {
     await user.click(screen.getByRole('button', { name: 'persona.voiceCloneSubmit' }));
     await waitFor(() => expect(cloneMocks.create).toHaveBeenCalledTimes(1));
     expect(cloneMocks.create.mock.calls[0]?.[2]).toBe(true);
+    // Clean audio is on by default.
+    expect(cloneMocks.create.mock.calls[0]?.[3]).toBe(true);
+  });
+
+  it('fetches the cleaned take for an A/B listen while clean audio is on', async () => {
+    cloneMocks.denoise.mockResolvedValue({ success: true, audio: new Blob(['clean'], { type: 'audio/wav' }) });
+    const user = userEvent.setup();
+    renderPanel();
+    const fileInput = screen.getByTestId('voice-clone-panel').querySelector('input[type="file"]');
+    await user.upload(fileInput as HTMLInputElement, makeWavFile());
+    await waitFor(() => expect(cloneMocks.denoise).toHaveBeenCalledTimes(1));
+    const cleaned = screen.getByTestId('voice-clone-cleaned');
+    await waitFor(() => expect(cleaned.querySelector('audio')).not.toBeNull());
+    expect(screen.getByText('persona.voiceCloneOriginal')).toBeInTheDocument();
+  });
+
+  it('shows an amber notice when cleaning fails and still allows cloning', async () => {
+    cloneMocks.denoise.mockResolvedValue({ success: false, error: 'boom' });
+    const user = userEvent.setup();
+    renderPanel();
+    const fileInput = screen.getByTestId('voice-clone-panel').querySelector('input[type="file"]');
+    await user.upload(fileInput as HTMLInputElement, makeWavFile());
+    await waitFor(() => expect(screen.getByText('persona.voiceCloneCleanFailed')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'persona.voiceCloneSubmit' })).toBeEnabled();
+  });
+
+  it('sends denoise false when clean audio is turned off', async () => {
+    const user = userEvent.setup();
+    cloneMocks.create.mockResolvedValue(publicRow({ id: 'clone-pending', status: 'pending' }));
+    renderPanel();
+    await user.click(screen.getByRole('checkbox', { name: 'persona.voiceCloneConsent' }));
+    const fileInput = screen.getByTestId('voice-clone-panel').querySelector('input[type="file"]');
+    await user.upload(fileInput as HTMLInputElement, makeWavFile());
+    await user.click(screen.getByRole('checkbox', { name: /persona.voiceCloneCleanToggle/ }));
+    expect(screen.queryByTestId('voice-clone-cleaned')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'persona.voiceCloneSubmit' }));
+    await waitFor(() => expect(cloneMocks.create).toHaveBeenCalledTimes(1));
+    expect(cloneMocks.create.mock.calls[0]?.[3]).toBe(false);
   });
 
   it('shows pending status while polling', async () => {
@@ -257,7 +292,7 @@ describe('PersonaVoiceClonePanel', () => {
     cloneMocks.create.mockResolvedValue(publicRow({ id: 'clone-pending', status: 'pending' }));
     const user = userEvent.setup();
     renderPanel();
-    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('checkbox', { name: 'persona.voiceCloneConsent' }));
     const fileInput = screen.getByTestId('voice-clone-panel').querySelector('input[type="file"]');
     await user.upload(fileInput as HTMLInputElement, makeWavFile());
     await user.click(screen.getByRole('button', { name: 'persona.voiceCloneSubmit' }));
@@ -280,6 +315,9 @@ describe('PersonaVoiceClonePanel', () => {
     expect(cloneMocks.setVoiceId).toHaveBeenCalledWith('chatterbox:uabc_123');
     await user.click(screen.getByRole('button', { name: 'persona.voiceClonePlayPreview' }));
     expect(cloneMocks.audioPlay).toHaveBeenCalled();
+    // No language override: a legacy non-English clone must not hit the
+    // English-only gate; the engine uses the clone's registered language.
+    expect(vi.mocked(clonedVoicePreviewUrl)).toHaveBeenCalledWith('clone-ready', null);
   });
 
   it('deletes a clone from the list', async () => {
@@ -403,7 +441,7 @@ describe('PersonaVoiceClonePanel', () => {
     cloneMocks.create.mockRejectedValue(new Error('Quota exceeded.'));
     const user = userEvent.setup();
     renderPanel();
-    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('checkbox', { name: 'persona.voiceCloneConsent' }));
     const fileInput = screen.getByTestId('voice-clone-panel').querySelector('input[type="file"]');
     await user.upload(fileInput as HTMLInputElement, makeWavFile());
     await user.click(screen.getByRole('button', { name: 'persona.voiceCloneSubmit' }));
@@ -428,7 +466,7 @@ describe('PersonaVoiceClonePanel', () => {
     const { queryClient } = renderPanel();
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
     const user = userEvent.setup();
-    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('checkbox', { name: 'persona.voiceCloneConsent' }));
     const fileInput = screen.getByTestId('voice-clone-panel').querySelector('input[type="file"]');
     await user.upload(fileInput as HTMLInputElement, makeWavFile());
     await user.click(screen.getByRole('button', { name: 'persona.voiceCloneSubmit' }));
@@ -447,7 +485,7 @@ describe('PersonaVoiceClonePanel', () => {
     const { queryClient } = renderPanel();
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
     const user = userEvent.setup();
-    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('checkbox', { name: 'persona.voiceCloneConsent' }));
     const fileInput = screen.getByTestId('voice-clone-panel').querySelector('input[type="file"]');
     await user.upload(fileInput as HTMLInputElement, makeWavFile());
     await user.click(screen.getByRole('button', { name: 'persona.voiceCloneSubmit' }));
@@ -501,18 +539,12 @@ describe('PersonaVoiceClonePanel', () => {
     expect(cloneMocks.create).not.toHaveBeenCalled();
   });
 
-  it('submits with the language chosen in the select', async () => {
-    cloneMocks.sampleLanguages = [
-      { code: 'pt', label: 'Português' },
-      { code: 'en', label: 'English' },
-    ];
+  it('renders no language select and submits the clone in English', async () => {
     cloneMocks.create.mockResolvedValue(publicRow({ id: 'clone-en', status: 'pending' }));
     const user = userEvent.setup();
     renderPanel();
-    const select = screen.getByRole('combobox');
-    await user.selectOptions(select, 'en');
-    expect((select as HTMLSelectElement).value).toBe('en');
-    await user.click(screen.getByRole('checkbox'));
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('checkbox', { name: 'persona.voiceCloneConsent' }));
     const fileInput = screen.getByTestId('voice-clone-panel').querySelector('input[type="file"]');
     await user.upload(fileInput as HTMLInputElement, makeWavFile());
     await user.click(screen.getByRole('button', { name: 'persona.voiceCloneSubmit' }));
@@ -575,13 +607,15 @@ describe('PersonaVoiceClonePanel', () => {
       screen.getByRole('button', { name: 'persona.voiceCloneSubmit' }),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('checkbox', { name: 'persona.voiceCloneConsent' }));
     await user.click(screen.getByRole('button', { name: 'persona.voiceCloneSubmit' }));
     await waitFor(() => expect(cloneMocks.create).toHaveBeenCalledTimes(1));
     const sentBlob = cloneMocks.create.mock.calls[0]?.[0] as Blob;
     expect(sentBlob.type).toBe('audio/webm;codecs=opus');
     expect(sentBlob.size).toBe(5);
-    expect(cloneMocks.create.mock.calls[0]?.[1]).toBe('pt');
+    // English-only launch: the clone language is fixed to English —
+    // the form has no language picker.
+    expect(cloneMocks.create.mock.calls[0]?.[1]).toBe('en');
     expect(cloneMocks.create.mock.calls[0]?.[2]).toBe(true);
   });
 
@@ -597,7 +631,7 @@ describe('PersonaVoiceClonePanel', () => {
       recorder.ondataavailable?.({ data: new Blob(['xy']) });
     });
     await user.click(stopButton);
-    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('checkbox', { name: 'persona.voiceCloneConsent' }));
     cloneMocks.create.mockResolvedValue(publicRow({ id: 'clone-rec2', status: 'pending' }));
     await user.click(screen.getByRole('button', { name: 'persona.voiceCloneSubmit' }));
     await waitFor(() => expect(cloneMocks.create).toHaveBeenCalledTimes(1));
@@ -676,7 +710,7 @@ describe('PersonaVoiceClonePanel', () => {
     cloneMocks.delete.mockResolvedValue(undefined);
     const user = userEvent.setup();
     renderPanel();
-    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('checkbox', { name: 'persona.voiceCloneConsent' }));
     const fileInput = screen.getByTestId('voice-clone-panel').querySelector('input[type="file"]');
     await user.upload(fileInput as HTMLInputElement, makeWavFile());
     await user.click(screen.getByRole('button', { name: 'persona.voiceCloneSubmit' }));

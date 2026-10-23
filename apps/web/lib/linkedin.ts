@@ -308,3 +308,19 @@ export async function createLinkedInOrganizationPost(
     isReshareDisabledByAuthor: false,
   });
 }
+
+//---------------
+// getLinkedInSocialActions — like/comment summary of one post
+// (GET /rest/socialActions/{urn}). Throws on HTTP errors so the metrics
+// collector logs and retries on the next run.
+//---------------
+export async function getLinkedInSocialActions(accessToken: string, postUrn: string): Promise<unknown> {
+  const response = await fetch(`${LINKEDIN_API}/rest/socialActions/${encodeURIComponent(postUrn)}`, {
+    headers: linkedinHeaders(accessToken),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) {
+    throw new LinkedinError(`LinkedIn social actions failed (${response.status})`, response.status);
+  }
+  return response.json();
+}

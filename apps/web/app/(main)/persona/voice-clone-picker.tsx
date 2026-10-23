@@ -19,9 +19,12 @@ import {
 import { usePersonaStore } from '@/lib/store';
 import { useI18n } from '@/lib/i18n/provider';
 import { CheckIcon, MicIcon, SpinnerIcon, TrashIcon } from '@/lib/ui';
-import { useVoiceSampleLanguagesQuery } from '@/lib/api';
+import { useDenoisePreview } from './use-denoise-preview';
 
 const POLL_MS = 2500;
+// English-only launch: clones are always registered in English — the
+// form has no clone-language picker.
+const CLONE_LANGUAGE = 'en';
 const RECORD_SOFT_LIMIT_SECONDS = 45;
 
 const VoiceTabButton = ({
@@ -55,12 +58,10 @@ function formatTimer(seconds: number): string {
 export { VoiceTabButton };
 
 /** Clone-my-voice tab panel (house grid is rendered by the parent). */
-export const PersonaVoiceClonePanel = ({ personaLanguage }: { personaLanguage?: string }) => {
+export const PersonaVoiceClonePanel = () => {
   const { t } = useI18n();
   const queryClient = useQueryClient();
-  const sampleLanguagesQuery = useVoiceSampleLanguagesQuery();
   const voiceId = usePersonaStore((s) => s.voiceId);
-  const [language, setLanguage] = useState(personaLanguage?.trim() || 'pt');
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
@@ -68,6 +69,10 @@ export const PersonaVoiceClonePanel = ({ personaLanguage }: { personaLanguage?: 
   const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
   const [pendingBlob, setPendingBlob] = useState<Blob | null>(null);
   const [activeCloneId, setActiveCloneId] = useState<string | null>(null);
+  // Clean (denoise) is on by default: phone recordings carry noise the clone
+  // would copy. The cleaned take is fetched for an A/B listen; the engine
+  // applies the same filter when the clone is created with denoise on.
+  const [denoise, setDenoise] = useState(true);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordChunksRef = useRef<Blob[]>([]);
   const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -100,9 +105,11 @@ export const PersonaVoiceClonePanel = ({ personaLanguage }: { personaLanguage?: 
     }
   }, [pollQuery.data?.status, queryClient]);
 
+  const { cleanedUrl, cleaning, cleanFailed } = useDenoisePreview(pendingBlob, denoise);
+
   const createMutation = useMutation({
     mutationFn: async (file: Blob) => {
-      return createClonedVoice(file, language, consent);
+      return createClonedVoice(file, CLONE_LANGUAGE, consent, denoise);
     },
     onSuccess: (row) => {
       setActiveCloneId(row.id);
@@ -237,7 +244,10 @@ export const PersonaVoiceClonePanel = ({ personaLanguage }: { personaLanguage?: 
 
   const playServerPreview = (clone: ClonedVoicePublicRow) => {
     previewAudioRef.current?.pause();
-    const audio = new Audio(clonedVoicePreviewUrl(clone.id, clone.language));
+    // No language override: the engine previews in the clone's registered
+    // language, and an override from a legacy non-English clone would be
+    // rejected by the English-only gate.
+    const audio = new Audio(clonedVoicePreviewUrl(clone.id, null));
     previewAudioRef.current = audio;
     void audio.play().catch(() => {
       setError(t('persona.voiceClonePreviewFailed'));
@@ -260,22 +270,6 @@ export const PersonaVoiceClonePanel = ({ personaLanguage }: { personaLanguage?: 
       <p className="rounded-lg bg-neutral-50 p-3 text-sm leading-relaxed text-neutral-800">
         {t('persona.voiceCloneScript')}
       </p>
-
-      <label className="block text-sm font-medium text-neutral-700">
-        {t('persona.sampleLanguage')}
-        <select
-          value={language}
-          onChange={(e) => setLanguage(e.target.value)}
-          className="mt-2 h-11 w-full max-w-sm rounded-xl border border-neutral-300 bg-white px-3 text-sm"
-          disabled={isSubmitting || recording}
-        >
-          {(sampleLanguagesQuery.data ?? [{ code: 'pt', label: 'Português' }]).map((lang) => (
-            <option key={lang.code} value={lang.code}>
-              {lang.label}
-            </option>
-          ))}
-        </select>
-      </label>
 
       <label className="flex items-start gap-2 text-sm text-neutral-800">
         <input
@@ -330,7 +324,33 @@ export const PersonaVoiceClonePanel = ({ personaLanguage }: { personaLanguage?: 
       {previewBlobUrl ? (
         <div className="rounded-lg border border-neutral-200 p-3">
           <p className="mb-2 text-sm font-medium text-neutral-800">{t('persona.voiceCloneLocalPreview')}</p>
+          <label className="mb-2 flex items-start gap-2 text-sm text-neutral-800">
+            <input
+              type="checkbox"
+              checked={denoise}
+              onChange={(e) => setDenoise(e.target.checked)}
+              disabled={isSubmitting}
+              className="mt-1"
+            />
+            <span>
+              {t('persona.voiceCloneCleanToggle')}
+              <span className="block text-xs text-neutral-500">{t('persona.voiceCloneCleanHint')}</span>
+            </span>
+          </label>
+          <p className="text-xs font-medium text-neutral-600">{t('persona.voiceCloneOriginal')}</p>
           <audio controls src={previewBlobUrl} className="w-full" />
+          {denoise ? (
+            <div className="mt-2" data-testid="voice-clone-cleaned">
+              <p className="text-xs font-medium text-neutral-600">{t('persona.voiceCloneCleaned')}</p>
+              {cleaning ? (
+                <p className="flex items-center gap-2 text-sm text-neutral-600" role="status">
+                  <SpinnerIcon /> {t('persona.voiceCloneCleaning')}
+                </p>
+              ) : null}
+              {cleanedUrl !== null && !cleaning ? <audio controls src={cleanedUrl} className="w-full" /> : null}
+              {cleanFailed ? <p className="text-sm text-amber-700">{t('persona.voiceCloneCleanFailed')}</p> : null}
+            </div>
+          ) : null}
           <div className="mt-2 flex flex-wrap gap-2">
             <button
               type="button"

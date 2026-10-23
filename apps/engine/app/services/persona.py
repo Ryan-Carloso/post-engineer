@@ -9,8 +9,8 @@ from typing import Any, Optional
 
 from loguru import logger
 
-from app.services import voice as voice_service
 from app.services.openrouter_tts import get_openrouter_voices
+from app.services.voice_catalog import load_catalog
 
 # Short Instagram/TikTok-style video hook used for the house voice
 # preview samples, per language: hook question, then the pitch.
@@ -27,74 +27,6 @@ VOICE_SAMPLE_TEXTS: dict[str, str] = {
     "Prête pour ton prochain post.",
 }
 
-# Sample languages exposed to the UI.
-SAMPLE_LANGUAGE_VOICES: dict[str, dict[str, str]] = {
-    "pt": {"label": "Português (BR)"},
-    "en-us": {"label": "English (US)"},
-    "en-uk": {"label": "English (UK)"},
-    "es": {"label": "Español"},
-    "fr": {"label": "Français"},
-}
-
-# Rate (speed multiplier) and pitch matching each house voice personality.
-# deep is "low/deep": pitch lowered so it sounds distinct from energetic when
-# the two share a locale's only male voice.
-HOUSE_VOICE_STYLES: dict[str, dict[str, str | float]] = {
-    "calm": {"rate": 0.85, "pitch": "+0Hz"},
-    "energetic": {"rate": 1.2, "pitch": "+5Hz"},
-    "young": {"rate": 1.0, "pitch": "+0Hz"},
-    "deep": {"rate": 1.4, "pitch": "-5Hz"},
-}
-
-# Cache of already synthesized samples: (voice_id, language) -> mp3 bytes.
-_voice_sample_cache: dict[tuple[str, str], bytes] = {}
-
-# House voices (mock catalog — replace with real TTS voices later)
-# Voice ids are stable descriptor codes that the web UI translates
-# through its i18n dictionaries (calm, energetic, young, deep).
-HOUSE_VOICES = [
-    {"id": "calm"},
-    {"id": "energetic"},
-    {"id": "young"},
-    {"id": "deep"},
-]
-
-# video_language -> sample language: resolve house voice ids used directly
-# in voice_name (faceless/debug flow and direct API callers, without an
-# inline persona) to the Neural voice for the video's language.
-HOUSE_VOICE_LANGUAGE_ALIASES: dict[str, str] = {
-    "pt": "pt",
-    "pt-br": "pt",
-    "pt_br": "pt",
-    "en": "en-us",
-    "en-us": "en-us",
-    "en_us": "en-us",
-    "en-gb": "en-uk",
-    "en-uk": "en-uk",
-    "en_uk": "en-uk",
-    "es": "es",
-    "es-es": "es",
-    "fr": "fr",
-    "fr-fr": "fr",
-}
-
-
-
-
-
-
-# Bounds for the composed TTS rate. Kept coupled with the voice_rate field
-# bounds on VideoParams (app/models/schema.py: ge=0.1, le=5.0): the request
-# rate is schema-validated, the house style rate is a catalog constant, and
-# their product is clamped back into the same window.
-VOICE_RATE_MIN = 0.1
-VOICE_RATE_MAX = 5.0
-
-
-
-
-
-
 class PersonaValidationError(Exception):
     """Raised when the persona payload is missing or invalid."""
 
@@ -102,37 +34,61 @@ class PersonaValidationError(Exception):
 def get_house_voices(user_id: str | None = None) -> list[dict[str, Any]]:
     """The voice catalog the UI offers.
 
-    These are the Chatterbox voices configured under ``[chatterbox] voices``
-    plus, when it is configured, the discovered OpenRouter voices — all
-    emitted provider-qualified (``chatterbox:ryan``,
-    ``openrouter:<model>:<voice>``). That is deliberate: the id is what gets
-    stored on the persona and handed straight to ``voice.tts``, which routes on
-    the prefix. There is no house-voice layer left to map ids onto Azure names,
-    and a voice the pipeline cannot reach is a voice the picker must not show.
+    House voices come from ``voice_catalog.json`` (Phonon + Kokoro, served by
+    the local CPU TTS server) and are emitted as ``chatterbox:<name>`` with
+    their filter metadata (``gender``, ``accent``, ``kind``) and a text
+    ``description`` so callers who cannot listen (MCP agents) can still choose. The discovered
+    OpenRouter voices follow when it is configured, with no metadata. That
+    id is what gets stored on the persona and handed straight to
+    ``voice.tts``, which routes on the prefix, so a voice the pipeline
+    cannot reach is a voice the picker must not show.
 
     OpenRouter contributes nothing until it is configured (``[openrouter]``
     with both a key and at least one model); see
     ``openrouter_tts.get_openrouter_voices`` for the discovery bounds.
 
     When ``user_id`` is given, the caller's ready cloned voices are appended
-    as ``chatterbox:<engine_voice_key>`` entries (see
+    as ``chatterbox:<engine_voice_key>`` entries with ``kind: "cloned"`` (see
     ``cloned_voices.service.list_catalog_entries``). That merge reads
     Supabase; if the store is unconfigured or unreachable the catalog
     degrades to the house voices above instead of failing the picker.
     """
-    voice_ids = list(voice_service.get_chatterbox_voices())
-    voice_ids.extend(get_openrouter_voices())
+    voices: list[dict[str, Any]] = [
+        {
+            "id": f"chatterbox:{voice['name']}",
+            "label": voice["label"],
+            "provider": voice["provider"],
+            "gender": voice["gender"],
+            "accent": voice["accent"],
+            "kind": voice["kind"],
+            "description": voice["description"],
+        }
+        for voice in load_catalog()
+    ]
+    voices.extend(_unclassified_voice(voice_id, "openrouter") for voice_id in get_openrouter_voices())
     if user_id:
         try:
             from app.services.cloned_voices.service import list_catalog_entries
 
             for entry in list_catalog_entries(user_id):
-                voice_ids.append(entry["id"])
+                voices.append({**_unclassified_voice(entry["id"], "chatterbox"), "kind": "cloned"})
         except Exception:
             logger.warning(
                 "cloned voice catalog merge failed; serving house voices only"
             )
-    return [{"id": voice_id} for voice_id in voice_ids]
+    return voices
+
+
+def _unclassified_voice(voice_id: str, provider: str) -> dict[str, Any]:
+    return {
+        "id": voice_id,
+        "label": None,
+        "provider": provider,
+        "gender": None,
+        "accent": None,
+        "kind": "standard",
+        "description": None,
+    }
 
 
 
