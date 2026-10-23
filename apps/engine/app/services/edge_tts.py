@@ -265,7 +265,7 @@ def maybe_fallback_to_edge_tts(
         return None
     logger.warning(
         "primary TTS failed for test account, falling back to Edge TTS "
-        f"(primary error: {primary_error[:120]})"
+        f"(primary error: {scrub_error_text(primary_error, max_chars=120)})"
     )
     track_event(
         "tts_fallback_used",

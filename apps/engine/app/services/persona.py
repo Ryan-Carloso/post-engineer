@@ -14,6 +14,7 @@ from loguru import logger
 
 from app.services import voice as voice_service
 from app.services import voice_catalog
+from app.services.analytics import scrub_error_text
 from app.services.openrouter_tts import get_openrouter_voices
 
 # Short Instagram/TikTok-style video hook used for the house voice
@@ -179,7 +180,10 @@ def get_voice_sample(voice_id: str) -> bytes | None:
             VOICE_SAMPLE_TEXTS["en-us"], voice_id, 1.0, tmp_path
         )
         if not result.ok:
-            logger.error(f"voice sample synthesis failed for {voice_id}: {result.error}")
+            logger.error(
+                f"voice sample synthesis failed for {voice_id}: "
+                f"{scrub_error_text(result.error or '', max_chars=200)}"
+            )
             _voice_sample_failures[cache_key] = time.monotonic()
             return None
         with open(tmp_path, "rb") as audio_file:

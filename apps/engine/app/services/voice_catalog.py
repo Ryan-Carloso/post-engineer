@@ -29,6 +29,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from loguru import logger
+
+from app.services.cloned_voices.ownership import is_user_clone_engine_key
+
 
 @dataclass(frozen=True)
 class VoiceInfo:
@@ -195,4 +199,10 @@ def resolve_voice_id(voice_id: str) -> str:
     if name.endswith(("-Female", "-Male")):
         name = name.rsplit("-", 1)[0]
     target = LEGACY_CHATTERBOX_ALIASES.get(name)
+    if target is None and not is_user_clone_engine_key(name):
+        # Not a house alias and not a per-user clone key: a retired or
+        # mistyped legacy id. It passes through so the dispatcher fails
+        # loud with the unknown-voice error, but leave a trace of the
+        # root cause — downstream only sees a clone-registration error.
+        logger.warning(f"unrecognized legacy chatterbox voice: {name}")
     return target if target is not None else voice_id

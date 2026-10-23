@@ -39,6 +39,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
   }
   const file = fileEntry as File;
   const buffer = Buffer.from(await file.arrayBuffer());
+  // Fast pre-check only (magic bytes/size): the engine's ffmpeg decode
+  // is the authoritative validation and re-checks everything.
   const validation = validateCloneReferenceBuffer(buffer);
   if (!validation.ok) {
     return NextResponse.json({ success: false, error: validation.error }, { status: 400 });

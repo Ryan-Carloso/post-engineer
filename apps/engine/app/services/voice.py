@@ -12,6 +12,7 @@ from moviepy.audio.io.AudioFileClip import AudioFileClip
 from moviepy.video.tools import subtitles
 
 from app.config import config  # noqa: F401 — re-exported: tests patch config sections via this module
+from app.services.analytics import scrub_error_text
 from app.services.edge_tts import chatterbox_tts_with_fallback
 from app.services.local_tts import kokoro_tts, phonon_tts
 from app.services.openrouter_tts import dispatch_openrouter_tts
@@ -228,7 +229,10 @@ def tts(
     if is_phonon_voice(voice_name) or is_kokoro_voice(voice_name):
         provider, _, raw_name = voice_name.partition(":")
         if not raw_name.strip():
-            logger.error(f"Invalid {provider} voice name format: {voice_name}")
+            logger.error(
+                f"Invalid {provider} voice name format: "
+                f"{scrub_error_text(voice_name, max_chars=100)}"
+            )
             label, hint = ("Phonon", "<name>") if provider == "phonon" else ("Kokoro", "<voice_id>")
             return TtsResult(error=f"invalid {label} voice name (expected '{provider}:{hint}')")
         synthesize = phonon_tts if provider == "phonon" else kokoro_tts
@@ -240,7 +244,10 @@ def tts(
             return elevenlabs_tts(
                 text, parts[1].strip(), voice_file, voice_rate, voice_volume
             )
-        logger.error(f"Invalid elevenlabs voice name format: {voice_name}")
+        logger.error(
+            "Invalid elevenlabs voice name format: "
+            f"{scrub_error_text(voice_name, max_chars=100)}"
+        )
         return TtsResult(
             error="invalid ElevenLabs voice name (expected 'elevenlabs:<voice_id>')"
         )
@@ -249,7 +256,10 @@ def tts(
         # -Female/-Male suffix.
         parts = voice_name.split(":", 1)
         if len(parts) < 2 or not parts[1].strip():
-            logger.error(f"Invalid chatterbox voice name format: {voice_name}")
+            logger.error(
+                "Invalid chatterbox voice name format: "
+                f"{scrub_error_text(voice_name, max_chars=100)}"
+            )
             return TtsResult(
                 error="invalid Chatterbox voice name (expected 'chatterbox:<name>')"
             )
@@ -268,7 +278,8 @@ def tts(
     # into silent network failures. Fail loud: the caller picked a voice
     # that no longer exists.
     logger.error(
-        f"unknown voice: {voice_name!r}. Providers are Phonon (`phonon:<name>`), "
+        f"unknown voice: {scrub_error_text(voice_name, max_chars=100)!r}. "
+        "Providers are Phonon (`phonon:<name>`), "
         "Kokoro (`kokoro:<id>`), ElevenLabs (`elevenlabs:<id>`), "
         "Chatterbox clones (`chatterbox:<name>`) and OpenRouter (`openrouter:<model>:<voice>`); "
         f"use the explicit {NO_VOICE_NAME!r} sentinel for silence."

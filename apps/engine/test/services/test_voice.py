@@ -168,6 +168,29 @@ class TestVoiceService(unittest.TestCase):
         self.assertIsNone(result.sub_maker)
         self.assertIn("unknown voice", result.error or "")
 
+    def test_unknown_voice_log_line_is_scrubbed(self):
+        # The unknown-voice error log feeds the PostHog log sink: a
+        # user-controlled voice id must not land there with local
+        # paths or secrets intact.
+        from loguru import logger
+
+        messages: list[str] = []
+        handler_id = logger.add(lambda m: messages.append(str(m)), level="ERROR")
+        try:
+            result = vs.tts(
+                text="hello",
+                voice_name="/home/testuser/evilvoice",
+                voice_rate=1.0,
+                voice_file="/tmp/unknown-voice.mp3",
+            )
+        finally:
+            logger.remove(handler_id)
+        self.assertIn("unknown voice", result.error or "")
+        joined = "".join(messages)
+        self.assertIn("unknown voice", joined)
+        self.assertNotIn("/home/testuser", joined)
+        self.assertIn("<path>", joined)
+
     def test_unknown_voice_name_fails_loud(self):
         """
         A voice id from a removed provider must not be routed anywhere. The old

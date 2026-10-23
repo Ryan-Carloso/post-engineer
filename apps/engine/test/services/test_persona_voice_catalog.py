@@ -137,6 +137,31 @@ class TestVoiceSample(unittest.TestCase):
             result = persona_service.get_voice_sample("kokoro:af_heart")
         self.assertIsNone(result)
 
+    def test_failed_synthesis_logs_a_scrubbed_error(self):
+        # The failure log line feeds the PostHog log sink: the provider's
+        # free-text error must be scrubbed at the call site, never logged
+        # with local paths or secrets intact.
+        from loguru import logger
+
+        messages: list[str] = []
+        handler_id = logger.add(lambda m: messages.append(str(m)), level="ERROR")
+        try:
+            with patch.object(
+                persona_service.voice_service,
+                "tts",
+                return_value=TtsResult(
+                    error="boom /home/testuser/voices/ref.wav"
+                ),
+            ):
+                result = persona_service.get_voice_sample("kokoro:af_heart")
+        finally:
+            logger.remove(handler_id)
+        self.assertIsNone(result)
+        joined = "".join(messages)
+        self.assertIn("voice sample synthesis failed", joined)
+        self.assertNotIn("/home/testuser", joined)
+        self.assertIn("<path>", joined)
+
     def test_failed_synthesis_is_negatively_cached_within_the_ttl(self):
         # A persistently broken provider (e.g. the Kokoro model download
         # failing) must not re-pay the load/download on every sample

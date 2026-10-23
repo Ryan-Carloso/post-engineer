@@ -133,6 +133,29 @@ class LegacyAliasTests(unittest.TestCase):
         ):
             self.assertEqual(voice_catalog.resolve_voice_id(voice_id), voice_id)
 
+    def test_resolve_warns_on_an_unrecognized_legacy_name(self):
+        from loguru import logger
+
+        messages: list[str] = []
+        handler_id = logger.add(lambda m: messages.append(str(m)), level="WARNING")
+        try:
+            resolved = voice_catalog.resolve_voice_id("chatterbox:en_us_retired_99")
+        finally:
+            logger.remove(handler_id)
+        self.assertEqual(resolved, "chatterbox:en_us_retired_99")
+        self.assertIn("unrecognized legacy chatterbox voice", "".join(messages))
+
+    def test_resolve_does_not_warn_for_clone_keys(self):
+        from loguru import logger
+
+        messages: list[str] = []
+        handler_id = logger.add(lambda m: messages.append(str(m)), level="WARNING")
+        try:
+            voice_catalog.resolve_voice_id("chatterbox:u0123456789ab_c0123456789a")
+        finally:
+            logger.remove(handler_id)
+        self.assertEqual(messages, [])
+
     def test_resolve_tolerates_none_and_empty(self):
         # tts() passes the stored voice id straight here; a missing
         # voice must fall through to the clean unknown-voice error,

@@ -179,6 +179,33 @@ class TestChatterboxFallback(_VoiceFileTestCase):
 class TestMaybeFallback(_VoiceFileTestCase):
     @patch("app.services.edge_tts.track_event")
     @patch("app.services.edge_tts.edge_tts")
+    def test_scrubs_primary_error_in_the_fallback_log(self, mock_edge, mock_track):
+        # The event props are scrubbed; the log line must be too — it
+        # feeds the same PostHog log sink.
+        from loguru import logger
+
+        mock_edge.return_value = TtsResult(sub_maker=MagicMock())
+        messages: list[str] = []
+        handler_id = logger.add(lambda m: messages.append(str(m)), level="WARNING")
+        try:
+            with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "user-123"}):
+                et.maybe_fallback_to_edge_tts(
+                    "failed loading /home/testuser/voices/clone.wav",
+                    text="hello",
+                    voice_file=self.voice_file,
+                    voice_rate=1.0,
+                    user_id="user-123",
+                    task_id="task-9",
+                )
+        finally:
+            logger.remove(handler_id)
+        joined = "".join(messages)
+        self.assertIn("falling back to Edge TTS", joined)
+        self.assertNotIn("/home/testuser", joined)
+        self.assertIn("<path>", joined)
+
+    @patch("app.services.edge_tts.track_event")
+    @patch("app.services.edge_tts.edge_tts")
     def test_emits_posthog_event_with_ids_only(self, mock_edge, mock_track):
         mock_edge.return_value = TtsResult(sub_maker=MagicMock())
         with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "user-123"}):
