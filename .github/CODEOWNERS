@@ -1,0 +1,13 @@
+# Code owners for the MCP parity gate.
+#
+# The parity test decides which web endpoints may stay out of the MCP. Its
+# exclusion list and the CI guard are security-adjacent: weakening either
+# lets an API-key-callable endpoint skip the MCP. Changes need a code owner
+# review, and the guard also requires the `parity-exclusion-approved` label
+# to be applied by a code owner (see
+# .github/workflows/parity-exclusion-guard.yml).
+
+/apps/mcp/src/__tests__/web-api-parity.test.ts @Ryan-Carloso
+/apps/mcp/src/__tests__/parity-exclusions.json @Ryan-Carloso
+/.github/scripts/parity-exclusions/ @Ryan-Carloso
+/.github/workflows/parity-exclusion-guard.yml @Ryan-Carloso

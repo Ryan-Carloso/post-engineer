@@ -1,0 +1,94 @@
+name: parity-exclusion-guard
+
+# Fails a PR that adds or changes an MCP parity exclusion without approval
+# from a code owner.
+#
+# Why: apps/mcp/src/__tests__/web-api-parity.test.ts requires every web API
+# endpoint to have an MCP tool or a typed exclusion. The kinds are verified
+# mechanically, but a reviewer still has to agree that a capability belongs
+# out of the MCP. This guard makes that agreement explicit and attributable.
+#
+# How to get a PR through:
+#   1. A code owner (@Ryan-Carloso) reviews the exclusion and applies the
+#      `parity-exclusion-approved` label to the PR.
+#   2. The label must still be present, and the issue timeline must show a
+#      `labeled` event for it by a code owner. Anyone with triage (including
+#      the bot that opened the PR) can apply labels, so presence alone is
+#      not proof.
+#
+# The fix for a parity failure is normally a tool, not an exclusion. See
+# AGENTS.md ("MCP parity gate"). This workflow is not required by default;
+# a repository admin must make it a required check.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+concurrency:
+  group: parity-exclusion-guard-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 pinned 2026-09-25
+        with:
+          node-version: '22'
+
+      - name: Unit tests (exclusion diff)
+        run: node --test .github/scripts/parity-exclusions/*.test.mjs
+
+      - name: Detect exclusion changes
+        id: detect
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          node .github/scripts/parity-exclusions/check.mjs \
+            --base "$BASE_SHA" --head "$HEAD_SHA"
+
+      - name: Require code-owner approval label
+        if: steps.detect.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          ADDED: ${{ steps.detect.outputs.added }}
+          MODIFIED: ${{ steps.detect.outputs.modified }}
+        run: |
+          set -euo pipefail
+          label='parity-exclusion-approved'
+          owner='Ryan-Carloso'
+
+          echo "Exclusion entries added: ${ADDED:-none}"
+          echo "Exclusion entries changed: ${MODIFIED:-none}"
+
+          current_labels=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json labels --jq '.labels[].name')
+          if ! grep -Fxq "$label" <<<"$current_labels"; then
+            echo "::error::This PR adds or changes an MCP parity exclusion. A code owner must apply the '$label' label after reviewing it. The fix for a parity failure is normally an MCP tool, not an exclusion."
+            exit 1
+          fi
+
+          # Anyone with triage can apply labels (the account that opens PRs
+          # here included), so require a timeline `labeled` event by a code
+          # owner. Presence alone is not proof of approval.
+          approvers=$(gh api --paginate "repos/$REPO/issues/$PR_NUMBER/timeline" \
+            --jq ".[] | select(.event == \"labeled\" and .label.name == \"$label\") | .actor.login" \
+            | sort -u)
+          if ! grep -Fxq "$owner" <<<"$approvers"; then
+            echo "::error::The '$label' label was not applied by a code owner ($owner). Ask a code owner to review and apply it; do not apply it yourself."
+            exit 1
+          fi
+
+          echo "Approved by $owner."
