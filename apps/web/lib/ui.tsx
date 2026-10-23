@@ -320,6 +320,12 @@ export const HistoryIcon = () => (
   </svg>
 );
 
+export const ChartIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="size-5" aria-hidden="true">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v18h18M8 17v-5m4 5V8m4 9v-3" />
+  </svg>
+);
+
 export const CalendarIcon = () => (
   <svg
     viewBox="0 0 24 24"

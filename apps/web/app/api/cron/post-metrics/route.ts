@@ -17,7 +17,7 @@ import { NextResponse } from 'next/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { collectPostMetrics, createPostMetricsStore } from '@/lib/metrics/post-metrics';
 import { fetchProviderCounters } from '@/lib/metrics/provider-counters';
-import { fetchEnginePublishResults } from '@/lib/engine-tasks';
+import { fetchEnginePostMetricsSource } from '@/lib/engine-tasks';
 import { trackApiEvent } from '@/lib/analytics';
 import { flushPostHog } from '@/lib/posthog-server';
 import { logger } from '@/lib/logger';
@@ -31,7 +31,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   const store = createPostMetricsStore(createSupabaseServiceClient());
   const report = await collectPostMetrics({
     ...store,
-    fetchPublishResults: fetchEnginePublishResults,
+    fetchTaskSource: fetchEnginePostMetricsSource,
     fetchCounters: fetchProviderCounters,
     track: trackApiEvent,
     now: () => new Date(),
