@@ -110,7 +110,7 @@
 - Numbered, append-only in `supabase/migrations/` (prefix = apply order); never edit a shipped file. Everything idempotent.
 - `create table if not exists` with inline FK never adds the FK to an existing table — add FKs in a `pg_constraint`-guarded do-block.
 - Update `supabase/README.md` with each migration — it is the single migration list; `docs/SELF_HOSTING.md` only links to it, never duplicate the list there. Moving a migration file: grep the tests that read it.
-- CI checks numbering, blocks destructive DDL without the `db:destructive-approved` label, and applies the chain to an ephemeral Postgres (stubs only `auth`/`storage` — extend stubs if needed). CD runs `supabase db push --linked` on merge, before redeploying the VPS.
+- CI checks numbering, blocks destructive DDL without the `db:destructive-approved` label, and applies the chain to an ephemeral Postgres (stubs only `auth`/`storage` — extend stubs if needed). CD runs `supabase db push --linked --include-all` on merge (or via workflow_dispatch, always from `main`), before redeploying the VPS: `--include-all` also applies an older-numbered migration whose PR merged after a newer one, which plain `db push` refuses — without it an out-of-order merge leaves that migration unapplied forever.
 
 ## Testing gotchas
 
