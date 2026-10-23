@@ -93,6 +93,22 @@ const getBrowserOrigin = (): string => window.location.origin;
 const getServerOrigin = (): null => null;
 
 //---------------
+// hostnameFromOrigin — hostname for a browser origin, or null when there
+// is no usable hostname: the server snapshot (null) and opaque origins
+// (sandboxed iframes, srcdoc and data: pages report the literal string
+// "null", which new URL() rejects). Returning null only hides the debug
+// line; the click handler re-reads window.location at click time.
+//---------------
+export function hostnameFromOrigin(origin: string | null): string | null {
+  if (origin === null) return null;
+  try {
+    return new URL(origin).hostname;
+  } catch {
+    return null;
+  }
+}
+
+//---------------
 // GithubLogin — OAuth button that preserves ?next= (e.g. returning from the
 // MCP OAuth flow at /oauth/authorize). On localhost it keeps the relay
 // behavior without appending next.
@@ -103,7 +119,7 @@ const GithubLogin = () => {
   const next = safeNext(useSearchParams().get('next'));
   const { t } = useI18n();
   const origin = useSyncExternalStore(subscribeToOrigin, getBrowserOrigin, getServerOrigin);
-  const hostname = origin === null ? null : new URL(origin).hostname;
+  const hostname = hostnameFromOrigin(origin);
 
   // Outside production (localhost and Vercel previews) the redirect URL is
   // shown on screen to validate the login flow.

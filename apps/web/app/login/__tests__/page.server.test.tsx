@@ -31,8 +31,10 @@ import Login from '../page';
 describe('app/login/page — server render', () => {
   it('renders the GitHub login button and no debug line without a window global', () => {
     expect(typeof window).toBe('undefined');
-    // renderToString does not throw for an error inside a Suspense boundary:
-    // it emits the fallback (null), which drops the button from the markup.
+    // Pre-fix, GithubLogin reads window.location during render, so
+    // renderToString throws ReferenceError: window is not defined here.
+    // The assertions pin the fixed behavior: button markup present in the
+    // server HTML, and no debug line (browser-only) in that markup.
     const html = renderToString(<Login />);
     expect(html).toContain('login.githubButton');
     expect(html).not.toContain('oauth-redirect-debug');

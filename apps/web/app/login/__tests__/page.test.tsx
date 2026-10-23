@@ -286,3 +286,26 @@ describe('app/login/page — shouldShowOAuthDebug', () => {
     expect(shouldShowOAuthDebug('post-engineer.com')).toBe(false);
   });
 });
+
+describe('app/login/page — hostnameFromOrigin', () => {
+  it('returns null for a null origin (server snapshot)', async () => {
+    const { hostnameFromOrigin } = await import('../page');
+    expect(hostnameFromOrigin(null)).toBeNull();
+  });
+
+  it('returns the hostname for a valid origin', async () => {
+    const { hostnameFromOrigin } = await import('../page');
+    expect(hostnameFromOrigin('http://localhost:3434')).toBe('localhost');
+    expect(hostnameFromOrigin('https://post-engineer.com')).toBe('post-engineer.com');
+  });
+
+  it('returns null for the opaque origin string "null" instead of throwing', async () => {
+    const { hostnameFromOrigin } = await import('../page');
+    expect(hostnameFromOrigin('null')).toBeNull();
+  });
+
+  it('returns null for a malformed origin instead of throwing', async () => {
+    const { hostnameFromOrigin } = await import('../page');
+    expect(hostnameFromOrigin('not a url')).toBeNull();
+  });
+});
