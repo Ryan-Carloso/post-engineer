@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { getGenerationPost, getSlotPost } from '../post-detail';
+import { getGenerationPost, getSlotPost, personaScopeOf } from '../post-detail';
 
 vi.mock('../schedule-slot-presentation', () => ({
   enrichSlot: vi.fn(async () => ({
@@ -82,6 +82,7 @@ const GENERATION_ROW = {
   id: 'vg-1',
   generation_id: 'gen-1:slot:slot-1',
   engine_task_id: 'task-1',
+  persona_id: 'persona-1',
   persona_name: 'Viva Leve',
   video_subject: 'myth busting',
   status: 'pending',
@@ -103,7 +104,7 @@ describe('getSlotPost', () => {
       personas: { data: { id: 'persona-1', name: 'Viva Leve' }, error: null },
       scheduled_post_progress_history: { data: [], error: null },
     });
-    const detail = await getSlotPost(supabase, 'slot-1', 'user-1');
+    const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null);
     expect(detail?.slot.id).toBe('slot-1');
     // Pin the query shape: the select column list is load-bearing for the
     // camelCase mapping below.
@@ -122,7 +123,7 @@ describe('getSlotPost', () => {
 
   it('returns null for an unknown id (PGRST116)', async () => {
     const { supabase } = mockSupabase({});
-    await expect(getSlotPost(supabase, 'nope', 'user-1')).resolves.toBeNull();
+    await expect(getSlotPost(supabase, 'nope', 'user-1', null)).resolves.toBeNull();
   });
 
   it('returns null when the schedule row is gone', async () => {
@@ -130,14 +131,14 @@ describe('getSlotPost', () => {
       scheduled_posts: { data: SLOT_ROW, error: null },
       schedules: { data: null, error: null },
     });
-    await expect(getSlotPost(supabase, 'slot-1', 'user-1')).resolves.toBeNull();
+    await expect(getSlotPost(supabase, 'slot-1', 'user-1', null)).resolves.toBeNull();
   });
 
   it('throws on DB errors so callers can 500', async () => {
     const { supabase } = mockSupabase({
       scheduled_posts: { data: null, error: new Error('db down') },
     });
-    await expect(getSlotPost(supabase, 'slot-1', 'user-1')).rejects.toThrow('db down');
+    await expect(getSlotPost(supabase, 'slot-1', 'user-1', null)).rejects.toThrow('db down');
   });
 
   it('throws when the schedule lookup hits a DB error', async () => {
@@ -145,7 +146,7 @@ describe('getSlotPost', () => {
       scheduled_posts: { data: SLOT_ROW, error: null },
       schedules: { data: null, error: new Error('db down') },
     });
-    await expect(getSlotPost(supabase, 'slot-1', 'user-1')).rejects.toThrow('db down');
+    await expect(getSlotPost(supabase, 'slot-1', 'user-1', null)).rejects.toThrow('db down');
   });
 
   it('degrades to a null persona when the persona lookup 404s', async () => {
@@ -155,7 +156,7 @@ describe('getSlotPost', () => {
       personas: { data: null, error: PGRST116 },
       scheduled_post_progress_history: { data: [], error: null },
     });
-    const detail = await getSlotPost(supabase, 'slot-1', 'user-1');
+    const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null);
     expect(detail?.persona).toBeNull();
     expect(detail?.slot.id).toBe('slot-1');
   });
@@ -167,7 +168,7 @@ describe('getSlotPost', () => {
       personas: { data: { id: 'persona-1', name: 'Viva Leve' }, error: null },
       scheduled_post_progress_history: { data: null, error: new Error('db down') },
     });
-    const detail = await getSlotPost(supabase, 'slot-1', 'user-1');
+    const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null);
     expect(detail?.slot.progressHistory).toEqual([]);
   });
 });
@@ -182,14 +183,14 @@ describe('getGenerationPost', () => {
     const { supabase, chains } = mockSupabase({
       video_generations: { data: GENERATION_ROW, error: null },
     });
-    const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1');
+    const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1', null);
     expect(detail?.generationId).toBe('gen-1:slot:slot-1');
     expect(detail?.progress).toBe(67);
     expect(detail?.stage).toBe('audio');
     expect(detail?.tokensRefunded).toBe(false);
     expect(fetchEngineTaskProgress).toHaveBeenCalledWith('task-1', 'user-1');
     expect(chains['video_generations'].select).toHaveBeenCalledWith(
-      'id, generation_id, engine_task_id, persona_name, video_subject, status, error_code, tokens_refunded, created_at, completed_at'
+      'id, generation_id, engine_task_id, persona_id, persona_name, video_subject, status, error_code, tokens_refunded, created_at, completed_at'
     );
   });
 
@@ -198,7 +199,7 @@ describe('getGenerationPost', () => {
     const { supabase } = mockSupabase({
       video_generations: { data: { ...GENERATION_ROW, status: 'running' }, error: null },
     });
-    const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1');
+    const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1', null);
     expect(detail?.status).toBe('running');
     expect(detail?.progress).toBe(67);
     expect(detail?.stage).toBe('audio');
@@ -210,7 +211,7 @@ describe('getGenerationPost', () => {
     const { supabase } = mockSupabase({
       video_generations: { data: { ...GENERATION_ROW, engine_task_id: null }, error: null },
     });
-    const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1');
+    const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1', null);
     expect(detail?.progress).toBe(0);
     expect(detail?.stage).toBeNull();
     expect(fetchEngineTaskProgress).not.toHaveBeenCalled();
@@ -224,7 +225,7 @@ describe('getGenerationPost', () => {
         error: null,
       },
     });
-    const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1');
+    const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1', null);
     expect(detail?.progress).toBe(0);
     expect(fetchEngineTaskProgress).not.toHaveBeenCalled();
   });
@@ -233,7 +234,7 @@ describe('getGenerationPost', () => {
     const { supabase, from } = mockSupabase({
       video_generations: { data: { ...GENERATION_ROW, status: 'completed' }, error: null },
     });
-    const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1');
+    const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1', null);
     expect(detail?.progress).toBe(0);
     expect(detail?.stage).toBeNull();
     expect(from).toHaveBeenCalledWith('video_generations');
@@ -245,20 +246,92 @@ describe('getGenerationPost', () => {
     const { supabase } = mockSupabase({
       video_generations: { data: GENERATION_ROW, error: null },
     });
-    const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1');
+    const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1', null);
     expect(detail?.progress).toBe(0);
     expect(detail?.stage).toBeNull();
   });
 
   it('returns null for an unknown id (PGRST116)', async () => {
     const { supabase } = mockSupabase({});
-    await expect(getGenerationPost(supabase, 'nope', 'user-1')).resolves.toBeNull();
+    await expect(getGenerationPost(supabase, 'nope', 'user-1', null)).resolves.toBeNull();
   });
 
   it('throws on DB errors so callers can 500', async () => {
     const { supabase } = mockSupabase({
       video_generations: { data: null, error: new Error('db down') },
     });
-    await expect(getGenerationPost(supabase, 'gen-1', 'user-1')).rejects.toThrow('db down');
+    await expect(getGenerationPost(supabase, 'gen-1', 'user-1', null)).rejects.toThrow('db down');
+  });
+});
+
+describe('persona scope (persona-scoped API keys)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('personaScopeOf is null for a session, OAuth or unscoped key and the list for a scoped key', () => {
+    expect(personaScopeOf({ isApiKey: false })).toBeNull();
+    expect(personaScopeOf({ isApiKey: true, personaIds: null })).toBeNull();
+    expect(personaScopeOf({ isApiKey: true, personaIds: ['persona-1'] })).toEqual(['persona-1']);
+    expect(personaScopeOf({ isApiKey: true, personaIds: [] })).toEqual([]);
+  });
+
+  it('returns an in-scope slot', async () => {
+    const { supabase } = mockSupabase({
+      scheduled_posts: { data: SLOT_ROW, error: null },
+      schedules: { data: SCHEDULE_ROW, error: null },
+      personas: { data: { id: 'persona-1', name: 'Viva Leve' }, error: null },
+      scheduled_post_progress_history: { data: [], error: null },
+    });
+    const detail = await getSlotPost(supabase, 'slot-1', 'user-1', ['persona-1']);
+    expect(detail?.slot.id).toBe('slot-1');
+  });
+
+  it('returns null for a slot of another persona, before any engine call', async () => {
+    const { enrichSlot } = await import('../schedule-slot-presentation');
+    const { fetchEnginePublishResults } = await import('../engine-tasks');
+    const { supabase, from } = mockSupabase({
+      scheduled_posts: { data: SLOT_ROW, error: null },
+      schedules: { data: SCHEDULE_ROW, error: null },
+    });
+    await expect(getSlotPost(supabase, 'slot-1', 'user-1', ['persona-2'])).resolves.toBeNull();
+    expect(from).toHaveBeenCalledWith('schedules');
+    expect(from).not.toHaveBeenCalledWith('personas');
+    expect(enrichSlot).not.toHaveBeenCalled();
+    expect(fetchEnginePublishResults).not.toHaveBeenCalled();
+  });
+
+  it('returns a persona-less slot to a scoped key', async () => {
+    const { supabase } = mockSupabase({
+      scheduled_posts: { data: SLOT_ROW, error: null },
+      schedules: { data: { ...SCHEDULE_ROW, persona_id: null }, error: null },
+      scheduled_post_progress_history: { data: [], error: null },
+    });
+    const detail = await getSlotPost(supabase, 'slot-1', 'user-1', []);
+    expect(detail?.slot.id).toBe('slot-1');
+    expect(detail?.persona).toBeNull();
+  });
+
+  it('returns an in-scope generation', async () => {
+    const { supabase } = mockSupabase({ video_generations: { data: GENERATION_ROW, error: null } });
+    const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1', ['persona-1']);
+    expect(detail?.generationId).toBe('gen-1:slot:slot-1');
+  });
+
+  it('returns null for a generation of another persona, before any engine call', async () => {
+    const { fetchEngineTaskProgress } = await import('../engine-tasks');
+    const { supabase } = mockSupabase({ video_generations: { data: GENERATION_ROW, error: null } });
+    await expect(
+      getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1', ['persona-2']),
+    ).resolves.toBeNull();
+    expect(fetchEngineTaskProgress).not.toHaveBeenCalled();
+  });
+
+  it('returns a persona-less generation to a scoped key', async () => {
+    const { supabase } = mockSupabase({
+      video_generations: { data: { ...GENERATION_ROW, persona_id: null }, error: null },
+    });
+    const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1', []);
+    expect(detail?.generationId).toBe('gen-1:slot:slot-1');
   });
 });

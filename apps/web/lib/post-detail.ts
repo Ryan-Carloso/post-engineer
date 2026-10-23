@@ -3,6 +3,7 @@ import { enrichSlot } from './schedule-slot-presentation';
 import { fetchEnginePublishResults, fetchEngineTaskProgress } from './engine-tasks';
 import { resolvePublishLinks, type PublishLink } from './publish-links';
 import { buildGenerationFacts } from './generation-facts';
+import { isPersonaAllowed, isScopedApiKey, type PersonaScopeContext } from './api-keys';
 import { logger } from './logger';
 
 //---------------
@@ -14,7 +15,24 @@ import { logger } from './logger';
 // Ownership: every query is scoped by user_id. PGRST116 (zero rows) means
 // unknown id or another user's row → null. Any other DB error throws so
 // the caller can 500 (retryable) instead of 404 (terminal).
+//
+// Persona scope: a persona-scoped API key only sees posts of its personas
+// plus persona-less posts — the same policy as GET /api/schedule/status
+// and GET /api/metrics. An out-of-scope post resolves to null (404, like
+// the list endpoints that never show it), and is rejected before any
+// engine call.
 //---------------
+
+// The persona allow-list for a caller: null = unrestricted (web session,
+// OAuth, or an unscoped key); an array = only those personas.
+export function personaScopeOf(auth: PersonaScopeContext): readonly string[] | null {
+  return isScopedApiKey(auth) ? (auth.personaIds ?? []) : null;
+}
+
+function inPersonaScope(scope: readonly string[] | null, personaId: string | null): boolean {
+  if (scope === null || personaId === null) return true;
+  return isPersonaAllowed(scope, personaId);
+}
 
 export interface SlotPostDetail {
   slot: {
@@ -105,6 +123,7 @@ export async function getSlotPost(
   supabase: SupabaseClient,
   slotId: string,
   userId: string,
+  personaScope: readonly string[] | null,
 ): Promise<SlotPostDetail | null> {
   const { data: slot, error: slotError } = await supabase
     .from('scheduled_posts')
@@ -156,6 +175,7 @@ export async function getSlotPost(
   // Ownership re-check: the service client (API-key/OAuth callers)
   // bypasses RLS, so the schedule must belong to the caller.
   if (!scheduleRow) return null;
+  if (!inPersonaScope(personaScope, scheduleRow.persona_id)) return null;
 
   // No persona is a real state (a post created without one, migration 012):
   // skip the lookup entirely rather than issuing `.eq('id', null)` and
@@ -276,11 +296,12 @@ export async function getGenerationPost(
   supabase: SupabaseClient,
   generationId: string,
   userId: string,
+  personaScope: readonly string[] | null,
 ): Promise<GenerationPostDetail | null> {
   const { data, error } = await supabase
     .from('video_generations')
     .select(
-      'id, generation_id, engine_task_id, persona_name, video_subject, status, error_code, tokens_refunded, created_at, completed_at',
+      'id, generation_id, engine_task_id, persona_id, persona_name, video_subject, status, error_code, tokens_refunded, created_at, completed_at',
     )
     .eq('user_id', userId)
     .eq('generation_id', generationId)
@@ -293,6 +314,7 @@ export async function getGenerationPost(
     id: string;
     generation_id: string;
     engine_task_id: string | null;
+    persona_id: string | null;
     persona_name: string | null;
     video_subject: string | null;
     status: string;
@@ -301,6 +323,7 @@ export async function getGenerationPost(
     created_at: string;
     completed_at: string | null;
   };
+  if (!inPersonaScope(personaScope, row.persona_id)) return null;
 
   let progress = 0;
   let stage: string | null = null;

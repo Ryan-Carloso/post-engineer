@@ -4,7 +4,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { apiErrorResponse } from '@/lib/api-error';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { getGenerationPost, getSlotPost } from '@/lib/post-detail';
+import { getGenerationPost, getSlotPost, personaScopeOf } from '@/lib/post-detail';
 import { resolveSlotUuid } from '@/lib/schedule-slot-id';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
@@ -37,6 +37,9 @@ async function getHandler(
       : await createSupabaseServerClient();
 
   const { id } = await context.params;
+  // A persona-scoped API key reads only its personas' (and persona-less)
+  // posts; an out-of-scope post is a 404 like any unknown id.
+  const personaScope = personaScopeOf(auth);
 
   try {
     // generation_id is text (a direct id, or `batch:<scheduleId>:slot:<slotId>`),
@@ -44,12 +47,12 @@ async function getHandler(
     // a batch key, a percent-encoded key, or garbage must be normalized
     // first. Feeding any of those into the uuid filter raises Postgres
     // 22P02 and the catch below would turn it into a 500 (issue #201).
-    const generation = await getGenerationPost(supabase, id, auth.userId);
+    const generation = await getGenerationPost(supabase, id, auth.userId, personaScope);
     if (generation) {
       return NextResponse.json({ success: true, kind: 'generation', generation });
     }
     const slotUuid = resolveSlotUuid(id);
-    const slotDetail = slotUuid === null ? null : await getSlotPost(supabase, slotUuid, auth.userId);
+    const slotDetail = slotUuid === null ? null : await getSlotPost(supabase, slotUuid, auth.userId, personaScope);
     if (slotDetail) {
       return NextResponse.json({ success: true, kind: 'slot', ...slotDetail });
     }

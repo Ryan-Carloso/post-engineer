@@ -4,7 +4,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { apiErrorResponse } from '@/lib/api-error';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { getSlotPost } from '@/lib/post-detail';
+import { getSlotPost, personaScopeOf } from '@/lib/post-detail';
 import { resolveSlotUuid } from '@/lib/schedule-slot-id';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
@@ -121,7 +121,7 @@ async function getHandler(
 
   let detail;
   try {
-    detail = await getSlotPost(supabase, resolvedSlotId, auth.userId);
+    detail = await getSlotPost(supabase, resolvedSlotId, auth.userId, personaScopeOf(auth));
   } catch (error) {
     logger.error('[api/schedule/slots] slot lookup failed', error);
     return apiErrorResponse(500, 'Failed to load post.', {
