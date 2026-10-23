@@ -1,7 +1,8 @@
 import '@testing-library/jest-dom/vitest';
-import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { renderToString } from 'react-dom/server';
+import { hydrateRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
@@ -219,6 +220,14 @@ describe('app/login/page — resolveLoginRedirectUrl', () => {
     expect(resolveLoginRedirectUrl('attacker-app.vercel.app', 'https://attacker-app.vercel.app', null)).toBe(PROD);
   });
 
+  it('opaque origin (hostname "", origin "null") falls through to the production callback', async () => {
+    const { resolveLoginRedirectUrl } = await import('../page');
+    expect(resolveLoginRedirectUrl('', 'null', null)).toBe(PROD);
+    expect(resolveLoginRedirectUrl('', 'null', '/oauth/authorize')).toBe(
+      `${PROD}?next=${encodeURIComponent('/oauth/authorize')}`,
+    );
+  });
+
   it('production keeps the plain production callback', async () => {
     const { resolveLoginRedirectUrl } = await import('../page');
     expect(resolveLoginRedirectUrl('post-engineer.com', 'https://post-engineer.com', null)).toBe(PROD);
@@ -247,6 +256,40 @@ describe('app/login/page — resolveLoginRedirectUrl', () => {
   });
 });
 
+describe('app/login/page — hydration', () => {
+  it('hydrates the server markup without a mismatch and keeps the button usable', async () => {
+    const container = document.createElement('div');
+    container.innerHTML = renderToString(<Login />);
+    document.body.appendChild(container);
+    // The container is appended manually, outside Testing Library cleanup:
+    // unmount and remove it in a finally so a failed assertion cannot leak
+    // a second Login instance into later tests.
+    let root: { unmount: () => void } | undefined;
+    try {
+      expect(container.querySelector('[data-testid="oauth-redirect-debug"]')).toBeNull();
+
+      const recoverableErrors: unknown[] = [];
+      root = await act(async () =>
+        hydrateRoot(container, <Login />, {
+          onRecoverableError: (error) => recoverableErrors.push(error),
+        }),
+      );
+
+      expect(recoverableErrors).toEqual([]);
+      // After hydration React re-renders with the browser hostname (localhost).
+      expect(screen.getByTestId('oauth-redirect-debug').textContent).toContain(
+        encodeURIComponent('http://localhost:3434/auth/callback'),
+      );
+      fireEvent.click(screen.getByText('login.githubButton'));
+      await waitFor(() => expect(mockSignInWithOAuth).toHaveBeenCalled());
+    } finally {
+      const mountedRoot = root;
+      if (mountedRoot !== undefined) act(() => mountedRoot.unmount());
+      container.remove();
+    }
+  });
+});
+
 describe('app/login/page — shouldShowOAuthDebug', () => {
   it('shows debug on localhost and vercel previews, hides on production', async () => {
     const { shouldShowOAuthDebug } = await import('../page');
@@ -255,5 +298,28 @@ describe('app/login/page — shouldShowOAuthDebug', () => {
     expect(shouldShowOAuthDebug('post-enginner-git-fix-abc123-ryan-carlosos-projects.vercel.app')).toBe(true);
     expect(shouldShowOAuthDebug('attacker-app.vercel.app')).toBe(false);
     expect(shouldShowOAuthDebug('post-engineer.com')).toBe(false);
+  });
+});
+
+describe('app/login/page — hostnameFromOrigin', () => {
+  it('returns null for a null origin (server snapshot)', async () => {
+    const { hostnameFromOrigin } = await import('../page');
+    expect(hostnameFromOrigin(null)).toBeNull();
+  });
+
+  it('returns the hostname for a valid origin', async () => {
+    const { hostnameFromOrigin } = await import('../page');
+    expect(hostnameFromOrigin('http://localhost:3434')).toBe('localhost');
+    expect(hostnameFromOrigin('https://post-engineer.com')).toBe('post-engineer.com');
+  });
+
+  it('returns null for the opaque origin string "null" instead of throwing', async () => {
+    const { hostnameFromOrigin } = await import('../page');
+    expect(hostnameFromOrigin('null')).toBeNull();
+  });
+
+  it('returns null for a malformed origin instead of throwing', async () => {
+    const { hostnameFromOrigin } = await import('../page');
+    expect(hostnameFromOrigin('not a url')).toBeNull();
   });
 });

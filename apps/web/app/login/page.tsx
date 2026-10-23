@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useMemo, useState } from 'react';
+import { Suspense, useMemo, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { createSupabaseClient } from '@/lib/supabase/client';
@@ -84,6 +84,31 @@ export function shouldShowOAuthDebug(hostname: string): boolean {
 }
 
 //---------------
+// Browser origin as an external store. The server snapshot (null) also serves
+// the hydration render, so the markup matches; React then re-renders with the
+// real origin.
+//---------------
+const subscribeToOrigin = (): (() => void) => () => {};
+const getBrowserOrigin = (): string => window.location.origin;
+const getServerOrigin = (): null => null;
+
+//---------------
+// hostnameFromOrigin — hostname for a browser origin, or null when there
+// is no usable hostname: the server snapshot (null) and opaque origins
+// (sandboxed iframes, srcdoc and data: pages report the literal string
+// "null", which new URL() rejects). Returning null only hides the debug
+// line; the click handler re-reads window.location at click time.
+//---------------
+export function hostnameFromOrigin(origin: string | null): string | null {
+  if (origin === null) return null;
+  try {
+    return new URL(origin).hostname;
+  } catch {
+    return null;
+  }
+}
+
+//---------------
 // GithubLogin — OAuth button that preserves ?next= (e.g. returning from the
 // MCP OAuth flow at /oauth/authorize). On localhost it keeps the relay
 // behavior without appending next.
@@ -93,22 +118,27 @@ const GithubLogin = () => {
   const [pending, setPending] = useState(false);
   const next = safeNext(useSearchParams().get('next'));
   const { t } = useI18n();
+  const origin = useSyncExternalStore(subscribeToOrigin, getBrowserOrigin, getServerOrigin);
+  const hostname = hostnameFromOrigin(origin);
 
-  // redirectTo and debug derive from the current host: outside production
-  // (localhost and Vercel previews) the URL is shown on screen to validate
-  // the login flow.
-  const { redirectTo, showDebug } = useMemo(() => {
-    const hostname = window.location.hostname;
-    const origin = window.location.origin;
-    return {
-      redirectTo: resolveLoginRedirectUrl(hostname, origin, next),
-      showDebug: shouldShowOAuthDebug(hostname),
-    };
-  }, [next]);
+  // Outside production (localhost and Vercel previews) the redirect URL is
+  // shown on screen to validate the login flow.
+  const debugRedirectTo =
+    origin !== null && hostname !== null && shouldShowOAuthDebug(hostname)
+      ? resolveLoginRedirectUrl(hostname, origin, next)
+      : null;
 
   const handleOAuthLogin = async (provider: 'github') => {
     if (pending) return;
     setPending(true);
+    // Opaque origins (sandboxed iframes, srcdoc) report hostname "" and
+    // origin "null": neither local nor a preview host, so they fall
+    // through to the production callback, same as any unknown host.
+    const redirectTo = resolveLoginRedirectUrl(
+      window.location.hostname,
+      window.location.origin,
+      next,
+    );
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: { redirectTo },
@@ -123,12 +153,12 @@ const GithubLogin = () => {
   return (
     <>
       <LoginButton provider="github" disabled={pending} onLogin={handleOAuthLogin} />
-      {showDebug ? (
+      {debugRedirectTo !== null ? (
         <p
           data-testid="oauth-redirect-debug"
           className="mt-4 font-mono text-[11px] leading-relaxed break-all text-[#8a94a8]"
         >
-          {t('login.oauthRedirectDebug')}: {redirectTo}
+          {t('login.oauthRedirectDebug')}: {debugRedirectTo}
         </p>
       ) : null}
     </>
