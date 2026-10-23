@@ -47,134 +47,26 @@ openssl rand -hex 32     # MONEYPRINT_API_SECRET (identical in both .env files)
 openssl rand -base64 32  # TOKEN_ENCRYPTION_KEY
 ```
 
-Provision the database schema in your Supabase project:
+Provision the database schema in your Supabase project: apply every file
+in `supabase/migrations/` in numeric order. The full migration list —
+what each file does, its prerequisites and its one-time setup steps
+(some live in the file headers, e.g. the `app.cron_base_url` /
+`app.cron_secret` database settings in 004 and the
+`select public.schedule_post_metrics();` step in 025) — lives in the
+[Supabase migrations README](../supabase/README.md); this guide does not
+duplicate it.
 
-1. `supabase/migrations/001_schema.sql` — tables, types and defaults
-   (idempotent snapshot; see its header for what it covers and what to
-   finish in the dashboard: RLS policies, FK constraints, RPC function
-   bodies, the `personas` storage bucket).
-2. `supabase/migrations/002_persona-images.sql` — persona image library
-   constraints.
-3. `supabase/migrations/003_engine-task-state.sql` — engine task state
-   (only needed when running the engine with `MPT_STATE_BACKEND=supabase`).
-4. `supabase/migrations/004_billing_reconcile.sql` — billing
-   reconciliation: zombie/stuck detectors and the daily pg_cron trigger
-   (needs `CRON_SECRET` in the web env and the `app.cron_base_url` /
-   `app.cron_secret` database settings; without them the schedule step
-   no-ops with a NOTICE — see the file header). The reconciliation is
-   fully automatic (engine-state-verified refunds, no human queue).
-5. `supabase/migrations/005_persona-visual-identity.sql` — CHECK constraint
-   that a persona never carries both an uploaded photo (`photo_path`) and a
-   chosen character/AI avatar (`avatar_url`). The web app swaps the two in a
-   single update when you change a persona's face, so this is what keeps the
-   face unambiguous.
-6. `supabase/migrations/007_personas-drop-face-mix.sql` — a persona is always
-   faced, so `face_mix_percent` is dropped and "no face" becomes a per-post
-   choice: the new `scheduled_posts.faceless` column (written by the web at
-   post creation, read by the engine's batch pipeline to price a slot).
-   This is the only migration with destructive DDL; a persona created without
-   a face before this migration needs a photo or a chosen avatar in the
-   persona editor before its posts can generate with the face on (until then
-   the slot fails and the tokens are refunded).
-7. `supabase/migrations/008_video-generations-engine-task-id-idx.sql` —
-   index on `video_generations.engine_task_id` so a task_id (from engine
-   logs, PostHog, or status polls) resolves to the web's generation record
-   without a full table scan. Index only — no foreign key to
-   `engine_task_state`, which is ephemeral.
-8. `supabase/migrations/009_batch-charge-task-correlation.sql` — backfills
-   `token_transactions.engine_task_id` for **single-slot** batch charges.
-   A scheduled post is charged once up front under `batch:<schedule_id>` with
-   no task id, while its slot dispatches its own task; without this
-   correlation a scheduled post whose engine task is lost stays `running`
-   in the history table forever. Multi-slot batches are left alone on
-   purpose — one charge covers several videos. Also adds the two indexes
-   the gone-task reconciliation looks up.
+Apply them from the repo root with the Supabase CLI:
 
-9. `supabase/migrations/010_scheduled-post-progress-history.sql` —
-   `scheduled_post_progress_history` records every observed
-   (progress, stage) transition of a scheduled post (written change-only by
-   `GET /api/schedule/status`), so a progress regression like 40% → 0%
-   stays visible on the post detail page after the fact. Rows
-   cascade-delete with their post.
+```bash
+supabase db push --db-url "<connection-string>"
+```
 
-10. `supabase/migrations/011_schedules-drop-persona-owner-unique.sql` — drops
-    `schedules_persona_owner`, the old `unique (persona_id)` constraint from
-    the retired recurring-schedule model. A fresh install never had it (the
-    canonical schema never declared it), but a database bootstrapped from the
-    older `apps/web/supabase/` chain does, and then every scheduled batch for
-    a persona after its first one fails. Harmless if you never applied that
-    chain — the drop is guarded with `if exists`.
-
-11. `supabase/migrations/012_schedules-optional-persona-snapshot.sql` —
-    lets a post exist without a persona (`schedules.persona_id` becomes
-    nullable) and snapshots the editorial definition the persona used to
-    supply (voice, language, niche, video aspect, paragraph count) on the
-    schedule row, so the engine can generate faceless posts reproducibly.
-
-12. `supabase/migrations/013_schedules-voice-audio-url-snapshot.sql` —
-    snapshots the persona-less audio voice URL (`post_voice_audio_url`) on
-    the schedule, so audio-voice posts keep their voice at tick time instead
-    of re-resolving (and rejecting) it.
-
-13. `supabase/migrations/014_videos-storage-bucket.sql` — creates the
-    private `videos` storage bucket (plus RLS policies) so the engine can
-    archive final videos at
-    `{user_id}/{persona_id|faceless}/{task_id}/final-1.mp4`.
-
-14. `supabase/migrations/015_schedules-publish-mode.sql` — adds
-    `schedules.publish_mode` (`scheduled`/`asap`, CHECK-pinned, default
-    `scheduled`): records whether a post publishes at its slot times or ASAP
-    (published the moment generation finishes, with no scheduled time).
-
-15. `supabase/migrations/016_scheduled-posts-publish-attempts.sql` —
-    adds `scheduled_posts.publish_attempts` (NOT NULL DEFAULT 0): counts
-    publish attempts per slot so the engine auto-cancels (failed) with a
-    token refund after 3 failures instead of retrying forever.
-
-16. `supabase/migrations/017_refund-batch-tokens.sql` — creates the
-    `public.refund_batch_tokens` RPC the engine's fill_schedule store and
-    the web's generate-and-schedule route already call for per-slot
-    refunds of a prepaid batch (no migration ever created it, so every
-    call 404'd and failed slots were never refunded). Idempotent per
-    refund key, total refunds capped at the batch charge, restores the
-    free/paid split.
-
-17. `supabase/migrations/019_personas-video-layout.sql` — adds
-    `personas.video_layout` and the matching
-    `schedules.post_video_layout` snapshot (`standard` or `react`, NULL
-    means `standard`, CHECK-pinned): how the persona hook is composed
-    with the b-roll — the avatar filling the frame, or a 50/50 split
-    with the b-roll below. Presentation only; the hook render and its
-    cost are identical either way.
-
-18. `supabase/migrations/021_video-generations-params.sql` — adds
-    `video_generations.params` (JSONB with the full engine job payload),
-    `publish_mode` (`asap`/`scheduled`, CHECK-pinned, default `asap`)
-    and `scheduled_at`: the engine's boot triage rebuilds orphaned
-    direct generations from the row instead of failing them (issue
-    #205), unifying "generate now" and scheduled posts into one
-    pipeline.
-
-19. `supabase/migrations/022_persona-default-accounts.sql` — per-persona
-    default publishing accounts with owner-scoped RLS.
-
-20. `supabase/migrations/023_cloned-voices.sql` — per-user Chatterbox
-    cloned voices (`cloned_voices`): registration status, consent,
-    reference storage path, engine voice key, language, and stable
-    `error_code`; owner-scoped RLS. Reference audio is stored under the
-    private `personas` bucket at
-    `{userId}/cloned-voices/{cloneId}/reference.wav`.
-
-21. `supabase/migrations/024_persona-cta.sql` — per-persona call to action
-    (`personas.cta_text`) plus its schedule snapshot
-    (`schedules.post_cta_text`), both capped at 200 characters.
-
-22. `supabase/migrations/025_post-metrics.sql` — per-video performance
-    snapshots (`post_metrics`) at 24h and 7d after publish, `post_metrics_done`
-    (posts already finished per window), plus the hourly
-    pg_cron job that calls `/api/cron/post-metrics`. Uses the same
-    `app.cron_base_url` / `app.cron_secret` settings as migration 004; after
-    setting them run `select public.schedule_post_metrics();`.
+or paste each file into the Supabase Dashboard > SQL Editor and run it,
+lowest number first. When the project adds new migrations they arrive as
+new numbered files; you only need to run the ones newer than what you
+already applied. All files are idempotent, so re-running the whole
+sequence is safe.
 
 ### Voices and cloning (local CPU TTS server)
 
@@ -207,15 +99,6 @@ Setup:
 Picker samples live in `apps/web/public/voice-samples/<name>.mp3`; re-render
 them with `python -m local_tts.render_samples ../web/public/voice-samples`
 whenever the catalog changes.
-
-Paste each file into the Supabase Dashboard > SQL Editor and run, in order
-(the numeric prefixes encode the order — always apply the
-lowest number first), or apply them with the Supabase CLI from the repo
-root: `supabase db push --db-url "<connection-string>"` (reads
-`supabase/migrations/`). When the project adds new migrations they arrive
-as new numbered files (`005_...`, ...); you only need to run the ones newer
-than what you already applied. All files are idempotent, so re-running the
-whole sequence is safe.
 
 ## 3. Run the engine with Docker Compose
 
