@@ -139,7 +139,7 @@ describe('getSlotPost', () => {
       schedules: { data: SCHEDULE_ROW, error: null },
       scheduled_post_progress_history: { data: [], error: null },
     });
-    const detail = await getSlotPost(supabase, 'slot-1', 'user-1');
+    const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null);
     // The generating slot's angle rides the progress read — no second lookup.
     expect(fetchEngineScriptAngle).not.toHaveBeenCalled();
     expect(detail?.slot.scriptAngle).toBe('The myth that keeps coming back');
@@ -157,7 +157,7 @@ describe('getSlotPost', () => {
       schedules: { data: SCHEDULE_ROW, error: null },
       scheduled_post_progress_history: { data: [], error: null },
     });
-    const detail = await getSlotPost(supabase, 'slot-1', 'user-1');
+    const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null);
     expect(fetchEnginePostMetricsSource).toHaveBeenCalledTimes(1);
     expect(fetchEnginePostMetricsSource).toHaveBeenCalledWith('task-1', 'user-1');
     expect(fetchEnginePublishResults).not.toHaveBeenCalled();
@@ -177,7 +177,7 @@ describe('getSlotPost', () => {
       schedules: { data: SCHEDULE_ROW, error: null },
       scheduled_post_progress_history: { data: [], error: null },
     });
-    const detail = await getSlotPost(supabase, 'slot-1', 'user-1');
+    const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null);
     expect(fetchEngineTaskProgress).toHaveBeenCalledTimes(1);
     expect(fetchEngineScriptAngle).not.toHaveBeenCalled();
     // The prefetched progress is handed to enrichSlot so it does not fetch again.
@@ -194,7 +194,7 @@ describe('getSlotPost', () => {
       schedules: { data: SCHEDULE_ROW, error: null },
       scheduled_post_progress_history: { data: [], error: null },
     });
-    const detail = await getSlotPost(supabase, 'slot-1', 'user-1');
+    const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null);
     expect(fetchEngineScriptAngle).not.toHaveBeenCalled();
     expect(detail?.slot.scriptAngle).toBeNull();
   });
@@ -210,7 +210,7 @@ describe('getSlotPost', () => {
       schedules: { data: SCHEDULE_ROW, error: null },
       scheduled_post_progress_history: { data: [], error: null },
     });
-    const detail = await getSlotPost(supabase, 'slot-1', 'user-1');
+    const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null);
     expect(detail?.slot.scriptAngle).toBeNull();
     expect(fetchEngineScriptAngle).not.toHaveBeenCalled();
     expect(logger.warn).toHaveBeenCalledWith('[post-detail] engine task progress unavailable', {
@@ -309,7 +309,7 @@ describe('getGenerationPost', () => {
     const { supabase } = mockSupabase({
       video_generations: { data: { ...GENERATION_ROW, status: 'running' }, error: null },
     });
-    const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1');
+    const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1', null);
     expect(fetchEngineTaskProgress).toHaveBeenCalledTimes(1);
     expect(fetchEngineScriptAngle).not.toHaveBeenCalled();
     expect(detail?.scriptAngle).toBe('The myth that keeps coming back');
@@ -369,7 +369,7 @@ describe('getGenerationPost', () => {
     const { supabase } = mockSupabase({
       video_generations: { data: { ...GENERATION_ROW, status: 'completed' }, error: null },
     });
-    const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1');
+    const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1', null);
     expect(fetchEngineTaskProgress).not.toHaveBeenCalled();
     expect(fetchEngineScriptAngle).toHaveBeenCalledWith('task-1', 'user-1');
     expect(detail?.scriptAngle).toBe('The myth that keeps coming back');
@@ -380,7 +380,7 @@ describe('getGenerationPost', () => {
     const { supabase } = mockSupabase({
       video_generations: { data: { ...GENERATION_ROW, engine_task_id: null }, error: null },
     });
-    const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1');
+    const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1', null);
     expect(fetchEngineScriptAngle).not.toHaveBeenCalled();
     expect(detail?.scriptAngle).toBeNull();
   });
