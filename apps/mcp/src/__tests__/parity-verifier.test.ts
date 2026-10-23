@@ -56,6 +56,11 @@ function verify(
       specifier === '@/lib/urls'
         ? "export function toUrl(id: string) { return `/api/files/${id}`; }"
         : undefined,
+    importSource: (specifier) => specifier === '@/lib/caller'
+      ? { file: 'caller.ts', text: "import { resolveApiKey } from '@/lib/api-keys'; export function accepts(request: Request) { return resolveApiKey(request.headers.get('x-api-key')); }" }
+      : specifier === '@/lib/api-keys'
+        ? { file: 'api-keys.ts', text: 'export function resolveApiKey(value: string | null) { return value; }' }
+        : undefined,
     endpointTools,
     graph,
     opsPublic: ['GET /api/version'],
@@ -100,6 +105,22 @@ describe('parity verifier: session-only', () => {
       export const GET = withApiErrorReporting('GET /api/x', getHandler);
     `;
     expect(verify('GET /api/x', SESSION_ONLY, text).length).toBeGreaterThan(0);
+  });
+
+  it('follows imported request helpers and rejects x-api-key auth hidden behind an import', () => {
+    const text = `
+      import { accepts } from '@/lib/caller';
+      async function getHandler(request: Request) {
+        if (await accepts(request)) return NextResponse.json({ ok: true });
+        const { auth, error } = await requireSupabaseSession();
+        if (error || !auth) return error;
+        return NextResponse.json({ ok: true });
+      }
+      export const GET = withApiErrorReporting('GET /api/x', getHandler);
+    `;
+    expect(verify('GET /api/x', SESSION_ONLY, text)).toContainEqual(
+      expect.stringContaining('imported bearer helper'),
+    );
   });
 
   it('checks each exported handler on its own: a cookie-only GET does not vouch for a bearer POST', () => {

@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -112,9 +112,20 @@ function libSource(specifier: string): string | undefined {
   return existsSync(file) ? readFileSync(file, 'utf8') : undefined;
 }
 
+function importSource(specifier: string, fromFile: string): { file: string; text: string } | undefined {
+  const base = specifier.startsWith('@/')
+    ? join(webDir, specifier.slice(2))
+    : join(dirname(fromFile), specifier);
+  for (const candidate of [base, `${base}.ts`, `${base}.tsx`, `${base}.mts`, `${base}.js`, join(base, 'index.ts')]) {
+    if (existsSync(candidate) && statSync(candidate).isFile()) return { file: candidate, text: readFileSync(candidate, 'utf8') };
+  }
+  return undefined;
+}
+
 const context: VerifyContext = {
   route: (key) => endpoints.get(key),
   libSource,
+  importSource,
   endpointTools: ENDPOINT_TOOLS,
   graph,
   opsPublic: PARITY.opsPublic,

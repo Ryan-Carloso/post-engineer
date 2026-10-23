@@ -1,13 +1,14 @@
 import ts from 'typescript';
 import { z } from 'zod';
 import {
+  BEARER_MARKERS,
   readsBearerHeader,
   rejectsFlag,
   type HandlerFacts,
   type RouteFile,
 } from './route-facts.js';
 import { endpointSite, toolCallsEndpoint, type McpCallGraph } from './mcp-calls.js';
-import { calleeName, parseSource, staticText, topLevelFunctions, walk } from './ts-source.js';
+import { accessChain, calleeName, parseSource, reachableLocalNodes, staticText, topLevelFunctions, walk } from './ts-source.js';
 
 //---------------
 // Typed parity exclusions and their mechanical checks.
@@ -76,6 +77,8 @@ export interface VerifyContext {
   route: (key: string) => { route: RouteFile; handler: HandlerFacts } | undefined;
   /** Source text of a web module specifier such as '@/lib/video-urls', or undefined. */
   libSource: (specifier: string) => string | undefined;
+  /** Source for imports reachable from a route; missing modules fail closed. */
+  importSource?: (specifier: string, fromFile: string) => { file: string; text: string } | undefined;
   endpointTools: Readonly<Record<string, readonly string[]>>;
   graph: McpCallGraph;
   opsPublic: readonly string[];
@@ -87,6 +90,53 @@ function noSession(h: HandlerFacts): boolean {
 
 function noBearer(route: RouteFile, h: HandlerFacts): boolean {
   return route.fileBearerMarkers.length === 0 && h.bearerMarkers.length === 0 && !readsBearerHeader(h);
+}
+
+function importedBearerRisk(route: RouteFile, h: HandlerFacts, ctx: VerifyContext): string[] {
+  if (ctx.importSource === undefined) return [];
+  const found = new Set<string>();
+  const queue: Array<{ specifier: string; fromFile: string; binding: string }> = [];
+  for (const name of h.calls) {
+    const specifier = route.imports.get(name);
+    if (specifier !== undefined && !(name === 'requireSupabaseSession' && h.sessionCallsWithArgs === 0)) {
+      queue.push({ specifier, fromFile: route.file, binding: name });
+    }
+  }
+  const seen = new Set<string>();
+  while (queue.length > 0) {
+    const item = queue.shift();
+    if (item === undefined) break;
+    const resolved = ctx.importSource(item.specifier, item.fromFile);
+    if (resolved === undefined || seen.has(`${resolved.file}:${item.binding}`)) continue;
+    seen.add(`${resolved.file}:${item.binding}`);
+    const source = parseSource(resolved.file, resolved.text);
+    const locals = topLevelFunctions(source);
+    const fn = locals.get(item.binding);
+    if (fn === undefined) continue;
+    const nodes = reachableLocalNodes(fn, locals);
+    for (const root of nodes) walk(root, (node) => {
+      if (ts.isIdentifier(node) && BEARER_MARKERS.includes(node.text as (typeof BEARER_MARKERS)[number])) found.add(node.text);
+      if (!ts.isCallExpression(node)) return;
+      const chain = accessChain(node.expression);
+      if (chain?.slice(-2).join('.') === 'headers.get' && node.arguments[0] !== undefined) {
+        const header = staticText(node.arguments[0])?.toLowerCase();
+        if (header === 'authorization' || header === 'x-api-key' || header === undefined) found.add(`header:${header ?? 'dynamic'}`);
+      }
+    });
+    for (const statement of source.statements) {
+      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+      const bindings = statement.importClause?.namedBindings;
+      if (bindings === undefined || !ts.isNamedImports(bindings)) continue;
+      for (const element of bindings.elements) {
+        let invoked = false;
+        for (const root of nodes) walk(root, (node) => {
+          if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === element.name.text) invoked = true;
+        });
+        if (invoked) queue.push({ specifier: statement.moduleSpecifier.text, fromFile: resolved.file, binding: element.name.text });
+      }
+    }
+  }
+  return [...found].sort();
 }
 
 function mappedAndCalled(ctx: VerifyContext, key: string): string | null {
@@ -112,15 +162,23 @@ export function verifyExclusion(key: string, exclusion: Exclusion, ctx: VerifyCo
       need(h.sessionCallsNoArgs + h.getUserCalls > 0, 'session-only handler must authenticate with requireSupabaseSession() or <client>.auth.getUser()');
       need(route.fileBearerMarkers.length === 0, `session-only route must contain no bearer handling (found ${route.fileBearerMarkers.join(', ')})`);
       need(!readsBearerHeader(h), 'session-only handler must not read the authorization/x-api-key header');
+      need(importedBearerRisk(route, h, ctx).length === 0, `session-only handler must not reach an imported bearer helper (found ${importedBearerRisk(route, h, ctx).join(', ')})`);
       break;
     case 'bearer-rejected':
       need(h.sessionCallsWithArgs > 0, 'bearer-rejected handler must resolve bearers via requireSupabaseSession(request)');
       need(rejectsFlag(h, 'isApiKey', 403), 'bearer-rejected handler must `return …403` when auth.isApiKey === true');
       need(rejectsFlag(h, 'isOAuth', 403), 'bearer-rejected handler must `return …403` when auth.isOAuth === true');
       break;
-    case 'secret-auth':
+    case 'secret-auth': {
+      // Cron secrets intentionally arrive in Authorization: Bearer. Reject
+      // API-key/OAuth markers and x-api-key imports, while allowing that
+      // header when the typed mechanism is cron-secret.
+      const importedSecretRisk = importedBearerRisk(route, h, ctx).filter(
+        (marker) => !(exclusion.mechanism === 'cron-secret' && marker === 'header:authorization'),
+      );
       need(noSession(h), 'secret-auth handler must not consult the session');
       need(noBearer(route, h), 'secret-auth handler must not handle bearer credentials');
+      need(importedSecretRisk.length === 0, `secret-auth handler must not reach imported bearer handling (found ${importedSecretRisk.join(', ')})`);
       if (exclusion.mechanism === 'cron-secret') {
         need(returnsCronRejection(h), 'cron-secret handler must `const r = rejectUnauthorizedCron(request, …)` and `if (r !== null) return r;`');
       } else if (exclusion.mechanism === 'engine-secret') {
@@ -131,15 +189,18 @@ export function verifyExclusion(key: string, exclusion: Exclusion, ctx: VerifyCo
         need(h.calls.has('constructEvent'), 'stripe-signature handler must verify with webhooks.constructEvent()');
       }
       break;
+    }
     case 'oauth-redirect':
       need(/-(?:auth|oauth)\/(?:start|callback)$/.test(key), 'oauth-redirect only applies to a */start or */callback route');
       need(h.calls.has('oauthPopupResponse') || h.calls.has('setOAuthNonceCookie'), 'oauth-redirect handler must use oauthPopupResponse or setOAuthNonceCookie');
       need(noBearer(route, h) && h.sessionCallsWithArgs === 0, 'oauth-redirect handler must not handle bearer credentials');
+      need(importedBearerRisk(route, h, ctx).length === 0, `oauth-redirect handler must not reach imported bearer handling (found ${importedBearerRisk(route, h, ctx).join(', ')})`);
       break;
     case 'ops-public':
       need(ctx.opsPublic.includes(key), 'ops-public is a closed list; the endpoint must be in opsPublic');
       need(noSession(h), 'ops-public handler must be unauthenticated');
       need(noBearer(route, h), 'ops-public handler must not handle bearer credentials');
+      need(importedBearerRisk(route, h, ctx).length === 0, `ops-public handler must not reach imported bearer handling (found ${importedBearerRisk(route, h, ctx).join(', ')})`);
       break;
     case 'returned-url': {
       const mapping = mappedAndCalled(ctx, exclusion.endpoint);

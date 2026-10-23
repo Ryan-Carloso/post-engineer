@@ -90,7 +90,7 @@ const OAUTH_JWT = 'header.payload.signature';
 
 type Handler = (request: Request, context: { params: Promise<Record<string, unknown>> }) => Promise<Response>;
 
-async function call(key: string, bearer: string): Promise<Response> {
+async function call(key: string, bearer: string, headerName = 'authorization'): Promise<Response> {
   const [method, path] = key.split(' ');
   const routeModule = (await import(
     /* @vite-ignore */ join(repoRoot, 'apps/web/app', path, 'route.ts')
@@ -99,7 +99,7 @@ async function call(key: string, bearer: string): Promise<Response> {
   if (handler === undefined) throw new Error(`${key}: no ${method} export`);
   const request = new Request(`https://example.com${path}`, {
     method,
-    headers: { authorization: `Bearer ${bearer}`, 'content-type': 'application/json' },
+    headers: { [headerName]: headerName === 'authorization' ? `Bearer ${bearer}` : bearer, 'content-type': 'application/json' },
     body: method === 'GET' || method === 'HEAD' ? undefined : '{}',
   });
   return handler(request, { params: Promise.resolve({}) });
@@ -126,6 +126,12 @@ describe('parity exclusions: bearer callers', () => {
     expect(resolveApiKey).not.toHaveBeenCalled();
   });
 
+  it.each(byKind('session-only'))('%s answers 401 to a valid API key in x-api-key and never resolves it', async (key) => {
+    const response = await call(key, API_KEY, 'x-api-key');
+    expect(response.status).toBe(401);
+    expect(resolveApiKey).not.toHaveBeenCalled();
+  });
+
   it.each(byKind('session-only'))('%s answers 401 to a valid OAuth token and never verifies it', async (key) => {
     const response = await call(key, OAUTH_JWT);
     expect(response.status).toBe(401);
@@ -134,6 +140,12 @@ describe('parity exclusions: bearer callers', () => {
 
   it.each(byKind('bearer-rejected'))('%s answers 403 to a valid API key', async (key) => {
     const response = await call(key, API_KEY);
+    expect(resolveApiKey).toHaveBeenCalled();
+    expect(response.status).toBe(403);
+  });
+
+  it.each(byKind('bearer-rejected'))('%s answers 403 to a valid API key in x-api-key', async (key) => {
+    const response = await call(key, API_KEY, 'x-api-key');
     expect(resolveApiKey).toHaveBeenCalled();
     expect(response.status).toBe(403);
   });
