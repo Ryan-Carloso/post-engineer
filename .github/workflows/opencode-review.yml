@@ -29,8 +29,9 @@ name: opencode-review
 #   model list to rot — same convention as the engine's
 #   _PROVIDER_DEFAULT_MODELS); one OPENROUTER_API_KEY secret serves both
 #   tiers (free models cost $0 even on a paid key).
-# - The job always runs: free OpenCode models need no secret. Each paid tier
-#   is skipped when its key is missing.
+#   Paid tiers run only when their key is set (zai → ZAI_API_KEY,
+#   openrouter → OPENROUTER_API_KEY, opencode → OPENCODE_ZEN_API_KEY for
+#   paid OpenCode Zen models; free opencode/* models need no secret).
 # - A second pass (REVIEW_MODEL_VERIFY, default a different provider) confirms
 #   or refutes pass 1. It is skipped when its key is missing, or when the
 #   diff is docs/assets-only and pass 1 has no CRITICAL/MAJOR. If pass 2
@@ -107,11 +108,13 @@ jobs:
         env:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
         run: |
           set -euo pipefail
           # has_key is the single gate for the whole job: the review runs if
-          # EITHER provider key is configured. Per-tier outputs let the
-          # review step skip the tiers whose key is missing.
+          # ANY provider key is configured or not at all (free OpenCode
+          # models need no secret). Per-tier outputs let the review step
+          # skip the tiers whose key is missing.
           if [ -z "${ZAI_API_KEY:-}" ]; then
             echo "has_zai_key=false" >> "$GITHUB_OUTPUT"
           else
@@ -122,16 +125,22 @@ jobs:
           else
             echo "has_openrouter_key=true" >> "$GITHUB_OUTPUT"
           fi
+          if [ -z "${OPENCODE_ZEN_API_KEY:-}" ]; then
+            echo "has_opencode_key=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_opencode_key=true" >> "$GITHUB_OUTPUT"
+          fi
           echo "has_key=true" >> "$GITHUB_OUTPUT"
-          if [ -z "${ZAI_API_KEY:-}" ] && [ -z "${OPENROUTER_API_KEY:-}" ]; then
+          if [ -z "${ZAI_API_KEY:-}" ] && [ -z "${OPENROUTER_API_KEY:-}" ] && [ -z "${OPENCODE_ZEN_API_KEY:-}" ]; then
             echo "No paid provider key is set. Review will use free models only."
           fi
 
       - name: Mask provider secrets
-        if: steps.check.outputs.has_zai_key == 'true' || steps.check.outputs.has_openrouter_key == 'true'
+        if: steps.check.outputs.has_zai_key == 'true' || steps.check.outputs.has_openrouter_key == 'true' || steps.check.outputs.has_opencode_key == 'true'
         env:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
         run: |
           set -euo pipefail
           # Establish log masking before any step that can print LLM output
@@ -139,6 +148,9 @@ jobs:
           # Scrub step still scrubs the key VALUES from the posted files.
           echo "::add-mask::${ZAI_API_KEY}"
           echo "::add-mask::${OPENROUTER_API_KEY}"
+          if [ -n "${OPENCODE_ZEN_API_KEY:-}" ]; then
+            echo "::add-mask::${OPENCODE_ZEN_API_KEY}"
+          fi
 
       - name: Install OpenCode (pinned release)
         if: steps.check.outputs.has_key == 'true'
@@ -170,8 +182,10 @@ jobs:
         env:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
           HAS_ZAI_KEY: ${{ steps.check.outputs.has_zai_key }}
           HAS_OPENROUTER_KEY: ${{ steps.check.outputs.has_openrouter_key }}
+          HAS_OPENCODE_KEY: ${{ steps.check.outputs.has_opencode_key }}
           REVIEW_MODEL_CHAIN_OVERRIDE: ${{ env.REVIEW_MODEL_CHAIN_OVERRIDE }}
           REVIEW_MODEL_PRIMARY: ${{ env.REVIEW_MODEL_PRIMARY }}
           OPENCODE_MODEL: ${{ env.OPENCODE_MODEL }}
@@ -190,6 +204,7 @@ jobs:
         env:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
         run: |
           set -euo pipefail
           # Temp config: OPENCODE_DISABLE_PROJECT_CONFIG skips the repo's
@@ -235,6 +250,11 @@ jobs:
                   "https://openrouter.ai/api/v1",
                   "OPENROUTER_API_KEY",
               ),
+              "opencode": (
+                  "OpenCode Zen",
+                  "https://opencode.ai/zen/v1",
+                  "OPENCODE_ZEN_API_KEY",
+              ),
           }
           for provider, models in groups.items():
               if provider not in endpoints:
@@ -257,7 +277,13 @@ jobs:
           # expects) from each provider's key variable; the workflow
           # validator checks this construction directly.
           for provider in providers.values():
-              key_var = "ZAI_API_KEY" if "z.ai" in provider["options"]["baseURL"] else "OPENROUTER_API_KEY"
+              base_url = provider["options"]["baseURL"]
+              if base_url == "https://opencode.ai/zen/v1":
+                  key_var = "OPENCODE_ZEN_API_KEY"
+              elif "z.ai" in base_url:
+                  key_var = "ZAI_API_KEY"
+              else:
+                  key_var = "OPENROUTER_API_KEY"
               provider["options"]["apiKey"] = "{env:%s}" % key_var
           config = {
               "$schema": "https://opencode.ai/config.json",
@@ -364,6 +390,7 @@ jobs:
         env:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
@@ -475,6 +502,7 @@ jobs:
         env:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
@@ -519,6 +547,9 @@ jobs:
           case "$provider" in
             openrouter)
               [ -n "${OPENROUTER_API_KEY:-}" ] && key_ok=true
+              ;;
+            opencode)
+              [ -n "${OPENCODE_ZEN_API_KEY:-}" ] && key_ok=true
               ;;
             zai-coding-plan|zai-standard)
               [ -n "${ZAI_API_KEY:-}" ] && key_ok=true
@@ -585,6 +616,7 @@ jobs:
         env:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
         run: |
           set -euo pipefail
           # Prompt-injection guard: the review is LLM output over
@@ -612,7 +644,7 @@ jobs:
                   continue
               text = open(path, encoding="utf-8").read()
               scrubbed = False
-              for var in ("ZAI_API_KEY", "OPENROUTER_API_KEY"):
+              for var in ("ZAI_API_KEY", "OPENROUTER_API_KEY", "OPENCODE_ZEN_API_KEY"):
                   key = os.environ.get(var, "")
                   if key and key in text:
                       text = text.replace(key, "***REDACTED***")

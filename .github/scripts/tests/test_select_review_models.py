@@ -181,6 +181,62 @@ def test_paid_fallbacks_survive_chain_length_cap(mod):
     assert attempts.index("zai-coding-plan/glm-5.3-flash") > 0
 
 
+def test_paid_opencode_fallback_runs_after_free_chain(mod):
+    prefs = json.loads(PREFS_PATH.read_text(encoding="utf-8"))
+    available = dict(mod.parse_opencode_verbose(SAMPLE_OPENCODE_VERBOSE))
+    available["opencode/glm-5.3-flash"] = mod.ModelMeta(
+        model_id="opencode/glm-5.3-flash",
+        context=200000,
+        max_output=32000,
+        tool_support=True,
+        zero_cost=False,
+    )
+    env = {
+        "HAS_ZAI_KEY": "false",
+        "HAS_OPENROUTER_KEY": "false",
+        "HAS_OPENCODE_KEY": "true",
+        "REVIEW_MODEL_PRIMARY": "zai-coding-plan/glm-5.3-flash",
+        "OPENCODE_MODEL": "zai-coding-plan/glm-5.3-flash",
+        "OPENROUTER_MODEL": "z-ai/glm-5.3-flash",
+        "OPENROUTER_FREE_MODEL": "openrouter/free",
+        "ZAI_FREE_MODEL": "glm-4.7-flash",
+    }
+    attempts, _, decisions = mod.build_chain(prefs, available, env)
+    assert attempts[0] == "opencode/glm-5.3-flash-free"
+    assert "zai-coding-plan/glm-5.3-flash" not in attempts
+    assert attempts[-1] == "opencode/glm-5.3-flash"
+    skipped = [d for d in decisions if d.model_id == "zai-coding-plan/glm-5.3-flash"]
+    assert skipped and "key missing" in skipped[0].reason
+
+
+def test_paid_opencode_fallback_skipped_without_zen_key(mod):
+    prefs = json.loads(PREFS_PATH.read_text(encoding="utf-8"))
+    available = dict(mod.parse_opencode_verbose(SAMPLE_OPENCODE_VERBOSE))
+    available["opencode/glm-5.3-flash"] = mod.ModelMeta(
+        model_id="opencode/glm-5.3-flash",
+        context=200000,
+        max_output=32000,
+        tool_support=True,
+        zero_cost=False,
+    )
+    env = {
+        "HAS_ZAI_KEY": "false",
+        "HAS_OPENROUTER_KEY": "false",
+        "HAS_OPENCODE_KEY": "false",
+        "REVIEW_MODEL_PRIMARY": "zai-coding-plan/glm-5.3-flash",
+        "OPENCODE_MODEL": "zai-coding-plan/glm-5.3-flash",
+        "OPENROUTER_MODEL": "z-ai/glm-5.3-flash",
+        "OPENROUTER_FREE_MODEL": "openrouter/free",
+        "ZAI_FREE_MODEL": "glm-4.7-flash",
+    }
+    attempts, _, decisions = mod.build_chain(prefs, available, env)
+    assert "opencode/glm-5.3-flash" not in attempts
+    assert any(
+        d.model_id == "opencode/glm-5.3-flash" and "opencode key missing" in d.reason
+        for d in decisions
+    )
+
+
 def test_main_writes_chain_file(mod, tmp_path, monkeypatch):
     prefs_copy = tmp_path / "prefs.json"
     prefs_copy.write_text(PREFS_PATH.read_text(encoding="utf-8"), encoding="utf-8")
