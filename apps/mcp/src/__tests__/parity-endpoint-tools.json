@@ -1,0 +1,114 @@
+{
+  "POST /api/account/connect-url": [
+    "connect_account"
+  ],
+  "GET /api/account": [
+    "list_social_accounts"
+  ],
+  "GET /api/billing/tokens": [
+    "get_token_balance"
+  ],
+  "POST /api/bluesky-connect": [
+    "connect_account"
+  ],
+  "GET /api/persona/faces": [
+    "list_faces"
+  ],
+  "GET /api/persona/images": [
+    "list_persona_images"
+  ],
+  "POST /api/persona/images": [
+    "add_persona_image"
+  ],
+  "DELETE /api/persona/images": [
+    "remove_persona_image"
+  ],
+  "PATCH /api/persona/images": [
+    "update_persona_image"
+  ],
+  "GET /api/persona/list": [
+    "list_personas"
+  ],
+  "POST /api/persona": [
+    "create_persona"
+  ],
+  "PATCH /api/persona": [
+    "update_persona"
+  ],
+  "GET /api/metrics": [
+    "get_post_metrics"
+  ],
+  "GET /api/posts/[id]": [
+    "get_post"
+  ],
+  "GET /api/persona/video-status/[taskId]": [
+    "get_video_status",
+    "get_video_task_progress"
+  ],
+  "GET /api/persona/voices": [
+    "list_voices"
+  ],
+  "GET /api/persona/cloned-voices": [
+    "list_cloned_voices"
+  ],
+  "POST /api/persona/cloned-voices": [
+    "create_cloned_voice"
+  ],
+  "GET /api/persona/cloned-voices/[cloneId]": [
+    "get_cloned_voice"
+  ],
+  "DELETE /api/persona/cloned-voices/[cloneId]": [
+    "delete_cloned_voice"
+  ],
+  "POST /api/persona/cloned-voices/[cloneId]/preview": [
+    "preview_cloned_voice"
+  ],
+  "GET /api/schedule": [
+    "list_schedules"
+  ],
+  "DELETE /api/schedule": [
+    "cancel_schedule"
+  ],
+  "GET /api/schedule/slots/[slotId]": [
+    "get_slot"
+  ],
+  "PATCH /api/schedule/slots/[slotId]": [
+    "update_slot_topic"
+  ],
+  "DELETE /api/schedule/slots/[slotId]": [
+    "delete_slot"
+  ],
+  "GET /api/schedule/status": [
+    "list_posts"
+  ],
+  "GET /api/persona/delete-preview": [
+    "get_persona_delete_preview"
+  ],
+  "GET /api/persona/publishing-accounts": [
+    "get_persona_publishing_accounts"
+  ],
+  "PUT /api/persona/publishing-accounts": [
+    "set_persona_publishing_accounts"
+  ],
+  "DELETE /api/persona": [
+    "delete_persona"
+  ],
+  "DELETE /api/account": [
+    "disconnect_account"
+  ],
+  "GET /api/persona/video-generations": [
+    "list_video_generations"
+  ],
+  "GET /api/persona/video-generations/[generationId]": [
+    "get_video_generation"
+  ],
+  "GET /api/billing/transactions": [
+    "list_token_transactions"
+  ],
+  "POST /api/upload-content": [
+    "publish_video_direct"
+  ],
+  "POST /api/videos/generate-and-schedule": [
+    "generate_persona_videos"
+  ]
+}

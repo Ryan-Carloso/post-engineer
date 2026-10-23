@@ -1,32 +1,86 @@
 {
-  "DELETE /api/api-keys/[id]": { "kind": "bearer-rejected" },
-  "GET /api/api-keys": { "kind": "bearer-rejected" },
-  "POST /api/api-keys": { "kind": "bearer-rejected" },
-  "POST /api/billing/check-tokens": { "kind": "secret-auth", "mechanism": "engine-secret" },
-  "POST /api/billing/checkout": { "kind": "session-only" },
-  "POST /api/billing/webhook": { "kind": "secret-auth", "mechanism": "stripe-signature" },
-  "GET /api/coverage": { "kind": "ops-public" },
-  "POST /api/cron/billing-reconcile": { "kind": "secret-auth", "mechanism": "cron-secret" },
-  "POST /api/cron/post-metrics": { "kind": "secret-auth", "mechanism": "cron-secret" },
-  "GET /api/google-oauth/callback": { "kind": "oauth-redirect" },
-  "GET /api/google-oauth/start": { "kind": "oauth-redirect" },
-  "GET /api/health": { "kind": "session-only" },
-  "GET /api/instagram-auth/callback": { "kind": "oauth-redirect" },
-  "GET /api/instagram-auth/start": { "kind": "oauth-redirect" },
-  "GET /api/linkedin-auth/callback": { "kind": "oauth-redirect" },
-  "GET /api/linkedin-auth/start": { "kind": "oauth-redirect" },
-  "POST /api/logout": { "kind": "session-only" },
-  "GET /api/moneyprint/health": { "kind": "session-only" },
-  "POST /api/persona/avatar": { "kind": "session-only" },
-  "GET /api/persona/video-download/[taskId]/[...path]": {
-    "kind": "covered-by",
-    "tools": ["get_video_status"]
-  },
-  "GET /api/persona/video-events/[taskId]": {
-    "kind": "covered-by",
-    "tools": ["get_video_task_progress"]
-  },
-  "DELETE /api/persona/video-task/[taskId]": { "kind": "session-only" },
-  "POST /api/persona/cloned-voices/denoise-preview": { "kind": "session-only" },
-  "GET /api/version": { "kind": "ops-public" }
+  "opsPublic": [
+    "GET /api/coverage",
+    "GET /api/version"
+  ],
+  "exclusions": {
+    "DELETE /api/api-keys/[id]": {
+      "kind": "bearer-rejected"
+    },
+    "GET /api/api-keys": {
+      "kind": "bearer-rejected"
+    },
+    "POST /api/api-keys": {
+      "kind": "bearer-rejected"
+    },
+    "POST /api/billing/check-tokens": {
+      "kind": "secret-auth",
+      "mechanism": "engine-secret"
+    },
+    "POST /api/billing/checkout": {
+      "kind": "session-only"
+    },
+    "POST /api/billing/webhook": {
+      "kind": "secret-auth",
+      "mechanism": "stripe-signature"
+    },
+    "GET /api/coverage": {
+      "kind": "ops-public"
+    },
+    "POST /api/cron/billing-reconcile": {
+      "kind": "secret-auth",
+      "mechanism": "cron-secret"
+    },
+    "POST /api/cron/post-metrics": {
+      "kind": "secret-auth",
+      "mechanism": "cron-secret"
+    },
+    "GET /api/google-oauth/callback": {
+      "kind": "oauth-redirect"
+    },
+    "GET /api/google-oauth/start": {
+      "kind": "oauth-redirect"
+    },
+    "GET /api/health": {
+      "kind": "session-only"
+    },
+    "GET /api/instagram-auth/callback": {
+      "kind": "oauth-redirect"
+    },
+    "GET /api/instagram-auth/start": {
+      "kind": "oauth-redirect"
+    },
+    "GET /api/linkedin-auth/callback": {
+      "kind": "oauth-redirect"
+    },
+    "GET /api/linkedin-auth/start": {
+      "kind": "oauth-redirect"
+    },
+    "POST /api/logout": {
+      "kind": "session-only"
+    },
+    "GET /api/moneyprint/health": {
+      "kind": "session-only"
+    },
+    "POST /api/persona/avatar": {
+      "kind": "session-only"
+    },
+    "POST /api/persona/cloned-voices/denoise-preview": {
+      "kind": "session-only"
+    },
+    "GET /api/persona/video-download/[taskId]/[...path]": {
+      "kind": "returned-url",
+      "endpoint": "GET /api/persona/video-status/[taskId]"
+    },
+    "GET /api/persona/video-events/[taskId]": {
+      "kind": "event-stream",
+      "polledBy": "GET /api/persona/video-status/[taskId]"
+    },
+    "DELETE /api/persona/video-task/[taskId]": {
+      "kind": "session-only"
+    },
+    "GET /api/version": {
+      "kind": "ops-public"
+    }
+  }
 }
