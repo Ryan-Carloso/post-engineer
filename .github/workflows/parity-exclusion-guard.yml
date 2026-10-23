@@ -1,0 +1,105 @@
+name: parity-exclusion-guard
+
+# Fails a PR that changes the MCP parity gate without fresh code-owner
+# approval.
+#
+# Why: apps/mcp/src/__tests__/web-api-parity.test.ts requires every web API
+# endpoint to have an MCP tool or a typed exclusion, and verifies both. A
+# PR could still weaken the gate itself (add an exclusion, edit the
+# verifier, the behavioural test, this workflow, its scripts or CODEOWNERS).
+# This guard makes any such change need an explicit, current approval.
+# Removing an exclusion (replacing it with a real tool) needs nothing.
+#
+# Security model:
+# - pull_request_target: the workflow file and the scripts always come from
+#   the base branch. The PR head is fetched as data only (git diff /
+#   git show); nothing from the PR is checked out, installed or executed.
+# - The token is read-only, no secrets are used, and checkout does not
+#   persist credentials.
+#
+# Approval (see .github/scripts/parity-exclusions/approval.mjs):
+#   1. A code owner (@Ryan-Carloso) reviews the PR and approves the
+#      current head commit.
+#   2. The code owner applies the `parity-exclusion-approved` label (this
+#      re-runs the check). If the label was applied first, re-run the job.
+#   The most recent `labeled` event must be the code owner's, and the
+#   approving review must be on the current head: any later push fails
+#   again until the code owner approves the new head.
+#
+# Mandatory repository settings (admin only), without which this guard is
+# advisory: make `parity-exclusion-guard / guard` a required status check
+# on main, and enable "Require review from Code Owners" (CODEOWNERS covers
+# .github/workflows/, so a PR cannot add a look-alike workflow unreviewed).
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled, ready_for_review]
+
+concurrency:
+  group: parity-exclusion-guard-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the base branch (trusted scripts)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 pinned 2026-09-25
+        with:
+          node-version: '22'
+
+      - name: Fetch the PR head as data
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+refs/pull/${PR_NUMBER}/head:refs/remotes/pr/head"
+          fetched=$(git rev-parse refs/remotes/pr/head)
+          if [ "$fetched" != "$HEAD_SHA" ]; then
+            echo "::error::The PR head moved while this run started ($HEAD_SHA -> $fetched); the run for the new head decides."
+            exit 2
+          fi
+
+      - name: Unit tests (guard scripts, base version)
+        run: node --test .github/scripts/parity-exclusions/*.test.mjs
+
+      - name: Detect guarded parity changes
+        id: detect
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          node .github/scripts/parity-exclusions/check.mjs detect \
+            --base "$BASE_SHA" --head "$HEAD_SHA"
+
+      - name: Require current code-owner approval
+        if: steps.detect.outputs.needs_approval == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          dir=$(mktemp -d)
+          gh api "repos/$REPO/issues/$PR_NUMBER/labels" --paginate --jq '[.[].name]' | jq -s 'add // []' > "$dir/labels.json"
+          gh api "repos/$REPO/issues/$PR_NUMBER/timeline" --paginate | jq -s 'add // []' > "$dir/timeline.json"
+          gh api "repos/$REPO/pulls/$PR_NUMBER/reviews" --paginate | jq -s 'add // []' > "$dir/reviews.json"
+          node .github/scripts/parity-exclusions/check.mjs approve \
+            --head "$HEAD_SHA" \
+            --labels "$dir/labels.json" \
+            --timeline "$dir/timeline.json" \
+            --reviews "$dir/reviews.json"

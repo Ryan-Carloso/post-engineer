@@ -30,6 +30,15 @@ async function getHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
 
+  // Key management (listing included) requires a full browser session: a
+  // bearer caller (API key or MCP OAuth token) must not even enumerate keys.
+  if (auth.isApiKey === true || auth.isOAuth === true) {
+    return NextResponse.json(
+      { success: false, error: 'API keys cannot manage API keys. Sign in to manage keys.' },
+      { status: 403 },
+    );
+  }
+
   const supabase = createSupabaseServiceClient();
   const { data, error } = await supabase
     .from('user_api_keys')
@@ -66,10 +75,11 @@ async function postHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
 
-  // Key management requires a full browser session. Any API-key-authenticated
-  // request is rejected here — an unrestricted key could otherwise mint new
-  // keys or revoke the keys that control it (self-escalation / lockout).
-  if (auth.isApiKey === true) {
+  // Key management requires a full browser session. Any API-key- or
+  // OAuth-authenticated request is rejected here — a bearer caller could
+  // otherwise mint new keys (a credential that outlives its own revocation)
+  // or revoke the keys that control it (self-escalation / lockout).
+  if (auth.isApiKey === true || auth.isOAuth === true) {
     return NextResponse.json(
       { success: false, error: 'API keys cannot manage API keys. Sign in to manage keys.' },
       { status: 403 },

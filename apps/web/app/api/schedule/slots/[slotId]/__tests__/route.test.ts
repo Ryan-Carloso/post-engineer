@@ -128,9 +128,9 @@ function mockSlotsClient(options: {
   return { from, rpc, postsChain, schedulesChain, personasChain, historyChain, calls };
 }
 
-function mockAuth() {
+function mockAuth(personaIds?: string[] | null) {
   vi.mocked(requireSupabaseSession).mockResolvedValue({
-    auth: { userId: USER_ID, accessToken: 'pe_test_key', isApiKey: true },
+    auth: { userId: USER_ID, accessToken: 'pe_test_key', isApiKey: true, ...(personaIds === undefined ? {} : { personaIds }) },
     error: null,
   } as never);
 }
@@ -215,6 +215,20 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
 
     expect(response.status).toBe(404);
     expect(client.calls.some((c) => c.op === 'delete')).toBe(false);
+  });
+
+  it('returns 404 and does not delete a slot outside the API key persona scope', async () => {
+    const client = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', topic: 'T' },
+      schedule: { id: 's1', user_id: USER_ID, persona_id: 'p-other' },
+    });
+    mockAuth(['p-allowed']);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await deleteSlot(SLOT_ID);
+
+    expect(response.status).toBe(404);
+    expect(client.rpc).not.toHaveBeenCalled();
   });
 
   it('returns 500 (not 404) and logs when the slot lookup hits a DB error', async () => {
@@ -396,6 +410,20 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
 
     expect(response.status).toBe(404);
     expect(client.calls.some((c) => c.op === 'update')).toBe(false);
+  });
+
+  it('returns 404 and does not update a slot outside the API key persona scope', async () => {
+    const client = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', topic: 'Old' },
+      schedule: { id: 's1', user_id: USER_ID, persona_id: 'p-other' },
+    });
+    mockAuth(['p-allowed']);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await patchSlot(SLOT_ID, { topic: 'New' });
+
+    expect(response.status).toBe(404);
+    expect(client.calls.some((call) => call.op === 'update')).toBe(false);
   });
 });
 

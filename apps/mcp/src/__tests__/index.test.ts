@@ -42,6 +42,9 @@ import {
   GetPersonaPublishingAccountsShape,
   SetPersonaPublishingAccountsShape,
 } from '../tools-publishing-accounts.js';
+import { GetClonedVoiceShape } from '../cloned-voice-tools.js';
+import { GetPostShape, GetPostMetricsShape } from '../tools-posts.js';
+import { CancelVideoTaskShape } from '../video-task-tools.js';
 import type { PostEngineerClient } from '../client.js';
 
 const mockTrackEvent = vi.fn();
@@ -55,6 +58,7 @@ const EXPECTED_TOOLS = [
   'list_voices',
   'list_cloned_voices',
   'create_cloned_voice',
+  'get_cloned_voice',
   'delete_cloned_voice',
   'preview_cloned_voice',
   'list_faces',
@@ -71,6 +75,9 @@ const EXPECTED_TOOLS = [
   'delete_slot',
   'list_video_generations',
   'get_video_generation',
+  'cancel_video_task',
+  'get_post',
+  'get_post_metrics',
   'list_token_transactions',
   'get_persona_delete_preview',
   'delete_persona',
@@ -193,6 +200,7 @@ describe('registered tool schemas (single source of truth)', () => {
       list_voices: ListVoicesShape,
       list_cloned_voices: ListClonedVoicesShape,
       create_cloned_voice: CreateClonedVoiceShape,
+      get_cloned_voice: GetClonedVoiceShape,
       delete_cloned_voice: DeleteClonedVoiceShape,
       preview_cloned_voice: PreviewClonedVoiceShape,
       list_faces: ListFacesShape,
@@ -209,6 +217,9 @@ describe('registered tool schemas (single source of truth)', () => {
       delete_slot: DeleteSlotShape,
       list_video_generations: ListVideoGenerationsShape,
       get_video_generation: GetVideoGenerationShape,
+      cancel_video_task: CancelVideoTaskShape,
+      get_post: GetPostShape,
+      get_post_metrics: GetPostMetricsShape,
       list_token_transactions: ListTokenTransactionsShape,
       get_persona_delete_preview: GetPersonaDeletePreviewShape,
       delete_persona: DeletePersonaShape,

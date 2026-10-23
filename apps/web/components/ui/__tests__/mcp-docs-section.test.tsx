@@ -108,7 +108,7 @@ describe('McpDocsSection', () => {
     expect(screen.queryByTestId('mcp-docs-help-cta')).toBeNull();
   });
 
-  it('renders the tools grid with all thirty-four tools', () => {
+  it('renders the tools grid with all thirty-eight tools', () => {
     render(<McpDocsSection />);
 
     const grid = screen.getByTestId('mcp-tools-grid');
@@ -123,6 +123,7 @@ describe('McpDocsSection', () => {
       'list_voices',
       'list_cloned_voices',
       'create_cloned_voice',
+      'get_cloned_voice',
       'delete_cloned_voice',
       'preview_cloned_voice',
       'list_faces',
@@ -149,6 +150,9 @@ describe('McpDocsSection', () => {
       'delete_slot',
       'list_video_generations',
       'get_video_generation',
+      'get_post',
+      'get_post_metrics',
+      'cancel_video_task',
       'list_token_transactions',
       'get_persona_delete_preview',
       'delete_persona',
@@ -243,14 +247,17 @@ describe('McpDocsSection', () => {
     expect(prompt).not.toContain('Clone');
     expect(prompt).not.toContain('apps/mcp/dist/index.js');
     expect(prompt).not.toContain('POST_ENGINEER_API_URL');
-    // The nine gap-closing tools must be documented for the agent in the
-    // copied prompt, or the prompt silently omits what the server offers.
+    // The prompt must document these tools for the agent, or it silently
+    // omits what the server offers.
     for (const tool of [
       'get_slot',
       'update_slot_topic',
       'delete_slot',
       'list_video_generations',
       'get_video_generation',
+      'get_post',
+      'get_post_metrics',
+      'cancel_video_task',
       'list_token_transactions',
       'get_persona_delete_preview',
       'delete_persona',
@@ -401,6 +408,9 @@ const EXPECTED_EN_PROMPT: string[] = [
   "- delete_slot: delete one scheduled post slot (only pending/awaiting or failed slots; never the schedule's last slot).",
   "- list_video_generations: list my video generation history, newest first (optional limit, default 50, max 200).",
   "- get_video_generation: get one video generation's detail by generation ID.",
+  "- cancel_video_task: cancel/remove one of my video tasks on the engine by taskId; only my own task, no token refund.",
+  "- get_post: get one post's full detail by id — slot id or generation id, the server resolves which (kind \"slot\" or \"generation\"), with live generation progress.",
+  "- get_post_metrics: per-video performance snapshots (views, likes, comments, saves) for window 24h or 7d; optional filters persona, account, provider, angle.",
   "- list_token_transactions: list my token ledger — every credit and debit (purchases, generation spends, refunds), newest first (optional limit, default 20, max 100).",
   "- get_persona_delete_preview: preview what deleting a persona would remove (counts + per-video download links). Read-only.",
   "- delete_persona: DESTRUCTIVE — delete a persona with all its schedules, slots, videos, and image library. No token refunds.",
@@ -460,6 +470,9 @@ const EXPECTED_PT_PROMPT: string[] = [
   "- delete_slot: deletar um slot de post agendado (só slots pendentes/aguardando ou falhados; nunca o último slot do agendamento).",
   "- list_video_generations: listar meu histórico de gerações de vídeo, do mais recente ao mais antigo (limit opcional, padrão 50, máx 200).",
   "- get_video_generation: ver o detalhe de uma geração de vídeo pelo generation ID.",
+  "- cancel_video_task: cancelar/remover uma tarefa de vídeo no motor pelo taskId; apenas a minha tarefa, sem reembolso de tokens.",
+  "- get_post: ver o detalhe completo de um post pelo id — slot id ou generation id, o servidor resolve qual (kind \"slot\" ou \"generation\"), com o progresso ao vivo da geração.",
+  "- get_post_metrics: métricas por vídeo (views, likes, comentários, salvos) para a janela 24h ou 7d; filtros opcionais persona, account, provider, angle.",
   "- list_token_transactions: listar meu extrato de tokens — todos os créditos e débitos (compras, gastos de geração, reembolsos), do mais recente ao mais antigo (limit opcional, padrão 20, máx 100).",
   "- get_persona_delete_preview: ver o que deletar uma persona removeria (contagens + links de download por vídeo). Somente leitura.",
   "- delete_persona: DESTRUTIVO — deleta uma persona com todos os agendamentos, slots, vídeos e biblioteca de imagens. Sem reembolso de tokens.",

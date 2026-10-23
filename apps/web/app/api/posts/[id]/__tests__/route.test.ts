@@ -21,10 +21,10 @@ vi.mock('@/lib/rate-limit', async (importOriginal) => {
   return { ...actual, applyRateLimit: vi.fn().mockResolvedValue(null) };
 });
 
-vi.mock('@/lib/post-detail', () => ({
-  getGenerationPost: vi.fn(),
-  getSlotPost: vi.fn(),
-}));
+vi.mock('@/lib/post-detail', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/post-detail')>();
+  return { ...actual, getGenerationPost: vi.fn(), getSlotPost: vi.fn() };
+});
 
 vi.mock('@/lib/api-error-reporting', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/api-error-reporting')>();
@@ -141,7 +141,7 @@ describe('GET /api/posts/[id]', () => {
     expect(body.success).toBe(true);
     expect(body.kind).toBe('slot');
     expect(body.slot.id).toBe('slot-1');
-    expect(getSlotPost).toHaveBeenCalledWith(expect.anything(), SLOT_ID, USER_ID);
+    expect(getSlotPost).toHaveBeenCalledWith(expect.anything(), SLOT_ID, USER_ID, null);
   });
 
   it('returns 404 when neither lookup matches (genuine miss)', async () => {
@@ -216,7 +216,7 @@ describe('GET /api/posts/[id]', () => {
     vi.mocked(getGenerationPost).mockResolvedValue(null);
     vi.mocked(getSlotPost).mockResolvedValue(null);
     await get(SLOT_ID);
-    expect(getGenerationPost).toHaveBeenCalledWith(server, SLOT_ID, USER_ID);
+    expect(getGenerationPost).toHaveBeenCalledWith(server, SLOT_ID, USER_ID, null);
     expect(createSupabaseServiceClient).not.toHaveBeenCalled();
   });
 
@@ -230,7 +230,7 @@ describe('GET /api/posts/[id]', () => {
     vi.mocked(getGenerationPost).mockResolvedValue(null);
     vi.mocked(getSlotPost).mockResolvedValue(null);
     await get(SLOT_ID);
-    expect(getGenerationPost).toHaveBeenCalledWith(service, SLOT_ID, USER_ID);
+    expect(getGenerationPost).toHaveBeenCalledWith(service, SLOT_ID, USER_ID, null);
     expect(createSupabaseServerClient).not.toHaveBeenCalled();
   });
 
@@ -244,7 +244,7 @@ describe('GET /api/posts/[id]', () => {
     vi.mocked(getGenerationPost).mockResolvedValue(null);
     vi.mocked(getSlotPost).mockResolvedValue(null);
     await get(SLOT_ID);
-    expect(getGenerationPost).toHaveBeenCalledWith(service, SLOT_ID, USER_ID);
+    expect(getGenerationPost).toHaveBeenCalledWith(service, SLOT_ID, USER_ID, null);
     expect(createSupabaseServerClient).not.toHaveBeenCalled();
   });
 });

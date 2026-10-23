@@ -12,8 +12,9 @@ async function deleteHandler(
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
 
-  // Same rule as POST: key management requires a full browser session.
-  if (auth.isApiKey === true) {
+  // Same rule as POST: key management requires a full browser session
+  // (API-key and OAuth bearer callers are both rejected).
+  if (auth.isApiKey === true || auth.isOAuth === true) {
     return NextResponse.json(
       { success: false, error: 'API keys cannot manage API keys. Sign in to manage keys.' },
       { status: 403 },

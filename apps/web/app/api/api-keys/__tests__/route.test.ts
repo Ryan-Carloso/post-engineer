@@ -439,6 +439,54 @@ describe('API-key privilege escalation (H3)', () => {
   });
 });
 
+describe('bearer callers cannot manage API keys (API key or MCP OAuth token)', () => {
+  const apiKeyAuth = {
+    auth: { userId: 'user-1', accessToken: 'pe_live_full', isApiKey: true, keyId: 'key-full', personaIds: null },
+    error: null,
+  };
+  const oauthAuth = {
+    auth: { userId: 'user-1', accessToken: 'header.payload.signature', isOAuth: true },
+    error: null,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it.each([
+    ['an API key', apiKeyAuth],
+    ['an OAuth token', oauthAuth],
+  ])('GET rejects %s with 403 before listing keys', async (_label, session) => {
+    vi.mocked(requireSupabaseSession).mockResolvedValue(session);
+    const response = await GET(new Request('http://localhost:3434/api/api-keys'));
+    expect(response.status).toBe(403);
+    expect((await response.json()).success).toBe(false);
+    expect(vi.mocked(createSupabaseServiceClient)).not.toHaveBeenCalled();
+  });
+
+  it('POST rejects an OAuth token with 403 before minting a key', async () => {
+    vi.mocked(requireSupabaseSession).mockResolvedValue(oauthAuth);
+    const response = await POST(
+      new Request('http://localhost:3434/api/api-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Via OAuth' }),
+      }),
+    );
+    expect(response.status).toBe(403);
+    expect(vi.mocked(createSupabaseServiceClient)).not.toHaveBeenCalled();
+  });
+
+  it('DELETE rejects an OAuth token with 403 before revoking a key', async () => {
+    vi.mocked(requireSupabaseSession).mockResolvedValue(oauthAuth);
+    const response = await DELETE(new Request('http://localhost:3434/api/api-keys/key-other'), {
+      params: Promise.resolve({ id: 'key-other' }),
+    });
+    expect(response.status).toBe(403);
+    expect(vi.mocked(createSupabaseServiceClient)).not.toHaveBeenCalled();
+  });
+});
+
 describe('POST /api/api-keys rate limiting', () => {
   afterEach(() => {
     vi.unstubAllEnvs();

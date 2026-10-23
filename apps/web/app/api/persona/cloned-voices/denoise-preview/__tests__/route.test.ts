@@ -71,6 +71,33 @@ describe('POST /api/persona/cloned-voices/denoise-preview', () => {
     expect((init.body as FormData).get('file')).toBeInstanceOf(Blob);
   });
 
+  it('authenticates by cookie session only (never resolves bearer headers)', async () => {
+    fetchMock.mockResolvedValue(new Response(new Uint8Array([1]), { headers: { 'content-type': 'audio/wav' } }));
+    vi.mocked(requireSupabaseSession).mockClear();
+    await POST(
+      new Request(URL_, { method: 'POST', body: form(), headers: { authorization: 'Bearer pe_live_key' } }),
+    );
+    expect(requireSupabaseSession).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(requireSupabaseSession).mock.calls[0]).toEqual([]);
+  });
+
+  it('returns 401 for an API-key bearer caller with no cookie session', async () => {
+    vi.mocked(requireSupabaseSession).mockResolvedValueOnce({
+      auth: null,
+      error: NextResponse.json(
+        { success: false, error: 'Authentication required.' },
+        { status: 401 },
+      ),
+    });
+
+    const response = await POST(
+      new Request(URL_, { method: 'POST', body: form(), headers: { authorization: 'Bearer pe_live_key' } }),
+    );
+
+    expect(response.status).toBe(401);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('applies the denoise preview rate limit', async () => {
     vi.mocked(applyRateLimit).mockResolvedValueOnce(
       NextResponse.json({ success: false, error: 'Too many requests.' }, { status: 429 }),

@@ -76,6 +76,17 @@ import {
   handleGetPersonaPublishingAccounts,
   handleSetPersonaPublishingAccounts,
 } from './tools-publishing-accounts.js';
+import { GetClonedVoiceShape, handleGetClonedVoice } from './cloned-voice-tools.js';
+import {
+  GetPostShape,
+  GetPostMetricsShape,
+  handleGetPost,
+  handleGetPostMetrics,
+} from './tools-posts.js';
+import {
+  CancelVideoTaskShape,
+  handleCancelVideoTask,
+} from './video-task-tools.js';
 import { trackEvent } from './analytics.js';
 
 //---------------
@@ -154,6 +165,15 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
     CreateClonedVoiceShape,
     withTracking('create_cloned_voice', async (args) => {
       return handleCreateClonedVoice(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'get_cloned_voice',
+    'Get one voice clone by id: its status (poll after create_cloned_voice until ready or failed) and voice_id once ready.',
+    GetClonedVoiceShape,
+    withTracking('get_cloned_voice', async (args) => {
+      return handleGetClonedVoice(apiClient, args);
     })
   );
 
@@ -298,6 +318,33 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
     GetVideoGenerationShape,
     withTracking('get_video_generation', async (args) => {
       return handleGetVideoGeneration(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'cancel_video_task',
+    'Cancel/remove one of your video tasks on the generation engine by task id (from get_video_status, get_video_task_progress, get_post or list_posts). Only the caller\'s own task can be cancelled; a persona-scoped API key can only cancel tasks belonging to its personas. Unknown or already-finished tasks return an error. No token refund is issued by this call.',
+    CancelVideoTaskShape,
+    withTracking('cancel_video_task', async (args) => {
+      return handleCancelVideoTask(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'get_post',
+    'Get one post\'s full detail by id, whichever kind it is: a scheduled slot (kind "slot") or a direct video generation (kind "generation"). The server resolves the id, so there is no need to guess between get_slot and get_video_generation. Both kinds carry live generation progress while the video is still generating.',
+    GetPostShape,
+    withTracking('get_post', async (args) => {
+      return handleGetPost(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'get_post_metrics',
+    'Get per-video performance snapshots (views, likes, comments, saves) of published posts for one window (24h or 7d), newest first, optionally filtered by persona, account, provider (network) and script angle. Returns rows plus truncated (true when more rows exist than the server cap).',
+    GetPostMetricsShape,
+    withTracking('get_post_metrics', async (args) => {
+      return handleGetPostMetrics(apiClient, args);
     })
   );
 

@@ -4,7 +4,8 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { apiErrorResponse } from '@/lib/api-error';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { getSlotPost } from '@/lib/post-detail';
+import { getSlotPost, personaScopeOf } from '@/lib/post-detail';
+import { isPersonaAllowed } from '@/lib/api-keys';
 import { resolveSlotUuid } from '@/lib/schedule-slot-id';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
@@ -29,12 +30,14 @@ interface SlotRow {
 interface ScheduleRow {
   id: string;
   user_id: string;
+  persona_id: string | null;
 }
 
 async function loadOwnedSlot(
   supabase: ReturnType<typeof createSupabaseServiceClient>,
   slotId: string,
   userId: string,
+  personaScope: readonly string[] | null,
 ): Promise<{ slot: SlotRow } | { error: NextResponse }> {
   const { data: slot, error } = await supabase
     .from('scheduled_posts')
@@ -63,7 +66,7 @@ async function loadOwnedSlot(
   const row = slot as SlotRow;
   const { data: schedule, error: scheduleError } = await supabase
     .from('schedules')
-    .select('id, user_id')
+    .select('id, user_id, persona_id')
     .eq('id', row.schedule_id)
     .maybeSingle();
   if (scheduleError) {
@@ -78,7 +81,11 @@ async function loadOwnedSlot(
   const scheduleRow = schedule as ScheduleRow | null;
   // Explicit ownership check: the service client bypasses RLS, so the
   // schedule row must belong to the caller.
-  if (!scheduleRow || scheduleRow.user_id !== userId) {
+  if (
+    !scheduleRow ||
+    scheduleRow.user_id !== userId ||
+    (personaScope !== null && scheduleRow.persona_id !== null && scheduleRow.persona_id !== undefined && !isPersonaAllowed(personaScope, scheduleRow.persona_id))
+  ) {
     return { error: apiErrorResponse(404, 'Slot not found.', { route: 'SLOT_OPS /api/schedule/slots' }) };
   }
   return { slot: row };
@@ -121,7 +128,7 @@ async function getHandler(
 
   let detail;
   try {
-    detail = await getSlotPost(supabase, resolvedSlotId, auth.userId);
+    detail = await getSlotPost(supabase, resolvedSlotId, auth.userId, personaScopeOf(auth));
   } catch (error) {
     logger.error('[api/schedule/slots] slot lookup failed', error);
     return apiErrorResponse(500, 'Failed to load post.', {
@@ -158,7 +165,7 @@ async function deleteHandler(
     return apiErrorResponse(404, 'Slot not found.', { route: 'DELETE /api/schedule/slots' });
   }
 
-  const owned = await loadOwnedSlot(supabase, resolvedSlotId, auth.userId);
+  const owned = await loadOwnedSlot(supabase, resolvedSlotId, auth.userId, personaScopeOf(auth));
   if ('error' in owned) return owned.error;
   const slot = owned.slot;
 
@@ -242,7 +249,7 @@ async function patchHandler(
     return apiErrorResponse(404, 'Slot not found.', { route: 'PATCH /api/schedule/slots' });
   }
 
-  const owned = await loadOwnedSlot(supabase, resolvedSlotId, auth.userId);
+  const owned = await loadOwnedSlot(supabase, resolvedSlotId, auth.userId, personaScopeOf(auth));
   if ('error' in owned) return owned.error;
   const slot = owned.slot;
 
