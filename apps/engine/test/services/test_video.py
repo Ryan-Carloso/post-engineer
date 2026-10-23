@@ -1205,27 +1205,47 @@ class TestFfmpegReencode(unittest.TestCase):
                 )
         self.assertIn("ffmpeg stderr:", str(ctx.exception))
         self.assertIn("Invalid data found", str(ctx.exception))
+        # str(CalledProcessError) echoes the full command line; the raised
+        # message must not leak the absolute source/output paths.
+        self.assertNotIn(temp_dir, str(ctx.exception))
 
     def test_reencode_clip_with_ffmpeg_returns_after_successful_codec_fallback(self):
         """A libx264 retry that succeeds must not raise after the hardware codec failed."""
-        hw_failure = subprocess.CalledProcessError(1, ["ffmpeg"], stderr=b"No NVENC capable devices found")
-        with tempfile.TemporaryDirectory() as temp_dir:
-            src = os.path.join(temp_dir, "input.mp4")
-            Path(src).write_bytes(b"x")
-            with patch.object(vd, "_get_effective_video_codec", return_value="h264_nvenc"), \
-                    patch.object(vd.subprocess, "run", side_effect=[hw_failure, None]) as run_mock, \
-                    patch.object(vd, "_disable_runtime_video_codec") as disable_mock:
-                vd._reencode_clip_with_ffmpeg(
-                    src=src, out=os.path.join(temp_dir, "output.mp4"),
-                    start_time=0, end_time=2,
-                    target_w=640, target_h=480,
-                    codec="h264_nvenc", fps=30, threads=2,
-                )
+        from loguru import logger
+
+        hw_failure = subprocess.CalledProcessError(
+            1, ["ffmpeg", "-i", "/cache/clip.mp4", "/cache/out.mp4"],
+            stderr=b"No NVENC capable devices found",
+        )
+        records = []
+        handler_id = logger.add(lambda message: records.append(message.record))
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                src = os.path.join(temp_dir, "input.mp4")
+                Path(src).write_bytes(b"x")
+                with patch.object(vd, "_get_effective_video_codec", return_value="h264_nvenc"), \
+                        patch.object(vd.subprocess, "run", side_effect=[hw_failure, None]) as run_mock, \
+                        patch.object(vd, "_disable_runtime_video_codec") as disable_mock:
+                    vd._reencode_clip_with_ffmpeg(
+                        src=src, out=os.path.join(temp_dir, "output.mp4"),
+                        start_time=0, end_time=2,
+                        target_w=640, target_h=480,
+                        codec="h264_nvenc", fps=30, threads=2,
+                    )
+        finally:
+            logger.remove(handler_id)
         self.assertEqual(run_mock.call_count, 2)
         retry_cmd = run_mock.call_args_list[1].args[0]
         self.assertEqual(retry_cmd[retry_cmd.index("-c:v") + 1], "libx264")
         disable_mock.assert_called_once()
         self.assertEqual(disable_mock.call_args.args[0], "h264_nvenc")
+        # The retry warning and the disable reason carry str(exc), whose
+        # command line holds absolute paths; both must be scrubbed.
+        warnings = [r["message"] for r in records if r["level"].name == "WARNING"]
+        self.assertTrue(any("retrying with libx264" in m for m in warnings))
+        for message in warnings:
+            self.assertNotIn("/cache/", message)
+        self.assertNotIn("/cache/", disable_mock.call_args.args[1])
 
     def _combine_with_reencode_failure(self, failure):
         from loguru import logger
@@ -1263,11 +1283,11 @@ class TestFfmpegReencode(unittest.TestCase):
     def test_combine_videos_skips_reencode_failure_at_warning(self):
         """The re-encode already logged the failure at ERROR: the skip must not open a second issue."""
         records = self._combine_with_reencode_failure(
-            vd.FfmpegReencodeError("ffmpeg re-encode failed for /tmp/clip1.mp4: exit 1")
+            vd.FfmpegReencodeError("ffmpeg re-encode failed for clip1.mp4: exit 1")
         )
         self.assertEqual([r for r in records if r["level"].name == "ERROR"], [])
         warnings = [r["message"] for r in records if r["level"].name == "WARNING"]
-        self.assertIn("skipping clip: ffmpeg re-encode failed for /tmp/clip1.mp4: exit 1", warnings)
+        self.assertIn("skipping clip: ffmpeg re-encode failed for clip1.mp4: exit 1", warnings)
 
     def test_combine_videos_logs_other_clip_failures_at_error(self):
         """Failures the re-encode did not log itself keep the ERROR log."""

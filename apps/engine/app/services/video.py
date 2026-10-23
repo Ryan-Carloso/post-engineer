@@ -46,6 +46,7 @@ from app.services.lipsync_layout import (
     _build_lipsync_intro_command,
 )
 from app.services.subtitle_text import wrap_text
+from app.services.analytics import scrub_error_text
 from app.services.ffmpeg_failure import FfmpegReencodeError, raise_reencode_failure
 
 DEFAULT_SUBTITLE_FONT = "BeVietnamPro-Medium.ttf"
@@ -1238,14 +1239,14 @@ def _reencode_clip_with_ffmpeg(
             raise_reencode_failure(src, exc)
         logger.warning(
             f"[ffmpeg] re-encode with {effective_codec} failed, "
-            f"retrying with {_DEFAULT_VIDEO_CODEC}: {str(exc)}"
+            f"retrying with {_DEFAULT_VIDEO_CODEC}: {scrub_error_text(str(exc))}"
         )
         cmd[cmd.index("-c:v") + 1] = _DEFAULT_VIDEO_CODEC
         try:
             subprocess.run(cmd, capture_output=True, check=True, timeout=600)
         except (OSError, subprocess.TimeoutExpired, subprocess.CalledProcessError) as exc2:
             raise_reencode_failure(src, exc2)
-        _disable_runtime_video_codec(effective_codec, str(exc))
+        _disable_runtime_video_codec(effective_codec, scrub_error_text(str(exc)))
         effective_codec = _DEFAULT_VIDEO_CODEC
     elapsed = time.monotonic() - start
     logger.info(

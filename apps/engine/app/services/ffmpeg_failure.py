@@ -34,7 +34,10 @@ def ffmpeg_stderr_tail(exc: BaseException) -> str:
 
 
 def raise_reencode_failure(src: str, exc: BaseException) -> NoReturn:
-    detail = str(exc)
+    # str(CalledProcessError/TimeoutExpired) echoes the full ffmpeg command
+    # line (absolute src/out paths); scrub it like the stderr tail so the
+    # log line and the raised message both stay basename-only.
+    detail = scrub_error_text(str(exc))
     tail = ffmpeg_stderr_tail(exc)
     if tail:
         detail = f"{detail}; ffmpeg stderr: {tail}"

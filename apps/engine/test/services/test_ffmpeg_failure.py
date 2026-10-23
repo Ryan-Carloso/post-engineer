@@ -7,7 +7,11 @@ from app.services import ffmpeg_failure as ff
 
 
 def _called_process_error(stderr):
-    return subprocess.CalledProcessError(1, ["ffmpeg", "-i", "in.mp4"], stderr=stderr)
+    # Production-shaped command: str(CalledProcessError) echoes the full
+    # command line, absolute src/out paths included.
+    return subprocess.CalledProcessError(
+        1, ["ffmpeg", "-i", "/cache/clip.mp4", "/cache/out.mp4"], stderr=stderr
+    )
 
 
 class TestFfmpegStderrTail(unittest.TestCase):
@@ -65,6 +69,11 @@ class TestRaiseReencodeFailure(unittest.TestCase):
         self.assertIn("re-encode failed for clip.mp4", errors[0]["message"])
         self.assertIn("ffmpeg stderr: banner", errors[0]["message"])
         self.assertIn("Invalid data found", errors[0]["message"])
+        # The command line inside str(exc) carries absolute paths; both the
+        # log line and the raised message must carry the scrubbed form only.
+        self.assertNotIn("/cache/", errors[0]["message"])
+        self.assertIn("<path>/clip.mp4", str(ctx.exception))
+        self.assertIn("<path>/clip.mp4", errors[0]["message"])
 
     def test_omits_stderr_label_when_there_is_no_stderr(self):
         with self.assertRaises(ff.FfmpegReencodeError) as ctx:
