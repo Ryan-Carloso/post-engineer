@@ -65,3 +65,55 @@ class PersonaEnvelopeTests(unittest.TestCase):
         resp = persona_controller.validate_persona_endpoint(request)
         self.assertIsInstance(resp.body, dict)
         self.assertEqual(resp.body.get("name"), "Ana")
+
+
+class PersonaSampleAuthHttpTests(unittest.TestCase):
+    """HTTP-level auth for the voice sample route.
+
+    The handler itself takes no Request: it is authenticated by the
+    router-level Depends(verify_token) that new_router() sets and
+    FastAPI propagates to routes included via include_router. These
+    tests pin that propagation end to end — a regression here would
+    expose paid local synthesis (and first-call model downloads) to
+    anyone who can reach the engine port.
+    """
+
+    def setUp(self):
+        from unittest.mock import patch
+
+        from fastapi.testclient import TestClient
+
+        from app.asgi import app
+
+        self.client = TestClient(app)
+        patcher = patch.dict(
+            "os.environ", {"MONEYPRINT_API_SECRET": "test-shared-secret"}
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.headers = {
+            "authorization": "Bearer test-shared-secret",
+            "x-user-id": "user-uuid-1",
+        }
+        self.url = "/api/v1/personas/voices/phonon:Zoey/sample"
+
+    def test_sample_requires_authentication(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 401)
+
+    def test_sample_rejects_a_wrong_secret(self):
+        headers = dict(self.headers, authorization="Bearer wrong-secret")
+        response = self.client.get(self.url, headers=headers)
+        self.assertEqual(response.status_code, 401)
+
+    def test_sample_serves_audio_to_an_authenticated_caller(self):
+        from unittest.mock import patch
+
+        with patch(
+            "app.controllers.v1.persona.persona_service.get_voice_sample",
+            return_value=b"mp3-bytes",
+        ):
+            response = self.client.get(self.url, headers=self.headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["content-type"], "audio/mpeg")
+        self.assertEqual(response.content, b"mp3-bytes")

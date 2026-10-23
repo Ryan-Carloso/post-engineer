@@ -101,9 +101,11 @@ class TestHouseVoiceCatalog(unittest.TestCase):
 class TestVoiceSample(unittest.TestCase):
     def setUp(self):
         persona_service._voice_sample_cache.clear()
+        persona_service._voice_sample_failures.clear()
 
     def tearDown(self):
         persona_service._voice_sample_cache.clear()
+        persona_service._voice_sample_failures.clear()
 
     def test_non_catalog_id_never_reaches_tts(self):
         # Paid providers (ElevenLabs/OpenRouter) must not be reachable
@@ -134,6 +136,35 @@ class TestVoiceSample(unittest.TestCase):
         ):
             result = persona_service.get_voice_sample("kokoro:af_heart")
         self.assertIsNone(result)
+
+    def test_failed_synthesis_is_negatively_cached_within_the_ttl(self):
+        # A persistently broken provider (e.g. the Kokoro model download
+        # failing) must not re-pay the load/download on every sample
+        # request: the failure is cached for a short TTL.
+        with patch.object(
+            persona_service.voice_service,
+            "tts",
+            return_value=TtsResult(error="synthesis broke"),
+        ) as tts:
+            first = persona_service.get_voice_sample("kokoro:af_heart")
+            second = persona_service.get_voice_sample("kokoro:af_heart")
+        self.assertIsNone(first)
+        self.assertIsNone(second)
+        tts.assert_called_once()
+
+    def test_failed_synthesis_retries_after_the_ttl(self):
+        with patch.object(
+            persona_service.voice_service,
+            "tts",
+            return_value=TtsResult(error="synthesis broke"),
+        ) as tts:
+            persona_service.get_voice_sample("kokoro:af_heart")
+            key = ("kokoro:af_heart", "en-us")
+            persona_service._voice_sample_failures[key] -= (
+                persona_service._VOICE_SAMPLE_FAILURE_TTL_SECONDS + 1
+            )
+            persona_service.get_voice_sample("kokoro:af_heart")
+        self.assertEqual(tts.call_count, 2)
 
 
 if __name__ == "__main__":

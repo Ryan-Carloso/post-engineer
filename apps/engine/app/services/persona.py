@@ -7,6 +7,7 @@ persona payload that arrives inline on a video job.
 
 import os
 import tempfile
+import time
 from typing import Any, Optional
 
 from loguru import logger
@@ -51,6 +52,14 @@ HOUSE_VOICE_STYLES: dict[str, dict[str, str | float]] = {
 
 # Cache of already synthesized samples: (voice_id, language) -> mp3 bytes.
 _voice_sample_cache: dict[tuple[str, str], bytes] = {}
+
+# Negative cache for failed syntheses: (voice_id, language) -> monotonic
+# timestamp. A persistently broken provider (e.g. a model download that
+# keeps failing) must not re-pay the load/download on every sample
+# request — and must not hold the provider lock against real jobs while
+# doing so. Failures degrade to cheap 400s for the TTL, then retry.
+_voice_sample_failures: dict[tuple[str, str], float] = {}
+_VOICE_SAMPLE_FAILURE_TTL_SECONDS = 60.0
 
 # House voices (mock catalog — replace with real TTS voices later)
 # Voice ids are stable descriptor codes that the web UI translates
@@ -157,6 +166,12 @@ def get_voice_sample(voice_id: str) -> bytes | None:
     cached = _voice_sample_cache.get(cache_key)
     if cached is not None:
         return cached
+    failed_at = _voice_sample_failures.get(cache_key)
+    if (
+        failed_at is not None
+        and time.monotonic() - failed_at < _VOICE_SAMPLE_FAILURE_TTL_SECONDS
+    ):
+        return None
     with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
         tmp_path = tmp.name
     try:
@@ -165,6 +180,7 @@ def get_voice_sample(voice_id: str) -> bytes | None:
         )
         if not result.ok:
             logger.error(f"voice sample synthesis failed for {voice_id}: {result.error}")
+            _voice_sample_failures[cache_key] = time.monotonic()
             return None
         with open(tmp_path, "rb") as audio_file:
             data = audio_file.read()
@@ -173,6 +189,7 @@ def get_voice_sample(voice_id: str) -> bytes | None:
             os.remove(tmp_path)
         except OSError:
             pass
+    _voice_sample_failures.pop(cache_key, None)
     _voice_sample_cache[cache_key] = data
     return data
 
