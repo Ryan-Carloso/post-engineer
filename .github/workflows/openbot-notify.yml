@@ -10,10 +10,12 @@ name: openbot-notify
 #   (event/action, PR number, head sha, workflow name, conclusion): no
 #   titles, bodies, logs or actor identities.
 #
-# Secret handling: fork pull_request events do not carry secrets, so the
-# single step exits successfully without sending when
-# OPENBOT_WEBHOOK_SECRET is not available — a missing secret can never
-# turn this relay into a red check. Network or endpoint failures are
+# Secret handling: both the endpoint (OPENBOT_WEBHOOK_URL) and the signing
+# key (OPENBOT_WEBHOOK_SECRET) are repository secrets — the repo is
+# public, so neither may live in this file. Fork pull_request events do
+# not carry secrets, so the single step exits successfully without
+# sending when either is empty — a missing secret or URL can never turn
+# this relay into a red check. Network or endpoint failures are
 # warnings too (continue-on-error): telemetry must never fail a build it
 # is only observing.
 #
@@ -49,9 +51,12 @@ jobs:
     steps:
       - name: Relay to OpenBot
         env:
-          OPENBOT_WEBHOOK_URL: https://signal.openbot.run/v1/webhooks/5cadd23b-8b61-4f24-b295-0ebdae7c45fc
-          # Empty on fork pull_request events (and until Ryan creates the
-          # repository secret): the step exits successfully, sending nothing.
+          # The endpoint and the signing key are both repository secrets, so
+          # the public repo never carries the webhook URL: an empty URL (or
+          # an empty key — fork pull_request events carry no secrets, and
+          # neither is created yet) makes the step exit successfully
+          # without sending.
+          OPENBOT_WEBHOOK_URL: ${{ secrets.OPENBOT_WEBHOOK_URL }}
           OPENBOT_WEBHOOK_SECRET: ${{ secrets.OPENBOT_WEBHOOK_SECRET }}
           EVENT_NAME: ${{ github.event_name }}
           EVENT_ACTION: ${{ github.event.action }}
@@ -64,8 +69,8 @@ jobs:
         continue-on-error: true
         run: |
           set -euo pipefail
-          if [ -z "${OPENBOT_WEBHOOK_SECRET:-}" ]; then
-            echo "OPENBOT_WEBHOOK_SECRET not available (fork PR or unset) — nothing sent"
+          if [ -z "${OPENBOT_WEBHOOK_URL:-}" ] || [ -z "${OPENBOT_WEBHOOK_SECRET:-}" ]; then
+            echo "OPENBOT_WEBHOOK_URL/OPENBOT_WEBHOOK_SECRET not available (fork PR or unset) — nothing sent"
             exit 0
           fi
           body=$(jq -nc \
