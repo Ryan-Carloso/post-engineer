@@ -43,6 +43,8 @@ const ENDPOINT_TOOLS: Record<string, string[]> = {
   'GET /api/persona/list': ['list_personas'],
   'POST /api/persona': ['create_persona'],
   'PATCH /api/persona': ['update_persona'],
+  'GET /api/metrics': ['get_post_metrics'],
+  'GET /api/posts/[id]': ['get_post'],
   'GET /api/persona/video-status/[taskId]': [
     'get_video_status',
     'get_video_task_progress',
@@ -50,6 +52,7 @@ const ENDPOINT_TOOLS: Record<string, string[]> = {
   'GET /api/persona/voices': ['list_voices'],
   'GET /api/persona/cloned-voices': ['list_cloned_voices'],
   'POST /api/persona/cloned-voices': ['create_cloned_voice'],
+  'GET /api/persona/cloned-voices/[cloneId]': ['get_cloned_voice'],
   'DELETE /api/persona/cloned-voices/[cloneId]': ['delete_cloned_voice'],
   'POST /api/persona/cloned-voices/[cloneId]/preview': ['preview_cloned_voice'],
   'GET /api/schedule': ['list_schedules'],
@@ -99,8 +102,6 @@ const EXCLUDED_ENDPOINTS: Record<string, string> = {
   'GET /api/linkedin-auth/callback': 'Browser OAuth callback.',
   'GET /api/linkedin-auth/start': 'Browser OAuth start (redirect flow).',
   'POST /api/logout': 'Browser-only session logout (clears the auth cookie).',
-  'GET /api/metrics':
-    'Dashboard-only metrics aggregation for the /metrics page; no MCP tool exposes per-video performance snapshots.',
   'GET /api/moneyprint/health': 'Ops engine health proxy.',
   'POST /api/persona/avatar':
     'Dashboard-only mock AI avatar generator placeholder, not a programmatic API.',
@@ -112,10 +113,6 @@ const EXCLUDED_ENDPOINTS: Record<string, string> = {
     'Dashboard engine-task cleanup; MCP polls status but never cancels engine tasks.',
   'POST /api/persona/cloned-voices/denoise-preview':
     'UI-only A/B listen of the cleaned recording before cloning; agents pass denoise to create_cloned_voice instead.',
-  'GET /api/persona/cloned-voices/[cloneId]':
-    'Dashboard clone status polling; MCP list_cloned_voices returns every clone row.',
-  'GET /api/posts/[id]':
-    'Dashboard-only unified post detail (issue #208); MCP get_slot and get_video_generation cover the same data.',
   'GET /api/version': 'Public version endpoint for ops/diagnostics.',
 };
 

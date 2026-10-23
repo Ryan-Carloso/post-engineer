@@ -93,6 +93,7 @@ The `Authorization: Bearer` API key header is sent to the configured base URL, s
 - `list_voices`: list available persona voices (live catalog: 65 English house voices with `gender`/`accent`/`kind`, plus your ready clones). Each voice has a `description` of how it sounds. Optional filters: `gender` (`female`|`male`), `origin` (`us`|`gb`|`character`), `search` (words matched in name/description, e.g. `"deep calm"`).
 - `list_cloned_voices`: list your per-user Chatterbox voice clones (status and `voice_id` when ready).
 - `create_cloned_voice`: register a voice clone from a short HTTPS audio URL (requires `consent: true` and `denoise`: `true` cleans background noise first, `false` keeps the original).
+- `get_cloned_voice`: get one voice clone by id — poll its `status` after `create_cloned_voice` until `ready` (then `voice_id` is set) or `failed`.
 - `delete_cloned_voice`: delete a voice clone by id.
 - `preview_cloned_voice`: synthesize a short MP3 preview for a ready clone (returns base64 audio).
 - `list_faces`: list default/stock persona faces (live catalog from `/api/persona/faces`). Each item has `id`, `url`, `name`, `gender`, `age` (single number, e.g. 23), `ethnicity`, `hair`, and `description` (English) so agents can choose without the photo; pass a face `url` as `avatarUrl` on `create_persona`.
@@ -119,6 +120,8 @@ The `Authorization: Bearer` API key header is sent to the configured base URL, s
 - `delete_slot`: delete one scheduled post slot (only pending/awaiting or failed slots; never the schedule's last slot).
 - `list_video_generations`: list the video generation history, newest first (status, error code, token refunds).
 - `get_video_generation`: get one video generation's detail by generation ID.
+- `get_post`: get one post's full detail by id, whether the id is a slot id or a generation id (the server resolves it; the response says `kind: "slot"` or `kind: "generation"`). Both kinds carry live generation progress.
+- `get_post_metrics`: per-video performance snapshots (views, likes, comments, saves) for a `window` of `24h` or `7d`, newest first. Optional exact-match filters: `persona` (uuid, or `^@none` for posts without a persona), `account`, `provider`, `angle` (or `^@none`). Returns `rows` and `truncated`.
 - `list_token_transactions`: list the token ledger — every credit and debit (purchases, generation spends, refunds), newest first.
 - `get_persona_delete_preview`: preview what deleting a persona would remove (counts + per-video download links). Read-only.
 - `delete_persona`: DESTRUCTIVE — delete a persona with all its schedules, slots, videos, and image library. No token refunds.

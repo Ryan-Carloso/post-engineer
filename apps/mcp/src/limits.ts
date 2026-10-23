@@ -40,3 +40,15 @@ export const MAX_UPLOAD_VIDEO_GB = MAX_UPLOAD_VIDEO_BYTES / (1024 * 1024 * 1024)
  * pinned by `persona-video-layout-sync.test.ts`.
  */
 export const VIDEO_LAYOUTS = ['standard', 'react'] as const;
+
+/**
+ * GET /api/metrics query contract, mirrored from
+ * `apps/web/lib/metrics/metrics-query.ts` (METRICS_FILTER_MAX_LENGTH,
+ * METRICS_NONE, the window values) and `apps/web/lib/providers/registry.ts`
+ * (SOCIAL_PROVIDERS). The MCP rejects what the route would 400 on before
+ * the request goes out. Pinned by `metrics-query-sync.test.ts`.
+ */
+export const METRICS_FILTER_MAX_LENGTH = 200;
+export const METRICS_NONE = '^@none';
+export const METRICS_WINDOWS = ['24h', '7d'] as const;
+export const METRICS_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin'] as const;

@@ -116,6 +116,17 @@ export async function createClonedVoiceFromUrl(
   );
 }
 
+export async function getClonedVoice(
+  client: ClonedVoiceClientHost,
+  cloneId: string,
+): Promise<unknown> {
+  return client.request(
+    `/api/persona/cloned-voices/${encodeURIComponent(cloneId)}`,
+    { method: 'GET', headers: client.getHeaders() },
+    'get cloned voice',
+  );
+}
+
 export async function deleteClonedVoice(
   client: ClonedVoiceClientHost,
   cloneId: string,

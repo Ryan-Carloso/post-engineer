@@ -58,6 +58,7 @@ export const personaVoiceCloneEn = {
 
 export const voiceCloneApiToolDescEn = {
   toolDescListClonedVoices: 'List your voice clones',
+  toolDescGetClonedVoice: "Get one voice clone's status",
   toolDescCreateClonedVoice: 'Create a voice clone from an audio URL',
   toolDescDeleteClonedVoice: 'Delete a voice clone',
   toolDescPreviewClonedVoice: 'Preview a ready voice clone',

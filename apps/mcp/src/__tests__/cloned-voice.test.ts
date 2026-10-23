@@ -5,6 +5,7 @@ import {
   createClonedVoiceFromUrl,
   deleteClonedVoice,
   fetchCloneReferenceAudio,
+  getClonedVoice,
   listClonedVoices,
   previewClonedVoice,
   type ClonedVoiceClientHost,
@@ -12,6 +13,7 @@ import {
 import {
   handleCreateClonedVoice,
   handleDeleteClonedVoice,
+  handleGetClonedVoice,
   handleListClonedVoices,
   handlePreviewClonedVoice,
 } from '../cloned-voice-tools.js';
@@ -178,6 +180,17 @@ describe('cloned voice client calls', () => {
     );
   });
 
+  it('gets one cloned voice with an encoded id', async () => {
+    const request = vi.fn().mockResolvedValue({ success: true, voice: { id: 'a/b c', status: 'ready' } });
+    const host = fakeHost(request);
+    await getClonedVoice(host, 'a/b c');
+    expect(request).toHaveBeenCalledWith(
+      '/api/persona/cloned-voices/a%2Fb%20c',
+      { method: 'GET', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-token' } },
+      'get cloned voice'
+    );
+  });
+
   it('deletes a cloned voice with an encoded id', async () => {
     const request = vi.fn().mockResolvedValue({ success: true });
     const host = fakeHost(request);
@@ -338,6 +351,22 @@ describe('cloned voice tool handlers', () => {
     expect(form.get('denoise')).toBe('true');
   });
 
+  it('handleGetClonedVoice returns the clone row', async () => {
+    const request = vi.fn().mockResolvedValue({ success: true, voice: { id: 'clone-1', status: 'pending' } });
+    const client = fakeHost(request) as unknown as PostEngineerClient;
+    const result = await handleGetClonedVoice(client, { cloneId: 'clone-1' });
+    expect(result.isError).toBeFalsy();
+    expect(JSON.parse(firstText(result))).toEqual({ success: true, voice: { id: 'clone-1', status: 'pending' } });
+  });
+
+  it('handleGetClonedVoice maps failures to an error response', async () => {
+    const request = vi.fn().mockRejectedValue(new Error('Cloned voice not found.'));
+    const client = fakeHost(request) as unknown as PostEngineerClient;
+    const result = await handleGetClonedVoice(client, { cloneId: 'clone-1' });
+    expect(result.isError).toBe(true);
+    expect(firstText(result)).toContain('Error getting cloned voice: Cloned voice not found.');
+  });
+
   it('handleDeleteClonedVoice prefixes the success message', async () => {
     const request = vi.fn().mockResolvedValue({ success: true });
     const client = fakeHost(request) as unknown as PostEngineerClient;
@@ -485,6 +514,16 @@ describe('cloned voice tools run through the MCP server', () => {
     } finally {
       await client.close();
     }
+  });
+
+  it('get_cloned_voice calls the client request', async () => {
+    const request = vi.fn().mockResolvedValue({ success: true, voice: { id: 'clone-1', status: 'ready' } });
+    await callTool('get_cloned_voice', { cloneId: 'clone-1' }, request);
+    expect(request).toHaveBeenCalledWith(
+      '/api/persona/cloned-voices/clone-1',
+      expect.objectContaining({ method: 'GET' }),
+      'get cloned voice'
+    );
   });
 
   it('delete_cloned_voice calls the client request', async () => {

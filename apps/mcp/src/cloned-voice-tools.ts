@@ -4,6 +4,7 @@ import type { PostEngineerClient } from './client.js';
 import {
   createClonedVoiceFromUrl,
   deleteClonedVoice,
+  getClonedVoice,
   listClonedVoices,
   previewClonedVoice,
 } from './cloned-voice-client.js';
@@ -35,6 +36,12 @@ export const DeleteClonedVoiceShape = {
 
 export const DeleteClonedVoiceSchema = z.object(DeleteClonedVoiceShape);
 
+export const GetClonedVoiceShape = {
+  cloneId: z.string().min(1).describe('Cloned voice id (the id returned by create_cloned_voice or list_cloned_voices)'),
+};
+
+export const GetClonedVoiceSchema = z.object(GetClonedVoiceShape);
+
 export const PreviewClonedVoiceShape = {
   cloneId: z.string().min(1).describe('Ready cloned voice id'),
   language: z
@@ -61,6 +68,13 @@ export async function handleCreateClonedVoice(
     'creating cloned voice',
     'Voice clone registration started',
   );
+}
+
+export async function handleGetClonedVoice(
+  client: PostEngineerClient,
+  args: z.infer<typeof GetClonedVoiceSchema>,
+): Promise<McpToolResponse> {
+  return handleLibraryCall(() => getClonedVoice(client, args.cloneId), 'getting cloned voice');
 }
 
 export async function handleDeleteClonedVoice(
