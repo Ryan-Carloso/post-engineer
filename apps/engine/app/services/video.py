@@ -47,7 +47,7 @@ from app.services.lipsync_layout import (
 )
 from app.services.subtitle_text import wrap_text
 from app.services.analytics import scrub_error_text
-from app.services.ffmpeg_failure import FfmpegReencodeError, raise_reencode_failure
+from app.services.ffmpeg_failure import FfmpegReencodeError, ffmpeg_stderr_tail, raise_reencode_failure
 
 DEFAULT_SUBTITLE_FONT = "BeVietnamPro-Medium.ttf"
 
@@ -1237,9 +1237,14 @@ def _reencode_clip_with_ffmpeg(
         # hardware encoder when libx264 can write the file successfully.
         if effective_codec == _DEFAULT_VIDEO_CODEC:
             raise_reencode_failure(src, exc)
+        # Keep the hardware attempt's stderr tail in the warning: if the
+        # libx264 retry also fails, only the retry's stderr reaches the
+        # raised error, and this attempt's cause would be lost.
+        tail = ffmpeg_stderr_tail(exc)
         logger.warning(
             f"[ffmpeg] re-encode with {effective_codec} failed, "
             f"retrying with {_DEFAULT_VIDEO_CODEC}: {scrub_error_text(str(exc))}"
+            + (f"; ffmpeg stderr: {tail}" if tail else "")
         )
         cmd[cmd.index("-c:v") + 1] = _DEFAULT_VIDEO_CODEC
         try:

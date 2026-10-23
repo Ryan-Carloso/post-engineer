@@ -1246,6 +1246,12 @@ class TestFfmpegReencode(unittest.TestCase):
         for message in warnings:
             self.assertNotIn("/cache/", message)
         self.assertNotIn("/cache/", disable_mock.call_args.args[1])
+        # The hardware attempt's own ffmpeg stderr must survive in the
+        # warning: if the libx264 retry also fails, only the retry's
+        # stderr reaches the raised error.
+        self.assertTrue(
+            any("ffmpeg stderr: No NVENC capable devices found" in m for m in warnings)
+        )
 
     def _combine_with_reencode_failure(self, failure):
         from loguru import logger
