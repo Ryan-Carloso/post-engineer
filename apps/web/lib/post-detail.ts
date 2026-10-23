@@ -1,6 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { enrichSlot } from './schedule-slot-presentation';
-import { fetchEnginePublishResults, fetchEngineScriptAngle, fetchEngineTaskProgress } from './engine-tasks';
+import {
+  fetchEnginePostMetricsSource,
+  fetchEnginePublishResults,
+  fetchEngineScriptAngle,
+  fetchEngineTaskProgress,
+} from './engine-tasks';
 import { resolvePublishLinks, type PublishLink } from './publish-links';
 import { buildGenerationFacts } from './generation-facts';
 import { logger } from './logger';
@@ -94,6 +99,29 @@ async function resolveSlotPublishLinks(
       error: error instanceof Error ? error.message : String(error),
     });
     return [];
+  }
+}
+
+//---------------
+// resolvePublishedSlotEngineData — publish links and script angle for a
+// published slot from ONE engine task read (fetchEnginePostMetricsSource):
+// both live on the same record, so reading it twice per detail view would
+// double the engine traffic on a rate-limited endpoint. A failed lookup
+// degrades both to empty/null with both warnings, mirroring the separate
+// resolvers below.
+//---------------
+async function resolvePublishedSlotEngineData(
+  taskId: string,
+  userId: string,
+): Promise<{ publishLinks: PublishLink[]; scriptAngle: string | null }> {
+  try {
+    const source = await fetchEnginePostMetricsSource(taskId, userId);
+    return { publishLinks: resolvePublishLinks(source.publishResults), scriptAngle: source.scriptAngle };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn('[post-detail] publish results unavailable', { taskId, error: message });
+    logger.warn('[post-detail] script angle unavailable', { taskId, error: message });
+    return { publishLinks: [], scriptAngle: null };
   }
 }
 
@@ -199,8 +227,18 @@ export async function getSlotPost(
   }
 
   const enrichment = await enrichSlot(row, userId);
-  const publishLinks = await resolveSlotPublishLinks(row, userId);
-  const scriptAngle = await resolveScriptAngle(row.task_id, userId);
+  // A published slot needs publish links AND the angle, both on the same
+  // engine task record: one read serves both. Any other status needs at
+  // most the angle (publish links are published-only).
+  const slotTaskId = typeof row.task_id === 'string' && row.task_id.length > 0 ? row.task_id : null;
+  let publishLinks: PublishLink[];
+  let scriptAngle: string | null;
+  if (row.status === 'published' && slotTaskId !== null) {
+    ({ publishLinks, scriptAngle } = await resolvePublishedSlotEngineData(slotTaskId, userId));
+  } else {
+    publishLinks = await resolveSlotPublishLinks(row, userId);
+    scriptAngle = await resolveScriptAngle(row.task_id, userId);
+  }
 
   // Progress history: every observed (progress, stage) transition recorded
   // while the post was live. A failed lookup degrades to an empty list —

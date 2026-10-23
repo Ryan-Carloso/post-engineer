@@ -240,6 +240,19 @@ class TestCtaSafeTrim:
         result = persona_hook._limit_generated_script(script)
 
         assert len(result) <= 60
+        # No body text fits next to the closing sentence, but the closing
+        # sentence fits on its own — it is the CTA and must survive.
+        assert result == closing
+
+    def test_closing_sentence_survives_when_no_head_budget_remains(self):
+        # head_budget < 0 (closing + paragraph separator exceed the limit)
+        # while the closing sentence alone still fits: the plain-cut
+        # fallback would end before it and drop the CTA.
+        closing = "C" * 58 + "."
+        script = f"Hook forte aqui.\n\n{closing}"
+        result = persona_hook._limit_generated_script(script)
+
+        assert result == closing
 
 
 class TestHookRegenerationContext:

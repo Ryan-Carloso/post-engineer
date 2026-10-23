@@ -17,6 +17,10 @@ vi.mock('../engine-tasks', () => ({
   fetchEnginePublishResults: vi.fn(async () => ({})),
   fetchEngineTaskProgress: vi.fn(async () => ({ gone: false, progress: 67, stage: 'audio' })),
   fetchEngineScriptAngle: vi.fn(async () => 'The myth that keeps coming back'),
+  fetchEnginePostMetricsSource: vi.fn(async () => ({
+    publishResults: [{ provider: 'youtube' }],
+    scriptAngle: 'The myth that keeps coming back',
+  })),
 }));
 
 vi.mock('../publish-links', () => ({
@@ -130,6 +134,30 @@ describe('getSlotPost', () => {
     });
     const detail = await getSlotPost(supabase, 'slot-1', 'user-1');
     expect(fetchEngineScriptAngle).toHaveBeenCalledWith('task-1', 'user-1');
+    expect(detail?.slot.scriptAngle).toBe('The myth that keeps coming back');
+  });
+
+  it('reads publish results and the angle from one engine task read for a published slot', async () => {
+    const { fetchEnginePostMetricsSource, fetchEnginePublishResults, fetchEngineScriptAngle } =
+      await import('../engine-tasks');
+    const { resolvePublishLinks } = await import('../publish-links');
+    vi.mocked(resolvePublishLinks).mockReturnValueOnce([
+      { provider: 'youtube', url: 'https://youtube.test/watch?v=1' },
+    ]);
+    const { supabase } = mockSupabase({
+      scheduled_posts: { data: { ...SLOT_ROW, status: 'published' }, error: null },
+      schedules: { data: SCHEDULE_ROW, error: null },
+      scheduled_post_progress_history: { data: [], error: null },
+    });
+    const detail = await getSlotPost(supabase, 'slot-1', 'user-1');
+    expect(fetchEnginePostMetricsSource).toHaveBeenCalledTimes(1);
+    expect(fetchEnginePostMetricsSource).toHaveBeenCalledWith('task-1', 'user-1');
+    expect(fetchEnginePublishResults).not.toHaveBeenCalled();
+    expect(fetchEngineScriptAngle).not.toHaveBeenCalled();
+    expect(resolvePublishLinks).toHaveBeenCalledWith([{ provider: 'youtube' }]);
+    expect(detail?.slot.publishLinks).toEqual([
+      { provider: 'youtube', url: 'https://youtube.test/watch?v=1' },
+    ]);
     expect(detail?.slot.scriptAngle).toBe('The myth that keeps coming back');
   });
 

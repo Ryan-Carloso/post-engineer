@@ -204,8 +204,9 @@ def _limit_generated_script(script: str) -> str:
 
     The call to action is the script's last sentence, so an over-budget
     script is trimmed from the body before it: cutting from the end would
-    drop exactly the CTA. Falls back to a plain cut when the last sentence
-    alone cannot fit next to any body text.
+    drop exactly the CTA. When no body text fits next to it, the closing
+    sentence ships alone; a plain cut is the fallback only when the closing
+    sentence cannot fit at all.
     """
     limit = int(config.app.get("max_video_script_characters", 700))
     normalized = re.sub(r"[ \t]+", " ", script.strip())
@@ -218,19 +219,24 @@ def _limit_generated_script(script: str) -> str:
     # break or space) so the hook paragraph boundary survives the trim.
     separator = normalized[len(head) : len(normalized) - len(closing)]
     head_budget = limit - len(separator) - len(closing)
-    if len(sentences) > 1 and head_budget > 0:
-        trimmed_head = _cut_to_budget(head, head_budget)
-        if "\n\n" in head and "\n\n" not in trimmed_head and "\n" not in separator:
-            # The trim kept only the hook paragraph: the closing sentence
-            # must stay its own paragraph or the hook loses its boundary.
-            separator = "\n\n"
-            if len(trimmed_head) + len(separator) + len(closing) > limit:
-                # Clamp at 0: head_budget can be 1 here, and a negative
-                # budget makes _cut_to_budget keep text[:-1] — nearly the
-                # whole head — instead of trimming to the limit.
-                trimmed_head = _cut_to_budget(head, max(head_budget - 2, 0))
-        if trimmed_head:
-            return f"{trimmed_head}{separator}{closing}"
+    if len(sentences) > 1 and len(closing) <= limit:
+        # The closing sentence fits on its own: never fall back to a plain
+        # cut, which ends before it and drops the CTA this trim exists to
+        # preserve — even when no body text fits next to it.
+        if head_budget > 0:
+            trimmed_head = _cut_to_budget(head, head_budget)
+            if "\n\n" in head and "\n\n" not in trimmed_head and "\n" not in separator:
+                # The trim kept only the hook paragraph: the closing sentence
+                # must stay its own paragraph or the hook loses its boundary.
+                separator = "\n\n"
+                if len(trimmed_head) + len(separator) + len(closing) > limit:
+                    # Clamp at 0: head_budget can be 1 here, and a negative
+                    # budget makes _cut_to_budget keep text[:-1] — nearly the
+                    # whole head — instead of trimming to the limit.
+                    trimmed_head = _cut_to_budget(head, max(head_budget - 2, 0))
+            if trimmed_head:
+                return f"{trimmed_head}{separator}{closing}"
+        return closing
     return _cut_to_budget(normalized, limit)
 
 
