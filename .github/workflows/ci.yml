@@ -786,23 +786,33 @@ jobs:
       # Same scoped invocation as the mutation workflow: line ranges first
       # (the extractor scopes to the PR's changed lines and emits the
       # bracket-escaped patterns), whole changed files as fallback. The
-      # mutation gate below reads the score over the mutants the run
-      # REPORTED — with line scoping that is exactly the PR's changed
-      # lines' mutants (files outside the PR are mutate:false and absent
-      # from the report), so the "mutation ≥ 60% on changed UI files"
-      # semantics holds.
+      # mapping comment + summary marker make the run VISIBLE: if the
+      # extractor cannot run, the shard fails loudly — never silently
+      # green. The mutation gate below reads the score over the mutants
+      # the run REPORTED — with line scoping that is exactly the PR's
+      # changed lines' mutants (files outside the PR are mutate:false and
+      # absent from the report), so the "mutation ≥ 60% on changed UI
+      # files" semantics hold.
       - name: Run Stryker on changed UI files
         if: steps.detect.outputs.files != ''
         working-directory: apps/web
+        env:
+          UI_FILES: ${{ steps.detect.outputs.files }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          set -uo pipefail
-          mutate="$(node .github/scripts/ui-gates/changed-ranges.mjs \
-            --files "${{ steps.detect.outputs.files }}" \
-            --strip-prefix 'apps/web/' \
-            --base "origin/${{ github.base_ref }}" \
-            --head HEAD || true)"
+          set -euo pipefail
+          SCRIPT="$GITHUB_WORKSPACE/.github/scripts/ui-gates/changed-ranges.mjs"
+          [ -f "$SCRIPT" ] || { echo "::error::extractor script not found at $SCRIPT"; exit 1; }
+          mutate="$(node "$SCRIPT" --files "$UI_FILES" --strip-prefix 'apps/web/' --base "origin/$BASE_REF" --head HEAD || true)"
           if [ -n "$mutate" ]; then
             echo "Mutating changed line ranges: $mutate"
+            {
+              echo "## Stryker line-scoped patterns (this run's scope)"
+              echo ""
+              echo '```'
+              echo "$mutate"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
             if pnpm exec stryker run --mutate "$mutate"; then
               exit 0
             fi
@@ -813,7 +823,7 @@ jobs:
           # the literal files. (Stryker's normalizeFileName turns
           # backslashes into slashes, so backslash-escaping cannot work
           # here.) Single pass only.
-          stryker_files="$(echo "${{ steps.detect.outputs.files }}" | sed 's|apps/web/||g' | perl -pe 's/(\[|\])/$1 eq "[" ? "[[]" : "[]]"/ge')"
+          stryker_files="$(echo "$UI_FILES" | sed 's|apps/web/||g' | perl -pe 's/(\[|\])/$1 eq "[" ? "[[]" : "[]]"/ge')"
           echo "Mutating whole UI files: $stryker_files"
           pnpm exec stryker run --mutate "$stryker_files"
 

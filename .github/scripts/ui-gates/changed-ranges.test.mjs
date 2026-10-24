@@ -225,7 +225,8 @@ describe('changedMutateArgument', () => {
       appFilter: (path) => path.startsWith('apps/web/'),
       stripPrefix: 'apps/web/',
     });
-    assert.equal(calls[0][0], 'diff');
+    assert.equal(calls[0][0], '-c');
+    assert.ok(calls[0].includes('diff'));
     assert.ok(calls[0].includes('-U0'));
     assert.ok(calls[0].includes('origin/main...HEAD'));
     // lib/voices.ts does not start with apps/web/ — filtered out.
@@ -254,5 +255,36 @@ describe('isTestishPath', () => {
 describe('escapeBrackets', () => {
   it('escapes minimatch classes in one pass', () => {
     assert.equal(escapeBrackets('app/[taskId]/page.tsx'), 'app/[[]taskId[]]/page.tsx');
+  });
+});
+
+describe('quoted headers and spaces in paths', () => {
+  it('parses quoted headers and paths with spaces', () => {
+    const diff = `diff --git "a/a b.ts" "b/a b.ts"
+index 1111111..2222222 100644
+--- "a/a b.ts"
++++ "b/a b.ts"
+@@ -4,1 +4,1 @@
+-const x = 1;
++const x = 2;
+`;
+    const entries = parseChangedRanges(diff);
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0].path, 'a b.ts');
+    assert.deepEqual(entries[0].ranges, [[4, 4]]);
+  });
+
+  it('a path with spaces that git does NOT quote still lands on the right file', () => {
+    const diff = `diff --git a/a b.ts b/a b.ts
+index 1111111..2222222 100644
+--- a/a b.ts
++++ b/a b.ts
+@@ -4,1 +4,1 @@
+-const x = 1;
++const x = 2;
+`;
+    const entries = parseChangedRanges(diff);
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0].path, 'a b.ts');
   });
 });

@@ -157,12 +157,13 @@ jobs:
       - name: Compute changed line ranges
         id: ranges
         if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          set -uo pipefail
-          mutate="$(node .github/scripts/ui-gates/changed-ranges.mjs \
-            --app "${{ matrix.app }}" \
-            --base "origin/${{ github.base_ref }}" \
-            --head HEAD || true)"
+          set -euo pipefail
+          SCRIPT="$GITHUB_WORKSPACE/.github/scripts/ui-gates/changed-ranges.mjs"
+          [ -f "$SCRIPT" ] || { echo "::error::extractor script not found at $SCRIPT"; exit 1; }
+          mutate="$(node "$SCRIPT" --app "${{ matrix.app }}" --base "origin/$BASE_REF" --head HEAD || true)"
           echo "mutate=$mutate" >> "$GITHUB_OUTPUT"
           if [ -n "$mutate" ]; then
             echo "Mutating changed line ranges: $mutate"
@@ -173,22 +174,30 @@ jobs:
       - name: Run Stryker mutation testing
         if: github.event_name == 'workflow_dispatch' || steps.changed.outputs.files != ''
         working-directory: apps/${{ matrix.app }}
+        env:
+          # PR-controlled patterns (paths/line ranges) pass through env
+          # vars, never inline ${{ }} interpolation — filenames can carry
+          # spaces, $ or backticks.
+          MUTATE_GLOBS: ${{ steps.ranges.outputs.mutate }}
+          CHANGED_FILES: ${{ steps.changed.outputs.files }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            # Line-scoped first (the ranges string is already bracket-
-            # escaped by the extractor). Stryker exits non-zero only on
-            # execution errors (no score thresholds here) — including
-            # "no mutants selected" on a diff whose lines carry no
-            # mutation points; the whole-file fallback covers that, so
-            # the scope only ever widens.
-            if [ -n "${{ steps.ranges.outputs.mutate }}" ]; then
-              echo "Mutating the PR's changed line ranges."
-              if pnpm exec stryker run --mutate "${{ steps.ranges.outputs.mutate }}"; then
-                exit 0
-              fi
-              echo "::warning::line-scoped run failed — falling back to whole changed files"
+          set -euo pipefail
+          if [ -n "$MUTATE_GLOBS" ]; then
+            echo "Mutating the PR's changed line ranges: $MUTATE_GLOBS"
+            {
+              echo "## Stryker line-scoped patterns (${{ matrix.app }})"
+              echo ""
+              echo '```'
+              echo "$MUTATE_GLOBS"
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            if pnpm exec stryker run --mutate "$MUTATE_GLOBS"; then
+              exit 0
             fi
-            if [ -z "${{ steps.changed.outputs.files }}" ]; then
+            echo "::warning::line-scoped run failed — falling back to whole changed files"
+          fi
+          if [ -z "$CHANGED_FILES" ]; then
+            if [ -n "$GITHUB_BASE_REF" ]; then
               echo "No changed source files — nothing to mutate."
               exit 0
             fi
@@ -200,8 +209,8 @@ jobs:
           # turns backslashes into slashes, so backslash-escaping cannot
           # work here. Single pass only: a second pass would re-escape the
           # brackets the first pass introduced.
-          stryker_files="$(echo "${{ steps.changed.outputs.files }}" | perl -pe 's/(\[|\])/$1 eq "[" ? "[[]" : "[]]"/ge')"
-          if [ -n "${{ steps.changed.outputs.files }}" ]; then
+          stryker_files="$(echo "$CHANGED_FILES" | perl -pe 's/(\[|\])/$1 eq "[" ? "[[]" : "[]]"/ge')"
+          if [ -n "$CHANGED_FILES" ]; then
             echo "Mutating whole changed files (fallback)."
             pnpm exec stryker run --mutate "$stryker_files"
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.scope }}" ]; then
