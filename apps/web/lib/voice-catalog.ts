@@ -158,12 +158,33 @@ const LEGACY_VOICE_SAMPLE_ALIASES: Record<string, string> = {
 };
 
 //---------------
+// Clone voice ids — the engine renamed the clone prefix from `chatterbox:`
+// to `chatterbox_nano:` while personas created before the rename still store
+// `chatterbox:<key>`. Both prefixes address the same clone, so any comparison
+// of a stored persona voice against a served clone row must compare the key,
+// never the full id. Engine clone keys are u{12 hex of user uuid}_{12 hex
+// of clone uuid} (apps/engine/app/services/cloned_voices/ownership.py).
+//---------------
+const CLONE_VOICE_ID_RE = /^chatterbox(_nano)?:u[0-9a-f]{12}_[0-9a-f]{12}$/i;
+
+export function isCloneVoiceId(voiceId: string): boolean {
+  return CLONE_VOICE_ID_RE.test(voiceId);
+}
+
+export function cloneKeyOf(voiceId: string | null | undefined): string | null {
+  if (voiceId === null || voiceId === undefined || voiceId === '') {
+    return null;
+  }
+  return voiceId.replace(/^chatterbox(_nano)?:/, '');
+}
+
+//---------------
 // voiceSampleName — house voice samples live at /voice-samples/<name>.mp3,
 // keyed by the catalog name without the `chatterbox:` routing prefix (a colon
 // is not a portable file name). Only catalog voices have a sample.
 //---------------
 export function voiceSampleName(voice: VoiceOption): string | null {
-  if (voice.kind === 'cloned' || voice.provider === 'openrouter') {
+  if (voice.kind === 'cloned' || voice.provider === 'openrouter' || isCloneVoiceId(voice.id)) {
     return null;
   }
   if (!voice.id.startsWith('chatterbox:')) {

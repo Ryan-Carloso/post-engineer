@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { filterHouseVoices, isVoiceOption, searchVoices, voiceSampleName, type VoiceOption } from '../voice-catalog';
+import { cloneKeyOf, filterHouseVoices, isCloneVoiceId, isVoiceOption, searchVoices, voiceSampleName, type VoiceOption } from '../voice-catalog';
 
 const v = (overrides: Partial<VoiceOption> & { id: string }): VoiceOption => ({
   label: 'X',
@@ -98,6 +98,18 @@ describe('voiceSampleName', () => {
     expect(voiceSampleName(v({ id: 'openrouter:m:eve', provider: 'openrouter' }))).toBeNull();
   });
 
+  it('returns null for clone-key ids even when kind is standard', () => {
+    // A persona stored before the chatterbox_nano: rename falls through to
+    // the legacy fallback with kind "standard"; its key must never resolve
+    // to a /voice-samples/<clone_key>.mp3 that does not exist.
+    expect(
+      voiceSampleName(v({ id: 'chatterbox:uaaaaaaaabbbb_cccccccccccc', provider: 'chatterbox' })),
+    ).toBeNull();
+    expect(
+      voiceSampleName(v({ id: 'chatterbox_nano:uaaaaaaaabbbb_cccccccccccc', provider: 'chatterbox' })),
+    ).toBeNull();
+  });
+
   it('resolves legacy voice ids through the engine alias map to a sample that exists', () => {
     // The old sample files were deleted with the Modal catalog; the engine
     // aliases a stored legacy id to a Kokoro voice at render time, so the
@@ -105,6 +117,38 @@ describe('voiceSampleName', () => {
     expect(voiceSampleName(v({ id: 'chatterbox:en_us_male_01', provider: 'chatterbox' }))).toBe('kokoro_am_michael');
     expect(voiceSampleName(v({ id: 'chatterbox:en_us_female_01', provider: 'chatterbox' }))).toBe('kokoro_af_heart');
     expect(voiceSampleName(v({ id: 'chatterbox:ryan', provider: 'chatterbox' }))).toBe('kokoro_am_michael');
+  });
+});
+
+describe('cloneKeyOf', () => {
+  it('strips either clone prefix so pre- and post-rename ids compare equal', () => {
+    expect(cloneKeyOf('chatterbox:uaaaaaaaabbbb_cccccccccccc')).toBe('uaaaaaaaabbbb_cccccccccccc');
+    expect(cloneKeyOf('chatterbox_nano:uaaaaaaaabbbb_cccccccccccc')).toBe('uaaaaaaaabbbb_cccccccccccc');
+    expect(cloneKeyOf('chatterbox:uaaaaaaaabbbb_cccccccccccc')).toBe(
+      cloneKeyOf('chatterbox_nano:uaaaaaaaabbbb_cccccccccccc'),
+    );
+  });
+
+  it('returns null for missing ids and leaves unprefixed ids unchanged', () => {
+    expect(cloneKeyOf(null)).toBeNull();
+    expect(cloneKeyOf(undefined)).toBeNull();
+    expect(cloneKeyOf('')).toBeNull();
+    expect(cloneKeyOf('voice-1')).toBe('voice-1');
+  });
+});
+
+describe('isCloneVoiceId', () => {
+  it('matches clone keys under either prefix', () => {
+    expect(isCloneVoiceId('chatterbox:uaaaaaaaabbbb_cccccccccccc')).toBe(true);
+    expect(isCloneVoiceId('chatterbox_nano:uaaaaaaaabbbb_cccccccccccc')).toBe(true);
+  });
+
+  it('rejects house voices, OpenRouter ids and malformed clone keys', () => {
+    expect(isCloneVoiceId('chatterbox:kokoro_af_heart')).toBe(false);
+    expect(isCloneVoiceId('openrouter:m:eve')).toBe(false);
+    expect(isCloneVoiceId('chatterbox:uabc_123')).toBe(false);
+    expect(isCloneVoiceId('chatterbox:uaaaaaaaabbbbcccccccccccc')).toBe(false);
+    expect(isCloneVoiceId('chatterbox_nano:zzzzzzzzzzzz_cccccccccccc')).toBe(false);
   });
 });
 

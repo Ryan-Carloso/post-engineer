@@ -17,6 +17,7 @@ import {
   clonedVoicePreviewUrl,
 } from '@/lib/cloned-voices-client';
 import { usePersonaStore } from '@/lib/store';
+import { cloneKeyOf } from '@/lib/voice-catalog';
 import { useI18n } from '@/lib/i18n/provider';
 import { CheckIcon, MicIcon, SpinnerIcon, TrashIcon } from '@/lib/ui';
 import { useDenoisePreview } from './use-denoise-preview';
@@ -133,10 +134,12 @@ export const PersonaVoiceClonePanel = () => {
       }
       const deletedClone = listQuery.data?.find((clone) => clone.id === deletedCloneId);
       const deletedVoiceId = deletedClone?.voice_id;
+      // Compare keys, not full ids: a persona stored before the
+      // chatterbox_nano: rename holds chatterbox:<key> for the same clone.
       if (
         deletedVoiceId !== null &&
         deletedVoiceId !== undefined &&
-        deletedVoiceId === usePersonaStore.getState().voiceId
+        cloneKeyOf(deletedVoiceId) === cloneKeyOf(usePersonaStore.getState().voiceId)
       ) {
         usePersonaStore.getState().setVoiceId(null);
       }
@@ -407,7 +410,8 @@ export const PersonaVoiceClonePanel = () => {
 
       <ul className="space-y-2">
         {voices.map((clone) => {
-          const isActive = clone.voice_id !== null && clone.voice_id === voiceId;
+          const isActive =
+            clone.voice_id !== null && cloneKeyOf(clone.voice_id) === cloneKeyOf(voiceId);
           const statusLabel =
             clone.status === 'ready'
               ? t('persona.voiceCloneStatusReady')
