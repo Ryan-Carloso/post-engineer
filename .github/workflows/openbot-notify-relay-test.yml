@@ -1,0 +1,33 @@
+name: openbot-notify-relay-test
+
+# Runs the committed regression tests for openbot-notify.yml's
+# relay_decision (.github/scripts/openbot-notify/relay.test.sh). Kept as
+# its own tiny workflow so the relay itself stays a pure, checkout-free
+# event forwarder — a checkout that executes PR code does not belong in
+# the relay.
+#
+# No secrets needed: the tests stub the GitHub API entirely.
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/openbot-notify.yml'
+      - '.github/scripts/openbot-notify/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/openbot-notify.yml'
+      - '.github/scripts/openbot-notify/**'
+
+permissions: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
+
+      - name: Run relay decision regression tests
+        run: bash .github/scripts/openbot-notify/relay.test.sh
