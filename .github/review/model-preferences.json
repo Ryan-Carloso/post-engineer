@@ -24,6 +24,7 @@
     "requireVisionOnlyRejection": true
   },
   "paidFallbacks": [
+    { "model": "opencode/glm-5.3-flash", "key": "opencode" },
     { "modelEnv": "REVIEW_MODEL_PRIMARY", "key": "zai" },
     { "modelEnv": "OPENCODE_MODEL", "key": "zai" },
     {

@@ -90,8 +90,19 @@ def main() -> int:
     )
     check(
         "providers map to their own key variable",
-        '"ZAI_API_KEY" if "z.ai" in provider["options"]["baseURL"] else "OPENROUTER_API_KEY"' in text,
-        "z.ai providers must use ZAI_API_KEY and OpenRouter must use OPENROUTER_API_KEY",
+        '''if base_url == "https://opencode.ai/zen/v1":
+                  key_var = "OPENCODE_ZEN_API_KEY"''' in text
+        and '''elif "z.ai" in base_url:
+                  key_var = "ZAI_API_KEY"''' in text
+        and '''else:
+                  key_var = "OPENROUTER_API_KEY"''' in text,
+        "opencode/z.ai/openrouter providers must map to their own key variable",
+    )
+    check("OpenCode Zen endpoint configured", "https://opencode.ai/zen/v1" in text)
+    check(
+        "OPENCODE_ZEN_API_KEY masked and scrubbed",
+        "::add-mask::${OPENCODE_ZEN_API_KEY}" in text
+        and "OPENCODE_ZEN_API_KEY" in text[text.index("Scrub secrets from review output") :],
     )
     check("no ZHIPU_API_KEY references", "ZHIPU_API_KEY" not in text)
     check("OPENCODE_MODEL default set", "OPENCODE_MODEL: zai-coding-plan/" in text)
@@ -266,7 +277,9 @@ def main() -> int:
     check("secret gate uses step outputs", "steps.check.outputs.has_key" in text)
     check(
         "per-tier key outputs recorded",
-        "has_zai_key=" in text and "has_openrouter_key=" in text,
+        "has_zai_key=" in text
+        and "has_openrouter_key=" in text
+        and "has_opencode_key=" in text,
         "the check step must record one output per provider key",
     )
     check(
@@ -316,8 +329,8 @@ def main() -> int:
     )
     check(
         "scrubs both key values from review.md",
-        'for var in ("ZAI_API_KEY", "OPENROUTER_API_KEY")' in text,
-        "the scrub step must iterate over both key env vars",
+        'for var in ("ZAI_API_KEY", "OPENROUTER_API_KEY", "OPENCODE_ZEN_API_KEY")' in text,
+        "the scrub step must iterate over every provider key env var",
     )
 
     # Concurrency + least-privilege permissions

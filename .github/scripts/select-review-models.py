@@ -186,7 +186,7 @@ def is_denied(
         and meta.vision_only
     ):
         return "vision-only model"
-    if meta is not None and model_id.startswith("opencode/") and not meta.zero_cost:
+    if meta is not None and not paid_tier and model_id.startswith("opencode/") and not meta.zero_cost:
         return "not zero-cost on opencode provider"
     return None
 
@@ -214,6 +214,10 @@ def expand_paid_model(spec: dict[str, Any], env: dict[str, str]) -> str | None:
 
 def provider_key_ok(model_id: str, key_kind: str, env: dict[str, str]) -> bool:
     provider = model_id.split("/", 1)[0]
+    if key_kind == "opencode":
+        # Paid OpenCode Zen models bill behind OPENCODE_ZEN_API_KEY; free
+        # opencode/* models need no secret at all.
+        return env.get("HAS_OPENCODE_KEY") == "true"
     if provider == "opencode":
         return True
     if key_kind == "zai":
@@ -423,6 +427,8 @@ def main() -> int:
         env["HAS_OPENROUTER_KEY"] = "true"
     if env.get("HAS_ZAI_KEY") != "true" and env.get("ZAI_API_KEY"):
         env["HAS_ZAI_KEY"] = "true"
+    if env.get("HAS_OPENCODE_KEY") != "true" and env.get("OPENCODE_ZEN_API_KEY"):
+        env["HAS_OPENCODE_KEY"] = "true"
 
     available, discovery_failed = collect_available(env)
     attempts, free_models, decisions = build_chain(
