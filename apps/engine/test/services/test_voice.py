@@ -605,6 +605,25 @@ class TestTtsFailureReasons(unittest.TestCase):
         self.assertIsNone(result.sub_maker)
         self.assertIn("cloned voice is not available", result.error or "")
 
+    def test_chatterbox_user_clone_allowed_for_owner_reaches_tts(self):
+        # Allow path through the moved guard: an owner's clone key must
+        # proceed to chatterbox_tts instead of being denied.
+        owner = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        key = "uaaaaaaaabbbb_cccccccccccc"
+        marker = vs.SubMaker()
+        with patch(
+            "app.services.voice.chatterbox_tts", return_value=marker
+        ) as chatterbox:
+            result = vs.tts(
+                text="hello",
+                voice_name=f"chatterbox:{key}",
+                voice_rate=1.0,
+                voice_file="/tmp/clone-allowed.mp3",
+                user_id=owner,
+            )
+        self.assertIs(result, marker)
+        chatterbox.assert_called_once()
+
     def test_elevenlabs_unauthorized_reports_provider_cause(self):
         unauthorized = SimpleNamespace(
             status_code=401,
