@@ -98,6 +98,19 @@ class TestRaiseReencodeFailure(unittest.TestCase):
         # The front survives the cut: str(exc)'s scrubbed cause text.
         self.assertIn("returned non-zero exit status 1", message)
 
+    def test_dangling_stderr_label_never_stays_when_tail_has_no_room(self):
+        # A scrubbed str(exc) alone can fill the bound (long echoed command
+        # line): trimming the tail to nothing must also drop the label —
+        # no bare "ffmpeg stderr: " promising a cause that is not there.
+        long_command = ["ffmpeg"] + [f"/cache/very/long/path/piece{i:03d}" for i in range(60)]
+        exc = subprocess.CalledProcessError(1, long_command, stderr=b"x")
+        with self.assertRaises(ff.FfmpegReencodeError) as ctx:
+            ff.raise_reencode_failure("/cache/clip.mp4", exc)
+        message = str(ctx.exception)
+        self.assertNotIn("ffmpeg stderr:", message)
+        self.assertLessEqual(len(message), 550)
+        self.assertIn("non-zero exit status 1", message)
+
     def test_error_is_a_runtime_error(self):
         self.assertTrue(issubclass(ff.FfmpegReencodeError, RuntimeError))
 

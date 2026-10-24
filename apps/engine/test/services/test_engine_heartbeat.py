@@ -125,17 +125,20 @@ class HeartbeatIoTests(unittest.TestCase):
         self.assertIn("clean_shutdown_at", kwargs["json"])
 
     def test_start_heartbeat_thread_is_daemon(self):
+        # start/stop/join all sit inside the write_beat patch: a loop
+        # scheduled after the patch exits would run its first beat against
+        # the real function and flake the assertion below.
         with patch.object(engine_heartbeat, "write_beat") as write:
             thread = engine_heartbeat.start_heartbeat_thread(interval_s=3600)
-        self.assertTrue(thread.daemon)
-        self.assertTrue(thread.is_alive())
-        write.assert_called_once()
-        # The thread must not outlive the test: a leaked daemon that runs
-        # subprocess calls races with mutmut's child bookkeeping (the
-        # video.py shard crashed on exactly that). stop() unblocks the
-        # loop's wait at once, so the join is immediate.
-        engine_heartbeat.stop_heartbeat_thread()
-        thread.join(timeout=5)
+            self.assertTrue(thread.daemon)
+            self.assertTrue(thread.is_alive())
+            write.assert_called_once()
+            # The thread must not outlive the test: a leaked daemon that runs
+            # subprocess calls races with mutmut's child bookkeeping (the
+            # video.py shard crashed on exactly that). stop() unblocks the
+            # loop's wait at once, so the join is immediate.
+            engine_heartbeat.stop_heartbeat_thread()
+            thread.join(timeout=5)
         self.assertFalse(thread.is_alive())
 
     def test_stop_heartbeat_thread_unblocks_the_loop_immediately(self):

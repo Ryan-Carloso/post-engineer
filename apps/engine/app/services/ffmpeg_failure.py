@@ -52,7 +52,11 @@ def raise_reencode_failure(src: str, exc: BaseException) -> NoReturn:
         over = len(detail) + len(sep) + len(tail) - FFMPEG_REENCODE_DETAIL_CHARS
         if over > 0:
             tail = tail[over:]
-        detail = f"{detail}{sep}{tail}"
+        # The trimmed tail can be empty (a long echoed command line alone
+        # can fill the bound): never append a bare label promising a
+        # stderr that is not there.
+        if tail:
+            detail = f"{detail}{sep}{tail}"
     logger.error(f"[ffmpeg] re-encode failed for {os.path.basename(src)}: {detail}")
     raise FfmpegReencodeError(
         f"ffmpeg re-encode failed for {os.path.basename(src)}: {detail}"
