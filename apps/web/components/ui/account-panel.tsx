@@ -114,7 +114,9 @@ export function SignOutButton() {
   const handleSignOut = async () => {
     const { createSupabaseClient } = await import('@/lib/supabase/client');
     const supabase = createSupabaseClient();
-    await supabase.auth.signOut();
+    // scope: 'local' — sign out only THIS session (the default 'global'
+    // would also end the user's sessions on every other device).
+    await supabase.auth.signOut({ scope: 'local' });
     router.push('/login');
   };
 
