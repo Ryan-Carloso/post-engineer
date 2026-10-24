@@ -37,6 +37,19 @@ name: mutation
 # function, git/ast failure) keep the whole-file scope. Dispatch runs and
 # the nightly full scope are unchanged; the mutation score threshold
 # logic is untouched (there is deliberately none).
+#
+# Speed (2026-10-24): the web/mcp Stryker runs are scoped to the PR's
+# CHANGED LINE RANGES (native `path:startLine-endLine` mutate syntax;
+# extractor: .github/scripts/ui-gates/changed-ranges.mjs, tested there).
+# New files and fallbacks (unparseable hunk, >maxRanges, extractor
+# error, zero mutants selected) mutate the whole file — the scope only
+# ever widens, so verdicts can only get stricter. Dispatch keeps the
+# full configured scope. The Stryker incremental cache is unaffected:
+# the per-mutant results it stores stay valid across synchronize runs.
+# The ui-coverage-gates mutation gate (ci.yml) reads its score over the
+# mutants the report carries — with line scoping that is exactly the
+# PR's changed lines' mutants, so "mutation ≥ 60% on changed UI files"
+# keeps meaning the changed code.
 # (Deliberately NOT set: mutmut's `mutate_only_covered_lines` — its extra
 # in-process coverage run breaks the subsequent stats collection on
 # test_material.py's order-sensitive tests (3/3 local repros); revisit
@@ -134,10 +147,52 @@ jobs:
             echo "No changed source files for ${{ matrix.app }} (or manual dispatch: full config scope)."
           fi
 
+      # Speed (2026-10-24): on PRs, Stryker mutates ONLY the PR's changed
+      # LINE RANGES (native `path:startLine-endLine` mutate syntax), like
+      # the engine shards' changed-function scoping. The extractor is
+      # .github/scripts/ui-gates/changed-ranges.mjs (tested there);
+      # fallbacks (new file, unparseable hunk, >maxRanges, script error)
+      # mutate the whole file, so the scope only ever widens, never
+      # weakens. Dispatch runs keep the full configured scope.
+      - name: Compute changed line ranges
+        id: ranges
+        if: github.event_name == 'pull_request'
+        run: |
+          set -uo pipefail
+          mutate="$(node .github/scripts/ui-gates/changed-ranges.mjs \
+            --app "${{ matrix.app }}" \
+            --base "origin/${{ github.base_ref }}" \
+            --head HEAD || true)"
+          echo "mutate=$mutate" >> "$GITHUB_OUTPUT"
+          if [ -n "$mutate" ]; then
+            echo "Mutating changed line ranges: $mutate"
+          else
+            echo "No line ranges extracted — the run step falls back to whole changed files."
+          fi
+
       - name: Run Stryker mutation testing
         if: github.event_name == 'workflow_dispatch' || steps.changed.outputs.files != ''
         working-directory: apps/${{ matrix.app }}
         run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # Line-scoped first (the ranges string is already bracket-
+            # escaped by the extractor). Stryker exits non-zero only on
+            # execution errors (no score thresholds here) — including
+            # "no mutants selected" on a diff whose lines carry no
+            # mutation points; the whole-file fallback covers that, so
+            # the scope only ever widens.
+            if [ -n "${{ steps.ranges.outputs.mutate }}" ]; then
+              echo "Mutating the PR's changed line ranges."
+              if pnpm exec stryker run --mutate "${{ steps.ranges.outputs.mutate }}"; then
+                exit 0
+              fi
+              echo "::warning::line-scoped run failed — falling back to whole changed files"
+            fi
+            if [ -z "${{ steps.changed.outputs.files }}" ]; then
+              echo "No changed source files — nothing to mutate."
+              exit 0
+            fi
+          fi
           # Brackets in Next.js route paths ([taskId], [...path]) are
           # minimatch character classes — escape them as [[] / []] so
           # Stryker matches the literal files (same escaping as the
@@ -147,6 +202,7 @@ jobs:
           # brackets the first pass introduced.
           stryker_files="$(echo "${{ steps.changed.outputs.files }}" | perl -pe 's/(\[|\])/$1 eq "[" ? "[[]" : "[]]"/ge')"
           if [ -n "${{ steps.changed.outputs.files }}" ]; then
+            echo "Mutating whole changed files (fallback)."
             pnpm exec stryker run --mutate "$stryker_files"
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.scope }}" ]; then
             # Manual scoped run: the glob resolves relative to the app

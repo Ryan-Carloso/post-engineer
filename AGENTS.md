@@ -121,7 +121,7 @@
 - Multipart route tests need `// @vitest-environment node`.
 - Logger migrations preserve the exact console call shape (`msg, obj`).
 - Web tests resolve repo files via `findRepoRoot(import.meta.url)` (`apps/web/test/repo-root.ts`), never `process.cwd()` (Stryker runs from `.stryker-tmp`).
-- Stryker mutates whole changed files; bracketed paths need `[[]`/`[]]` escaping in every workflow. mutmut runs a subset in random order — don't assert counts over global state.
+- Stryker mutates the PR's changed LINE RANGES on web/mcp (`path:startLine-endLine` — `.github/scripts/ui-gates/changed-ranges.mjs` parses the `-U0` diff and emits the escaped patterns; new files and fallbacks mutate whole, so the scope only widens). Bracketed paths still need `[[]`/`[]]` escaping — done inside changed-ranges.mjs; the engine's mutmut mutates only the changed functions (`apps/engine/scripts/changed_functions.py`). mutmut runs a subset in random order — don't assert counts over global state.
 - JWT tamper tests flip the first signature char, not the last.
 - Cypress: specs end with `export {};`; log in via `cy.loginE2EUser()`; only `cy.wait()` on requests the app actually fires; the AppShell renders hidden responsive twins — scope selectors to a visible container and exact hrefs; set React inputs via the native value setter + `input` event; binary fixtures need `'x.mp4,null'`; never fake `setTimeout` with `cy.clock()` on React Query pages.
 
