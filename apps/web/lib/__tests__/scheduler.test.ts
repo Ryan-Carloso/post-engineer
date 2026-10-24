@@ -206,13 +206,17 @@ describe('createScheduler', () => {
   });
 
   it('stop() clears the timers so nothing runs afterwards', async () => {
-    const deps = makeDeps({ lastSuccessAt: new Date(Date.now()), jobs: [makeJob()] });
+    // The job is DUE at startup: the immediate tick runs it once; after
+    // stop() the hourly ticks must never run it again.
+    const deps = makeDeps({ lastSuccessAt: null, jobs: [makeJob()] });
     const scheduler = createScheduler(deps);
     scheduler.start();
-    scheduler.stop();
 
     await settleImmediateTick();
+    expect(deps.jobs[0].run).toHaveBeenCalledTimes(1);
+
+    scheduler.stop();
     await vi.advanceTimersByTimeAsync(10 * HOUR);
-    expect(deps.jobs[0].run).not.toHaveBeenCalled();
+    expect(deps.jobs[0].run).toHaveBeenCalledTimes(1);
   });
 });
