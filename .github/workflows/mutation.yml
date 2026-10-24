@@ -28,6 +28,15 @@ name: mutation
 # synchronize re-runs only re-test mutants invalidated by source changes.
 # Stryker runs incrementally (`incremental: true` + a per-PR cache of the
 # incremental file) so synchronize re-runs only re-test changed mutants.
+#
+# Speed (2026-10-24, P3): within each engine shard, mutmut runs ONLY the
+# changed functions' mutants — scripts/changed_functions.py maps the
+# diff's changed lines to functions via ast and emits mutmut name globs
+# (mutmut run accepts fnmatch globs on mutant keys). Conservative
+# fallbacks (new file, module-level change, change inside a decorated
+# function, git/ast failure) keep the whole-file scope. Dispatch runs and
+# the nightly full scope are unchanged; the mutation score threshold
+# logic is untouched (there is deliberately none).
 # (Deliberately NOT set: mutmut's `mutate_only_covered_lines` — its extra
 # in-process coverage run breaks the subsequent stats collection on
 # test_material.py's order-sensitive tests (3/3 local repros); revisit
@@ -388,6 +397,28 @@ jobs:
           print(f"only_mutate set to [{shard_file}]")
           EOF
 
+      # P3 (2026-10-24): scope the shard's TEST RUN to the changed
+      # functions. The mapper returns name globs for mutmut's CLI (mode
+      # "functions") or falls back to the whole file ("file") — see
+      # scripts/changed_functions.py for the rules and
+      # test/scripts/test_changed_functions.py for the pins. Manual
+      # dispatch keeps the full-file scope (no PR base to diff against).
+      - name: Compute the shard's changed functions
+        id: functions
+        if: matrix.file != '' && github.event_name == 'pull_request'
+        env:
+          SHARD_FILE: ${{ matrix.file }}
+        run: |
+          uv run python scripts/changed_functions.py \
+            --file "$SHARD_FILE" \
+            --base "origin/${{ github.base_ref }}" \
+            --head HEAD > functions.json
+          cat functions.json
+          globs="$(uv run python -c "import json; print(' '.join(json.load(open('functions.json'))['globs']))")"
+          echo "globs=$globs" >> "$GITHUB_OUTPUT"
+          mode="$(uv run python -c "import json; print(json.load(open('functions.json'))['mode'])")"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+
       # mutmut 3.x never mutates decorated functions (copying them for the
       # trampoline setup can cause side effects, e.g. duplicate route
       # registrations) — except a lone @staticmethod / @classmethod. A shard
@@ -437,7 +468,25 @@ jobs:
 
       - name: Run mutmut mutation testing
         if: matrix.file == '' || steps.mutable.outputs.has_functions == 'true'
-        run: uv run mutmut run
+        env:
+          SHARD_GLOBS: ${{ steps.functions.outputs.globs }}
+        run: |
+          set -f
+          if [ -z "$SHARD_GLOBS" ]; then
+            # Full-file scope: dispatch runs, or the mapper's fallback
+            # (new file / module-level change / decorated function).
+            uv run mutmut run
+            exit 0
+          fi
+          echo "Function-scoped mutant selection: $SHARD_GLOBS"
+          if ! uv run mutmut run $SHARD_GLOBS; then
+            # Only ever WIDENS the scope (never weakens a verdict): a
+            # function-scoped run can fail when a changed function
+            # happens to generate zero mutants (mutmut asserts on an
+            # empty selection); the whole file covers that case.
+            echo "::warning::function-scoped run failed — falling back to the whole-file scope"
+            uv run mutmut run
+          fi
 
       - name: Report skipped shard
         if: matrix.file != '' && steps.mutable.outputs.has_functions == 'false'
