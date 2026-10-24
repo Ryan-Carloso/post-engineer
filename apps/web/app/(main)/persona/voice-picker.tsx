@@ -5,7 +5,12 @@ import { useVoicesQuery } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
 import { usePersonaStore } from '@/lib/store';
 import { MicIcon, PlayIcon } from '@/lib/ui';
-import { filterHouseVoices, voiceSampleName, type VoiceOption } from '@/lib/voice-catalog';
+import {
+  filterHouseVoices,
+  isCloneVoiceId,
+  voiceSampleName,
+  type VoiceOption,
+} from '@/lib/voice-catalog';
 import { VoicePickerDialog, VoiceTags } from './voice-picker-dialog';
 
 // Voice ids come from the engine's catalog and are provider-qualified:
@@ -68,7 +73,10 @@ function voiceModelLabel(voiceId: string): string {
 }
 
 function legacyVoice(voiceId: string): VoiceOption {
-  return { id: voiceId, label: null, provider: 'chatterbox', gender: null, accent: null, kind: 'standard', description: null };
+  // A stored clone id from before the chatterbox_nano: rename misses the
+  // catalog lookup, so it lands here. It is still a clone: the "Cloned" tag
+  // renders and no (nonexistent) sample button is shown for it.
+  return { id: voiceId, label: null, provider: 'chatterbox', gender: null, accent: null, kind: isCloneVoiceId(voiceId) ? 'cloned' : 'standard', description: null };
 }
 
 //---------------

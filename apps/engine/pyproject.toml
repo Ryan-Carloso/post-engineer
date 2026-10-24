@@ -41,8 +41,6 @@ dependencies = [
     "opencv-python-headless==4.12.0.88",
     "posthog>=3.0.0",
     "python-dotenv>=1.0.0",
-    # Free fallback TTS for test accounts when Chatterbox (Modal) is down.
-    "edge-tts>=7.0.0",
 ]
 
 [project.optional-dependencies]

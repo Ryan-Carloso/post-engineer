@@ -209,7 +209,7 @@ class ClonedVoicesControllerTests(unittest.TestCase):
         }
         response = self.client.get("/api/v1/cloned-voices/clone-1", headers=self.headers)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["body"]["voice_id"], "chatterbox:uabc_clone1")
+        self.assertEqual(response.json()["body"]["voice_id"], "chatterbox_nano:uabc_clone1")
 
     @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
     def test_get_missing_returns_404(self, mock_service_cls):

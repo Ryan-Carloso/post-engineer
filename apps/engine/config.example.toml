@@ -50,12 +50,6 @@ persona_lipsync_enabled = true
 # 是否隐藏配置面板
 hide_config = false
 
-# Azure TTS V1(edge_tts) 单次流式请求超时时间，单位秒。
-# 网络异常、服务端限流或 voice 与文本语言不匹配时，edge_tts 可能长期卡住。
-# 默认 30 秒可避免 WebUI 任务无反馈；慢网络或代理环境可适当调大。
-# 设置为 0 表示禁用超时。
-edge_tts_timeout = 30
-
 # 是否校验外部 API 和素材下载的 TLS 证书。
 # 默认必须开启，避免 Pexels/Pixabay API key 和下载素材被中间人攻击篡改。
 # 只有在企业代理或自签证书环境明确需要时，才临时改为 false。
@@ -599,23 +593,6 @@ model_id = "chatterbox"
 [cloned_voices]
 registry_base_url = ""
 registry_api_key = ""
-
-# Edge TTS fallback (free, no API key) ########################################
-# Microsoft Edge TTS is the automatic fallback when Chatterbox fails, for test
-# accounts ONLY. It never appears in the UI. Configure via env vars (not here):
-#
-#   TEST_ACCOUNT_USER_IDS  comma-separated user IDs that get the fallback
-#                          (e.g. "91f32003-31f4-419a-a5ee-ef8a3563ff03")
-#   EDGE_TTS_VOICE         Fallback Edge TTS voice name, used only when the
-#                          video's language is missing/unknown — a known
-#                          language always selects its own voice (default:
-#                          pt-BR-FranciscaNeural).
-#
-# When the local Chatterbox server is unavailable, test-account generations
-# fall back to Edge TTS instead of failing.
-# Every fallback emits a `tts_fallback_used` PostHog event (ids and reason
-# only, never audio text). Production traffic keeps the loud Chatterbox
-# failure so a silent voice switch never reaches real users.
 
 # OpenRouter TTS (hosted, multi-vendor) #######################################
 # OpenRouter (https://openrouter.ai) routes one API key to many hosted TTS

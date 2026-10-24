@@ -284,8 +284,9 @@ class TestVoiceService(unittest.TestCase):
 
 
     def test_chatterbox_voice_helpers(self):
-        """is_chatterbox_voice recognises only the chatterbox: prefix."""
+        """is_chatterbox_voice recognises the chatterbox: and chatterbox_nano: prefixes."""
         self.assertTrue(vs.is_chatterbox_voice("chatterbox:kokoro_af_heart"))
+        self.assertTrue(vs.is_chatterbox_voice("chatterbox_nano:uaaaaaaaabbbb_cccccccccccc"))
         self.assertFalse(vs.is_chatterbox_voice("elevenlabs:abc:Rachel"))
         self.assertFalse(vs.is_chatterbox_voice(""))
         self.assertFalse(vs.is_chatterbox_voice(None))
@@ -391,14 +392,14 @@ class TestVoiceService(unittest.TestCase):
     def test_chatterbox_success_is_returned_as_is(self):
         """A successful Chatterbox result is returned untouched.
 
-        No other provider may be consulted on success — the Edge TTS
-        fallback only triggers on failure, for test accounts.
+        No other provider may be consulted on success — there is no
+        fallback, so a Chatterbox result is the final result.
         """
         chatterbox_marker = vs.SubMaker()
         with tempfile.TemporaryDirectory() as tmp_dir, patch.object(
             app_config, "chatterbox", {}
         ), patch(
-            "app.services.edge_tts.chatterbox_tts", return_value=chatterbox_marker
+            "app.services.voice.chatterbox_tts", return_value=chatterbox_marker
         ), patch.object(
             vs, "elevenlabs_tts"
         ) as elevenlabs:
@@ -408,8 +409,25 @@ class TestVoiceService(unittest.TestCase):
         self.assertIs(result, chatterbox_marker)
         elevenlabs.assert_not_called()
 
+    def test_chatterbox_nano_prefix_routes_to_chatterbox_tts(self):
+        """Clones are now issued as chatterbox_nano:<key> (Nano, CPU).
 
-
+        The prefix routes to the same local TTS server client, and the
+        legacy chatterbox: prefix keeps routing too, so personas stored
+        before the rename keep speaking.
+        """
+        chatterbox_marker = vs.SubMaker()
+        with tempfile.TemporaryDirectory() as tmp_dir, patch.object(
+            app_config, "chatterbox", {}
+        ), patch(
+            "app.services.voice.chatterbox_tts", return_value=chatterbox_marker
+        ) as mock_tts:
+            result = vs.tts(
+                "hello world", "chatterbox_nano:phonon_zoey", 1.0, str(Path(tmp_dir) / "v.mp3")
+            )
+        self.assertIs(result, chatterbox_marker)
+        mock_tts.assert_called_once()
+        self.assertEqual(mock_tts.call_args.args[1], "phonon_zoey")
 
     def test_script_split_keeps_thousand_separator_comma(self):
         """
@@ -575,6 +593,17 @@ class TestTtsFailureReasons(unittest.TestCase):
         self.assertIn("invalid Chatterbox voice name", result.error or "")
         self.assertNotIn("voice/subtitle mismatch", result.error or "")
 
+    def test_malformed_chatterbox_nano_voice_name_names_both_prefixes(self):
+        result = vs.tts(
+            text="hello",
+            voice_name="chatterbox_nano:",
+            voice_rate=1.0,
+            voice_file="/tmp/malformed-chatterbox-nano.mp3",
+        )
+
+        self.assertIsNone(result.sub_maker)
+        self.assertIn("chatterbox_nano:<name>", result.error or "")
+
     def test_chatterbox_user_clone_rejected_for_wrong_user(self):
         other = "ffffffff-bbbb-cccc-dddd-eeeeeeeeeeee"
         key = "uaaaaaaaabbbb_cccccccccccc"
@@ -587,6 +616,25 @@ class TestTtsFailureReasons(unittest.TestCase):
         )
         self.assertIsNone(result.sub_maker)
         self.assertIn("cloned voice is not available", result.error or "")
+
+    def test_chatterbox_user_clone_allowed_for_owner_reaches_tts(self):
+        # Allow path through the moved guard: an owner's clone key must
+        # proceed to chatterbox_tts instead of being denied.
+        owner = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        key = "uaaaaaaaabbbb_cccccccccccc"
+        marker = vs.SubMaker()
+        with patch(
+            "app.services.voice.chatterbox_tts", return_value=marker
+        ) as chatterbox:
+            result = vs.tts(
+                text="hello",
+                voice_name=f"chatterbox:{key}",
+                voice_rate=1.0,
+                voice_file="/tmp/clone-allowed.mp3",
+                user_id=owner,
+            )
+        self.assertIs(result, marker)
+        chatterbox.assert_called_once()
 
     def test_elevenlabs_unauthorized_reports_provider_cause(self):
         unauthorized = SimpleNamespace(
@@ -767,3 +815,14 @@ class TestElevenLabsVoice(unittest.TestCase):
         result = vs.elevenlabs_tts("  ", "abc123", "/tmp/test.mp3")
         self.assertIsNone(result.sub_maker)
         self.assertIn("empty", result.error or "")
+
+
+class TestMktimestamp(unittest.TestCase):
+    """SRT timestamp formatting for subtitle items."""
+
+    def test_zero_formats_as_midnight(self):
+        self.assertEqual(vs.mktimestamp(0), "00:00:00.000")
+
+    def test_hours_minutes_and_fractional_seconds(self):
+        # 1h 2m 3.5s in 100-nanosecond units.
+        self.assertEqual(vs.mktimestamp(37235000000), "01:02:03.500")

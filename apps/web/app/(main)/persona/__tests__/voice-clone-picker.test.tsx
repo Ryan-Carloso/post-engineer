@@ -392,6 +392,35 @@ describe('PersonaVoiceClonePanel', () => {
     expect(useButton.closest('li')?.className).toContain('border-accent');
   });
 
+  it('marks a nano clone as active when the persona voice uses the legacy prefix', async () => {
+    // The served row carries chatterbox_nano:<key> while a persona stored
+    // before the rename holds the same key under chatterbox: — the
+    // comparison strips the prefix, so the row still shows as active.
+    cloneMocks.list = [
+      publicRow({ id: 'clone-nano', status: 'ready', voice_id: 'chatterbox_nano:voice-1' }),
+    ];
+    renderPanel();
+    const useButton = await screen.findByRole('button', {
+      name: 'persona.voiceCloneUseOnPersona',
+    });
+    expect(useButton.closest('li')?.className).toContain('border-accent');
+  });
+
+  it('clears the persona voice when a nano clone matching a legacy voice is deleted', async () => {
+    cloneMocks.list = [
+      publicRow({ id: 'clone-del-nano', status: 'ready', voice_id: 'chatterbox_nano:voice-1' }),
+    ];
+    cloneMocks.delete.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderPanel();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'persona.voiceCloneDelete' })).toBeInTheDocument(),
+    );
+    await user.click(screen.getByRole('button', { name: 'persona.voiceCloneDelete' }));
+    await waitFor(() => expect(cloneMocks.delete).toHaveBeenCalledWith('clone-del-nano'));
+    await waitFor(() => expect(cloneMocks.setVoiceId).toHaveBeenCalledWith(null));
+  });
+
   it('does not set a voice when a ready clone has no voice_id', async () => {
     cloneMocks.list = [publicRow({ id: 'clone-novoice', status: 'ready', voice_id: null })];
     const user = userEvent.setup();

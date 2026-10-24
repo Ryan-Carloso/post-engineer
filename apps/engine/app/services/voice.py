@@ -11,11 +11,11 @@ from loguru import logger
 from moviepy.audio.io.AudioFileClip import AudioFileClip
 from moviepy.video.tools import subtitles
 
-from app.services.edge_tts import chatterbox_tts_with_fallback
 from app.services.openrouter_tts import dispatch_openrouter_tts
 from app.services.voice_providers import (
     SubMaker,
     TtsResult,
+    chatterbox_tts,
     elevenlabs_tts,
     ensure_file_path_exists,
     populate_legacy_submaker_with_full_text,
@@ -40,7 +40,6 @@ def _configure_pydub_ffmpeg(audio_segment_cls):
 
 def mktimestamp(time_unit: float) -> str:
     """Format a 100-nanosecond-unit timestamp as an SRT timestamp."""
-    hour = math.floor(time_unit / 10**7 / 3600)
     hour = math.floor(time_unit / 10**7 / 3600)
     minute = math.floor((time_unit / 10**7 / 60) % 60)
     seconds = (time_unit / 10**7) % 60
@@ -84,7 +83,8 @@ def is_elevenlabs_voice(voice_name: str) -> bool:
 
 
 def is_chatterbox_voice(voice_name: str) -> bool:
-    return (voice_name or "").startswith("chatterbox:")
+    # New clones are chatterbox_nano:<key>; legacy chatterbox: stays valid.
+    return (voice_name or "").startswith(("chatterbox:", "chatterbox_nano:"))
 
 
 def is_no_voice(voice_name: str | None) -> bool:
@@ -197,7 +197,7 @@ def tts(
 ) -> TtsResult:
     """Synthesize speech. Failures return a TtsResult with a specific, sanitized
     `error` naming the real cause (forwarded to the task failure for PostHog).
-    Test accounts fall back to free Edge TTS on Chatterbox failure (voice follows `language`)."""
+    Chatterbox failures fail loudly: there is no fallback voice switch."""
     if is_no_voice(voice_name):
         duration_seconds = estimate_no_voice_duration(text)
         if not generate_silent_audio(duration_seconds, voice_file):
@@ -216,29 +216,28 @@ def tts(
         # Format: elevenlabs:<voice_id>
         parts = voice_name.split(":", 1)
         if len(parts) >= 2 and parts[1].strip():
-            return elevenlabs_tts(
-                text, parts[1].strip(), voice_file, voice_rate, voice_volume
-            )
+            return elevenlabs_tts(text, parts[1].strip(), voice_file, voice_rate, voice_volume)
         logger.error(f"Invalid elevenlabs voice name format: {voice_name}")
         return TtsResult(
             error="invalid ElevenLabs voice name (expected 'elevenlabs:<voice_id>')"
         )
     if is_chatterbox_voice(voice_name):
-        # Format: chatterbox:<voice>, optionally with a display-only
-        # -Female/-Male suffix.
+        # Format: chatterbox:<voice> or chatterbox_nano:<voice>, optionally
+        # with a display-only -Female/-Male suffix.
         parts = voice_name.split(":", 1)
         if len(parts) < 2 or not parts[1].strip():
             logger.error(f"Invalid chatterbox voice name format: {voice_name}")
             return TtsResult(
-                error="invalid Chatterbox voice name (expected 'chatterbox:<name>')"
+                error="invalid Chatterbox voice name (expected 'chatterbox:<name>' or 'chatterbox_nano:<name>')"
             )
         chatterbox_voice = parts[1].strip()
         if chatterbox_voice.endswith(("-Female", "-Male")):
             chatterbox_voice = chatterbox_voice.rsplit("-", 1)[0]
-        return chatterbox_tts_with_fallback(
-            text, chatterbox_voice, voice_file, voice_rate, voice_volume,
-            user_id=user_id, task_id=task_id, language=language,
-        )
+        # Ownership guard moved here from the deleted fallback wrapper.
+        from app.services.cloned_voices.ownership import chatterbox_voice_allowed_for_user
+        if not chatterbox_voice_allowed_for_user(user_id, chatterbox_voice):
+            return TtsResult(error="cloned voice is not available for this user")
+        return chatterbox_tts(text, chatterbox_voice, voice_file, voice_rate, voice_volume)
     routed = dispatch_openrouter_tts(voice_name, text, voice_file, voice_rate, voice_volume)
     if routed is not None:
         return routed

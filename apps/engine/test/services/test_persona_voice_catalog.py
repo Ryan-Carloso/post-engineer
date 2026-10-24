@@ -66,13 +66,14 @@ class TestHouseVoiceCatalog(unittest.TestCase):
         with patch.object(persona_service, "get_openrouter_voices", return_value=[]):
             with patch(
                 "app.services.cloned_voices.service.list_catalog_entries",
-                return_value=[{"id": "chatterbox:uabc_clone1"}],
+                return_value=[{"id": "chatterbox_nano:uabc_clone1"}],
             ) as mock_entries:
                 result = persona_service.get_house_voices(user_id="user-1")
 
         mock_entries.assert_called_once_with("user-1")
-        self.assertEqual(result[-1]["id"], "chatterbox:uabc_clone1")
+        self.assertEqual(result[-1]["id"], "chatterbox_nano:uabc_clone1")
         self.assertEqual(result[-1]["kind"], "cloned")
+        self.assertEqual(result[-1]["provider"], "chatterbox_nano")
         self.assertEqual(len(result), len(_house_ids()) + 1)
 
     def test_catalog_degrades_to_house_voices_when_cloned_store_fails(self):
@@ -93,7 +94,7 @@ class TestHouseVoiceCatalog(unittest.TestCase):
             result = persona_service.get_house_voices()
 
         for entry in result:
-            self.assertRegex(entry["id"], r"^(chatterbox|elevenlabs|openrouter):")
+            self.assertRegex(entry["id"], r"^(chatterbox_nano|chatterbox|elevenlabs|openrouter):")
 
     def test_a_failed_discovery_does_not_empty_the_catalog(self):
         """A models-API outage must degrade to the house voices, not to an empty

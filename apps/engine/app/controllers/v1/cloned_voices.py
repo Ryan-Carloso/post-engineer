@@ -13,7 +13,7 @@ from app.controllers.v1.base import new_router
 from app.models.schema import BaseResponse
 from app.services.cloned_voices.audio import ReferenceAudioError, normalize_reference_audio
 from app.services.cloned_voices.constants import (
-    CHATTERBOX_VOICE_PREFIX,
+    CHATTERBOX_NANO_VOICE_PREFIX,
     ERROR_AUDIO_TOO_LARGE,
     ERROR_AUDIO_TOO_LONG,
     ERROR_CONSENT_REQUIRED,
@@ -36,7 +36,7 @@ cloned_router = router
 def _public_row(row: dict[str, Any]) -> dict[str, Any]:
     engine_key = row.get("engine_voice_key")
     voice_id = (
-        f"{CHATTERBOX_VOICE_PREFIX}{engine_key}"
+        f"{CHATTERBOX_NANO_VOICE_PREFIX}{engine_key}"
         if isinstance(engine_key, str) and engine_key
         else None
     )
