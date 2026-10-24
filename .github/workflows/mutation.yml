@@ -260,7 +260,13 @@ jobs:
     needs: [mutation-engine-changes]
     if: needs.mutation-engine-changes.outputs.files_json != '[]'
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # 180 min: video.py alone generates 2032 mutants across 39 functions
+    # (~354 min of sequential test time; the two biggest functions,
+    # generate_video and combine_videos, hold 60% of it). The 120-min cap
+    # cancelled a run at 86% processed (run 40051091970: 1739/2032 verdicts
+    # saved). A completed run also lets mutmut's incremental cache save,
+    # making later synchronize runs much faster. (Ryan approved, 2026-10-24.)
+    timeout-minutes: 180
     permissions:
       contents: read
     strategy:
