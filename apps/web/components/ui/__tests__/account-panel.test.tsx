@@ -176,6 +176,45 @@ describe('AccountPanel', () => {
     expect(pushMock).toHaveBeenCalledWith('/login');
   });
 
+  it('signs out of all devices only after the confirmation dialog', async () => {
+    render(<AccountPanel />, { wrapper: createWrapper() });
+
+    // Opening the confirmation dialog must not sign out yet.
+    fireEvent.click(screen.getByTestId('sign-out-all-button'));
+    expect(screen.getByTestId('sign-out-all-dialog')).toBeInTheDocument();
+    expect(signOutMock).not.toHaveBeenCalled();
+
+    // Cancel: dialog closes, still no sign-out.
+    fireEvent.click(screen.getByTestId('sign-out-all-cancel'));
+    expect(screen.queryByTestId('sign-out-all-dialog')).not.toBeInTheDocument();
+    expect(signOutMock).not.toHaveBeenCalled();
+
+    // Confirm: the scope is 'global' (every device ends) and the route
+    // goes to /login.
+    fireEvent.click(screen.getByTestId('sign-out-all-button'));
+    fireEvent.click(screen.getByTestId('sign-out-all-confirm'));
+    await waitFor(() => {
+      expect(signOutMock).toHaveBeenCalledWith({ scope: 'global' });
+    });
+    expect(pushMock).toHaveBeenCalledWith('/login');
+  });
+
+  it('keeps the global sign-out dialog open and its controls disabled while the sign-out is in flight', async () => {
+    signOutMock.mockImplementationOnce(() => new Promise(() => {})); // never settles
+    render(<AccountPanel />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getByTestId('sign-out-all-button'));
+    fireEvent.click(screen.getByTestId('sign-out-all-confirm'));
+
+    await waitFor(() => {
+      expect(signOutMock).toHaveBeenCalledWith({ scope: 'global' });
+    });
+    expect(screen.getByTestId('sign-out-all-dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('sign-out-all-confirm')).toBeDisabled();
+    expect(screen.getByTestId('sign-out-all-cancel')).toBeDisabled();
+    // The user must not be routed to /login while the request is pending.
+    expect(pushMock).not.toHaveBeenCalled();
+  });
+
   it('renders no user block or sign-out button when there is no session user', () => {
     vi.mocked(useSessionQuery).mockReturnValue({
       data: null,

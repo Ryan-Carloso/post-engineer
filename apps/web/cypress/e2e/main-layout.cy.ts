@@ -156,6 +156,24 @@ describe('Main Layout — Sidebar', () => {
     cy.get('button[title="Sair"]').click();
     cy.url().should('match', /\/login$/);
   });
+
+  it('pede confirmação antes de sair de todos os dispositivos', () => {
+    // The confirmation dialog is the boundary: confirming here would fire
+    // a GLOBAL sign-out against the shared E2E account, revoking the
+    // session of the parallel cypress job mid-run (the /landing bounce).
+    // The global path's behavior is pinned by the unit tests instead.
+    seedUserMetadata({ name: 'Cypress' });
+    cy.visit('/');
+    cy.contains('p', 'Cypress', { timeout: 10_000 }).scrollIntoView().should('be.visible');
+
+    cy.get('[data-testid=sign-out-all-button]').scrollIntoView().click();
+    cy.get('[data-testid=sign-out-all-dialog]').should('be.visible');
+    cy.get('[data-testid=sign-out-all-confirm]').should('be.visible');
+    cy.get('[data-testid=sign-out-all-cancel]').should('be.visible');
+
+    cy.get('[data-testid=sign-out-all-cancel]').click();
+    cy.get('[data-testid=sign-out-all-dialog]').should('not.exist');
+  });
 });
 
 //---------------
