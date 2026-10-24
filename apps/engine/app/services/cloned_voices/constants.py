@@ -23,5 +23,8 @@ ERROR_PREVIEW_FAILED = "preview_failed"
 MAX_REFERENCE_BYTES = PERSONA_VOICE_MAX_BYTES
 MAX_REFERENCE_SECONDS = PERSONA_VOICE_MAX_SECONDS
 
-# Catalog id prefix: full voice_id stored on personas is chatterbox:<engine_voice_key>.
+# Catalog id prefix for clones: new clones are chatterbox_nano:<engine_voice_key>
+# (Nano, local CPU). The legacy chatterbox: prefix stays valid for routing so
+# personas stored before the rename keep speaking.
 CHATTERBOX_VOICE_PREFIX = "chatterbox:"
+CHATTERBOX_NANO_VOICE_PREFIX = "chatterbox_nano:"

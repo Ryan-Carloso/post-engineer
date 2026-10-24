@@ -17,7 +17,7 @@ from app.services.cloned_voices.chatterbox_registry import (
     default_registry,
 )
 from app.services.cloned_voices.constants import (
-    CHATTERBOX_VOICE_PREFIX,
+    CHATTERBOX_NANO_VOICE_PREFIX,
     ERROR_CONSENT_REQUIRED,
     ERROR_NOT_FOUND,
     ERROR_NOT_READY,
@@ -33,7 +33,7 @@ from app.services.voice_providers import chatterbox_tts
 
 
 def _catalog_voice_id(engine_voice_key: str) -> str:
-    return f"{CHATTERBOX_VOICE_PREFIX}{engine_voice_key}"
+    return f"{CHATTERBOX_NANO_VOICE_PREFIX}{engine_voice_key}"
 
 
 def list_catalog_entries(user_id: str, store: ClonedVoiceStore | None = None) -> list[dict[str, str]]:

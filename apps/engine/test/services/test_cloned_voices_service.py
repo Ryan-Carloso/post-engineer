@@ -151,7 +151,7 @@ class ClonedVoiceServiceTests(unittest.TestCase):
             {"engine_voice_key": None},
         ]
         entries = list_catalog_entries("user-1", store=self.store)
-        self.assertEqual(entries, [{"id": "chatterbox:uabc_clone1"}])
+        self.assertEqual(entries, [{"id": "chatterbox_nano:uabc_clone1"}])
 
     @patch("app.services.cloned_voices.service.track_event")
     def test_register_background_noop_when_row_missing(self, _track):

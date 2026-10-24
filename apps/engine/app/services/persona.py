@@ -48,7 +48,8 @@ def get_house_voices(user_id: str | None = None) -> list[dict[str, Any]]:
     ``openrouter_tts.get_openrouter_voices`` for the discovery bounds.
 
     When ``user_id`` is given, the caller's ready cloned voices are appended
-    as ``chatterbox:<engine_voice_key>`` entries with ``kind: "cloned"`` (see
+    as ``chatterbox_nano:<engine_voice_key>`` entries with ``kind: "cloned"``
+    and provider ``chatterbox_nano`` (see
     ``cloned_voices.service.list_catalog_entries``). That merge reads
     Supabase; if the store is unconfigured or unreachable the catalog
     degrades to the house voices above instead of failing the picker.
@@ -71,7 +72,7 @@ def get_house_voices(user_id: str | None = None) -> list[dict[str, Any]]:
             from app.services.cloned_voices.service import list_catalog_entries
 
             for entry in list_catalog_entries(user_id):
-                voices.append({**_unclassified_voice(entry["id"], "chatterbox"), "kind": "cloned"})
+                voices.append({**_unclassified_voice(entry["id"], "chatterbox_nano"), "kind": "cloned"})
         except Exception:
             logger.warning(
                 "cloned voice catalog merge failed; serving house voices only"

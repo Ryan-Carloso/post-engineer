@@ -84,7 +84,8 @@ def is_elevenlabs_voice(voice_name: str) -> bool:
 
 
 def is_chatterbox_voice(voice_name: str) -> bool:
-    return (voice_name or "").startswith("chatterbox:")
+    # New clones are chatterbox_nano:<key>; legacy chatterbox: stays valid.
+    return (voice_name or "").startswith(("chatterbox:", "chatterbox_nano:"))
 
 
 def is_no_voice(voice_name: str | None) -> bool:
@@ -222,8 +223,8 @@ def tts(
             error="invalid ElevenLabs voice name (expected 'elevenlabs:<voice_id>')"
         )
     if is_chatterbox_voice(voice_name):
-        # Format: chatterbox:<voice>, optionally with a display-only
-        # -Female/-Male suffix.
+        # Format: chatterbox:<voice> or chatterbox_nano:<voice>, optionally
+        # with a display-only -Female/-Male suffix.
         parts = voice_name.split(":", 1)
         if len(parts) < 2 or not parts[1].strip():
             logger.error(f"Invalid chatterbox voice name format: {voice_name}")

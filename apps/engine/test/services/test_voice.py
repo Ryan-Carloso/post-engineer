@@ -408,8 +408,25 @@ class TestVoiceService(unittest.TestCase):
         self.assertIs(result, chatterbox_marker)
         elevenlabs.assert_not_called()
 
+    def test_chatterbox_nano_prefix_routes_to_chatterbox_tts(self):
+        """Clones are now issued as chatterbox_nano:<key> (Nano, CPU).
 
-
+        The prefix routes to the same local TTS server client, and the
+        legacy chatterbox: prefix keeps routing too, so personas stored
+        before the rename keep speaking.
+        """
+        chatterbox_marker = vs.SubMaker()
+        with tempfile.TemporaryDirectory() as tmp_dir, patch.object(
+            app_config, "chatterbox", {}
+        ), patch(
+            "app.services.voice.chatterbox_tts", return_value=chatterbox_marker
+        ) as mock_tts:
+            result = vs.tts(
+                "hello world", "chatterbox_nano:phonon_zoey", 1.0, str(Path(tmp_dir) / "v.mp3")
+            )
+        self.assertIs(result, chatterbox_marker)
+        mock_tts.assert_called_once()
+        self.assertEqual(mock_tts.call_args.args[1], "phonon_zoey")
 
     def test_script_split_keeps_thousand_separator_comma(self):
         """
