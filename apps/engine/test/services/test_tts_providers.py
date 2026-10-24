@@ -1,9 +1,9 @@
 """ElevenLabs, Chatterbox and OpenRouter are the TTS providers.
 
 The Azure v1 edge_tts transport was removed (it silently caught typos).
-Microsoft Edge TTS returned on 2026-10-19 as an explicit, test-account-only
-fallback for Chatterbox failures — see app/services/edge_tts.py. It is not
-a provider choice and never appears in the UI.
+Microsoft Edge TTS was later added as an explicit, test-account-only
+fallback for Chatterbox failures, and then removed again: Chatterbox
+failures now fail loudly, with no silent voice switch for any account.
 
 ElevenLabs, SiliconFlow, Gemini, MiMo and Azure v2 were the other removed
 providers. They were not removed for tidiness:
@@ -99,15 +99,14 @@ def _edge_tts_import_or_use() -> list[str]:
 
 
 class TestNoEdgeTts:
-    """The Azure v1 edge_tts transport is gone; Microsoft Edge TTS is back
-    as an explicit, test-account-only fallback (see app/services/edge_tts.py).
+    """The Azure v1 edge_tts transport is gone, and so is the Microsoft
+    Edge TTS fallback that followed it.
 
     The old transport was removed because it silently caught typos: an
     unrecognised voice id fell through to azure_tts_v1 and failed as a
-    network problem. The new module is the opposite — an explicit fallback
-    that only triggers for test accounts after Chatterbox fails, emitting
-    a tts_fallback_used PostHog event. It must never become a silent
-    catch-all again.
+    network problem. The fallback was removed for the same reason a silent
+    voice switch is unacceptable: a Chatterbox failure must stay loud,
+    for test accounts and production alike.
     """
 
     def test_old_azure_transport_symbols_are_gone(self):
@@ -118,20 +117,31 @@ class TestNoEdgeTts:
                 f"{name} belongs to the removed Azure transport"
             )
 
-    def test_edge_tts_module_is_test_fallback_only(self):
-        """The new edge_tts module exists, but voice.py must only reach it
-        through the explicit test-account fallback — never as a silent
-        catch-all for unknown voice ids."""
+    def test_edge_tts_module_is_gone(self):
+        """The Edge TTS fallback module is deleted, and voice.py must not
+        reach it through any wrapper — never as a silent catch-all for
+        unknown voice ids, and never as a test-account fallback either."""
+        assert not (APP / "services" / "edge_tts.py").exists(), (
+            "app/services/edge_tts.py must be deleted with the fallback"
+        )
         source = VOICE.read_text(encoding="utf-8")
-        # The fallback is gated: only via chatterbox_tts_with_fallback, which
-        # checks is_test_account before touching Edge TTS.
-        assert "chatterbox_tts_with_fallback" in source
+        assert "chatterbox_tts_with_fallback" not in source
+        assert "edge_tts" not in source
+        assert "chatterbox_tts" in source
         # Unknown voices still fail loudly (the typo-catching guarantee).
         assert "unknown voice" in source
 
-    def test_edge_tts_is_a_declared_dependency(self):
+    def test_edge_tts_is_not_a_declared_dependency(self):
         pyproject = (VOICE.parents[2] / "pyproject.toml").read_text(encoding="utf-8")
-        assert "edge-tts" in pyproject
+        assert "edge-tts" not in pyproject
+
+    def test_no_edge_tts_name_tokens_in_app_code(self):
+        """No app module may import or touch edge_tts in code.
+
+        Docstrings and comments may still explain why it is gone; the
+        token scan only flags real code, so prose does not trip it.
+        """
+        assert _edge_tts_import_or_use() == []
 
     def test_subtitle_maker_helpers_are_gone(self):
         """The cues branch was edge_tts-only: no provider ever writes .cues."""
@@ -189,9 +199,10 @@ class TestRemainingProviders:
         # OpenRouter dispatch lives in app/services/openrouter_tts.py so voice.py
         # stays under the file-size cap; tts() keeps a single call into it and
         # the provider behaviour is covered in test_openrouter_tts.py.
-        # Chatterbox goes through chatterbox_tts_with_fallback (Edge TTS
-        # fallback for test accounts lives in app/services/edge_tts.py).
-        assert {"chatterbox_tts_with_fallback", "elevenlabs_tts", "dispatch_openrouter_tts"} <= called
+        # Chatterbox goes straight to chatterbox_tts: the Edge TTS fallback
+        # is gone, so a Chatterbox failure fails loudly instead of switching
+        # voices.
+        assert {"chatterbox_tts", "elevenlabs_tts", "dispatch_openrouter_tts"} <= called
         assert "is_no_voice" in called
         assert "is_chatterbox_voice" in called
         assert "is_elevenlabs_voice" in called

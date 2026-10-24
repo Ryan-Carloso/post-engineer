@@ -1,9 +1,10 @@
 """The job's video language must reach TTS.
 
 Regression: ``generate_audio`` never passed ``params.video_language`` to
-``voice.tts``, so the Edge TTS fallback (test accounts) had no language to
-pick a voice from and always used the pt-BR default — an English video was
-read aloud with a Portuguese voice.
+``voice.tts``, so a provider that picks a voice by language had nothing to
+pick from and an English video could be read aloud with a Portuguese
+voice. The language must still be forwarded even though the Edge TTS
+fallback that exposed this bug is gone.
 """
 
 import sys

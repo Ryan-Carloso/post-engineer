@@ -600,23 +600,6 @@ model_id = "chatterbox"
 registry_base_url = ""
 registry_api_key = ""
 
-# Edge TTS fallback (free, no API key) ########################################
-# Microsoft Edge TTS is the automatic fallback when Chatterbox fails, for test
-# accounts ONLY. It never appears in the UI. Configure via env vars (not here):
-#
-#   TEST_ACCOUNT_USER_IDS  comma-separated user IDs that get the fallback
-#                          (e.g. "91f32003-31f4-419a-a5ee-ef8a3563ff03")
-#   EDGE_TTS_VOICE         Fallback Edge TTS voice name, used only when the
-#                          video's language is missing/unknown — a known
-#                          language always selects its own voice (default:
-#                          pt-BR-FranciscaNeural).
-#
-# When the local Chatterbox server is unavailable, test-account generations
-# fall back to Edge TTS instead of failing.
-# Every fallback emits a `tts_fallback_used` PostHog event (ids and reason
-# only, never audio text). Production traffic keeps the loud Chatterbox
-# failure so a silent voice switch never reaches real users.
-
 # OpenRouter TTS (hosted, multi-vendor) #######################################
 # OpenRouter (https://openrouter.ai) routes one API key to many hosted TTS
 # vendors (OpenAI, Gemini, Mistral, ElevenLabs, Grok, Azure, ...) behind a

@@ -391,14 +391,14 @@ class TestVoiceService(unittest.TestCase):
     def test_chatterbox_success_is_returned_as_is(self):
         """A successful Chatterbox result is returned untouched.
 
-        No other provider may be consulted on success — the Edge TTS
-        fallback only triggers on failure, for test accounts.
+        No other provider may be consulted on success — there is no
+        fallback, so a Chatterbox result is the final result.
         """
         chatterbox_marker = vs.SubMaker()
         with tempfile.TemporaryDirectory() as tmp_dir, patch.object(
             app_config, "chatterbox", {}
         ), patch(
-            "app.services.edge_tts.chatterbox_tts", return_value=chatterbox_marker
+            "app.services.voice.chatterbox_tts", return_value=chatterbox_marker
         ), patch.object(
             vs, "elevenlabs_tts"
         ) as elevenlabs:
