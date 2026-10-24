@@ -46,6 +46,8 @@ from app.services.lipsync_layout import (
     _build_lipsync_intro_command,
 )
 from app.services.subtitle_text import wrap_text
+from app.services.analytics import scrub_error_text
+from app.services.ffmpeg_failure import FfmpegReencodeError, ffmpeg_stderr_tail, raise_reencode_failure
 
 DEFAULT_SUBTITLE_FONT = "BeVietnamPro-Medium.ttf"
 
@@ -322,7 +324,8 @@ def _encoder_actually_usable(codec: str) -> bool:
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         logger.warning(
-            f"could not probe encoder {codec}, fallback to {_DEFAULT_VIDEO_CODEC}: {str(exc)}"
+            f"could not probe encoder {codec}, fallback to {_DEFAULT_VIDEO_CODEC}: "
+            f"{scrub_error_text(str(exc))}"
         )
         return False
     if result.returncode != 0:
@@ -356,7 +359,7 @@ def _ffmpeg_encoder_exists(ffmpeg_binary: str, codec: str) -> bool:
     except (OSError, subprocess.TimeoutExpired) as exc:
         logger.warning(
             "failed to inspect ffmpeg encoders, "
-            f"fallback to {_DEFAULT_VIDEO_CODEC}: {str(exc)}"
+            f"fallback to {_DEFAULT_VIDEO_CODEC}: {scrub_error_text(str(exc))}"
         )
         return False
 
@@ -474,7 +477,7 @@ def _write_videofile_with_codec_fallback(clip, output_file: str, codec: str, **k
             clip,
             output_file,
             failed_codec=effective_codec,
-            reason=str(exc),
+            reason=scrub_error_text(str(exc)),
             **kwargs,
         )
 
@@ -552,7 +555,7 @@ def concat_video_clips_with_ffmpeg(
             if effective_codec == _DEFAULT_VIDEO_CODEC:
                 raise
             result_codec = run_concat(_DEFAULT_VIDEO_CODEC)
-            _disable_runtime_video_codec(effective_codec, str(exc))
+            _disable_runtime_video_codec(effective_codec, scrub_error_text(str(exc)))
             return result_codec
     finally:
         delete_files(concat_list_file)
@@ -1233,36 +1236,29 @@ def _reencode_clip_with_ffmpeg(
     except (OSError, subprocess.TimeoutExpired, subprocess.CalledProcessError) as exc:
         # Reuse the existing codec fallback machinery: only disable the
         # hardware encoder when libx264 can write the file successfully.
-        if effective_codec != _DEFAULT_VIDEO_CODEC:
-            logger.warning(
-                f"[ffmpeg] re-encode with {effective_codec} failed, "
-                f"retrying with {_DEFAULT_VIDEO_CODEC}: {str(exc)}"
-            )
-            cmd[cmd.index("-c:v") + 1] = _DEFAULT_VIDEO_CODEC
-            try:
-                subprocess.run(cmd, capture_output=True, check=True, timeout=600)
-                _disable_runtime_video_codec(effective_codec, str(exc))
-                elapsed = time.monotonic() - start
-                logger.info(
-                    f"[ffmpeg] re-encoded {os.path.basename(src)} "
-                    f"({duration:.2f}s -> {target_w}x{target_h}) with "
-                    f"{_DEFAULT_VIDEO_CODEC} in {elapsed:.2f}s"
-                )
-            except (OSError, subprocess.TimeoutExpired, subprocess.CalledProcessError) as exc2:
-                logger.error(
-                    f"[ffmpeg] re-encode failed for {os.path.basename(src)}: {str(exc2)}"
-                )
-                raise RuntimeError(
-                    f"ffmpeg re-encode failed for {src}: {str(exc2)}"
-                ) from exc2
-        logger.error(
-            f"[ffmpeg] re-encode failed for {os.path.basename(src)}: {str(exc)}"
+        if effective_codec == _DEFAULT_VIDEO_CODEC:
+            raise_reencode_failure(src, exc)
+        # Keep the hardware attempt's stderr tail in the warning: if the
+        # libx264 retry also fails, only the retry's stderr reaches the
+        # raised error, and this attempt's cause would be lost.
+        tail = ffmpeg_stderr_tail(exc)
+        logger.warning(
+            f"[ffmpeg] re-encode with {effective_codec} failed, "
+            f"retrying with {_DEFAULT_VIDEO_CODEC}: {scrub_error_text(str(exc))}"
+            + (f"; ffmpeg stderr: {tail}" if tail else "")
         )
-        raise RuntimeError(f"ffmpeg re-encode failed for {src}: {str(exc)}") from exc
+        cmd[cmd.index("-c:v") + 1] = _DEFAULT_VIDEO_CODEC
+        try:
+            subprocess.run(cmd, capture_output=True, check=True, timeout=600)
+        except (OSError, subprocess.TimeoutExpired, subprocess.CalledProcessError) as exc2:
+            raise_reencode_failure(src, exc2)
+        _disable_runtime_video_codec(effective_codec, scrub_error_text(str(exc)))
+        effective_codec = _DEFAULT_VIDEO_CODEC
     elapsed = time.monotonic() - start
     logger.info(
         f"[ffmpeg] re-encoded {os.path.basename(src)} "
-        f"({duration:.2f}s -> {target_w}x{target_h}) in {elapsed:.2f}s"
+        f"({duration:.2f}s -> {target_w}x{target_h}) with "
+        f"{effective_codec} in {elapsed:.2f}s"
     )
 
 
@@ -1488,16 +1484,19 @@ def combine_videos(
             )
             video_duration += clip_duration_saved
             
+        except FfmpegReencodeError as e:
+            logger.warning(f"skipping clip: {str(e)}")
         except Exception as e:
-            logger.error(f"failed to process clip: {str(e)}")
+            logger.error(f"failed to process clip: {scrub_error_text(str(e))}")
 
     # Only fail when there WAS material and no clip survived the shape
     # filter. Empty input (video_paths=[]) is a legitimate test path.
     if video_paths and not processed_clips:
         raise ValueError(
-            f"no usable clips for target {video_width}x{video_height}: all clips "
-            f"exceed the letterbox bars limit ({MAX_LETTERBOX_BARS:.0%}) for this "
-            "aspect. Try a different video_subject or check the material sources."
+            f"no usable clips for target {video_width}x{video_height}: every clip "
+            f"was skipped (letterbox bars limit {MAX_LETTERBOX_BARS:.0%} or a "
+            "per-clip processing failure — see the ERROR/WARNING logs above). "
+            "Check the material sources."
         )
 
     # loop processed clips until the video duration covers the audio duration and the small safety margin.
