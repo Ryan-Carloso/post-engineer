@@ -228,7 +228,7 @@ def tts(
         if len(parts) < 2 or not parts[1].strip():
             logger.error(f"Invalid chatterbox voice name format: {voice_name}")
             return TtsResult(
-                error="invalid Chatterbox voice name (expected 'chatterbox:<name>')"
+                error="invalid Chatterbox voice name (expected 'chatterbox:<name>' or 'chatterbox_nano:<name>')"
             )
         chatterbox_voice = parts[1].strip()
         if chatterbox_voice.endswith(("-Female", "-Male")):

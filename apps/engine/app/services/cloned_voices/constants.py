@@ -25,6 +25,7 @@ MAX_REFERENCE_SECONDS = PERSONA_VOICE_MAX_SECONDS
 
 # Catalog id prefix for clones: new clones are chatterbox_nano:<engine_voice_key>
 # (Nano, local CPU). The legacy chatterbox: prefix stays valid for routing so
-# personas stored before the rename keep speaking.
-CHATTERBOX_VOICE_PREFIX = "chatterbox:"
+# personas stored before the rename keep speaking; routing keeps its own
+# literal pair in voice.is_chatterbox_voice, so no second constant exists
+# to drift from it.
 CHATTERBOX_NANO_VOICE_PREFIX = "chatterbox_nano:"

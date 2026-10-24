@@ -284,8 +284,9 @@ class TestVoiceService(unittest.TestCase):
 
 
     def test_chatterbox_voice_helpers(self):
-        """is_chatterbox_voice recognises only the chatterbox: prefix."""
+        """is_chatterbox_voice recognises the chatterbox: and chatterbox_nano: prefixes."""
         self.assertTrue(vs.is_chatterbox_voice("chatterbox:kokoro_af_heart"))
+        self.assertTrue(vs.is_chatterbox_voice("chatterbox_nano:uaaaaaaaabbbb_cccccccccccc"))
         self.assertFalse(vs.is_chatterbox_voice("elevenlabs:abc:Rachel"))
         self.assertFalse(vs.is_chatterbox_voice(""))
         self.assertFalse(vs.is_chatterbox_voice(None))
@@ -591,6 +592,17 @@ class TestTtsFailureReasons(unittest.TestCase):
         self.assertIsNone(result.sub_maker)
         self.assertIn("invalid Chatterbox voice name", result.error or "")
         self.assertNotIn("voice/subtitle mismatch", result.error or "")
+
+    def test_malformed_chatterbox_nano_voice_name_names_both_prefixes(self):
+        result = vs.tts(
+            text="hello",
+            voice_name="chatterbox_nano:",
+            voice_rate=1.0,
+            voice_file="/tmp/malformed-chatterbox-nano.mp3",
+        )
+
+        self.assertIsNone(result.sub_maker)
+        self.assertIn("chatterbox_nano:<name>", result.error or "")
 
     def test_chatterbox_user_clone_rejected_for_wrong_user(self):
         other = "ffffffff-bbbb-cccc-dddd-eeeeeeeeeeee"
