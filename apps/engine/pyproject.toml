@@ -156,6 +156,14 @@ source_paths = [
     "app/",
 ]
 only_mutate = []
+# forkserver instead of the fork default: the video.py shard crashed twice
+# with mutmut's own fork bookkeeping race (KeyError on the child pid in
+# read_one_child_exit_status), not from surviving mutants. The docs'
+# remedy for exactly this failure class is a fork server — the main
+# process never imports pytest, the fork server imports once, and a
+# crashed fork server is restarted in flight (max_forkserver_restarts,
+# default 3) instead of killing the run.
+process_isolation = "forkserver"
 # Files the test run needs inside mutants/, beyond mutmut's defaults
 # (test/, pyproject.toml, uv.lock, ...).
 # - modal_longcat.py / modal_longcat_gpu.py: the LongCat source-scan tests
