@@ -2,6 +2,7 @@
 
 import { personaVoiceClonePt, voiceCloneApiToolDescPt } from './voice-clone-i18n-pt';
 import { postToolDescPt } from './post-tools-i18n-pt';
+import { accountI18nPt } from './account-i18n-pt';
 export const ptDictionary = {
   // Sidebar / navigation
   nav: {
@@ -26,11 +27,7 @@ export const ptDictionary = {
     profile: 'Perfil',
   },
   // Account area — Perfil page (mobile header avatar + /account route)
-  account: {
-    title: 'Perfil',
-    subtitle: 'Suas informações, tokens e preferências.',
-    version: 'Versão',
-  },
+  account: { ...accountI18nPt },
   // Posts page — history + upcoming posts from all accounts
   posts: {
     title: 'Posts',

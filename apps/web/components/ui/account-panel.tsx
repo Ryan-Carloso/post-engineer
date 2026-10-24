@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
 import { useSessionQuery } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
 import { LOCALES } from '@/lib/i18n';
@@ -136,6 +137,160 @@ export function SignOutButton() {
 }
 
 //---------------
+// SignOutAllButton — ends the user's sessions on EVERY device
+// (scope 'global'), so it asks for confirmation first. The dialog
+// follows the destructive-dialog rules: initial focus on the safe
+// action, Escape closes (not while signing out), Tab stays trapped,
+// and every control is disabled while the sign-out is in flight.
+//---------------
+export function SignOutAllButton() {
+  const router = useRouter();
+  const { t } = useI18n();
+  const [confirming, setConfirming] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    // The dialog is mounted only while open: focus the safe action and
+    // listen for keys while it is up.
+    if (!confirming) return;
+    cancelButtonRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !pending) {
+        setConfirming(false);
+        return;
+      }
+      if (event.key === 'Tab' && dialogRef.current) {
+        const focusables = dialogRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled])',
+        );
+        if (focusables.length === 0) {
+          // While pending every control is disabled: Tab must not escape
+          // the dialog (keep focus where it is).
+          event.preventDefault();
+          return;
+        }
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        // Focus landed OUTSIDE the dialog (e.g. on document.body — some
+        // browsers/reset paths leave it there): Tab must not escape the
+        // modal, pull focus back inside.
+        if (!dialogRef.current.contains(document.activeElement)) {
+          event.preventDefault();
+          (event.shiftKey ? last : first)?.focus();
+          return;
+        }
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [confirming, pending]);
+
+  const handleConfirm = async () => {
+    setPending(true);
+    setFailed(false);
+    try {
+      const { createSupabaseClient } = await import('@/lib/supabase/client');
+      const supabase = createSupabaseClient();
+      // supabase-js resolves with { error } instead of throwing: a failed
+      // revocation must keep the dialog open so the user can retry —
+      // other devices are still signed in.
+      const { error } = await supabase.auth.signOut({ scope: 'global' });
+      if (error) {
+        setFailed(true);
+        return;
+      }
+      setConfirming(false);
+      router.push('/login');
+    } catch {
+      // Unexpected failure (client construction, network crash): same
+      // retryable error state.
+      setFailed(true);
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          setFailed(false);
+          setConfirming(true);
+        }}
+        title={t('account.signOutAllDevices')}
+        data-testid="sign-out-all-button"
+        className="flex w-full items-center gap-3.5 rounded-[18px] bg-[#f8fafc] px-4 py-3 text-left text-[15px] text-[#718096] transition-colors hover:bg-[#f1f4f7] hover:text-[#101728] lg:gap-5 lg:rounded-[22px] lg:px-8 lg:py-4 lg:text-[18px]"
+      >
+        <svg className="size-5 lg:size-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7} aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.36 6.36-.7-.7M6.34 6.34l-.7-.7m12.72 0-.7.7M6.34 17.66l-.7.7M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" />
+        </svg>
+        {t('account.signOutAllDevices')}
+      </button>
+      {confirming && (
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="sign-out-all-title"
+          aria-describedby="sign-out-all-desc"
+          data-testid="sign-out-all-dialog"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/60 p-4"
+        >
+          <div ref={dialogRef} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <h2 id="sign-out-all-title" className="text-lg font-semibold text-neutral-900">
+              {t('account.signOutAllDevicesTitle')}
+            </h2>
+            <p id="sign-out-all-desc" className="mt-1 text-sm leading-6 text-neutral-600">
+              {t('account.signOutAllDevicesDesc')}
+            </p>
+            {failed && (
+              <p
+                role="alert"
+                data-testid="sign-out-all-error"
+                className="mt-3 text-sm font-medium text-[#b91c1c]"
+              >
+                {t('account.signOutAllDevicesError')}
+              </p>
+            )}
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                ref={cancelButtonRef}
+                type="button"
+                onClick={() => setConfirming(false)}
+                disabled={pending}
+                data-testid="sign-out-all-cancel"
+                className="inline-flex min-h-11 items-center justify-center rounded-lg border border-neutral-200 px-5 py-2.5 text-sm font-semibold text-neutral-700 transition-colors hover:bg-neutral-50 disabled:opacity-50"
+              >
+                {t('account.signOutAllDevicesCancel')}
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirm}
+                disabled={pending}
+                data-testid="sign-out-all-confirm"
+                className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[#ff514a] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#e64842] disabled:opacity-50"
+              >
+                {t('account.signOutAllDevicesConfirm')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+//---------------
 // MobileProfileLink — avatar button in the mobile header, links to
 // /account. Falls back to the initial letter, then a person icon.
 //---------------
@@ -206,6 +361,7 @@ export function AccountPanel({ showVersionBadge = false }: { showVersionBadge?: 
           </Link>
           <ApiKeysRow />
           <SignOutButton />
+          <SignOutAllButton />
         </div>
       )}
     </div>
