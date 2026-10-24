@@ -146,6 +146,7 @@ export function SignOutAllButton() {
   const { t } = useI18n();
   const [confirming, setConfirming] = useState(false);
   const [pending, setPending] = useState(false);
+  const [failed, setFailed] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -163,7 +164,12 @@ export function SignOutAllButton() {
         const focusables = dialogRef.current.querySelectorAll<HTMLElement>(
           'button:not([disabled])',
         );
-        if (focusables.length === 0) return;
+        if (focusables.length === 0) {
+          // While pending every control is disabled: Tab must not escape
+          // the dialog (keep focus where it is).
+          event.preventDefault();
+          return;
+        }
         const first = focusables[0];
         const last = focusables[focusables.length - 1];
         if (event.shiftKey && document.activeElement === first) {
@@ -181,12 +187,24 @@ export function SignOutAllButton() {
 
   const handleConfirm = async () => {
     setPending(true);
+    setFailed(false);
     try {
       const { createSupabaseClient } = await import('@/lib/supabase/client');
       const supabase = createSupabaseClient();
-      await supabase.auth.signOut({ scope: 'global' });
+      // supabase-js resolves with { error } instead of throwing: a failed
+      // revocation must keep the dialog open so the user can retry —
+      // other devices are still signed in.
+      const { error } = await supabase.auth.signOut({ scope: 'global' });
+      if (error) {
+        setFailed(true);
+        return;
+      }
       setConfirming(false);
       router.push('/login');
+    } catch {
+      // Unexpected failure (client construction, network crash): same
+      // retryable error state.
+      setFailed(true);
     } finally {
       setPending(false);
     }
@@ -196,7 +214,10 @@ export function SignOutAllButton() {
     <>
       <button
         type="button"
-        onClick={() => setConfirming(true)}
+        onClick={() => {
+          setFailed(false);
+          setConfirming(true);
+        }}
         title={t('account.signOutAllDevices')}
         data-testid="sign-out-all-button"
         className="flex w-full items-center gap-3.5 rounded-[18px] bg-[#f8fafc] px-4 py-3 text-left text-[15px] text-[#718096] transition-colors hover:bg-[#f1f4f7] hover:text-[#101728] lg:gap-5 lg:rounded-[22px] lg:px-8 lg:py-4 lg:text-[18px]"
@@ -222,6 +243,15 @@ export function SignOutAllButton() {
             <p id="sign-out-all-desc" className="mt-1 text-sm leading-6 text-neutral-600">
               {t('account.signOutAllDevicesDesc')}
             </p>
+            {failed && (
+              <p
+                role="alert"
+                data-testid="sign-out-all-error"
+                className="mt-3 text-sm font-medium text-[#b91c1c]"
+              >
+                {t('account.signOutAllDevicesError')}
+              </p>
+            )}
             <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <button
                 ref={cancelButtonRef}

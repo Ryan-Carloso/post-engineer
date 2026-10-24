@@ -153,6 +153,11 @@ describe('Main Layout — Sidebar', () => {
     cy.visit('/');
     cy.contains('p', 'Cypress', { timeout: 10_000 }).scrollIntoView().should('be.visible');
 
+    // Stub the auth-server logout call: these specs share one E2E
+    // account with the parallel cypress job, and a real sign-out here
+    // would revoke its session mid-run (the /landing bounce).
+    cy.intercept('POST', '**/auth/v1/logout*', { statusCode: 204 });
+
     cy.get('button[title="Sair"]').click();
     cy.url().should('match', /\/login$/);
   });

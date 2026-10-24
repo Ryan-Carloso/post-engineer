@@ -8,4 +8,6 @@ export const accountI18nPt = {
     'Isto encerra a sessão neste navegador e em todos os outros dispositivos (outros navegadores e celulares).',
   signOutAllDevicesConfirm: 'Sair de todos',
   signOutAllDevicesCancel: 'Cancelar',
+  signOutAllDevicesError:
+    'Não foi possível encerrar as sessões. Tente novamente — os outros dispositivos continuam com sessão ativa.',
 } as const;

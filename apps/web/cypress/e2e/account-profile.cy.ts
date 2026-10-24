@@ -188,6 +188,11 @@ describe('Account area — /account page', () => {
   it('signs out and lands on /login', () => {
     cy.visit('/account');
 
+    // Stub the auth-server logout call: these specs share one E2E
+    // account with the parallel cypress job, and a real sign-out here
+    // would revoke its session mid-run (the /landing bounce).
+    cy.intercept('POST', '**/auth/v1/logout*', { statusCode: 204 });
+
     cy.get('[data-testid=account-page]').find('button[title="Sair"]').scrollIntoView().click();
     cy.url().should('match', /\/login$/);
   });
