@@ -41,7 +41,6 @@ def _configure_pydub_ffmpeg(audio_segment_cls):
 def mktimestamp(time_unit: float) -> str:
     """Format a 100-nanosecond-unit timestamp as an SRT timestamp."""
     hour = math.floor(time_unit / 10**7 / 3600)
-    hour = math.floor(time_unit / 10**7 / 3600)
     minute = math.floor((time_unit / 10**7 / 60) % 60)
     seconds = (time_unit / 10**7) % 60
     return f"{hour:02d}:{minute:02d}:{seconds:06.3f}"

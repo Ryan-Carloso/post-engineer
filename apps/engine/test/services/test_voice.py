@@ -803,3 +803,14 @@ class TestElevenLabsVoice(unittest.TestCase):
         result = vs.elevenlabs_tts("  ", "abc123", "/tmp/test.mp3")
         self.assertIsNone(result.sub_maker)
         self.assertIn("empty", result.error or "")
+
+
+class TestMktimestamp(unittest.TestCase):
+    """SRT timestamp formatting for subtitle items."""
+
+    def test_zero_formats_as_midnight(self):
+        self.assertEqual(vs.mktimestamp(0), "00:00:00.000")
+
+    def test_hours_minutes_and_fractional_seconds(self):
+        # 1h 2m 3.5s in 100-nanosecond units.
+        self.assertEqual(vs.mktimestamp(37235000000), "01:02:03.500")
