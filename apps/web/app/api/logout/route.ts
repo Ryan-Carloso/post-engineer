@@ -28,7 +28,9 @@ async function postHandler() {
       );
     }
 
-    const { error } = await supabase.auth.signOut();
+    // scope: 'local' — end only THIS session; the default 'global' would
+    // also sign the user out on every other device.
+    const { error } = await supabase.auth.signOut({ scope: 'local' });
 
     if (error) {
       logger.error('Logout failed during sign-out', new Error(error.message), {

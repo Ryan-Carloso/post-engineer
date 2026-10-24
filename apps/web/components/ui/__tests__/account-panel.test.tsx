@@ -173,6 +173,10 @@ describe('AccountPanel', () => {
     await waitFor(() => {
       expect(signOutMock).toHaveBeenCalled();
     });
+    // scope: 'local' pins the UX contract: the sign-out ends only the
+    // current session, never the user's other devices (the auth-js default
+    // scope 'global' would kill them all).
+    expect(signOutMock).toHaveBeenCalledWith({ scope: 'local' });
     expect(pushMock).toHaveBeenCalledWith('/login');
   });
 
