@@ -51,8 +51,10 @@ Provision the database schema in your Supabase project: apply every file
 in `supabase/migrations/` in numeric order. The full migration list —
 what each file does, its prerequisites and its one-time setup steps
 (some live in the file headers, e.g. the `app.cron_base_url` /
-`app.cron_secret` database settings in 004 and the
-`select public.schedule_post_metrics();` step in 025) — lives in the
+`app.cron_secret` database settings in 004 — superseded by 027, which
+removes the pg_cron wiring and adds the in-app scheduler lease — and the
+`select public.schedule_post_metrics();` step in 025, no longer needed
+since 027) — lives in the
 [Supabase migrations README](../supabase/README.md); this guide does not
 duplicate it.
 

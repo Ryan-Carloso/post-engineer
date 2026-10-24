@@ -7,7 +7,7 @@ import type { SocialProvider } from '@/lib/providers/registry';
 //---------------
 // post-metrics — per-video performance snapshots for A/B content tests.
 //
-// Hourly (pg_cron -> POST /api/cron/post-metrics), every published slot is
+// Hourly (in-app scheduler -> runPostMetricsTick in lib/scheduler-jobs.ts), every published slot is
 // snapshotted twice: once 24-48h after publish ('24h') and once 168-192h
 // after publish ('7d'). A window that was missed (engine down, token
 // expired for the whole 24h) is skipped, never back-filled with a late

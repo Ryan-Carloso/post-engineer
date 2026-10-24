@@ -15,7 +15,6 @@ export async function register() {
   const build = getBuildInfo();
   const commitSuffix = build.commit ? ` ${build.commit}` : '';
   console.log(`[web] starting version ${formatBuildInfo(build)}${commitSuffix}`);
-
   // Loud startup signal: if PostHog is unconfigured in production, say so
   // clearly. Telemetry is optional, but a silent misconfiguration (typo'd
   // key) is worse than a noisy one.
@@ -31,6 +30,25 @@ export async function register() {
       // Trigger the lazy SDK load now so the first real error doesn't pay
       // the import cost.
       getPostHogServer();
+    }
+  }
+
+  //---------------
+  // Internal scheduler — post-metrics (hourly) and billing-reconcile
+  // (daily) run inside this server process (lib/scheduler-jobs.ts), with
+  // a DB lease so only one replica executes each tick. No public HTTP
+  // route, no CRON_SECRET, no pg_cron. SCHEDULER_ENABLED=false (and the
+  // test environment) disables it.
+  //
+  // Node runtime only (guarded with the dynamic import INSIDE the
+  // branch): instrumentation is also compiled for the edge runtime,
+  // where the scheduler's chain (crypto in lib/token-crypto.ts etc.)
+  // does not resolve.
+  //---------------
+  if (process.env.NEXT_RUNTIME === 'nodejs') {
+    const { startInternalScheduler, isSchedulerEnabled } = await import('./lib/scheduler-jobs');
+    if (isSchedulerEnabled()) {
+      startInternalScheduler();
     }
   }
 }

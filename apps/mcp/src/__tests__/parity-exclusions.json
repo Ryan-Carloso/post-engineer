@@ -27,14 +27,6 @@
     "GET /api/coverage": {
       "kind": "ops-public"
     },
-    "POST /api/cron/billing-reconcile": {
-      "kind": "secret-auth",
-      "mechanism": "cron-secret"
-    },
-    "POST /api/cron/post-metrics": {
-      "kind": "secret-auth",
-      "mechanism": "cron-secret"
-    },
     "GET /api/google-oauth/callback": {
       "kind": "oauth-redirect"
     },

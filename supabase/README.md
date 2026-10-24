@@ -9,7 +9,7 @@ the order — you never need to guess or read docs to know what comes next:
 | 001 | `migrations/001_schema.sql`                 | Base schema: tables, types, defaults (snapshot)     |
 | 002 | `migrations/002_persona-images.sql`         | Persona image library: constraints, trigger, RPCs   |
 | 003 | `migrations/003_engine-task-state.sql`      | Engine task state (only for `MPT_STATE_BACKEND=supabase`) |
-| 004 | `migrations/004_billing_reconcile.sql`        | Billing reconciliation: zombie/stuck detectors, daily pg_cron trigger (fully automatic, no review queue) |
+| 004 | `migrations/004_billing_reconcile.sql`        | Billing reconciliation: zombie/stuck detectors, daily pg_cron trigger (fully automatic, no review queue) (the pg_cron trigger is superseded by 027: the daily run now happens in the web app) |
 | 005 | `migrations/005_persona-visual-identity.sql` | CHECK: a persona never has both `photo_path` and `avatar_url` |
 | 006 | `migrations/006_test-deploy-supabase.sql`    | Test-deploy schema verification (CI/dev only)    |
 | 007 | `migrations/007_personas-drop-face-mix.sql`  | `scheduled_posts.faceless` (per-post "no face") + `drop column personas.face_mix_percent`: personas are always faced. **Destructive** — needs the `db:destructive-approved` PR label |
@@ -30,8 +30,9 @@ the order — you never need to guess or read docs to know what comes next:
 | 022 | `migrations/022_persona-default-accounts.sql` | Per-persona default publishing accounts (`persona_default_accounts`) with owner-scoped RLS |
 | 023 | `migrations/023_cloned-voices.sql` | Per-user Chatterbox cloned voices (`cloned_voices`): async registration status, consent, storage path, engine voice key, language, error_code; owner-scoped RLS |
 | 024 | `migrations/024_persona-cta.sql` | Per-persona call to action (`personas.cta_text`) and its schedule snapshot (`schedules.post_cta_text`), both capped at 200 characters |
-| 025 | `migrations/025_post-metrics.sql` | Per-video performance snapshots (`post_metrics`: views/likes/comments/saves at 24h and 7d) with owner-read RLS, `post_metrics_done` (posts finished per window, service-role only), plus the hourly `post-metrics-hourly` pg_cron job (`schedule_post_metrics()`) |
+| 025 | `migrations/025_post-metrics.sql` | Per-video performance snapshots (`post_metrics`: views/likes/comments/saves at 24h and 7d) with owner-read RLS, `post_metrics_done` (posts finished per window, service-role only), plus the hourly `post-metrics-hourly` pg_cron job (`schedule_post_metrics()`) (superseded by 027: the hourly run now happens in the web app) |
 | 026 | `migrations/026_post-metrics-dimensions.sql` | Metrics dimensions on `post_metrics`: `persona_id` (filled by a BEFORE INSERT trigger from the post's schedule; NULL for faceless posts) and `script_angle` (written by the web collector from the engine task record), so the metrics dashboard filters by persona, account, network and script angle without joins. Existing snapshots are backfilled for `persona_id` |
+| 027 | `migrations/027_internal-scheduler.sql` | In-app scheduler replaces the pg_cron/pg_net HTTP triggers: unschedules `post-metrics-hourly`/`billing-reconcile-daily` and drops `schedule_post_metrics()`/`schedule_billing_reconcile()` (both guarded), adds `scheduler_leases` + `try_acquire_scheduler_lease()` (service-role only) — the web app (`apps/web/lib/scheduler-jobs.ts`) runs the jobs in-process, one run per tick across replicas |
 
 ## How to apply
 
