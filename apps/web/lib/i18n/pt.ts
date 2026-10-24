@@ -2,6 +2,7 @@
 
 import { personaVoiceClonePt, voiceCloneApiToolDescPt } from './voice-clone-i18n-pt';
 import { postToolDescPt } from './post-tools-i18n-pt';
+import { accountI18nPt } from './account-i18n-pt';
 export const ptDictionary = {
   // Sidebar / navigation
   nav: {
@@ -26,17 +27,7 @@ export const ptDictionary = {
     profile: 'Perfil',
   },
   // Account area — Perfil page (mobile header avatar + /account route)
-  account: {
-    title: 'Perfil',
-    subtitle: 'Suas informações, tokens e preferências.',
-    version: 'Versão',
-    signOutAllDevices: 'Sair de todos os dispositivos',
-    signOutAllDevicesTitle: 'Sair de todos os dispositivos?',
-    signOutAllDevicesDesc:
-      'Isto encerra a sessão neste navegador e em todos os outros dispositivos (outros navegadores e celulares).',
-    signOutAllDevicesConfirm: 'Sair de todos',
-    signOutAllDevicesCancel: 'Cancelar',
-  },
+  account: { ...accountI18nPt },
   // Posts page — history + upcoming posts from all accounts
   posts: {
     title: 'Posts',

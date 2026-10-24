@@ -3,6 +3,7 @@
 import type { Dictionary } from './pt';
 import { personaVoiceCloneEn, voiceCloneApiToolDescEn } from './voice-clone-i18n-en';
 import { postToolDescEn } from './post-tools-i18n-en';
+import { accountI18nEn } from './account-i18n-en';
 export const enDictionary: Dictionary = {
   nav: {
     brand: 'Post Engineer',
@@ -26,17 +27,7 @@ export const enDictionary: Dictionary = {
     profile: 'Profile',
   },
   // Account area — Profile page (mobile header avatar + /account route)
-  account: {
-    title: 'Profile',
-    subtitle: 'Your info, tokens and preferences.',
-    version: 'Version',
-    signOutAllDevices: 'Sign out of all devices',
-    signOutAllDevicesTitle: 'Sign out of all devices?',
-    signOutAllDevicesDesc:
-      'This ends the session in this browser and on every other device (other browsers and phones).',
-    signOutAllDevicesConfirm: 'Sign out everywhere',
-    signOutAllDevicesCancel: 'Cancel',
-  },
+  account: { ...accountI18nEn },
   // Posts page — history + upcoming posts from all accounts
   posts: {
     title: 'Posts',
