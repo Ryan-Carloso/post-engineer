@@ -138,6 +138,13 @@ def map_changed_lines(
     Returns {"mode": "functions", "globs": [...], "functions": [...]} or
     {"mode": "file", "reason": ...}.
     """
+    if not changed_lines:
+        # Explicit guard: zero extracted lines from a diff the caller
+        # considers changed is a parser anomaly, not "nothing to do" —
+        # running 0 mutants would silently weaken the gate. Fall back to
+        # the whole-file scope (the caller's own "no diff hunks at all"
+        # case never reaches here — that returns file mode earlier).
+        return {"mode": "file", "reason": "no changed lines extracted from the diff"}
     try:
         functions = collect_mutable_functions(source)
     except SyntaxError as error:

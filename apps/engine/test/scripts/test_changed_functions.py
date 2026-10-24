@@ -194,6 +194,14 @@ def test_map_changed_lines_unparsable_source_falls_back():
     assert "ast parse failed" in result["reason"]
 
 
+def test_map_changed_lines_empty_changed_lines_falls_back():
+    # Zero extracted lines must NOT silently produce an empty functions
+    # scope (0 mutants = weakened gate): fall back to the whole file.
+    result = map_changed_lines(changed_lines=[], source=TWO_FUNCTIONS, path="app/services/video.py")
+    assert result["mode"] == "file"
+    assert "no changed lines extracted" in result["reason"]
+
+
 def test_map_changed_lines_nested_class_method_falls_back_to_file():
     # mutmut mutates only methods of MODULE-level classes (a nested
     # ClassDef's body passes through untouched — file_mutation.py walks
