@@ -82,30 +82,49 @@ def mutant_key(path: str, mangled_name: str) -> str:
 
 
 def collect_mutable_functions(source: str) -> list[dict]:
-    """(start, end, name, class_name) of every TOP-LEVEL function and class
-    method, tagged with mutmut's mutable rule. Nested functions are
-    deliberately excluded: a changed line inside one maps UP to the
-    enclosing mutable function (conservative)."""
+    """(start, end, name, class_name) of every function mutmut actually
+    mutates: module-level functions and methods of module-level classes.
+
+    Mirrors mutmut.mutation.file_mutation (it walks MODULE-level
+    statements only; a nested ClassDef's body passes through untouched,
+    and functions nested inside functions are mutated as part of their
+    parent's span, never as their own mangled trampoline). A changed
+    line inside a nested function/class maps UP to the enclosing
+    top-level function (conservative), or falls back to the whole file
+    when there is none."""
     functions: list[dict] = []
-
-    def visit_class(node: ast.AST, class_name: str | None) -> None:
-        for child in ast.iter_child_nodes(node):
-            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                functions.append(
-                    {
-                        "start": child.lineno,
-                        "end": child.end_lineno,
-                        "name": child.name,
-                        "class_name": class_name,
-                        "mutable": is_mutable_function(child),
-                    }
-                )
-            elif isinstance(child, ast.ClassDef):
-                visit_class(child, child.name)
-
     tree = ast.parse(source)
-    visit_class(tree, None)
+    for child in ast.iter_child_nodes(tree):
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            functions.append(
+                {
+                    "start": child.lineno,
+                    "end": child.end_lineno,
+                    "name": child.name,
+                    "class_name": None,
+                    "mutable": is_mutable_function(child),
+                }
+            )
+        elif isinstance(child, ast.ClassDef):
+            for method in ast.iter_child_nodes(child):
+                if isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    functions.append(
+                        {
+                            "start": method.lineno,
+                            "end": method.end_lineno,
+                            "name": method.name,
+                            "class_name": child.name,
+                            "mutable": is_mutable_function(method),
+                        }
+                    )
     return functions
+
+
+def has_mutable_function(source: str) -> bool:
+    """True when the file holds at least one function mutmut can mutate
+    (the shard's "skip gracefully" check — one source for the rule, used
+    by the workflow's --check-mutable)."""
+    return any(f["mutable"] for f in collect_mutable_functions(source))
 
 
 def map_changed_lines(
@@ -262,11 +281,29 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--file", required=True, help="file relative to the working directory")
     parser.add_argument("--base", required=True, help="base ref (e.g. origin/main)")
     parser.add_argument("--head", default="HEAD", help="head ref")
+    parser.add_argument(
+        "--check-mutable",
+        action="store_true",
+        help="print 'true'/'false' (has a mutmut-mutable function) instead of the diff mapping",
+    )
     args = parser.parse_args(argv)
+
+    if args.check_mutable:
+        try:
+            source = Path(args.file).read_text()
+            has = has_mutable_function(source)
+        except (OSError, SyntaxError):
+            has = False
+        print("true" if has else "false")
+        return 0
 
     result = changed_functions_for_file(
         base=args.base, head=args.head, path=args.file, cwd=os.getcwd()
     )
+    # Uniform output shape: the workflow reads both keys unconditionally,
+    # so "file" mode carries an empty globs list.
+    if result["mode"] == "file":
+        result["globs"] = []
     json.dump(result, sys.stdout)
     sys.stdout.write("\n")
     # Exit 0 in both modes: "file" is the conservative fallback, not an error.

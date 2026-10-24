@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -17,6 +18,8 @@ import pytest
 
 from scripts.changed_functions import (
     changed_functions_for_file,
+    has_mutable_function,
+    main,
     map_changed_lines,
     mangled_function_name,
     mutant_key,
@@ -89,9 +92,22 @@ def test_map_changed_lines_inside_two_functions():
     ]
 
 
+def line_of(source: str, needle: str) -> int:
+    """1-based line number of the first line containing needle — keeps
+    fallback tests pinned to the right line even if the fixture shifts."""
+    for i, line in enumerate(source.splitlines(), start=1):
+        if needle in line:
+            return i
+    raise AssertionError(f"{needle!r} not found in fixture source")
+
+
 def test_map_changed_lines_module_level_change_falls_back_to_file():
+    # Pin the line number against the fixture: MODULE_LEVEL is a
+    # module-level assignment (outside every function).
+    module_line = line_of(TWO_FUNCTIONS, 'MODULE_LEVEL = "value"')
+    assert TWO_FUNCTIONS.splitlines()[module_line - 1].startswith("MODULE_LEVEL")
     result = map_changed_lines(
-        changed_lines=[11], source=TWO_FUNCTIONS, path="app/services/video.py"
+        changed_lines=[module_line], source=TWO_FUNCTIONS, path="app/services/video.py"
     )
     assert result["mode"] == "file"
     assert "module-level" in result["reason"]
@@ -176,6 +192,31 @@ def test_map_changed_lines_unparsable_source_falls_back():
     result = map_changed_lines(changed_lines=[1], source="def broken(:\n", path="app/x.py")
     assert result["mode"] == "file"
     assert "ast parse failed" in result["reason"]
+
+
+def test_map_changed_lines_nested_class_method_falls_back_to_file():
+    # mutmut mutates only methods of MODULE-level classes (a nested
+    # ClassDef's body passes through untouched — file_mutation.py walks
+    # module statements only), so a change inside a nested class's
+    # method cannot be pinned to a mutatable mutant name.
+    source = "class Outer:\n    class Inner:\n        def method(self):\n            return 1\n"
+    result = map_changed_lines(changed_lines=[4], source=source, path="app/services/d.py")
+    assert result["mode"] == "file"
+
+
+def test_has_mutable_function():
+    assert has_mutable_function("def f():\n    return 1\n")
+    assert has_mutable_function("class C:\n    @staticmethod\n    def s():\n        return 1\n")
+    # Decorated-only file: every module-level function is decorated, so
+    # mutmut mutates nothing. (lru_cache is non-bare → not mutable by the
+    # lone-staticmethod/classmethod rule.)
+    assert not has_mutable_function(
+        "import functools\n\n\n@functools.lru_cache\ndef g():\n    return 1\n"
+    )
+    # Controller-style file: only @router endpoint methods.
+    assert not has_mutable_function(
+        "class R:\n    @router.get('/x')\n    def x(self):\n        return 1\n"
+    )
 
 
 def test_map_changed_lines_package_init_module_key_rewrites_the_dots():
@@ -270,3 +311,51 @@ def test_changed_functions_for_file_git_failure_falls_back(tmp_path: Path):
     )
     assert result["mode"] == "file"
     assert "git diff failed" in result["reason"]
+
+
+# ---------------
+# CLI contract — the workflow step reads "mode" and "globs"
+# unconditionally, so the JSON shape is pinned for BOTH modes (a
+# fallback output must carry "globs": [], never a missing key).
+# ---------------
+def test_cli_function_mode_output_shape(
+    git_repo: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.chdir(git_repo)
+    rc = main(["--file", "app/services/video.py", "--base", "HEAD~1", "--head", "HEAD"])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["mode"] == "functions"
+    assert payload["globs"] == ["app.services.video.x_generate_video__mutmut_*"]
+    assert payload["functions"] == ["generate_video"]
+
+
+def test_cli_file_mode_output_shape(
+    git_repo: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+):
+    # Simulated fallback output (new file in this branch): the JSON must
+    # still carry "mode" and "globs": [] — the exact crash the review
+    # flagged (KeyError on ['globs']) cannot happen.
+    monkeypatch.chdir(git_repo)
+    rc = main(["--file", "app/services/brand_new.py", "--base", "HEAD~1", "--head", "HEAD"])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["mode"] == "file"
+    assert payload["globs"] == []
+    assert "reason" in payload
+
+
+def test_cli_check_mutable_true_and_false(
+    git_repo: Path,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.chdir(git_repo)
+    assert main(["--file", "app/services/video.py", "--base", "HEAD~1", "--check-mutable"]) == 0
+    assert json.dumps(capsys.readouterr().out.strip()) == json.dumps("true")
+
+    decorated = tmp_path / "decorated.py"
+    decorated.write_text("import functools\n\n\n@functools.lru_cache\ndef g():\n    return 1\n")
+    assert main(["--file", str(decorated), "--base", "HEAD~1", "--check-mutable"]) == 0
+    assert json.dumps(capsys.readouterr().out.strip()) == json.dumps("false")

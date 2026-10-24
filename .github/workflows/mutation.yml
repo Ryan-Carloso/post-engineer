@@ -401,8 +401,10 @@ jobs:
       # functions. The mapper returns name globs for mutmut's CLI (mode
       # "functions") or falls back to the whole file ("file") — see
       # scripts/changed_functions.py for the rules and
-      # test/scripts/test_changed_functions.py for the pins. Manual
-      # dispatch keeps the full-file scope (no PR base to diff against).
+      # test/scripts/test_changed_functions.py for the pins. The output
+      # shape is uniform (file mode carries "globs": []), and the run
+      # step branches on the mode. Manual dispatch keeps the full-file
+      # scope (no PR base to diff against).
       - name: Compute the shard's changed functions
         id: functions
         if: matrix.file != '' && github.event_name == 'pull_request'
@@ -414,10 +416,17 @@ jobs:
             --base "origin/${{ github.base_ref }}" \
             --head HEAD > functions.json
           cat functions.json
-          globs="$(uv run python -c "import json; print(' '.join(json.load(open('functions.json'))['globs']))")"
-          echo "globs=$globs" >> "$GITHUB_OUTPUT"
-          mode="$(uv run python -c "import json; print(json.load(open('functions.json'))['mode'])")"
-          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          uv run python - <<'EOF' >> "$GITHUB_OUTPUT"
+          import json
+
+          d = json.load(open("functions.json"))
+          mode = d["mode"]
+          globs = d.get("globs", []) if mode == "functions" else []
+          print(f"mode={mode}")
+          print(f"globs={' '.join(globs)}")
+          if mode == "functions":
+              assert globs, f"function mode with empty globs: {d}"
+          EOF
 
       # mutmut 3.x never mutates decorated functions (copying them for the
       # trampoline setup can cause side effects, e.g. duplicate route
@@ -426,45 +435,19 @@ jobs:
       # `mutmut run` exits 1 ("Stopping early, because we could not find
       # any test case for any mutant") — which is not a failure. Detect
       # that case up front so the shard skips gracefully instead.
-      # (A plain "has any function" check is wrong here: a controller file
-      # whose only functions are @router endpoints has zero mutants.)
+      # The mutable-function RULE has one source: the same
+      # scripts/changed_functions.py the function scoping uses (its
+      # collect_mutable_functions also matches mutmut's module-level walk
+      # exactly — nested classes/functions pass through untouched there).
       - name: Check shard file has mutable code
         if: matrix.file != ''
         id: mutable
         env:
           SHARD_FILE: ${{ matrix.file }}
         run: |
-          uv run python - <<'EOF'
-          import ast
-          import os
-
-          def _is_mutable_function(node):
-              if not isinstance(
-                  node, (ast.FunctionDef, ast.AsyncFunctionDef)
-              ):
-                  return False
-              if not node.decorator_list:
-                  return True
-              # Mirror mutmut: exactly one bare @staticmethod / @classmethod
-              # is mutable; any other decorator (or combination) is not.
-              if len(node.decorator_list) == 1:
-                  decorator = node.decorator_list[0]
-                  if (
-                      isinstance(decorator, ast.Name)
-                      and decorator.id in ("staticmethod", "classmethod")
-                  ):
-                      return True
-              return False
-
-          path = os.environ["SHARD_FILE"]
-          tree = ast.parse(open(path).read())
-          has_functions = any(
-              _is_mutable_function(node) for node in ast.walk(tree)
-          )
-          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
-              out.write(f"has_functions={'true' if has_functions else 'false'}\n")
-          print(f"{path}: has_functions={has_functions}")
-          EOF
+          has_functions="$(uv run python scripts/changed_functions.py --file "$SHARD_FILE" --check-mutable)"
+          echo "has_functions=$has_functions" >> "$GITHUB_OUTPUT"
+          echo "$SHARD_FILE: has_functions=$has_functions"
 
       - name: Run mutmut mutation testing
         if: matrix.file == '' || steps.mutable.outputs.has_functions == 'true'
