@@ -179,6 +179,39 @@ describe('Main Layout — Sidebar', () => {
     cy.get('[data-testid=sign-out-all-cancel]').click();
     cy.get('[data-testid=sign-out-all-dialog]').should('not.exist');
   });
+
+  it('confirma o sair de todos os dispositivos com o logout stubado (nunca real)', () => {
+    // The confirmation dialog is the boundary: confirming here would fire
+    // a GLOBAL sign-out against the shared E2E account. The auth-server
+    // logout call is stubbed, so only the UI flow is exercised.
+    seedUserMetadata({ name: 'Cypress' });
+    cy.visit('/');
+    cy.contains('p', 'Cypress', { timeout: 10_000 }).scrollIntoView().should('be.visible');
+
+    cy.intercept('POST', '**/auth/v1/logout*', { statusCode: 204 });
+
+    cy.get('[data-testid=sign-out-all-button]').scrollIntoView().click();
+    cy.get('[data-testid=sign-out-all-dialog]').should('be.visible');
+    cy.get('[data-testid=sign-out-all-confirm]').click();
+    cy.url().should('match', /\/login$/);
+  });
+
+  it('mostra o erro retryable quando o sair de todos falha (stub 500)', () => {
+    // Failure path: the dialog stays open with the retryable alert and
+    // the user is NOT routed away (other devices stay signed in).
+    seedUserMetadata({ name: 'Cypress' });
+    cy.visit('/');
+    cy.contains('p', 'Cypress', { timeout: 10_000 }).scrollIntoView().should('be.visible');
+
+    cy.intercept('POST', '**/auth/v1/logout*', { statusCode: 500, body: { msg: 'kaboom' } });
+
+    cy.get('[data-testid=sign-out-all-button]').scrollIntoView().click();
+    cy.get('[data-testid=sign-out-all-dialog]').should('be.visible');
+    cy.get('[data-testid=sign-out-all-confirm]').click();
+    cy.get('[data-testid=sign-out-all-error]').should('be.visible');
+    cy.get('[data-testid=sign-out-all-dialog]').should('be.visible');
+    cy.url().should('not.match', /\/login$/);
+  });
 });
 
 //---------------

@@ -172,6 +172,14 @@ export function SignOutAllButton() {
         }
         const first = focusables[0];
         const last = focusables[focusables.length - 1];
+        // Focus landed OUTSIDE the dialog (e.g. on document.body — some
+        // browsers/reset paths leave it there): Tab must not escape the
+        // modal, pull focus back inside.
+        if (!dialogRef.current.contains(document.activeElement)) {
+          event.preventDefault();
+          (event.shiftKey ? last : first)?.focus();
+          return;
+        }
         if (event.shiftKey && document.activeElement === first) {
           event.preventDefault();
           last?.focus();

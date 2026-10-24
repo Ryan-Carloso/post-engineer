@@ -273,6 +273,63 @@ describe('AccountPanel', () => {
     expect(tab.defaultPrevented).toBe(true);
   });
 
+  it('Escape closes the dialog when the sign-out is not pending', () => {
+    render(<AccountPanel />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getByTestId('sign-out-all-button'));
+    expect(screen.getByTestId('sign-out-all-dialog')).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByTestId('sign-out-all-dialog')).not.toBeInTheDocument();
+    expect(signOutMock).not.toHaveBeenCalled();
+  });
+
+  it('Escape does NOT close the dialog while the sign-out is pending', async () => {
+    signOutMock.mockImplementationOnce(() => new Promise(() => {})); // never settles
+    render(<AccountPanel />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getByTestId('sign-out-all-button'));
+    fireEvent.click(screen.getByTestId('sign-out-all-confirm'));
+    await waitFor(() => {
+      expect(signOutMock).toHaveBeenCalledWith({ scope: 'global' });
+    });
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.getByTestId('sign-out-all-dialog')).toBeInTheDocument();
+  });
+
+  it('Tab pulls focus back inside the dialog when focus is on document.body', () => {
+    render(<AccountPanel />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getByTestId('sign-out-all-button'));
+    // The dialog focuses the safe action on mount; blur to simulate the
+    // browser leaving focus on document.body (outside the dialog).
+    (document.activeElement as HTMLElement).blur();
+    expect(document.activeElement).not.toBe(screen.getByTestId('sign-out-all-cancel'));
+
+    const tab = new KeyboardEvent('keydown', {
+      key: 'Tab',
+      bubbles: true,
+      cancelable: true,
+    });
+    window.dispatchEvent(tab);
+    // Tab must not escape the modal: focus moves to the first focusable
+    // (the safe action, Cancel) instead of leaving the dialog.
+    expect(tab.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(screen.getByTestId('sign-out-all-cancel'));
+
+    // Shift+Tab with body focus pulls focus to the LAST focusable.
+    fireEvent.click(screen.getByTestId('sign-out-all-cancel'));
+    fireEvent.click(screen.getByTestId('sign-out-all-button')); // reopen
+    (document.activeElement as HTMLElement).blur();
+    const shiftTab = new KeyboardEvent('keydown', {
+      key: 'Tab',
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    window.dispatchEvent(shiftTab);
+    expect(shiftTab.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(screen.getByTestId('sign-out-all-confirm'));
+  });
+
   it('renders no user block or sign-out button when there is no session user', () => {
     vi.mocked(useSessionQuery).mockReturnValue({
       data: null,
