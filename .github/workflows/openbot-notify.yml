@@ -5,7 +5,8 @@ name: openbot-notify
 #
 # Pure relay by construction:
 # - no checkout at all — nothing from the PR is read or executed;
-# - permissions: {} — no GitHub API access;
+# - job-level permissions: actions: read (the only API scope: listing
+#   workflow runs for the last-finisher query; no code, no writes);
 # - the body is a compact (< 2 KB) envelope of low-cardinality facts only
 #   (event/action, PR number, head sha, workflow name, conclusion): no
 #   titles, bodies, logs or actor identities.
@@ -19,6 +20,21 @@ name: openbot-notify
 # warnings too (continue-on-error): telemetry must never fail a build it
 # is only observing.
 #
+# Last-finisher rule: every relayed workflow fires a workflow_run completed
+# event, so the decision counts pending workflow runs only (runs API,
+# which is the completion authority). Non-workflow check runs (e.g. the
+# coverage uploader) never fire a workflow_run event — if they gated the
+# relay, a completed build could wake nobody (0 events); excluding them
+# guarantees at least one send: the run whose completion event is the
+# last to be processed always sees nothing pending. Two workflows that
+# finish within the same second may both send — 2 events is acceptable,
+# 0 is not. `Release MCP (auto)` (the main-push follower of CI) IS in the
+# list, so the invariant holds on main pushes too. A run stuck
+# queued/in_progress by a hung runner is the one accepted gap: that build
+# already failed, and the daily test-flight monitor covers prod health.
+# A transient failure of the pending query fails OPEN (send): 2 events
+# is acceptable, 0 is not.
+#
 # Signature: x-openbot-signature = "sha256=" + hex HMAC-SHA256 over
 # "<timestamp>.<delivery-id>.<exact body bytes>", keyed by the secret —
 # the same envelope format the webhook route validates.
@@ -27,9 +43,12 @@ on:
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review, closed]
   workflow_run:
-    # The exact workflow names that run on PRs in this repo (name: fields
-    # of .github/workflows/*.yml); parity-exclusion-guard uses
-    # pull_request_target, which still triggers workflow_run.
+    # The workflow names this relay covers: the ones that run on PRs
+    # (name: fields of .github/workflows/*.yml; parity-exclusion-guard
+    # uses pull_request_target, which still triggers workflow_run) plus
+    # Release MCP (auto), CI's main-push follower — every run that can be
+    # counted as pending must also fire a relayed completion event, or a
+    # green push could wake nobody.
     workflows:
       - CI
       - mutation
@@ -39,6 +58,7 @@ on:
       - parity-exclusion-guard
       - CodeQL Advanced
       - Deploy
+      - Release MCP (auto)
     types: [completed]
 
 permissions: {}
@@ -47,7 +67,9 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    permissions: {}
+    permissions:
+      # The last-finisher check queries workflow runs for the head sha.
+      actions: read
     steps:
       - name: Relay to OpenBot
         env:
@@ -66,11 +88,51 @@ jobs:
           CONCLUSION: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion || '' }}
           RUN_ID: ${{ github.run_id }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
+          # Token for the last-finisher query (actions: read only). Fork
+          # pull_request events never reach this call: the secrets guard
+          # above exits first.
+          GH_TOKEN: ${{ github.token }}
         continue-on-error: true
         run: |
           set -euo pipefail
           if [ -z "${OPENBOT_WEBHOOK_URL:-}" ] || [ -z "${OPENBOT_WEBHOOK_SECRET:-}" ]; then
             echo "OPENBOT_WEBHOOK_URL/OPENBOT_WEBHOOK_SECRET not available (fork PR or unset) — nothing sent"
+            exit 0
+          fi
+          # relay_decision — send on every failure-family conclusion; on
+          # success/skipped send only when no other workflow run for the
+          # same head sha is still queued or in progress, so the Babysit
+          # is woken once, by the LAST check to finish, instead of ~8
+          # times per push. pull_request events always relay.
+          relay_decision() {
+            case "$1" in
+              pull_request) echo send; return ;;
+              workflow_run) ;;
+              *) echo skip; return ;;
+            esac
+            case "$2" in
+              failure|timed_out|cancelled|action_required) echo send; return ;;
+              success|skipped) ;;
+              *) echo skip; return ;;
+            esac
+            # Fail OPEN on a transient query failure: a broken/limited API
+            # call must not abort the relay before the send (2 events is
+            # acceptable, 0 is not).
+            pending=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$HEAD_SHA" \
+              --jq "[.workflow_runs[] | select(.id != $3 and .name != \"openbot-notify\" and (.status == \"queued\" or .status == \"in_progress\"))] | length") || pending=0
+            if [ "$pending" -gt 0 ]; then
+              # One late retry: a run that completes while another's
+              # completion event is still in flight must not be missed by
+              # both (the re-query sees it completed and sends).
+              sleep 60
+              pending=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$HEAD_SHA" \
+                --jq "[.workflow_runs[] | select(.id != $3 and .name != \"openbot-notify\" and (.status == \"queued\" or .status == \"in_progress\"))] | length") || pending=0
+            fi
+            if [ "$pending" -gt 0 ]; then echo skip; else echo send; fi
+          }
+          decision=$(relay_decision "$EVENT_NAME" "$CONCLUSION" "$RUN_ID")
+          if [ "$decision" = "skip" ]; then
+            echo "skipping relay: other checks still running for $HEAD_SHA"
             exit 0
           fi
           body=$(jq -nc \
