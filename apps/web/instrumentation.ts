@@ -39,10 +39,17 @@ export async function register() {
   // a DB lease so only one replica executes each tick. No public HTTP
   // route, no CRON_SECRET, no pg_cron. SCHEDULER_ENABLED=false (and the
   // test environment) disables it.
+  //
+  // Node runtime only (guarded with the dynamic import INSIDE the
+  // branch): instrumentation is also compiled for the edge runtime,
+  // where the scheduler's chain (crypto in lib/token-crypto.ts etc.)
+  // does not resolve.
   //---------------
-  const { startInternalScheduler, isSchedulerEnabled } = await import('./lib/scheduler-jobs');
-  if (isSchedulerEnabled()) {
-    startInternalScheduler();
+  if (process.env.NEXT_RUNTIME === 'nodejs') {
+    const { startInternalScheduler, isSchedulerEnabled } = await import('./lib/scheduler-jobs');
+    if (isSchedulerEnabled()) {
+      startInternalScheduler();
+    }
   }
 }
 

@@ -17,7 +17,6 @@ function makeDeps(overrides: Partial<SchedulerDeps> = {}): SchedulerDeps {
       info: vi.fn(),
       error: vi.fn(),
     },
-    captureException: vi.fn(),
     holder: 'test-holder',
     now: () => 1_000_000,
     ...overrides,
@@ -94,10 +93,6 @@ describe('createScheduler', () => {
       expect.any(Error),
       {},
     );
-    expect(deps.captureException).toHaveBeenCalledWith(expect.any(Error), {
-      job: 'post-metrics',
-      holder: 'test-holder',
-    });
 
     // The timer survived: the next tick runs again (and succeeds).
     await vi.advanceTimersByTimeAsync(1_000);

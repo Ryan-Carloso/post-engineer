@@ -53,8 +53,6 @@ export interface SchedulerDeps {
   acquireLease(job: string, ttlSeconds: number, holder: string): Promise<boolean>;
   track(event: string, properties?: Record<string, unknown>): void;
   logger: SchedulerLogger;
-  // Best-effort error tracking (PostHog $exception). Never throws.
-  captureException(error: unknown, context: Record<string, unknown>): void;
   // Stable per-process holder id (debugging: which replica holds a lease).
   holder: string;
   now: () => number;
@@ -85,9 +83,11 @@ export function createScheduler(deps: SchedulerDeps): SchedulerHandle {
       deps.track(job.successEvent, { job: job.name, ...summary });
     } catch (error) {
       // A failing job must never kill the scheduler: log, report, and
-      // let the next tick try again.
+      // let the next tick try again. logger.error reports the scrubbed
+      // $exception to PostHog (lib/logger.ts reportErrorToPostHog →
+      // scrubSecrets); never capture the raw error here — posthog-node's
+      // captureException would send unscrubbed messages/stacks.
       deps.logger.error(`[scheduler] ${job.name}: run failed`, error, {});
-      deps.captureException(error, { job: job.name, holder: deps.holder });
     }
   };
 

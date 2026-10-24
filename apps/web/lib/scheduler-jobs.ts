@@ -24,7 +24,7 @@ import { fetchProviderCounters } from '@/lib/metrics/provider-counters';
 import { fetchEnginePostMetricsSource } from '@/lib/engine-tasks';
 import { createReconcileStore, runBillingReconciliation } from '@/lib/billing/reconcile';
 import { trackApiEvent } from '@/lib/analytics';
-import { flushPostHog, getPostHogServer } from '@/lib/posthog-server';
+import { flushPostHog } from '@/lib/posthog-server';
 import { logger } from '@/lib/logger';
 import { createScheduler, type SchedulerHandle, type SchedulerJob } from '@/lib/scheduler';
 import { tryAcquireSchedulerLease } from '@/lib/scheduler-lease';
@@ -112,9 +112,6 @@ export function startInternalScheduler(): SchedulerHandle | null {
     acquireLease: tryAcquireSchedulerLease,
     track: trackApiEvent,
     logger,
-    captureException: (error, context) => {
-      getPostHogServer()?.captureException(error, context);
-    },
     holder: `${process.env.HOSTNAME ?? 'web'}:${process.pid}`,
     now: () => Date.now(),
   });

@@ -87,6 +87,9 @@ begin
 end;
 $$;
 
-if exists (select 1 from pg_roles where rolname = 'service_role') then
-  grant execute on function public.try_acquire_scheduler_lease(text, integer, text) to service_role;
-end if;
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function public.try_acquire_scheduler_lease(text, integer, text) to service_role;
+  end if;
+end $$;
