@@ -361,9 +361,9 @@ def test_cli_check_mutable_true_and_false(
 ):
     monkeypatch.chdir(git_repo)
     assert main(["--file", "app/services/video.py", "--base", "HEAD~1", "--check-mutable"]) == 0
-    assert json.dumps(capsys.readouterr().out.strip()) == json.dumps("true")
+    assert capsys.readouterr().out.strip() == "true"
 
     decorated = tmp_path / "decorated.py"
     decorated.write_text("import functools\n\n\n@functools.lru_cache\ndef g():\n    return 1\n")
     assert main(["--file", str(decorated), "--base", "HEAD~1", "--check-mutable"]) == 0
-    assert json.dumps(capsys.readouterr().out.strip()) == json.dumps("false")
+    assert capsys.readouterr().out.strip() == "false"

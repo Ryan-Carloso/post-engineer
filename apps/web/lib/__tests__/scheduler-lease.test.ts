@@ -38,10 +38,15 @@ describe('tryAcquireSchedulerLease', () => {
     await expect(tryAcquireSchedulerLease('post-metrics', 1800, 'h')).resolves.toBe(false);
   });
 
-  it('throws a tagged error when the RPC fails', async () => {
-    rpcMock.mockResolvedValue({ data: null, error: { message: 'db down' } });
-    await expect(tryAcquireSchedulerLease('post-metrics', 1800, 'h')).rejects.toThrow(
-      'acquire rpc failed: db down',
+  it('throws a tagged, scrubbed error when the RPC fails', async () => {
+    rpcMock.mockResolvedValue({
+      data: null,
+      error: { message: 'connect failed: https://user:secret@db.internal:5432/postgres' },
+    });
+    // The credential-bearing fragment (userinfo in the URL) must be
+    // redacted before the message is thrown/logged.
+    await expect(tryAcquireSchedulerLease('post-metrics', 1800, 'h1')).rejects.toThrow(
+      'acquire rpc failed: connect failed: https://[redacted]@db.internal:5432/postgres',
     );
   });
 });

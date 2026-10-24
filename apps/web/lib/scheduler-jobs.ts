@@ -81,6 +81,9 @@ async function runBillingReconcileTick(): Promise<void> {
       errors: report.errors,
     });
   }
+  // Same flush as the post-metrics tick: insurance for the events
+  // queued by this tick (e.g. refund_issued).
+  await flushPostHog();
 }
 
 export const SCHEDULER_TICK_MS = 60 * 60 * 1000; // hourly due-check tick

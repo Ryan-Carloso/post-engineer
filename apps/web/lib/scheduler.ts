@@ -109,7 +109,7 @@ export function createScheduler(deps: SchedulerDeps): SchedulerHandle {
       const last = lastSuccessAt === null ? null : lastSuccessAt.getTime();
       if (last !== null && deps.now() - last < job.dueAfterMs) {
         deps.logger.info(`[scheduler] ${job.name}: not due yet`, {
-          lastSuccessAt: lastSuccessAt!.toISOString(),
+          lastSuccessAt: lastSuccessAt?.toISOString() ?? null,
           dueAfterMs: job.dueAfterMs,
         });
         return;

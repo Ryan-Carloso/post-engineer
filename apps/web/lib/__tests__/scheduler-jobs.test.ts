@@ -40,6 +40,19 @@ describe('isSchedulerEnabled', () => {
     expect(isSchedulerEnabled()).toBe(false);
   });
 
+  it('defaults OFF when NODE_ENV is undefined (safe default)', () => {
+    delete process.env.SCHEDULER_ENABLED;
+    const env = process.env as Record<string, string | undefined>;
+    const real = env.NODE_ENV;
+    delete env.NODE_ENV;
+    try {
+      expect(isSchedulerEnabled()).toBe(false);
+    } finally {
+      if (real === undefined) delete env.NODE_ENV;
+      else env.NODE_ENV = real;
+    }
+  });
+
   it('SCHEDULER_ENABLED=true opts in explicitly (even outside production)', () => {
     process.env.SCHEDULER_ENABLED = 'true';
     setEnv('NODE_ENV', 'development');

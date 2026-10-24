@@ -158,11 +158,13 @@ def map_changed_lines(
                 "mode": "file",
                 "reason": f"changed line {line} is outside any function (module-level change)",
             }
-        # Climb the enclosing chain to the nearest MUTABLE function (the
-        # innermost may be a non-mutable nested helper or decorated
-        # method inside a mutable parent). mutmut never mutates decorated
-        # functions, so a change pinned to non-mutable code only falls
-        # back to the whole file.
+        # Candidates come from collect_mutable_functions in source order,
+        # so the first mutable candidate is the OUTERMOST mutable
+        # function containing the line — an inner non-mutable nested
+        # helper (or decorated method) inside a mutable parent maps to
+        # that parent. mutmut never mutates decorated functions, so a
+        # change pinned to non-mutable code only falls back to the whole
+        # file.
         mutable_candidates = [f for f in candidates if f["mutable"]]
         target = mutable_candidates[0] if mutable_candidates else None
         if target is None:
@@ -199,7 +201,8 @@ def parse_diff_changed_lines(diff_text: str) -> list[int]:
     for line in diff_text.splitlines():
         if line.startswith("@@"):
             match = hunk_header.match(line)
-            assert match is not None, line  # only malformed if git is broken
+            if match is None:
+                raise ValueError(f"unrecognized diff hunk header: {line!r}")
             new_line = int(match.group(1))
         elif line.startswith("+") and not line.startswith("+++"):
             if new_line > 0:
@@ -234,6 +237,13 @@ def file_is_new(base: str, path: str, cwd: str | None = None) -> bool:
                 offset = cwd_abs.relative_to(root_abs).as_posix()
                 repo_relative = (Path(offset) / path).as_posix()
         except (ValueError, OSError):
+            # Deliberately silent: the naive fallback below (path treated
+            # as repo-root-relative) is safe in every failure mode. If
+            # the offset cannot be resolved, cat-file simply fails and
+            # file_is_new returns "new file" — which sends the shard to
+            # the WHOLE-file scope. That is the conservative direction
+            # (wider scope, never fewer mutants), so the loss of the
+            # precise new-file check costs nothing.
             pass
     result = subprocess.run(
         ["git", "cat-file", "-e", f"{base}:{repo_relative}", "--"],

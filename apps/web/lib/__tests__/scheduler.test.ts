@@ -205,6 +205,31 @@ describe('createScheduler', () => {
     scheduler.stop();
   });
 
+  it('survives an acquireLease failure: reports and retries on the next tick', async () => {
+    // The lease RPC itself failing (DB down) must not kill the
+    // scheduler: the tick is contained and the next tick tries again.
+    const acquireLease = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('acquire rpc failed: db down'))
+      .mockResolvedValue({ acquired: true, lastSuccessAt: null } satisfies LeaseAcquisition);
+    const deps = makeDeps({ jobs: [makeJob()], acquireLease });
+    const scheduler = createScheduler(deps);
+    scheduler.start();
+
+    await settleImmediateTick();
+    expect(deps.logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('run failed'),
+      expect.any(Error),
+      {},
+    );
+    expect(deps.jobs[0].run).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(HOUR);
+    expect(deps.jobs[0].run).toHaveBeenCalledTimes(1);
+    expect(deps.recordSuccess).toHaveBeenCalledWith('billing-reconcile');
+    scheduler.stop();
+  });
+
   it('stop() clears the timers so nothing runs afterwards', async () => {
     // The job is DUE at startup: the immediate tick runs it once; after
     // stop() the hourly ticks must never run it again.
