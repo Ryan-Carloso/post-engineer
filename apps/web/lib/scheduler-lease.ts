@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
+import { redactCredentialFragments } from '@/lib/scrub';
 
 //---------------
 // scheduler-lease — DB lease + last-success persistence for the in-app
@@ -15,6 +16,11 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 // Service-role client: the lease table is internal infrastructure, not
 // user data (RLS on, no policies; functions revoked from
 // public/anon/authenticated, granted to service_role only).
+//
+// RPC error messages (which can echo connection strings or upstream
+// bodies) are scrubbed through the repo's redactCredentialFragments
+// before they are embedded in a thrown error or reach a log — same
+// convention as logger.ts/analytics.ts.
 //---------------
 
 export async function tryAcquireSchedulerLease(
@@ -29,7 +35,9 @@ export async function tryAcquireSchedulerLease(
     p_holder: holder,
   });
   if (error) {
-    throw new Error(`[scheduler-lease] ${job}: acquire rpc failed: ${error.message}`);
+    throw new Error(
+      `[scheduler-lease] ${job}: acquire rpc failed: ${redactCredentialFragments(error.message)}`,
+    );
   }
   return data === true;
 }
@@ -40,7 +48,9 @@ export async function getSchedulerLastSuccess(job: string): Promise<Date | null>
     p_job: job,
   });
   if (error) {
-    throw new Error(`[scheduler-lease] ${job}: last-success rpc failed: ${error.message}`);
+    throw new Error(
+      `[scheduler-lease] ${job}: last-success rpc failed: ${redactCredentialFragments(error.message)}`,
+    );
   }
   if (data === null || data === undefined) return null;
   return new Date(data as string);
@@ -52,6 +62,8 @@ export async function recordSchedulerSuccess(job: string): Promise<void> {
     p_job: job,
   });
   if (error) {
-    throw new Error(`[scheduler-lease] ${job}: record-success rpc failed: ${error.message}`);
+    throw new Error(
+      `[scheduler-lease] ${job}: record-success rpc failed: ${redactCredentialFragments(error.message)}`,
+    );
   }
 }

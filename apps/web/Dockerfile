@@ -40,6 +40,11 @@ ARG COMMIT=""
 RUN cd apps/web && pnpm build
 
 FROM node:22-alpine AS runner
+# NODE_ENV=production is baked into the image (the standalone server
+# runs via `node apps/web/server.js` below); it also drives the internal
+# scheduler's default-on gate (apps/web/lib/scheduler-jobs.ts
+# isSchedulerEnabled — on only here, off in dev/tests/CI unless
+# SCHEDULER_ENABLED=true).
 ENV NODE_ENV=production TZ=UTC PORT=3000 HOSTNAME=0.0.0.0
 WORKDIR /app
 
