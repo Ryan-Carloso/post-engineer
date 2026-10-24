@@ -12,6 +12,9 @@ from app.services.analytics import scrub_error_text
 # let scrub_error_text cap the characters after the scrub.
 FFMPEG_STDERR_TAIL_LINES = 10
 FFMPEG_STDERR_TAIL_CHARS = 500
+# Bound of the combined raised/logged detail (scrubbed str(exc) + label +
+# scrubbed stderr tail).
+FFMPEG_REENCODE_DETAIL_CHARS = 500
 
 
 class FfmpegReencodeError(RuntimeError):
@@ -40,7 +43,16 @@ def raise_reencode_failure(src: str, exc: BaseException) -> NoReturn:
     detail = scrub_error_text(str(exc))
     tail = ffmpeg_stderr_tail(exc)
     if tail:
-        detail = f"{detail}; ffmpeg stderr: {tail}"
+        sep = "; ffmpeg stderr: "
+        # Cap the combination at FFMPEG_REENCODE_DETAIL_CHARS by trimming
+        # the tail's FRONT (ffmpeg puts the cause in its last lines), so
+        # the raised message and the shared log line keep both the
+        # scrubbed exception cause and the stderr's cause. Both parts are
+        # already scrubbed, so the cut cannot expose anything unscrubbed.
+        over = len(detail) + len(sep) + len(tail) - FFMPEG_REENCODE_DETAIL_CHARS
+        if over > 0:
+            tail = tail[over:]
+        detail = f"{detail}{sep}{tail}"
     logger.error(f"[ffmpeg] re-encode failed for {os.path.basename(src)}: {detail}")
     raise FfmpegReencodeError(
         f"ffmpeg re-encode failed for {os.path.basename(src)}: {detail}"

@@ -324,7 +324,8 @@ def _encoder_actually_usable(codec: str) -> bool:
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         logger.warning(
-            f"could not probe encoder {codec}, fallback to {_DEFAULT_VIDEO_CODEC}: {str(exc)}"
+            f"could not probe encoder {codec}, fallback to {_DEFAULT_VIDEO_CODEC}: "
+            f"{scrub_error_text(str(exc))}"
         )
         return False
     if result.returncode != 0:
@@ -358,7 +359,7 @@ def _ffmpeg_encoder_exists(ffmpeg_binary: str, codec: str) -> bool:
     except (OSError, subprocess.TimeoutExpired) as exc:
         logger.warning(
             "failed to inspect ffmpeg encoders, "
-            f"fallback to {_DEFAULT_VIDEO_CODEC}: {str(exc)}"
+            f"fallback to {_DEFAULT_VIDEO_CODEC}: {scrub_error_text(str(exc))}"
         )
         return False
 
@@ -476,7 +477,7 @@ def _write_videofile_with_codec_fallback(clip, output_file: str, codec: str, **k
             clip,
             output_file,
             failed_codec=effective_codec,
-            reason=str(exc),
+            reason=scrub_error_text(str(exc)),
             **kwargs,
         )
 
@@ -554,7 +555,7 @@ def concat_video_clips_with_ffmpeg(
             if effective_codec == _DEFAULT_VIDEO_CODEC:
                 raise
             result_codec = run_concat(_DEFAULT_VIDEO_CODEC)
-            _disable_runtime_video_codec(effective_codec, str(exc))
+            _disable_runtime_video_codec(effective_codec, scrub_error_text(str(exc)))
             return result_codec
     finally:
         delete_files(concat_list_file)
@@ -1486,15 +1487,16 @@ def combine_videos(
         except FfmpegReencodeError as e:
             logger.warning(f"skipping clip: {str(e)}")
         except Exception as e:
-            logger.error(f"failed to process clip: {str(e)}")
+            logger.error(f"failed to process clip: {scrub_error_text(str(e))}")
 
     # Only fail when there WAS material and no clip survived the shape
     # filter. Empty input (video_paths=[]) is a legitimate test path.
     if video_paths and not processed_clips:
         raise ValueError(
-            f"no usable clips for target {video_width}x{video_height}: all clips "
-            f"exceed the letterbox bars limit ({MAX_LETTERBOX_BARS:.0%}) for this "
-            "aspect. Try a different video_subject or check the material sources."
+            f"no usable clips for target {video_width}x{video_height}: every clip "
+            f"was skipped (letterbox bars limit {MAX_LETTERBOX_BARS:.0%} or a "
+            "per-clip processing failure — see the ERROR/WARNING logs above). "
+            "Check the material sources."
         )
 
     # loop processed clips until the video duration covers the audio duration and the small safety margin.

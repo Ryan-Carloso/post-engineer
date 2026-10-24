@@ -172,16 +172,36 @@ def mark_clean_shutdown(requests_module: Any = None) -> bool:
     return True
 
 
+_heartbeat_stop = threading.Event()
+
+
+def stop_heartbeat_thread() -> None:
+    """Signal the heartbeat loop to stop and return once it has.
+
+    Tests that start a real heartbeat (even with a huge interval) must call
+    this: the daemon thread survives the test otherwise, and a thread that
+    runs subprocess calls inside the mutation runner's main process races
+    with its child bookkeeping (os.wait reaps any child) — the video.py
+    shard crashed on exactly that.
+    """
+    _heartbeat_stop.set()
+
+
 def start_heartbeat_thread(interval_s: float = HEARTBEAT_INTERVAL_S) -> threading.Thread:
     """Start the daemon heartbeat loop. A write failure never kills it."""
+    _heartbeat_stop.clear()
 
     def _loop() -> None:
+        # Beat first, then sleep inside the stop event's wait: the first
+        # beat is immediate, and a stop request unblocks the sleep at once
+        # instead of waiting out the interval.
         while True:
             try:
                 write_beat()
             except Exception as exc:  # noqa: BLE001 - keep beating
                 logger.warning(f"engine heartbeat write failed: {exc}")
-            time.sleep(interval_s)
+            if _heartbeat_stop.wait(interval_s):
+                return
 
     thread = threading.Thread(target=_loop, name="engine-heartbeat", daemon=True)
     thread.start()

@@ -83,6 +83,21 @@ class TestRaiseReencodeFailure(unittest.TestCase):
             self.records[-1]["message"], "[ffmpeg] re-encode failed for clip.mp4: no such binary"
         )
 
+    def test_combined_detail_is_length_capped(self):
+        # detail = scrubbed str(exc) (<= 500 chars) + "; ffmpeg stderr: " +
+        # the scrubbed tail (<= 500 chars): without a cap on the
+        # combination, the log line and the raised message could carry ~
+        # 1 KB. The combined detail is capped at 500 chars, keeping the
+        # front (the cause and the label), so the whole message stays
+        # under the prefix (~39 chars) plus the cap.
+        with self.assertRaises(ff.FfmpegReencodeError) as ctx:
+            ff.raise_reencode_failure("/cache/clip.mp4", _called_process_error(b"x" * 3000))
+        message = str(ctx.exception)
+        self.assertLessEqual(len(message), 550)
+        self.assertEqual(message.count("ffmpeg stderr:"), 1)
+        # The front survives the cut: str(exc)'s scrubbed cause text.
+        self.assertIn("returned non-zero exit status 1", message)
+
     def test_error_is_a_runtime_error(self):
         self.assertTrue(issubclass(ff.FfmpegReencodeError, RuntimeError))
 

@@ -130,6 +130,31 @@ class HeartbeatIoTests(unittest.TestCase):
         self.assertTrue(thread.daemon)
         self.assertTrue(thread.is_alive())
         write.assert_called_once()
+        # The thread must not outlive the test: a leaked daemon that runs
+        # subprocess calls races with mutmut's child bookkeeping (the
+        # video.py shard crashed on exactly that). stop() unblocks the
+        # loop's wait at once, so the join is immediate.
+        engine_heartbeat.stop_heartbeat_thread()
+        thread.join(timeout=5)
+        self.assertFalse(thread.is_alive())
+
+    def test_stop_heartbeat_thread_unblocks_the_loop_immediately(self):
+        # A long interval must not delay the stop: the loop sleeps inside
+        # the stop event's wait, not a bare time.sleep.
+        engine_heartbeat._heartbeat_stop.clear()
+        with patch.object(engine_heartbeat, "write_beat"):
+            thread = engine_heartbeat.start_heartbeat_thread(interval_s=3600)
+            engine_heartbeat.stop_heartbeat_thread()
+            thread.join(timeout=5)
+            self.assertFalse(thread.is_alive())
+            # A restart clears the stale signal: the new loop beats again
+            # (the mocked write was called once per started loop), and
+            # stopping it again unblocks it the same way.
+            thread2 = engine_heartbeat.start_heartbeat_thread(interval_s=3600)
+            self.assertFalse(engine_heartbeat._heartbeat_stop.is_set())
+            engine_heartbeat.stop_heartbeat_thread()
+            thread2.join(timeout=5)
+        self.assertFalse(thread2.is_alive())
 
 
 class CleanShutdownTests(unittest.TestCase):
