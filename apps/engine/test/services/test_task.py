@@ -1,10 +1,11 @@
 import unittest
+from datetime import datetime, UTC
 import os
 import shutil
 import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import ANY, patch
+from unittest.mock import ANY, MagicMock, patch
 
 # add project root to python path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -1246,6 +1247,303 @@ class TestArchiveFinalVideos(unittest.TestCase):
             {"task_id": task_id, "hook_end_seconds": 14.6},
             immediate=True,
         )
+
+    def test_generate_final_videos_falls_back_faceless_when_modal_is_disabled(self):
+        """Ryan's 2026-10 decision: a LongCat 'workspace disabled' 404
+        (credits exhausted) delivers the video WITHOUT the face intro —
+        an informative (deduplicated) PostHog event, never a $exception,
+        plus the user-visible warning marker, the face premium refunded
+        and the breaker TRIPPED. Non-outage failures still fail the task."""
+        from app.services import longcat as longcat_module
+
+        task_id = "modal-disabled"
+        params = VideoParams(
+            video_subject="test",
+            persona=PersonaParams(
+                name="Ana",
+                photo_url="https://supabase.test/signed/foto.png",
+                voice_id="test-voice",
+            ),
+        )
+        exc = longcat_module.LongCatUnavailableError(
+            "LongCat submit failed with HTTP 404: modal-http: workspace ac-X is disabled"
+        )
+        state = MagicMock()
+        state.get_task.return_value = {
+            "user_id": "alice",
+            "generation_id": "batch:sched-9:slot:slot-1",
+            "slot_id": "slot-1",
+        }
+        rpc_response = MagicMock()
+        rpc_response.json.return_value = {"refunded": True}
+        state._rpc = MagicMock(return_value=rpc_response)
+        # 'alice' is a TEST account for THIS run: the informative event +
+        # persisted-breaker path (real users take the loud alert path).
+        with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "alice,other-test-user"}), \
+             tempfile.TemporaryDirectory() as breaker_root, \
+             patch.object(tm.longcat_breaker, "_state_path",
+                          side_effect=lambda root=None: os.path.join(breaker_root, "marker.json")), \
+             patch.object(tm.sm, "state", state), \
+             patch.object(tm.sm, "persist_state_update") as persist, \
+             patch.object(tm.history_repository, "recent", return_value=[]), \
+             patch.object(tm, "_update_task"), \
+             patch.object(tm.video, "combine_videos"), \
+             patch.object(tm, "prepare_persona_lipsync_video", side_effect=exc), \
+             patch.object(tm, "_apply_persona_face_fill") as face_fill, \
+             patch.object(tm, "track_event") as track, \
+             patch.object(tm.video, "generate_video") as generate_video:
+            final_paths, combined_paths, intro_report = tm.generate_final_videos(
+                task_id, params, ["clip.mp4"], "voice.mp3", "sub.srt", "script", "none"
+            )
+            # The breaker is OPEN now and stays open until the 1st of next
+            # month (persisted); at 00:00 on the 1st attempts resume.
+            self.assertTrue(tm.longcat_breaker.is_open(
+                datetime(2026, 10, 25, 12, 0, tzinfo=UTC), root=breaker_root))
+            self.assertTrue(tm.longcat_breaker.is_open(
+                datetime(2026, 10, 31, 23, 59, tzinfo=UTC), root=breaker_root))
+            self.assertFalse(tm.longcat_breaker.is_open(
+                datetime(2026, 11, 1, 0, 0, tzinfo=UTC), root=breaker_root))
+
+        self.assertEqual(len(final_paths), 1)
+        self.assertFalse(intro_report.ran)
+        # Face-fill is SKIPPED: the backend is unreachable this month.
+        face_fill.assert_not_called()
+        self.assertEqual(
+            generate_video.call_args.kwargs["video_path"], combined_paths[0]
+        )
+        # INFORMATIVE only: one event, reason=workspace_disabled, and the
+        # record is NOT immediate (never exceptions into a $exception).
+        track.assert_called_once()
+        self.assertEqual(track.call_args.args[0], "longcat_fallback_faceless")
+        self.assertEqual(track.call_args.args[1]["reason"], "workspace_disabled")
+        persist.assert_called_once()
+        self.assertEqual(persist.call_args.kwargs.get("user_warning_codes"),
+                         ["avatar_disabled"])
+        # Face premium refund: batch charge, slot-scoped idempotency key.
+        rpc = state._rpc
+        self.assertEqual(rpc.call_args.args[0], "refund_batch_tokens")
+        payload = rpc.call_args.args[1]
+        self.assertEqual(payload["p_batch_generation_id"], "batch:sched-9")
+        self.assertEqual(payload["p_refund_key"], "batch:sched-9:slot:slot-1:shortface")
+        self.assertEqual(payload["p_amount"], 1)  # ok(2) - faceless(1)
+        self.assertEqual(payload["p_engine_task_id"], task_id)
+    def test_open_breaker_never_calls_the_disabled_backend(self):
+        """While the breaker is open a faced post goes STRAIGHT to faceless:
+        the LongCat backend is not asked, no event, warning marker set."""
+        import json as json_module
+        import os as os_module
+
+        task_id = "breaker-open"
+        params = VideoParams(
+            video_subject="test",
+            persona=PersonaParams(
+                name="Ana",
+                photo_url="https://supabase.test/signed/foto.png",
+                voice_id="test-voice",
+            ),
+        )
+        state = MagicMock()
+        state.get_task.return_value = {"user_id": "alice"}
+        with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "alice"}), \
+             tempfile.TemporaryDirectory() as breaker_root, \
+             patch.object(tm.longcat_breaker, "_state_path",
+                          side_effect=lambda root=None: os_module.path.join(breaker_root, "marker.json")), \
+             patch.object(tm.sm, "state", state), \
+             patch.object(tm.sm, "persist_state_update") as persist, \
+             patch.object(tm.history_repository, "recent", return_value=[]), \
+             patch.object(tm, "_update_task"), \
+             patch.object(tm.video, "combine_videos"), \
+             patch.object(tm, "prepare_persona_lipsync_video",
+                          side_effect=AssertionError("backend must not be asked")), \
+             patch.object(tm, "_apply_persona_face_fill"), \
+             patch.object(tm, "track_event") as track, \
+             patch.object(tm.video, "generate_video"):
+            with open(os_module.path.join(breaker_root, "marker.json"), "w", encoding="utf-8") as fh:
+                json_module.dump({"until": "2026-11-01T00:00:00+00:00"}, fh)
+            final_paths, combined_paths, intro_report = tm.generate_final_videos(
+                task_id, params, ["clip.mp4"], "voice.mp3", "sub.srt", "script", "none"
+            )
+
+        self.assertEqual(len(final_paths), 1)
+        self.assertFalse(intro_report.ran)
+        # Same informative channels as the direct fallback path: the event
+        # is idle only if it already ran today (dedup!) — pinned by the
+        # dedup test.
+        self.assertEqual(track.call_count, 1)
+        self.assertEqual(track.call_args.args[0], "longcat_fallback_faceless")
+        self.assertEqual(track.call_args.args[1].get("reason"), "workspace_disabled")
+        persist.assert_called_once()
+        self.assertEqual(persist.call_args.kwargs.get("user_warning_codes"),
+                         ["avatar_disabled"])
+
+    def test_open_breaker_does_not_skip_longcat_for_real_users(self):
+        """Real users always try LongCat first, even if a test account
+        already tripped the persisted breaker."""
+        import json as json_module
+        import os as os_module
+
+        task_id = "real-user-tries"
+        params = VideoParams(
+            video_subject="test",
+            persona=PersonaParams(
+                name="Ana",
+                photo_url="https://supabase.test/signed/foto.png",
+                voice_id="test-voice",
+            ),
+        )
+        state = MagicMock()
+        state.get_task.return_value = {"user_id": "real-user"}
+        with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "alice"}), \
+             tempfile.TemporaryDirectory() as breaker_root, \
+             patch.object(tm.longcat_breaker, "_state_path",
+                          side_effect=lambda root=None: os_module.path.join(breaker_root, "marker.json")), \
+             patch.object(tm.sm, "state", state), \
+             patch.object(tm.history_repository, "recent", return_value=[]), \
+             patch.object(tm, "_update_task"), \
+             patch.object(tm.video, "combine_videos"), \
+             patch.object(tm, "prepare_persona_lipsync_video",
+                          return_value=("intro.mp4", 0.01, "job-1")) as lipsync, \
+             patch.object(tm, "_apply_persona_face_fill",
+                          side_effect=lambda **kwargs: kwargs["video_file"]), \
+             patch.object(tm.video, "generate_video"):
+            with open(os_module.path.join(breaker_root, "marker.json"), "w", encoding="utf-8") as fh:
+                json_module.dump({"until": "2026-11-01T00:00:00+00:00"}, fh)
+            tm.generate_final_videos(
+                task_id, params, ["clip.mp4"], "voice.mp3", "sub.srt", "script", "none"
+            )
+        lipsync.assert_called_once()
+
+    def test_fallback_event_is_deduplicated_to_one_per_day(self):
+        """The informative event fires at most once per calendar day; the
+        dedup marker rides the same persisted file (survives restarts)."""
+        import json as json_module
+        import os as os_module
+        import tempfile as tempfile_module
+
+        with tempfile_module.TemporaryDirectory() as breaker_root:
+            marker = os_module.path.join(breaker_root, "marker.json")
+            with patch.object(tm.longcat_breaker, "_state_path",
+                              side_effect=lambda root=None: marker):
+                self.assertTrue(tm.longcat_breaker.should_emit_event(
+                    datetime(2026, 10, 25, 9, 0, tzinfo=UTC)))
+                self.assertFalse(tm.longcat_breaker.should_emit_event(
+                    datetime(2026, 10, 25, 18, 0, tzinfo=UTC)))
+                self.assertTrue(tm.longcat_breaker.should_emit_event(
+                    datetime(2026, 10, 26, 6, 0, tzinfo=UTC)))
+            with open(marker, encoding="utf-8") as fh:
+                self.assertEqual(json_module.load(fh)["last_event_day"], "2026-10-26")
+
+    def test_breaker_persistence_across_a_restart(self):
+        """The breaker state is a FILE under the storage volume (tests hand
+        over the root), so 'open until the 1st' survives boots: the fresh
+        reads a restarted process makes are the same file."""
+        import json as json_module
+        import os as os_module
+        import tempfile as tempfile_module
+
+        with tempfile_module.TemporaryDirectory() as breaker_root:
+            marker = os_module.path.join(breaker_root, "marker.json")
+            with patch.object(tm.longcat_breaker, "_state_path",
+                              side_effect=lambda root=None: marker):
+                tm.longcat_breaker.trip(
+                    datetime(2026, 10, 20, 12, 0, tzinfo=UTC), "workspace disabled"
+                )
+            with patch.object(tm.longcat_breaker, "_state_path",
+                              side_effect=lambda root=None: marker):
+                self.assertTrue(tm.longcat_breaker.is_open(
+                    datetime(2026, 10, 25, 12, 0, tzinfo=UTC)))
+            with open(marker, encoding="utf-8") as fh:
+                state = json_module.load(fh)
+            self.assertEqual(state["until"], "2026-11-01T00:00:00+00:00")
+            self.assertEqual(state["reason"], "workspace disabled")
+
+    def test_real_user_fallback_is_loud_and_never_trips_the_breaker(self):
+        """Real users ALWAYS keep the next-day recovery path (no breaker):
+        the alert is loud on BOTH channels — the $exception (ERROR record)
+        and a Discord ping — deduplicated to one per hour; the user still
+        gets the amber warning and the face premium refund."""
+        import os
+
+        with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "someone-else"}), \
+                tempfile.TemporaryDirectory() as breaker_root:
+            state = MagicMock()
+            state.get_task.return_value = {"user_id": "real-user"}
+            task_id = "real-user-task"
+            with patch.object(tm.longcat_breaker, "_state_path",
+                              side_effect=lambda root=None: os.path.join(breaker_root, "marker.json")), \
+                    patch.object(tm.sm, "state", state), \
+                    patch.object(tm.sm, "persist_state_update") as persist, \
+                    patch.object(tm, "track_event"), \
+                    patch.object(tm, "_discord_notify") as discord, \
+                    patch.object(tm.logger, "error") as log_error, \
+                    patch.object(tm.video, "generate_video"):
+                tm._report_longcat_faceless_fallback(task_id, {"user_id": "real-user"})
+                # LOUD: error record + Discord ping. NOT quiet.
+                log_error.assert_called_once()
+                discord.assert_called_once()
+                # No breaker trip: the backend is recoverable, so the next
+                # dispatch tries the LONGCAT first again.
+                self.assertFalse(tm.longcat_breaker.is_open(
+                    datetime(2026, 10, 25, 13, 0, tzinfo=UTC), root=breaker_root))
+                # User marker stays.
+                self.assertEqual(persist.call_args.kwargs.get("user_warning_codes"),
+                                 ["avatar_disabled"])
+
+                # DEDUP: a second fallback for a second real user's task in the
+                # SAME hour stays silent (no further alert, no spammage).
+                tm._report_longcat_faceless_fallback("task-2", {"user_id": "real-user-2"})
+                log_error.assert_called_once()  # still one
+                discord.assert_called_once()   # still one
+
+            with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "someone-else"}), \
+                    tempfile.TemporaryDirectory() as breaker_root_persist:
+                # A REAL user's outage NEVER trips: is_open stays closed even
+                # when many fallbacks fired.
+                self.assertFalse(tm.longcat_breaker.is_open(
+                    datetime(2026, 10, 25, 12, 30, tzinfo=UTC), root=breaker_root_persist))
+
+    def test_real_user_fallback_never_trips_the_persisted_breaker(self):
+        """Counter guard on a real path store: empty marker file, and the
+        real-user alert still lands once (dedup) + tracks no event."""
+        import os
+
+        with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": ""}), \
+                tempfile.TemporaryDirectory() as breaker_root:
+            with patch.object(tm.longcat_breaker, "_state_path",
+                              side_effect=lambda root=None: os.path.join(breaker_root, "marker.json")), \
+                    patch.object(tm, "track_event") as track, \
+                    patch.object(tm, "_discord_notify") as discord, \
+                    patch.object(tm.logger, "error") as log_error, \
+                    patch.object(tm.sm, "persist_state_update"), \
+                    patch.object(tm.sm, "state",
+                                 MagicMock(get_task=MagicMock(return_value={"user_id": "u"}))):
+                # Nothing set the breaker: the file never appears (the real
+                # path NEVER trips it).
+                self.assertFalse(tm.longcat_breaker.is_open(
+                    datetime(2026, 10, 25, 12, 0, tzinfo=UTC), root=breaker_root))
+                tm._report_longcat_faceless_fallback("t1", {"user_id": "u"})
+                self.assertFalse(tm.longcat_breaker.is_open(
+                    datetime(2026, 10, 25, 12, 5, tzinfo=UTC), root=breaker_root))
+                # The marker may exist for the ALERT dedup; what must NEVER
+                # appear is a breaker resume date.
+                if os.path.exists(os.path.join(breaker_root, "marker.json")):
+                    import json as json_module
+
+                    with open(os.path.join(breaker_root, "marker.json"), encoding="utf-8") as fh:
+                        self.assertNotIn("until", json_module.load(fh))
+                self.assertFalse(track.called)      # real users: no quiet event
+                self.assertTrue(discord.called or log_error.called)  # loudness YES
+
+    def test_longcat_faceless_fallback_does_nothing_for_direct_or_bare_tasks(self):
+        """No batch charge under this task → no refund key refund."""
+
+        state = MagicMock()
+        state.get_task.return_value = {"user_id": "alice"}  # no generation id
+        state._rpc = MagicMock()
+        with patch.object(tm.sm, "state", state):
+            tm._refund_face_premium("direct-task", 1)
+        state._rpc.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

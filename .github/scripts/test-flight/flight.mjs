@@ -395,7 +395,10 @@ export async function waitForPublished(client, slotId, providers, { timeoutMs, i
   const deadline = nowFn() + timeoutMs;
   for (;;) {
     const slot = await getSlot();
-    if (slot.status === 'published') return assertPublishedSlot(slot, providers);
+    if (slot.status === 'published') {
+      const links = assertPublishedSlot(slot, providers);
+      return { links, warnings: Array.isArray(slot.warnings) ? slot.warnings : [] };
+    }
     if (slot.status === 'failed' || slot.status === 'cancelled') {
       throw new FlightError(
         `test-flight: ASAP slot ${slotId} ended as '${slot.status}'${slot.error ? `: ${slot.error}` : ''}`,
@@ -493,13 +496,19 @@ export async function runFlight(env = process.env, options = {}) {
     }),
   });
   const asapSlot = singleSlot(asapBody, 'ASAP');
-  const links = await waitForPublished(client, asapSlot.slotId, providers, {
+  const published = await waitForPublished(client, asapSlot.slotId, providers, {
     timeoutMs: cfg.pollTimeoutMs,
     intervalMs: cfg.pollIntervalMs,
     sleepFn: options.sleepFn,
     nowFn: options.nowFn,
   });
+  const links = published.links;
   summary.push(`ASAP slot ${asapSlot.slotId} published: ${links.map((link) => `${link.provider}=${link.url}`).join(' ')}`);
+  if (!cfg.faceless && published.warnings.includes('avatar_disabled')) {
+    summary.push(
+      'WARNING: LongCat avatar fallback — this faced flight delivered faceless (avatar_disabled); LongCat is still down',
+    );
+  }
 
   console.log('test-flight: leg 2/2 (scheduled)');
   const target = scheduledTarget(now);

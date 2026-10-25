@@ -110,6 +110,7 @@ describe('GET /api/posts/[id]', () => {
         publishLinks: [],
         progressHistory: [],
         queuePosition: null,
+        warnings: [],
         queueTotal: null,
       },
       schedule: {

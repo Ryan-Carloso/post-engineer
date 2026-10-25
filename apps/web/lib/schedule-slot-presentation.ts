@@ -28,6 +28,11 @@ export interface SlotEnrichment {
   stage: string | null;
   queuePosition: number | null;
   queueTotal: number | null;
+  // Stable user-warning codes the engine recorded on the slot's task (see
+  // warningsFromTask). Only consulted when the slot's engine task was
+  // actually read; [] otherwise, so surfaces that skipped the lookup stay
+  // silent instead of asserting a warning they did not see.
+  warnings: string[];
   retryable: boolean | null;
 }
 
@@ -152,6 +157,7 @@ export async function enrichSlot(
     queuePosition: null,
     queueTotal: null,
     retryable: null,
+    warnings: [],
   };
   switch (dbStatus) {
     case 'pending': {
@@ -218,6 +224,7 @@ export async function enrichSlot(
           } else {
             enrichment.progress = task.progress;
             if (dbStatus === 'generating') enrichment.stage = task.stage;
+            enrichment.warnings = task.warnings;
           }
         } catch (error) {
           // Transient (5xx, abort, network): degrade, keep the slot as-is so

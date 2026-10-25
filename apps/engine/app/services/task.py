@@ -3,6 +3,7 @@ import math
 import os.path
 import random
 import re
+from datetime import datetime, timezone
 from collections import deque
 from os import path
 from threading import Lock
@@ -27,6 +28,7 @@ from app.services import (
     upload_post,
 )
 from app.services import state as sm
+from app.services import longcat_breaker
 from app.services import persona_image
 from app.services import task_webhook
 from app.services.pipeline_stage import PhaseTracker
@@ -1019,6 +1021,135 @@ def get_video_materials(task_id, params, video_terms, audio_duration):
         return downloaded_videos
 
 
+_AVATAR_DISABLED_WARNING_CODE = "avatar_disabled"
+
+
+def _discord_notify(message: str) -> None:
+    """One operator-facing Discord ping (DISCORD_WEBHOOK_URL).
+
+    Thin on purpose: throttling/logging rules live in the notify module;
+    this wrapper only keeps `task.py` free of the import (the engine's
+    notify module may be absent entirely in local runs). A failed send is
+    logged inside the caller, never raised."""
+    from app.services import notify as notify_module
+
+    try:
+        notify_module.send_discord(message)
+    except Exception as exc:  # noqa: BLE001 — the alert is best-effort
+        logger.warning(f"discord billing alert failed: {exc}")
+
+
+def _report_longcat_faceless_fallback(
+    task_id: str, task: dict[str, object]
+) -> None:
+    """Deliver the video faceless when the Modal backend is billing-dead.
+
+    Behavior SPLIT by user (Ryan's 2026-10-25 decision):
+
+    - TEST accounts (TEST_ACCOUNT_USER_IDS): nothing actionable for them —
+      the only signal is the INFORMATIVE `longcat_fallback_faceless` event,
+      deduplicated to at most ONE per calendar day; the persisted breaker
+      (longcat_breaker.trip) then stops every following task from even
+      ASKING the billing-dead backend until the first day of the month.
+    - REAL users: every dispatch ALWAYS tries the LongCat first (the moment
+      Modal credits land, nothing stays degraded) — so no breaker trip.
+      Instead the alert to the operator is loud: an ERROR record (sink
+      forwarded as a PostHog $exception) plus a Discord ping from
+      _discord_notify, BOTH deduplicated to at most ONE PER HOUR so a real
+      user's many videos cannot spam the channels.
+
+    BOTH paths: the task-state marker ``user_warning_codes:
+    [avatar_disabled]`` (amber warning on the post/slot), and the face
+    premium refunded the way it was charged — batch prepaid charges are
+    refunded here, direct charges by the web's poll path (video-status) on
+    the same marker. Other LongCat failures keep today's loud failure.
+    """
+    from app.services.fill_schedule.support import FACELESS_PRICE, token_cost
+
+    user_id = str(task.get("user_id", "internal")) if task else "internal"
+    now = datetime.now(timezone.utc)
+    if longcat_breaker.is_test_account(user_id):
+        if longcat_breaker.should_emit_event(now):
+            track_event(
+                "longcat_fallback_faceless",
+                {"task_id": task_id, "reason": "workspace_disabled"},
+                immediate=False,
+            )
+        # The persisted breaker: test users never need the backend again
+        # until credits return.
+        longcat_breaker.trip(now, "workspace_disabled")
+    elif longcat_breaker.should_alert(now):
+        # ERROR+: the asgi sink files 'modal-http' as a PostHog $exception
+        # (loud channel #1). The Discord ping is loud channel #2.
+        logger.error(
+            "MODAL BILLING ALERT — Modal workspace disabled hits REAL users; "
+            f"task {task_id} delivered faceless. Top up the Modal credits "
+            "(they return on the 1st) to restore the avatar intro."
+        )
+        _discord_notify(
+            (
+                "🚨 Modal workspace disabled (LongCat): REAL users' videos are "
+                f"losing the avatar intro (task {task_id}). Top up the Modal "
+                "credits to restore it."
+            ),
+        )
+    sm.persist_state_update(
+        sm.state, task_id, user_warning_codes=[_AVATAR_DISABLED_WARNING_CODE]
+    )
+    premium = token_cost(False, "ok") - FACELESS_PRICE
+    _refund_face_premium(task_id, premium)
+
+
+def _refund_face_premium(task_id: str, premium: int) -> None:
+    """Refund the face/premium difference for BATCH-prefunded tasks.
+
+    'Whoever charges owns the refund' (the billing rule): the unified batch
+    is prepaid by the WEB under `batch:<schedule_id>`, but per-slot refunds
+    are the engine's convention today (generate.py, publish.py, reconcile.py
+    all call refund_batch_tokens with their own `:suffix` keys) — so the
+    fallback refunds the face premium directly here. DIRECT generations are
+    charged per-task by the web, which refunds the same premium through its
+    own poll path (video-status) when it sees the same marker. Idempotent by
+    the refund key; a refund failure is logged and retried never (the next
+    batch refunds nothing extra) — the loud log is the trail.
+    """
+    task = sm.state.get_task(task_id) or {}
+    generation_id = str(task.get("generation_id", "") or "")
+    if not generation_id.startswith("batch:") or generation_id.count(":") < 2:
+        return
+    rpc = getattr(sm.state, "_rpc", None)
+    if not callable(rpc):
+        return
+    batch_generation_id = "batch:" + generation_id.split(":")[1]
+    user_id = str(task.get("user_id", "") or "")
+    try:
+        result = rpc(
+            "refund_batch_tokens",
+            {
+                "p_user_id": user_id,
+                "p_batch_generation_id": batch_generation_id,
+                # Slot-scoped key: only this slot's face premium, never a
+                # sibling's.
+                "p_refund_key": f"{generation_id}:shortface",
+                "p_amount": premium,
+                "p_reason": (
+                    "LongCat unavailable (Modal workspace disabled); video "
+                    "delivered without the face intro"
+                ),
+                "p_engine_task_id": task_id,
+            },
+        )
+        refunded = bool((result.json() or {}).get("refunded"))
+        if refunded:
+            logger.info(
+                f"refund landed for the face premium of task {task_id} ({premium} tokens)"
+            )
+    except Exception as inner_exp:  # noqa: BLE001 — refund is best-effort here
+        logger.error(
+            f"refund_batch_tokens failed for task {task_id} face premium: {inner_exp}"
+        )
+
+
 def generate_final_videos(
     task_id, params, downloaded_videos, audio_file, subtitle_path, video_script, music_mood
 ) -> tuple[list[str], list[str], IntroCostReport]:
@@ -1060,35 +1191,67 @@ def generate_final_videos(
     video_for_render = combined_video_path
     if persona_lipsync_active(params):
         logger.info("generating persona lip-sync intro")
-        try:
-            video_for_render, intro_cost_usd, intro_job_id = prepare_persona_lipsync_video(
-                task_id=task_id,
-                params=params,
-                audio_file=audio_file,
-                background_video=combined_video_path,
-                index=1,
-                video_script=video_script,
-                subtitle_path=subtitle_path,
+        faceless_fallback = False
+        # The persisted breaker is TEST-ACCOUNT only: real users always try
+        # LongCat first so recovery is immediate once credits land.
+        if longcat_breaker.is_test_account(user_id) and longcat_breaker.is_open(
+            datetime.now(timezone.utc)
+        ):
+            # The breaker is open from a PREVIOUS test-account task's
+            # "workspace disabled" answer: skip the billing-dead backend.
+            faceless_fallback = True
+            logger.warning(
+                "LongCat breaker open (Modal workspace disabled) — rendering "
+                f"task {task_id} faceless without asking the backend"
             )
-        except persona_hook.HookExceedsLipsyncCeiling as exc:
-            persona_hook.report_lipsync_intro_skipped(task_id, exc.hook_end_seconds)
+            _report_longcat_faceless_fallback(task_id, task or {})
         else:
-            intro_report = IntroCostReport(
-                ran=True, cost_usd=intro_cost_usd, job_id=intro_job_id
-            )
+            try:
+                video_for_render, intro_cost_usd, intro_job_id = prepare_persona_lipsync_video(
+                    task_id=task_id,
+                    params=params,
+                    audio_file=audio_file,
+                    background_video=combined_video_path,
+                    index=1,
+                    video_script=video_script,
+                    subtitle_path=subtitle_path,
+                )
+            except longcat.LongCatUnavailableError:
+                # The Modal gateway reports the workspace disabled (LongCat
+                # credits exhausted — e.g. the 2026-11-01 billing break). A
+                # test account's outage is NOT actionable: quiet event +
+                # persisted breaker trip (Ryan's decision). For REAL users,
+                # NO breaker is set: every next dispatch tries the backend
+                # again, and the alert is loud (ERROR $exception + Discord,
+                # 1/hour dedup). Either way the video DELIVERS faceless and
+                # the face premium refunds. A failure that is NOT this
+                # class still fails the task exactly as before.
+                faceless_fallback = True
+                _report_longcat_faceless_fallback(task_id, task or {})
+            except persona_hook.HookExceedsLipsyncCeiling as exc:
+                persona_hook.report_lipsync_intro_skipped(task_id, exc.hook_end_seconds)
+            else:
+                intro_report = IntroCostReport(
+                    ran=True, cost_usd=intro_cost_usd, job_id=intro_job_id
+                )
         # Experimental face-fill: close the video on the persona so weak
         # stock never has to fill the tail. Best-effort — ANY failure
         # (Modal down, unreadable file) degrades to the intro-only video;
         # the residual cost is that a slow Modal backend can hold the task
-        # for up to the LongCat timeout before the fallback fires.
-        video_for_render = _apply_persona_face_fill(
-            task_id=task_id,
-            params=params,
-            video_file=video_for_render,
-            audio_file=audio_file,
-            subtitle_path=subtitle_path,
-            index=1,
-        )
+        # for up to the LongCat timeout before the fallback fires. Skipped
+        # entirely when the intro already fell back faceless: the fallback
+        # ran because the Modal backend is unreachable, and re-asking it
+        # for the tail would only burn the LongCat timeout AGAIN before
+        # degrading to the same video.
+        if not faceless_fallback:
+            video_for_render = _apply_persona_face_fill(
+                task_id=task_id,
+                params=params,
+                video_file=video_for_render,
+                audio_file=audio_file,
+                subtitle_path=subtitle_path,
+                index=1,
+            )
 
     _update_task(task_id, progress=75, music_mood=music_mood)
 

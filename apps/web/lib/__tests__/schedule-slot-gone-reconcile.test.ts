@@ -216,7 +216,7 @@ describe('enrichSlot — gone engine task', () => {
 
   it('uses a prefetched task from options instead of fetching the record again', async () => {
     const result = await enrichSlot(GENERATING_SLOT, 'user-1', new Map(), {
-      task: { progress: 33, stage: 'render', state: 4, gone: false, scriptAngle: 'Myth' },
+      task: { progress: 33, stage: 'render', state: 4, gone: false, scriptAngle: 'Myth', warnings: [] },
     });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(selectVideoGeneration).not.toHaveBeenCalled();

@@ -6,6 +6,7 @@ import { ptDictionary as basePtDictionary, type Dictionary as BaseDictionary } f
 import { enDictionary as baseEnDictionary } from './en';
 import { publishingAccountsStrings } from './publishing-accounts';
 import { metricsStrings } from './metrics-i18n';
+import { longcatFallbackStrings } from './longcat-fallback-i18n';
 import type { Locale } from './types';
 
 //---------------
@@ -21,6 +22,7 @@ export const ptDictionary = {
   ...basePtDictionary,
   apiKeys: { ...basePtDictionary.apiKeys, ...publishingAccountsStrings.pt.apiKeys },
   persona: { ...basePtDictionary.persona, ...publishingAccountsStrings.pt.persona },
+  posts: { ...basePtDictionary.posts, ...longcatFallbackStrings.pt.posts },
   nav: { ...basePtDictionary.nav, ...metricsStrings.pt.nav },
   metrics: metricsStrings.pt.metrics,
 };
@@ -29,15 +31,21 @@ export const enDictionary = {
   ...baseEnDictionary,
   apiKeys: { ...baseEnDictionary.apiKeys, ...publishingAccountsStrings.en.apiKeys },
   persona: { ...baseEnDictionary.persona, ...publishingAccountsStrings.en.persona },
+  posts: { ...baseEnDictionary.posts, ...longcatFallbackStrings.en.posts },
   nav: { ...baseEnDictionary.nav, ...metricsStrings.en.nav },
   metrics: metricsStrings.en.metrics,
 };
 
 type PublishingAccountsKeys = typeof publishingAccountsStrings.en;
+type LongcatFallbackKeys = typeof longcatFallbackStrings.en;
 type MetricsKeys = typeof metricsStrings.en;
 export type Dictionary = BaseDictionary & {
   [Section in keyof PublishingAccountsKeys]: {
     [Key in keyof PublishingAccountsKeys[Section]]: string;
+  };
+} & {
+  [Section in keyof LongcatFallbackKeys]: {
+    [Key in keyof LongcatFallbackKeys[Section]]: string;
   };
 } & {
   [Section in keyof MetricsKeys]: {

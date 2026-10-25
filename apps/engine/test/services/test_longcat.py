@@ -12,12 +12,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import requests
 
 from app.models.schema import LipSyncQuality
 from app.services import longcat
+from app.services.longcat import LongCatUnavailableError
 
 ENGINE_DIR = Path(__file__).resolve().parents[2]
 
@@ -724,6 +725,65 @@ class TestAudioDuration(unittest.TestCase):
             with patch.object(longcat.subprocess, "run", return_value=Completed()):
                 with self.assertRaises(longcat.LongCatError):
                     longcat.audio_duration_seconds(audio_path)
+
+
+class TestWorkspaceDisabledClassification(unittest.TestCase):
+    """The 2026-10 outage: an HTTP 404 whose body is the Modal gateway's
+    'workspace disabled' verdict (slot 0d88790d, run 39320019610). Classified
+    as UNAVAILABLE — the fallback trigger — never as a generic failure."""
+
+    def _response(self, status_code: int, body: str) -> MagicMock:
+        response = MagicMock()
+        response.status_code = status_code
+        response.text = body
+        return response
+
+    def test_modal_workspace_disabled_raises_unavailable(self):
+        with self.assertRaises(LongCatUnavailableError) as ctx:
+            longcat._raise_for_status(
+                self._response(404, "modal-http: workspace ac-H0vJnhfnXhxZw0VlvCne9f is disabled\n"),
+                "submit",
+            )
+        self.assertIn("workspace", str(ctx.exception))
+        self.assertIn("is disabled", str(ctx.exception))
+        # The upstream verdict is pinned for the fallback's log (production
+        # evidence, format confirmed — never guessed).
+        self.assertIn("modal-http:", str(ctx.exception))
+
+    def test_generic_404_body_stays_a_plain_failure(self):
+
+        with self.assertRaises(longcat.LongCatError) as ctx:
+            longcat._raise_for_status(self._response(404, "job not found"), "status")
+        self.assertNotIsInstance(ctx.exception, LongCatUnavailableError)
+        self.assertNotIn("modal-http", str(ctx.exception))
+
+    def test_disabled_body_is_not_enough_without_the_gateway_marker(self):
+
+        with self.assertRaises(longcat.LongCatError) as ctx:
+            longcat._raise_for_status(
+                self._response(404, "workspace disabled for maintenance"), "submit"
+            )
+        self.assertNotIsInstance(ctx.exception, LongCatUnavailableError)
+
+    def test_disabled_body_on_a_non_404_stays_a_plain_failure(self):
+        with self.assertRaises(longcat.LongCatError) as ctx:
+            longcat._raise_for_status(
+                self._response(500, "modal-http: workspace ac-X is disabled\n"),
+                "submit",
+            )
+        self.assertNotIsInstance(ctx.exception, LongCatUnavailableError)
+
+    def test_unavailable_message_scrubs_credential_fragments(self):
+        with self.assertRaises(LongCatUnavailableError) as ctx:
+            longcat._raise_for_status(
+                self._response(
+                    404,
+                    "modal-http: workspace ac-X is disabled https://user:pw@modal.com/x\n",
+                ),
+                "submit",
+            )
+        self.assertNotIn("user:pw", str(ctx.exception))
+        self.assertNotIn("user:pw", getattr(ctx.exception, "response_body", ""))
 
 
 if __name__ == "__main__":

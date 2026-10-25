@@ -43,6 +43,9 @@ export interface EngineTaskProgress {
   // caller that already paid for this read never fetches the record again
   // just for the angle. Null when the engine recorded none.
   scriptAngle: string | null;
+  // Stable user-warning codes carried on the task record (see
+  // warningsFromTask). [] when the record has none.
+  warnings: string[];
   //---------------
   // gone — the engine answered 404: it no longer knows this task (an engine
   // restart dropped it, or the state backend lost it). This is TERMINAL,
@@ -122,7 +125,7 @@ export async function fetchEngineTaskProgress(
     // forgot the task. Report it as gone (state -1) so callers stop
     // polling instead of retrying a resource that can never come back.
     if (response.status === 404) {
-      return { progress: 0, stage: null, state: TASK_STATE_FAILED, gone: true, scriptAngle: null };
+      return { progress: 0, stage: null, state: TASK_STATE_FAILED, gone: true, scriptAngle: null, warnings: [] };
     }
     if (!response.ok) {
       throw new Error(`Engine task lookup failed with status ${response.status}`);
@@ -135,6 +138,7 @@ export async function fetchEngineTaskProgress(
       state: task ? taskState(task) : null,
       gone: false,
       scriptAngle: task ? scriptAngleFromTask(task) : null,
+      warnings: warningsFromTask(task),
     };
   } finally {
     clearTimeout(timeout);
@@ -233,15 +237,33 @@ async function fetchEngineTaskRecord(
 // double its engine reads. Same parsing as fetchEnginePublishResults and
 // fetchEngineScriptAngle; throws on the same conditions.
 //---------------
+//---------------
+// warningsFromTask — the stable user-warning codes the engine writes onto
+// the task record (data flattened into the /tasks payload as
+// ``user_warning_codes: string[]``). Unknown/not-array → []: a missing
+// list never invents a warning.
+//---------------
+export function warningsFromTask(
+  task: Record<string, unknown> | null,
+): string[] {
+  if (!task) return [];
+  const candidate = task.user_warning_codes;
+  if (!Array.isArray(candidate)) return [];
+  return candidate.filter(
+    (code): code is string => typeof code === 'string' && code.length > 0,
+  );
+}
+
 export async function fetchEnginePostMetricsSource(
   taskId: string,
   userId: string,
-): Promise<{ publishResults: unknown[]; scriptAngle: string | null }> {
+): Promise<{ publishResults: unknown[]; scriptAngle: string | null; warnings: string[] }> {
   const task = await fetchEngineTaskRecord(taskId, userId);
   const results = task ? task.publish_results : null;
   const trimmed = task ? (scriptAngleFromTask(task) ?? '') : '';
   return {
     publishResults: Array.isArray(results) ? results : [],
     scriptAngle: trimmed.length > 0 ? trimmed : null,
+    warnings: warningsFromTask(task),
   };
 }

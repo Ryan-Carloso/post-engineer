@@ -58,6 +58,10 @@ export interface SlotPostDetail {
     progressHistory: Array<{ progress: number; stage: string | null; recordedAt: string }>;
     queuePosition: null;
     queueTotal: null;
+    // Stable user-warning codes the engine recorded on the slot's task —
+    // surfaced as an amber banner on the page (e.g. avatar_disabled when
+    // the LongCat backend was billing-dead and the video shipped faceless).
+    warnings: string[];
   };
   schedule: {
     id: string;
@@ -132,15 +136,23 @@ async function resolveSlotPublishLinks(
 async function resolvePublishedSlotEngineData(
   taskId: string,
   userId: string,
-): Promise<{ publishLinks: PublishLink[]; scriptAngle: string | null }> {
+): Promise<{
+  publishLinks: PublishLink[];
+  scriptAngle: string | null;
+  warnings: string[];
+}> {
   try {
     const source = await fetchEnginePostMetricsSource(taskId, userId);
-    return { publishLinks: resolvePublishLinks(source.publishResults), scriptAngle: source.scriptAngle };
+    return {
+      publishLinks: resolvePublishLinks(source.publishResults),
+      scriptAngle: source.scriptAngle,
+      warnings: source.warnings,
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.warn('[post-detail] publish results unavailable', { taskId, error: message });
     logger.warn('[post-detail] script angle unavailable', { taskId, error: message });
-    return { publishLinks: [], scriptAngle: null };
+    return { publishLinks: [], scriptAngle: null, warnings: [] };
   }
 }
 
@@ -281,8 +293,9 @@ export async function getSlotPost(
   // most the angle (publish links are published-only).
   let publishLinks: PublishLink[];
   let scriptAngle: string | null;
+  let warnings: string[] = [];
   if (row.status === 'published' && slotTaskId !== null) {
-    ({ publishLinks, scriptAngle } = await resolvePublishedSlotEngineData(slotTaskId, userId));
+    ({ publishLinks, scriptAngle, warnings } = await resolvePublishedSlotEngineData(slotTaskId, userId));
   } else {
     publishLinks = await resolveSlotPublishLinks(row, userId);
     // One task-record read per view: a prefetched task carries the angle,
@@ -294,6 +307,9 @@ export async function getSlotPost(
         : prefetchFailed
           ? null
           : await resolveScriptAngle(row.task_id, userId);
+    if (prefetchedTask && prefetchedTask.warnings.length > 0) {
+      warnings = prefetchedTask.warnings;
+    }
   }
 
   // Progress history: every observed (progress, stage) transition recorded
@@ -363,6 +379,7 @@ export async function getSlotPost(
       // pending slots); the detail view doesn't render it.
       queuePosition: null,
       queueTotal: null,
+      warnings,
     },
     schedule: {
       id: scheduleId2,

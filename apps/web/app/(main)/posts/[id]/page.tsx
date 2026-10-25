@@ -700,6 +700,16 @@ export const SlotDetail = ({
         <p className="mt-6 text-sm text-destructive">{slot.error}</p>
       )}
 
+      {Array.isArray(slot.warnings) && slot.warnings.includes('avatar_disabled') && (
+        <p
+          role="status"
+          data-testid="avatar-disabled-warning"
+          className="mt-6 rounded-xl bg-[#fff8e0] p-3 text-sm text-[#8a6100]"
+        >
+          {t('posts.avatarDisabledWarning')}
+        </p>
+      )}
+
       <PublishLinks links={publishLinks} />
 
       <ProgressHistory history={slot.progressHistory ?? []} />

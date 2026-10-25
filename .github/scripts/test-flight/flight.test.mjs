@@ -479,15 +479,33 @@ describe('waitForPublished', () => {
         publishLinks: providers.map((provider) => ({ provider, url: `https://${provider}/p` })),
       };
     };
-    const links = await waitForPublished(null, 's1', providers, {
+    const published = await waitForPublished(null, 's1', providers, {
       timeoutMs: 60_000,
       intervalMs: 1_000,
       fetchSlot,
       sleepFn: async () => {},
       nowFn: () => 0,
     });
-    assert.equal(links.length, 3);
+    assert.equal(published.links.length, 3);
+    assert.deepEqual(published.warnings, []);
     assert.equal(calls, 3);
+  });
+
+  it('surfaces avatar_disabled so a faced flight cannot look silently green', async () => {
+    const fetchSlot = async () => ({
+      id: 's1',
+      status: 'published',
+      warnings: ['avatar_disabled'],
+      publishLinks: providers.map((provider) => ({ provider, url: `https://${provider}/p` })),
+    });
+    const published = await waitForPublished(null, 's1', providers, {
+      timeoutMs: 60_000,
+      intervalMs: 1_000,
+      fetchSlot,
+      sleepFn: async () => {},
+      nowFn: () => 0,
+    });
+    assert.deepEqual(published.warnings, ['avatar_disabled']);
   });
 
   it('throws when the slot fails', async () => {

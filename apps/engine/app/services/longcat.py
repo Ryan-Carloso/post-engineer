@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import math
 import os
+import re
 import subprocess
 import tempfile
 import time
@@ -37,6 +38,17 @@ from app.services.analytics import scrub_error_text, track_ai_request
 
 class LongCatError(RuntimeError):
     """Raised when LongCat cannot produce a valid intro video."""
+
+
+class LongCatUnavailableError(LongCatError):
+    """The Modal gateway answered 'workspace disabled' (billing exhausted).
+
+    Distinguishable the moment the render starts — an HTTP 404 whose body is
+    the gateway's `modal-http: workspace … is disabled` verdict (production:
+    slot 0d88790d, 2026-10-19, run 39320019610) — instead of a generic
+    pipeline failure. The task pipeline treats it as a FALLBACK trigger
+    (faceless video) rather than a task failure.
+    """
 
 
 Request = Callable[..., requests.Response]
@@ -201,10 +213,32 @@ def _json_object(response: requests.Response) -> dict[str, object]:
 
 
 def _raise_for_status(response: requests.Response, operation: str) -> None:
-    if response.status_code >= 300:
-        raise LongCatError(
-            f"LongCat {operation} failed with HTTP {response.status_code}"
+    if response.status_code < 300:
+        return
+    body = (getattr(response, "text", "") or "").strip()
+    scrubbed = re.sub(
+        r"(https?://)[^\s/@]+@",
+        r"\1[redacted]@",
+        scrub_error_text(body, max_chars=200),
+        flags=re.IGNORECASE,
+    )
+    # Production evidence (slot 0d88790d, run 39320019610, 2026-10-19):
+    # HTTP 404 + `modal-http: workspace … is disabled`. Status AND body
+    # both required — other 404s stay generic LongCatError.
+    if (
+        response.status_code == 404
+        and "modal-http:" in body
+        and "is disabled" in body
+    ):
+        error = LongCatUnavailableError(
+            f"LongCat {operation} failed with HTTP 404: {scrubbed}"
         )
+        error.response_body = scrubbed  # type: ignore[attr-defined]
+        raise error
+    raise LongCatError(
+        f"LongCat {operation} failed with HTTP {response.status_code}"
+        + (f": {scrubbed}" if scrubbed else "")
+    )
 
 
 def _modal_cost_usd(status: dict[str, object]) -> float | None:
