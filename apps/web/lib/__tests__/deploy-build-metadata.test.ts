@@ -67,6 +67,19 @@ describe('deployment build metadata contract', () => {
     }
   });
 
+  it('bakes builtAt after COMMIT/BUILD so the layer is not cached across deploys', () => {
+    const webDocker = read('apps', 'web', 'Dockerfile');
+    const engineDocker = read('apps', 'engine', 'Dockerfile');
+    const webCommit = webDocker.indexOf('ARG COMMIT=""');
+    const webDate = webDocker.indexOf('date -u +"%Y-%m-%dT%H:%M:%SZ"');
+    expect(webCommit).toBeGreaterThan(-1);
+    expect(webDate).toBeGreaterThan(webCommit);
+    const engineCommit = engineDocker.indexOf('ARG COMMIT=""');
+    const engineDate = engineDocker.indexOf('date -u +"%Y-%m-%dT%H:%M:%SZ"');
+    expect(engineCommit).toBeGreaterThan(-1);
+    expect(engineDate).toBeGreaterThan(engineCommit);
+  });
+
   it('reads PR_NUMBER on the engine side too', () => {
     // The engine's build info (asgi.py get_build_info) is what /version and
     // /health expose; the web only proxies it.
