@@ -94,4 +94,58 @@ describe('PATCH remote ingest onto an existing photo object', () => {
     });
     expect(removeMock).not.toHaveBeenCalled();
   });
+
+  it('removes a different existing photo_path after a remote ingest', async () => {
+    const existing = {
+      id: 'persona-uuid-1',
+      user_id: USER_ID,
+      name: 'Antiga',
+      photo_path: `${USER_ID}/persona-uuid-1/photo.jpg`,
+      avatar_url: null,
+      voice_id: 'voz-antiga',
+      voice_audio_path: null,
+    };
+    const client = {
+      auth: {
+        getUser: vi.fn(async () => ({ data: { user: { id: USER_ID } }, error: null })),
+      },
+      storage: {
+        from: vi.fn(() => ({
+          upload: vi.fn(async (path: string) => ({ data: { path }, error: null })),
+          remove: removeMock,
+        })),
+      },
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              single: vi.fn(async () => ({ data: existing, error: null })),
+            })),
+          })),
+        })),
+        update: vi.fn(() => ({
+          eq: vi.fn(async () => ({ error: null })),
+        })),
+      })),
+    };
+    vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: USER_ID, accessToken: 'cookie-token' },
+      error: null,
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(PNG_BYTES, { status: 200, headers: { 'content-type': 'image/png' } })),
+    );
+    const formData = new FormData();
+    formData.append('avatarUrl', 'https://cdn.example/face.png');
+    const res = await PATCH(
+      new Request('http://localhost/api/persona?personaId=persona-uuid-1', {
+        method: 'PATCH',
+        body: formData,
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(removeMock).toHaveBeenCalledWith([`${USER_ID}/persona-uuid-1/photo.jpg`]);
+  });
 });

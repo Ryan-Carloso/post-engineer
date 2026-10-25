@@ -1,4 +1,10 @@
-import { createServer, type Server } from 'node:http';
+import {
+  createServer,
+  type IncomingMessage,
+  type RequestListener,
+  type Server,
+  type ServerResponse,
+} from 'node:http';
 import { AddressInfo } from 'node:net';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -15,9 +21,7 @@ const PNG_BYTES = Uint8Array.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
 ]);
 
-function listen(
-  handler: Parameters<typeof createServer>[0],
-): Promise<{ server: Server; url: string }> {
+function listen(handler: RequestListener): Promise<{ server: Server; url: string }> {
   return new Promise((resolve) => {
     const server = createServer(handler);
     server.listen(0, '127.0.0.1', () => {
@@ -36,7 +40,7 @@ describe('downloadPublicImage requestPinned', () => {
   });
 
   it('downloads a public PNG through requestPinned when fetchImpl is omitted', async () => {
-    const started = await listen((_req, res) => {
+    const started = await listen((_req: IncomingMessage, res: ServerResponse) => {
       res.writeHead(200, { 'content-type': 'image/png' });
       res.end(Buffer.from(PNG_BYTES));
     });
@@ -48,7 +52,7 @@ describe('downloadPublicImage requestPinned', () => {
   });
 
   it('returns REMOTE_FACE_ERROR on 302 without following the redirect', async () => {
-    const started = await listen((_req, res) => {
+    const started = await listen((_req: IncomingMessage, res: ServerResponse) => {
       res.writeHead(302, { Location: 'http://evil.example/steal' });
       res.end();
     });
@@ -60,7 +64,7 @@ describe('downloadPublicImage requestPinned', () => {
   });
 
   it('returns REMOTE_FACE_ERROR when the pinned body exceeds the image cap', async () => {
-    const started = await listen((_req, res) => {
+    const started = await listen((_req: IncomingMessage, res: ServerResponse) => {
       res.writeHead(200, { 'content-type': 'image/png' });
       res.end(Buffer.alloc(MAX_IMAGE_BYTES + 1, 1));
     });
