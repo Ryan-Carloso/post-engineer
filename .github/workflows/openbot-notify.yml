@@ -71,13 +71,6 @@ jobs:
       # The last-finisher check queries workflow runs for the head sha.
       actions: read
     steps:
-      # Checkout for the last-finisher counter: pending_runs.py is a real
-      # file now (the previous indented inline python under `run: |` raised
-      # IndentationError every run and the guard degenerated to send-always).
-      - name: Checkout (for scripts/openbot-notify)
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
-        with:
-          persist-credentials: false
       - name: Relay to OpenBot
         env:
           # The endpoint and the signing key are both repository secrets, so
@@ -128,49 +121,25 @@ jobs:
             esac
             # Fail OPEN on a transient query failure: a broken/limited API
             # call must not abort the relay before the send (2 events is
-            # acceptable, 0 is not). A CRASH of the counting script must
-            # be visible as ::warning:: and still fail OPEN — silent
-            # scripts are invisible in green logs.
-            #
-            # Single source for the counted names: RELAYED_WORKFLOWS (env
-            # below), the same list the trigger block declares —
-            # relay.test.sh parses the trigger block and pins both stay
-            # identical. Only listed runs may gate the send: every one of
-            # them fires a relayed completion event, so the last finisher
-            # always wakes the Babysit; unlisted runs (release-mcp,
-            # openbot-notify-relay-test, test-flight, the openbot-notify
-            # run itself) never fire one and would deadlock the chain.
-            #
-            # pending_runs.py is a real file executed through a checkout:
-            # the inline python block indented under this `run: |` raised
-            # IndentationError every time, and the fail-open mask made the
-            # guard send on EVERY completed workflow (GH runs
-            # 401818*). relay.test.sh executes this same file shape.
-            _pending_json=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$HEAD_SHA&per_page=100") || {
-              echo "::warning::last-finisher pending query failed (gh api); failing OPEN" >&2
+            # acceptable, 0 is not). The --jq expression can only fail on
+            # malformed/missing input or a jq runtime error — either way the
+            # ::warning:: makes it visible and the relay still fires.
+            # (review: no checkout at all — pure event relay, counting done
+            # inside the gh call; relay.test.sh pins this exact expression
+            # against sample JSON.)
+            pending=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$HEAD_SHA&per_page=100" --jq '[.workflow_runs[] | select(.name as $n | ($ENV.RELAYED_WORKFLOWS | split(",") | index($n))) | select(.status=="queued" or .status=="in_progress")] | length') || {
+              echo "::warning::last-finisher pending query failed (gh api/--jq); failing OPEN" >&2
               pending=0
             }
-            if [ -n "${_pending_json:-}" ]; then
-              pending=$(printf '%s' "$_pending_json" | python3 .github/scripts/openbot-notify/pending_runs.py) || {
-                echo "::warning::pending_runs.py crashed; failing OPEN (see its traceback above)" >&2
-                pending=0
-              }
-            fi
             if [ "$pending" -gt 0 ]; then
               # One late retry: a run that completes while another's
               # completion event is still in flight must not be missed by
               # both (the re-query sees it completed and sends).
               sleep 60
-              _pending_json=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$HEAD_SHA&per_page=100") || {
-                echo "::warning::last-finisher pending retry query failed (gh api); failing OPEN" >&2
+              pending=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$HEAD_SHA&per_page=100" --jq '[.workflow_runs[] | select(.name as $n | ($ENV.RELAYED_WORKFLOWS | split(",") | index($n))) | select(.status=="queued" or .status=="in_progress")] | length') || {
+                echo "::warning::last-finisher pending retry query failed (gh api/--jq); failing OPEN" >&2
                 pending=0
               }
-              if [ -n "${_pending_json:-}" ]; then
-                pending=$(printf '%s' "$_pending_json" | python3 .github/scripts/openbot-notify/pending_runs.py) || {
-                  echo "::warning::pending_runs.py crashed on retry; failing OPEN (see its traceback above)" >&2
-                  pending=0
-                }
-              fi
             fi
             if [ "$pending" -gt 0 ]; then echo skip; else echo send; fi
           }
