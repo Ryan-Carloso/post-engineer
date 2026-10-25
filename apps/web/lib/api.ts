@@ -723,6 +723,7 @@ export interface ScheduledSlot {
   queueTotal: number | null;
   // Failed slots only: whether the failure looks transient/retryable.
   retryable: boolean | null;
+  warnings?: string[];
 }
 
 interface ScheduleRow {
@@ -1018,11 +1019,6 @@ export function useDeleteSlotMutation() {
   });
 }
 
-//---------------
-// Detail endpoints — one post per request. A 404 resolves to null (not
-// found — unknown id or another user's row); other failures throw.
-//---------------
-
 export interface SlotDetailPayload {
   slot: {
     id: string;
@@ -1047,6 +1043,7 @@ export interface SlotDetailPayload {
     // Observed generation progress transitions, oldest first. Empty for
     // posts that never started generating (or predate the history table).
     progressHistory: ProgressHistoryEntry[];
+    warnings: string[];
   };
   schedule: {
     id: string;
@@ -1071,14 +1068,9 @@ export interface SlotDetailPayload {
   generation: GenerationFacts;
 }
 
-//---------------
-// PostDetail — the unified detail payload from GET /api/posts/[id]: one
-// endpoint resolves any post id (issue #208); both branches carry live
-// progress.
-//---------------
 export type PostDetail =
   | (SlotDetailPayload & { kind: 'slot' })
-  | { kind: 'generation'; generation: VideoGeneration & { progress: number; stage: string | null; scriptAngle: string | null } };
+  | { kind: 'generation'; generation: VideoGeneration & { progress: number; stage: string | null; scriptAngle: string | null; warnings: string[] } };
 
 export async function fetchPostDetail(id: string): Promise<PostDetail | null> {
   const response = await fetch(`/api/posts/${encodeURIComponent(id)}`, {
@@ -1093,7 +1085,10 @@ export async function fetchPostDetail(id: string): Promise<PostDetail | null> {
     const progress = typeof record.progress === 'number' ? record.progress : 0;
     const stage = typeof record.stage === 'string' ? record.stage : null;
     const scriptAngle = narrowScriptAngle(record.scriptAngle);
-    return { kind: 'generation', generation: { ...(record as unknown as VideoGeneration), progress, stage, scriptAngle } };
+    const warnings = Array.isArray(record.warnings)
+      ? record.warnings.filter((code): code is string => typeof code === 'string')
+      : [];
+    return { kind: 'generation', generation: { ...(record as unknown as VideoGeneration), progress, stage, scriptAngle, warnings } };
   }
   if (data.kind === 'slot') {
     const payload = data as unknown as SlotDetailPayload;

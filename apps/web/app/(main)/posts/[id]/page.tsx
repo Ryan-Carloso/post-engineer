@@ -21,6 +21,8 @@ import { Badge } from '@/components/ui/badge';
 import AccountCard from '@/components/account-card';
 import { DetailProgressBar } from './detail-progress-bar';
 import { ScriptAngleSection } from './script-angle-section';
+import { AvatarDisabledBanner } from './avatar-disabled-banner';
+import { DetailNotFound, DetailSkeleton } from './detail-chrome';
 import { ExternalLinkIcon } from '@/lib/ui';
 import type { PublishLink } from '@/lib/publish-links';
 import { useI18n } from '@/lib/i18n/provider';
@@ -235,6 +237,7 @@ export default function PostDetailPage() {
               {t('posts.refundedBadge')}
             </Badge>
           )}
+          <AvatarDisabledBanner warnings={generation.warnings} />
         </section>
       </div>
     );
@@ -700,15 +703,7 @@ export const SlotDetail = ({
         <p className="mt-6 text-sm text-destructive">{slot.error}</p>
       )}
 
-      {Array.isArray(slot.warnings) && slot.warnings.includes('avatar_disabled') && (
-        <p
-          role="status"
-          data-testid="avatar-disabled-warning"
-          className="mt-6 rounded-xl bg-[#fff8e0] p-3 text-sm text-[#8a6100]"
-        >
-          {t('posts.avatarDisabledWarning')}
-        </p>
-      )}
+      <AvatarDisabledBanner warnings={slot.warnings} />
 
       <PublishLinks links={publishLinks} />
 
@@ -799,35 +794,3 @@ export const ProgressHistory = ({ history }: { history: ProgressHistoryEntry[] }
     </section>
   );
 };
-
-//---------------
-// DetailNotFound — unknown id (deleted slot, another user's post) or a
-// failed detail fetch: an honest message and a way back, never a blank
-// page.
-//---------------
-const DetailNotFound = ({ message }: { message?: string }) => {
-  const { t } = useI18n();
-  return (
-    <div className="mx-auto max-w-3xl py-16 text-center">
-      <p className="text-sm font-semibold text-[#0d2b45]">{message ?? t('posts.notFound')}</p>
-      <Link href="/posts" className="mt-4 inline-block rounded-xl bg-[#0d2b45] px-4 py-2 text-sm font-semibold text-white hover:bg-[#123a5e]">
-        {t('posts.back')}
-      </Link>
-    </div>
-  );
-};
-
-//---------------
-// Skeleton
-//---------------
-const DetailSkeleton = () => (
-  <div className="mx-auto max-w-3xl animate-pulse" data-testid="detail-skeleton">
-    <div className="flex items-center gap-3">
-      <div className="size-9 rounded-full bg-[#e8edf1]" />
-      <div className="h-6 w-48 rounded-lg bg-[#e8edf1]" />
-    </div>
-    <div className="mt-6 aspect-video w-full rounded-2xl bg-[#e8edf1]" />
-    <div className="mt-6 h-4 w-3/4 rounded bg-[#e8edf1]" />
-    <div className="mt-3 h-4 w-1/2 rounded bg-[#e8edf1]" />
-  </div>
-);

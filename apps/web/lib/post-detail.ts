@@ -87,21 +87,8 @@ export interface SlotPostDetail {
   };
 }
 
-export interface GenerationPostDetail {
-  id: string;
-  generationId: string;
-  engineTaskId: string | null;
-  personaName: string | null;
-  videoSubject: string | null;
-  status: string;
-  errorCode: string | null;
-  tokensRefunded: boolean;
-  createdAt: string;
-  completedAt: string | null;
-  progress: number;
-  stage: string | null;
-  scriptAngle: string | null;
-}
+export type { GenerationPostDetail } from './generation-post-detail';
+export { getGenerationPost } from './generation-post-detail';
 
 function isNotFound(error: unknown): boolean {
   return (error as { code?: string }).code === 'PGRST116';
@@ -394,109 +381,5 @@ export async function getSlotPost(
     },
     persona: personaRow,
     generation: buildGenerationFacts(row, scheduleRow),
-  };
-}
-
-//---------------
-// getGenerationPost — one video_generations row by generation_id, with live
-// engine progress while the generation is still in flight. generate-and-schedule
-// writes status 'running' (and engine_task_id) once the engine accepts the
-// job; 'pending' is the pre-accept snapshot and is included so a task id
-// recorded before that flip still shows progress. A failed progress lookup
-// degrades to 0 — the detail still resolves; the next poll retries.
-//---------------
-export async function getGenerationPost(
-  supabase: SupabaseClient,
-  generationId: string,
-  userId: string,
-  personaScope: readonly string[] | null,
-): Promise<GenerationPostDetail | null> {
-  const { data, error } = await supabase
-    .from('video_generations')
-    .select(
-      'id, generation_id, engine_task_id, persona_id, persona_name, video_subject, status, error_code, tokens_refunded, created_at, completed_at',
-    )
-    .eq('user_id', userId)
-    .eq('generation_id', generationId)
-    .single();
-  if (error) {
-    if (isNotFound(error)) return null;
-    throw error;
-  }
-  const row = data as {
-    id: string;
-    generation_id: string;
-    engine_task_id: string | null;
-    persona_id: string | null;
-    persona_name: string | null;
-    video_subject: string | null;
-    status: string;
-    error_code: string | null;
-    tokens_refunded: boolean;
-    created_at: string;
-    completed_at: string | null;
-  };
-  if (!inPersonaScope(personaScope, row.persona_id)) return null;
-
-  let progress = 0;
-  let stage: string | null = null;
-  // The angle lives on the same task record the progress read fetches: when
-  // that read happens, the angle comes from it instead of a second read.
-  // Undefined means no read was attempted (terminal generation or no task
-  // id) — the angle then gets its own read below. A failed read sets it to
-  // null: that attempt was this view's one read.
-  let angleFromProgress: string | null | undefined;
-  if ((row.status === 'pending' || row.status === 'running') && row.engine_task_id) {
-    try {
-      const task = await fetchEngineTaskProgress(row.engine_task_id, userId);
-      angleFromProgress = task.scriptAngle;
-      if (!task.gone) {
-        progress = task.progress;
-        stage = task.stage;
-      }
-    } catch (taskError) {
-      // Transient (5xx, abort, network): degrade, keep progress 0 so the
-      // next poll retries. Only a 404 is terminal, and generations never
-      // settle tasks from a read path. The failed read was this view's one
-      // task-record read, so the angle degrades to null with it instead of
-      // reading the same record a second time.
-      angleFromProgress = null;
-      logger.warn('[post-detail] engine task progress unavailable', {
-        taskId: row.engine_task_id,
-        error: taskError instanceof Error ? taskError.message : String(taskError),
-      });
-    }
-  }
-
-  // One const per leaf (not an inline object literal): v8 coverage does not
-  // report object-literal property lines.
-  const idOut = row.id;
-  const generationIdOut = row.generation_id;
-  const engineTaskIdOut = row.engine_task_id;
-  const personaNameOut = row.persona_name;
-  const videoSubjectOut = row.video_subject;
-  const statusOut = row.status;
-  const errorCodeOut = row.error_code;
-  const tokensRefundedOut = row.tokens_refunded === true;
-  const createdAtOut = row.created_at;
-  const completedAtOut = row.completed_at;
-
-  return {
-    id: idOut,
-    generationId: generationIdOut,
-    engineTaskId: engineTaskIdOut,
-    personaName: personaNameOut,
-    videoSubject: videoSubjectOut,
-    status: statusOut,
-    errorCode: errorCodeOut,
-    tokensRefunded: tokensRefundedOut,
-    createdAt: createdAtOut,
-    completedAt: completedAtOut,
-    progress,
-    stage,
-    scriptAngle:
-      angleFromProgress !== undefined
-        ? angleFromProgress
-        : await resolveScriptAngle(row.engine_task_id, userId),
   };
 }

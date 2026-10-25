@@ -261,13 +261,14 @@ describe('fetchEnginePostMetricsSource', () => {
     await expect(fetchEnginePostMetricsSource(TASK_ID, 'user-1')).resolves.toEqual({
       publishResults: [{ provider: 'youtube' }],
       scriptAngle: 'Myth',
+      warnings: [],
     });
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
   });
 
   it('defaults to no results and a null angle when the task carries neither', async () => {
     mockEngine({ body: { progress: 100, script_angle: '  ' } });
-    await expect(fetchEnginePostMetricsSource(TASK_ID, 'user-1')).resolves.toEqual({ publishResults: [], scriptAngle: null });
+    await expect(fetchEnginePostMetricsSource(TASK_ID, 'user-1')).resolves.toEqual({ publishResults: [], scriptAngle: null, warnings: [] });
   });
 
   it('throws on non-OK engine responses', async () => {

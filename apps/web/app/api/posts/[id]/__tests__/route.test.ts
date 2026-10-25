@@ -81,6 +81,7 @@ describe('GET /api/posts/[id]', () => {
       progress: 67,
       stage: 'audio',
       scriptAngle: 'The myth that keeps coming back',
+      warnings: [],
     });
     const response = await get('gen-1:slot:slot-1');
     expect(response.status).toBe(200);

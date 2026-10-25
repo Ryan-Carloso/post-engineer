@@ -11,6 +11,7 @@ from unittest.mock import ANY, MagicMock, patch
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.services import task as tm
+from app.services import longcat_faceless_fallback as lff
 from app.services import voice as vs
 from app.services.intro_cost import IntroCostReport, completion_cost_kwargs
 from app.services import intro_cost as intro_cost_module
@@ -23,6 +24,14 @@ RUN_INTEGRATION_TESTS = os.environ.get("MPT_RUN_INTEGRATION_TESTS", "").lower() 
     "true",
     "yes",
 }
+
+def _breaker_path(breaker_root: str):
+    def _path(root=None):
+        base = root if root is not None else breaker_root
+        return os.path.join(base, "marker.json")
+
+    return _path
+
 
 class TestTaskService(unittest.TestCase):
     def setUp(self):
@@ -1282,7 +1291,7 @@ class TestArchiveFinalVideos(unittest.TestCase):
         with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "alice,other-test-user"}), \
              tempfile.TemporaryDirectory() as breaker_root, \
              patch.object(tm.longcat_breaker, "_state_path",
-                          side_effect=lambda root=None: os.path.join(breaker_root, "marker.json")), \
+                          side_effect=_breaker_path(breaker_root)), \
              patch.object(tm.sm, "state", state), \
              patch.object(tm.sm, "persist_state_update") as persist, \
              patch.object(tm.history_repository, "recent", return_value=[]), \
@@ -1290,7 +1299,7 @@ class TestArchiveFinalVideos(unittest.TestCase):
              patch.object(tm.video, "combine_videos"), \
              patch.object(tm, "prepare_persona_lipsync_video", side_effect=exc), \
              patch.object(tm, "_apply_persona_face_fill") as face_fill, \
-             patch.object(tm, "track_event") as track, \
+             patch.object(lff, "track_event") as track, \
              patch.object(tm.video, "generate_video") as generate_video:
             final_paths, combined_paths, intro_report = tm.generate_final_videos(
                 task_id, params, ["clip.mp4"], "voice.mp3", "sub.srt", "script", "none"
@@ -1327,6 +1336,58 @@ class TestArchiveFinalVideos(unittest.TestCase):
         self.assertEqual(payload["p_refund_key"], "batch:sched-9:slot:slot-1:shortface")
         self.assertEqual(payload["p_amount"], 1)  # ok(2) - faceless(1)
         self.assertEqual(payload["p_engine_task_id"], task_id)
+
+    def test_intro_succeeds_then_face_fill_longcat_unavailable_is_intro_only(self):
+        """prepare_persona_lipsync_video succeeds, face-fill raises
+        LongCatUnavailableError: keep intro, set warning, refund once."""
+        import os
+        from app.services import longcat as longcat_module
+
+        task_id = "intro-then-fill"
+        params = VideoParams(
+            video_subject="test",
+            persona=PersonaParams(
+                name="Ana",
+                photo_url="https://supabase.test/signed/foto.png",
+                voice_id="test-voice",
+            ),
+        )
+        exc = longcat_module.LongCatUnavailableError(
+            "LongCat submit failed with HTTP 404: modal-http: workspace ac-X is disabled"
+        )
+        state = MagicMock()
+        state.get_task.return_value = {
+            "user_id": "alice",
+            "generation_id": "batch:sched-9:slot:slot-1",
+        }
+        rpc_response = MagicMock()
+        rpc_response.json.return_value = {"refunded": True}
+        state._rpc = MagicMock(return_value=rpc_response)
+        with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "alice"}), \
+             tempfile.TemporaryDirectory() as breaker_root, \
+             patch.object(tm.longcat_breaker, "_state_path",
+                          side_effect=_breaker_path(breaker_root)), \
+             patch.object(tm.sm, "state", state), \
+             patch.object(tm.sm, "persist_state_update") as persist, \
+             patch.object(tm.history_repository, "recent", return_value=[]), \
+             patch.object(tm, "_update_task"), \
+             patch.object(tm.video, "combine_videos"), \
+             patch.object(tm, "prepare_persona_lipsync_video",
+                          return_value=("intro.mp4", 0.01, "job-1")), \
+             patch.object(tm, "_apply_persona_face_fill", side_effect=exc), \
+             patch.object(lff, "track_event"), \
+             patch.object(tm.video, "generate_video") as generate_video:
+            final_paths, combined_paths, intro_report = tm.generate_final_videos(
+                task_id, params, ["clip.mp4"], "voice.mp3", "sub.srt", "script", "none"
+            )
+        self.assertEqual(len(final_paths), 1)
+        self.assertTrue(intro_report.ran)
+        self.assertEqual(generate_video.call_args.kwargs["video_path"], "intro.mp4")
+        persist.assert_called_once()
+        self.assertEqual(persist.call_args.kwargs.get("user_warning_codes"),
+                         ["avatar_disabled"])
+        self.assertEqual(state._rpc.call_count, 1)
+
     def test_open_breaker_never_calls_the_disabled_backend(self):
         """While the breaker is open a faced post goes STRAIGHT to faceless:
         the LongCat backend is not asked, no event, warning marker set."""
@@ -1347,7 +1408,7 @@ class TestArchiveFinalVideos(unittest.TestCase):
         with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "alice"}), \
              tempfile.TemporaryDirectory() as breaker_root, \
              patch.object(tm.longcat_breaker, "_state_path",
-                          side_effect=lambda root=None: os_module.path.join(breaker_root, "marker.json")), \
+                          side_effect=_breaker_path(breaker_root)), \
              patch.object(tm.sm, "state", state), \
              patch.object(tm.sm, "persist_state_update") as persist, \
              patch.object(tm.history_repository, "recent", return_value=[]), \
@@ -1356,7 +1417,7 @@ class TestArchiveFinalVideos(unittest.TestCase):
              patch.object(tm, "prepare_persona_lipsync_video",
                           side_effect=AssertionError("backend must not be asked")), \
              patch.object(tm, "_apply_persona_face_fill"), \
-             patch.object(tm, "track_event") as track, \
+             patch.object(lff, "track_event") as track, \
              patch.object(tm.video, "generate_video"):
             with open(os_module.path.join(breaker_root, "marker.json"), "w", encoding="utf-8") as fh:
                 json_module.dump({"until": "2026-11-01T00:00:00+00:00"}, fh)
@@ -1396,7 +1457,7 @@ class TestArchiveFinalVideos(unittest.TestCase):
         with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "alice"}), \
              tempfile.TemporaryDirectory() as breaker_root, \
              patch.object(tm.longcat_breaker, "_state_path",
-                          side_effect=lambda root=None: os_module.path.join(breaker_root, "marker.json")), \
+                          side_effect=_breaker_path(breaker_root)), \
              patch.object(tm.sm, "state", state), \
              patch.object(tm.history_repository, "recent", return_value=[]), \
              patch.object(tm, "_update_task"), \
@@ -1423,7 +1484,7 @@ class TestArchiveFinalVideos(unittest.TestCase):
         with tempfile_module.TemporaryDirectory() as breaker_root:
             marker = os_module.path.join(breaker_root, "marker.json")
             with patch.object(tm.longcat_breaker, "_state_path",
-                              side_effect=lambda root=None: marker):
+                              side_effect=lambda root=None: os_module.path.join(root if root is not None else os_module.path.dirname(marker), os_module.path.basename(marker))):
                 self.assertTrue(tm.longcat_breaker.should_emit_event(
                     datetime(2026, 10, 25, 9, 0, tzinfo=UTC)))
                 self.assertFalse(tm.longcat_breaker.should_emit_event(
@@ -1444,12 +1505,12 @@ class TestArchiveFinalVideos(unittest.TestCase):
         with tempfile_module.TemporaryDirectory() as breaker_root:
             marker = os_module.path.join(breaker_root, "marker.json")
             with patch.object(tm.longcat_breaker, "_state_path",
-                              side_effect=lambda root=None: marker):
+                              side_effect=lambda root=None: os_module.path.join(root if root is not None else os_module.path.dirname(marker), os_module.path.basename(marker))):
                 tm.longcat_breaker.trip(
                     datetime(2026, 10, 20, 12, 0, tzinfo=UTC), "workspace disabled"
                 )
             with patch.object(tm.longcat_breaker, "_state_path",
-                              side_effect=lambda root=None: marker):
+                              side_effect=lambda root=None: os_module.path.join(root if root is not None else os_module.path.dirname(marker), os_module.path.basename(marker))):
                 self.assertTrue(tm.longcat_breaker.is_open(
                     datetime(2026, 10, 25, 12, 0, tzinfo=UTC)))
             with open(marker, encoding="utf-8") as fh:
@@ -1470,12 +1531,12 @@ class TestArchiveFinalVideos(unittest.TestCase):
             state.get_task.return_value = {"user_id": "real-user"}
             task_id = "real-user-task"
             with patch.object(tm.longcat_breaker, "_state_path",
-                              side_effect=lambda root=None: os.path.join(breaker_root, "marker.json")), \
+                              side_effect=_breaker_path(breaker_root)), \
                     patch.object(tm.sm, "state", state), \
                     patch.object(tm.sm, "persist_state_update") as persist, \
-                    patch.object(tm, "track_event"), \
-                    patch.object(tm, "_discord_notify") as discord, \
-                    patch.object(tm.logger, "error") as log_error, \
+                    patch.object(lff, "track_event"), \
+                    patch.object(lff, "_discord_notify") as discord, \
+                    patch.object(lff.logger, "error") as log_error, \
                     patch.object(tm.video, "generate_video"):
                 tm._report_longcat_faceless_fallback(task_id, {"user_id": "real-user"})
                 # LOUD: error record + Discord ping. NOT quiet.
@@ -1510,10 +1571,10 @@ class TestArchiveFinalVideos(unittest.TestCase):
         with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": ""}), \
                 tempfile.TemporaryDirectory() as breaker_root:
             with patch.object(tm.longcat_breaker, "_state_path",
-                              side_effect=lambda root=None: os.path.join(breaker_root, "marker.json")), \
-                    patch.object(tm, "track_event") as track, \
-                    patch.object(tm, "_discord_notify") as discord, \
-                    patch.object(tm.logger, "error") as log_error, \
+                              side_effect=_breaker_path(breaker_root)), \
+                    patch.object(lff, "track_event") as track, \
+                    patch.object(lff, "_discord_notify") as discord, \
+                    patch.object(lff.logger, "error") as log_error, \
                     patch.object(tm.sm, "persist_state_update"), \
                     patch.object(tm.sm, "state",
                                  MagicMock(get_task=MagicMock(return_value={"user_id": "u"}))):

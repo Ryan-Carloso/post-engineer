@@ -21,11 +21,13 @@ vi.mock('../engine-tasks', () => ({
     stage: 'audio',
     state: 4,
     scriptAngle: 'The myth that keeps coming back',
+    warnings: [],
   })),
   fetchEngineScriptAngle: vi.fn(async () => 'The myth that keeps coming back'),
   fetchEnginePostMetricsSource: vi.fn(async () => ({
     publishResults: [{ provider: 'youtube' }],
     scriptAngle: 'The myth that keeps coming back',
+    warnings: [],
   })),
 }));
 
@@ -286,6 +288,7 @@ describe('getGenerationPost', () => {
     expect(detail?.progress).toBe(67);
     expect(detail?.stage).toBe('audio');
     expect(detail?.tokensRefunded).toBe(false);
+    expect(detail?.warnings).toEqual([]);
     expect(fetchEngineTaskProgress).toHaveBeenCalledWith('task-1', 'user-1');
     expect(chains['video_generations'].select).toHaveBeenCalledWith(
       'id, generation_id, engine_task_id, persona_id, persona_name, video_subject, status, error_code, tokens_refunded, created_at, completed_at'
@@ -370,9 +373,28 @@ describe('getGenerationPost', () => {
       video_generations: { data: { ...GENERATION_ROW, status: 'completed' }, error: null },
     });
     const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1', null);
-    expect(fetchEngineTaskProgress).not.toHaveBeenCalled();
-    expect(fetchEngineScriptAngle).toHaveBeenCalledWith('task-1', 'user-1');
+    expect(fetchEngineTaskProgress).toHaveBeenCalledWith('task-1', 'user-1');
+    expect(fetchEngineScriptAngle).not.toHaveBeenCalled();
     expect(detail?.scriptAngle).toBe('The myth that keeps coming back');
+    expect(detail?.progress).toBe(0);
+  });
+
+  it('fills warnings from the engine task on a completed generation', async () => {
+    const { fetchEngineTaskProgress } = await import('../engine-tasks');
+    vi.mocked(fetchEngineTaskProgress).mockResolvedValueOnce({
+      gone: false,
+      progress: 100,
+      stage: 'done',
+      state: 1,
+      scriptAngle: 'The myth that keeps coming back',
+      warnings: ['avatar_disabled'],
+    });
+    const { supabase } = mockSupabase({
+      video_generations: { data: { ...GENERATION_ROW, status: 'completed' }, error: null },
+    });
+    const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1', null);
+    expect(detail?.warnings).toEqual(['avatar_disabled']);
+    expect(detail?.progress).toBe(0);
   });
 
   it('returns a null angle for a generation with no task id', async () => {

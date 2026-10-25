@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from datetime import datetime, timezone
 from typing import Any
 
@@ -51,9 +52,28 @@ def _read_state(path: str) -> dict[str, Any]:
 
 
 def _write_state(path: str, state: dict[str, Any]) -> bool:
+    """Atomic replace (temp file + rename) so a crash cannot leave a torn JSON.
+
+    Duplicate alerts are the remaining race: two processes can both read a
+    stale last_alert_hour / last_event_day before either rename lands, so
+    last-writer-wins can still emit twice. Do not leave that uncommented.
+    """
+    directory = os.path.dirname(path) or "."
     try:
-        with open(path, "w", encoding="utf-8") as handle:
-            json.dump(state, handle)
+        os.makedirs(directory, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(prefix=".longcat-breaker-", suffix=".tmp", dir=directory)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(state, handle)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(tmp, path)
+        except Exception:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
         return True
     except OSError:
         # A read-only storage volume must never disable the pipeline's
