@@ -20,9 +20,11 @@ import { logger } from '@/lib/logger';
 import type { PublishLink } from '@/lib/publish-links';
 import { narrowGeneration, narrowProgressHistory, narrowPublishLinks, type GenerationFacts, type ProgressHistoryEntry } from './slot-detail';
 import { narrowScriptAngle } from './script-angle';
+import type { PersonaRecord } from './persona-record';
 
 // Re-exported so existing import sites (`@/lib/api`) keep working.
 export type { ProgressHistoryEntry };
+export type { PersonaRecord };
 
 
 //---------------
@@ -151,27 +153,6 @@ async function fetchVoices(): Promise<VoiceOption[]> {
   }
 
   return data.voices;
-}
-
-export interface PersonaRecord {
-  id: string;
-  name: string;
-  createdAt: string;
-  avatarUrl?: string;
-  photoUrl?: string;
-  voiceId?: string;
-  voiceAudioUrl?: string;
-  language?: string;
-  videoAspect?: string;
-  videoLayout?: string;
-  scriptPrompt?: string;
-  // The persona's call to action; absent = the engine picks a generic one.
-  ctaText?: string;
-  paragraphNumber?: number;
-  niche?: string;
-  // Billing input for the per-video token cost estimate (the persona's face
-  // quality; "no face" is a per-post choice, not a persona attribute).
-  faceQuality?: string;
 }
 
 async function fetchPersonaList(): Promise<PersonaRecord[]> {

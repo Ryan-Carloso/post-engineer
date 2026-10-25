@@ -172,6 +172,7 @@ const PersonaCard = ({
         <PersonaAvatar
           avatarUrl={persona.avatarUrl}
           photoUrl={persona.photoUrl}
+          libraryUrl={persona.libraryUrl}
           name={persona.name}
           size={56}
         />

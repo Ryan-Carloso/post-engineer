@@ -53,7 +53,13 @@ const PERSONAS = [
   },
 ];
 
-function mockAuth(overrides: { user?: { id: string } | null } = {}) {
+function mockAuth(
+  overrides: {
+    user?: { id: string } | null;
+    isApiKey?: boolean;
+    personaIds?: string[] | null;
+  } = {},
+) {
   vi.mocked(requireSupabaseSession).mockResolvedValue(
     overrides.user === null
       ? {
@@ -63,37 +69,105 @@ function mockAuth(overrides: { user?: { id: string } | null } = {}) {
         }) as never,
       }
       : {
-        auth: { userId: USER_ID, accessToken: 'token' },
+        auth: {
+          userId: USER_ID,
+          accessToken: 'token',
+          isApiKey: overrides.isApiKey,
+          personaIds: overrides.personaIds,
+        },
         error: null,
       },
   );
 }
 
-function mockSupabase(overrides: { user?: { id: string } | null; error?: { message: string } | null } = {}) {
+const LIBRARY_ROWS = [
+  {
+    id: 'img-primary',
+    persona_id: 'p-1',
+    image_path: `${USER_ID}/p-1/library.png`,
+    is_primary: true,
+    created_at: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: 'img-other',
+    persona_id: 'p-2',
+    image_path: `${USER_ID}/p-2/other.png`,
+    is_primary: false,
+    created_at: '2026-02-01T00:00:00Z',
+  },
+];
+
+function mockSupabase(
+  overrides: {
+    user?: { id: string } | null;
+    error?: { message: string } | null;
+    imagesError?: { message: string } | null;
+    images?: typeof LIBRARY_ROWS;
+    signErrorPaths?: string[];
+    isApiKey?: boolean;
+    personaIds?: string[] | null;
+    personas?: typeof PERSONAS;
+  } = {},
+) {
   mockAuth(overrides);
   const signed: string[] = [];
+  const imageFilters: { personaIds?: string[]; userId?: string } = {};
+  const personas = overrides.personas ?? PERSONAS;
   const client = {
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          order: vi.fn(async () => ({
-            data: overrides.error ? null : PERSONAS,
-            error: overrides.error ?? null,
+    from: vi.fn((table: string) => {
+      if (table === 'persona_images') {
+        return {
+          select: vi.fn(() => ({
+            in: vi.fn((_col: string, ids: string[]) => {
+              imageFilters.personaIds = ids;
+              return {
+                eq: vi.fn(async (_col: string, userId: string) => {
+                  imageFilters.userId = userId;
+                  if (overrides.imagesError) {
+                    return { data: null, error: overrides.imagesError };
+                  }
+                  const rows = (overrides.images ?? LIBRARY_ROWS).filter((row) => ids.includes(row.persona_id));
+                  return { data: rows, error: null };
+                }),
+              };
+            }),
           })),
+        };
+      }
+      return {
+        select: vi.fn(() => ({
+          eq: vi.fn(() => {
+            const finish = async () => ({
+              data: overrides.error ? null : personas,
+              error: overrides.error ?? null,
+            });
+            return {
+              in: vi.fn((_col: string, ids: string[]) => ({
+                order: vi.fn(async () => ({
+                  data: overrides.error ? null : personas.filter((p) => ids.includes(p.id)),
+                  error: overrides.error ?? null,
+                })),
+              })),
+              order: vi.fn(finish),
+            };
+          }),
         })),
-      })),
-    })),
+      };
+    }),
     storage: {
       from: vi.fn(() => ({
         createSignedUrl: vi.fn(async (path: string, _expires: number) => {
           signed.push(path);
+          if (overrides.signErrorPaths?.includes(path)) {
+            return { data: null, error: { message: 'sign failed' } };
+          }
           return { data: { signedUrl: `https://supabase.test/signed/${path}` }, error: null };
         }),
       })),
     },
   };
   vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
-  return { client, signed };
+  return { client, signed, imageFilters };
 }
 
 describe('GET /api/persona/list', () => {
@@ -189,5 +263,74 @@ describe('GET /api/persona/list', () => {
     const res = await GET(new Request('http://localhost:3434/api/persona/list'));
 
     expect(res.status).toBe(500);
+  });
+
+  it('signs only the chosen library path and omits image_path', async () => {
+    const { signed } = mockSupabase();
+
+    const res = await GET(new Request('http://localhost:3434/api/persona/list'));
+    const body = (await res.json()) as {
+      personas: Array<{ id: string; libraryUrl?: string; image_path?: string }>;
+    };
+
+    expect(res.status).toBe(200);
+    expect(body.personas[0].libraryUrl).toBe(
+      `https://supabase.test/signed/${USER_ID}/p-1/library.png`,
+    );
+    expect(body.personas[0].image_path).toBeUndefined();
+    expect(body.personas[1].libraryUrl).toBe(
+      `https://supabase.test/signed/${USER_ID}/p-2/other.png`,
+    );
+    expect(signed.sort()).toEqual(
+      [
+        `${USER_ID}/foto.png`,
+        `${USER_ID}/p-1/library.png`,
+        `${USER_ID}/p-2/other.png`,
+        `${USER_ID}/voz.mp3`,
+      ].sort(),
+    );
+  });
+
+  it('scopes the library query to the caller and listed personas', async () => {
+    const { imageFilters } = mockSupabase();
+    await GET(new Request('http://localhost:3434/api/persona/list'));
+    expect(imageFilters.userId).toBe(USER_ID);
+    expect(imageFilters.personaIds).toEqual(['p-1', 'p-2']);
+  });
+
+  it('does not let a scoped key see another persona library image', async () => {
+    const { signed, imageFilters } = mockSupabase({
+      isApiKey: true,
+      personaIds: ['p-1'],
+    });
+
+    const res = await GET(new Request('http://localhost:3434/api/persona/list'));
+    const body = (await res.json()) as { personas: Array<{ id: string; libraryUrl?: string }> };
+
+    expect(body.personas.map((p) => p.id)).toEqual(['p-1']);
+    expect(imageFilters.personaIds).toEqual(['p-1']);
+    expect(signed).not.toContain(`${USER_ID}/p-2/other.png`);
+    expect(body.personas[0].libraryUrl).toBe(
+      `https://supabase.test/signed/${USER_ID}/p-1/library.png`,
+    );
+  });
+
+  it('returns 500 when the persona_images query fails', async () => {
+    mockSupabase({ imagesError: { message: 'images down' } });
+
+    const res = await GET(new Request('http://localhost:3434/api/persona/list'));
+
+    expect(res.status).toBe(500);
+  });
+
+  it('omits libraryUrl when signing the chosen path fails', async () => {
+    mockSupabase({ signErrorPaths: [`${USER_ID}/p-1/library.png`] });
+
+    const res = await GET(new Request('http://localhost:3434/api/persona/list'));
+    const body = (await res.json()) as { personas: Array<{ id: string; libraryUrl?: string; photoUrl?: string }> };
+
+    expect(res.status).toBe(200);
+    expect(body.personas[0].libraryUrl).toBeUndefined();
+    expect(body.personas[0].photoUrl).toBe(`https://supabase.test/signed/${USER_ID}/foto.png`);
   });
 });

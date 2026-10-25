@@ -89,6 +89,61 @@ describe('PersonaAvatar', () => {
     expect(screen.getByText('VL')).toBeInTheDocument();
   });
 
+  it('ignores the library while the avatar is still loading', () => {
+    render(
+      <PersonaAvatar
+        avatarUrl="https://x.test/a.png"
+        photoUrl="https://x.test/p.png"
+        libraryUrl="https://x.test/l.png"
+        name="Viva Leve"
+      />,
+    );
+    expect(screen.getByAltText('Viva Leve')).toHaveAttribute('src', 'https://x.test/a.png');
+  });
+
+  it('falls through to the photo when the avatar fails', () => {
+    render(
+      <PersonaAvatar
+        avatarUrl="https://x.test/a.png"
+        photoUrl="https://x.test/p.png"
+        libraryUrl="https://x.test/l.png"
+        name="Viva Leve"
+      />,
+    );
+    fireEvent.error(screen.getByAltText('Viva Leve'));
+    expect(screen.getByAltText('Viva Leve')).toHaveAttribute('src', 'https://x.test/p.png');
+  });
+
+  it('falls through to the library when avatar and photo fail', () => {
+    render(
+      <PersonaAvatar
+        avatarUrl="https://x.test/a.png"
+        photoUrl="https://x.test/p.png"
+        libraryUrl="https://x.test/l.png"
+        name="Viva Leve"
+      />,
+    );
+    fireEvent.error(screen.getByAltText('Viva Leve'));
+    fireEvent.error(screen.getByAltText('Viva Leve'));
+    expect(screen.getByAltText('Viva Leve')).toHaveAttribute('src', 'https://x.test/l.png');
+  });
+
+  it('shows initials after avatar, photo, and library all fail', () => {
+    render(
+      <PersonaAvatar
+        avatarUrl="https://x.test/a.png"
+        photoUrl="https://x.test/p.png"
+        libraryUrl="https://x.test/l.png"
+        name="Viva Leve"
+      />,
+    );
+    fireEvent.error(screen.getByAltText('Viva Leve'));
+    fireEvent.error(screen.getByAltText('Viva Leve'));
+    fireEvent.error(screen.getByAltText('Viva Leve'));
+    expect(screen.queryByAltText('Viva Leve')).not.toBeInTheDocument();
+    expect(screen.getByText('VL')).toBeInTheDocument();
+  });
+
   // An aborted request (unmount / Fast Refresh) fires `error` too: reacting
   // to it logged a false failure AND threw away a photo that was fine.
   it('ignores the error of a load aborted by unmount', () => {

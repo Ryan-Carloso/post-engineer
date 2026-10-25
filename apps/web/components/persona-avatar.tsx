@@ -18,14 +18,23 @@ import { describeImageSource } from '@/lib/image-source';
 //---------------
 
 export interface PersonaAvatarProps {
-  /** Avatar first, then photo: the avatar is what the user picked last. */
+  /** Avatar, then photo, then library: the first URL that loads wins. */
   avatarUrl?: string;
   photoUrl?: string;
+  libraryUrl?: string;
   /** Used as the alt text and to build the deterministic gradient fallback. */
   name: string;
   className?: string;
   /** Rendered size of the square image (px). Defaults to the card size. */
   size?: number;
+}
+
+function displayCandidates(avatarUrl?: string, photoUrl?: string, libraryUrl?: string): string[] {
+  const urls: string[] = [];
+  if (typeof avatarUrl === 'string' && avatarUrl.length > 0) urls.push(avatarUrl);
+  if (typeof photoUrl === 'string' && photoUrl.length > 0) urls.push(photoUrl);
+  if (typeof libraryUrl === 'string' && libraryUrl.length > 0) urls.push(libraryUrl);
+  return urls;
 }
 
 /**
@@ -40,18 +49,21 @@ function personaInitials(name: string): string {
 export default function PersonaAvatar({
   avatarUrl,
   photoUrl,
+  libraryUrl,
   name,
   className,
   size = 48,
 }: PersonaAvatarProps) {
-  const imageUrl = avatarUrl ?? photoUrl;
+  const candidates = displayCandidates(avatarUrl, photoUrl, libraryUrl);
   const initials = personaInitials(name);
   // A signed Supabase URL can 403 after it expires: without this the avatar
   // stays a blank circle forever (same guard as account-card.tsx).
-  const [imageFailed, setImageFailed] = useState(false);
+  const [failedCount, setFailedCount] = useState(0);
   useEffect(() => {
-    setImageFailed(false);
-  }, [imageUrl]);
+    setFailedCount(0);
+  }, [avatarUrl, photoUrl, libraryUrl]);
+  const imageUrl = candidates[failedCount];
+  const imageFailed = failedCount >= candidates.length;
 
   //---------------
   // Why no photo: the two silent causes are "the row has no avatar at all"
@@ -73,7 +85,7 @@ export default function PersonaAvatar({
   //---------------
   const handleImageError = (event: React.SyntheticEvent<HTMLImageElement>) => {
     if (!event.currentTarget.isConnected) return;
-    setImageFailed(true);
+    setFailedCount((count) => count + 1);
     logClientError('[persona-avatar] avatar image failed to load', undefined, {
       name,
       source: describeImageSource(imageUrl),
