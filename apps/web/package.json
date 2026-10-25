@@ -18,8 +18,7 @@
     "test:e2e:coverage": "start-server-and-test 'CYPRESS_COVERAGE=1 TESTING=1 next dev -p 3434' http://localhost:3434/login 'CYPRESS_COVERAGE=1 cypress run' && node scripts/print-coverage.js",
     "test:e2e:coverage:open": "start-server-and-test 'CYPRESS_COVERAGE=1 TESTING=1 next dev -p 3434' http://localhost:3434/login 'CYPRESS_COVERAGE=1 cypress open'",
     "test:coverage": "vitest run --coverage && node scripts/print-coverage.js",
-    "test:all": "vitest run --coverage && npm run test:e2e:coverage",
-    "ingest-remote-faces": "node -r ts-node/register/transpile-only -r ./scripts/ts-alias.cjs scripts/ingest-remote-persona-faces.ts"
+    "test:all": "vitest run --coverage && npm run test:e2e:coverage"
   },
   "keywords": [
     "youtube",
