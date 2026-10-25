@@ -47,6 +47,7 @@ export function stubPinnedHttp(
       queueMicrotask(() => {
         if (body.byteLength) incoming.emit('data', Buffer.from(body));
         incoming.emit('end');
+        req.emit('close');
       });
     };
     return req;

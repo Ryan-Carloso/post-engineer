@@ -38,9 +38,6 @@ describe('PATCH remote ingest onto an existing photo object', () => {
     const uploaded: Array<{ path: string; upsert?: boolean }> = [];
     const removeMock = vi.fn(async () => ({ error: null }));
     const client = {
-      auth: {
-        getUser: vi.fn(async () => ({ data: { user: { id: USER_ID } }, error: null })),
-      },
       storage: {
         from: vi.fn(() => ({
           upload: vi.fn(async (path: string, _body: unknown, options: { upsert?: boolean }) => {
