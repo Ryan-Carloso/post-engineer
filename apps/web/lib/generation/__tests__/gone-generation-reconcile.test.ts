@@ -79,7 +79,7 @@ describe('batchGenerationId', () => {
 describe('resolveGoneGenerationId', () => {
   it('prefers the row linked by engine_task_id', async () => {
     const client = makeClient([{ table: 'video_generations', user_id: USER_ID, generation_id: 'direct-gen', engine_task_id: TASK_ID }]);
-    await expect(resolveGoneGenerationId(asClient(client), USER_ID, TASK_ID)).resolves.toBe('direct-gen');
+    await expect(resolveGoneGenerationId(asClient(client), USER_ID, TASK_ID)).resolves.toEqual({ generationId: 'direct-gen', batchChargeKey: false });
   });
 
   it('scopes the task-id lookup to the user', async () => {
@@ -98,7 +98,7 @@ describe('resolveGoneGenerationId', () => {
       { table: 'scheduled_posts', user_id: USER_ID, schedule_id: scheduleId, task_id: TASK_ID },
       { table: 'token_transactions', user_id: USER_ID, generation_id: BATCH_ID, type: 'video_generation' },
     ]);
-    await expect(resolveGoneGenerationId(asClient(client), USER_ID, TASK_ID)).resolves.toBe(BATCH_ID);
+    await expect(resolveGoneGenerationId(asClient(client), USER_ID, TASK_ID)).resolves.toEqual({ generationId: BATCH_ID, batchChargeKey: true });
   });
 
   it('returns undefined when neither lookup finds a charge', async () => {
