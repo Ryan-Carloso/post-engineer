@@ -218,6 +218,18 @@ def main() -> int:
         "prompt defines the machine-checkable finding format",
         "### SEVERITY:" in prompt and "**Location:**" in prompt,
     )
+    check(
+        "prompt verdict is APPROVE or REQUEST_CHANGES only",
+        "Verdict: APPROVE | REQUEST_CHANGES" in prompt
+        and "APPROVE_WITH_NITS" not in prompt,
+        "Ryan: any posted finding is REQUEST_CHANGES; there is no NITS verdict",
+    )
+    verify_prompt = (prompt_path.parent / "verify-prompt.md").read_text()
+    check(
+        "verify-prompt has no APPROVE_WITH_NITS verdict",
+        "APPROVE_WITH_NITS" not in verify_prompt
+        and "Verdict: APPROVE | REQUEST_CHANGES" in verify_prompt,
+    )
     review_dir = prompt_path.parent
     english = "Write the entire review in English."
     for name in (
