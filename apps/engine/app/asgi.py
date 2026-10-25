@@ -305,6 +305,19 @@ app = get_application()
 # version-related is committed to git per build — parallel PRs never conflict
 # on version files.
 VERSION_FILE = "/app/VERSION"
+# Written at image build (engine Dockerfile, after ARG COMMIT/BUILD so the
+# layer is not reused across deploys). ISO UTC. Empty locally.
+BUILT_AT_FILE = "/app/BUILT_AT"
+
+
+def _read_built_at_file() -> str | None:
+    """ISO UTC stamp baked into the image, or None when unreadable."""
+    try:
+        with open(BUILT_AT_FILE, encoding="utf-8") as handle:
+            stamp = handle.read().strip()
+            return stamp or None
+    except OSError:
+        return None
 
 
 def _read_version_file() -> str | None:
@@ -344,7 +357,14 @@ def get_build_info() -> dict[str, str | int | None]:
     if build is None:
         build = pr
     commit = os.environ.get("COMMIT", "").strip() or None
-    return {"version": version, "build": build, "pr": pr, "commit": commit}
+    built_at = os.environ.get("BUILT_AT", "").strip() or _read_built_at_file()
+    return {
+        "version": version,
+        "build": build,
+        "pr": pr,
+        "commit": commit,
+        "builtAt": built_at,
+    }
 
 
 @app.get("/version")

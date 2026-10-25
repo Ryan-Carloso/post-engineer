@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 //---------------
 // Tests for PersonaPublishingAccountsSection (issue #212): per-persona
@@ -72,7 +72,7 @@ vi.mock('@/lib/api', () => ({
 
 import { PersonaPublishingAccountsSection } from '../persona-publishing-accounts-section';
 
-const PERSONA_ID = 'persona-1';
+const PERSONA_ID = '11111111-2222-3333-4444-555555555555';
 const DEFAULTS_URL = `/api/persona/publishing-accounts?personaId=${PERSONA_ID}`;
 
 const connectedAccounts = {
@@ -124,6 +124,19 @@ beforeEach(() => {
 });
 
 describe('PersonaPublishingAccountsSection', () => {
+
+  it('does not fetch for a non-uuid personaId (placeholder callers stopped 400ing)', async () => {
+    // The production warnings ("invalid input syntax for type uuid: \"p-1\"")
+    // came from a placeholder id reaching the fetch. The guard in the section
+    // must skip it entirely: no GET, defaults stay empty, no crash.
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    render(<PersonaPublishingAccountsSection personaId="p-1" />);
+    await waitFor(() => {
+      expect(screen.queryByTestId('publishing-accounts-loading')).not.toBeInTheDocument();
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
   it('shows a loading skeleton while the defaults load', () => {
     mockFetchOnce(new Promise(() => {}));
     render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
@@ -270,9 +283,9 @@ describe('PersonaPublishingAccountsSection', () => {
       status: 200,
       json: () => Promise.resolve({ success: true, defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [] } }),
     });
-    rerender(<PersonaPublishingAccountsSection personaId="persona-2" />);
+    rerender(<PersonaPublishingAccountsSection personaId="22222222-3333-4444-5555-666666666666" />);
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith('/api/persona/publishing-accounts?personaId=persona-2');
+      expect(fetchMock).toHaveBeenCalledWith('/api/persona/publishing-accounts?personaId=22222222-3333-4444-5555-666666666666');
     });
   });
 

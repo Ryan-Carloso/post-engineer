@@ -1,7 +1,8 @@
 # Engine CPU on the VPS — ffmpeg/TTS/render only (no GPU).
 # TTS (Phonon + Kokoro presets, Chatterbox Nano clones) runs in the `tts`
-# service below, also CPU-only; config.toml points [chatterbox] base_url and
-# [cloned_voices] registry_base_url at http://tts:4123.
+# service below, also CPU-only; the engine's MPT_CHATTERBOX_* and
+# MPT_CLONED_VOICES_* env vars point it at http://tts:4123 and override
+# config.toml.
 # LongCat/H200 stays on Modal and is reached over HTTP.
 #
 # Secrets come from .env next to this file (never committed):
@@ -30,6 +31,14 @@ services:
       # runs leave APP_ENV unset and report 'development'). Read by
       # app/services/analytics.py; dashboards split prod/dev on it.
       APP_ENV: production
+      # Local CPU TTS (the `tts` service below). These override [chatterbox]
+      # and [cloned_voices] in config.toml (app/config/config.py
+      # apply_tts_env_overrides), so a stale host config.toml (e.g. the
+      # retired Modal URL) cannot route speech away from the local server.
+      MPT_CHATTERBOX_BASE_URL: http://tts:4123/v1
+      MPT_CHATTERBOX_API_KEY: ${CHATTERBOX_HTTP_SECRET}
+      MPT_CLONED_VOICES_REGISTRY_BASE_URL: http://tts:4123
+      MPT_CLONED_VOICES_REGISTRY_API_KEY: ${CHATTERBOX_HTTP_SECRET}
       # Build metadata reported by GET /version and /health. Injected at
       # deploy time: the VPS deploy generates them from the commit being
       # deployed (VERSION=MAJOR.MINOR.PR, PR_NUMBER/BUILD=that PR,
@@ -58,7 +67,9 @@ services:
       resources:
         limits:
           cpus: "3.0"
-          memory: 6g
+          # Sized for the 16 GB VPS: CPU inference peaks with several agents
+          # in flight, so the old 6g cap tuned for the 8 GB box no longer fits.
+          memory: 8g
     logging:
       driver: json-file
       options:
@@ -103,7 +114,8 @@ services:
           cpus: "3.0"
           # Measured: Phonon + Kokoro resident ~1.5 GB; Chatterbox Nano adds
           # ~3 GB while clones are in use and is unloaded after 5 idle min.
-          memory: 5g
+          # 7g headroom on the 16 GB host; the old 5g cap was for the 8 GB box.
+          memory: 7g
     logging:
       driver: json-file
       options:

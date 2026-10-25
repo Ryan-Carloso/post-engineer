@@ -87,10 +87,12 @@ Setup:
 
 1. Set `CHATTERBOX_HTTP_SECRET` in `apps/engine/.env` (the `tts` service reads
    it; the engine sends the same value).
-2. In `apps/engine/config.toml`:
-   - `[chatterbox] base_url = "http://tts:4123/v1"`, `api_key` = the secret
-   - `[cloned_voices] registry_base_url = "http://tts:4123"`,
-     `registry_api_key` = the secret
+2. Nothing to set in `apps/engine/config.toml`: `docker-compose.yml` passes
+   `MPT_CHATTERBOX_BASE_URL=http://tts:4123/v1`,
+   `MPT_CLONED_VOICES_REGISTRY_BASE_URL=http://tts:4123` and the secret as
+   both API keys to the engine, and these override `[chatterbox]` /
+   `[cloned_voices]` in `config.toml` (outside compose, set those sections
+   by hand).
 3. `docker compose up -d --build` in `apps/engine`. Models download to the
    `tts_models` volume on first use (Chatterbox Nano is a gated Hugging Face
    repo: accept its terms and set `HF_TOKEN` in `.env` if the download is
