@@ -30,6 +30,10 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 const ROUTE = 'GET /api/persona/publishing-accounts';
 const PUT_ROUTE = 'PUT /api/persona/publishing-accounts';
 
+// Same canonical-shape check the engine's SAFE_TASK_ID enforces upstream:
+// a uuid-shaped string (any version layout the DB generates).
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function codedError(
   route: string,
   status: number,
@@ -83,6 +87,18 @@ async function resolveContext(request: Request, route: string): Promise<RouteCon
   const personaId = new URL(request.url).searchParams.get('personaId');
   if (!personaId) {
     return apiErrorResponse(400, 'personaId is required.', {
+      route,
+      code: ERROR_CODES.VALIDATION_FAILED,
+      field: 'personaId',
+    });
+  }
+  // Placeholder/sentinel ids (e.g. 'p-1' from an unthinking caller — the
+  // production warnings were `invalid input syntax for type uuid: "p-1"`)
+  // never reach Postgres: a stable validation 400 answers them with a
+  // machine-readable field, instead of a PostgREST error the UI can't
+  // classify and PostHog can't group (same convention as issue #216).
+  if (!UUID_SHAPE.test(personaId)) {
+    return apiErrorResponse(400, 'personaId must be a UUID.', {
       route,
       code: ERROR_CODES.VALIDATION_FAILED,
       field: 'personaId',
