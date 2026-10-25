@@ -68,13 +68,15 @@ describe('PATCH /api/persona — the identity swap the constraint requires', () 
     // separate statements would race (and the second one alone is what left
     // the row with both columns set).
     const branch = route.slice(route.indexOf('} else if (patch.avatarUrl !== null) {'));
-    const setIndex = branch.indexOf('updates.avatar_url = patch.avatarUrl;');
-    const clearIndex = branch.indexOf('updates.photo_path = null;');
-    expect(setIndex).toBeGreaterThan(-1);
-    expect(clearIndex).toBeGreaterThan(setIndex);
+    // Remote ingest may store a photo_path; samples keep avatar_url. Both
+    // columns are written in this one update so the XOR check cannot fire.
+    const setAvatar = branch.indexOf('updates.avatar_url = resolved.avatarUrl;');
+    const setPhoto = branch.indexOf('updates.photo_path = resolved.photoPath;');
+    expect(setAvatar).toBeGreaterThan(-1);
+    expect(setPhoto).toBeGreaterThan(setAvatar);
     // The stale photo is removed only after the swap succeeded (the cleanup
     // list is applied post-update), never before.
-    expect(branch.indexOf('stalePaths.push(persona.photo_path)')).toBeGreaterThan(clearIndex);
+    expect(branch.indexOf('stalePaths.push(persona.photo_path)')).toBeGreaterThan(setPhoto);
   });
 
   it('clears avatar_url when a new photo is uploaded (the mirror branch)', () => {

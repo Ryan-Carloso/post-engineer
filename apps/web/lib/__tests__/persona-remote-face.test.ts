@@ -125,6 +125,35 @@ describe('resolvePersonaAvatar', () => {
     expect(uploaded).toEqual([{ path: 'user-1/persona-1/photo.png' }]);
   });
 
+  it('keeps a non-http path as avatar_url without fetching', async () => {
+    const fetchImpl = vi.fn();
+    const supabase = mockSupabase({});
+    const result = await resolvePersonaAvatar(supabase as never, 'u', 'p', 'not-a-url', {
+      fetchImpl: fetchImpl as never,
+    });
+    expect(result).toEqual({ ok: true, photoPath: null, avatarUrl: 'not-a-url' });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('returns upload failure when storage rejects the bytes', async () => {
+    const supabase = {
+      from: vi.fn(),
+      storage: {
+        from: vi.fn(() => ({
+          upload: vi.fn(async () => ({ data: null, error: { message: 'denied' } })),
+        })),
+      },
+    };
+    const result = await resolvePersonaAvatar(
+      supabase as never,
+      'user-1',
+      'persona-1',
+      'https://cdn.example/face.png',
+      { fetchImpl: vi.fn(async () => pngResponse()) as never, lookupImpl: publicLookup() },
+    );
+    expect(result).toEqual({ ok: false, error: 'Failed to upload photo.' });
+  });
+
   it('does not download caracter-samples or data:image', async () => {
     const fetchImpl = vi.fn();
     const supabase = mockSupabase({});
@@ -163,5 +192,79 @@ describe('ingestRemotePersonaFaces', () => {
     expect(result).toEqual({ migrated: 1, skipped: 2, failed: 1 });
     expect(updates).toEqual([{ photo_path: 'u1/ok/photo.png', avatar_url: null }]);
     expect(uploaded).toEqual([{ path: 'u1/ok/photo.png' }]);
+  });
+
+  it('throws when listing personas fails', async () => {
+    const supabase = {
+      from: vi.fn(() => ({
+        select: vi.fn(async () => ({ data: null, error: { message: 'db' } })),
+      })),
+      storage: { from: vi.fn() },
+    };
+    await expect(ingestRemotePersonaFaces(supabase as never)).rejects.toThrow(
+      'Failed to list personas for remote-face ingest.',
+    );
+  });
+
+  it('counts an update error as failed', async () => {
+    const supabase = {
+      from: vi.fn(() => ({
+        select: vi.fn(async () => ({
+          data: [{ id: 'ok', user_id: 'u1', avatar_url: 'https://cdn.example/ok.png', photo_path: null }],
+          error: null,
+        })),
+        update: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            eq: vi.fn(async () => ({ error: { message: 'constraint' } })),
+          })),
+        })),
+      })),
+      storage: {
+        from: vi.fn(() => ({
+          upload: vi.fn(async (path: string) => ({ data: { path }, error: null })),
+        })),
+      },
+    };
+    const result = await ingestRemotePersonaFaces(supabase as never, {
+      fetchImpl: vi.fn(async () => pngResponse()) as never,
+      lookupImpl: publicLookup(),
+    });
+    expect(result).toEqual({ migrated: 0, skipped: 0, failed: 1 });
+  });
+});
+
+describe('downloadPublicImage extra guards', () => {
+  it('refuses an invalid URL and ftp', async () => {
+    expect(await downloadPublicImage('not a url', { lookupImpl: publicLookup() })).toEqual({
+      error: REMOTE_FACE_ERROR,
+    });
+    expect(await downloadPublicImage('ftp://cdn.example/face.png', { lookupImpl: publicLookup() })).toEqual({
+      error: REMOTE_FACE_ERROR,
+    });
+  });
+
+  it('fails closed when DNS throws or returns no addresses', async () => {
+    expect(
+      await downloadPublicImage('https://cdn.example/face.png', {
+        fetchImpl: vi.fn() as never,
+        lookupImpl: vi.fn(async () => {
+          throw new Error('nxdomain');
+        }),
+      }),
+    ).toEqual({ error: REMOTE_FACE_ERROR });
+    expect(
+      await downloadPublicImage('https://cdn.example/face.png', {
+        fetchImpl: vi.fn() as never,
+        lookupImpl: vi.fn(async () => []),
+      }),
+    ).toEqual({ error: REMOTE_FACE_ERROR });
+  });
+
+  it('refuses an empty body', async () => {
+    const result = await downloadPublicImage('https://cdn.example/face.png', {
+      fetchImpl: vi.fn(async () => new Response(new Uint8Array(), { status: 200 })) as never,
+      lookupImpl: publicLookup(),
+    });
+    expect(result).toEqual({ error: REMOTE_FACE_ERROR });
   });
 });
