@@ -287,6 +287,12 @@ def build_chain(
         return attempts, [m for m in free_ids if m in attempts], decisions
 
     preferred = list(prefs.get("preferredFree") or [])
+    configured: list[str] = []
+    for key in ("REVIEW_MODEL_PRIMARY", "OPENCODE_MODEL"):
+        model_id = env.get(key, "").strip()
+        if model_id and model_id not in configured:
+            configured.append(model_id)
+    preferred = configured + [item for item in preferred if item not in configured]
     if discovery_failed:
         log("Discovery failed; using static preferred free list without availability checks.")
         for model_id in preferred:

@@ -253,8 +253,13 @@ def main() -> int:
     )
     check(
         "pass 2 OpenCode free needs no paid key",
-        "[[ \"$verify\" == *-free ]]" in text
-        or '[[ "$verify" == *-free ]]' in text,
+        '[[ "$verify" == *-free ]]' in text
+        and "preferredFree" in text
+        and 'grep -F -q "\\"$verify\\""' not in text,
+    )
+    check(
+        "pass 2 paid OpenCode still needs zen key",
+        "OPENCODE_ZEN_API_KEY" in text[text.index("key_ok=false") :],
     )
     verify_prompt = (prompt_path.parent / "verify-prompt.md").read_text()
     check(

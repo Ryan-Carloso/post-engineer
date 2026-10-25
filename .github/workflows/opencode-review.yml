@@ -523,7 +523,7 @@ jobs:
               [ -n "${OPENROUTER_API_KEY:-}" ] && key_ok=true
               ;;
             opencode)
-              if [[ "$verify" == *-free ]] || grep -F -q "\"$verify\"" .github/review/model-preferences.json; then
+              if [[ "$verify" == *-free ]] || python3 -c "import json,sys; sys.exit(0 if sys.argv[1] in json.load(open('.github/review/model-preferences.json')).get('preferredFree',[]) else 1)" "$verify"; then
                 key_ok=true
               elif [ -n "${OPENCODE_ZEN_API_KEY:-}" ]; then
                 key_ok=true

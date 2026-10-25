@@ -55,6 +55,13 @@ opencode/new-discovery-free
   "limit": {"context": 500000, "output": 64000},
   "capabilities": {"toolcall": true, "input": {"image": false}}
 }
+opencode/mimo-v2.6-flash-free
+{
+  "id": "mimo-v2.6-flash-free",
+  "cost": {"input": 0, "output": 0},
+  "limit": {"context": 200000, "output": 32000},
+  "capabilities": {"toolcall": true, "input": {"image": false}}
+}
 """
 
 
@@ -80,6 +87,26 @@ def test_preferred_available_models_keep_rank_order(mod):
     assert "opencode/new-discovery-free" in attempts
     assert "opencode/nemotron-3.5-super-vl-free" not in attempts
     assert attempts[0] in free_models
+
+
+def test_review_model_primary_is_first_attempt(mod):
+    prefs = json.loads(PREFS_PATH.read_text(encoding="utf-8"))
+    available = mod.parse_opencode_verbose(SAMPLE_OPENCODE_VERBOSE)
+    env = _env(REVIEW_MODEL_PRIMARY="opencode/mimo-v2.6-flash-free")
+    attempts, _, _ = mod.build_chain(prefs, available, env)
+    assert attempts[0] == "opencode/mimo-v2.6-flash-free"
+
+
+def test_opencode_model_follows_primary_when_different(mod):
+    prefs = json.loads(PREFS_PATH.read_text(encoding="utf-8"))
+    available = mod.parse_opencode_verbose(SAMPLE_OPENCODE_VERBOSE)
+    env = _env(
+        REVIEW_MODEL_PRIMARY="opencode/glm-5.3-flash-free",
+        OPENCODE_MODEL="opencode/deepseek-v4.1-flash-free",
+    )
+    attempts, _, _ = mod.build_chain(prefs, available, env)
+    assert attempts[0] == "opencode/glm-5.3-flash-free"
+    assert attempts[1] == "opencode/deepseek-v4.1-flash-free"
 
 
 def test_missing_preferred_model_is_skipped(mod):
