@@ -59,7 +59,11 @@ where v.status in ('pending', 'running')
   );
 
 -- 2) rows a false "gone" verdict failed while the durable state (or a
---    published slot) proves the video finished
+--    published slot) proves the video finished. The scope is the EXACT rule
+--    the code applies (gone-settle.ts + the video-status 404 verdict), plus
+--    the error_code it uniquely stamps (engine_restart): a row failed for
+--    any OTHER reason (reconcile_stuck, Chatterbox, publish failure) is not
+--    this PR's business and stays failed even when the task later completed.
 update public.video_generations v
 set status = 'completed',
     error_code = null,
@@ -67,6 +71,7 @@ set status = 'completed',
     completed_at = now(),
     updated_at = now()
 where v.status = 'failed'
+  and v.error_code = 'engine_restart'
   and (
     exists (
       select 1 from public.engine_task_state t

@@ -87,8 +87,10 @@ function hasPersistedVideos(data: unknown): boolean {
 // hasPublishedSlotForTask — value-delivered proof, same rule the billing
 // reconciler applies (billing/reconcile.ts): a published slot for this task
 // means the video reached the network even if the engine task is gone.
+// Exported: the video-status 404 path must apply the SAME verdict as the
+// slot-gone path before it may fail (and refund) a generation.
 //---------------
-async function hasPublishedSlotForTask(
+export async function hasPublishedSlotForTask(
   supabase: SupabaseClient,
   userId: string,
   taskId: string,
@@ -122,6 +124,11 @@ export async function settleGoneGeneration(input: {
   generationId: string;
 }): Promise<GoneSettleOutcome> {
   const { supabase, userId, taskId, generationId } = input;
+  // NOTE: the batch-billing-key refusal lives in the caller (see
+  // resolveGoneGenerationId's batchChargeKey flag): a settle path receives
+  // only ids that name THIS generation. Re-checking shapes here would also
+  // block a legitimately-batch-keyed video_generations row found by engine_task_id.
+
 
   // Durable state first: it outranks any live-HTTP answer, including the
   // 404 that brought us here. A persisted COMPLETE with a render output is

@@ -76,6 +76,44 @@ const GENERATING_SLOT = {
 };
 
 describe('enrichSlot — gone engine task', () => {
+  it('presents a failed slot as completed and never retryable when the generation row was backfilled (M2)', async () => {
+    // Pre-fix behavior: the failed-slot tail refilled retryable from the
+    // slot's own error text, offering a retry for a video the backfill
+    // already recorded completed.
+    fetchMock.mockResolvedValue(engineResponse(200, { body: { progress: 100, state: -1, stage: 'render', error: 'anything' } }));
+    mockTables({
+      video_generations: { data: [{ status: 'completed' }] },
+      scheduled_posts: { data: [] },
+      engine_task_state: { data: { state: -1, data: {} } },
+    });
+
+    const result = await enrichSlot({ ...GENERATING_SLOT, status: 'failed' }, 'user-1');
+
+    expect(result.status).toBe('completed');
+    expect(result.retryable).toBe(false);
+    expect(result.progress).toBe(100);
+  });
+
+  it('refuses to settle on a batch-charge resolution key (M4)', async () => {
+    // The resolution fallback can land on the shared batch charge key
+    // (batch:<schedule_id>): that key belongs to the whole batch — stamping
+    // it from ONE slot's task verdict would rewrite every sibling's
+    // billing/history. The slot stays untouched and unresolved.
+    fetchMock.mockResolvedValue(engineResponse(404, { message: 'task not found' }));
+    mockTables({
+      video_generations: { data: null },
+      scheduled_posts: { data: { schedule_id: 'sched-9' } },
+      token_transactions: { data: { generation_id: 'batch:sched-9' } },
+      engine_task_state: { data: null },
+    });
+
+    const result = await enrichSlot(GENERATING_SLOT, 'user-1');
+
+    expect(selectVideoGeneration).not.toHaveBeenCalled();
+    expect(result.status).toBe('failed');
+    expect(result.retryable).toBe(false);
+  });
+
   it('settles the generation row as failed when no durable proof contradicts the 404', async () => {
     fetchMock.mockResolvedValue(engineResponse(404, { message: 'task not found' }));
     mockTables({
@@ -120,9 +158,11 @@ describe('enrichSlot — gone engine task', () => {
     expect(selectVideoGeneration).not.toHaveBeenCalledWith(
       expect.objectContaining({ status: 'failed' }),
     );
-    expect(result.status).toBe('failed');
-    // A delivered video is not retryable.
-    expect(result.retryable).toBeNull();
+    expect(result.status).toBe('completed');
+    // A delivered video is not retryable: false, never null — the failed-slot
+    // tail refills a null retryable, which would offer a retry on delivered
+    // work (review MAJOR 2).
+    expect(result.retryable).toBe(false);
   });
 
   it('backfills completed when a published slot proves delivery (i18n: engine 404 mid-publish window)', async () => {

@@ -171,6 +171,11 @@ describe('GET /api/persona/video-status/:taskId', () => {
       // verdict side effects running; `{ state: 1, data: { videos: [...] } }`
       // triggers the completed-backfill branch instead.
       durableTask: { state: number; data: unknown } | null = null,
+      // The published scheduled_posts slot proof the 404 path consults when
+      // the durable row is absent (MAJOR 1: the video-status verdict MUST
+      // match the slot-gone verdict — a published slot means delivered
+      // value, the row backfills completed and nothing is refunded).
+      publishedSlot: boolean = false,
     ) {
       const durableSingle = vi
         .fn()
@@ -182,6 +187,13 @@ describe('GET /api/persona/video-status/:taskId', () => {
       const durableEq2 = vi.fn().mockReturnValue({ limit: durableLimit });
       const durableEq1 = vi.fn().mockReturnValue({ eq: durableEq2 });
       const durableSelect = vi.fn().mockReturnValue({ eq: durableEq1 });
+      const publishedLimit = vi
+        .fn()
+        .mockResolvedValue({ data: publishedSlot ? [{ id: 'slot-1' }] : [], error: null });
+      const publishedEq3 = vi.fn().mockReturnValue({ limit: publishedLimit });
+      const publishedEq2 = vi.fn().mockReturnValue({ eq: publishedEq3 });
+      const publishedEq1 = vi.fn().mockReturnValue({ eq: publishedEq2 });
+      const publishedSelect = vi.fn().mockReturnValue({ eq: publishedEq1 });
       const chargeSingle = vi
         .fn()
         .mockResolvedValue({ data: generationId ? { generation_id: generationId } : null, error: null });
@@ -212,6 +224,7 @@ describe('GET /api/persona/video-status/:taskId', () => {
       const from = vi.fn().mockImplementation((table: string) => {
         if (table !== 'video_generations') {
           if (table === 'engine_task_state') return { select: durableSelect };
+          if (table === 'scheduled_posts') return { select: publishedSelect };
           return { select: chargeSelect };
         }
         // With no charge row the FIRST video_generations read is the task-id
@@ -565,6 +578,33 @@ describe('GET /api/persona/video-status/:taskId', () => {
             tokensRefunded: true,
           }),
         );
+      } finally {
+        updateSpy.mockRestore();
+      }
+    });
+
+    it('backfills completed on an engine 404 when a published slot proves delivery (MAJOR 1)', async () => {
+      // The video-status verdict must match the slot-gone verdict: a
+      // published slot for the task is delivered value even without a
+      // durable engine row — the row backfills completed and NOTHING is
+      // refunded (the pre-fix code failed + refunded here).
+      mockTaskBody({ status: 404, message: 'req-1: task not found' }, 404);
+      const serviceClient = mockServiceClient('gen-1', null, null, null, true);
+      const updateSpy = vi
+        .spyOn(videoGeneration, 'recordGenerationUpdate')
+        .mockResolvedValue(undefined);
+      try {
+        const response = await poll();
+        expect(response.status).toBe(410);
+        expect(await response.json()).toMatchObject({ success: false, terminal: true });
+        expect(updateSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            generationId: 'gen-1',
+            status: 'completed',
+            engineTaskId: 'task-1',
+          }),
+        );
+        expect(refundTokens).not.toHaveBeenCalledWith(serviceClient, USER_ID, 'gen-1');
       } finally {
         updateSpy.mockRestore();
       }

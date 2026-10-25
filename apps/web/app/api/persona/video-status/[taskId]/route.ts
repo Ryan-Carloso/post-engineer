@@ -11,7 +11,7 @@ import {
 import { apiErrorResponse } from '@/lib/api-error';
 import { rewriteVideoUrls, SAFE_TASK_ID } from '@/lib/video-urls';
 import { taskPayload, taskState, extractTaskError } from '@/lib/engine-task-state';
-import { readDurableTaskState } from '@/lib/generation/gone-settle';
+import { hasPublishedSlotForTask, readDurableTaskState } from '@/lib/generation/gone-settle';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
@@ -52,14 +52,23 @@ async function getHandler(
     const body: unknown = await response.json().catch(() => null);
     if (response.status === 404) {
       // The engine no longer serves this task. Its HTTP verdict is not
-      // trusted on its own: production showed 404s for tasks whose persisted
-      // engine_task_state row is COMPLETE with a finished video (engine
-      // redeploy window). Read the durable state first and settle the row
-      // completed when the video provably finished; only unrecoverable
-      // dead work keeps the historical failed verdict.
+      // trusted on its own, and it may not cost the user a refund either:
+      // the SAME verdict the slot-gone path applies decides here (see
+      // lib/generation/gone-settle.ts):
+      //   1. durable engine_task_state COMPLETE with a render → completed;
+      //   2. a published scheduled_posts slot for the task → completed
+      //      (delivered value — never refunded);
+      //   3. only otherwise the failed+refund verdict stands.
       const supabase = createSupabaseServiceClient();
       const durable = await readDurableTaskState(supabase, auth.userId, taskId);
-      if (durable.complete && durable.hasVideos) {
+      let delivered: boolean = durable.complete && durable.hasVideos;
+      if (!delivered) {
+        const published = await hasPublishedSlotForTask(supabase, auth.userId, taskId);
+        // A published-slot read error is NOT proof of delivery: fall through
+        // to the historical failed+refund verdict (fail closed on refunds).
+        delivered = published === true;
+      }
+      if (delivered) {
         const generationId = await lookupChargeGenerationId(supabase, auth.userId, taskId);
         const resolution = generationId ?? (await resolveGenerationIdByEngineTask(supabase, auth.userId, taskId));
         if (resolution) {
