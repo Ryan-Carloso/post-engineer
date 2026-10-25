@@ -186,9 +186,9 @@ export async function downloadPublicImage(
   try {
     response = deps.fetchImpl
       ? await deps.fetchImpl(url, {
-          redirect: 'error',
-          signal: AbortSignal.timeout(REMOTE_FACE_TIMEOUT_MS),
-        })
+        redirect: 'error',
+        signal: AbortSignal.timeout(REMOTE_FACE_TIMEOUT_MS),
+      })
       : await requestPinned(url, safety.addresses);
   } catch {
     return { error: REMOTE_FACE_ERROR };
