@@ -49,7 +49,7 @@ RERUN_FAIL_DOC='{"workflow_runs": [{"name": "CI", "status": "completed", "conclu
 ALL_GREEN_DOC='{"workflow_runs": [{"name": "CI", "status": "completed", "conclusion": "success", "id": 1, "run_attempt": 1}, {"name": "mutation", "status": "completed", "conclusion": "success", "id": 42, "run_attempt": 1}]}'
 GREEN_WITH_FAIL_DOC='{"workflow_runs": [{"name": "CI", "status": "completed", "conclusion": "failure", "id": 1, "run_attempt": 1}, {"name": "mutation", "status": "completed", "conclusion": "success", "id": 42, "run_attempt": 1}]}'
 FIXED_GREEN_DOC='{"workflow_runs": [{"name": "CI", "status": "completed", "conclusion": "failure", "id": 1, "run_attempt": 1}, {"name": "CI", "status": "completed", "conclusion": "success", "id": 99, "run_attempt": 1}, {"name": "mutation", "status": "completed", "conclusion": "success", "id": 42, "run_attempt": 1}]}'
-export RELAYED_WORKFLOWS='CI,mutation,opencode-review,file-size,api-naming,parity-exclusion-guard,CodeQL Advanced,Deploy,Release MCP (auto)'
+export RELAYED_WORKFLOWS='CI,mutation,opencode-review,file-size,api-naming,parity-exclusion-guard,CodeQL Advanced,Deploy,Release MCP (auto),test-flight-faceless,test-flight'
 export WORKFLOW_RUN_ID=42
 count() { # count <workflows> <json> -> "pending other_failed all_ok"
   # gh api --jq prints strings raw; jq -r matches that contract.

@@ -55,6 +55,8 @@ on:
       - CodeQL Advanced
       - Deploy
       - Release MCP (auto)
+      - test-flight-faceless
+      - test-flight
     types: [completed]
 
 permissions: {}
@@ -79,7 +81,7 @@ jobs:
           # The relayed workflow names, comma-separated: the single source
           # for the last-finisher query. relay.test.sh pins this list and
           # the trigger block's `workflows:` stay identical.
-          RELAYED_WORKFLOWS: CI,mutation,opencode-review,file-size,api-naming,parity-exclusion-guard,CodeQL Advanced,Deploy,Release MCP (auto)
+          RELAYED_WORKFLOWS: CI,mutation,opencode-review,file-size,api-naming,parity-exclusion-guard,CodeQL Advanced,Deploy,Release MCP (auto),test-flight-faceless,test-flight
           EVENT_NAME: ${{ github.event_name }}
           EVENT_ACTION: ${{ github.event.action }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number || '' }}
