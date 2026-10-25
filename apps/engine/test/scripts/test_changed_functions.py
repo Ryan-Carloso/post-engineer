@@ -367,3 +367,26 @@ def test_cli_check_mutable_true_and_false(
     decorated.write_text("import functools\n\n\n@functools.lru_cache\ndef g():\n    return 1\n")
     assert main(["--file", str(decorated), "--base", "HEAD~1", "--check-mutable"]) == 0
     assert capsys.readouterr().out.strip() == "false"
+
+
+def test_cli_check_mutable_without_base(
+    git_repo: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+):
+    # mutation.yml's "Check shard file has mutable code" step passes no --base.
+    monkeypatch.chdir(git_repo)
+    assert main(["--file", "app/services/video.py", "--check-mutable"]) == 0
+    assert capsys.readouterr().out.strip() == "true"
+
+
+def test_cli_diff_mapping_requires_base(
+    git_repo: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.chdir(git_repo)
+    with pytest.raises(SystemExit) as exc:
+        main(["--file", "app/services/video.py"])
+    assert exc.value.code == 2
+    assert "--base is required unless --check-mutable" in capsys.readouterr().err
