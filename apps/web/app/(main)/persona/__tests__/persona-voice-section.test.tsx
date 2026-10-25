@@ -163,4 +163,23 @@ describe('PersonaVoiceSection', () => {
     render(<PersonaVoiceSection />);
     expect(screen.queryByTestId('persona-voice-fallback-warning')).not.toBeInTheDocument();
   });
+
+  it('warns with the missing-voice copy when the saved voice is empty', () => {
+    sectionMocks.voiceId = '';
+    render(<PersonaVoiceSection />);
+    const warning = screen.getByTestId('persona-voice-fallback-warning');
+    expect(warning).toHaveTextContent('persona.voiceFallbackMissingWarning');
+  });
+
+  it('warns that a clone is unavailable when the catalog lists other clones', () => {
+    sectionMocks.voices = [
+      { id: 'chatterbox:kokoro_af_heart', label: 'Heart', provider: 'kokoro', gender: 'female', accent: 'us', kind: 'standard', description: null },
+      { id: 'chatterbox_nano:ucccccccccccc_dddddddddddd', label: 'Other clone', provider: 'chatterbox', gender: null, accent: null, kind: 'clone', description: null },
+    ];
+    sectionMocks.voiceId = 'chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb';
+    render(<PersonaVoiceSection />);
+    expect(screen.getByTestId('persona-voice-fallback-warning')).toHaveTextContent(
+      'persona.voiceFallbackWarning',
+    );
+  });
 });

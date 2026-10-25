@@ -26,6 +26,7 @@
 // never targets a clone — always a house catalog voice.
 //---------------
 
+import { isEnglishLanguage } from '@/lib/language-gate';
 import { cloneKeyOf, isCloneVoiceId } from '@/lib/voice-catalog';
 
 function catalogContainsClone(catalogIds: ReadonlySet<string>): boolean {
@@ -43,7 +44,6 @@ function catalogListsCloneKey(catalogIds: ReadonlySet<string>, voiceId: string):
   }
   return false;
 }
-import { isEnglishLanguage } from '@/lib/language-gate';
 
 /** Stable warning code surfaced by the dispatch API when a persona voice
  * was swapped. Shared with the UI warning mapper (amber, never red) —

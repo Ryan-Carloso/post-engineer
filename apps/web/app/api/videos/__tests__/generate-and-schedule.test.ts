@@ -1733,7 +1733,10 @@ describe('POST /api/videos/generate-and-schedule', () => {
       vi.mocked(getPostHogServer).mockReturnValue(recordingClient as never);
       setup({
         ...DEFAULT_CFG,
-        persona: { ...PERSONA, voice_id: 'https://user:hunter2@voices.example/sk-abcdefghijklmnopqrstuvwxyz' },
+        persona: {
+          ...PERSONA,
+          voice_id: 'https://user:hunter2@voices.example/voice?api_key=supersecretvalue',
+        },
       });
       const res = await post(baseBody());
       expect(res.status).toBe(200);
@@ -1743,9 +1746,13 @@ describe('POST /api/videos/generate-and-schedule', () => {
       if (event === undefined) {
         throw new Error('expected a voice_fallback_applied capture');
       }
-      const fromVoice = String(event.properties.from_voice);
+      const properties = event.properties;
+      if (properties === undefined) {
+        throw new Error('expected capture properties');
+      }
+      const fromVoice = String(properties.from_voice);
       expect(fromVoice).not.toContain('hunter2');
-      expect(fromVoice).not.toContain('sk-abcdefghijklmnopqrstuvwxyz');
+      expect(fromVoice).not.toContain('supersecretvalue');
       expect(fromVoice).toContain('[redacted]');
       expect(fromVoice.length).toBeLessThanOrEqual(500);
       expect(event.distinctId).toBe(USER_ID);
@@ -1785,6 +1792,22 @@ describe('POST /api/videos/generate-and-schedule', () => {
       // still completed with the swapped voice for this post only. Nothing
       // about the failure reaches the response — only the server-side log.
       expect(updates.some((u) => u.table === 'personas')).toBe(true);
+    });
+
+    it('survives a throwing PostHog captureAs after a successful persist', async () => {
+      vi.mocked(getPostHogServer).mockReturnValue({
+        captureAs: () => {
+          throw new Error('posthog down');
+        },
+      } as never);
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, voice_id: 'energetic' } });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(200);
+      expect(json.success).toBe(true);
+      expect(json.warnings).toEqual([
+        { code: 'voice_fallback_applied', fromVoice: 'energetic', toVoice: 'chatterbox:kokoro_af_heart' },
+      ]);
     });
 
     it('survives a persist ERROR object the same way (no throw, warning kept)', async () => {
