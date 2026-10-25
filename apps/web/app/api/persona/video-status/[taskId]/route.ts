@@ -11,6 +11,7 @@ import {
 import { apiErrorResponse } from '@/lib/api-error';
 import { rewriteVideoUrls, SAFE_TASK_ID } from '@/lib/video-urls';
 import { taskPayload, taskState, extractTaskError } from '@/lib/engine-task-state';
+import { readDurableTaskState } from '@/lib/generation/gone-settle';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
@@ -50,11 +51,44 @@ async function getHandler(
     });
     const body: unknown = await response.json().catch(() => null);
     if (response.status === 404) {
-      // The engine no longer knows this task — polling again will 404
-      // forever, so this is terminal: fail the generation with
-      // engine_restart and refund, exactly like a numeric failed state.
-      // 410 Gone tells the caller to stop polling.
+      // The engine no longer serves this task. Its HTTP verdict is not
+      // trusted on its own: production showed 404s for tasks whose persisted
+      // engine_task_state row is COMPLETE with a finished video (engine
+      // redeploy window). Read the durable state first and settle the row
+      // completed when the video provably finished; only unrecoverable
+      // dead work keeps the historical failed verdict.
       const supabase = createSupabaseServiceClient();
+      const durable = await readDurableTaskState(supabase, auth.userId, taskId);
+      if (durable.complete && durable.hasVideos) {
+        const generationId = await lookupChargeGenerationId(supabase, auth.userId, taskId);
+        const resolution = generationId ?? (await resolveGenerationIdByEngineTask(supabase, auth.userId, taskId));
+        if (resolution) {
+          const { data: history } = await supabase
+            .from('video_generations')
+            .select('status, tokens_refunded')
+            .eq('generation_id', resolution)
+            .maybeSingle();
+          if (!terminalAlreadyRecorded(history, 'completed')) {
+            await recordGenerationUpdate({
+              supabase,
+              generationId: resolution,
+              status: 'completed',
+              engineTaskId: taskId,
+            });
+          }
+        }
+        return NextResponse.json(
+          {
+            success: false,
+            terminal: true,
+            error: 'The video task no longer exists on the generation engine.',
+          },
+          { status: 410 },
+        );
+      }
+      // Nothing proves the video finished: the historical failed verdict
+      // stands (failed with engine_restart and refund, exactly like a
+      // numeric failed state; 410 tells the caller to stop polling).
       await recordTerminalFailure({
         supabase,
         userId: auth.userId,

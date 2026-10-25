@@ -166,7 +166,22 @@ describe('GET /api/persona/video-status/:taskId', () => {
       // The generation row found by the engine_task_id fallback (the batch
       // case: prepaid under `batch:<id>` with no per-task charge row).
       fallbackGenerationId: string | null = null,
+      // The durable engine_task_state row the 404 path consults before
+      // recording a failure. Default null (no persisted row) keeps the old
+      // verdict side effects running; `{ state: 1, data: { videos: [...] } }`
+      // triggers the completed-backfill branch instead.
+      durableTask: { state: number; data: unknown } | null = null,
     ) {
+      const durableSingle = vi
+        .fn()
+        .mockResolvedValue({
+          data: durableTask ? { state: durableTask.state, data: durableTask.data } : null,
+          error: null,
+        });
+      const durableLimit = vi.fn().mockReturnValue({ maybeSingle: durableSingle });
+      const durableEq2 = vi.fn().mockReturnValue({ limit: durableLimit });
+      const durableEq1 = vi.fn().mockReturnValue({ eq: durableEq2 });
+      const durableSelect = vi.fn().mockReturnValue({ eq: durableEq1 });
       const chargeSingle = vi
         .fn()
         .mockResolvedValue({ data: generationId ? { generation_id: generationId } : null, error: null });
@@ -196,6 +211,7 @@ describe('GET /api/persona/video-status/:taskId', () => {
       let videoGenerationCalls = 0;
       const from = vi.fn().mockImplementation((table: string) => {
         if (table !== 'video_generations') {
+          if (table === 'engine_task_state') return { select: durableSelect };
           return { select: chargeSelect };
         }
         // With no charge row the FIRST video_generations read is the task-id
@@ -548,6 +564,40 @@ describe('GET /api/persona/video-status/:taskId', () => {
             errorMessage: 'req-1: task not found',
             tokensRefunded: true,
           }),
+        );
+      } finally {
+        updateSpy.mockRestore();
+      }
+    });
+
+    it('backfills completed on an engine 404 when the durable task state proves the render finished', async () => {
+      // Production case (2026-10): the engine 404'd tasks it had already
+      // completed (redeploy window). The persisted engine_task_state row is
+      // the tie-breaker: the video exists, so the row settles completed
+      // instead of failed, and nothing is refunded for delivered value.
+      mockTaskBody({ status: 404, message: 'req-1: task not found' }, 404);
+      const serviceClient = mockServiceClient('gen-1', null, null, {
+        state: 1,
+        data: { videos: ['render/final-1.mp4'] },
+      });
+      const updateSpy = vi
+        .spyOn(videoGeneration, 'recordGenerationUpdate')
+        .mockResolvedValue(undefined);
+      try {
+        const response = await poll();
+        expect(response.status).toBe(410);
+        expect(await response.json()).toMatchObject({ success: false, terminal: true });
+        expect(updateSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            generationId: 'gen-1',
+            status: 'completed',
+            engineTaskId: 'task-1',
+          }),
+        );
+        expect(refundTokens).not.toHaveBeenCalledWith(
+          serviceClient,
+          USER_ID,
+          'gen-1',
         );
       } finally {
         updateSpy.mockRestore();

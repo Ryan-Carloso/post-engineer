@@ -1,7 +1,7 @@
 import { fetchEngineTaskProgress, type EngineTaskProgress } from './engine-tasks';
 import { isRetryableGenerationError } from './generation/generation-errors';
 import { resolveGoneGenerationId } from './generation/gone-generation-reconcile';
-import { recordGenerationUpdate } from './generation/video-generation';
+import { settleGoneGeneration, type GoneSettleOutcome } from './generation/gone-settle';
 import { createSupabaseServiceClient } from './supabase/service';
 import { logger } from './logger';
 
@@ -45,8 +45,15 @@ export function presentStatus(dbStatus: string): string {
 const GONE_TASK_ERROR = 'engine_restart: the video task no longer exists on the generation engine';
 
 //---------------
-// settleGoneTask — record the terminal failed state for a task the engine
-// no longer has.
+// settleGoneTask — record the terminal state for a task the engine no
+// longer serves, VERIFIED against the durable state row first.
+//
+// The engine's HTTP answer alone is not trusted: production showed 404s for
+// tasks the persisted engine_task_state row says completed (and published)
+// — the previous quiet `failed` verdict was wrong for delivered videos
+// (see apps/web/lib/generation/gone-settle.ts). The durable verification
+// lives there; this wrapper resolves the owning generation and only fails
+// the history row after every proof of delivery came up empty.
 //
 // NO REFUND happens here. The per-generation refund RPC keys on a charge
 // row this path cannot prove exists (batch posts are prepaid under the
@@ -57,7 +64,7 @@ const GONE_TASK_ERROR = 'engine_restart: the video task no longer exists on the 
 // Failures are logged, never thrown: a status read must not 500 because a
 // history write could not land — the next poll retries.
 //---------------
-async function settleGoneTask(taskId: string, userId: string): Promise<void> {
+async function settleGoneTask(taskId: string, userId: string): Promise<GoneSettleOutcome> {
   try {
     const supabase = createSupabaseServiceClient();
     const generationId = await resolveGoneGenerationId(supabase, userId, taskId);
@@ -65,21 +72,29 @@ async function settleGoneTask(taskId: string, userId: string): Promise<void> {
       logger.warn('[api/schedule] gone task has no resolvable generation; history row left untouched', {
         taskId,
       });
-      return;
+      return 'unresolved';
     }
-    await recordGenerationUpdate({
+    const outcome = await settleGoneGeneration({
       supabase,
+      userId,
+      taskId,
       generationId,
-      status: 'failed',
-      engineTaskId: taskId,
-      errorCode: 'engine_restart',
-      errorMessage: GONE_TASK_ERROR,
     });
+    if (outcome === 'unresolved') {
+      // Left deliberately non-terminal: the durable lookup or the
+      // published-slot check could not be performed. The next status poll
+      // retries; the daily billing reconcile is the eventual backstop.
+      logger.warn('[api/schedule] gone task unverifiable; history row left untouched', {
+        taskId,
+      });
+    }
+    return outcome;
   } catch (error) {
     logger.error('[api/schedule] failed to settle a gone engine task', {
       taskId,
       error: error instanceof Error ? error.message : String(error),
     });
+    return 'unresolved';
   }
 }
 
@@ -117,12 +132,15 @@ export async function enrichSlot(
         try {
           const task = options.task ?? (await fetchEngineTaskProgress(taskId, userId));
           if (task.gone) {
-            // The engine no longer knows this task and never will: settle the
-            // history row once so the slot stops reporting `running` and the
-            // UI stops polling a task that cannot finish.
-            await settleGoneTask(taskId, userId);
+            // The engine no longer serves this task. The durable state row
+            // decides the verdict (completed videos must not be failed):
+            // a completed backfill is not retryable, a failed settle is.
+            const outcome = await settleGoneTask(taskId, userId);
             enrichment.status = 'failed';
-            enrichment.retryable = isRetryableGenerationError(GONE_TASK_ERROR);
+            enrichment.retryable =
+              outcome === 'completed'
+                ? null
+                : isRetryableGenerationError(GONE_TASK_ERROR);
           } else {
             enrichment.progress = task.progress;
             if (dbStatus === 'generating') enrichment.stage = task.stage;
