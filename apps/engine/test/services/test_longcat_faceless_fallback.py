@@ -363,3 +363,55 @@ class TestLongcatFacelessFallback(unittest.TestCase):
         skipped.assert_called_once()
         self.assertEqual(video, "filled.mp4")
         self.assertFalse(report.ran)
+
+    def test_hook_skip_then_face_fill_outage_warns_and_refunds(self):
+        """No intro ran; face-fill is the only face. Outage is faceless."""
+        params = VideoParams(
+            video_subject="test",
+            persona=PersonaParams(
+                name="Ana",
+                photo_url="https://supabase.test/signed/foto.png",
+                voice_id="test-voice",
+            ),
+        )
+        state = MagicMock()
+        state.get_task.return_value = {
+            "user_id": "alice",
+            "generation_id": "batch:sched-9:slot:slot-1",
+        }
+        store = MagicMock()
+        store.refund_batch_tokens.return_value = True
+        prepare = MagicMock(side_effect=lff.persona_hook.HookExceedsLipsyncCeiling(14.6, 12.0))
+        face_fill = MagicMock(
+            side_effect=longcat.LongCatUnavailableError(
+                "LongCat submit failed with HTTP 404: modal-http: workspace ac-X is disabled"
+            )
+        )
+        with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "alice"}), \
+             patch.object(lff.longcat_breaker, "trip", return_value=True), \
+             patch.object(lff.longcat_breaker, "should_emit_event", return_value=False), \
+             patch.object(lff.sm, "state", state), \
+             patch("app.services.fill_schedule.store.ScheduleStore", return_value=store), \
+             patch.object(lff.sm, "persist_state_update") as persist, \
+             patch.object(lff.persona_hook, "report_lipsync_intro_skipped"):
+            video, report = lff.render_persona_video(
+                task_id="hook-then-outage",
+                params=params,
+                audio_file="voice.mp3",
+                combined_video_path="combined.mp4",
+                video_script="script",
+                subtitle_path="sub.srt",
+                task=state.get_task.return_value,
+                user_id="alice",
+                prepare_intro=prepare,
+                apply_face_fill=face_fill,
+            )
+        self.assertEqual(video, "combined.mp4")
+        self.assertFalse(report.ran)
+        self.assertTrue(
+            any(
+                c.kwargs.get("user_warning_codes") == [lff.AVATAR_DISABLED_WARNING_CODE]
+                for c in persist.call_args_list
+            )
+        )
+        self.assertEqual(store.refund_batch_tokens.call_count, 1)

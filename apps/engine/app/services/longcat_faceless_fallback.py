@@ -248,10 +248,15 @@ def render_persona_video(
                 index=1,
             )
         except longcat.LongCatUnavailableError:
-            # Intro already contains the avatar: keep it. Do not mark
-            # avatar_disabled and do not refund the face premium.
-            logger.warning(
-                "face-fill skipped after LongCat unavailable "
-                f"(keeping intro-only video) task {task_id}"
-            )
+            if not intro_report.ran:
+                report_longcat_faceless_fallback(
+                    task_id, task or {}, user_id, params
+                )
+            else:
+                # Intro already contains the avatar: keep it. Do not mark
+                # avatar_disabled and do not refund the face premium.
+                logger.warning(
+                    "face-fill skipped after LongCat unavailable "
+                    f"(keeping intro-only video) task {task_id}"
+                )
     return video_for_render, intro_report

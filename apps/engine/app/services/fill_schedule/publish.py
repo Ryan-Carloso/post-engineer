@@ -27,6 +27,7 @@ from app.services.fill_schedule.publish_results import (
 )
 from app.services.fill_schedule.store import ScheduleStore
 from app.services.fill_schedule.support import (
+    FACELESS_PRICE,
     notify_safe,
     post_identity,
     slot_faceless,
@@ -443,7 +444,7 @@ class BatchPublisher:
                             f"publish-failed slot {slot['id']}: {exc}"
                         )
                 amount = (
-                    0
+                    min(cost, FACELESS_PRICE)
                     if not lookup_ok
                     else publish_refund_amount(cost, task_record, face_quality)
                 )
