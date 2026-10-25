@@ -183,6 +183,23 @@ describe('enrichSlot — gone engine task', () => {
     );
   });
 
+  it('leaves the history row untouched when the durable lookup errors even if no slot is published', async () => {
+    // Pre-fix: published === false after a durable READ error fell through
+    // to recordGenerationUpdate(failed) — contradicting the video-status
+    // 404 path (read error → no write, no refund).
+    fetchMock.mockResolvedValue(engineResponse(404, { message: 'task not found' }));
+    mockTables({
+      video_generations: { data: { generation_id: RESOLVED_GENERATION } },
+      engine_task_state: { error: { message: 'connection reset' } },
+      scheduled_posts: { data: [] },
+    });
+
+    const result = await enrichSlot(GENERATING_SLOT, 'user-1');
+
+    expect(selectVideoGeneration).not.toHaveBeenCalled();
+    expect(result.status).toBe('failed');
+  });
+
   it('leaves the history row untouched when the durable lookup fails (unresolved is NOT failed)', async () => {
     fetchMock.mockResolvedValue(engineResponse(404, { message: 'task not found' }));
     mockTables({

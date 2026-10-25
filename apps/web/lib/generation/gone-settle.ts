@@ -173,6 +173,16 @@ export async function settleGoneGeneration(input: {
   if (published === null) {
     return 'unresolved';
   }
+  if (durable.errored) {
+    // Same rule as the video-status 404 path: a durable LOOKUP error is
+    // unverifiable, not "no proof". Writing failed + engine_restart here
+    // would also refund (or lock out the completed backfill) on a state
+    // we could not read.
+    logger.error('[gone-settle] durable task-state lookup errored; history row left untouched', {
+      taskId,
+    });
+    return 'unresolved';
+  }
 
   // Genuinely dead work: the engine holds no task, no persisted completion,
   // and nothing was published. The historical verdict stands.
