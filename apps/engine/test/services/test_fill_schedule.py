@@ -1283,6 +1283,30 @@ class PublishRetryLimitTests(unittest.TestCase):
         self.assertEqual(store.updates[0][1]["publish_attempts"], 2)
         self.assertEqual(store.refund_batch_calls, [])
 
+    def test_retry_backoff_schedules_the_next_attempt_by_the_failed_attempt_number(self):
+        # PR-B (#277): the next attempt is NOT the next tick — the failing
+        # slot earns a publish_not_before key (30s after the first failure,
+        # 2min after the second) so the failing upload endpoint is not
+        # hammered every tick inside its recovery window.
+        store, _ = self._run_publish(self._slot(publish_attempts=0))
+        self.assertEqual(
+            store.updates[0][1]["publish_not_before"],
+            "2026-09-07T12:00:30+00:00",
+        )
+        store, _ = self._run_publish(self._slot(publish_attempts=1))
+        self.assertEqual(
+            store.updates[0][1]["publish_not_before"],
+            "2026-09-07T12:02:00+00:00",
+        )
+        # The terminal (third) attempt keys no backoff: the slot is failed.
+        store, _ = self._run_publish(self._slot(publish_attempts=2))
+        self.assertEqual(store.updates[0][1]["status"], "failed")
+
+    def test_retry_delays_match_the_documented_schedule(self):
+        from app.services.fill_schedule.constants import PUBLISH_RETRY_DELAY_SECONDS
+
+        self.assertEqual(PUBLISH_RETRY_DELAY_SECONDS, (30, 120, 600))
+
     def test_attempts_default_to_zero_when_column_missing(self):
         # Rows selected before the publish_attempts migration (or partial
         # projections) carry no counter: the first failure counts as attempt 1.

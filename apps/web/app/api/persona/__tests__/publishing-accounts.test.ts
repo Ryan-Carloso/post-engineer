@@ -37,7 +37,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 
 const USER_ID = 'user-uuid-1';
-const PERSONA_ID = 'persona-uuid-1';
+const PERSONA_ID = '11111111-2222-3333-4444-555555555555';
 
 type Row = Record<string, unknown>;
 
@@ -130,6 +130,22 @@ describe('GET /api/persona/publishing-accounts', () => {
     } as never);
     const res = await GET(req('GET'));
     expect(res.status).toBe(401);
+  });
+
+  it('400s with a stable validation code for a non-uuid personaId (placeholder callers stop leaking Postgres errors)', async () => {
+    // The production warnings: `invalid input syntax for type uuid: "p-1"`
+    // from a caller that sent placeholder ids. A uuid-shape gate answers
+    // with a machine-readable VALIDATION_FAILED on the personaId field and
+    // NEVER hits Postgres.
+    const request = new Request('https://app.test/api/persona/publishing-accounts?personaId=p-1', {
+      method: 'GET',
+      headers: { 'x-api-key': 'key' },
+    });
+    const res = await GET(request);
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.code).toBe('VALIDATION_FAILED');
+    expect(json.field).toBe('personaId');
   });
 
   it('400s when personaId is missing', async () => {
