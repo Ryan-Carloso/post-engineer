@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import threading
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
@@ -119,11 +120,53 @@ class TestLongcatFacelessFallback(unittest.TestCase):
         store.refund_batch_tokens.side_effect = RuntimeError("/secret/path/token.json boom")
         with patch.object(lff.sm, "state", state), \
              patch("app.services.fill_schedule.store.ScheduleStore", return_value=store), \
+             patch.object(lff.sm, "persist_state_update") as persist, \
              patch.object(lff.logger, "error") as log_error:
             lff.refund_face_premium("t-refund", 1)
+        persist.assert_not_called()
         message = str(log_error.call_args)
         self.assertNotIn("/secret/path/token.json", message)
         self.assertIn("refund_batch_tokens failed", message)
+
+    def test_should_emit_event_serializes_concurrent_calls(self):
+        now = datetime(2026, 10, 25, 9, 0, tzinfo=timezone.utc)
+        with tempfile.TemporaryDirectory() as breaker_root:
+            results: list[bool] = []
+            barrier = threading.Barrier(2)
+
+            def run() -> None:
+                barrier.wait()
+                results.append(longcat_breaker.should_emit_event(now, root=breaker_root))
+
+            threads = [threading.Thread(target=run), threading.Thread(target=run)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+            self.assertEqual(sorted(results), [False, True])
+
+    def test_emit_does_not_drop_until_from_concurrent_trip(self):
+        now = datetime(2026, 10, 25, 9, 0, tzinfo=timezone.utc)
+        with tempfile.TemporaryDirectory() as breaker_root:
+            barrier = threading.Barrier(2)
+
+            def tripper() -> None:
+                barrier.wait()
+                longcat_breaker.trip(now, "workspace_disabled", root=breaker_root)
+
+            def emitter() -> None:
+                barrier.wait()
+                longcat_breaker.should_emit_event(now, root=breaker_root)
+
+            threads = [
+                threading.Thread(target=tripper),
+                threading.Thread(target=emitter),
+            ]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+            self.assertTrue(longcat_breaker.is_open(now, root=breaker_root))
 
     def test_should_alert_hour_bucket_allows_the_next_hour(self):
         with tempfile.TemporaryDirectory() as breaker_root:
@@ -169,8 +212,10 @@ class TestLongcatFacelessFallback(unittest.TestCase):
         store = MagicMock()
         store.refund_batch_tokens.return_value = True
         with patch.object(lff.sm, "state", state), \
-             patch("app.services.fill_schedule.store.ScheduleStore", return_value=store):
+             patch("app.services.fill_schedule.store.ScheduleStore", return_value=store), \
+             patch.object(lff.sm, "persist_state_update") as persist:
             lff.refund_face_premium("dispatch-task", 2)
+        persist.assert_called_once_with(state, "dispatch-task", shortface_refunded=True)
         args = store.refund_batch_tokens.call_args.args
         self.assertEqual(args[1], "batch:sched-9")
         self.assertEqual(args[2], "batch:sched-9:slot:slot-1:shortface")
@@ -204,9 +249,25 @@ class TestLongcatFacelessFallback(unittest.TestCase):
         store.refund_batch_tokens.return_value = True
         with patch.object(lff.sm, "state", state), \
              patch("app.services.fill_schedule.store.ScheduleStore", return_value=store), \
+             patch.object(lff.sm, "persist_state_update") as persist, \
              patch.object(lff.logger, "info") as log_info:
             lff.refund_face_premium("t-ok", 1)
+        persist.assert_called_once_with(state, "t-ok", shortface_refunded=True)
         self.assertTrue(any("refund landed" in str(c) for c in log_info.call_args_list))
+
+    def test_refund_does_not_persist_shortface_when_store_returns_false(self):
+        state = MagicMock()
+        state.get_task.return_value = {
+            "user_id": "alice",
+            "generation_id": "batch:sched-9:slot:slot-1",
+        }
+        store = MagicMock()
+        store.refund_batch_tokens.return_value = False
+        with patch.object(lff.sm, "state", state), \
+             patch("app.services.fill_schedule.store.ScheduleStore", return_value=store), \
+             patch.object(lff.sm, "persist_state_update") as persist:
+            lff.refund_face_premium("t-miss", 1)
+        persist.assert_not_called()
 
     def test_quality_token_ignores_non_strings(self):
         self.assertIsNone(lff._quality_token(3))

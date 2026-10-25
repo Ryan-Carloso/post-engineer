@@ -1320,8 +1320,8 @@ class TestArchiveFinalVideos(unittest.TestCase):
         self.assertEqual(track.call_args.args[0], "longcat_fallback_faceless")
         self.assertEqual(track.call_args.args[1]["reason"], "workspace_disabled")
         self.assertEqual(track.call_args.args[1]["user_id"], "alice")
-        persist.assert_called_once()
-        self.assertEqual(persist.call_args.kwargs.get("user_warning_codes"),
+        persist.assert_called()
+        self.assertEqual(persist.call_args_list[0].kwargs.get("user_warning_codes"),
                          ["avatar_disabled"])
         # Face premium refund: batch charge, slot-scoped idempotency key.
         args = store.refund_batch_tokens.call_args.args
@@ -1467,8 +1467,8 @@ class TestArchiveFinalVideos(unittest.TestCase):
         self.assertEqual(track.call_count, 1)
         self.assertEqual(track.call_args.args[0], "longcat_fallback_faceless")
         self.assertEqual(track.call_args.args[1].get("reason"), "workspace_disabled")
-        persist.assert_called_once()
-        self.assertEqual(persist.call_args.kwargs.get("user_warning_codes"),
+        persist.assert_called()
+        self.assertEqual(persist.call_args_list[0].kwargs.get("user_warning_codes"),
                          ["avatar_disabled"])
 
     def test_open_breaker_does_not_skip_longcat_for_real_users(self):
@@ -1583,7 +1583,7 @@ class TestArchiveFinalVideos(unittest.TestCase):
                 with open(os.path.join(breaker_root, "marker.json"), encoding="utf-8") as fh:
                     self.assertNotIn("until", json_module.load(fh))
                 # User marker stays.
-                self.assertEqual(persist.call_args.kwargs.get("user_warning_codes"),
+                self.assertEqual(persist.call_args_list[0].kwargs.get("user_warning_codes"),
                                  ["avatar_disabled"])
 
                 # DEDUP: a second fallback for a second real user's task in the

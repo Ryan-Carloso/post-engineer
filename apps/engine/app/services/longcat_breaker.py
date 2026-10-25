@@ -26,10 +26,13 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import threading
 from datetime import datetime, timezone
 from typing import Any
 
 from loguru import logger
+
+_MARKER_LOCK = threading.Lock()
 
 
 def _state_path(root: str | None = None) -> str:
@@ -56,9 +59,8 @@ def _read_state(path: str) -> dict[str, Any]:
 def _write_state(path: str, state: dict[str, Any]) -> bool:
     """Atomic replace (temp file + rename) so a crash cannot leave a torn JSON.
 
-    Duplicate alerts are the remaining race: two processes can both read a
-    stale last_alert_hour / last_event_day before either rename lands, so
-    last-writer-wins can still emit twice. Do not leave that uncommented.
+    In-process concurrent batch slots share ``_MARKER_LOCK`` around
+    read/mutate/write. Cross-process last-writer-wins can still emit twice.
     """
     directory = os.path.dirname(path) or "."
     try:
@@ -99,10 +101,11 @@ def trip(now: datetime, reason: str, root: str | None = None) -> bool:
     the breaker simply behaves closed until the next trip.
     """
     until = _first_of_next_month(now)
-    state = _read_state(_state_path(root))
-    state["until"] = until
-    state["reason"] = reason[:200]
-    return _write_state(_state_path(root), state)
+    with _MARKER_LOCK:
+        state = _read_state(_state_path(root))
+        state["until"] = until
+        state["reason"] = reason[:200]
+        return _write_state(_state_path(root), state)
 
 
 def is_open(now: datetime, root: str | None = None) -> bool:
@@ -123,20 +126,21 @@ def is_open(now: datetime, root: str | None = None) -> bool:
 def should_emit_event(now: datetime, root: str | None = None) -> bool:
     """Dedup gate for the informative event: at most ONE per calendar day."""
     path = _state_path(root)
-    state = _read_state(path)
     today = now.date().isoformat()
-    if state.get("last_event_day") == today:
-        return False
-    state["last_event_day"] = today
-    if not _write_state(path, state):
-        logger.warning(
-            "longcat breaker event marker did not persist (marker write failed)"
-        )
-        # Fail-closed: a lost daily marker must not spam the informative
-        # event. should_alert fail-opens on the same failure (duplicates
-        # beat silence). Both branches are pinned in tests.
-        return False
-    return True
+    with _MARKER_LOCK:
+        state = _read_state(path)
+        if state.get("last_event_day") == today:
+            return False
+        state["last_event_day"] = today
+        if not _write_state(path, state):
+            logger.warning(
+                "longcat breaker event marker did not persist (marker write failed)"
+            )
+            # Fail-closed: a lost daily marker must not spam the informative
+            # event. should_alert fail-opens on the same failure (duplicates
+            # beat silence). Both branches are pinned in tests.
+            return False
+        return True
 
 
 #---------------
@@ -164,14 +168,15 @@ def is_test_account(user_id: str) -> bool:
 def should_alert(now: datetime, root: str | None = None) -> bool:
     """Dedup gate for the REAL-user loud alert: at most ONE per hour."""
     path = _state_path(root)
-    state = _read_state(path)
     hour_bucket = now.strftime("%Y-%m-%dT%H")
-    if state.get("last_alert_hour", "") == hour_bucket:
-        return False
-    state["last_alert_hour"] = hour_bucket
-    if not _write_state(path, state):
-        logger.warning(
-            "longcat breaker alert marker did not persist (marker write failed)"
-        )
+    with _MARKER_LOCK:
+        state = _read_state(path)
+        if state.get("last_alert_hour", "") == hour_bucket:
+            return False
+        state["last_alert_hour"] = hour_bucket
+        if not _write_state(path, state):
+            logger.warning(
+                "longcat breaker alert marker did not persist (marker write failed)"
+            )
+            return True
         return True
-    return True

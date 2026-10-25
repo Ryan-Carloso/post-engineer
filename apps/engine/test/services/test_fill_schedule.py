@@ -1335,7 +1335,7 @@ class PublishRetryLimitTests(unittest.TestCase):
             "state": 1,
             "videos": [self.video_path],
             "video_storage_path": "user-1/faced/t-1/final-1.mp4",
-            "user_warning_codes": ["avatar_disabled"],
+            "user_warning_codes": ["avatar_disabled"], "shortface_refunded": True,
         }
         publish = MagicMock(side_effect=PublishError("boom"))
         scheduler = fs.FillScheduleScheduler(

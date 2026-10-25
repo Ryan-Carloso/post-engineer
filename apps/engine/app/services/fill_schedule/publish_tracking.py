@@ -39,11 +39,12 @@ def publish_refund_amount(
     """Net of a :shortface premium already refunded for this slot.
 
     LongCat faceless fallback refunds only the face premium under
-    ``:shortface``. A later publish failure must not refund that premium
-    again: the remaining prepaid amount is the faceless price (or zero).
+    ``:shortface``. Net only when that refund actually landed
+    (``shortface_refunded``). ``avatar_disabled`` alone is not enough:
+    a failed premium refund leaves later generation/publish refunds at
+    the prepaid faced amount.
     """
-    codes = (task or {}).get("user_warning_codes") or []
-    if not isinstance(codes, list) or "avatar_disabled" not in codes:
+    if not (task or {}).get("shortface_refunded"):
         return prepaid
     premium = token_cost(False, face_quality) - FACELESS_PRICE
     return max(0, prepaid - premium)

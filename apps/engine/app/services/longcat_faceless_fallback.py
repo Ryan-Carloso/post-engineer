@@ -149,6 +149,7 @@ def refund_face_premium(task_id: str, premium: int) -> None:
             engine_task_id=task_id,
         )
         if refunded:
+            sm.persist_state_update(sm.state, task_id, shortface_refunded=True)
             logger.info(
                 f"refund landed for the face premium of task {task_id} ({premium} tokens)"
             )

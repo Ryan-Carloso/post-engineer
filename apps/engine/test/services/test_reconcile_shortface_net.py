@@ -57,6 +57,7 @@ class TestReconcileShortfaceNet(unittest.TestCase):
             "state": const.TASK_STATE_FAILED,
             "error": "ffmpeg died",
             "user_warning_codes": ["avatar_disabled"],
+            "shortface_refunded": True,
         }
         with patch("app.services.fill_schedule.reconcile.track_event"), patch(
             "app.services.fill_schedule.reconcile.track_refund_issued"
@@ -88,6 +89,7 @@ class TestReconcileShortfaceNet(unittest.TestCase):
             "state": const.TASK_STATE_FAILED,
             "error": "ffmpeg died",
             "user_warning_codes": ["avatar_disabled"],
+            "shortface_refunded": True,
         }
         with patch("app.services.fill_schedule.reconcile.track_event"), patch(
             "app.services.fill_schedule.reconcile.track_refund_issued"
@@ -116,6 +118,7 @@ class TestReconcileShortfaceNet(unittest.TestCase):
             "state": const.TASK_STATE_FAILED,
             "error": "ffmpeg died",
             "user_warning_codes": ["avatar_disabled"],
+            "shortface_refunded": True,
         }
         with patch("app.services.fill_schedule.reconcile.track_event"), patch(
             "app.services.fill_schedule.reconcile.track_refund_issued"
@@ -125,3 +128,31 @@ class TestReconcileShortfaceNet(unittest.TestCase):
             )
         self.assertEqual(store.refund_batch_calls, [])
         issued.assert_not_called()
+
+    def test_generation_failure_keeps_prepaid_when_shortface_refund_did_not_land(self):
+        slot = {
+            "id": "slot-1",
+            "user_id": "user-1",
+            "task_id": "t-1",
+            "faceless": False,
+            "schedules": {
+                "id": "sched-1",
+                "user_id": "user-1",
+                "personas": {"face_quality": "very_good"},
+                "post_face_quality": "very_good",
+            },
+        }
+        store = _Store([slot])
+        state = MagicMock()
+        state.get_task.return_value = {
+            "state": const.TASK_STATE_FAILED,
+            "error": "ffmpeg died",
+            "user_warning_codes": ["avatar_disabled"],
+        }
+        with patch("app.services.fill_schedule.reconcile.track_event"), patch(
+            "app.services.fill_schedule.reconcile.track_refund_issued"
+        ):
+            BatchReconciler(store, state).run(
+                datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc)
+            )
+        self.assertEqual(store.refund_batch_calls[0][3], 3)
