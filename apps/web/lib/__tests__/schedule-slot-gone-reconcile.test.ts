@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { enrichSlot } from '../schedule-slot-presentation';
+import { logger } from '@/lib/logger';
 
 const fetchMock = vi.fn();
 const serviceClient = { from: vi.fn() };
@@ -180,6 +181,28 @@ describe('enrichSlot — gone engine task', () => {
     );
     expect(selectVideoGeneration).not.toHaveBeenCalledWith(
       expect.objectContaining({ status: 'failed' }),
+    );
+  });
+
+  it('leaves the history row untouched when the durable lookup errors even if no slot is published', async () => {
+    // Pre-fix: published === false after a durable READ error fell through
+    // to recordGenerationUpdate(failed) — a false terminal verdict that
+    // would lock out the completed backfill. This path never refunds.
+    fetchMock.mockResolvedValue(engineResponse(404, { message: 'task not found' }));
+    mockTables({
+      video_generations: { data: { generation_id: RESOLVED_GENERATION } },
+      engine_task_state: { error: { message: 'connection reset' } },
+      scheduled_posts: { data: [] },
+    });
+
+    const result = await enrichSlot(GENERATING_SLOT, 'user-1');
+
+    expect(selectVideoGeneration).not.toHaveBeenCalled();
+    expect(result.status).toBe('failed');
+    expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
+      '[gone-settle] durable task-state lookup errored; history row left untouched',
+      undefined,
+      expect.objectContaining({ taskId: 'task-abc' }),
     );
   });
 
