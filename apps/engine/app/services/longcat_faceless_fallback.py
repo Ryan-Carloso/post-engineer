@@ -42,8 +42,9 @@ def report_longcat_faceless_fallback(
     - TEST accounts (TEST_ACCOUNT_USER_IDS): informative
       `longcat_fallback_faceless` event (1/day) plus persisted breaker trip.
     - REAL users: always retry LongCat next dispatch; loud ERROR + Discord
-      1/hour. Both paths set user_warning_codes [avatar_disabled] and refund
-      the face premium the way it was charged.
+      1/hour. Both paths set user_warning_codes [avatar_disabled]. Batch
+      tasks get the face premium refund; direct tasks have no batch charge
+      and are not refunded here.
     """
     from app.services.fill_schedule.support import FACELESS_PRICE, token_cost
 
@@ -79,10 +80,10 @@ def report_longcat_faceless_fallback(
     sm.persist_state_update(
         sm.state, task_id, user_warning_codes=[AVATAR_DISABLED_WARNING_CODE]
     )
-    stored = sm.state.get_task(task_id) or task or {}
+    stored = _load_task(task_id, task)
     face_quality = _face_quality(stored, params)
     premium = token_cost(False, face_quality) - FACELESS_PRICE
-    refund_face_premium(task_id, premium)
+    refund_face_premium(task_id, premium, stored)
 
 
 def _quality_token(raw: object) -> str | None:
@@ -126,9 +127,22 @@ def _batch_generation_id(task: dict[str, object]) -> str | None:
     return generation_id
 
 
-def refund_face_premium(task_id: str, premium: int) -> None:
+def _load_task(
+    task_id: str, fallback: dict[str, object] | None = None
+) -> dict[str, object]:
+    try:
+        loaded = sm.state.get_task(task_id)
+    except Exception as exc:  # noqa: BLE001 — fallback still delivers faceless
+        logger.warning(f"task lookup failed for {task_id}: {exc}")
+        loaded = None
+    return loaded or fallback or {}
+
+
+def refund_face_premium(
+    task_id: str, premium: int, task: dict[str, object] | None = None
+) -> None:
     """Refund the face/premium difference for BATCH-prefunded tasks."""
-    task = sm.state.get_task(task_id) or {}
+    task = _load_task(task_id, task)
     generation_id = _batch_generation_id(task)
     if generation_id is None:
         return
@@ -149,10 +163,17 @@ def refund_face_premium(task_id: str, premium: int) -> None:
             engine_task_id=task_id,
         )
         if refunded:
-            sm.persist_state_update(sm.state, task_id, shortface_refunded=True)
-            logger.info(
-                f"refund landed for the face premium of task {task_id} ({premium} tokens)"
+            persisted = sm.persist_state_update(
+                sm.state, task_id, shortface_refunded=True
             )
+            if not persisted:
+                persisted = sm.persist_state_update(
+                    sm.state, task_id, shortface_refunded=True
+                )
+            if persisted:
+                logger.info(
+                    f"refund landed for the face premium of task {task_id} ({premium} tokens)"
+                )
     except Exception as inner_exp:  # noqa: BLE001 — refund is best-effort here
         logger.error(
             "refund_batch_tokens failed for task "

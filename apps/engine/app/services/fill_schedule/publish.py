@@ -407,8 +407,7 @@ class BatchPublisher:
                 "video_publish_failed",
                 {
                     **_publish_tracking_context(slot, schedule),
-                    # Same scrub-then-truncate convention as the exception
-                    # path: the reason is client-visible in the error column.
+                    # Scrub-then-truncate: the reason is client-visible.
                     "reason": scrub_error_text(error, max_chars=200),
                     "retryable": False,
                 },
@@ -432,11 +431,15 @@ class BatchPublisher:
                 engine_task_id = (
                     str(slot["task_id"]) if slot.get("task_id") else None
                 )
-                task_record = (
-                    self.task_state.get_task(engine_task_id)
-                    if engine_task_id
-                    else None
-                )
+                task_record = None
+                if engine_task_id:
+                    try:
+                        task_record = self.task_state.get_task(engine_task_id)
+                    except Exception as exc:  # noqa: BLE001 — lookup must not abort the tick
+                        logger.error(
+                            "fill_schedule: task lookup failed for "
+                            f"publish-failed slot {slot['id']}: {exc}"
+                        )
                 amount = publish_refund_amount(cost, task_record, face_quality)
                 if amount > 0:
                     try:

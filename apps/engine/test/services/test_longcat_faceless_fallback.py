@@ -255,6 +255,40 @@ class TestLongcatFacelessFallback(unittest.TestCase):
         persist.assert_called_once_with(state, "t-ok", shortface_refunded=True)
         self.assertTrue(any("refund landed" in str(c) for c in log_info.call_args_list))
 
+    def test_refund_retries_shortface_persist_after_first_write_fails(self):
+        state = MagicMock()
+        state.get_task.return_value = {
+            "user_id": "alice",
+            "generation_id": "batch:sched-9:slot:slot-1",
+        }
+        store = MagicMock()
+        store.refund_batch_tokens.return_value = True
+        persist = MagicMock(side_effect=[False, True])
+        with patch.object(lff.sm, "state", state), \
+             patch("app.services.fill_schedule.store.ScheduleStore", return_value=store), \
+             patch.object(lff.sm, "persist_state_update", persist):
+            lff.refund_face_premium("t-retry", 1)
+        self.assertEqual(persist.call_count, 2)
+        persist.assert_called_with(state, "t-retry", shortface_refunded=True)
+
+    def test_report_uses_passed_task_when_get_task_raises(self):
+        state = MagicMock()
+        state.get_task.side_effect = RuntimeError("state down")
+        store = MagicMock()
+        store.refund_batch_tokens.return_value = True
+        passed = {
+            "user_id": "alice",
+            "generation_id": "batch:sched-9:slot:slot-1",
+        }
+        with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "alice"}), \
+             patch.object(lff.longcat_breaker, "trip", return_value=True), \
+             patch.object(lff.longcat_breaker, "should_emit_event", return_value=False), \
+             patch.object(lff.sm, "persist_state_update", return_value=True), \
+             patch.object(lff.sm, "state", state), \
+             patch("app.services.fill_schedule.store.ScheduleStore", return_value=store):
+            lff.report_longcat_faceless_fallback("t-lookup", passed, "alice")
+        self.assertEqual(store.refund_batch_tokens.call_count, 1)
+
     def test_refund_does_not_persist_shortface_when_store_returns_false(self):
         state = MagicMock()
         state.get_task.return_value = {
