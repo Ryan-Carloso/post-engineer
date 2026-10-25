@@ -1538,7 +1538,7 @@ class TestArchiveFinalVideos(unittest.TestCase):
                     patch.object(lff, "_discord_notify") as discord, \
                     patch.object(lff.logger, "error") as log_error, \
                     patch.object(tm.video, "generate_video"):
-                tm._report_longcat_faceless_fallback(task_id, {"user_id": "real-user"})
+                lff.report_longcat_faceless_fallback(task_id, {"user_id": "real-user"})
                 # LOUD: error record + Discord ping. NOT quiet.
                 log_error.assert_called_once()
                 discord.assert_called_once()
@@ -1552,7 +1552,7 @@ class TestArchiveFinalVideos(unittest.TestCase):
 
                 # DEDUP: a second fallback for a second real user's task in the
                 # SAME hour stays silent (no further alert, no spammage).
-                tm._report_longcat_faceless_fallback("task-2", {"user_id": "real-user-2"})
+                lff.report_longcat_faceless_fallback("task-2", {"user_id": "real-user-2"})
                 log_error.assert_called_once()  # still one
                 discord.assert_called_once()   # still one
 
@@ -1582,7 +1582,7 @@ class TestArchiveFinalVideos(unittest.TestCase):
                 # path NEVER trips it).
                 self.assertFalse(tm.longcat_breaker.is_open(
                     datetime(2026, 10, 25, 12, 0, tzinfo=UTC), root=breaker_root))
-                tm._report_longcat_faceless_fallback("t1", {"user_id": "u"})
+                lff.report_longcat_faceless_fallback("t1", {"user_id": "u"})
                 self.assertFalse(tm.longcat_breaker.is_open(
                     datetime(2026, 10, 25, 12, 5, tzinfo=UTC), root=breaker_root))
                 # The marker may exist for the ALERT dedup; what must NEVER
@@ -1602,7 +1602,7 @@ class TestArchiveFinalVideos(unittest.TestCase):
         state.get_task.return_value = {"user_id": "alice"}  # no generation id
         state._rpc = MagicMock()
         with patch.object(tm.sm, "state", state):
-            tm._refund_face_premium("direct-task", 1)
+            lff.refund_face_premium("direct-task", 1)
         state._rpc.assert_not_called()
 
 

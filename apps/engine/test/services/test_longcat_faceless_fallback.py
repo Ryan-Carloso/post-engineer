@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
-from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -15,7 +14,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.models.schema import PersonaParams, VideoParams
 from app.services import longcat, longcat_faceless_fallback as lff
-from app.services.intro_cost import IntroCostReport
 
 
 def _breaker_path(breaker_root: str):

@@ -3,7 +3,6 @@ import math
 import os.path
 import random
 import re
-from datetime import datetime, timezone
 from collections import deque
 from os import path
 from threading import Lock
@@ -28,10 +27,7 @@ from app.services import (
     upload_post,
 )
 from app.services import state as sm
-from app.services import longcat_breaker
 from app.services.longcat_faceless_fallback import (
-    report_longcat_faceless_fallback as _report_longcat_faceless_fallback,
-    refund_face_premium as _refund_face_premium,
     render_persona_video,
 )
 from app.services import persona_image
