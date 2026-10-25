@@ -375,7 +375,15 @@ def chatterbox_tts(
 
             response = requests.post(url, json=payload, headers=headers, timeout=120)
             if response.status_code != 200:
-                last_error = f"status {response.status_code}"
+                # Include the server's verdict: the bare "status 404" hid the
+                # production evidence for days (a gateway body like
+                # "modal-http: workspace ... is disabled" answered the 404
+                # while only "status 404" reached the history row).
+                body = " ".join(response.text[:200].split())
+                if body:
+                    last_error = f"status {response.status_code}: {body}"
+                else:
+                    last_error = f"status {response.status_code}"
                 logger.error(
                     f"chatterbox tts failed with status {response.status_code}: {response.text[:200]}"
                 )
