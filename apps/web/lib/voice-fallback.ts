@@ -126,13 +126,15 @@ function defaultVoiceFor(gender: 'female' | 'male' | null): string {
 }
 
 /**
- * The gender the stored voice id spells out, when it does. Legacy display
- * suffixes (`-Female` / `-Male`) are the only trustworthy source; arbitrary
- * bare names stay gender-unknown and fall back to the language default.
+ * The gender the stored voice id spells out, when it does. Real legacy
+ * forms in this repo: `-Female`/`-Male` suffixes (Edge/Azure/`default-Female`),
+ * `_female_`/`_male_` Modal/chatterbox ids (`en_us_female_01`), and the
+ * underscore-to-space display rewrite (`en us female 01`). Female is
+ * matched first so `female` is not swallowed by `male`.
  */
 function voiceGenderHint(voiceId: string): 'female' | 'male' | null {
-  if (/-female$/i.test(voiceId)) return 'female';
-  if (/-male$/i.test(voiceId)) return 'male';
+  if (/(?:^|[-_\s])female(?:[-_\s]|$)/i.test(voiceId)) return 'female';
+  if (/(?:^|[-_\s])male(?:[-_\s]|$)/i.test(voiceId)) return 'male';
   return null;
 }
 
@@ -163,6 +165,8 @@ export function resolvePersonaVoice(
   opts: ResolvePersonaVoiceOptions = {},
 ): VoiceResolution {
   const trimmed = (voiceId ?? '').trim();
+  const catalogIds = opts.catalogIds;
+  const hasClones = catalogIds !== undefined && catalogContainsClone(catalogIds);
   // An absent voice falls back to the persona's language default (no
   // gender is known) instead of failing at TTS with "no voice configured".
   if (trimmed.length === 0) {
@@ -191,15 +195,15 @@ export function resolvePersonaVoice(
   }
   if (isCloneVoiceId(trimmed)) {
     const key = cloneKeyOf(trimmed) ?? '';
-    if (opts.catalogIds !== undefined) {
+    if (catalogIds !== undefined) {
       // Compare by clone KEY: personas still store `chatterbox:<key>` while
       // the served catalog lists `chatterbox_nano:<key>` (voice-catalog.ts).
-      if (catalogListsCloneKey(opts.catalogIds, trimmed)) {
+      if (catalogListsCloneKey(catalogIds, trimmed)) {
         return { kind: 'valid', voiceId: trimmed };
       }
       // A catalog with zero clone rows is a degraded merge, not proof the
       // clone is gone — treat it as "catalog not loaded" and fall through.
-      if (catalogContainsClone(opts.catalogIds)) {
+      if (hasClones) {
         return fallbackResolution(trimmed, VOICE_FALLBACK_REASONS.CLONE_UNAVAILABLE, null, language);
       }
     }
@@ -213,7 +217,7 @@ export function resolvePersonaVoice(
     if (name.length === 0) {
       return fallbackResolution(trimmed, VOICE_FALLBACK_REASONS.UNKNOWN_VOICE, null, language);
     }
-    if (opts.catalogIds !== undefined && !opts.catalogIds.has(trimmed)) {
+    if (catalogIds !== undefined && !catalogIds.has(trimmed)) {
       return fallbackResolution(trimmed, VOICE_FALLBACK_REASONS.RETIRED_HOUSE_VOICE, voiceGenderHint(trimmed), language);
     }
     return { kind: 'valid', voiceId: trimmed };

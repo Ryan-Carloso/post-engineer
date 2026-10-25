@@ -1788,9 +1788,8 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(json.warnings).toEqual([
         { code: 'voice_fallback_applied', fromVoice: '', toVoice: 'chatterbox:kokoro_af_heart' },
       ]);
-      // The write THREW (recorded as attempted, never landed): the dispatch
-      // still completed with the swapped voice for this post only. Nothing
-      // about the failure reaches the response — only the server-side log.
+      // The mock records the attempted personas update; no DB row was
+      // committed (the client threw). Dispatch still uses the swapped voice.
       expect(updates.some((u) => u.table === 'personas')).toBe(true);
     });
 

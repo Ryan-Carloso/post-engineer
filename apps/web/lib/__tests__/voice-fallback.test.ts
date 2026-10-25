@@ -134,6 +134,37 @@ describe('resolvePersonaVoice', () => {
       });
     });
 
+    it('reads gender from a Modal underscore id (en_us_female_01 / en_us_male_01)', () => {
+      const emptyCatalog = new Set<string>();
+      expect(resolvePersonaVoice('chatterbox:en_us_female_01', 'en-US', { catalogIds: emptyCatalog })).toEqual({
+        kind: 'fallback',
+        fromVoice: 'chatterbox:en_us_female_01',
+        toVoice: 'chatterbox:kokoro_af_heart',
+        reason: VOICE_FALLBACK_REASONS.RETIRED_HOUSE_VOICE,
+      });
+      expect(resolvePersonaVoice('chatterbox:en_us_male_01', 'en-US', { catalogIds: emptyCatalog })).toEqual({
+        kind: 'fallback',
+        fromVoice: 'chatterbox:en_us_male_01',
+        toVoice: 'chatterbox:kokoro_am_michael',
+        reason: VOICE_FALLBACK_REASONS.RETIRED_HOUSE_VOICE,
+      });
+    });
+
+    it('reads gender from the underscore-to-space display form (en us female 01)', () => {
+      expect(resolvePersonaVoice('en us female 01', 'en-US')).toEqual({
+        kind: 'fallback',
+        fromVoice: 'en us female 01',
+        toVoice: 'chatterbox:kokoro_af_heart',
+        reason: VOICE_FALLBACK_REASONS.UNKNOWN_VOICE,
+      });
+      expect(resolvePersonaVoice('en us male 01', 'en-US')).toEqual({
+        kind: 'fallback',
+        fromVoice: 'en us male 01',
+        toVoice: 'chatterbox:kokoro_am_michael',
+        reason: VOICE_FALLBACK_REASONS.UNKNOWN_VOICE,
+      });
+    });
+
     it('swaps an empty stored voice for the language default', () => {
       expect(resolvePersonaVoice(null, 'en-US')).toEqual({
         kind: 'fallback',
@@ -141,7 +172,7 @@ describe('resolvePersonaVoice', () => {
         toVoice: 'chatterbox:kokoro_af_heart',
         reason: VOICE_FALLBACK_REASONS.VOICE_MISSING,
       });
-      expect(resolvePersonaVoice('   ', 'en-US')?.kind).toBe('fallback');
+      expect(resolvePersonaVoice('   ', 'en-US').kind).toBe('fallback');
     });
 
     it('swaps a bare legacy Modal name for its exact alias target', () => {

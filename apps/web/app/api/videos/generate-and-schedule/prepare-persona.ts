@@ -296,6 +296,7 @@ async function persistVoiceSwap(
     // Voice ids can carry user-typed fragments or clone ids; scrub the same
     // way trackApiEvent does (secret keys + credential fragments + 500 cap)
     // while keeping captureAs so the event stays attributed to the user.
+    // scrubSecrets handles secret keys; redactCredentialFragments handles fragments inside values.
     const props = scrubSecrets({
       from_voice: info.fromVoice,
       to_voice: info.toVoice,

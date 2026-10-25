@@ -31,6 +31,8 @@ export const PersonaVoiceSection = () => {
   // Skip the check while the catalog is loading, failed, or empty: an empty
   // set would flag every house voice as retired, and a load failure is
   // already surfaced by the picker's own retry states.
+  // Language is omitted: this screen never sees a non-English persona.
+  // Create/edit is gated to English (#252) until other languages launch.
   const resolution =
     savedVoiceId === null || catalogIds.size === 0
       ? null
