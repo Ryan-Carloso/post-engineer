@@ -84,7 +84,9 @@ function visitPersona(path: string): void {
 // Fill a valid create form: name + character + voice.
 function fillValidForm(): void {
   cy.get('#persona-name').type('Maya E2E');
-  cy.get('button[aria-label="Escolha um personagem 1"]').click();
+  cy.get('button[aria-label="Escolha um personagem 1"]')
+    .scrollIntoView()
+    .click({ force: true });
   cy.pickHouseVoice('en us male 01');
 }
 

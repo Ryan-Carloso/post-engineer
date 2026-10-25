@@ -271,6 +271,25 @@ class TestLongcatFacelessFallback(unittest.TestCase):
         self.assertEqual(persist.call_count, 2)
         persist.assert_called_with(state, "t-retry", shortface_refunded=True)
 
+    def test_refund_logs_error_when_shortface_persist_never_lands(self):
+        state = MagicMock()
+        state.get_task.return_value = {
+            "user_id": "alice",
+            "generation_id": "batch:sched-9:slot:slot-1",
+        }
+        store = MagicMock()
+        store.refund_batch_tokens.return_value = True
+        persist = MagicMock(return_value=False)
+        with patch.object(lff.sm, "state", state), \
+             patch("app.services.fill_schedule.store.ScheduleStore", return_value=store), \
+             patch.object(lff.sm, "persist_state_update", persist), \
+             patch.object(lff.logger, "error") as log_error:
+            lff.refund_face_premium("t-flag", 1)
+        self.assertEqual(persist.call_count, 2)
+        self.assertTrue(
+            any("shortface_refunded flag did not persist" in str(c) for c in log_error.call_args_list)
+        )
+
     def test_report_uses_passed_task_when_get_task_raises(self):
         state = MagicMock()
         state.get_task.side_effect = RuntimeError("state down")

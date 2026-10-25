@@ -174,6 +174,11 @@ def refund_face_premium(
                 logger.info(
                     f"refund landed for the face premium of task {task_id} ({premium} tokens)"
                 )
+            else:
+                logger.error(
+                    "shortface_refunded flag did not persist for task "
+                    f"{task_id} after the face premium refund landed"
+                )
     except Exception as inner_exp:  # noqa: BLE001 — refund is best-effort here
         logger.error(
             "refund_batch_tokens failed for task "

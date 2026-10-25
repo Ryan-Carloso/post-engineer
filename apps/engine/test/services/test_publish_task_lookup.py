@@ -1,4 +1,4 @@
-"""Publish-tick refund must survive a raising task-state lookup."""
+"""A raising task lookup must not refund the full prepaid faced amount."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ class _Store:
 
 
 class TestPublishTaskLookup(unittest.TestCase):
-    def test_fail_slot_refunds_when_get_task_raises(self):
+    def test_fail_slot_skips_refund_when_get_task_raises(self):
         store = _Store()
         state = MagicMock()
         state.get_task.side_effect = RuntimeError("state down")
@@ -51,5 +51,5 @@ class TestPublishTaskLookup(unittest.TestCase):
             "app.services.fill_schedule.publish.track_refund_issued"
         ):
             publisher._fail_slot_permanently(slot, schedule, "boom", "publish failed")
-        self.assertEqual(len(store.refund_batch_calls), 1)
-        self.assertEqual(store.refund_batch_calls[0][3], 2)
+        self.assertEqual(store.refund_batch_calls, [])
+        self.assertEqual(store.updates[0][1]["status"], "failed")

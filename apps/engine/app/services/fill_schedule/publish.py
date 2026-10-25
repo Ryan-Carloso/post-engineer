@@ -432,15 +432,21 @@ class BatchPublisher:
                     str(slot["task_id"]) if slot.get("task_id") else None
                 )
                 task_record = None
+                lookup_ok = True
                 if engine_task_id:
                     try:
                         task_record = self.task_state.get_task(engine_task_id)
                     except Exception as exc:  # noqa: BLE001 — lookup must not abort the tick
+                        lookup_ok = False
                         logger.error(
                             "fill_schedule: task lookup failed for "
                             f"publish-failed slot {slot['id']}: {exc}"
                         )
-                amount = publish_refund_amount(cost, task_record, face_quality)
+                amount = (
+                    0
+                    if not lookup_ok
+                    else publish_refund_amount(cost, task_record, face_quality)
+                )
                 if amount > 0:
                     try:
                         refunded = self.store.refund_batch_tokens(
@@ -478,8 +484,7 @@ class BatchPublisher:
                 "user_id/schedule_id",
                 slot_id=slot.get("id"),
             )
-        # The error column is client-visible: scrub before storing, keep
-        # the diagnostic tail and strip local paths.
+        # Error column is client-visible: scrub before storing.
         fields: dict[str, Any] = {
             "status": SLOT_FAILED,
             "error": scrub_error_text(error, max_chars=200),
