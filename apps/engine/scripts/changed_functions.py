@@ -296,7 +296,11 @@ def changed_functions_for_file(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--file", required=True, help="file relative to the working directory")
-    parser.add_argument("--base", required=True, help="base ref (e.g. origin/main)")
+    # Not required by argparse: --check-mutable reads only --file (the
+    # workflow calls it without a base); the diff mapping enforces it below.
+    parser.add_argument(
+        "--base", help="base ref (e.g. origin/main); required unless --check-mutable"
+    )
     parser.add_argument("--head", default="HEAD", help="head ref")
     parser.add_argument(
         "--check-mutable",
@@ -313,6 +317,9 @@ def main(argv: list[str] | None = None) -> int:
             has = False
         print("true" if has else "false")
         return 0
+
+    if args.base is None:
+        parser.error("--base is required unless --check-mutable is given")
 
     result = changed_functions_for_file(
         base=args.base, head=args.head, path=args.file, cwd=os.getcwd()
