@@ -165,7 +165,13 @@ export async function preparePersona(
   // audio cannot be signed — the fallback repairs only a persona with no
   // usable voice configured at all.
   if (!voiceAudioUrl && opts.voiceId === undefined && !persona.voice_audio_path) {
-    const catalogIds = await fetchPersonaVoiceCatalogIds(userId);
+    // Catalog is only consulted for chatterbox / chatterbox_nano ids
+    // (retired house voices and clone rows). Sentinels, elevenlabs,
+    // openrouter, and bare ids never read it — skip the engine round-trip.
+    const storedId = (voiceIdValue ?? '').trim();
+    const needsCatalog =
+      storedId.startsWith('chatterbox:') || storedId.startsWith('chatterbox_nano:');
+    const catalogIds = needsCatalog ? await fetchPersonaVoiceCatalogIds(userId) : undefined;
     const catalogOpts = catalogIds === undefined ? {} : { catalogIds };
     let resolution: VoiceResolution = resolvePersonaVoice(
       voiceIdValue ?? null,
@@ -247,7 +253,7 @@ export async function preparePersona(
 // the last line of defense, and a transient DB error must not fail a
 // dispatch the engine would accept.
 //---------------
-async function cloneVoiceAvailable(
+export async function cloneVoiceAvailable(
   supabase: SupabaseClient,
   userId: string,
   key: string,

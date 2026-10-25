@@ -184,6 +184,24 @@ describe('resolvePersonaVoice', () => {
       });
     });
 
+    it('maps the legacy default alias to the female house voice', () => {
+      expect(resolvePersonaVoice('default', 'en-US')).toEqual({
+        kind: 'fallback',
+        fromVoice: 'default',
+        toVoice: 'chatterbox:kokoro_af_heart',
+        reason: VOICE_FALLBACK_REASONS.LEGACY_VOICE_ALIAS,
+      });
+    });
+
+    it('maps the legacy ryan alias to the male house voice, not the female default', () => {
+      expect(resolvePersonaVoice('ryan', 'en-US')).toEqual({
+        kind: 'fallback',
+        fromVoice: 'ryan',
+        toVoice: 'chatterbox:kokoro_am_michael',
+        reason: VOICE_FALLBACK_REASONS.LEGACY_VOICE_ALIAS,
+      });
+    });
+
     it('never gives a non-English persona the English legacy alias target (review MAJOR: the alias path respects the language)', () => {
       // The legacy alias targets are ALL English house voices; a Portuguese
       // persona with `en_us_female_02` stored must resolve unavailable (fail

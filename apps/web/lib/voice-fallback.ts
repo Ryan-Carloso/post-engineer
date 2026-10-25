@@ -142,6 +142,8 @@ function voiceGenderHint(voiceId: string): 'female' | 'male' | null {
  *  there — a BARE alias id never reaches the engine's alias map, because
  *  the alias lookup lives behind the local TTS server's routing). */
 const BARE_LEGACY_ALIAS_TARGETS: Record<string, string> = {
+  default: 'chatterbox:kokoro_af_heart',
+  ryan: 'chatterbox:kokoro_am_michael',
   en_us_female_01: 'chatterbox:kokoro_af_heart',
   en_us_female_02: 'chatterbox:kokoro_af_bella',
   en_us_female_03: 'chatterbox:kokoro_af_nicole',
