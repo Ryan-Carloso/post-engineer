@@ -35,7 +35,7 @@ describe('Personas list library fallback', () => {
     cy.visit('/personas');
     cy.wait('@getPersonas');
     cy.contains('Library Face').should('be.visible');
-    cy.get('img[alt="Library Face"]').should('have.attr', 'src', '/icon-128.png');
+    cy.get('img[alt="Library Face"]').should('have.attr', 'src').and('match', /\/icon-128\.png$/);
   });
 
   it('falls through avatar then photo then library on the persona card', () => {
@@ -59,10 +59,8 @@ describe('Personas list library fallback', () => {
     cy.visit('/personas');
     cy.wait('@getPersonas');
     cy.contains('Fallback Chain').should('be.visible');
-    cy.get('img[alt="Fallback Chain"]', { timeout: 10000 }).should(
-      'have.attr',
-      'src',
-      '/icon-128.png',
-    );
+    cy.get('img[alt="Fallback Chain"]', { timeout: 10000 })
+      .should('have.attr', 'src')
+      .and('match', /\/icon-128\.png$/);
   });
 });

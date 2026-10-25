@@ -112,5 +112,28 @@ describe('pickLibraryDisplayImage', () => {
     );
     expect(picked?.id).toBe('ab');
   });
+
+  it('picks the largest id among three same-timestamp rows', () => {
+    const picked = pickLibraryDisplayImage(
+      [
+        img({ id: 'm', persona_id: 'p-1', created_at: '2026-01-02T00:00:00Z' }),
+        img({ id: 'z', persona_id: 'p-1', created_at: '2026-01-02T00:00:00Z' }),
+        img({ id: 'a', persona_id: 'p-1', created_at: '2026-01-02T00:00:00Z' }),
+      ],
+      'p-1',
+    );
+    expect(picked?.id).toBe('z');
+  });
+
+  it('ignores a newer image that belongs to another persona', () => {
+    const picked = pickLibraryDisplayImage(
+      [
+        img({ id: 'mine-old', persona_id: 'p-1', created_at: '2026-01-01T00:00:00Z' }),
+        img({ id: 'other-new', persona_id: 'p-2', created_at: '2026-12-01T00:00:00Z', is_primary: true }),
+      ],
+      'p-1',
+    );
+    expect(picked?.id).toBe('mine-old');
+  });
 });
 

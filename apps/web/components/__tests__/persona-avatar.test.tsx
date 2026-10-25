@@ -29,10 +29,9 @@ vi.mock('@/lib/client-logger', () => ({
 import PersonaAvatar from '../persona-avatar';
 
 //---------------
-// PersonaAvatar — the shared face: avatar, then photo, then library, then
-// initials. It replaced two inline copies (the persona card and the
-// create-post picker), so the fallback order is pinned here rather than in
-// either screen.
+// PersonaAvatar — avatar, then photo, then library, then initials. The
+// personas list passes libraryUrl; the create-post picker does not. The
+// fallback order is pinned here rather than in either screen.
 //---------------
 
 beforeEach(() => {
@@ -71,6 +70,11 @@ describe('PersonaAvatar', () => {
     render(
       <PersonaAvatar avatarUrl="" photoUrl="" libraryUrl="https://x.test/l.png" name="Viva Leve" />,
     );
+    expect(screen.getByAltText('Viva Leve')).toHaveAttribute('src', 'https://x.test/l.png');
+  });
+
+  it('skips an empty photo URL and uses the library', () => {
+    render(<PersonaAvatar photoUrl="" libraryUrl="https://x.test/l.png" name="Viva Leve" />);
     expect(screen.getByAltText('Viva Leve')).toHaveAttribute('src', 'https://x.test/l.png');
   });
 

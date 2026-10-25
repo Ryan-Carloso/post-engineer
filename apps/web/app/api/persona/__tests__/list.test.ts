@@ -20,6 +20,7 @@ vi.mock('@/lib/request-auth', () => ({
 import { GET } from '../list/route';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
+import { logger } from '@/lib/logger';
 
 const USER_ID = 'user-uuid-1';
 
@@ -104,9 +105,25 @@ function mockSupabase(
     imagesError?: { message: string } | null;
     images?: typeof LIBRARY_ROWS;
     signErrorPaths?: string[];
+    signEmptyUrlPaths?: string[];
+    signNullDataPaths?: string[];
     isApiKey?: boolean;
     personaIds?: string[] | null;
-    personas?: typeof PERSONAS;
+    personas?: Array<{
+      id: string;
+      name: string;
+      photo_path: string | null;
+      avatar_url: string | null;
+      voice_id: string | null;
+      voice_audio_path: string | null;
+      created_at: string;
+      language: string | null;
+      video_aspect: string | null;
+      script_prompt: string | null;
+      paragraph_number: number | null;
+      niche?: string;
+    }>;
+    imagesNull?: boolean;
   } = {},
 ) {
   mockAuth(overrides);
@@ -125,6 +142,9 @@ function mockSupabase(
                   imageFilters.userId = userId;
                   if (overrides.imagesError) {
                     return { data: null, error: overrides.imagesError };
+                  }
+                  if (overrides.imagesNull) {
+                    return { data: null, error: null };
                   }
                   const rows = (overrides.images ?? LIBRARY_ROWS).filter((row) => ids.includes(row.persona_id));
                   return { data: rows, error: null };
@@ -160,6 +180,12 @@ function mockSupabase(
           signed.push(path);
           if (overrides.signErrorPaths?.includes(path)) {
             return { data: null, error: { message: 'sign failed' } };
+          }
+          if (overrides.signEmptyUrlPaths?.includes(path)) {
+            return { data: { signedUrl: '' }, error: null };
+          }
+          if (overrides.signNullDataPaths?.includes(path)) {
+            return { data: null, error: null };
           }
           return { data: { signedUrl: `https://supabase.test/signed/${path}` }, error: null };
         }),
@@ -388,6 +414,7 @@ describe('GET /api/persona/list', () => {
       ],
     });
 
+    const warn = vi.spyOn(logger, 'warn');
     const res = await GET(new Request('http://localhost:3434/api/persona/list'));
     const body = (await res.json()) as {
       personas: Array<{ id: string; libraryUrl?: string; avatarUrl?: string; photoUrl?: string }>;
@@ -400,5 +427,55 @@ describe('GET /api/persona/list', () => {
     expect(body.personas[0].libraryUrl).toBe(
       `https://supabase.test/signed/${USER_ID}/p-lib/face.png`,
     );
+    expect(warn.mock.calls.some((call) => String(call[0]).includes('no avatar source'))).toBe(false);
+    warn.mockRestore();
+  });
+
+  it('warns when a persona has no avatar, photo, or library face', async () => {
+    const warn = vi.spyOn(logger, 'warn');
+    mockSupabase({
+      personas: [
+        {
+          id: 'p-blank',
+          name: 'Blank',
+          photo_path: null,
+          avatar_url: null,
+          voice_id: null,
+          voice_audio_path: null,
+          created_at: '2026-08-29T00:00:00Z',
+          language: null,
+          video_aspect: null,
+          script_prompt: null,
+          paragraph_number: null,
+        },
+      ],
+      images: [],
+    });
+    await GET(new Request('http://localhost:3434/api/persona/list'));
+    expect(warn.mock.calls.some((call) => String(call[0]).includes('no avatar source'))).toBe(true);
+    warn.mockRestore();
+  });
+
+  it('omits libraryUrl when the signed url is empty', async () => {
+    mockSupabase({ signEmptyUrlPaths: [`${USER_ID}/p-1/library.png`] });
+    const res = await GET(new Request('http://localhost:3434/api/persona/list'));
+    const body = (await res.json()) as { personas: Array<{ libraryUrl?: string }> };
+    expect(body.personas[0].libraryUrl).toBeUndefined();
+  });
+
+  it('omits libraryUrl when sign returns null data without an error', async () => {
+    mockSupabase({ signNullDataPaths: [`${USER_ID}/p-1/library.png`] });
+    const res = await GET(new Request('http://localhost:3434/api/persona/list'));
+    const body = (await res.json()) as { personas: Array<{ libraryUrl?: string }> };
+    expect(body.personas[0].libraryUrl).toBeUndefined();
+  });
+
+  it('omits libraryUrl when persona_images returns null rows without an error', async () => {
+    mockSupabase({ imagesNull: true });
+    const res = await GET(new Request('http://localhost:3434/api/persona/list'));
+    const body = (await res.json()) as { personas: Array<{ libraryUrl?: string; photoUrl?: string }> };
+    expect(res.status).toBe(200);
+    expect(body.personas[0].libraryUrl).toBeUndefined();
+    expect(body.personas[0].photoUrl).toBe(`https://supabase.test/signed/${USER_ID}/foto.png`);
   });
 });

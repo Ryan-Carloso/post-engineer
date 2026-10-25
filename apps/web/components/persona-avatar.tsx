@@ -9,12 +9,10 @@ import { logClientError } from '@/lib/client-logger';
 import { describeImageSource } from '@/lib/image-source';
 
 //---------------
-// PersonaAvatar — the persona's face, as the app shows it everywhere:
-// avatar, then photo, then library, then initials (or a glyph when the
-// name has no letters). Extracted from the persona card so the
-// create-post picker and the persona list can't drift (same size, same ring,
-// same `unoptimized` — the URLs are Supabase signed links, not an optimizer
-// source).
+// PersonaAvatar — avatar, then photo, then library, then initials (or a
+// glyph when the name has no letters). The personas list passes libraryUrl;
+// the create-post picker does not. Shared size, ring, and `unoptimized`
+// (Supabase signed links, not an optimizer source).
 //---------------
 
 export interface PersonaAvatarProps {
