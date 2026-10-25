@@ -17,6 +17,7 @@ vi.mock('node:dns/promises', () => ({
 import { PATCH } from '../route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { requireSupabaseSession } from '@/lib/request-auth';
+import { restorePinnedHttp, stubPinnedHttp } from '@/test/stub-pinned-http';
 
 const USER_ID = 'user-uuid-1';
 const PNG_BYTES = Uint8Array.from([
@@ -31,19 +32,11 @@ describe('PATCH remote ingest onto an existing photo object', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    restorePinnedHttp();
   });
 
-  it('upserts the existing photo.png instead of failing the upload', async () => {
+  function patchClient(existing: Record<string, unknown>, updateError: { message: string } | null = null) {
     const uploaded: Array<{ path: string; upsert?: boolean }> = [];
-    const existing = {
-      id: 'persona-uuid-1',
-      user_id: USER_ID,
-      name: 'Antiga',
-      photo_path: `${USER_ID}/persona-uuid-1/photo.png`,
-      avatar_url: null,
-      voice_id: 'voz-antiga',
-      voice_audio_path: null,
-    };
     const client = {
       auth: {
         getUser: vi.fn(async () => ({ data: { user: { id: USER_ID } }, error: null })),
@@ -66,19 +59,34 @@ describe('PATCH remote ingest onto an existing photo object', () => {
           })),
         })),
         update: vi.fn(() => ({
-          eq: vi.fn(async () => ({ error: null })),
+          eq: vi.fn(async () => ({ error: updateError })),
         })),
       })),
     };
+    return { client, uploaded };
+  }
+
+  function stubPng() {
+    stubPinnedHttp(200, PNG_BYTES);
+  }
+
+  it('uploads a temp object instead of overwriting the live photo.png', async () => {
+    const existing = {
+      id: 'persona-uuid-1',
+      user_id: USER_ID,
+      name: 'Antiga',
+      photo_path: `${USER_ID}/persona-uuid-1/photo.png`,
+      avatar_url: null,
+      voice_id: 'voz-antiga',
+      voice_audio_path: null,
+    };
+    const { client, uploaded } = patchClient(existing);
     vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
     vi.mocked(requireSupabaseSession).mockResolvedValue({
       auth: { userId: USER_ID, accessToken: 'cookie-token' },
       error: null,
     });
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => new Response(PNG_BYTES, { status: 200, headers: { 'content-type': 'image/png' } })),
-    );
+    stubPng();
     const formData = new FormData();
     formData.append('avatarUrl', 'https://cdn.example/face.png');
     const res = await PATCH(
@@ -88,11 +96,41 @@ describe('PATCH remote ingest onto an existing photo object', () => {
       }),
     );
     expect(res.status).toBe(200);
-    expect(uploaded[0]).toEqual({
-      path: `${USER_ID}/persona-uuid-1/photo.png`,
-      upsert: true,
+    expect(uploaded[0]?.path).toMatch(new RegExp(`^${USER_ID}/persona-uuid-1/ingest/.+\\.png$`));
+    expect(uploaded[0]?.upsert).toBe(false);
+    expect(removeMock).toHaveBeenCalledWith([`${USER_ID}/persona-uuid-1/photo.png`]);
+  });
+
+  it('keeps the previous photo when the row update fails after upload', async () => {
+    const live = `${USER_ID}/persona-uuid-1/photo.png`;
+    const existing = {
+      id: 'persona-uuid-1',
+      user_id: USER_ID,
+      name: 'Antiga',
+      photo_path: live,
+      avatar_url: null,
+      voice_id: 'voz-antiga',
+      voice_audio_path: null,
+    };
+    const { client, uploaded } = patchClient(existing, { message: 'constraint' });
+    vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: USER_ID, accessToken: 'cookie-token' },
+      error: null,
     });
-    expect(removeMock).not.toHaveBeenCalled();
+    stubPng();
+    const formData = new FormData();
+    formData.append('avatarUrl', 'https://cdn.example/face.png');
+    const res = await PATCH(
+      new Request('http://localhost/api/persona?personaId=persona-uuid-1', {
+        method: 'PATCH',
+        body: formData,
+      }),
+    );
+    expect(res.status).toBe(500);
+    expect(uploaded[0]?.path).toMatch(new RegExp(`^${USER_ID}/persona-uuid-1/ingest/.+\\.png$`));
+    expect(removeMock).toHaveBeenCalledWith([uploaded[0]?.path]);
+    expect(removeMock).not.toHaveBeenCalledWith([live]);
   });
 
   it('removes a different existing photo_path after a remote ingest', async () => {
@@ -133,10 +171,7 @@ describe('PATCH remote ingest onto an existing photo object', () => {
       auth: { userId: USER_ID, accessToken: 'cookie-token' },
       error: null,
     });
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => new Response(PNG_BYTES, { status: 200, headers: { 'content-type': 'image/png' } })),
-    );
+    stubPng();
     const formData = new FormData();
     formData.append('avatarUrl', 'https://cdn.example/face.png');
     const res = await PATCH(

@@ -131,6 +131,28 @@ describe('resolvePersonaAvatar', () => {
     expect(uploaded).toEqual([{ path: 'user-1/persona-1/photo.png', upsert: true }]);
   });
 
+  it('uploads beside a live photo.png instead of upserting it', async () => {
+    const uploaded: Array<{ path: string; upsert?: boolean }> = [];
+    const supabase = mockSupabase({ uploaded });
+    const result = await resolvePersonaAvatar(
+      supabase as never,
+      'user-1',
+      'persona-1',
+      'https://cdn.example/face.png',
+      {
+        fetchImpl: vi.fn(async () => pngResponse()) as never,
+        lookupImpl: publicLookup(),
+        existingPhotoPath: 'user-1/persona-1/photo.png',
+      },
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.photoPath).toMatch(/^user-1\/persona-1\/ingest\/.+\.png$/);
+    }
+    expect(uploaded[0]?.upsert).toBe(false);
+    expect(uploaded[0]?.path).not.toBe('user-1/persona-1/photo.png');
+  });
+
   it('keeps a non-http path as avatar_url without fetching', async () => {
     const fetchImpl = vi.fn();
     const supabase = mockSupabase({});

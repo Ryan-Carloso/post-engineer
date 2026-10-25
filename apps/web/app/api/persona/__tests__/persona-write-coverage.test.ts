@@ -22,6 +22,7 @@ import { PATCH, POST } from '../route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { restorePinnedHttp, stubPinnedHttp } from '@/test/stub-pinned-http';
 
 const USER_ID = 'user-uuid-1';
 const PNG_BYTES = Uint8Array.from([
@@ -46,6 +47,7 @@ describe('POST/PATCH personaWrite coverage', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    restorePinnedHttp();
   });
 
   it('returns 429 when personaWrite rejects POST', async () => {
@@ -115,15 +117,43 @@ describe('POST/PATCH personaWrite coverage', () => {
       },
     };
     vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => new Response(PNG_BYTES, { status: 200, headers: { 'content-type': 'image/png' } })),
-    );
+    stubPinnedHttp(200, PNG_BYTES);
     const form = new FormData();
     form.append('name', 'Remote');
     form.append('voiceId', 'voz-1');
     form.append('avatarUrl', 'https://cdn.example/face.png');
     form.append('images', png('lib.png'));
+    const res = await POST(new Request('http://localhost/api/persona', { method: 'POST', body: form }));
+    expect(res.status).toBe(500);
+    expect(removed.some((paths) => paths.some((path) => path.endsWith('/photo.png')))).toBe(true);
+  });
+
+  it('removes ingestedPhotoPath when the persona insert fails', async () => {
+    const removed: string[][] = [];
+    const client = {
+      from: vi.fn(() => ({
+        insert: vi.fn(() => ({
+          select: vi.fn(() => ({
+            single: vi.fn(async () => ({ data: null, error: { message: 'insert boom' } })),
+          })),
+        })),
+      })),
+      storage: {
+        from: vi.fn(() => ({
+          upload: vi.fn(async (path: string) => ({ data: { path }, error: null })),
+          remove: vi.fn(async (paths: string[]) => {
+            removed.push(paths);
+            return { error: null };
+          }),
+        })),
+      },
+    };
+    vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+    stubPinnedHttp(200, PNG_BYTES);
+    const form = new FormData();
+    form.append('name', 'Remote');
+    form.append('voiceId', 'voz-1');
+    form.append('avatarUrl', 'https://cdn.example/face.png');
     const res = await POST(new Request('http://localhost/api/persona', { method: 'POST', body: form }));
     expect(res.status).toBe(500);
     expect(removed.some((paths) => paths.some((path) => path.endsWith('/photo.png')))).toBe(true);

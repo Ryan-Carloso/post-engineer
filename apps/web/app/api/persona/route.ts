@@ -21,7 +21,7 @@ import {
   type LibraryImageInput,
 } from '@/lib/persona-images';
 import { validateLibraryInputs } from '@/lib/persona-library-validate';
-import { resolvePersonaAvatar } from '@/lib/persona-remote-face';
+import { resolvePersonaAvatar, rollbackStoragePath } from '@/lib/persona-remote-face';
 import { logger } from '@/lib/logger';
 import { parsePatchBody } from './patch-body';
 import { parseJsonStringArray, parsePrimaryIndex } from './form-parsing';
@@ -208,6 +208,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
     .single();
 
   if (insertError || !persona) {
+    // Insert never landed: remove the ingested object so it does not orphan.
+    await rollbackStoragePath(supabase, ingestedPhotoPath);
     return errorResponse(500, 'Failed to create persona.', 'POST /api/persona', {
       cause: insertError,
     });
@@ -216,9 +218,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   let libraryImageIds: string[] = [];
   const warnings: string[] = [];
   if (validatedLibraryInputs.length > 0) {
-    // The MINTED id, not `persona.id`: the storage folder must be the id that
-    // went into the row, so a future divergence between the two can't scatter
-    // a persona's files across folders.
+    // Storage folder uses the minted id that went into the row.
     const added = await addLibraryImages(supabase, user.id, personaId, validatedLibraryInputs);
     if ('error' in added) {
       // Roll back the whole creation so a half-written persona never survives.
@@ -269,14 +269,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
           }
         }
       }
-      if (ingestedPhotoPath) {
-        const { error: photoRollbackError } = await supabase.storage
-          .from(IMAGE_BUCKET)
-          .remove([ingestedPhotoPath]);
-        if (photoRollbackError) {
-          logger.error('[api/persona] photo rollback failed', photoRollbackError);
-        }
-      }
+      await rollbackStoragePath(supabase, ingestedPhotoPath);
       return errorResponse(added.status, added.error, 'POST /api/persona');
     }
     libraryImageIds = added.images.map((image) => image.id);
@@ -353,6 +346,7 @@ async function patchHandler(request: Request): Promise<NextResponse> {
 
   const updates: Record<string, unknown> = {};
   const stalePaths: string[] = [];
+  let replacementPhotoPath: string | null = null;
 
   if (patch.name !== null) {
     updates.name = patch.name.trim();
@@ -367,12 +361,15 @@ async function patchHandler(request: Request): Promise<NextResponse> {
       stalePaths.push(persona.photo_path);
     }
   } else if (patch.avatarUrl !== null) {
-    const resolved = await resolvePersonaAvatar(supabase, user.id, personaId, patch.avatarUrl);
+    const resolved = await resolvePersonaAvatar(supabase, user.id, personaId, patch.avatarUrl, {
+      existingPhotoPath: typeof persona.photo_path === 'string' ? persona.photo_path : null,
+    });
     if (!resolved.ok) {
       return errorResponse(400, resolved.error, 'PATCH /api/persona');
     }
     updates.avatar_url = resolved.avatarUrl;
     updates.photo_path = resolved.photoPath;
+    replacementPhotoPath = resolved.photoPath;
     if (
       typeof persona.photo_path === 'string' &&
       persona.photo_path &&
@@ -407,7 +404,10 @@ async function patchHandler(request: Request): Promise<NextResponse> {
     .update(updates)
     .eq('id', personaId);
   if (updateError) {
-    logger.error('[api/persona] update failed', updateError);
+    logger.error('[api/persona] update failed', updateError.message);
+    if (replacementPhotoPath && replacementPhotoPath !== persona.photo_path) {
+      await rollbackStoragePath(supabase, replacementPhotoPath);
+    }
     return errorResponse(500, 'Failed to update persona.', 'PATCH /api/persona');
   }
 

@@ -43,6 +43,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { trackApiEvent } from '@/lib/analytics';
+import { restorePinnedHttp, stubPinnedHttp } from '@/test/stub-pinned-http';
 
 const USER_ID = 'user-uuid-1';
 
@@ -59,6 +60,7 @@ function mockSupabase(overrides: {
       uploaded.push({ path, options });
       return { data: { path }, error: overrides.uploadError ?? null };
     }),
+    remove: vi.fn(async () => ({ error: null })),
   };
 
   const from = {
@@ -112,20 +114,18 @@ const PNG_BYTES = Uint8Array.from([
 ]);
 
 function stubPngFetch() {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async () => new Response(PNG_BYTES, { status: 200, headers: { 'content-type': 'image/png' } })),
-  );
+  stubPinnedHttp(200, PNG_BYTES);
 }
 
 function stubFetchResponse(response: Response) {
-  vi.stubGlobal('fetch', vi.fn(async () => response));
+  stubPinnedHttp(response.status, new Uint8Array());
 }
 
 describe('POST /api/persona — toda persona tem rosto', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllGlobals();
+    restorePinnedHttp();
   });
 
   it('cria persona com avatarUrl (sem foto) e a voz da casa', async () => {
@@ -902,6 +902,7 @@ describe('PATCH /api/persona', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllGlobals();
+    restorePinnedHttp();
   });
 
   it('retorna 401 quando não há sessão', async () => {

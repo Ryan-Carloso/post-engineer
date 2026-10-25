@@ -63,6 +63,33 @@ describe('downloadPublicImage requestPinned', () => {
     expect(result).toEqual({ error: REMOTE_FACE_ERROR });
   });
 
+  it('still pins when globalThis.fetch is a wrapper unless fetchImpl is passed', async () => {
+    const originalFetch = globalThis.fetch;
+    const wrapper = vi.fn(originalFetch);
+    globalThis.fetch = wrapper as typeof fetch;
+    try {
+      const started = await listen((_req: IncomingMessage, res: ServerResponse) => {
+        res.writeHead(302, { Location: 'http://evil.example/steal' });
+        res.end();
+      });
+      server = started.server;
+      const pinned = await downloadPublicImage(started.url, {
+        lookupImpl: vi.fn(async () => [{ address: '127.0.0.1' }]),
+      });
+      expect(pinned).toEqual({ error: REMOTE_FACE_ERROR });
+      expect(wrapper).not.toHaveBeenCalled();
+      const injected = vi.fn(async () => new Response(null, { status: 302 }));
+      const unpinned = await downloadPublicImage('https://cdn.example/face.png', {
+        fetchImpl: injected as never,
+        lookupImpl: vi.fn(async () => [{ address: '1.2.3.4' }]),
+      });
+      expect(unpinned).toEqual({ error: REMOTE_FACE_ERROR });
+      expect(injected).toHaveBeenCalledOnce();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it('returns REMOTE_FACE_ERROR when the pinned body exceeds the image cap', async () => {
     const started = await listen((_req: IncomingMessage, res: ServerResponse) => {
       res.writeHead(200, { 'content-type': 'image/png' });

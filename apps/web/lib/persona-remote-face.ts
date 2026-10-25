@@ -4,6 +4,7 @@
 // SSRF: public DNS, fail closed, redirect: 'error', http(s) only, timeout.
 //---------------
 
+import { randomUUID } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import http from 'node:http';
 import https from 'node:https';
@@ -25,8 +26,6 @@ import {
 
 export const REMOTE_FACE_TIMEOUT_MS = 10_000;
 
-const nativeFetch = globalThis.fetch;
-
 const MIME_TO_EXT: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
@@ -44,6 +43,7 @@ export type DnsLookupAll = (
 export interface RemoteFaceFetchDeps {
   fetchImpl?: typeof fetch;
   lookupImpl?: DnsLookupAll;
+  existingPhotoPath?: string | null;
 }
 
 export function isKeptAvatarUrl(value: string): boolean {
@@ -177,7 +177,6 @@ export async function downloadPublicImage(
   url: string,
   deps: RemoteFaceFetchDeps = {},
 ): Promise<{ bytes: Uint8Array; mime: string; extension: string } | { error: string }> {
-  const fetchImpl = deps.fetchImpl ?? fetch;
   const lookupImpl: DnsLookupAll =
     deps.lookupImpl ?? ((hostname) => lookup(hostname, { all: true }));
   const safety = await assertPublicHttpUrl(url, lookupImpl);
@@ -185,10 +184,12 @@ export async function downloadPublicImage(
 
   let response: Response;
   try {
-    response =
-      fetchImpl === nativeFetch
-        ? await requestPinned(url, safety.addresses)
-        : await fetchImpl(url, { redirect: 'error', signal: AbortSignal.timeout(REMOTE_FACE_TIMEOUT_MS) });
+    response = deps.fetchImpl
+      ? await deps.fetchImpl(url, {
+          redirect: 'error',
+          signal: AbortSignal.timeout(REMOTE_FACE_TIMEOUT_MS),
+        })
+      : await requestPinned(url, safety.addresses);
   } catch {
     return { error: REMOTE_FACE_ERROR };
   }
@@ -225,17 +226,33 @@ export async function uploadPersonaPhotoBytes(
   bytes: Uint8Array,
   mime: string,
   extension: string,
+  existingPhotoPath?: string | null,
 ): Promise<string | null> {
-  const path = personaAssetPath(userId, personaId, `photo.${extension}`);
+  const livePath = personaAssetPath(userId, personaId, `photo.${extension}`);
+  const path =
+    existingPhotoPath === livePath
+      ? personaAssetPath(userId, personaId, `ingest/${randomUUID()}.${extension}`)
+      : livePath;
   const { error } = await supabase.storage.from(IMAGE_BUCKET).upload(path, bytes, {
     contentType: mime,
-    upsert: true,
+    upsert: path === livePath,
   });
   if (error) {
-    logger.error('[persona-remote-face] storage upload failed', error, { path });
+    logger.error('[persona-remote-face] storage upload failed', error.message, { path });
     return null;
   }
   return path;
+}
+
+export async function rollbackStoragePath(
+  supabase: SupabaseClient,
+  path: string | null | undefined,
+): Promise<void> {
+  if (!path) return;
+  const { error } = await supabase.storage.from(IMAGE_BUCKET).remove([path]);
+  if (error) {
+    logger.error('[persona-remote-face] storage rollback failed', error.message, { path });
+  }
 }
 
 export type ResolvedPersonaAvatar =
@@ -267,6 +284,7 @@ export async function resolvePersonaAvatar(
     downloaded.bytes,
     downloaded.mime,
     downloaded.extension,
+    deps.existingPhotoPath,
   );
   if (!path) {
     return { ok: false, error: 'Failed to upload photo.' };
