@@ -153,6 +153,9 @@ interface DbConfig {
   spendErrorMessage?: string;
   /** Tables for which update() resolves with an error (bind-failure path). */
   updateErrorTables?: string[];
+  /** Tables for which update() THROWS (network crash) — bind-failure paths
+   *  must catch it instead of failing the dispatch (voice-swap persist). */
+  updateThrowsTables?: string[];
   /** Makes the scheduled_posts replay select fail (fetchReplay error path). */
   replaySlotsError?: boolean;
   /** Subjects for which the engine accepts but returns no task id. */
@@ -162,6 +165,10 @@ interface DbConfig {
   /** Whether the user's cloned_voices table has a ready row (issue #277
    *  clone-availability lookup). Default: no rows. */
   cloneReady?: boolean;
+  /** Makes the cloned_voices availability lookup fail / throw (its
+   *  fail-open paths must keep the dispatch alive). */
+  cloneReadyError?: boolean;
+  cloneReadyThrows?: boolean;
 }
 
 const rpcCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
@@ -259,9 +266,15 @@ function makeClient(cfg: DbConfig): unknown {
         const updateError = cfg.updateErrorTables?.includes(name)
           ? { code: 'XX000', message: 'update failed' }
           : null;
+        const updateThrows = cfg.updateThrowsTables?.includes(name)
+          ? new Error('update exploded')
+          : null;
         const q: Record<string, unknown> = {
           eq: () => q,
-          then: (resolve: (v: unknown) => void) => Promise.resolve({ error: updateError }).then(resolve),
+          then: (resolve: (v: unknown) => void, reject: (e: unknown) => void) =>
+            updateThrows
+              ? Promise.reject(updateThrows).then(resolve, reject)
+              : Promise.resolve({ error: updateError }).then(resolve),
         };
         return q;
       },
@@ -286,6 +299,12 @@ function makeClient(cfg: DbConfig): unknown {
         if (name === 'cloned_voices') {
           // The clone availability lookup (issue #277) resolves a ready row
           // only when the fixture says so; anything else is unavailable.
+          if (cfg.cloneReadyError) {
+            return Promise.resolve({ data: null, error: { code: 'XX000', message: 'db down' } }).then(resolve, reject);
+          }
+          if (cfg.cloneReadyThrows) {
+            return Promise.reject(new Error('cloned_voices exploded')).then(resolve, reject);
+          }
           return Promise.resolve({ data: cfg.cloneReady ? [{ engine_voice_key: 'x' }] : [], error: null }).then(resolve, reject);
         }
         if (name === 'token_transactions') {
@@ -1728,6 +1747,34 @@ describe('POST /api/videos/generate-and-schedule', () => {
       ]);
     });
 
+    it('survives a THROWING persist: the dispatch proceeds with the swapped voice (review MINOR)', async () => {
+      // A failed persist must not break the dispatch: the engine payload
+      // already carries the working voice, and the swap repeats next post.
+      vi.mocked(getPostHogServer).mockReturnValue(recordingClient as never);
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, voice_id: null, voice_audio_path: null }, updateThrowsTables: ['personas'] });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(200);
+      expect(json.success).toBe(true);
+      expect(json.warnings).toEqual([
+        { code: 'voice_fallback_applied', fromVoice: '', toVoice: 'chatterbox:kokoro_af_heart' },
+      ]);
+      // The write THREW (recorded as attempted, never landed): the dispatch
+      // still completed with the swapped voice for this post only. Nothing
+      // about the failure reaches the response — only the server-side log.
+      expect(updates.some((u) => u.table === 'personas')).toBe(true);
+    });
+
+    it('survives a persist ERROR object the same way (no throw, warning kept)', async () => {
+      vi.mocked(getPostHogServer).mockReturnValue(recordingClient as never);
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, voice_id: null, voice_audio_path: null }, updateErrorTables: ['personas'] });
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+      expect((await res.json()).warnings).toEqual([
+        { code: 'voice_fallback_applied', fromVoice: '', toVoice: 'chatterbox:kokoro_af_heart' },
+      ]);
+    });
+
     it('never swaps an explicit per-request voice: the engine fails loudly on it', async () => {
       setup({ ...DEFAULT_CFG, persona: { ...PERSONA, voice_id: 'energetic' } });
       const res = await post(baseBody({ options: { voiceId: 'also-invalid' } }));
@@ -1777,6 +1824,31 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect((payload.persona as Record<string, unknown>).voice_id).toBe('chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb');
       expect(updates.find((u) => u.table === 'personas')).toBeUndefined();
       expect(capturedEvents.filter((entry) => entry.event === 'voice_fallback_applied')).toEqual([]);
+    });
+
+    it('keeps the clone when the availability lookup FAILS: fail open into the engine guard', async () => {
+      // The clone-availability lookup has two fail-open paths (DB error and
+      // thrown client). Either keeps the clone — a transient DB outage must
+      // not fail a dispatch the engine's ownership guard would accept.
+      setup({
+        ...DEFAULT_CFG,
+        persona: { ...PERSONA, voice_id: 'chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb' },
+        cloneReadyError: true,
+      });
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+      expect((payload.persona as Record<string, unknown>).voice_id).toBe('chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb');
+
+      setup({
+        ...DEFAULT_CFG,
+        persona: { ...PERSONA, voice_id: 'chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb' },
+        cloneReadyThrows: true,
+      });
+      const second = await post(baseBody());
+      expect(second.status).toBe(200);
+      const secondPayload = vi.mocked(startEngineVideoTask).mock.calls.at(-1)?.[1] as Record<string, unknown>;
+      expect((secondPayload.persona as Record<string, unknown>).voice_id).toBe('chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb');
     });
 
     it('404s with the pinned-image status when the pinned image cannot be resolved', async () => {

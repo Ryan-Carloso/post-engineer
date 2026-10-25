@@ -196,10 +196,15 @@ export function resolvePersonaVoice(
   }
 
   // Bare id — no provider prefix. A legacy Modal-era name resolves to its
-  // exact alias target (same gender and accent the persona picked); anything
-  // else falls back to the gender default when the id spells a gender.
+  // exact alias target — but the swap ALWAYS respects the persona's
+  // language: the alias targets are English house voices, so a non-English
+  // persona gets `unavailable` (fail before spend) instead of an
+  // English-speaking video it never asked for (review MAJOR round 2).
   const aliasTarget = BARE_LEGACY_ALIAS_TARGETS[lowered];
   if (aliasTarget !== undefined) {
+    if (language !== null && language !== undefined && language.trim().length > 0 && !isEnglishLanguage(language)) {
+      return NO_VOICE_FOR_LANGUAGE;
+    }
     return { kind: 'fallback', fromVoice: trimmed, toVoice: aliasTarget, reason: VOICE_FALLBACK_REASONS.LEGACY_VOICE_ALIAS };
   }
   return fallbackResolution(trimmed, VOICE_FALLBACK_REASONS.UNKNOWN_VOICE, voiceGenderHint(trimmed), language);

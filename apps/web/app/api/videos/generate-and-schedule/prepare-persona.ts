@@ -274,27 +274,38 @@ async function persistVoiceSwap(
   personaId: string,
   info: VoiceFallbackInfo,
 ): Promise<void> {
-  // The service-role client bypasses RLS: re-check ownership with the
-  // explicit user_id predicate.
-  const { error } = await supabase
-    .from('personas')
-    .update({ voice_id: info.toVoice })
-    .eq('id', personaId)
-    .eq('user_id', userId);
-  if (error) {
-    logger.error('[generate-and-schedule] failed to persist the swapped persona voice', error, {
+  // GUARDED as a whole (review MINOR): a failed persist (DB throw, PostHog
+  // throw) must NEVER break the dispatch — the payload already carries the
+  // working voice for THIS request, and a failed persist only means the
+  // next post repeats the same swap. Errors are logged, never rethrown.
+  try {
+    // The service-role client bypasses RLS: re-check ownership with the
+    // explicit user_id predicate.
+    const { error } = await supabase
+      .from('personas')
+      .update({ voice_id: info.toVoice })
+      .eq('id', personaId)
+      .eq('user_id', userId);
+    if (error) {
+      logger.error('[generate-and-schedule] failed to persist the swapped persona voice', error, {
+        personaId,
+        userId,
+      });
+    }
+    getPostHogServer()?.captureAs(userId, VOICE_FALLBACK_WARNING_CODE, {
+      from_voice: info.fromVoice,
+      to_voice: info.toVoice,
+      reason: info.reason,
+      // The reason 'voice_missing' carries an empty from_voice: there was no
+      // stored voice to name.
+      from_voice_present: info.reason !== VOICE_FALLBACK_REASONS.VOICE_MISSING,
+    });
+  } catch (error) {
+    logger.error('[generate-and-schedule] persistVoiceSwap threw; swap persisted no-op', error, {
       personaId,
       userId,
     });
   }
-  getPostHogServer()?.captureAs(userId, VOICE_FALLBACK_WARNING_CODE, {
-    from_voice: info.fromVoice,
-    to_voice: info.toVoice,
-    reason: info.reason,
-    // The reason 'voice_missing' carries an empty from_voice: there was no
-    // stored voice to name.
-    from_voice_present: info.reason !== VOICE_FALLBACK_REASONS.VOICE_MISSING,
-  });
 }
 
 /**

@@ -137,6 +137,20 @@ describe('resolvePersonaVoice', () => {
       });
     });
 
+    it('never gives a non-English persona the English legacy alias target (review MAJOR: the alias path respects the language)', () => {
+      // The legacy alias targets are ALL English house voices; a Portuguese
+      // persona with `en_us_female_02` stored must resolve unavailable (fail
+      // before any spend), not silently speak English through the alias.
+      expect(resolvePersonaVoice('en_us_female_02', 'pt')).toEqual({ kind: 'unavailable' });
+      expect(resolvePersonaVoice('en_us_male_01', 'pt-BR')).toEqual({ kind: 'unavailable' });
+    });
+
+    it('still resolves the alias target for an English-language persona whose language is unset', () => {
+      // A missing/unknown language leans English (the pipeline's hard gate):
+      // the alias keeps resolving.
+      expect(resolvePersonaVoice('en_us_female_02', null)).toMatchObject({ kind: 'fallback', toVoice: 'chatterbox:kokoro_af_bella' });
+    });
+
     it('swaps a retired house voice when the served catalog no longer lists it', () => {
       const catalogIds = new Set(['chatterbox:kokoro_af_heart']);
       expect(resolvePersonaVoice('chatterbox:retired_voice', 'en-US', { catalogIds })).toEqual({
@@ -173,6 +187,34 @@ describe('resolvePersonaVoice', () => {
     it('reports unavailable instead of falling back for a non-English persona', () => {
       expect(resolvePersonaVoice('energetic', 'pt-BR')).toEqual({ kind: 'unavailable' });
       expect(resolvePersonaVoice('energetic', 'Portuguese')).toEqual({ kind: 'unavailable' });
+    });
+  });
+
+  describe('unreachable branches (mutation/codecov hardening)', () => {
+    it('swaps an elevenlabs id with an empty voice half', () => {
+      expect(resolvePersonaVoice('elevenlabs:', 'en-US')).toEqual({
+        kind: 'fallback',
+        fromVoice: 'elevenlabs:',
+        toVoice: 'chatterbox:kokoro_af_heart',
+        reason: VOICE_FALLBACK_REASONS.UNKNOWN_VOICE,
+      });
+    });
+
+    it('swaps an openrouter id with an empty voice half', () => {
+      expect(resolvePersonaVoice('openrouter:model:', 'en-US')?.kind).toBe('fallback');
+      expect(resolvePersonaVoice('openrouter:model', 'en-US')?.kind).toBe('fallback');
+    });
+
+    it('swaps a chatterbox prefix with an empty voice name', () => {
+      expect(resolvePersonaVoice('chatterbox:', 'en-US')?.kind).toBe('fallback');
+    });
+
+    it('swaps a bare non-legendary name with a Male hint for the male default and non-English becomes unavailable', () => {
+      expect(resolvePersonaVoice('voice-Male', 'en-US')).toMatchObject({
+        kind: 'fallback',
+        toVoice: 'chatterbox:kokoro_am_michael',
+      });
+      expect(resolvePersonaVoice('voice-Female', 'pt')).toEqual({ kind: 'unavailable' });
     });
   });
 
