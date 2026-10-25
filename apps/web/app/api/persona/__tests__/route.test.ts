@@ -34,6 +34,9 @@ vi.mock('@/lib/request-auth', () => ({
 vi.mock('@/lib/analytics', () => ({
   trackApiEvent: vi.fn(),
 }));
+vi.mock('node:dns/promises', () => ({
+  lookup: vi.fn(async () => [{ address: '1.2.3.4' }]),
+}));
 
 import { POST, PATCH, DELETE } from '../route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -104,10 +107,25 @@ function formRequest(fields: Record<string, string>, files: File[] = []): Reques
 }
 
 const photo = () => new File(['png'], 'foto.png', { type: 'image/png' });
+const PNG_BYTES = Uint8Array.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+]);
+
+function stubPngFetch() {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(PNG_BYTES, { status: 200, headers: { 'content-type': 'image/png' } })),
+  );
+}
+
+function stubFetchResponse(response: Response) {
+  vi.stubGlobal('fetch', vi.fn(async () => response));
+}
 
 describe('POST /api/persona — toda persona tem rosto', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it('cria persona com avatarUrl (sem foto) e a voz da casa', async () => {
@@ -683,6 +701,64 @@ describe('POST /api/persona — face quality (no mix, no mode)', () => {
     const body = (await res.json()) as { error: string };
     expect(body.error).toContain('faceQuality');
   });
+
+  it('https PNG avatar is stored as photo_path with avatar_url null', async () => {
+    const { uploaded, inserted } = mockSupabase();
+    stubPngFetch();
+    const res = await POST(
+      formRequest({
+        name: 'Remote',
+        avatarUrl: 'https://cdn.example/face.png',
+        voiceId: 'voz-1',
+      }),
+    );
+    const body = (await res.json()) as { success: boolean; personaId?: string };
+    expect(res.status).toBe(200);
+    expect(uploaded).toHaveLength(1);
+    expect(uploaded[0].path).toBe(`${USER_ID}/${body.personaId}/photo.png`);
+    expect(inserted[0]).toMatchObject({
+      photo_path: `${USER_ID}/${body.personaId}/photo.png`,
+      avatar_url: null,
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps caracter-samples on avatar_url and does not download', async () => {
+    const { uploaded, inserted } = mockSupabase();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const res = await POST(
+      formRequest({
+        name: 'Sample',
+        avatarUrl: '/caracter-samples/file-3.png',
+        voiceId: 'voz-1',
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(uploaded).toHaveLength(0);
+    expect(inserted[0]).toMatchObject({
+      photo_path: null,
+      avatar_url: '/caracter-samples/file-3.png',
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it('404 remote avatar fails the save without inserting', async () => {
+    const { uploaded, inserted } = mockSupabase();
+    stubFetchResponse(new Response('gone', { status: 404, headers: { 'content-type': 'text/plain' } }));
+    const res = await POST(
+      formRequest({
+        name: 'Dead',
+        avatarUrl: 'https://muse.ai/missing.jpg',
+        voiceId: 'voz-1',
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(inserted).toHaveLength(0);
+    expect(uploaded).toHaveLength(0);
+    vi.unstubAllGlobals();
+  });
 });
 
 //---------------
@@ -825,6 +901,7 @@ function patchRequest(
 describe('PATCH /api/persona', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it('retorna 401 quando não há sessão', async () => {
@@ -939,6 +1016,33 @@ describe('PATCH /api/persona', () => {
       photo_path: null,
     });
     expect(removed).toContain(`${USER_ID}/foto-antiga.png`);
+  });
+
+  it('PATCH https PNG stores photo_path and clears avatar_url in the same update', async () => {
+    const { uploaded, updated } = mockSupabaseForPatch();
+    stubPngFetch();
+    const res = await PATCH(
+      patchRequest('persona-uuid-1', { avatarUrl: 'https://cdn.example/face.png' }),
+    );
+    expect(res.status).toBe(200);
+    expect(uploaded[0].path).toBe(`${USER_ID}/persona-uuid-1/photo.png`);
+    expect(updated[0]).toMatchObject({
+      photo_path: `${USER_ID}/persona-uuid-1/photo.png`,
+      avatar_url: null,
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it('PATCH 404 remote avatar does not set both columns', async () => {
+    const { uploaded, updated } = mockSupabaseForPatch();
+    stubFetchResponse(new Response('gone', { status: 404, headers: { 'content-type': 'text/plain' } }));
+    const res = await PATCH(
+      patchRequest('persona-uuid-1', { avatarUrl: 'https://muse.ai/missing.jpg' }),
+    );
+    expect(res.status).toBe(400);
+    expect(uploaded).toEqual([]);
+    expect(updated).toEqual([]);
+    vi.unstubAllGlobals();
   });
 
   it('trocar para voz da casa grava voice_id e limpa voice_audio_path', async () => {

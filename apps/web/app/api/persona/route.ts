@@ -15,14 +15,13 @@ import {
   IMAGE_BUCKET,
   isFileLike,
   personaAssetPath,
-  readValidatedImage,
   removeOrphanedUploadPaths,
   setPrimaryLibraryImage,
-  validateImageFile,
-  MAX_PERSONA_IMAGES,
   PERSONA_IMAGE_WARNING_CODES,
   type LibraryImageInput,
 } from '@/lib/persona-images';
+import { validateLibraryInputs } from '@/lib/persona-library-validate';
+import { resolvePersonaAvatar } from '@/lib/persona-remote-face';
 import { logger } from '@/lib/logger';
 import { parsePatchBody } from './patch-body';
 import { parseJsonStringArray, parsePrimaryIndex } from './form-parsing';
@@ -171,6 +170,17 @@ async function postHandler(request: Request): Promise<NextResponse> {
     return errorResponse(500, 'Failed to upload photo.', 'POST /api/persona');
   }
 
+  let avatarUrl = body.values.avatarUrl;
+  let ingestedPhotoPath = photoPath;
+  if (ingestedPhotoPath === null && typeof avatarUrl === 'string') {
+    const resolved = await resolvePersonaAvatar(supabase, user.id, personaId, avatarUrl);
+    if (!resolved.ok) {
+      return errorResponse(400, resolved.error, 'POST /api/persona');
+    }
+    ingestedPhotoPath = resolved.photoPath;
+    avatarUrl = resolved.avatarUrl;
+  }
+
   const { data: persona, error: insertError } = await supabase
     .from('personas')
     .insert({
@@ -180,8 +190,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
       id: personaId,
       user_id: user.id,
       name: (body.values.name ?? '').trim(),
-      photo_path: photoPath,
-      avatar_url: body.values.avatarUrl,
+      photo_path: ingestedPhotoPath,
+      avatar_url: avatarUrl,
       voice_id: body.values.voiceId,
       language: body.values.language,
       video_aspect: body.values.videoAspect,
@@ -309,55 +319,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
   });
 }
 
-//---------------
-// validateLibraryInputs — library rules at creation: at most
-// MAX_PERSONA_IMAGES files, each a valid image. Every persona is faced, so
-// there is no faceless branch to exempt here.
-//---------------
-async function validateLibraryInputs(
-  inputs: LibraryImageInput[],
-): Promise<{ inputs: LibraryImageInput[] } | { error: string }> {
-  if (inputs.length === 0) return { inputs: [] };
-  if (inputs.length > MAX_PERSONA_IMAGES) {
-    return { error: `Image library accepts at most ${MAX_PERSONA_IMAGES} images.` };
-  }
-  // Intentional per-file validation BEFORE any upload or persona insert, so
-  // a bad file never creates partial state the rollback then has to clean
-  // up. The magic-byte check reads the real bytes (declared MIME type and
-  // extension are client-controlled); the validated bytes are passed through
-  // to addLibraryImages so the file is not read a second time.
-  // Per-file errors carry the entry index and filename so a caller with
-  // up to 10 files can tell which entry to fix. validateImageFile's own
-  // messages stay stable (the UI's ERROR_CLASS_PATTERNS matches some of
-  // them by shape); the context is appended here at the call site.
-  const validated: LibraryImageInput[] = [];
-  for (let index = 0; index < inputs.length; index += 1) {
-    const input = inputs[index] as LibraryImageInput;
-    const fileCheck = validateImageFile(input.file);
-    if ('error' in fileCheck) {
-      return { error: withImageContext(fileCheck.error, index, input.file.name) };
-    }
-    const content = await readValidatedImage(fileCheck.file);
-    if ('error' in content) {
-      return { error: withImageContext(content.error, index, input.file.name) };
-    }
-    validated.push({
-      ...input,
-      validatedContent: { bytes: content.bytes, mime: content.mime },
-    });
-  }
-  return { inputs: validated };
-}
-
-/**
- * Appends the 1-based entry index and filename to a per-file validation
- * error, so batch callers can identify the failing file.
- */
-function withImageContext(error: string, index: number, fileName: string): string {
-  const name = fileName.trim() === '' ? '' : `: ${fileName}`;
-  return `${error} (image ${index + 1}${name})`;
-}
-
 async function patchHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
@@ -410,13 +371,12 @@ async function patchHandler(request: Request): Promise<NextResponse> {
       stalePaths.push(persona.photo_path);
     }
   } else if (patch.avatarUrl !== null) {
-    updates.avatar_url = patch.avatarUrl;
-    // Exactly one visual identity per persona (personas_visual_identity_check:
-    // photo_path + avatar_url = 1). Switching a photo persona to a character
-    // must CLEAR photo_path in the same update, exactly like the photo branch
-    // above clears avatar_url — without it the update violates the check and
-    // every edit of a photo persona 500s.
-    updates.photo_path = null;
+    const resolved = await resolvePersonaAvatar(supabase, user.id, personaId, patch.avatarUrl);
+    if (!resolved.ok) {
+      return errorResponse(400, resolved.error, 'PATCH /api/persona');
+    }
+    updates.avatar_url = resolved.avatarUrl;
+    updates.photo_path = resolved.photoPath;
     if (typeof persona.photo_path === 'string' && persona.photo_path) {
       stalePaths.push(persona.photo_path);
     }
