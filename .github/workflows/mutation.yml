@@ -510,7 +510,11 @@ jobs:
         env:
           SHARD_FILE: ${{ matrix.file }}
         run: |
-          has_functions="$(uv run python scripts/changed_functions.py --file "$SHARD_FILE" --check-mutable)"
+          # --base is required by the CLI contract (the arg parser demands it):
+          # without it this step died with argparse exit 2 on EVERY PR
+          # (engine mutation runs 40183620262*), mutmut never ran and the
+          # shard went red before any mutant was ever tested.
+          has_functions="$(uv run python scripts/changed_functions.py --file "$SHARD_FILE" --base origin/main --check-mutable)"
           echo "has_functions=$has_functions" >> "$GITHUB_OUTPUT"
           echo "$SHARD_FILE: has_functions=$has_functions"
 

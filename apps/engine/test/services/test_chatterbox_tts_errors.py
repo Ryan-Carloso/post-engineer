@@ -62,6 +62,41 @@ def test_non_200_body_is_included_in_the_error(
     )
 
 
+def test_response_body_credentials_are_scrubbed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # CRITICAL review round: the upstream body goes into the stored error and
+    # the log line untouched — a gateway echoing a rejected key, or the
+    # caller's own "user:pass@host" base_url, would leak into video_generations
+    # and the logs. Both consumer paths share _scrubbed_response_body.
+    error = _run_with_responses(
+        monkeypatch,
+        [(
+            500,
+            "upstream rejected api_key=sk-real-secret-key-12345 bearer t0k3n "
+            "https://user:pw@chatter.internal/v1",
+        )] * 3,
+        tmp_path,
+    )
+    assert "sk-real" not in error
+    assert "t0k3n" not in error
+    assert "user:pw@" not in error
+    assert "api_key" in error  # the key NAME survives; the VALUE is redacted
+    assert "***:***@chatter.internal" in error
+    assert error == error.strip()
+
+
+def test_scrub_helper_alone_scrubs_credentials_and_cap_at_200() -> None:
+    from app.services.voice_providers import _scrubbed_response_body
+
+    body = _scrubbed_response_body("api_key=leakverse-999 auth\nhttps://u:s@x.example/a")
+    assert "leakverse-999" not in body
+    assert "https://u:s@" not in body
+    assert "***:***@x.example" in body
+    long = _scrubbed_response_body("x" * 500)
+    assert len(long) <= 200
+
+
 def test_blank_body_keeps_the_bare_status(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

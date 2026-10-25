@@ -310,6 +310,32 @@ def elevenlabs_tts(
     return TtsResult(
         error=f"ElevenLabs TTS failed after 3 attempts ({last_error or 'unknown error'})"
     )
+
+
+#---------------
+# _scrubbed_response_body — one source for the scrubber applied to an
+# upstream response body before it is stored or logged. Many TTS gateways
+# echo rejected credentials verbatim (api_key/Authorization values in
+# key=value or JSON shape, and "https://user:pass@host" URLs probe the
+# People's own base_url). The secret-value rules come from the shared
+# scrub_secret_values (analytics); the URL userinfo redactor mirrors the
+# one llm.py applies to its own error paths.
+#---------------
+_URL_USERINFO_RE = re.compile(
+    r"((?:https?|wss?)://)([^/\s?#@]*:[^/\s?#@]*@)",
+    re.IGNORECASE,
+)
+
+
+def _scrubbed_response_body(text: str) -> str:
+    """Upstream body -> credential-free, single-line, bounded evidence."""
+    if not isinstance(text, str) or not text:
+        return ""
+    scrubbed = _URL_USERINFO_RE.sub(r"\1***:***@", text)
+    scrubbed = scrub_secret_values(scrubbed)
+    return " ".join(scrubbed[:200].split())
+
+
 def chatterbox_tts(
     text: str,
     voice: str,
@@ -375,17 +401,18 @@ def chatterbox_tts(
 
             response = requests.post(url, json=payload, headers=headers, timeout=120)
             if response.status_code != 200:
-                # Include the server's verdict: the bare "status 404" hid the
-                # production evidence for days (a gateway body like
-                # "modal-http: workspace ... is disabled" answered the 404
-                # while only "status 404" reached the history row).
-                body = " ".join(response.text[:200].split())
+                # The verdict is ONLY included after the credential scrubber:
+                # an upstream body may echo rejected credentials (keys,
+                # "user:pass@host" URLs) — saving it raw would leak them into
+                # the history row and the logs. Both the log line and the
+                # stored error consume the SAME scrubbed text.
+                body = _scrubbed_response_body(response.text)
                 if body:
                     last_error = f"status {response.status_code}: {body}"
                 else:
                     last_error = f"status {response.status_code}"
                 logger.error(
-                    f"chatterbox tts failed with status {response.status_code}: {response.text[:200]}"
+                    f"chatterbox tts failed with status {response.status_code}: {body}"
                 )
                 continue
 
