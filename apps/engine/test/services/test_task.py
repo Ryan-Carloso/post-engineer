@@ -1420,7 +1420,7 @@ class TestArchiveFinalVideos(unittest.TestCase):
         self.assertTrue(intro_report.ran)
         self.assertEqual(generate_video.call_args.kwargs["video_path"], "intro.mp4")
         persist.assert_not_called()
-        self.assertEqual(state._rpc.call_count, 0)
+        store.refund_batch_tokens.assert_not_called()
 
     def test_open_breaker_never_calls_the_disabled_backend(self):
         """While the breaker is open a faced post goes STRAIGHT to faceless:
