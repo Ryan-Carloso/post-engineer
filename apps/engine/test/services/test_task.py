@@ -1290,7 +1290,7 @@ class TestArchiveFinalVideos(unittest.TestCase):
         # persisted-breaker path (real users take the loud alert path).
         with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "alice,other-test-user"}), \
              tempfile.TemporaryDirectory() as breaker_root, \
-             patch.object(tm.longcat_breaker, "_state_path",
+             patch.object(lff.longcat_breaker, "_state_path",
                           side_effect=_breaker_path(breaker_root)), \
              patch.object(tm.sm, "state", state), \
              patch.object(tm.sm, "persist_state_update") as persist, \
@@ -1306,11 +1306,11 @@ class TestArchiveFinalVideos(unittest.TestCase):
             )
             # The breaker is OPEN now and stays open until the 1st of next
             # month (persisted); at 00:00 on the 1st attempts resume.
-            self.assertTrue(tm.longcat_breaker.is_open(
+            self.assertTrue(lff.longcat_breaker.is_open(
                 datetime(2026, 10, 25, 12, 0, tzinfo=UTC), root=breaker_root))
-            self.assertTrue(tm.longcat_breaker.is_open(
+            self.assertTrue(lff.longcat_breaker.is_open(
                 datetime(2026, 10, 31, 23, 59, tzinfo=UTC), root=breaker_root))
-            self.assertFalse(tm.longcat_breaker.is_open(
+            self.assertFalse(lff.longcat_breaker.is_open(
                 datetime(2026, 11, 1, 0, 0, tzinfo=UTC), root=breaker_root))
 
         self.assertEqual(len(final_paths), 1)
@@ -1325,6 +1325,7 @@ class TestArchiveFinalVideos(unittest.TestCase):
         track.assert_called_once()
         self.assertEqual(track.call_args.args[0], "longcat_fallback_faceless")
         self.assertEqual(track.call_args.args[1]["reason"], "workspace_disabled")
+        self.assertEqual(track.call_args.args[1]["user_id"], "alice")
         persist.assert_called_once()
         self.assertEqual(persist.call_args.kwargs.get("user_warning_codes"),
                          ["avatar_disabled"])
@@ -1337,9 +1338,54 @@ class TestArchiveFinalVideos(unittest.TestCase):
         self.assertEqual(payload["p_amount"], 1)  # ok(2) - faceless(1)
         self.assertEqual(payload["p_engine_task_id"], task_id)
 
+    def test_faceless_fallback_refunds_very_good_premium_of_two(self):
+        """very_good is 3 tokens; faceless is 1; the premium refund is 2."""
+        import os
+        from app.services import longcat as longcat_module
+
+        task_id = "very-good-fallback"
+        params = VideoParams(
+            video_subject="test",
+            persona=PersonaParams(
+                name="Ana",
+                photo_url="https://supabase.test/signed/foto.png",
+                voice_id="test-voice",
+            ),
+        )
+        exc = longcat_module.LongCatUnavailableError(
+            "LongCat submit failed with HTTP 404: modal-http: workspace ac-X is disabled"
+        )
+        state = MagicMock()
+        state.get_task.return_value = {
+            "user_id": "alice",
+            "generation_id": "batch:sched-9:slot:slot-1",
+            "video_quality": "very_good",
+        }
+        rpc_response = MagicMock()
+        rpc_response.json.return_value = {"refunded": True}
+        state._rpc = MagicMock(return_value=rpc_response)
+        with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "alice"}), \
+             tempfile.TemporaryDirectory() as breaker_root, \
+             patch.object(lff.longcat_breaker, "_state_path",
+                          side_effect=_breaker_path(breaker_root)), \
+             patch.object(tm.sm, "state", state), \
+             patch.object(tm.sm, "persist_state_update"), \
+             patch.object(tm.history_repository, "recent", return_value=[]), \
+             patch.object(tm, "_update_task"), \
+             patch.object(tm.video, "combine_videos"), \
+             patch.object(tm, "prepare_persona_lipsync_video", side_effect=exc), \
+             patch.object(tm, "_apply_persona_face_fill"), \
+             patch.object(lff, "track_event"), \
+             patch.object(tm.video, "generate_video"):
+            tm.generate_final_videos(
+                task_id, params, ["clip.mp4"], "voice.mp3", "sub.srt", "script", "none"
+            )
+        payload = state._rpc.call_args.args[1]
+        self.assertEqual(payload["p_amount"], 2)
+
     def test_intro_succeeds_then_face_fill_longcat_unavailable_is_intro_only(self):
         """prepare_persona_lipsync_video succeeds, face-fill raises
-        LongCatUnavailableError: keep intro, set warning, refund once."""
+        LongCatUnavailableError: keep intro; no warning, no refund."""
         import os
         from app.services import longcat as longcat_module
 
@@ -1365,7 +1411,7 @@ class TestArchiveFinalVideos(unittest.TestCase):
         state._rpc = MagicMock(return_value=rpc_response)
         with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "alice"}), \
              tempfile.TemporaryDirectory() as breaker_root, \
-             patch.object(tm.longcat_breaker, "_state_path",
+             patch.object(lff.longcat_breaker, "_state_path",
                           side_effect=_breaker_path(breaker_root)), \
              patch.object(tm.sm, "state", state), \
              patch.object(tm.sm, "persist_state_update") as persist, \
@@ -1383,10 +1429,8 @@ class TestArchiveFinalVideos(unittest.TestCase):
         self.assertEqual(len(final_paths), 1)
         self.assertTrue(intro_report.ran)
         self.assertEqual(generate_video.call_args.kwargs["video_path"], "intro.mp4")
-        persist.assert_called_once()
-        self.assertEqual(persist.call_args.kwargs.get("user_warning_codes"),
-                         ["avatar_disabled"])
-        self.assertEqual(state._rpc.call_count, 1)
+        persist.assert_not_called()
+        self.assertEqual(state._rpc.call_count, 0)
 
     def test_open_breaker_never_calls_the_disabled_backend(self):
         """While the breaker is open a faced post goes STRAIGHT to faceless:
@@ -1407,7 +1451,7 @@ class TestArchiveFinalVideos(unittest.TestCase):
         state.get_task.return_value = {"user_id": "alice"}
         with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "alice"}), \
              tempfile.TemporaryDirectory() as breaker_root, \
-             patch.object(tm.longcat_breaker, "_state_path",
+             patch.object(lff.longcat_breaker, "_state_path",
                           side_effect=_breaker_path(breaker_root)), \
              patch.object(tm.sm, "state", state), \
              patch.object(tm.sm, "persist_state_update") as persist, \
@@ -1456,7 +1500,7 @@ class TestArchiveFinalVideos(unittest.TestCase):
         state.get_task.return_value = {"user_id": "real-user"}
         with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "alice"}), \
              tempfile.TemporaryDirectory() as breaker_root, \
-             patch.object(tm.longcat_breaker, "_state_path",
+             patch.object(lff.longcat_breaker, "_state_path",
                           side_effect=_breaker_path(breaker_root)), \
              patch.object(tm.sm, "state", state), \
              patch.object(tm.history_repository, "recent", return_value=[]), \
@@ -1483,13 +1527,13 @@ class TestArchiveFinalVideos(unittest.TestCase):
 
         with tempfile_module.TemporaryDirectory() as breaker_root:
             marker = os_module.path.join(breaker_root, "marker.json")
-            with patch.object(tm.longcat_breaker, "_state_path",
+            with patch.object(lff.longcat_breaker, "_state_path",
                               side_effect=lambda root=None: os_module.path.join(root if root is not None else os_module.path.dirname(marker), os_module.path.basename(marker))):
-                self.assertTrue(tm.longcat_breaker.should_emit_event(
+                self.assertTrue(lff.longcat_breaker.should_emit_event(
                     datetime(2026, 10, 25, 9, 0, tzinfo=UTC)))
-                self.assertFalse(tm.longcat_breaker.should_emit_event(
+                self.assertFalse(lff.longcat_breaker.should_emit_event(
                     datetime(2026, 10, 25, 18, 0, tzinfo=UTC)))
-                self.assertTrue(tm.longcat_breaker.should_emit_event(
+                self.assertTrue(lff.longcat_breaker.should_emit_event(
                     datetime(2026, 10, 26, 6, 0, tzinfo=UTC)))
             with open(marker, encoding="utf-8") as fh:
                 self.assertEqual(json_module.load(fh)["last_event_day"], "2026-10-26")
@@ -1504,14 +1548,14 @@ class TestArchiveFinalVideos(unittest.TestCase):
 
         with tempfile_module.TemporaryDirectory() as breaker_root:
             marker = os_module.path.join(breaker_root, "marker.json")
-            with patch.object(tm.longcat_breaker, "_state_path",
+            with patch.object(lff.longcat_breaker, "_state_path",
                               side_effect=lambda root=None: os_module.path.join(root if root is not None else os_module.path.dirname(marker), os_module.path.basename(marker))):
-                tm.longcat_breaker.trip(
+                lff.longcat_breaker.trip(
                     datetime(2026, 10, 20, 12, 0, tzinfo=UTC), "workspace disabled"
                 )
-            with patch.object(tm.longcat_breaker, "_state_path",
+            with patch.object(lff.longcat_breaker, "_state_path",
                               side_effect=lambda root=None: os_module.path.join(root if root is not None else os_module.path.dirname(marker), os_module.path.basename(marker))):
-                self.assertTrue(tm.longcat_breaker.is_open(
+                self.assertTrue(lff.longcat_breaker.is_open(
                     datetime(2026, 10, 25, 12, 0, tzinfo=UTC)))
             with open(marker, encoding="utf-8") as fh:
                 state = json_module.load(fh)
@@ -1530,22 +1574,24 @@ class TestArchiveFinalVideos(unittest.TestCase):
             state = MagicMock()
             state.get_task.return_value = {"user_id": "real-user"}
             task_id = "real-user-task"
-            with patch.object(tm.longcat_breaker, "_state_path",
+            with patch.object(lff.longcat_breaker, "_state_path",
                               side_effect=_breaker_path(breaker_root)), \
                     patch.object(tm.sm, "state", state), \
                     patch.object(tm.sm, "persist_state_update") as persist, \
                     patch.object(lff, "track_event"), \
                     patch.object(lff, "_discord_notify") as discord, \
-                    patch.object(lff.logger, "error") as log_error, \
-                    patch.object(tm.video, "generate_video"):
+                    patch.object(lff.logger, "error") as log_error:
                 lff.report_longcat_faceless_fallback(task_id, {"user_id": "real-user"})
                 # LOUD: error record + Discord ping. NOT quiet.
                 log_error.assert_called_once()
                 discord.assert_called_once()
                 # No breaker trip: the backend is recoverable, so the next
                 # dispatch tries the LONGCAT first again.
-                self.assertFalse(tm.longcat_breaker.is_open(
+                self.assertFalse(lff.longcat_breaker.is_open(
                     datetime(2026, 10, 25, 13, 0, tzinfo=UTC), root=breaker_root))
+                import json as json_module
+                with open(os.path.join(breaker_root, "marker.json"), encoding="utf-8") as fh:
+                    self.assertNotIn("until", json_module.load(fh))
                 # User marker stays.
                 self.assertEqual(persist.call_args.kwargs.get("user_warning_codes"),
                                  ["avatar_disabled"])
@@ -1556,13 +1602,6 @@ class TestArchiveFinalVideos(unittest.TestCase):
                 log_error.assert_called_once()  # still one
                 discord.assert_called_once()   # still one
 
-            with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "someone-else"}), \
-                    tempfile.TemporaryDirectory() as breaker_root_persist:
-                # A REAL user's outage NEVER trips: is_open stays closed even
-                # when many fallbacks fired.
-                self.assertFalse(tm.longcat_breaker.is_open(
-                    datetime(2026, 10, 25, 12, 30, tzinfo=UTC), root=breaker_root_persist))
-
     def test_real_user_fallback_never_trips_the_persisted_breaker(self):
         """Counter guard on a real path store: empty marker file, and the
         real-user alert still lands once (dedup) + tracks no event."""
@@ -1570,7 +1609,7 @@ class TestArchiveFinalVideos(unittest.TestCase):
 
         with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": ""}), \
                 tempfile.TemporaryDirectory() as breaker_root:
-            with patch.object(tm.longcat_breaker, "_state_path",
+            with patch.object(lff.longcat_breaker, "_state_path",
                               side_effect=_breaker_path(breaker_root)), \
                     patch.object(lff, "track_event") as track, \
                     patch.object(lff, "_discord_notify") as discord, \
@@ -1580,18 +1619,16 @@ class TestArchiveFinalVideos(unittest.TestCase):
                                  MagicMock(get_task=MagicMock(return_value={"user_id": "u"}))):
                 # Nothing set the breaker: the file never appears (the real
                 # path NEVER trips it).
-                self.assertFalse(tm.longcat_breaker.is_open(
+                self.assertFalse(lff.longcat_breaker.is_open(
                     datetime(2026, 10, 25, 12, 0, tzinfo=UTC), root=breaker_root))
                 lff.report_longcat_faceless_fallback("t1", {"user_id": "u"})
-                self.assertFalse(tm.longcat_breaker.is_open(
+                self.assertFalse(lff.longcat_breaker.is_open(
                     datetime(2026, 10, 25, 12, 5, tzinfo=UTC), root=breaker_root))
-                # The marker may exist for the ALERT dedup; what must NEVER
+                # The marker exists for the ALERT dedup; what must NEVER
                 # appear is a breaker resume date.
-                if os.path.exists(os.path.join(breaker_root, "marker.json")):
-                    import json as json_module
-
-                    with open(os.path.join(breaker_root, "marker.json"), encoding="utf-8") as fh:
-                        self.assertNotIn("until", json_module.load(fh))
+                import json as json_module
+                with open(os.path.join(breaker_root, "marker.json"), encoding="utf-8") as fh:
+                    self.assertNotIn("until", json_module.load(fh))
                 self.assertFalse(track.called)      # real users: no quiet event
                 self.assertTrue(discord.called or log_error.called)  # loudness YES
 

@@ -294,8 +294,11 @@ export async function getSlotPost(
         : prefetchFailed
           ? null
           : await resolveScriptAngle(row.task_id, userId);
-    if (prefetchedTask && prefetchedTask.warnings.length > 0) {
-      warnings = prefetchedTask.warnings;
+    const prefetchedWarnings = Array.isArray(prefetchedTask?.warnings)
+      ? prefetchedTask.warnings
+      : [];
+    if (prefetchedWarnings.length > 0) {
+      warnings = prefetchedWarnings;
     }
   }
 

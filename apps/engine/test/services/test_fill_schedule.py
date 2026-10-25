@@ -1317,6 +1317,37 @@ class PublishRetryLimitTests(unittest.TestCase):
         self.assertEqual(store.updates[0][1]["publish_attempts"], 1)
         self.assertEqual(store.refund_batch_calls, [])
 
+    def test_publish_failure_refund_is_net_of_shortface_premium(self):
+        """Faced very_good prepaid 3; :shortface already refunded 2.
+
+        A later publish failure refunds the remaining 1, not another 3.
+        """
+        from app.services.upload_publisher import PublishError
+
+        slot = self._slot(publish_attempts=2)
+        slot["faceless"] = False
+        slot["schedules"]["personas"] = {"face_quality": "very_good"}
+        slot["schedules"]["post_face_quality"] = "very_good"
+        store = _FakeStore()
+        store.ready_due_slots = lambda now: [slot]
+        state = MagicMock()
+        state.get_task.return_value = {
+            "state": 1,
+            "videos": [self.video_path],
+            "video_storage_path": "user-1/faced/t-1/final-1.mp4",
+            "user_warning_codes": ["avatar_disabled"],
+        }
+        publish = MagicMock(side_effect=PublishError("boom"))
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=state, publish_video=publish,
+        )
+        scheduler.publisher.base_url = "https://post-engineer.com"
+        scheduler.publisher.api_secret = "secret"
+        published = scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
+        self.assertEqual(published, 0)
+        self.assertEqual(len(store.refund_batch_calls), 1)
+        self.assertEqual(store.refund_batch_calls[0][3], 1)
+
     def test_final_failure_marks_slot_failed_and_refunds_token(self):
         store, published = self._run_publish(self._slot(publish_attempts=2))
         self.assertEqual(published, 0)

@@ -21,7 +21,19 @@ vi.mock('@/lib/rate-limit', async (importOriginal) => {
 });
 vi.mock('@/lib/engine-tasks', () => ({
   fetchEnginePublishResults: vi.fn(async () => ({})),
-  fetchEngineTaskProgress: vi.fn(async () => ({ gone: false, progress: 50, stage: 'video' })),
+  fetchEngineTaskProgress: vi.fn(async () => ({
+    gone: false,
+    progress: 50,
+    stage: 'video',
+    scriptAngle: null,
+    warnings: [],
+  })),
+  fetchEngineScriptAngle: vi.fn(async () => null),
+  fetchEnginePostMetricsSource: vi.fn(async () => ({
+    publishResults: [],
+    scriptAngle: null,
+    warnings: [],
+  })),
 }));
 vi.mock('@/lib/schedule-slot-presentation', () => ({
   enrichSlot: vi.fn(async () => ({

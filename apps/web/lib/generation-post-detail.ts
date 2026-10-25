@@ -89,8 +89,8 @@ export async function getGenerationPost(
     const live = row.status === 'pending' || row.status === 'running';
     try {
       const task = await fetchEngineTaskProgress(row.engine_task_id, userId);
-      warnings = task.warnings;
-      angleFromProgress = task.scriptAngle;
+      warnings = Array.isArray(task.warnings) ? task.warnings : [];
+      angleFromProgress = task.scriptAngle ?? null;
       if (live && !task.gone) {
         progress = task.progress;
         stage = task.stage;

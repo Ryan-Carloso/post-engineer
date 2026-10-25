@@ -50,7 +50,11 @@ def report_longcat_faceless_fallback(
         if longcat_breaker.should_emit_event(now):
             track_event(
                 "longcat_fallback_faceless",
-                {"task_id": task_id, "reason": "workspace_disabled"},
+                {
+                    "task_id": task_id,
+                    "user_id": user_id,
+                    "reason": "workspace_disabled",
+                },
                 immediate=False,
             )
         if not longcat_breaker.trip(now, "workspace_disabled"):
@@ -73,8 +77,17 @@ def report_longcat_faceless_fallback(
     sm.persist_state_update(
         sm.state, task_id, user_warning_codes=[AVATAR_DISABLED_WARNING_CODE]
     )
-    premium = token_cost(False, "ok") - FACELESS_PRICE
+    stored = sm.state.get_task(task_id) or task or {}
+    face_quality = _face_quality(stored)
+    premium = token_cost(False, face_quality) - FACELESS_PRICE
     refund_face_premium(task_id, premium)
+
+
+def _face_quality(task: dict[str, object]) -> str:
+    raw = task.get("video_quality") or task.get("face_quality")
+    if isinstance(raw, str) and raw == "very_good":
+        return "very_good"
+    return "ok"
 
 
 def refund_face_premium(task_id: str, premium: int) -> None:
@@ -176,7 +189,10 @@ def render_persona_video(
                 index=1,
             )
         except longcat.LongCatUnavailableError:
-            # Intro already landed: keep it, set the same warning, refund
-            # once (report is idempotent by refund key).
-            report_longcat_faceless_fallback(task_id, task or {})
+            # Intro already contains the avatar: keep it. Do not mark
+            # avatar_disabled and do not refund the face premium.
+            logger.warning(
+                "face-fill skipped after LongCat unavailable "
+                f"(keeping intro-only video) task {task_id}"
+            )
     return video_for_render, intro_report

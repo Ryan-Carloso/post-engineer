@@ -1293,10 +1293,12 @@ def _apply_persona_face_fill(
     LongCat segment and spliced over the background tail. The slot is
     cut on the video timeline (not the audio's) so the muxed voiceover —
     which starts at video second 0 — stays lip-synced. When the tail window
-    can't be derived the video is returned untouched. EVERY failure is
-    swallowed with a logged warning: a complete intro-only video already
-    exists, so a face-fill problem (Modal down, unreadable file, ffmpeg
-    error) must degrade to the intro-only video, never fail the task.
+    can't be derived the video is returned untouched. LongCatUnavailableError
+    is re-raised so the caller can keep the intro-only video without treating
+    the outage as a full faceless fallback. Every other failure is swallowed
+    with a logged warning: a complete intro-only video already exists, so a
+    face-fill problem (unreadable file, ffmpeg error) must degrade to the
+    intro-only video, never fail the task.
     The accepted trade-off: a slow Modal backend can still hold the task
     for up to the configured LongCat timeout before the fallback
     kicks in — no separate timeout knob is added (product-fixed pacing).

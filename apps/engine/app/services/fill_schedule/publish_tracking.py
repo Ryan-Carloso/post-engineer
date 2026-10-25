@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.services.fill_schedule.support import slot_user_id
+from app.services.fill_schedule.support import FACELESS_PRICE, slot_user_id, token_cost
 
 
 def publish_tracking_context(
@@ -31,3 +31,19 @@ def publish_tracking_context(
     if isinstance(persona_id, str) and persona_id:
         context["persona_id"] = persona_id
     return context
+
+
+def publish_refund_amount(
+    prepaid: int, task: dict[str, Any] | None, face_quality: str
+) -> int:
+    """Net of a :shortface premium already refunded for this slot.
+
+    LongCat faceless fallback refunds only the face premium under
+    ``:shortface``. A later publish failure must not refund that premium
+    again: the remaining prepaid amount is the faceless price (or zero).
+    """
+    codes = (task or {}).get("user_warning_codes") or []
+    if not isinstance(codes, list) or "avatar_disabled" not in codes:
+        return prepaid
+    premium = token_cost(False, face_quality) - FACELESS_PRICE
+    return max(0, prepaid - premium)

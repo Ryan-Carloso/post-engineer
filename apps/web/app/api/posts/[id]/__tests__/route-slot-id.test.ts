@@ -53,7 +53,19 @@ vi.mock('@/lib/schedule-slot-presentation', () => ({
 
 vi.mock('@/lib/engine-tasks', () => ({
   fetchEnginePublishResults: vi.fn(async () => ({})),
-  fetchEngineTaskProgress: vi.fn(async () => ({ gone: false, progress: 67, stage: 'audio' })),
+  fetchEngineTaskProgress: vi.fn(async () => ({
+    gone: false,
+    progress: 67,
+    stage: 'audio',
+    scriptAngle: null,
+    warnings: [],
+  })),
+  fetchEngineScriptAngle: vi.fn(async () => null),
+  fetchEnginePostMetricsSource: vi.fn(async () => ({
+    publishResults: [],
+    scriptAngle: null,
+    warnings: [],
+  })),
 }));
 
 vi.mock('@/lib/publish-links', () => ({

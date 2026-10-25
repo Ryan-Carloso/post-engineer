@@ -36,6 +36,7 @@ from app.services.fill_schedule.support import (
 )
 from app.services.state import persist_state_update
 from app.services.fill_schedule.publish_tracking import (
+    publish_refund_amount,
     publish_tracking_context as _publish_tracking_context,
 )
 
@@ -425,49 +426,49 @@ class BatchPublisher:
                     schedule_id=schedule_id,
                 )
             else:
-                cost = token_cost(
-                    slot_faceless(slot),
-                    str(identity.get("face_quality") or "ok"),
-                )
+                face_quality = str(identity.get("face_quality") or "ok")
+                cost = token_cost(slot_faceless(slot), face_quality)
                 batch_generation_id = f"batch:{schedule_id}"
                 engine_task_id = (
                     str(slot["task_id"]) if slot.get("task_id") else None
                 )
-                try:
-                    refunded = self.store.refund_batch_tokens(
-                        user_id,
-                        batch_generation_id,
-                        f"{batch_generation_id}:slot:{slot['id']}:publish",
-                        cost,
-                        refund_reason,
-                        engine_task_id=engine_task_id,
-                    )
-                except Exception as exc:  # noqa: BLE001 — refund is best-effort here
-                    logger.error(
-                        f"fill_schedule: refund failed for publish-failed "
-                        f"slot {slot['id']}: {exc}"
-                    )
-                else:
-                    # Fire refund_issued only on a landed refund — never
-                    # optimistically (see reconcile.py).
-                    if refunded:
-                        track_refund_issued(
-                            user_id=user_id,
-                            amount=cost,
-                            reason=refund_reason,
-                            batch_generation_id=batch_generation_id,
-                            slot_id=str(slot["id"]),
+                task_record = (
+                    self.task_state.get_task(engine_task_id)
+                    if engine_task_id
+                    else None
+                )
+                amount = publish_refund_amount(cost, task_record, face_quality)
+                if amount > 0:
+                    try:
+                        refunded = self.store.refund_batch_tokens(
+                            user_id,
+                            batch_generation_id,
+                            f"{batch_generation_id}:slot:{slot['id']}:publish",
+                            amount,
+                            refund_reason,
                             engine_task_id=engine_task_id,
                         )
-                    # The RPC answered but the charge was NOT refunded: a
-                    # soft failure. Log loudly (billing rule) and keep the
-                    # tick running — the slot is already terminal.
-                    if not refunded:
+                    except Exception as exc:  # noqa: BLE001 — refund is best-effort here
                         logger.error(
-                            f"fill_schedule: refund not applied for "
-                            f"publish-failed slot {slot['id']}: rpc returned "
-                            f"not-refunded"
+                            f"fill_schedule: refund failed for publish-failed "
+                            f"slot {slot['id']}: {exc}"
                         )
+                    else:
+                        if refunded:
+                            track_refund_issued(
+                                user_id=user_id,
+                                amount=amount,
+                                reason=refund_reason,
+                                batch_generation_id=batch_generation_id,
+                                slot_id=str(slot["id"]),
+                                engine_task_id=engine_task_id,
+                            )
+                        if not refunded:
+                            logger.error(
+                                f"fill_schedule: refund not applied for "
+                                f"publish-failed slot {slot['id']}: rpc returned "
+                                f"not-refunded"
+                            )
         else:
             logger.error(
                 "fill_schedule: cannot refund publish-failed slot without "

@@ -41,7 +41,7 @@ class TestLongcatFacelessFallback(unittest.TestCase):
     def test_intro_succeeds_then_face_fill_longcat_unavailable(self):
         """Intro lands; face-fill raises LongCatUnavailableError.
 
-        Video stays intro-only, warning is set, refund runs once.
+        Video stays intro-only. No avatar_disabled warning, no refund.
         """
         params = VideoParams(
             video_subject="test",
@@ -83,12 +83,8 @@ class TestLongcatFacelessFallback(unittest.TestCase):
             )
         self.assertEqual(video, "intro.mp4")
         self.assertTrue(intro_report.ran)
-        persist.assert_called_once()
-        self.assertEqual(
-            persist.call_args.kwargs.get("user_warning_codes"),
-            ["avatar_disabled"],
-        )
-        self.assertEqual(state._rpc.call_count, 1)
+        persist.assert_not_called()
+        self.assertEqual(state._rpc.call_count, 0)
 
     def test_state_path_patch_honors_root(self):
         """A patch that ignores root would hide writes outside the temp dir."""
