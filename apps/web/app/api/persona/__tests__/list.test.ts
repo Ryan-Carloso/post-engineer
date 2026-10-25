@@ -238,6 +238,7 @@ describe('GET /api/persona/list', () => {
       photoUrl: 'https://supabase.test/signed/user-uuid-1/foto.png',
       voiceId: 'voz-1',
     });
+    expect(ana.avatarUrl).toBeUndefined();
     expect(robo).toMatchObject({
       id: 'p-2',
       name: 'Robo',

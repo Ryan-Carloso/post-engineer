@@ -19,6 +19,13 @@
       }
     ]
   },
+  "ts-node": {
+    "transpileOnly": true,
+    "compilerOptions": {
+      "module": "commonjs",
+      "moduleResolution": "node"
+    }
+  },
   "include": [
     "**/*.ts",
     "**/*.tsx",

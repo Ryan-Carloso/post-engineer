@@ -15,14 +15,13 @@ import {
   IMAGE_BUCKET,
   isFileLike,
   personaAssetPath,
-  readValidatedImage,
   removeOrphanedUploadPaths,
   setPrimaryLibraryImage,
-  validateImageFile,
-  MAX_PERSONA_IMAGES,
   PERSONA_IMAGE_WARNING_CODES,
   type LibraryImageInput,
 } from '@/lib/persona-images';
+import { validateLibraryInputs } from '@/lib/persona-library-validate';
+import { resolvePersonaAvatar, rollbackStoragePath } from '@/lib/persona-remote-face';
 import { logger } from '@/lib/logger';
 import { parsePatchBody } from './patch-body';
 import { parseJsonStringArray, parsePrimaryIndex } from './form-parsing';
@@ -34,15 +33,7 @@ import { SAFE_TASK_ID } from '@/lib/video-urls';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
-// Aggregate budget for the post-delete engine task cleanup (see DELETE):
-// after() has no deadline of its own, so the loop must bound itself.
 const ENGINE_CLEANUP_BUDGET_MS = 20_000;
-
-//---------------
-// POST /api/persona — creates the user's persona: uploads photo/audio
-// to the private 'personas' bucket and inserts into public.personas
-// (RLS by user_id). Validation = shared zod schema (lib/persona-schema.ts).
-//---------------
 
 function errorResponse(
   status: number,
@@ -56,6 +47,8 @@ function errorResponse(
 async function postHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
+  const limited = await applyRateLimit(request, RATE_LIMITS.personaWrite, auth.userId);
+  if (limited) return limited;
   if (isScopedApiKey(auth)) {
     return errorResponse(403, 'This API key is restricted to specific personas and cannot create new ones.', 'POST /api/persona');
   }
@@ -157,11 +150,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
   }
   const validatedLibraryInputs = libraryValidation.inputs;
 
-  // The persona id is generated HERE, before the upload, so the photo can
-  // land in {userId}/{personaId}/photo.{ext} (the folder says whose file it
-  // is). The upload still happens BEFORE the insert on purpose: if the insert
-  // fails, the rollback removes the file by its exact path — swapping the
-  // order would leave a row with no file.
+  // Persona id first so the photo lands in {userId}/{personaId}/photo.{ext}.
+  // Upload before insert so a failed insert can roll the file back by path.
   const personaId = randomUUID();
   const photoPath =
     body.photo && body.photoExtension
@@ -171,17 +161,26 @@ async function postHandler(request: Request): Promise<NextResponse> {
     return errorResponse(500, 'Failed to upload photo.', 'POST /api/persona');
   }
 
+  let avatarUrl = body.values.avatarUrl;
+  let photoPathToRollback = photoPath;
+  if (photoPathToRollback === null && typeof avatarUrl === 'string') {
+    const resolved = await resolvePersonaAvatar(supabase, user.id, personaId, avatarUrl);
+    if (!resolved.ok) {
+      return errorResponse(400, resolved.error, 'POST /api/persona');
+    }
+    photoPathToRollback = resolved.photoPath;
+    avatarUrl = resolved.avatarUrl;
+  }
+
   const { data: persona, error: insertError } = await supabase
     .from('personas')
     .insert({
-      // Explicit id: the column already defaults to gen_random_uuid(), so
-      // this changes nothing for the schema — it only lets the storage
-      // folder be known before the row exists.
+      // Explicit id so the storage folder is known before the row exists.
       id: personaId,
       user_id: user.id,
       name: (body.values.name ?? '').trim(),
-      photo_path: photoPath,
-      avatar_url: body.values.avatarUrl,
+      photo_path: photoPathToRollback,
+      avatar_url: avatarUrl,
       voice_id: body.values.voiceId,
       language: body.values.language,
       video_aspect: body.values.videoAspect,
@@ -204,6 +203,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
     .single();
 
   if (insertError || !persona) {
+    // Insert never landed: remove the ingested object so it does not orphan.
+    await rollbackStoragePath(supabase, photoPathToRollback);
     return errorResponse(500, 'Failed to create persona.', 'POST /api/persona', {
       cause: insertError,
     });
@@ -212,9 +213,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   let libraryImageIds: string[] = [];
   const warnings: string[] = [];
   if (validatedLibraryInputs.length > 0) {
-    // The MINTED id, not `persona.id`: the storage folder must be the id that
-    // went into the row, so a future divergence between the two can't scatter
-    // a persona's files across folders.
+    // Storage folder uses the minted id that went into the row.
     const added = await addLibraryImages(supabase, user.id, personaId, validatedLibraryInputs);
     if ('error' in added) {
       // Roll back the whole creation so a half-written persona never survives.
@@ -265,14 +264,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
           }
         }
       }
-      if (photoPath) {
-        const { error: photoRollbackError } = await supabase.storage
-          .from(IMAGE_BUCKET)
-          .remove([photoPath]);
-        if (photoRollbackError) {
-          logger.error('[api/persona] photo rollback failed', photoRollbackError);
-        }
-      }
+      await rollbackStoragePath(supabase, photoPathToRollback);
       return errorResponse(added.status, added.error, 'POST /api/persona');
     }
     libraryImageIds = added.images.map((image) => image.id);
@@ -309,58 +301,11 @@ async function postHandler(request: Request): Promise<NextResponse> {
   });
 }
 
-//---------------
-// validateLibraryInputs — library rules at creation: at most
-// MAX_PERSONA_IMAGES files, each a valid image. Every persona is faced, so
-// there is no faceless branch to exempt here.
-//---------------
-async function validateLibraryInputs(
-  inputs: LibraryImageInput[],
-): Promise<{ inputs: LibraryImageInput[] } | { error: string }> {
-  if (inputs.length === 0) return { inputs: [] };
-  if (inputs.length > MAX_PERSONA_IMAGES) {
-    return { error: `Image library accepts at most ${MAX_PERSONA_IMAGES} images.` };
-  }
-  // Intentional per-file validation BEFORE any upload or persona insert, so
-  // a bad file never creates partial state the rollback then has to clean
-  // up. The magic-byte check reads the real bytes (declared MIME type and
-  // extension are client-controlled); the validated bytes are passed through
-  // to addLibraryImages so the file is not read a second time.
-  // Per-file errors carry the entry index and filename so a caller with
-  // up to 10 files can tell which entry to fix. validateImageFile's own
-  // messages stay stable (the UI's ERROR_CLASS_PATTERNS matches some of
-  // them by shape); the context is appended here at the call site.
-  const validated: LibraryImageInput[] = [];
-  for (let index = 0; index < inputs.length; index += 1) {
-    const input = inputs[index] as LibraryImageInput;
-    const fileCheck = validateImageFile(input.file);
-    if ('error' in fileCheck) {
-      return { error: withImageContext(fileCheck.error, index, input.file.name) };
-    }
-    const content = await readValidatedImage(fileCheck.file);
-    if ('error' in content) {
-      return { error: withImageContext(content.error, index, input.file.name) };
-    }
-    validated.push({
-      ...input,
-      validatedContent: { bytes: content.bytes, mime: content.mime },
-    });
-  }
-  return { inputs: validated };
-}
-
-/**
- * Appends the 1-based entry index and filename to a per-file validation
- * error, so batch callers can identify the failing file.
- */
-function withImageContext(error: string, index: number, fileName: string): string {
-  const name = fileName.trim() === '' ? '' : `: ${fileName}`;
-  return `${error} (image ${index + 1}${name})`;
-}
-
 async function patchHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
+  const limited = await applyRateLimit(request, RATE_LIMITS.personaWrite, auth.userId);
+  if (limited) return limited;
   const user = { id: auth.userId };
   const supabase = auth.isApiKey === true
     ? createSupabaseServiceClient()
@@ -396,6 +341,7 @@ async function patchHandler(request: Request): Promise<NextResponse> {
 
   const updates: Record<string, unknown> = {};
   const stalePaths: string[] = [];
+  let replacementPhotoPath: string | null = null;
 
   if (patch.name !== null) {
     updates.name = patch.name.trim();
@@ -406,18 +352,25 @@ async function patchHandler(request: Request): Promise<NextResponse> {
     if (!photoPath) return errorResponse(500, 'Failed to upload photo.', 'PATCH /api/persona');
     updates.photo_path = photoPath;
     updates.avatar_url = null;
-    if (typeof persona.photo_path === 'string' && persona.photo_path) {
+    replacementPhotoPath = photoPath;
+    if (typeof persona.photo_path === 'string' && persona.photo_path && persona.photo_path !== photoPath) {
       stalePaths.push(persona.photo_path);
     }
   } else if (patch.avatarUrl !== null) {
-    updates.avatar_url = patch.avatarUrl;
-    // Exactly one visual identity per persona (personas_visual_identity_check:
-    // photo_path + avatar_url = 1). Switching a photo persona to a character
-    // must CLEAR photo_path in the same update, exactly like the photo branch
-    // above clears avatar_url — without it the update violates the check and
-    // every edit of a photo persona 500s.
-    updates.photo_path = null;
-    if (typeof persona.photo_path === 'string' && persona.photo_path) {
+    const resolved = await resolvePersonaAvatar(supabase, user.id, personaId, patch.avatarUrl, {
+      existingPhotoPath: typeof persona.photo_path === 'string' ? persona.photo_path : null,
+    });
+    if (!resolved.ok) {
+      return errorResponse(400, resolved.error, 'PATCH /api/persona');
+    }
+    updates.avatar_url = resolved.avatarUrl;
+    updates.photo_path = resolved.photoPath;
+    replacementPhotoPath = resolved.photoPath;
+    if (
+      typeof persona.photo_path === 'string' &&
+      persona.photo_path &&
+      persona.photo_path !== resolved.photoPath
+    ) {
       stalePaths.push(persona.photo_path);
     }
   }
@@ -448,6 +401,9 @@ async function patchHandler(request: Request): Promise<NextResponse> {
     .eq('id', personaId);
   if (updateError) {
     logger.error('[api/persona] update failed', updateError);
+    if (replacementPhotoPath && replacementPhotoPath !== persona.photo_path) {
+      await rollbackStoragePath(supabase, replacementPhotoPath);
+    }
     return errorResponse(500, 'Failed to update persona.', 'PATCH /api/persona');
   }
 
