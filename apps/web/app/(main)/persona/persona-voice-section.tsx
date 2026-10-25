@@ -11,7 +11,15 @@ import { InlineFieldError, SectionDivider } from './persona-section-parts';
 import { PersonaHouseVoicePicker } from './voice-picker';
 import { PersonaVoiceClonePanel, VoiceTabButton } from './voice-clone-picker';
 
-export const PersonaVoiceSection = () => {
+export const PersonaVoiceSection = ({
+  voiceHydrated = true,
+}: {
+  /** False while an existing persona has not been copied into the store
+   *  yet. The list route omits a missing voice_id (undefined) and the page
+   *  writes null; that loaded-empty state must warn, the not-yet-loaded
+   *  initial null must not. */
+  voiceHydrated?: boolean;
+}) => {
   const { t } = useI18n();
   const result = usePersonaStore((s) => s.result);
   const savedVoiceId = usePersonaStore((s) => s.voiceId);
@@ -34,7 +42,7 @@ export const PersonaVoiceSection = () => {
   // Language is omitted: this screen never sees a non-English persona.
   // Create/edit is gated to English (#252) until other languages launch.
   const resolution =
-    savedVoiceId === null || catalogIds.size === 0
+    !voiceHydrated || catalogIds.size === 0
       ? null
       : resolvePersonaVoice(savedVoiceId, undefined, { catalogIds });
   const fallback = resolution?.kind === 'fallback' ? resolution : null;

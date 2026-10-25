@@ -156,7 +156,9 @@ const PersonaPageContent = () => {
             <PersonaTokensSection />
           </section>
           <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
-            <PersonaVoiceSection />
+            <PersonaVoiceSection
+              voiceHydrated={editingPersonaId ? editingPersona !== undefined : true}
+            />
           </section>
           <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
             <PersonaPreferencesSection />

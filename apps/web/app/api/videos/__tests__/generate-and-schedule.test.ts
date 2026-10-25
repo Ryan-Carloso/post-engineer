@@ -66,6 +66,11 @@ vi.mock('@/lib/persona-images', async (importOriginal) => {
   };
 });
 
+vi.mock('@/lib/voice-catalog-fetch', () => ({
+  fetchPersonaVoiceCatalogIds: vi.fn().mockResolvedValue(undefined),
+  fetchPersonaVoiceOptions: vi.fn(),
+}));
+
 vi.mock('@/lib/engine-image-url', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/engine-image-url')>();
   return {
@@ -92,6 +97,7 @@ import { startEngineVideoTask, recordGenerationStart, recordGenerationUpdate } f
 import { checkCustomAudioUrl } from '@/lib/generation/custom-audio';
 import { resolveVideoImage, recordRecentImageId } from '@/lib/persona-images';
 import { ensureEngineImageUrl } from '@/lib/engine-image-url';
+import { fetchPersonaVoiceCatalogIds } from '@/lib/voice-catalog-fetch';
 import { trackApiEvent } from '@/lib/analytics';
 import { IDEMPOTENCY_NAMESPACE, deterministicUuid } from '@/lib/idempotency';
 import { logger } from '@/lib/logger';
@@ -1735,7 +1741,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
         ...DEFAULT_CFG,
         persona: {
           ...PERSONA,
-          voice_id: 'https://user:hunter2@voices.example/voice?api_key=supersecretvalue',
+          voice_id: `https://user:hunter2@voices.example/${'v'.repeat(520)}?api_key=supersecretvalue`,
         },
       });
       const res = await post(baseBody());
@@ -1755,6 +1761,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(fromVoice).not.toContain('supersecretvalue');
       expect(fromVoice).toContain('[redacted]');
       expect(fromVoice.length).toBeLessThanOrEqual(500);
+      expect(fromVoice.length).toBe(500);
       expect(event.distinctId).toBe(USER_ID);
     });
 
@@ -1903,6 +1910,37 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(json.code).toBe('VALIDATION_FAILED');
       expect(json.error).toBe('image gone');
       expect(json.field).toBe('options.imageId');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it('swaps a house voice the served catalog no longer lists before the engine call', async () => {
+      vi.mocked(fetchPersonaVoiceCatalogIds).mockResolvedValueOnce(
+        new Set(['chatterbox:kokoro_af_heart', 'chatterbox:kokoro_am_michael']),
+      );
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, voice_id: 'chatterbox:retired_house' } });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(200);
+      expect(json.warnings).toEqual([
+        {
+          code: 'voice_fallback_applied',
+          fromVoice: 'chatterbox:retired_house',
+          toVoice: 'chatterbox:kokoro_af_heart',
+        },
+      ]);
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+      expect((payload.persona as Record<string, unknown>).voice_id).toBe('chatterbox:kokoro_af_heart');
+      expect(updates.find((u) => u.table === 'personas')?.fields).toEqual({
+        voice_id: 'chatterbox:kokoro_af_heart',
+      });
+    });
+
+    it('does not persist a voice swap when a later validation still 400s', async () => {
+      vi.mocked(resolveVideoImage).mockResolvedValueOnce({ ok: false, error: 'image gone', status: 404 });
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, voice_id: 'energetic' } });
+      const res = await post(baseBody({ options: { imageId: 'img-1' } }));
+      expect(res.status).toBe(404);
+      expect(updates.find((u) => u.table === 'personas')).toBeUndefined();
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
     });
   });

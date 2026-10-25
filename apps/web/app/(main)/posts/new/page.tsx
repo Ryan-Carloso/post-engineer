@@ -86,6 +86,7 @@ const ERROR_KEY_BY_CODE: Record<string, TranslationKey> = {
   INSUFFICIENT_TOKENS: 'newPost.errorInsufficientTokens',
   RATE_LIMIT_EXCEEDED: 'newPost.errorRateLimited',
   ENGINE_UNAVAILABLE: 'newPost.errorEngineUnavailable',
+  VOICE_UNAVAILABLE: 'newPost.errorVoiceUnavailable',
 };
 
 export default function NewPostPage() {

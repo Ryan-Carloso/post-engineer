@@ -40,6 +40,7 @@ import { computeVideoTokens, toFiniteNumber } from '@/lib/tokens';
 import { resolvePublishingAccounts, signedUrl } from './persona-prep';
 import {
   MAX_TOPIC_CHARS,
+  persistVoiceSwap,
   preparePost,
   SlotDispatchError,
   coded,
@@ -686,6 +687,12 @@ async function postHandler(request: Request): Promise<NextResponse> {
     if (!imageCheck.ok) {
       return validationFailed(ERROR_CODES.VALIDATION_FAILED, imageCheck.error, 'options.imageId', imageCheck.status);
     }
+  }
+
+  // Persist a voice swap only after every request-level validation that can
+  // still 400: a rejected generate must not rewrite personas.voice_id.
+  if (prep.voiceFallback !== undefined && personaId !== null) {
+    await persistVoiceSwap(supabase, userId, personaId, prep.voiceFallback);
   }
 
   // 6. Cost for the whole operation, computed BEFORE the charge.

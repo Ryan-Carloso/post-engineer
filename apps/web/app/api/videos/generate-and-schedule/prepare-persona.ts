@@ -26,6 +26,7 @@ import {
   type VoiceFallbackInfo,
   type VoiceResolution,
 } from '@/lib/voice-fallback';
+import { fetchPersonaVoiceCatalogIds } from '@/lib/voice-catalog-fetch';
 import { signedUrl, resolvePostWithoutPersona, type PersonaPrep } from './persona-prep';
 
 export const ROUTE = 'POST /api/videos/generate-and-schedule';
@@ -164,9 +165,16 @@ export async function preparePersona(
   // audio cannot be signed — the fallback repairs only a persona with no
   // usable voice configured at all.
   if (!voiceAudioUrl && opts.voiceId === undefined && !persona.voice_audio_path) {
-    let resolution: VoiceResolution = resolvePersonaVoice(voiceIdValue ?? null, effectiveLanguage);
+    const catalogIds = await fetchPersonaVoiceCatalogIds(userId);
+    const catalogOpts = catalogIds === undefined ? {} : { catalogIds };
+    let resolution: VoiceResolution = resolvePersonaVoice(
+      voiceIdValue ?? null,
+      effectiveLanguage,
+      catalogOpts,
+    );
     if (resolution.kind === 'clone') {
       resolution = resolvePersonaVoice(voiceIdValue, effectiveLanguage, {
+        ...catalogOpts,
         cloneAvailable: await cloneVoiceAvailable(supabase, userId, resolution.key),
       });
     }
@@ -182,7 +190,8 @@ export async function preparePersona(
     if (resolution.kind === 'fallback') {
       voiceFallback = { fromVoice: resolution.fromVoice, toVoice: resolution.toVoice, reason: resolution.reason };
       voiceIdValue = resolution.toVoice;
-      await persistVoiceSwap(supabase, userId, personaId, voiceFallback);
+      // Persist after the last route validation that can still 400, so a
+      // rejected request cannot silently rewrite personas.voice_id.
     }
   }
 
@@ -269,7 +278,7 @@ async function cloneVoiceAvailable(
 // the payload already carries the working voice, and a failed persist only
 // means the next post repeats the same swap.
 //---------------
-async function persistVoiceSwap(
+export async function persistVoiceSwap(
   supabase: SupabaseClient,
   userId: string,
   personaId: string,

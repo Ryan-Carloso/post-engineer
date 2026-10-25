@@ -71,7 +71,7 @@ vi.mock('../voice-clone-picker', () => ({
 describe('PersonaVoiceSection', () => {
   beforeEach(() => {
     sectionMocks.result = null;
-    sectionMocks.voiceId = null;
+    sectionMocks.voiceId = 'chatterbox:kokoro_af_heart';
     sectionMocks.voices = [
       { id: 'chatterbox:kokoro_af_heart', label: 'Heart', provider: 'kokoro', gender: 'female', accent: 'us', kind: 'standard', description: null },
     ];
@@ -164,11 +164,18 @@ describe('PersonaVoiceSection', () => {
     expect(screen.queryByTestId('persona-voice-fallback-warning')).not.toBeInTheDocument();
   });
 
-  it('warns with the missing-voice copy when the saved voice is empty', () => {
-    sectionMocks.voiceId = '';
-    render(<PersonaVoiceSection />);
+  it('warns with the missing-voice copy when the loaded persona has no voice', () => {
+    // The list route omits a missing voice_id; the page writes null.
+    sectionMocks.voiceId = null;
+    render(<PersonaVoiceSection voiceHydrated />);
     const warning = screen.getByTestId('persona-voice-fallback-warning');
     expect(warning).toHaveTextContent('persona.voiceFallbackMissingWarning');
+  });
+
+  it('does not warn for a not-yet-loaded persona whose store voiceId is still null', () => {
+    sectionMocks.voiceId = null;
+    render(<PersonaVoiceSection voiceHydrated={false} />);
+    expect(screen.queryByTestId('persona-voice-fallback-warning')).not.toBeInTheDocument();
   });
 
   it('warns that a clone is unavailable when the catalog lists other clones', () => {
