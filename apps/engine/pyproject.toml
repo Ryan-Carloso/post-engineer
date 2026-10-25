@@ -165,6 +165,8 @@ only_mutate = []
 #   the registry volume and routes tests import both top-level modules.
 # - local_tts/__init__.py / routing.py / backends.py: the local TTS routing
 #   and backend tests (test/services/test_local_tts_*.py) import them.
+# - scripts/changed_functions.py: test/scripts/test_changed_functions.py
+#   imports it; without the copy test collection errors and every shard fails.
 also_copy = [
     "config.example.toml",
     "cli.py",
@@ -176,6 +178,7 @@ also_copy = [
     "local_tts/__init__.py",
     "local_tts/routing.py",
     "local_tts/backends.py",
+    "scripts/changed_functions.py",
 ]
 # Test exclusions for mutmut runs (these still run in the main engine CI job):
 # - test_mypy_config.py pins the CI workflow file layout (.github/workflows/),
