@@ -64,9 +64,25 @@ async function getHandler(
       let delivered: boolean = durable.complete && durable.hasVideos;
       if (!delivered) {
         const published = await hasPublishedSlotForTask(supabase, auth.userId, taskId);
-        // A published-slot read error is NOT proof of delivery: fall through
-        // to the historical failed+refund verdict (fail closed on refunds).
+        if (published === null) {
+          // The published-slot read failed: the state is unverifiable, and the
+          // gone-settle policy says an unverifiable state must not record a
+          // terminal verdict (or a refund). Answer non-terminal; the next
+          // poll retries and the billing reconcile is the eventual backstop.
+          return apiErrorResponse(502, 'Video service is unavailable.', {
+            route: 'GET /api/persona/video-status',
+          });
+        }
         delivered = published === true;
+      }
+      if (!delivered && durable.errored) {
+        // The durable row could not be READ (not merely absent) and there is
+        // no published-slot proof to consult instead: without it, "the task
+        // died" is unproven, so no `failed` verdict and no refund — log and
+        // answer non-terminal for the next poll to retry.
+        return apiErrorResponse(502, 'Video service is unavailable.', {
+          route: 'GET /api/persona/video-status',
+        });
       }
       if (delivered) {
         const generationId = await lookupChargeGenerationId(supabase, auth.userId, taskId);

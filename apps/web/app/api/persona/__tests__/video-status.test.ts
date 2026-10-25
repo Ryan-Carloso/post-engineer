@@ -170,7 +170,7 @@ describe('GET /api/persona/video-status/:taskId', () => {
       // recording a failure. Default null (no persisted row) keeps the old
       // verdict side effects running; `{ state: 1, data: { videos: [...] } }`
       // triggers the completed-backfill branch instead.
-      durableTask: { state: number; data: unknown } | null = null,
+      durableTask: { state?: number; data?: unknown; error?: unknown } | null = null,
       // The published scheduled_posts slot proof the 404 path consults when
       // the durable row is absent (MAJOR 1: the video-status verdict MUST
       // match the slot-gone verdict — a published slot means delivered
@@ -180,8 +180,11 @@ describe('GET /api/persona/video-status/:taskId', () => {
       const durableSingle = vi
         .fn()
         .mockResolvedValue({
-          data: durableTask ? { state: durableTask.state, data: durableTask.data } : null,
-          error: null,
+          data:
+            durableTask && durableTask.state !== undefined
+              ? { state: durableTask.state, data: durableTask.data ?? {} }
+              : null,
+          error: durableTask?.error ?? null,
         });
       const durableLimit = vi.fn().mockReturnValue({ maybeSingle: durableSingle });
       const durableEq2 = vi.fn().mockReturnValue({ limit: durableLimit });
@@ -604,6 +607,32 @@ describe('GET /api/persona/video-status/:taskId', () => {
             engineTaskId: 'task-1',
           }),
         );
+        expect(refundTokens).not.toHaveBeenCalledWith(serviceClient, USER_ID, 'gen-1');
+      } finally {
+        updateSpy.mockRestore();
+      }
+    });
+
+    it('does NOT record a failure on an engine 404 when the durable read itself errors (unverifiable is not failed)', async () => {
+      // Review round: the pre-fix code treated a durable/published READ ERROR
+      // like "no proof" and fell through to the failed+refund verdict —
+      // contradicting the gone-settle policy that an unverifiable state
+      // writes nothing. The route must answer non-terminal so the next poll
+      // retries.
+      mockTaskBody({ status: 404, message: 'req-1: task not found' }, 404);
+      const serviceClient = mockServiceClient(
+        'gen-1',
+        null,
+        null,
+        { error: { message: 'connection reset' } },
+      );
+      const updateSpy = vi
+        .spyOn(videoGeneration, 'recordGenerationUpdate')
+        .mockResolvedValue(undefined);
+      try {
+        const response = await poll();
+        expect(response.status).toBe(502); // non-terminal, not 410
+        expect(updateSpy).not.toHaveBeenCalled();
         expect(refundTokens).not.toHaveBeenCalledWith(serviceClient, USER_ID, 'gen-1');
       } finally {
         updateSpy.mockRestore();

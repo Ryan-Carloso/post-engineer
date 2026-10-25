@@ -48,6 +48,11 @@ export interface DurableTaskRead {
   ok: boolean;
   complete: boolean;
   hasVideos: boolean;
+  // True only when the LOOKUP ITSELF failed (row absent is not an error:
+  // no persisted row simply carries no proof). Callers must refuse to write
+  // a terminal verdict (or a refund) on an unverifiable state — see the
+  // gone-settle header.
+  errored: boolean;
 }
 
 export async function readDurableTaskState(
@@ -67,13 +72,14 @@ export async function readDurableTaskState(
       // A query error is an unknown state, never "the task died".
       logger.error('[gone-settle] durable task-state lookup failed', error, { taskId });
     }
-    return { ok: false, complete: false, hasVideos: false };
+    return { ok: false, complete: false, hasVideos: false, errored: Boolean(error) };
   }
   const record = data as { state?: unknown; data?: unknown };
   return {
     ok: true,
     complete: record.state === 1,
     hasVideos: hasPersistedVideos(record.data),
+    errored: false,
   };
 }
 
