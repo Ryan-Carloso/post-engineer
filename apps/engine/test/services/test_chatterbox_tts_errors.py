@@ -97,6 +97,45 @@ def test_scrub_helper_alone_scrubs_credentials_and_cap_at_200() -> None:
     assert len(long) <= 200
 
 
+def test_bubbled_exception_log_is_scrubbed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Review nit round 2: the catch-path record carried the raw exception
+    # ("chatterbox tts failed: {str(e)}") — a request exception can embed the
+    # caller's credential-bearing base_url or an echoed key. The record must
+    # carry the same scrubbed text the stored error does.
+    import app.services.voice_providers as vp
+    from types import SimpleNamespace
+
+    records: list[str] = []
+    fake_logger = SimpleNamespace(
+        error=lambda msg, *a, **kw: records.append(str(msg)),
+        success=lambda msg, *a, **kw: None,
+        info=lambda msg, *a, **kw: None,
+        bind=lambda **kw: SimpleNamespace(error=lambda msg, **kw: records.append(str(msg))),
+    )
+    monkeypatch.setattr(vp, "logger", fake_logger)
+    config = SimpleNamespace(
+        chatterbox={"base_url": "http://tts.test/v1", "api_key": "k", "model_id": "chatterbox"},
+    )
+    monkeypatch.setattr(vp, "config", config, raising=False)
+
+    def boom(**_kwargs: object) -> None:
+        raise RuntimeError("POST https://user:pw@chatter.internal/v1 failed api_key=sk-real")
+
+    monkeypatch.setattr(vp.requests, "post", boom)
+    result = vp.chatterbox_tts(
+        "hello world",
+        "kokoro_am_michael",
+        str(tmp_path / "out.mp3"),
+    )
+    assert "Chatterbox TTS failed after 3 attempts" in (result.error or "")
+    assert records, "the failure record must be logged"
+    for record in records:
+        assert "user:pw@" not in record
+        assert "sk-real" not in record
+
+
 def test_blank_body_keeps_the_bare_status(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

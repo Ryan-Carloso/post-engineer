@@ -16,7 +16,7 @@ from loguru import logger
 from moviepy.audio.io.AudioFileClip import AudioFileClip
 
 from app.config import config
-from app.services.analytics import scrub_secret_values
+from app.services.analytics import scrub_error_text, scrub_secret_values
 from app.utils import utils
 
 
@@ -207,6 +207,30 @@ def populate_legacy_submaker_with_full_text(
     return sub_maker
 
 
+#---------------
+# _scrubbed_response_body — one source for the scrubber applied to an
+# upstream response body before it is stored or logged. Many TTS gateways
+# echo rejected credentials verbatim (api_key/Authorization values in
+# key=value or JSON shape, and "https://user:pass@host" URLs probe the
+# People's own base_url). The secret-value rules come from the shared
+# scrub_secret_values (analytics); the URL userinfo redactor mirrors the
+# one llm.py applies to its own error paths.
+#---------------
+_URL_USERINFO_RE = re.compile(
+    r"((?:https?|wss?)://)([^/\s?#@]*:[^/\s?#@]*@)",
+    re.IGNORECASE,
+)
+
+
+def _scrubbed_response_body(text: str) -> str:
+    """Upstream body -> credential-free, single-line, bounded evidence."""
+    if not isinstance(text, str) or not text:
+        return ""
+    scrubbed = _URL_USERINFO_RE.sub(r"\1***:***@", text)
+    scrubbed = scrub_secret_values(scrubbed)
+    return " ".join(scrubbed[:200].split())
+
+
 def elevenlabs_tts(
     text: str,
     voice_id: str,
@@ -283,7 +307,7 @@ def elevenlabs_tts(
 
                 last_error = f"status {response.status_code}"
                 logger.error(
-                    f"elevenlabs tts failed with status {response.status_code}: {response.text[:200]}"
+                    f"elevenlabs tts failed with status {response.status_code}: {_scrubbed_response_body(response.text)}"
                 )
                 continue
 
@@ -310,30 +334,6 @@ def elevenlabs_tts(
     return TtsResult(
         error=f"ElevenLabs TTS failed after 3 attempts ({last_error or 'unknown error'})"
     )
-
-
-#---------------
-# _scrubbed_response_body — one source for the scrubber applied to an
-# upstream response body before it is stored or logged. Many TTS gateways
-# echo rejected credentials verbatim (api_key/Authorization values in
-# key=value or JSON shape, and "https://user:pass@host" URLs probe the
-# People's own base_url). The secret-value rules come from the shared
-# scrub_secret_values (analytics); the URL userinfo redactor mirrors the
-# one llm.py applies to its own error paths.
-#---------------
-_URL_USERINFO_RE = re.compile(
-    r"((?:https?|wss?)://)([^/\s?#@]*:[^/\s?#@]*@)",
-    re.IGNORECASE,
-)
-
-
-def _scrubbed_response_body(text: str) -> str:
-    """Upstream body -> credential-free, single-line, bounded evidence."""
-    if not isinstance(text, str) or not text:
-        return ""
-    scrubbed = _URL_USERINFO_RE.sub(r"\1***:***@", text)
-    scrubbed = scrub_secret_values(scrubbed)
-    return " ".join(scrubbed[:200].split())
 
 
 def chatterbox_tts(
@@ -436,7 +436,12 @@ def chatterbox_tts(
             # Scrub before the 200-cut: a cut landing mid-secret defeats the
             # scrubber and leaks the raw remainder.
             last_error = scrub_secret_values(str(e))[:200]
-            logger.error(f"chatterbox tts failed: {str(e)}")
+            # The record carries the SAME appendage the stored error does: an
+            # exception can embed the request URL with credentials (review
+            # nit — scrub_error_text also strips machine-local paths).
+            logger.error(
+                f"chatterbox tts failed: {scrub_error_text(str(e), max_chars=200)}"
+            )
 
     return TtsResult(
         error=f"Chatterbox TTS failed after 3 attempts ({last_error or 'unknown error'})"
