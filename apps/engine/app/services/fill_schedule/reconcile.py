@@ -14,6 +14,7 @@ from app.services.fill_schedule.constants import (
 from app.services.analytics import scrub_secret_values, track_event
 from app.services.intro_cost import cost_event_props
 from app.services.fill_schedule.store import ScheduleStore
+from app.services.fill_schedule.publish_tracking import publish_refund_amount
 from app.services.fill_schedule.support import (
     post_identity,
     slot_faceless,
@@ -83,22 +84,26 @@ class BatchReconciler:
                             schedule_id=schedule.get("id"),
                         )
                     else:
-                        cost = token_cost(
-                            slot_faceless(slot),
-                            str(identity.get("face_quality") or "ok"),
+                        face_quality = str(identity.get("face_quality") or "ok")
+                        cost = publish_refund_amount(
+                            token_cost(slot_faceless(slot), face_quality),
+                            task,
+                            face_quality,
                         )
                         batch_generation_id = f"batch:{schedule['id']}"
                         engine_task_id = (
                             str(slot["task_id"]) if slot.get("task_id") else None
                         )
-                        refunded = self.store.refund_batch_tokens(
-                            user_id,
-                            batch_generation_id,
-                            f"{batch_generation_id}:slot:{slot['id']}",
-                            cost,
-                            "Batch generation failed",
-                            engine_task_id=engine_task_id,
-                        )
+                        refunded = False
+                        if cost > 0:
+                            refunded = self.store.refund_batch_tokens(
+                                user_id,
+                                batch_generation_id,
+                                f"{batch_generation_id}:slot:{slot['id']}",
+                                cost,
+                                "Batch generation failed",
+                                engine_task_id=engine_task_id,
+                            )
                         # The RPC is idempotent: a False answer means this slot
                         # was already refunded (or had nothing to refund), so
                         # refund_issued fires only on a landed refund — never

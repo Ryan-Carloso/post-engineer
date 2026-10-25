@@ -132,27 +132,22 @@ def refund_face_premium(task_id: str, premium: int) -> None:
     generation_id = _batch_generation_id(task)
     if generation_id is None:
         return
-    rpc = getattr(sm.state, "_rpc", None)
-    if not callable(rpc):
-        return
     batch_generation_id = "batch:" + generation_id.split(":")[1]
     user_id = str(task.get("user_id", "") or "")
     try:
-        result = rpc(
-            "refund_batch_tokens",
-            {
-                "p_user_id": user_id,
-                "p_batch_generation_id": batch_generation_id,
-                "p_refund_key": f"{generation_id}:shortface",
-                "p_amount": premium,
-                "p_reason": (
-                    "LongCat unavailable (Modal workspace disabled); video "
-                    "delivered without the face intro"
-                ),
-                "p_engine_task_id": task_id,
-            },
+        from app.services.fill_schedule.store import ScheduleStore
+
+        refunded = ScheduleStore().refund_batch_tokens(
+            user_id,
+            batch_generation_id,
+            f"{generation_id}:shortface",
+            premium,
+            (
+                "LongCat unavailable (Modal workspace disabled); video "
+                "delivered without the face intro"
+            ),
+            engine_task_id=task_id,
         )
-        refunded = bool((result.json() or {}).get("refunded"))
         if refunded:
             logger.info(
                 f"refund landed for the face premium of task {task_id} ({premium} tokens)"

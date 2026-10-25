@@ -254,7 +254,13 @@ export async function getSlotPost(
   // logged) — enrichSlot is told not to fetch a second time.
   let prefetchedTask: EngineTaskProgress | undefined;
   let prefetchFailed = false;
-  if ((row.status === 'generating' || row.status === 'failed') && slotTaskId !== null) {
+  if (
+    (row.status === 'generating' ||
+      row.status === 'failed' ||
+      row.status === 'ready' ||
+      row.status === 'publishing') &&
+    slotTaskId !== null
+  ) {
     try {
       prefetchedTask = await fetchEngineTaskProgress(slotTaskId, userId);
     } catch (error) {

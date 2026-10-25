@@ -244,10 +244,27 @@ export async function enrichSlot(
     }
     case 'ready':
     case 'publishing':
-    case 'published':
+    case 'published': {
       enrichment.progress = 100;
       enrichment.stage = 'done';
+      const readyTaskId = typeof slot.task_id === 'string' ? slot.task_id : null;
+      if (readyTaskId && options.allowEngineLookup !== false) {
+        try {
+          const task = options.task ?? (await fetchEngineTaskProgress(readyTaskId, userId));
+          if (Array.isArray(task.warnings) && task.warnings.length > 0) {
+            enrichment.warnings = task.warnings;
+          }
+        } catch (error) {
+          logger.warn('[api/schedule] engine task progress unavailable', {
+            taskId: readyTaskId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      } else if (Array.isArray(options.task?.warnings) && options.task.warnings.length > 0) {
+        enrichment.warnings = options.task.warnings;
+      }
       return enrichment;
+    }
     default:
       return enrichment;
   }

@@ -1277,9 +1277,8 @@ class TestArchiveFinalVideos(unittest.TestCase):
             "generation_id": "batch:sched-9:slot:slot-1",
             "slot_id": "slot-1",
         }
-        rpc_response = MagicMock()
-        rpc_response.json.return_value = {"refunded": True}
-        state._rpc = MagicMock(return_value=rpc_response)
+        store = MagicMock()
+        store.refund_batch_tokens.return_value = True
         # 'alice' is a TEST account for THIS run: the informative event +
         # persisted-breaker path (real users take the loud alert path).
         with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "alice,other-test-user"}), \
@@ -1287,6 +1286,7 @@ class TestArchiveFinalVideos(unittest.TestCase):
              patch.object(lff.longcat_breaker, "_state_path",
                           side_effect=_breaker_path(breaker_root)), \
              patch.object(tm.sm, "state", state), \
+             patch("app.services.fill_schedule.store.ScheduleStore", return_value=store), \
              patch.object(tm.sm, "persist_state_update") as persist, \
              patch.object(tm.history_repository, "recent", return_value=[]), \
              patch.object(tm, "_update_task"), \
@@ -1324,13 +1324,11 @@ class TestArchiveFinalVideos(unittest.TestCase):
         self.assertEqual(persist.call_args.kwargs.get("user_warning_codes"),
                          ["avatar_disabled"])
         # Face premium refund: batch charge, slot-scoped idempotency key.
-        rpc = state._rpc
-        self.assertEqual(rpc.call_args.args[0], "refund_batch_tokens")
-        payload = rpc.call_args.args[1]
-        self.assertEqual(payload["p_batch_generation_id"], "batch:sched-9")
-        self.assertEqual(payload["p_refund_key"], "batch:sched-9:slot:slot-1:shortface")
-        self.assertEqual(payload["p_amount"], 1)  # ok(2) - faceless(1)
-        self.assertEqual(payload["p_engine_task_id"], task_id)
+        args = store.refund_batch_tokens.call_args.args
+        self.assertEqual(args[1], "batch:sched-9")
+        self.assertEqual(args[2], "batch:sched-9:slot:slot-1:shortface")
+        self.assertEqual(args[3], 1)  # ok(2) - faceless(1)
+        self.assertEqual(store.refund_batch_tokens.call_args.kwargs["engine_task_id"], task_id)
 
     def test_faceless_fallback_refunds_very_good_premium_of_two(self):
         """very_good is 3 tokens; faceless is 1; the premium refund is 2."""
@@ -1354,14 +1352,14 @@ class TestArchiveFinalVideos(unittest.TestCase):
             "user_id": "alice",
             "generation_id": "batch:sched-9:slot:slot-1",
         }
-        rpc_response = MagicMock()
-        rpc_response.json.return_value = {"refunded": True}
-        state._rpc = MagicMock(return_value=rpc_response)
+        store = MagicMock()
+        store.refund_batch_tokens.return_value = True
         with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "alice"}), \
              tempfile.TemporaryDirectory() as breaker_root, \
              patch.object(lff.longcat_breaker, "_state_path",
                           side_effect=_breaker_path(breaker_root)), \
              patch.object(tm.sm, "state", state), \
+             patch("app.services.fill_schedule.store.ScheduleStore", return_value=store), \
              patch.object(tm.sm, "persist_state_update"), \
              patch.object(tm.history_repository, "recent", return_value=[]), \
              patch.object(tm, "_update_task"), \
@@ -1373,8 +1371,7 @@ class TestArchiveFinalVideos(unittest.TestCase):
             tm.generate_final_videos(
                 task_id, params, ["clip.mp4"], "voice.mp3", "sub.srt", "script", "none"
             )
-        payload = state._rpc.call_args.args[1]
-        self.assertEqual(payload["p_amount"], 2)
+        self.assertEqual(store.refund_batch_tokens.call_args.args[3], 2)
 
     def test_intro_succeeds_then_face_fill_longcat_unavailable_is_intro_only(self):
         """prepare_persona_lipsync_video succeeds, face-fill raises
@@ -1399,14 +1396,14 @@ class TestArchiveFinalVideos(unittest.TestCase):
             "user_id": "alice",
             "generation_id": "batch:sched-9:slot:slot-1",
         }
-        rpc_response = MagicMock()
-        rpc_response.json.return_value = {"refunded": True}
-        state._rpc = MagicMock(return_value=rpc_response)
+        store = MagicMock()
+        store.refund_batch_tokens.return_value = True
         with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "alice"}), \
              tempfile.TemporaryDirectory() as breaker_root, \
              patch.object(lff.longcat_breaker, "_state_path",
                           side_effect=_breaker_path(breaker_root)), \
              patch.object(tm.sm, "state", state), \
+             patch("app.services.fill_schedule.store.ScheduleStore", return_value=store), \
              patch.object(tm.sm, "persist_state_update") as persist, \
              patch.object(tm.history_repository, "recent", return_value=[]), \
              patch.object(tm, "_update_task"), \
@@ -1630,10 +1627,10 @@ class TestArchiveFinalVideos(unittest.TestCase):
 
         state = MagicMock()
         state.get_task.return_value = {"user_id": "alice"}  # no generation id
-        state._rpc = MagicMock()
-        with patch.object(tm.sm, "state", state):
+        store = MagicMock()
+        with patch.object(tm.sm, "state", state), patch("app.services.fill_schedule.store.ScheduleStore", return_value=store):
             lff.refund_face_premium("direct-task", 1)
-        state._rpc.assert_not_called()
+        store.refund_batch_tokens.assert_not_called()
 
 
 if __name__ == "__main__":

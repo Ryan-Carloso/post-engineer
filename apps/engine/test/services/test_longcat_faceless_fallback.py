@@ -51,9 +51,8 @@ class TestLongcatFacelessFallback(unittest.TestCase):
             "user_id": "alice",
             "generation_id": "batch:sched-9:slot:slot-1",
         }
-        rpc_response = MagicMock()
-        rpc_response.json.return_value = {"refunded": True}
-        state._rpc = MagicMock(return_value=rpc_response)
+        store = MagicMock()
+        store.refund_batch_tokens.return_value = True
         exc = longcat.LongCatUnavailableError(
             "LongCat submit failed with HTTP 404: modal-http: workspace ac-X is disabled"
         )
@@ -63,6 +62,7 @@ class TestLongcatFacelessFallback(unittest.TestCase):
              tempfile.TemporaryDirectory() as breaker_root, \
              patch.object(lff.longcat_breaker, "_state_path", side_effect=_breaker_path(breaker_root)), \
              patch.object(lff.sm, "state", state), \
+             patch("app.services.fill_schedule.store.ScheduleStore", return_value=store), \
              patch.object(lff.sm, "persist_state_update") as persist:
             video, intro_report = lff.render_persona_video(
                 task_id="face-fill-fail",
@@ -79,7 +79,7 @@ class TestLongcatFacelessFallback(unittest.TestCase):
         self.assertEqual(video, "intro.mp4")
         self.assertTrue(intro_report.ran)
         persist.assert_not_called()
-        self.assertEqual(state._rpc.call_count, 0)
+        self.assertEqual(store.refund_batch_tokens.call_count, 0)
 
     def test_state_path_patch_honors_root(self):
         """A patch that ignores root would hide writes outside the temp dir."""
@@ -115,8 +115,10 @@ class TestLongcatFacelessFallback(unittest.TestCase):
             "user_id": "alice",
             "generation_id": "batch:sched-9:slot:slot-1",
         }
-        state._rpc = MagicMock(side_effect=RuntimeError("/secret/path/token.json boom"))
+        store = MagicMock()
+        store.refund_batch_tokens.side_effect = RuntimeError("/secret/path/token.json boom")
         with patch.object(lff.sm, "state", state), \
+             patch("app.services.fill_schedule.store.ScheduleStore", return_value=store), \
              patch.object(lff.logger, "error") as log_error:
             lff.refund_face_premium("t-refund", 1)
         message = str(log_error.call_args)
@@ -164,15 +166,15 @@ class TestLongcatFacelessFallback(unittest.TestCase):
             "slot_id": "slot-1",
             "persona_id": "persona-1",
         }
-        rpc_response = MagicMock()
-        rpc_response.json.return_value = {"refunded": True}
-        state._rpc = MagicMock(return_value=rpc_response)
-        with patch.object(lff.sm, "state", state):
+        store = MagicMock()
+        store.refund_batch_tokens.return_value = True
+        with patch.object(lff.sm, "state", state), \
+             patch("app.services.fill_schedule.store.ScheduleStore", return_value=store):
             lff.refund_face_premium("dispatch-task", 2)
-        payload = state._rpc.call_args.args[1]
-        self.assertEqual(payload["p_batch_generation_id"], "batch:sched-9")
-        self.assertEqual(payload["p_refund_key"], "batch:sched-9:slot:slot-1:shortface")
-        self.assertEqual(payload["p_amount"], 2)
+        args = store.refund_batch_tokens.call_args.args
+        self.assertEqual(args[1], "batch:sched-9")
+        self.assertEqual(args[2], "batch:sched-9:slot:slot-1:shortface")
+        self.assertEqual(args[3], 2)
 
     def test_face_quality_accepts_kebab_very_good_from_params(self):
         params = VideoParams(video_subject="test", video_quality="very-good")
@@ -191,3 +193,59 @@ class TestLongcatFacelessFallback(unittest.TestCase):
             lff.report_longcat_faceless_fallback("t-empty", {}, "alice")
         discord.assert_not_called()
         log_error.assert_not_called()
+
+    def test_refund_logs_when_schedule_store_lands(self):
+        state = MagicMock()
+        state.get_task.return_value = {
+            "user_id": "alice",
+            "generation_id": "batch:sched-9:slot:slot-1",
+        }
+        store = MagicMock()
+        store.refund_batch_tokens.return_value = True
+        with patch.object(lff.sm, "state", state), \
+             patch("app.services.fill_schedule.store.ScheduleStore", return_value=store), \
+             patch.object(lff.logger, "info") as log_info:
+            lff.refund_face_premium("t-ok", 1)
+        self.assertTrue(any("refund landed" in str(c) for c in log_info.call_args_list))
+
+    def test_quality_token_ignores_non_strings(self):
+        self.assertIsNone(lff._quality_token(3))
+        self.assertIsNone(lff._quality_token("ok"))
+        self.assertEqual(lff._batch_generation_id({"generation_id": "batch:only"}), None)
+        self.assertEqual(lff._face_quality({"params": {"video_quality": "ok"}}), "ok")
+
+    def test_discord_notify_swallows_send_failures(self):
+        with patch("app.services.notify.send_discord", side_effect=RuntimeError("nope")), \
+             patch.object(lff.logger, "warning") as warn:
+            lff._discord_notify("hello")
+        self.assertTrue(any("discord billing" in str(c) for c in warn.call_args_list))
+
+    def test_render_skips_intro_when_hook_exceeds_ceiling(self):
+        params = VideoParams(
+            video_subject="test",
+            persona=PersonaParams(
+                name="Ana",
+                photo_url="https://supabase.test/signed/foto.png",
+                voice_id="test-voice",
+            ),
+        )
+        prepare = MagicMock(side_effect=lff.persona_hook.HookExceedsLipsyncCeiling(14.6, 12.0))
+        face_fill = MagicMock(return_value="filled.mp4")
+        with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": ""}), \
+             patch.object(lff.sm, "state", MagicMock(get_task=MagicMock(return_value={}))), \
+             patch.object(lff.persona_hook, "report_lipsync_intro_skipped") as skipped:
+            video, report = lff.render_persona_video(
+                task_id="t-hook",
+                params=params,
+                audio_file="voice.mp3",
+                combined_video_path="combined.mp4",
+                video_script="script",
+                subtitle_path="sub.srt",
+                task={},
+                user_id="real-user",
+                prepare_intro=prepare,
+                apply_face_fill=face_fill,
+            )
+        skipped.assert_called_once()
+        self.assertEqual(video, "filled.mp4")
+        self.assertFalse(report.ran)
