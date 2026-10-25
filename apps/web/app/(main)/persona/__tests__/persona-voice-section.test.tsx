@@ -4,7 +4,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 
-import { PersonaVoiceSection } from '../persona-voice-section';
+import { isPersonaVoiceHydrated, PersonaVoiceSection } from '../persona-voice-section';
 
 const sectionMocks = vi.hoisted(() => ({
   result: null as { success: boolean; error: string } | null,
@@ -67,6 +67,14 @@ vi.mock('../voice-clone-picker', () => ({
     </button>
   ),
 }));
+
+describe('isPersonaVoiceHydrated', () => {
+  it('is true on create and after the edit persona has loaded', () => {
+    expect(isPersonaVoiceHydrated(null, undefined)).toBe(true);
+    expect(isPersonaVoiceHydrated('p-1', { id: 'p-1' })).toBe(true);
+    expect(isPersonaVoiceHydrated('p-1', undefined)).toBe(false);
+  });
+});
 
 describe('PersonaVoiceSection', () => {
   beforeEach(() => {

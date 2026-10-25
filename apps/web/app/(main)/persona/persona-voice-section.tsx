@@ -11,13 +11,19 @@ import { InlineFieldError, SectionDivider } from './persona-section-parts';
 import { PersonaHouseVoicePicker } from './voice-picker';
 import { PersonaVoiceClonePanel, VoiceTabButton } from './voice-clone-picker';
 
+/** True once a create form is ready, or an edit form has loaded its persona.
+ *  The list route omits a missing voice_id (undefined) and the page writes
+ *  null; that loaded-empty state must warn, the not-yet-loaded null must not. */
+export function isPersonaVoiceHydrated(
+  editingPersonaId: string | null,
+  editingPersona: unknown,
+): boolean {
+  return editingPersonaId ? editingPersona !== undefined : true;
+}
+
 export const PersonaVoiceSection = ({
   voiceHydrated = true,
 }: {
-  /** False while an existing persona has not been copied into the store
-   *  yet. The list route omits a missing voice_id (undefined) and the page
-   *  writes null; that loaded-empty state must warn, the not-yet-loaded
-   *  initial null must not. */
   voiceHydrated?: boolean;
 }) => {
   const { t } = useI18n();

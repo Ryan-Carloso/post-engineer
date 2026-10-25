@@ -23,7 +23,7 @@ import { PersonaImageLibrarySection, mapPersonaImageWarnings } from './persona-i
 import { PersonaPreferencesSection } from './persona-preferences-section';
 import { PersonaPublishingAccountsSection } from './persona-publishing-accounts-section';
 import { PersonaFormSync } from './persona-form-sync';
-import { PersonaVoiceSection } from './persona-voice-section';
+import { isPersonaVoiceHydrated, PersonaVoiceSection } from './persona-voice-section';
 import { InlineFieldError, SectionDivider } from './persona-section-parts';
 import { scrollToErrorField } from '@/lib/scroll-to-error';
 import { DEFAULT_PERSONA_FACE_IDS } from '@/lib/persona-faces';
@@ -156,9 +156,7 @@ const PersonaPageContent = () => {
             <PersonaTokensSection />
           </section>
           <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
-            <PersonaVoiceSection
-              voiceHydrated={editingPersonaId ? editingPersona !== undefined : true}
-            />
+            <PersonaVoiceSection voiceHydrated={isPersonaVoiceHydrated(editingPersonaId, editingPersona)} />
           </section>
           <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
             <PersonaPreferencesSection />

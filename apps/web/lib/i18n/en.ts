@@ -181,7 +181,6 @@ export const enDictionary: Dictionary = {
     errorInsufficientTokens: 'You need {need} tokens, but you only have {have}.',
     errorRateLimited: 'Too many scheduling requests in a row. Please try again shortly.',
     errorEngineUnavailable: 'The video service is temporarily unavailable. Please try again.',
-    errorVoiceUnavailable: 'This persona’s voice is unavailable and there is no default voice for its language. Update the persona.',
     errorPersonaScopeDenied: 'This persona is not available to your account.',
     errorGeneric: 'Something went wrong while scheduling. Please try again.',
     successTitle: 'Posts scheduled',

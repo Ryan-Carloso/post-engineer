@@ -14,6 +14,8 @@ export const voiceFallbackStrings = {
         'The voice {fromVoice} is no longer available; we switched to {toVoice}. You can change it in Persona → Voice.',
       voiceFallbackMissingWarning:
         'This persona had no usable voice configured; we switched to {toVoice}. You can change it in Persona → Voice.',
+      errorVoiceUnavailable:
+        'This persona’s voice is unavailable and there is no default voice for its language. Update the persona.',
     },
     persona: {
       voiceFallbackWarning:
@@ -28,6 +30,8 @@ export const voiceFallbackStrings = {
         'A voz {fromVoice} deixou de estar disponível; trocámos para {toVoice}. Podes mudar em Persona → Voz.',
       voiceFallbackMissingWarning:
         'Esta persona não tinha voz configurada; trocámos para {toVoice}. Podes mudar em Persona → Voz.',
+      errorVoiceUnavailable:
+        'A voz desta persona não está disponível e não há voz padrão para o idioma. Atualize a persona.',
     },
     persona: {
       voiceFallbackWarning:

@@ -181,7 +181,6 @@ export const ptDictionary = {
     errorInsufficientTokens: 'Você precisa de {need} tokens, mas tem apenas {have}.',
     errorRateLimited: 'Muitos agendamentos seguidos. Tente novamente em instantes.',
     errorEngineUnavailable: 'O serviço de vídeo está temporariamente indisponível. Tente novamente.',
-    errorVoiceUnavailable: 'A voz desta persona não está disponível e não há voz padrão para o idioma. Atualize a persona.',
     errorPersonaScopeDenied: 'Esta persona não está disponível para a sua conta.',
     errorGeneric: 'Algo deu errado ao agendar. Tente novamente.',
     successTitle: 'Posts agendados',
