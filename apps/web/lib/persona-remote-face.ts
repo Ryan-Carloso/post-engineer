@@ -239,7 +239,7 @@ export async function uploadPersonaPhotoBytes(
     upsert: path === livePath,
   });
   if (error) {
-    logger.error('[persona-remote-face] storage upload failed', error.message, { path });
+    logger.error('[persona-remote-face] storage upload failed', error, { path });
     return null;
   }
   return path;
@@ -252,7 +252,7 @@ export async function rollbackStoragePath(
   if (!path) return;
   const { error } = await supabase.storage.from(IMAGE_BUCKET).remove([path]);
   if (error) {
-    logger.error('[persona-remote-face] storage rollback failed', error.message, { path });
+    logger.error('[persona-remote-face] storage rollback failed', error, { path });
   }
 }
 
@@ -320,7 +320,7 @@ export async function ingestRemotePersonaFaces(
       .select('id, user_id, avatar_url, photo_path')
       .range(offset, offset + INGEST_PAGE_SIZE - 1);
     if (error || !data) {
-      logger.error('[persona-remote-face] list personas failed', error?.message);
+      logger.error('[persona-remote-face] list personas failed', error);
       throw new Error('Failed to list personas for remote-face ingest.');
     }
     rows.push(...(data as RemoteFaceRow[]));
@@ -355,7 +355,7 @@ export async function ingestRemotePersonaFaces(
       .eq('id', row.id)
       .eq('user_id', row.user_id);
     if (updateError) {
-      logger.error('[persona-remote-face] update failed', updateError.message, { personaId: row.id });
+      logger.error('[persona-remote-face] update failed', updateError, { personaId: row.id });
       failed += 1;
       continue;
     }

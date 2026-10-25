@@ -404,7 +404,7 @@ async function patchHandler(request: Request): Promise<NextResponse> {
     .update(updates)
     .eq('id', personaId);
   if (updateError) {
-    logger.error('[api/persona] update failed', updateError.message);
+    logger.error('[api/persona] update failed', updateError);
     if (replacementPhotoPath && replacementPhotoPath !== persona.photo_path) {
       await rollbackStoragePath(supabase, replacementPhotoPath);
     }
