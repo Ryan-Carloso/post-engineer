@@ -64,9 +64,9 @@ count() { # count <workflows> <json> -> "pending is_winner all_ok"
     WORKFLOW_NAME="$WORKFLOW_NAME" CONCLUSION="$CONCLUSION" jq -r "$JQ_FILTER"
 }
 [ "$(count 'CI,mutation' "$PENDING_DOC")" = "1 1 0" ] || { echo "FAIL [jq pending] got $(count 'CI,mutation' "$PENDING_DOC")"; fail=1; }
+# Empty pool is intentional fail-open send (all() on [] is true; jq min on [] is null, not a throw).
 [ "$(count 'CI,mutation' "$EMPTY_DOC")" = "0 1 1" ] || { echo "FAIL [jq empty all_ok] got $(count 'CI,mutation' "$EMPTY_DOC")"; fail=1; }
 WORKFLOW_NAME=CI
-CONCLUSION=failure
 CONCLUSION=failure
 [ "$(count 'CI,mutation' "$FIRST_FAIL_DOC")" = "0 1 0" ] || { echo "FAIL [jq first fail winner] got $(count 'CI,mutation' "$FIRST_FAIL_DOC")"; fail=1; }
 [ "$(count 'CI,mutation' "$SECOND_FAIL_DOC")" = "0 0 0" ] || { echo "FAIL [jq higher-id concurrent fail] got $(count 'CI,mutation' "$SECOND_FAIL_DOC")"; fail=1; }
