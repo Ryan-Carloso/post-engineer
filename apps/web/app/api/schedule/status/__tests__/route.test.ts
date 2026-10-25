@@ -152,6 +152,7 @@ describe('GET auth', () => {
         queuePosition: null,
         queueTotal: null,
         retryable: null,
+        warnings: [],
       })),
       recent: recent.map((slot) => ({
         ...slot,
@@ -160,6 +161,7 @@ describe('GET auth', () => {
         queuePosition: null,
         queueTotal: null,
         retryable: null,
+        warnings: [],
       })),
     });
   });
@@ -186,6 +188,7 @@ describe('GET auth', () => {
         queuePosition: null,
         queueTotal: null,
         retryable: null,
+        warnings: [],
       })),
       recent: recent.map((slot) => ({
         ...slot,
@@ -194,6 +197,7 @@ describe('GET auth', () => {
         queuePosition: null,
         queueTotal: null,
         retryable: null,
+        warnings: [],
       })),
     });
   });
@@ -233,6 +237,7 @@ describe('GET auth', () => {
         queuePosition: null,
         queueTotal: null,
         retryable: null,
+        warnings: [],
       })),
       recent: recent.map((slot) => ({
         ...slot,
@@ -241,6 +246,7 @@ describe('GET auth', () => {
         queuePosition: null,
         queueTotal: null,
         retryable: null,
+        warnings: [],
       })),
     });
   });
@@ -282,6 +288,7 @@ describe('GET auth', () => {
         queuePosition: null,
         queueTotal: null,
         retryable: null,
+        warnings: [],
       })),
       recent: allowedRecent.map((slot) => ({
         ...slot,
@@ -290,6 +297,7 @@ describe('GET auth', () => {
         queuePosition: null,
         queueTotal: null,
         retryable: null,
+        warnings: [],
       })),
     });
   });
