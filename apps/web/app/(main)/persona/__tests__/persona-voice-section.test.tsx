@@ -200,6 +200,12 @@ describe('PersonaVoiceSection', () => {
     );
   });
 
+  it('does not warn when the persona has uploaded voice audio', () => {
+    sectionMocks.voiceId = 'energetic';
+    render(<PersonaVoiceSection voiceHydrated isEditing hasVoiceAudio />);
+    expect(screen.queryByTestId('persona-voice-fallback-warning')).not.toBeInTheDocument();
+  });
+
   it('does not warn for a not-yet-loaded persona whose store voiceId is still null', () => {
     sectionMocks.voiceId = null;
     render(<PersonaVoiceSection voiceHydrated={false} />);

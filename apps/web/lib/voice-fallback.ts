@@ -219,7 +219,8 @@ export function resolvePersonaVoice(
     if (name.length === 0) {
       return fallbackResolution(trimmed, VOICE_FALLBACK_REASONS.UNKNOWN_VOICE, null, language);
     }
-    if (catalogIds !== undefined && !catalogIds.has(trimmed)) {
+    const routableId = `chatterbox:${name.replace(/-(?:Female|Male)$/, '')}`;
+    if (catalogIds !== undefined && !catalogIds.has(trimmed) && !catalogIds.has(routableId)) {
       return fallbackResolution(trimmed, VOICE_FALLBACK_REASONS.RETIRED_HOUSE_VOICE, voiceGenderHint(trimmed), language);
     }
     return { kind: 'valid', voiceId: trimmed };

@@ -24,11 +24,14 @@ export function isPersonaVoiceHydrated(
 export const PersonaVoiceSection = ({
   voiceHydrated = true,
   isEditing = false,
+  hasVoiceAudio = false,
 }: {
   voiceHydrated?: boolean;
   /** True while editing a saved persona. The create form starts with a
    *  null voiceId; VOICE_MISSING must not warn until a persona exists. */
   isEditing?: boolean;
+  /** Uploaded voice audio: the API will not swap house ids in that case. */
+  hasVoiceAudio?: boolean;
 }) => {
   const { t } = useI18n();
   const result = usePersonaStore((s) => s.result);
@@ -53,7 +56,7 @@ export const PersonaVoiceSection = ({
   // set would flag every house voice as retired, and a load failure is
   // already surfaced by the picker's own retry states.
   const resolution =
-    !voiceHydrated || catalogIds.size === 0
+    !voiceHydrated || hasVoiceAudio || catalogIds.size === 0
       ? null
       : resolvePersonaVoice(savedVoiceId, language, { catalogIds });
   const unavailable = resolution?.kind === 'unavailable';

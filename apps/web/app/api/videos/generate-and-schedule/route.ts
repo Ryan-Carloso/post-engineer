@@ -512,6 +512,7 @@ async function fetchReplay(
   supabase: SupabaseClient,
   userId: string,
   scheduleId: string,
+  voiceFallbackWarning: { code: string; fromVoice: string; toVoice: string } | null = null,
 ): Promise<NextResponse | null> {
   const { data: slots, error } = await supabase
     .from('scheduled_posts')
@@ -523,9 +524,7 @@ async function fetchReplay(
     logger.error('[generate-and-schedule] replay fetch failed', error, { scheduleId });
     return null;
   }
-  // The envelope carries the schedule's publish mode so a replayed ASAP
-  // request reads the same shape as a fresh one. A pre-015 row has no
-  // column value — default to 'scheduled', the only mode that existed.
+  // Replay ASAP uses the stored publish_mode; pre-015 rows default scheduled.
   const { data: scheduleRow } = await supabase
     .from('schedules')
     .select('publish_mode')
@@ -545,6 +544,7 @@ async function fetchReplay(
       status: (row as { status: string }).status,
     })),
     replayed: true,
+    ...(voiceFallbackWarning !== null ? { warnings: [voiceFallbackWarning] } : {}),
   });
 }
 
@@ -665,6 +665,14 @@ async function postHandler(request: Request): Promise<NextResponse> {
     niche: validatedOptions.niche,
   });
   if (prep instanceof NextResponse) return prep;
+  const voiceFallbackWarning =
+    prep.voiceFallback === undefined
+      ? null
+      : {
+        code: VOICE_FALLBACK_WARNING_CODE,
+        fromVoice: prep.voiceFallback.fromVoice,
+        toVoice: prep.voiceFallback.toVoice,
+      };
 
   // 5. Providers + social accounts (fail fast: never charge for a bad selection).
   const accountIds = await validateAccounts(supabase, userId, providers, await resolvePublishingAccounts(supabase, personaId, publishing.accounts));
@@ -757,7 +765,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       await supabase.from('schedules').delete().eq('id', idem.scheduleId).eq('user_id', userId);
     } else {
       trackApiEvent('video_creation_replayed', { userId, scheduleId: idem.scheduleId });
-      const replayed = await fetchReplay(supabase, userId, idem.scheduleId);
+      const replayed = await fetchReplay(supabase, userId, idem.scheduleId, voiceFallbackWarning);
       if (replayed) return replayed;
     }
   }
@@ -803,7 +811,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       if (violatedConstraint(spendError) !== null) {
         // A concurrent duplicate spent under the same generation_id first:
         // replay instead of double-charging.
-        const replayed = await fetchReplay(supabase, userId, idem.scheduleId);
+        const replayed = await fetchReplay(supabase, userId, idem.scheduleId, voiceFallbackWarning);
         if (replayed) {
           trackApiEvent('video_creation_replayed', { userId, scheduleId: idem.scheduleId });
           return replayed;
@@ -975,7 +983,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         errorCode: 'IDEMPOTENCY_CONFLICT',
         failureStage: 'schedule_insert_race',
       });
-      const replayed = await fetchReplay(supabase, userId, idem.scheduleId);
+      const replayed = await fetchReplay(supabase, userId, idem.scheduleId, voiceFallbackWarning);
       if (replayed) return replayed;
     }
     // Real DB failure after the spend: refund the whole generation loudly.
@@ -1234,17 +1242,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
   });
 
   const durationMs = Date.now() - startedAt;
-  // The voice swap is a committed mutation with a user-visible consequence:
-  // it travels as a stable warning code (rendered amber, never red) so the
-  // UI can tell the user which voice was replaced and by what.
-  const voiceFallbackWarning =
-    prep.voiceFallback === undefined
-      ? null
-      : {
-        code: VOICE_FALLBACK_WARNING_CODE,
-        fromVoice: prep.voiceFallback.fromVoice,
-        toVoice: prep.voiceFallback.toVoice,
-      };
   const envelope = {
     schedule: { id: idem.scheduleId, mode },
     slots: results,

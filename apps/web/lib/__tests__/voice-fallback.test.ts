@@ -38,6 +38,20 @@ describe('resolvePersonaVoice', () => {
       });
     });
 
+    it('strips engine display suffixes before catalog membership', () => {
+      const catalogIds = new Set(['chatterbox:kokoro_af_heart']);
+      expect(resolvePersonaVoice('chatterbox:kokoro_af_heart-Female', 'en-US', { catalogIds })).toEqual({
+        kind: 'valid',
+        voiceId: 'chatterbox:kokoro_af_heart-Female',
+      });
+      expect(resolvePersonaVoice('chatterbox:kokoro_am_michael-Male', 'en-US', { catalogIds })).toEqual({
+        kind: 'fallback',
+        fromVoice: 'chatterbox:kokoro_am_michael-Male',
+        toVoice: 'chatterbox:kokoro_am_michael',
+        reason: 'retired_house_voice',
+      });
+    });
+
     it('accepts a house catalog id without a served catalog (shape only)', () => {
       expect(resolvePersonaVoice('chatterbox:some_voice', 'en-US')).toEqual({
         kind: 'valid',

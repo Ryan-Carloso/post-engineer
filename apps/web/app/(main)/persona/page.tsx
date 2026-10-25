@@ -138,8 +138,7 @@ const PersonaPageContent = () => {
           <section className="space-y-6 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
             <PersonaNameField />
             <PersonaAvatarSection />
-            {/* Library needs a persisted, loaded persona (no flash while the
-                list is fetching). Every persona is faced (migration 007). */}
+            {/* Library needs a persisted, loaded persona (no fetch flash). */}
             {editingPersonaId && editingPersona !== undefined ? (
               <PersonaImageLibrarySection personaId={editingPersonaId} />
             ) : null}
@@ -150,6 +149,7 @@ const PersonaPageContent = () => {
             <PersonaVoiceSection
               voiceHydrated={isPersonaVoiceHydrated(editingPersonaId, editingPersona)}
               isEditing={Boolean(editingPersonaId)}
+              hasVoiceAudio={Boolean(editingPersona?.voiceAudioUrl)}
             />
           </section>
           <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
