@@ -1339,7 +1339,7 @@ class TestArchiveFinalVideos(unittest.TestCase):
 
         task_id = "very-good-fallback"
         params = VideoParams(
-            video_subject="test",
+            video_subject="test", video_quality="very-good",
             persona=PersonaParams(
                 name="Ana",
                 photo_url="https://supabase.test/signed/foto.png",
@@ -1353,7 +1353,6 @@ class TestArchiveFinalVideos(unittest.TestCase):
         state.get_task.return_value = {
             "user_id": "alice",
             "generation_id": "batch:sched-9:slot:slot-1",
-            "video_quality": "very_good",
         }
         rpc_response = MagicMock()
         rpc_response.json.return_value = {"refunded": True}
@@ -1575,7 +1574,7 @@ class TestArchiveFinalVideos(unittest.TestCase):
                     patch.object(lff, "track_event"), \
                     patch.object(lff, "_discord_notify") as discord, \
                     patch.object(lff.logger, "error") as log_error:
-                lff.report_longcat_faceless_fallback(task_id, {"user_id": "real-user"})
+                lff.report_longcat_faceless_fallback(task_id, {"user_id": "real-user"}, "real-user")
                 # LOUD: error record + Discord ping. NOT quiet.
                 log_error.assert_called_once()
                 discord.assert_called_once()
@@ -1592,7 +1591,7 @@ class TestArchiveFinalVideos(unittest.TestCase):
 
                 # DEDUP: a second fallback for a second real user's task in the
                 # SAME hour stays silent (no further alert, no spammage).
-                lff.report_longcat_faceless_fallback("task-2", {"user_id": "real-user-2"})
+                lff.report_longcat_faceless_fallback("task-2", {"user_id": "real-user-2"}, "real-user-2")
                 log_error.assert_called_once()  # still one
                 discord.assert_called_once()   # still one
 
@@ -1615,7 +1614,7 @@ class TestArchiveFinalVideos(unittest.TestCase):
                 # path NEVER trips it).
                 self.assertFalse(lff.longcat_breaker.is_open(
                     datetime(2026, 10, 25, 12, 0, tzinfo=UTC), root=breaker_root))
-                lff.report_longcat_faceless_fallback("t1", {"user_id": "u"})
+                lff.report_longcat_faceless_fallback("t1", {"user_id": "u"}, "u")
                 self.assertFalse(lff.longcat_breaker.is_open(
                     datetime(2026, 10, 25, 12, 5, tzinfo=UTC), root=breaker_root))
                 # The marker exists for the ALERT dedup; what must NEVER

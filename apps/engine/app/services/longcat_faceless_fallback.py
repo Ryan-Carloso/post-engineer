@@ -30,7 +30,10 @@ def _discord_notify(message: str) -> None:
 
 
 def report_longcat_faceless_fallback(
-    task_id: str, task: dict[str, object]
+    task_id: str,
+    task: dict[str, object],
+    user_id: str,
+    params: VideoParams | None = None,
 ) -> None:
     """Deliver the video faceless when the Modal backend is billing-dead.
 
@@ -44,7 +47,6 @@ def report_longcat_faceless_fallback(
     """
     from app.services.fill_schedule.support import FACELESS_PRICE, token_cost
 
-    user_id = str(task.get("user_id", "internal")) if task else "internal"
     now = datetime.now(timezone.utc)
     if longcat_breaker.is_test_account(user_id):
         if longcat_breaker.should_emit_event(now):
@@ -78,23 +80,57 @@ def report_longcat_faceless_fallback(
         sm.state, task_id, user_warning_codes=[AVATAR_DISABLED_WARNING_CODE]
     )
     stored = sm.state.get_task(task_id) or task or {}
-    face_quality = _face_quality(stored)
+    face_quality = _face_quality(stored, params)
     premium = token_cost(False, face_quality) - FACELESS_PRICE
     refund_face_premium(task_id, premium)
 
 
-def _face_quality(task: dict[str, object]) -> str:
-    raw = task.get("video_quality") or task.get("face_quality")
-    if isinstance(raw, str) and raw == "very_good":
+def _quality_token(raw: object) -> str | None:
+    value = getattr(raw, "value", raw)
+    if not isinstance(value, str):
+        return None
+    normalized = value.replace("-", "_").strip().lower()
+    if normalized == "very_good":
         return "very_good"
+    return None
+
+
+def _face_quality(task: dict[str, object], params: VideoParams | None = None) -> str:
+    candidates: list[object] = []
+    if params is not None:
+        candidates.append(getattr(params, "video_quality", None))
+    nested = task.get("params")
+    if isinstance(nested, dict):
+        candidates.append(nested.get("video_quality"))
+        candidates.append(nested.get("face_quality"))
+    candidates.append(task.get("video_quality"))
+    candidates.append(task.get("face_quality"))
+    candidates.append(task.get("post_face_quality"))
+    for raw in candidates:
+        token = _quality_token(raw)
+        if token is not None:
+            return token
     return "ok"
+
+
+def _batch_generation_id(task: dict[str, object]) -> str | None:
+    generation_id = str(task.get("generation_id", "") or "")
+    if not generation_id.startswith("batch:"):
+        schedule_id = str(task.get("schedule_id", "") or "")
+        slot_id = str(task.get("slot_id", "") or "")
+        if not schedule_id or not slot_id:
+            return None
+        generation_id = f"batch:{schedule_id}:slot:{slot_id}"
+    if generation_id.count(":") < 2:
+        return None
+    return generation_id
 
 
 def refund_face_premium(task_id: str, premium: int) -> None:
     """Refund the face/premium difference for BATCH-prefunded tasks."""
     task = sm.state.get_task(task_id) or {}
-    generation_id = str(task.get("generation_id", "") or "")
-    if not generation_id.startswith("batch:") or generation_id.count(":") < 2:
+    generation_id = _batch_generation_id(task)
+    if generation_id is None:
         return
     rpc = getattr(sm.state, "_rpc", None)
     if not callable(rpc):
@@ -158,7 +194,7 @@ def render_persona_video(
             "LongCat breaker open (Modal workspace disabled) — rendering "
             f"task {task_id} faceless without asking the backend"
         )
-        report_longcat_faceless_fallback(task_id, task or {})
+        report_longcat_faceless_fallback(task_id, task or {}, user_id, params)
     else:
         try:
             video_for_render, intro_cost_usd, intro_job_id = prepare_intro(
@@ -172,7 +208,7 @@ def render_persona_video(
             )
         except longcat.LongCatUnavailableError:
             faceless_fallback = True
-            report_longcat_faceless_fallback(task_id, task or {})
+            report_longcat_faceless_fallback(task_id, task or {}, user_id, params)
         except persona_hook.HookExceedsLipsyncCeiling as exc:
             persona_hook.report_lipsync_intro_skipped(task_id, exc.hook_end_seconds)
         else:

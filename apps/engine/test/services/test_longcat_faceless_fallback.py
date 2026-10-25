@@ -27,7 +27,7 @@ class TestLongcatFacelessFallback(unittest.TestCase):
              patch.object(lff.sm, "persist_state_update"), \
              patch.object(lff.sm, "state", MagicMock(get_task=MagicMock(return_value={}))), \
              patch.object(lff.logger, "warning") as warn:
-            lff.report_longcat_faceless_fallback("t1", {"user_id": "alice"})
+            lff.report_longcat_faceless_fallback("t1", {"user_id": "alice"}, "alice")
         warn.assert_called()
         self.assertTrue(
             any("did not persist" in str(c) for c in warn.call_args_list)
@@ -106,7 +106,7 @@ class TestLongcatFacelessFallback(unittest.TestCase):
         with tempfile.TemporaryDirectory() as breaker_root, \
              patch.object(longcat_breaker, "_write_state", return_value=False), \
              patch.object(longcat_breaker.logger, "warning") as warn:
-            self.assertFalse(longcat_breaker.should_alert(now, root=breaker_root))
+            self.assertTrue(longcat_breaker.should_alert(now, root=breaker_root))
         self.assertTrue(any("did not persist" in str(c) for c in warn.call_args_list))
 
     def test_refund_error_is_scrubbed_before_the_log(self):
@@ -150,7 +150,44 @@ class TestLongcatFacelessFallback(unittest.TestCase):
                     patch.object(lff, "track_event"), \
                     patch.object(lff, "_discord_notify") as discord, \
                     patch.object(lff.logger, "error") as log_error:
-                lff.report_longcat_faceless_fallback("t1", {"user_id": "real-user"})
-                lff.report_longcat_faceless_fallback("t2", {"user_id": "real-user-2"})
+                lff.report_longcat_faceless_fallback("t1", {"user_id": "real-user"}, "real-user")
+                lff.report_longcat_faceless_fallback("t2", {"user_id": "real-user-2"}, "real-user-2")
                 self.assertEqual(log_error.call_count, 2)
                 self.assertEqual(discord.call_count, 2)
+
+    def test_refund_uses_schedule_and_slot_when_generation_id_is_absent(self):
+        """_dispatch_generation persists slot_id/schedule_id, not generation_id."""
+        state = MagicMock()
+        state.get_task.return_value = {
+            "user_id": "alice",
+            "schedule_id": "sched-9",
+            "slot_id": "slot-1",
+            "persona_id": "persona-1",
+        }
+        rpc_response = MagicMock()
+        rpc_response.json.return_value = {"refunded": True}
+        state._rpc = MagicMock(return_value=rpc_response)
+        with patch.object(lff.sm, "state", state):
+            lff.refund_face_premium("dispatch-task", 2)
+        payload = state._rpc.call_args.args[1]
+        self.assertEqual(payload["p_batch_generation_id"], "batch:sched-9")
+        self.assertEqual(payload["p_refund_key"], "batch:sched-9:slot:slot-1:shortface")
+        self.assertEqual(payload["p_amount"], 2)
+
+    def test_face_quality_accepts_kebab_very_good_from_params(self):
+        params = VideoParams(video_subject="test", video_quality="very-good")
+        self.assertEqual(lff._face_quality({}, params), "very_good")
+        self.assertEqual(lff._face_quality({"post_face_quality": "very-good"}), "very_good")
+        self.assertEqual(lff._face_quality({"video_quality": "very_good"}), "very_good")
+
+    def test_report_uses_caller_user_id_when_task_is_empty(self):
+        with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "alice"}), \
+             patch.object(lff.longcat_breaker, "trip", return_value=True), \
+             patch.object(lff.longcat_breaker, "should_emit_event", return_value=False), \
+             patch.object(lff.sm, "persist_state_update"), \
+             patch.object(lff.sm, "state", MagicMock(get_task=MagicMock(return_value={}))), \
+             patch.object(lff, "_discord_notify") as discord, \
+             patch.object(lff.logger, "error") as log_error:
+            lff.report_longcat_faceless_fallback("t-empty", {}, "alice")
+        discord.assert_not_called()
+        log_error.assert_not_called()

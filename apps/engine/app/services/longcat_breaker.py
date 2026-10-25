@@ -170,5 +170,5 @@ def should_alert(now: datetime, root: str | None = None) -> bool:
         logger.warning(
             "longcat breaker alert marker did not persist (marker write failed)"
         )
-        return False
+        return True
     return True

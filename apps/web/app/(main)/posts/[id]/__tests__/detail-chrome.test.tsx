@@ -27,8 +27,10 @@ describe('detail-chrome', () => {
     expect(screen.getByText('gone')).toBeInTheDocument();
   });
 
-  it('renders the skeleton', () => {
-    render(<DetailSkeleton />);
+  it('renders the skeleton pulse blocks', () => {
+    const { container } = render(<DetailSkeleton />);
     expect(screen.getByTestId('detail-skeleton')).toBeInTheDocument();
+    expect(container.querySelectorAll('.animate-pulse .rounded-2xl')).toHaveLength(1);
   });
 });
+

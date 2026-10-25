@@ -9,7 +9,7 @@ from typing import Any
 
 from loguru import logger
 
-from app.models.schema import TaskVideoRequest
+from app.models.schema import LipSyncQuality, TaskVideoRequest
 from app.models import const as model_const
 from app.services import notify as notify_module
 from app.services import task as tm
@@ -105,9 +105,15 @@ class BatchGenerator:
             # refund is anchored to.)
             voice_for(identity)
             faceless = slot_faceless(slot)
+            face_quality = str(identity.get("face_quality") or "ok")
             request = TaskVideoRequest(
                 video_subject=topic,
                 persona=build_persona_params(identity, self.store, faceless),
+                video_quality=(
+                    LipSyncQuality.very_good
+                    if face_quality == "very_good"
+                    else LipSyncQuality.ok
+                ),
                 video_aspect=identity.get("video_aspect") or "9:16",
                 # Layout resolves through post_identity() like every other
                 # editorial field: snapshot first, persona embed second. The
@@ -131,7 +137,6 @@ class BatchGenerator:
             user_id = slot_user_id(slot)
             if user_id is None:
                 raise RuntimeError("Scheduled slot has no user_id")
-            face_quality = str(identity.get("face_quality") or "ok")
             cost = token_cost(faceless, face_quality)
             # Prepaid at request time under this id: no spend here, only a
             # refund if dispatch itself fails.
