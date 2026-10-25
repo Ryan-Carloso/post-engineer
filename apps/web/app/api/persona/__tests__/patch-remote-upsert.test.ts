@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn(),
@@ -22,10 +22,15 @@ const USER_ID = 'user-uuid-1';
 const PNG_BYTES = Uint8Array.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
 ]);
+const removeMock = vi.fn(async () => ({ error: null }));
 
 describe('PATCH remote ingest onto an existing photo object', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('upserts the existing photo.png instead of failing the upload', async () => {
@@ -49,7 +54,7 @@ describe('PATCH remote ingest onto an existing photo object', () => {
             uploaded.push({ path, upsert: options?.upsert });
             return { data: { path }, error: null };
           }),
-          remove: vi.fn(async () => ({ error: null })),
+          remove: removeMock,
         })),
       },
       from: vi.fn(() => ({
@@ -74,7 +79,6 @@ describe('PATCH remote ingest onto an existing photo object', () => {
       'fetch',
       vi.fn(async () => new Response(PNG_BYTES, { status: 200, headers: { 'content-type': 'image/png' } })),
     );
-    vi.stubGlobal('lookup', undefined);
     const formData = new FormData();
     formData.append('avatarUrl', 'https://cdn.example/face.png');
     const res = await PATCH(
@@ -88,6 +92,6 @@ describe('PATCH remote ingest onto an existing photo object', () => {
       path: `${USER_ID}/persona-uuid-1/photo.png`,
       upsert: true,
     });
-    vi.unstubAllGlobals();
+    expect(removeMock).not.toHaveBeenCalled();
   });
 });

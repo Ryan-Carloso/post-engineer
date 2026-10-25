@@ -33,15 +33,7 @@ import { SAFE_TASK_ID } from '@/lib/video-urls';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
-// Aggregate budget for the post-delete engine task cleanup (see DELETE):
-// after() has no deadline of its own, so the loop must bound itself.
 const ENGINE_CLEANUP_BUDGET_MS = 20_000;
-
-//---------------
-// POST /api/persona — creates the user's persona: uploads photo/audio
-// to the private 'personas' bucket and inserts into public.personas
-// (RLS by user_id). Validation = shared zod schema (lib/persona-schema.ts).
-//---------------
 
 function errorResponse(
   status: number,
@@ -55,6 +47,8 @@ function errorResponse(
 async function postHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
+  const limited = await applyRateLimit(request, RATE_LIMITS.personaWrite, auth.userId);
+  if (limited) return limited;
   if (isScopedApiKey(auth)) {
     return errorResponse(403, 'This API key is restricted to specific personas and cannot create new ones.', 'POST /api/persona');
   }
@@ -275,10 +269,10 @@ async function postHandler(request: Request): Promise<NextResponse> {
           }
         }
       }
-      if (ingestedPhotoPath ?? photoPath) {
+      if (ingestedPhotoPath) {
         const { error: photoRollbackError } = await supabase.storage
           .from(IMAGE_BUCKET)
-          .remove([ingestedPhotoPath ?? photoPath]);
+          .remove([ingestedPhotoPath]);
         if (photoRollbackError) {
           logger.error('[api/persona] photo rollback failed', photoRollbackError);
         }
@@ -322,6 +316,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
 async function patchHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
+  const limited = await applyRateLimit(request, RATE_LIMITS.personaWrite, auth.userId);
+  if (limited) return limited;
   const user = { id: auth.userId };
   const supabase = auth.isApiKey === true
     ? createSupabaseServiceClient()
@@ -377,7 +373,11 @@ async function patchHandler(request: Request): Promise<NextResponse> {
     }
     updates.avatar_url = resolved.avatarUrl;
     updates.photo_path = resolved.photoPath;
-    if (typeof persona.photo_path === 'string' && persona.photo_path) {
+    if (
+      typeof persona.photo_path === 'string' &&
+      persona.photo_path &&
+      persona.photo_path !== resolved.photoPath
+    ) {
       stalePaths.push(persona.photo_path);
     }
   }

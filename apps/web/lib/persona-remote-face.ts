@@ -138,9 +138,10 @@ function requestPinned(url: string, addresses: string[]): Promise<Response> {
         incoming.on('error', reject);
       },
     );
-    req.setTimeout(REMOTE_FACE_TIMEOUT_MS, () => {
+    const deadline = setTimeout(() => {
       req.destroy(new Error('timeout'));
-    });
+    }, REMOTE_FACE_TIMEOUT_MS);
+    req.on('close', () => clearTimeout(deadline));
     req.on('error', reject);
     req.end();
   });
@@ -187,10 +188,7 @@ export async function downloadPublicImage(
     response =
       fetchImpl === nativeFetch
         ? await requestPinned(url, safety.addresses)
-        : await fetchImpl(url, {
-            redirect: 'error',
-            signal: AbortSignal.timeout(REMOTE_FACE_TIMEOUT_MS),
-          });
+        : await fetchImpl(url, { redirect: 'error', signal: AbortSignal.timeout(REMOTE_FACE_TIMEOUT_MS) });
   } catch {
     return { error: REMOTE_FACE_ERROR };
   }
