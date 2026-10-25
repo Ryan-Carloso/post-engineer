@@ -80,7 +80,7 @@ describe('pickLibraryDisplayImage', () => {
     ).toBeUndefined();
   });
 
-  it('keeps the first primary when two rows are marked primary', () => {
+  it('keeps the newest primary when two rows are marked primary', () => {
     const picked = pickLibraryDisplayImage(
       [
         img({ id: 'first-primary', persona_id: 'p-1', is_primary: true, created_at: '2026-01-01T00:00:00Z' }),
@@ -88,7 +88,7 @@ describe('pickLibraryDisplayImage', () => {
       ],
       'p-1',
     );
-    expect(picked?.id).toBe('first-primary');
+    expect(picked?.id).toBe('second-primary');
   });
 
   it('picks the newest created_at when the array is oldest-first', () => {

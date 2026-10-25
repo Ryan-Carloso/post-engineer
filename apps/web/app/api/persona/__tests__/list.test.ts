@@ -387,6 +387,7 @@ describe('GET /api/persona/list', () => {
   });
 
   it('omits photoUrl when createSignedUrl returns error even if data.signedUrl is set', async () => {
+    const errorSpy = vi.spyOn(logger, 'error');
     mockSupabase({ signErrorPaths: [`${USER_ID}/foto.png`] });
 
     const res = await GET(new Request('http://localhost:3434/api/persona/list'));
@@ -394,6 +395,7 @@ describe('GET /api/persona/list', () => {
 
     expect(res.status).toBe(200);
     expect(body.personas[0].photoUrl).toBeUndefined();
+    expect(errorSpy.mock.calls.some((call) => String(call[0]).includes('photo sign failed'))).toBe(true);
   });
 
   it('still lists a persona whose only face is the library image', async () => {

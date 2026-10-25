@@ -44,7 +44,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
   const { data, error } = await query.order('created_at', { ascending: false });
 
   if (error) {
-    logger.error('[api/persona/list] query failed', error);
+    logger.error('[api/persona/list] query failed', error.message);
     return NextResponse.json(
       { success: false, error: 'Failed to list personas.' },
       { status: 500 },
@@ -61,7 +61,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
       .in('persona_id', personaIds)
       .eq('user_id', auth.userId);
     if (imagesError) {
-      logger.error('[api/persona/list] persona_images query failed', imagesError);
+      logger.error('[api/persona/list] persona_images query failed', imagesError.message);
       return NextResponse.json(
         { success: false, error: 'Failed to list personas.' },
         { status: 500 },
@@ -80,9 +80,9 @@ async function getHandler(request: Request): Promise<NextResponse> {
       // lines (Codecov merged the Cypress 0-hit map onto the object
       // literal and treated these as uncovered).
       const avatarUrl = toSameOriginAssetPath(record.avatar_url as string | null) ?? undefined;
-      const photoUrl = await signedUrl(supabase, record.photo_path as string | null);
+      const photoUrl = await signedUrl(supabase, record.photo_path as string | null, 'photo');
       const voiceId = (record.voice_id as string | null) ?? undefined;
-      const voiceAudioUrl = await signedUrl(supabase, record.voice_audio_path as string | null);
+      const voiceAudioUrl = await signedUrl(supabase, record.voice_audio_path as string | null, 'voice');
       const language = (record.language as string | null) ?? undefined;
       const videoAspect = (record.video_aspect as string | null) ?? undefined;
       const videoLayout = (record.video_layout as string | null) ?? undefined;
@@ -159,12 +159,19 @@ async function getHandler(request: Request): Promise<NextResponse> {
 async function signedUrl(
   supabase: ReturnType<typeof createSupabaseServiceClient>,
   path: string | null,
+  kind: 'photo' | 'voice' | 'library',
+  metadata?: Record<string, unknown>,
 ): Promise<string | undefined> {
   if (!path) return undefined;
   const { data, error } = await supabase.storage
     .from('personas')
     .createSignedUrl(path, SIGNED_URL_EXPIRES_SECONDS);
   if (error || data === null || data === undefined || !data.signedUrl) {
+    logger.error(
+      `[api/persona/list] ${kind} sign failed`,
+      error?.message ?? 'missing signedUrl',
+      metadata,
+    );
     return undefined;
   }
   return data.signedUrl;
@@ -175,14 +182,7 @@ async function signedLibraryUrl(
   path: string,
   personaId: string,
 ): Promise<string | undefined> {
-  const { data, error } = await supabase.storage
-    .from('personas')
-    .createSignedUrl(path, SIGNED_URL_EXPIRES_SECONDS);
-  if (error || data === null || data === undefined || !data.signedUrl) {
-    logger.error('[api/persona/list] library image sign failed', error, { personaId });
-    return undefined;
-  }
-  return data.signedUrl;
+  return signedUrl(supabase, path, 'library', { personaId });
 }
 
 //---------------

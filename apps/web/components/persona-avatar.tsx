@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { ImageIcon } from '@/lib/ui';
@@ -57,9 +57,11 @@ export default function PersonaAvatar({
   // A signed Supabase URL can 403 after it expires: without this the avatar
   // stays a blank circle forever (same guard as account-card.tsx).
   const [failedCount, setFailedCount] = useState(0);
+  const loggedEmptyChain = useRef(false);
   useEffect(() => {
     // A URL change is a new candidate chain and must start at 0.
     setFailedCount(0);
+    loggedEmptyChain.current = false;
   }, [avatarUrl, photoUrl, libraryUrl]);
   const imageUrl = candidates[failedCount];
   const imageFailed = failedCount >= candidates.length;
@@ -71,9 +73,9 @@ export default function PersonaAvatar({
   // Supabase signature token lives in the query string).
   //---------------
   useEffect(() => {
-    if (imageUrl === undefined) {
-      logger.debug('[persona-avatar] no avatar source, showing initials', { name });
-    }
+    if (imageUrl !== undefined || loggedEmptyChain.current) return;
+    loggedEmptyChain.current = true;
+    logger.debug('[persona-avatar] no avatar source, showing initials', { name });
   }, [imageUrl, name]);
 
   //---------------

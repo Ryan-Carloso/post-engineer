@@ -223,4 +223,15 @@ describe('PersonaAvatar', () => {
     });
     expect(mockClientError).not.toHaveBeenCalled();
   });
+
+  it('logs a missing source once per candidate chain', () => {
+    const { rerender } = render(<PersonaAvatar name="Nia" />);
+    expect(mockDebug).toHaveBeenCalledTimes(1);
+    rerender(<PersonaAvatar name="Nia" />);
+    expect(mockDebug).toHaveBeenCalledTimes(1);
+    rerender(<PersonaAvatar name="Nia" avatarUrl="https://cdn.example/a.png" />);
+    expect(mockDebug).toHaveBeenCalledTimes(1);
+    rerender(<PersonaAvatar name="Nia" />);
+    expect(mockDebug).toHaveBeenCalledTimes(2);
+  });
 });
