@@ -29,9 +29,10 @@ vi.mock('@/lib/client-logger', () => ({
 import PersonaAvatar from '../persona-avatar';
 
 //---------------
-// PersonaAvatar — the shared face: avatar first, photo second, initials
-// third. It replaced two inline copies (the persona card and the create-post
-// picker), so the fallback order is pinned here rather than in either screen.
+// PersonaAvatar — the shared face: avatar, then photo, then library, then
+// initials. It replaced two inline copies (the persona card and the
+// create-post picker), so the fallback order is pinned here rather than in
+// either screen.
 //---------------
 
 beforeEach(() => {
@@ -50,6 +51,27 @@ describe('PersonaAvatar', () => {
     render(<PersonaAvatar photoUrl="https://x.test/p.png" name="Viva Leve" />);
 
     expect(screen.getByAltText('Viva Leve')).toHaveAttribute('src', 'https://x.test/p.png');
+  });
+
+  it('prefers the photo over the library when there is no avatar', () => {
+    render(
+      <PersonaAvatar photoUrl="https://x.test/p.png" libraryUrl="https://x.test/l.png" name="Viva Leve" />,
+    );
+
+    expect(screen.getByAltText('Viva Leve')).toHaveAttribute('src', 'https://x.test/p.png');
+  });
+
+  it('uses the library when there is no avatar or photo', () => {
+    render(<PersonaAvatar libraryUrl="https://x.test/l.png" name="Viva Leve" />);
+
+    expect(screen.getByAltText('Viva Leve')).toHaveAttribute('src', 'https://x.test/l.png');
+  });
+
+  it('ignores an empty library URL the same as a missing one', () => {
+    render(<PersonaAvatar libraryUrl="" name="Viva Leve" />);
+
+    expect(screen.queryByAltText('Viva Leve')).not.toBeInTheDocument();
+    expect(screen.getByText('VL')).toBeInTheDocument();
   });
 
   it('falls back to two initials with no image at all', () => {

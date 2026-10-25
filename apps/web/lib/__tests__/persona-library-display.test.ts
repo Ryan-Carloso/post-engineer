@@ -41,6 +41,25 @@ describe('pickLibraryDisplayImage', () => {
     expect(pickLibraryDisplayImage([], 'p-1')).toBeUndefined();
   });
 
+  it('returns the only image for that persona', () => {
+    const picked = pickLibraryDisplayImage(
+      [img({ id: 'solo', persona_id: 'p-1' })],
+      'p-1',
+    );
+    expect(picked?.id).toBe('solo');
+  });
+
+  it('treats only is_primary true as primary', () => {
+    const picked = pickLibraryDisplayImage(
+      [
+        img({ id: 'not-primary', persona_id: 'p-1', is_primary: false, created_at: '2026-03-01T00:00:00Z' }),
+        img({ id: 'primary', persona_id: 'p-1', is_primary: true, created_at: '2026-01-01T00:00:00Z' }),
+      ],
+      'p-1',
+    );
+    expect(picked?.id).toBe('primary');
+  });
+
   it('does not mix personas', () => {
     const picked = pickLibraryDisplayImage(
       [

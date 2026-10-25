@@ -269,18 +269,30 @@ describe('GET /api/persona/list', () => {
     const { signed } = mockSupabase();
 
     const res = await GET(new Request('http://localhost:3434/api/persona/list'));
-    const body = (await res.json()) as {
-      personas: Array<{ id: string; libraryUrl?: string; image_path?: string }>;
-    };
+    const body = (await res.json()) as { personas: unknown[] };
 
     expect(res.status).toBe(200);
-    expect(body.personas[0].libraryUrl).toBe(
-      `https://supabase.test/signed/${USER_ID}/p-1/library.png`,
-    );
-    expect(body.personas[0].image_path).toBeUndefined();
-    expect(body.personas[1].libraryUrl).toBe(
-      `https://supabase.test/signed/${USER_ID}/p-2/other.png`,
-    );
+    expect(body.personas[0]).toEqual({
+      id: 'p-1',
+      name: 'Ana',
+      createdAt: '2026-08-29T00:00:00Z',
+      photoUrl: `https://supabase.test/signed/${USER_ID}/foto.png`,
+      libraryUrl: `https://supabase.test/signed/${USER_ID}/p-1/library.png`,
+      voiceId: 'voz-1',
+      language: 'pt',
+      videoAspect: '9:16',
+      scriptPrompt: 'Storytelling.',
+      paragraphNumber: 2,
+      niche: 'finanças pessoais',
+    });
+    expect(body.personas[1]).toEqual({
+      id: 'p-2',
+      name: 'Robo',
+      createdAt: '2026-08-29T01:00:00Z',
+      avatarUrl: 'data:image/png;base64,IA',
+      libraryUrl: `https://supabase.test/signed/${USER_ID}/p-2/other.png`,
+      voiceAudioUrl: `https://supabase.test/signed/${USER_ID}/voz.mp3`,
+    });
     expect(signed.sort()).toEqual(
       [
         `${USER_ID}/foto.png`,
@@ -289,6 +301,20 @@ describe('GET /api/persona/list', () => {
         `${USER_ID}/voz.mp3`,
       ].sort(),
     );
+  });
+
+  it('skips the persona_images query when the persona list is empty', async () => {
+    const { client, signed } = mockSupabase({ personas: [] });
+
+    const res = await GET(new Request('http://localhost:3434/api/persona/list'));
+    const body = (await res.json()) as { authenticated: boolean; personas: unknown[] };
+
+    expect(res.status).toBe(200);
+    expect(body.authenticated).toBe(true);
+    expect(body.personas).toEqual([]);
+    expect(client.from.mock.calls.map((call) => call[0])).not.toContain('persona_images');
+    expect(signed).toEqual([]);
+    expect(client.storage.from).not.toHaveBeenCalled();
   });
 
   it('scopes the library query to the caller and listed personas', async () => {
