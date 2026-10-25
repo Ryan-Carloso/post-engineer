@@ -14,6 +14,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 
+import { logger } from '../lib/logger';
 import { ingestRemotePersonaFaces } from '../lib/persona-remote-face';
 
 async function main(): Promise<void> {
@@ -26,14 +27,16 @@ async function main(): Promise<void> {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const result = await ingestRemotePersonaFaces(supabase);
-  console.log(
-    `ingest-remote-persona-faces: migrated=${result.migrated} skipped=${result.skipped} failed=${result.failed}`,
-  );
+  logger.info('ingest-remote-persona-faces', {
+    migrated: result.migrated,
+    skipped: result.skipped,
+    failed: result.failed,
+  });
 }
 
 if (process.argv[1]?.includes('ingest-remote-persona-faces')) {
   main().catch((error: unknown) => {
-    console.error(error);
+    logger.error('ingest-remote-persona-faces failed', error);
     process.exit(1);
   });
 }

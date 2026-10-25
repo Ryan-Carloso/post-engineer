@@ -81,7 +81,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   }
 
   const hasPhoto = body.photo !== null;
-  const hasAvatarUrl = body.values.avatarUrl !== null;
+  const hasAvatarUrl = typeof body.values.avatarUrl === 'string' && body.values.avatarUrl.trim() !== '';
   const visualError = validateVisualCues(hasPhoto, hasAvatarUrl);
   if (visualError) {
     return errorResponse(400, visualError, 'POST /api/persona');
@@ -150,11 +150,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
   }
   const validatedLibraryInputs = libraryValidation.inputs;
 
-  // The persona id is generated HERE, before the upload, so the photo can
-  // land in {userId}/{personaId}/photo.{ext} (the folder says whose file it
-  // is). The upload still happens BEFORE the insert on purpose: if the insert
-  // fails, the rollback removes the file by its exact path — swapping the
-  // order would leave a row with no file.
+  // Persona id first so the photo lands in {userId}/{personaId}/photo.{ext}.
+  // Upload before insert so a failed insert can roll the file back by path.
   const personaId = randomUUID();
   const photoPath =
     body.photo && body.photoExtension
@@ -164,7 +161,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     return errorResponse(500, 'Failed to upload photo.', 'POST /api/persona');
   }
 
-  let avatarUrl = body.values.avatarUrl;
+  let avatarUrl = hasAvatarUrl ? body.values.avatarUrl : null;
   let photoPathToRollback = photoPath;
   if (photoPathToRollback === null && typeof avatarUrl === 'string') {
     const resolved = await resolvePersonaAvatar(supabase, user.id, personaId, avatarUrl);
@@ -178,9 +175,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   const { data: persona, error: insertError } = await supabase
     .from('personas')
     .insert({
-      // Explicit id: the column already defaults to gen_random_uuid(), so
-      // this changes nothing for the schema — it only lets the storage
-      // folder be known before the row exists.
+      // Explicit id so the storage folder is known before the row exists.
       id: personaId,
       user_id: user.id,
       name: (body.values.name ?? '').trim(),
@@ -357,9 +352,12 @@ async function patchHandler(request: Request): Promise<NextResponse> {
     if (!photoPath) return errorResponse(500, 'Failed to upload photo.', 'PATCH /api/persona');
     updates.photo_path = photoPath;
     updates.avatar_url = null;
-    if (typeof persona.photo_path === 'string' && persona.photo_path) {
+    replacementPhotoPath = photoPath;
+    if (typeof persona.photo_path === 'string' && persona.photo_path && persona.photo_path !== photoPath) {
       stalePaths.push(persona.photo_path);
     }
+  } else if (typeof patch.avatarUrl === 'string' && patch.avatarUrl.trim() === '') {
+    updates.avatar_url = null;
   } else if (patch.avatarUrl !== null) {
     const resolved = await resolvePersonaAvatar(supabase, user.id, personaId, patch.avatarUrl, {
       existingPhotoPath: typeof persona.photo_path === 'string' ? persona.photo_path : null,

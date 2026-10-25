@@ -23,7 +23,6 @@ const USER_ID = 'user-uuid-1';
 const PNG_BYTES = Uint8Array.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
 ]);
-const removeMock = vi.fn(async () => ({ error: null }));
 
 describe('PATCH remote ingest onto an existing photo object', () => {
   beforeEach(() => {
@@ -37,6 +36,7 @@ describe('PATCH remote ingest onto an existing photo object', () => {
 
   function patchClient(existing: Record<string, unknown>, updateError: { message: string } | null = null) {
     const uploaded: Array<{ path: string; upsert?: boolean }> = [];
+    const removeMock = vi.fn(async () => ({ error: null }));
     const client = {
       auth: {
         getUser: vi.fn(async () => ({ data: { user: { id: USER_ID } }, error: null })),
@@ -63,7 +63,7 @@ describe('PATCH remote ingest onto an existing photo object', () => {
         })),
       })),
     };
-    return { client, uploaded };
+    return { client, uploaded, removeMock };
   }
 
   function stubPng() {
@@ -80,7 +80,7 @@ describe('PATCH remote ingest onto an existing photo object', () => {
       voice_id: 'voz-antiga',
       voice_audio_path: null,
     };
-    const { client, uploaded } = patchClient(existing);
+    const { client, uploaded, removeMock } = patchClient(existing);
     vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
     vi.mocked(requireSupabaseSession).mockResolvedValue({
       auth: { userId: USER_ID, accessToken: 'cookie-token' },
@@ -112,7 +112,7 @@ describe('PATCH remote ingest onto an existing photo object', () => {
       voice_id: 'voz-antiga',
       voice_audio_path: null,
     };
-    const { client, uploaded } = patchClient(existing, { message: 'constraint' });
+    const { client, uploaded, removeMock } = patchClient(existing, { message: 'constraint' });
     vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
     vi.mocked(requireSupabaseSession).mockResolvedValue({
       auth: { userId: USER_ID, accessToken: 'cookie-token' },
@@ -143,29 +143,7 @@ describe('PATCH remote ingest onto an existing photo object', () => {
       voice_id: 'voz-antiga',
       voice_audio_path: null,
     };
-    const client = {
-      auth: {
-        getUser: vi.fn(async () => ({ data: { user: { id: USER_ID } }, error: null })),
-      },
-      storage: {
-        from: vi.fn(() => ({
-          upload: vi.fn(async (path: string) => ({ data: { path }, error: null })),
-          remove: removeMock,
-        })),
-      },
-      from: vi.fn(() => ({
-        select: vi.fn(() => ({
-          eq: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              single: vi.fn(async () => ({ data: existing, error: null })),
-            })),
-          })),
-        })),
-        update: vi.fn(() => ({
-          eq: vi.fn(async () => ({ error: null })),
-        })),
-      })),
-    };
+    const { client, removeMock } = patchClient(existing);
     vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
     vi.mocked(requireSupabaseSession).mockResolvedValue({
       auth: { userId: USER_ID, accessToken: 'cookie-token' },
