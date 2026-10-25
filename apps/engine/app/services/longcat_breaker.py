@@ -132,6 +132,9 @@ def should_emit_event(now: datetime, root: str | None = None) -> bool:
         logger.warning(
             "longcat breaker event marker did not persist (marker write failed)"
         )
+        # Fail-closed: a lost daily marker must not spam the informative
+        # event. should_alert fail-opens on the same failure (duplicates
+        # beat silence). Both branches are pinned in tests.
         return False
     return True
 

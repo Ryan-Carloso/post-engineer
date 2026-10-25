@@ -39,6 +39,8 @@ from app.services.analytics import scrub_error_text, track_ai_request
 class LongCatError(RuntimeError):
     """Raised when LongCat cannot produce a valid intro video."""
 
+    response_body: str | None = None
+
 
 class LongCatUnavailableError(LongCatError):
     """The Modal gateway answered 'workspace disabled' (billing exhausted).
@@ -235,10 +237,11 @@ def _raise_for_status(response: requests.Response, operation: str) -> None:
         )
         error.response_body = scrubbed  # type: ignore[attr-defined]
         raise error
-    raise LongCatError(
+    error = LongCatError(
         f"LongCat {operation} failed with HTTP {response.status_code}"
-        + (f": {scrubbed}" if scrubbed else "")
     )
+    error.response_body = scrubbed  # type: ignore[attr-defined]
+    raise error
 
 
 def _modal_cost_usd(status: dict[str, object]) -> float | None:

@@ -756,6 +756,8 @@ class TestWorkspaceDisabledClassification(unittest.TestCase):
             longcat._raise_for_status(self._response(404, "job not found"), "status")
         self.assertNotIsInstance(ctx.exception, LongCatUnavailableError)
         self.assertNotIn("modal-http", str(ctx.exception))
+        self.assertEqual(str(ctx.exception), "LongCat status failed with HTTP 404")
+        self.assertEqual(ctx.exception.response_body, "job not found")
 
     def test_disabled_body_is_not_enough_without_the_gateway_marker(self):
 

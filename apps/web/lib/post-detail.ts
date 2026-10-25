@@ -254,7 +254,20 @@ export async function getSlotPost(
   // logged) — enrichSlot is told not to fetch a second time.
   let prefetchedTask: EngineTaskProgress | undefined;
   let prefetchFailed = false;
-  if (
+  let publishedResolved:
+    | { publishLinks: PublishLink[]; scriptAngle: string | null; warnings: string[] }
+    | undefined;
+  if (row.status === 'published' && slotTaskId !== null) {
+    publishedResolved = await resolvePublishedSlotEngineData(slotTaskId, userId);
+    prefetchedTask = {
+      gone: false,
+      progress: 100,
+      stage: 'done',
+      state: null,
+      scriptAngle: publishedResolved.scriptAngle,
+      warnings: publishedResolved.warnings,
+    };
+  } else if (
     (row.status === 'generating' ||
       row.status === 'failed' ||
       row.status === 'ready' ||
@@ -287,8 +300,8 @@ export async function getSlotPost(
   let publishLinks: PublishLink[];
   let scriptAngle: string | null;
   let warnings: string[] = [];
-  if (row.status === 'published' && slotTaskId !== null) {
-    ({ publishLinks, scriptAngle, warnings } = await resolvePublishedSlotEngineData(slotTaskId, userId));
+  if (publishedResolved !== undefined) {
+    ({ publishLinks, scriptAngle, warnings } = publishedResolved);
   } else {
     publishLinks = await resolveSlotPublishLinks(row, userId);
     // One task-record read per view: a prefetched task carries the angle,

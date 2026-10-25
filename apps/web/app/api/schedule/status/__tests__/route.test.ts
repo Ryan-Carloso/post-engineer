@@ -605,10 +605,8 @@ describe('GET slot progress (0–100)', () => {
   });
 
   //---------------
-  // Engine lookup cap — only slots that actually need a live lookup
-  // (generating/failed WITH a task id) consume the ENGINE_LOOKUP_CAP
-  // budget. Anything else reaching past the cap degrades to progress 0
-  // instead of firing unbounded concurrent engine calls.
+  // Engine lookup cap — generating/failed/ready/publishing/published
+  // WITH a task id consume ENGINE_LOOKUP_CAP. Anything else does not.
   //---------------
   it('does not spend the engine cap on pending slots', async () => {
     mockEngine({ body: { progress: 62, stage: 'lipsync' } });
@@ -643,20 +641,20 @@ describe('GET slot progress (0–100)', () => {
     expect(body.upcoming.slice(25).every((s) => s.progress === 62)).toBe(true);
   });
 
-  it('does not spend the engine cap on non-live slots that carry a task id', async () => {
-    mockEngine({ body: { progress: 62, stage: 'lipsync' } });
-    const pending = Array.from({ length: 25 }, (_, i) => ({
-      id: `pend-${i}`, slot_at: '2026-09-24T10:00:00Z', status: 'pending',
-      topic: `Topic ${i}`, schedule_id: 's1', task_id: `stale-task-${i}`,
+  it('caps the engine fan-out for ready/published slots that carry a task id', async () => {
+    mockEngine({ body: { progress: 62, user_warning_codes: ['longcat_faceless_fallback'] } });
+    const ready = Array.from({ length: 20 }, (_, i) => ({
+      id: `ready-${i}`, slot_at: '2026-09-24T10:00:00Z', status: 'ready',
+      topic: `Topic ${i}`, schedule_id: 's1', task_id: `ready-task-${i}`,
     }));
-    const live = Array.from({ length: 5 }, (_, i) => ({
-      id: `gen-${i}`, slot_at: '2026-09-24T10:00:00Z', status: 'generating',
-      topic: `Live ${i}`, schedule_id: 's1', task_id: `task-${i}`,
+    const published = Array.from({ length: 10 }, (_, i) => ({
+      id: `pub-${i}`, slot_at: '2026-09-24T09:00:00Z', status: 'published',
+      topic: `Old ${i}`, schedule_id: 's1', task_id: `pub-task-${i}`,
     }));
-    const body = await getStatus([...pending, ...live]);
+    const body = await getStatus([...ready, ...published]);
 
-    expect(vi.mocked(fetch).mock.calls.length).toBe(5);
-    expect(body.upcoming.slice(25).every((s) => s.progress === 62)).toBe(true);
+    expect(vi.mocked(fetch).mock.calls.length).toBe(25);
+    expect(body.upcoming.every((s) => s.progress === 100)).toBe(true);
   });
 
   it('caps the engine fan-out for failed slots too', async () => {
