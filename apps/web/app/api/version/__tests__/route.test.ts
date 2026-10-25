@@ -30,6 +30,13 @@ describe('GET /api/version', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubEnv('MONEYPRINT_API_URL', ENGINE_URL);
+    vi.stubEnv('VERSION', '');
+    vi.stubEnv('PR_NUMBER', '');
+    vi.stubEnv('BUILD', '');
+    vi.stubEnv('COMMIT', '');
+    vi.stubEnv('BUILT_AT', '');
+    vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('SCHEDULER_ENABLED', '');
     vi.mocked(isPostHogServerConfigured).mockReturnValue(false);
   });
 
@@ -53,13 +60,32 @@ describe('GET /api/version', () => {
       pr: 152,
       build: 152,
       commit: '8f31abc',
+      builtAt: null,
       posthogConfigured: false,
+      web: {
+        version: 'dev',
+        pr: null,
+        commit: null,
+        builtAt: null,
+        schedulerEnabled: false,
+      },
     });
     expect(fetchMock).toHaveBeenCalledWith(
       `${ENGINE_URL}/version`,
       expect.objectContaining({ cache: 'no-store', signal: expect.any(AbortSignal) }),
     );
     expect(clearTimeoutSpy).toHaveBeenCalled();
+  });
+
+  it('includes web.schedulerEnabled from isSchedulerEnabled', async () => {
+    vi.stubEnv('SCHEDULER_ENABLED', 'true');
+    mockFetchOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ version: '1.28.152', pr: 152, build: 152, commit: 'abc' }),
+    });
+    const json = await (await GET()).json();
+    expect(json.web.schedulerEnabled).toBe(true);
   });
 
   it('reports posthogConfigured true when server telemetry is configured', async () => {
@@ -71,12 +97,17 @@ describe('GET /api/version', () => {
     });
     const res = await GET();
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
+    const json = await res.json();
+    expect(json).toMatchObject({
       version: '1.8.0',
       pr: null,
       build: 502,
       commit: 'abc123',
       posthogConfigured: true,
+      web: expect.objectContaining({
+        schedulerEnabled: false,
+        version: expect.any(String),
+      }),
     });
   });
 
@@ -88,12 +119,14 @@ describe('GET /api/version', () => {
     });
     const res = await GET();
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
+    expect(await res.json()).toMatchObject({
       version: '1.8.0',
       pr: null,
       build: 502,
       commit: 'abc123',
+      builtAt: null,
       posthogConfigured: false,
+      web: expect.objectContaining({ schedulerEnabled: expect.any(Boolean) }),
     });
   });
 

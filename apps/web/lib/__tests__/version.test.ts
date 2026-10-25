@@ -16,6 +16,7 @@ describe('getBuildInfo', () => {
       pr: 152,
       build: 152,
       commit: '8f31abc',
+      builtAt: null,
     });
   });
 
@@ -24,7 +25,8 @@ describe('getBuildInfo', () => {
     vi.stubEnv('PR_NUMBER', '');
     vi.stubEnv('BUILD', '');
     vi.stubEnv('COMMIT', '');
-    expect(getBuildInfo()).toEqual({ version: 'dev', pr: null, build: null, commit: null });
+    vi.stubEnv('BUILT_AT', '');
+    expect(getBuildInfo()).toEqual({ version: 'dev', pr: null, build: null, commit: null, builtAt: null });
   });
 
   it('degrades malformed BUILD/PR_NUMBER to null instead of NaN', () => {
@@ -55,7 +57,14 @@ describe('getBuildInfo', () => {
       pr: 152,
       build: 152,
       commit: '8f31abc',
+      builtAt: null,
     });
+  });
+
+  it('reports the ISO builtAt stamp when injected', () => {
+    vi.stubEnv('VERSION', '1.28.152');
+    vi.stubEnv('BUILT_AT', '2026-10-25T12:00:00Z');
+    expect(getBuildInfo().builtAt).toBe('2026-10-25T12:00:00Z');
   });
 });
 
@@ -78,8 +87,20 @@ describe('formatBuildInfo', () => {
 describe('parseBuildInfo', () => {
   it('parses a well-formed engine payload', () => {
     expect(
-      parseBuildInfo({ version: '1.28.152', pr: 152, build: 152, commit: '8f31abc' }),
-    ).toEqual({ version: '1.28.152', pr: 152, build: 152, commit: '8f31abc' });
+      parseBuildInfo({
+        version: '1.28.152',
+        pr: 152,
+        build: 152,
+        commit: '8f31abc',
+        builtAt: '2026-10-25T12:00:00Z',
+      }),
+    ).toEqual({
+      version: '1.28.152',
+      pr: 152,
+      build: 152,
+      commit: '8f31abc',
+      builtAt: '2026-10-25T12:00:00Z',
+    });
   });
 
   it('mirrors pr into build when the payload omits build', () => {
@@ -88,6 +109,7 @@ describe('parseBuildInfo', () => {
       pr: 152,
       build: 152,
       commit: null,
+      builtAt: null,
     });
   });
 
@@ -97,6 +119,7 @@ describe('parseBuildInfo', () => {
       pr: null,
       build: null,
       commit: null,
+      builtAt: null,
     });
   });
 
@@ -110,6 +133,6 @@ describe('parseBuildInfo', () => {
   it('degrades malformed pr/build/commit to null', () => {
     expect(
       parseBuildInfo({ version: '1.28.152', pr: '#152', build: '502', commit: 123 }),
-    ).toEqual({ version: '1.28.152', pr: null, build: null, commit: null });
+    ).toEqual({ version: '1.28.152', pr: null, build: null, commit: null, builtAt: null });
   });
 });

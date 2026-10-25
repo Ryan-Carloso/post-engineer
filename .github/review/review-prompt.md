@@ -88,6 +88,11 @@ Rules for `**Location:**`:
   most relevant file and quote the line that proves it, or use
   `**Location:** PR` with a fenced quote copied verbatim from `pr-context.md`.
 
-After the findings, write one line: `Verdict: APPROVE | APPROVE_WITH_NITS | REQUEST_CHANGES`.
-If there are no findings, write `No material findings.` followed by the verdict
-line. No preamble, no narration of your process.
+After the findings, write one line: `Verdict: APPROVE | REQUEST_CHANGES`.
+
+- Zero findings => `Verdict: APPROVE` and the line `No material findings.`
+- One or more findings of any severity (CRITICAL, MAJOR, or MINOR) =>
+  `Verdict: REQUEST_CHANGES`. MINOR is a severity label on a finding; it
+  does not have its own verdict.
+
+No preamble, no narration of your process.

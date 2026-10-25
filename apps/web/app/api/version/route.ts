@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { withApiErrorReporting } from '@/lib/api-error-reporting';
 import { apiErrorResponse } from '@/lib/api-error';
-import { parseBuildInfo } from '@/lib/version';
+import { getBuildInfo, parseBuildInfo } from '@/lib/version';
 import { isPostHogServerConfigured } from '@/lib/posthog-server';
+import { isSchedulerEnabled } from '@/lib/scheduler-jobs';
 
 //---------------
 // Public version endpoint — no auth required. Proxies the engine's
@@ -45,7 +46,18 @@ async function getHandler() {
         logMessage: 'Engine /version returned an unexpected payload',
       });
     }
-    return NextResponse.json({ ...info, posthogConfigured: isPostHogServerConfigured() });
+    const web = getBuildInfo();
+    return NextResponse.json({
+      ...info,
+      posthogConfigured: isPostHogServerConfigured(),
+      web: {
+        version: web.version,
+        pr: web.pr,
+        commit: web.commit,
+        builtAt: web.builtAt,
+        schedulerEnabled: isSchedulerEnabled(),
+      },
+    });
   } catch (cause) {
     return apiErrorResponse(502, 'Engine version unavailable', {
       route: 'GET /api/version',

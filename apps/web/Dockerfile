@@ -37,7 +37,9 @@ ARG VERSION=""
 ARG PR_NUMBER=""
 ARG BUILD=""
 ARG COMMIT=""
-RUN cd apps/web && pnpm build
+# builtAt: after COMMIT/BUILD so this layer is not cached between deploys.
+RUN date -u +"%Y-%m-%dT%H:%M:%SZ" > apps/web/.built-at \
+    && cd apps/web && pnpm build
 
 FROM node:22-alpine AS runner
 # NODE_ENV=production is baked into the image (the standalone server

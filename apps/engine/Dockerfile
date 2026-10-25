@@ -37,6 +37,14 @@ COPY app ./app
 COPY resource/fonts ./resource/fonts
 COPY main.py ./
 
+# builtAt: ISO UTC, written AFTER ARG COMMIT/BUILD so Docker does not
+# reuse this layer across deploys (those ARGs change every VPS build).
+ARG VERSION=""
+ARG PR_NUMBER=""
+ARG BUILD=""
+ARG COMMIT=""
+RUN date -u +"%Y-%m-%dT%H:%M:%SZ" > /app/BUILT_AT
+
 # Non-root runtime user; storage must be writable for tasks/ and caches.
 RUN useradd --create-home --uid 10001 engine \
     && mkdir -p /app/storage /app/logs \

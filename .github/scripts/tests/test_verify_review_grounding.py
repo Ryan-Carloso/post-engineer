@@ -448,6 +448,14 @@ def test_review_prompts_require_english():
         assert required in text, name
 
 
+def test_review_verdict_has_no_approve_with_nits():
+    review_dir = SCRIPTS_DIR.parent / "review"
+    for name in ("review-prompt.md", "verify-prompt.md"):
+        text = (review_dir / name).read_text(encoding="utf-8")
+        assert "APPROVE_WITH_NITS" not in text, name
+        assert "Verdict: APPROVE | REQUEST_CHANGES" in text, name
+
+
 def _git_show(sha: str, path: str) -> str | None:
     import subprocess
 

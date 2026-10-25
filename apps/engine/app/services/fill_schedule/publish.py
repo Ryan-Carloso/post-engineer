@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from loguru import logger
@@ -14,6 +14,7 @@ from app.services import video_storage
 from app.services.analytics import scrub_error_text, track_event
 from app.services.fill_schedule.constants import (
     MAX_PUBLISH_ATTEMPTS,
+    PUBLISH_RETRY_DELAY_SECONDS,
     SLOT_FAILED,
     SLOT_PUBLISHED,
     SLOT_READY,
@@ -359,9 +360,18 @@ class BatchPublisher:
                     )
                 else:
                     # back to 'ready' (not 'failed'): may be transient; the atomic
-                    # claim guarantees only one worker publishes at a time.
+                    # claim guarantees only one worker publishes at a time. The
+                    # retry does NOT run on the next tick: a backoff key
+                    # (publish_not_before) staggers it 30s / 2min / 10min so a
+                    # failing upload endpoint is re-attempted inside its own
+                    # recovery window instead of hammered every tick.
+                    delay_index = min(attempts - 1, len(PUBLISH_RETRY_DELAY_SECONDS) - 1)
+                    not_before = now + timedelta(seconds=PUBLISH_RETRY_DELAY_SECONDS[delay_index])
                     self.store.update_slot(
-                        slot["id"], status=SLOT_READY, publish_attempts=attempts
+                        slot["id"],
+                        status=SLOT_READY,
+                        publish_attempts=attempts,
+                        publish_not_before=not_before.isoformat(),
                     )
                 track_event(
                     "video_publish_failed",

@@ -199,6 +199,27 @@ app["redis_host"] = os.getenv(
 )
 app["video_codec"] = os.getenv("MPT_VIDEO_CODEC", app.get("video_codec", "libx264"))
 
+# Local CPU TTS endpoints: docker-compose.yml sets these env vars so the engine
+# reaches the `tts` service even when a host's config.toml still carries a
+# stale (e.g. retired Modal) URL. A non-empty env value wins; an unset or
+# blank one keeps the config.toml value.
+_TTS_ENV_OVERRIDES = (
+    ("MPT_CHATTERBOX_BASE_URL", "chatterbox", "base_url"),
+    ("MPT_CHATTERBOX_API_KEY", "chatterbox", "api_key"),
+    ("MPT_CLONED_VOICES_REGISTRY_BASE_URL", "cloned_voices", "registry_base_url"),
+    ("MPT_CLONED_VOICES_REGISTRY_API_KEY", "cloned_voices", "registry_api_key"),
+)
+
+
+def apply_tts_env_overrides(sections: dict, environ) -> None:
+    for env_name, section_name, key in _TTS_ENV_OVERRIDES:
+        value = (environ.get(env_name) or "").strip()
+        if value:
+            sections[section_name][key] = value
+
+
+apply_tts_env_overrides({"chatterbox": chatterbox, "cloned_voices": cloned_voices}, os.environ)
+
 imagemagick_path = app.get("imagemagick_path", "")
 if imagemagick_path and os.path.isfile(imagemagick_path):
     os.environ["IMAGEMAGICK_BINARY"] = imagemagick_path

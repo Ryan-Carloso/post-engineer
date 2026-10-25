@@ -177,6 +177,15 @@ class ScheduleStore:
             params={
                 "status": f"eq.{SLOT_READY}",
                 "slot_at": f"lte.{now_utc.isoformat()}",
+                # publish_not_before is the retry backoff key (PR-B of #277):
+                # a slot that just failed a publish attempt waits its delay
+                # before the next attempt — and the column is also simply
+                # absent on older rows until migration 028, so either no key
+                # or an elapsed one qualifies.
+                "or": (
+                    "(publish_not_before.is.null,"
+                    f"publish_not_before.lte.{now_utc.isoformat()})"
+                ),
                 "select": self.SLOT_SELECT,
                 "order": "slot_at.asc",
             },

@@ -16,6 +16,8 @@ export interface BuildInfo {
   /** Build identifier; mirrors `pr` on the VPS deploy, CI's run number in CI. */
   build: number | null;
   commit: string | null;
+  /** ISO UTC timestamp of the image build; null when the image was not rebuilt. */
+  builtAt: string | null;
 }
 
 //---------------
@@ -35,6 +37,7 @@ export function getBuildInfo(): BuildInfo {
     pr,
     build: toBuildNumber(process.env.BUILD) ?? pr,
     commit: process.env.COMMIT?.trim() || null,
+    builtAt: process.env.BUILT_AT?.trim() || null,
   };
 }
 
@@ -67,5 +70,8 @@ export function parseBuildInfo(body: unknown): BuildInfo | null {
   const commitRaw = record.commit;
   const commit =
     typeof commitRaw === 'string' && commitRaw.trim() !== '' ? commitRaw.trim() : null;
-  return { version: version.trim(), pr, build, commit };
+  const builtAtRaw = record.builtAt;
+  const builtAt =
+    typeof builtAtRaw === 'string' && builtAtRaw.trim() !== '' ? builtAtRaw.trim() : null;
+  return { version: version.trim(), pr, build, commit, builtAt };
 }

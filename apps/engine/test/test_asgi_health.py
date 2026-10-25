@@ -33,7 +33,7 @@ def _write_version(tmp_path, content: str) -> str:
 
 
 def _clear_build_env(monkeypatch):
-    for var in ("VERSION", "PR_NUMBER", "BUILD", "COMMIT"):
+    for var in ("VERSION", "PR_NUMBER", "BUILD", "COMMIT", "BUILT_AT"):
         monkeypatch.delenv(var, raising=False)
 
 
@@ -59,6 +59,7 @@ def test_version_reports_injected_build_metadata(tmp_path, monkeypatch):
             "build": 152,
             "pr": 152,
             "commit": "8f31abc",
+            "builtAt": None,
         }
 
 
@@ -77,6 +78,7 @@ def test_health_includes_build_metadata(tmp_path, monkeypatch):
             "build": 152,
             "pr": 152,
             "commit": "8f31abc",
+            "builtAt": None,
         }
 
 
@@ -96,6 +98,7 @@ def test_version_file_fallback_without_env(tmp_path, monkeypatch):
         "build": None,
         "pr": None,
         "commit": None,
+        "builtAt": None,
     }
 
 
@@ -108,6 +111,7 @@ def test_version_defaults_to_dev_without_file_or_env(tmp_path, monkeypatch):
         "build": None,
         "pr": None,
         "commit": None,
+        "builtAt": None,
     }
 
 
@@ -156,4 +160,23 @@ def test_get_build_info_trims_values(tmp_path, monkeypatch):
         "build": 152,
         "pr": 152,
         "commit": "8f31abc",
+        "builtAt": None,
     }
+
+
+def test_built_at_from_env(tmp_path, monkeypatch):
+    monkeypatch.setattr(asgi, "VERSION_FILE", str(tmp_path / "MISSING"))
+    monkeypatch.setattr(asgi, "BUILT_AT_FILE", str(tmp_path / "MISSING_BUILT"))
+    _clear_build_env(monkeypatch)
+    monkeypatch.setenv("BUILT_AT", "2026-10-25T12:00:00Z")
+    assert _get_json("/version")["builtAt"] == "2026-10-25T12:00:00Z"
+    assert _get_json("/health")["builtAt"] == "2026-10-25T12:00:00Z"
+
+
+def test_built_at_from_baked_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(asgi, "VERSION_FILE", str(tmp_path / "MISSING"))
+    baked = tmp_path / "BUILT_AT"
+    baked.write_text("2026-11-01T00:00:00Z\n", encoding="utf-8")
+    monkeypatch.setattr(asgi, "BUILT_AT_FILE", str(baked))
+    _clear_build_env(monkeypatch)
+    assert _get_json("/version")["builtAt"] == "2026-11-01T00:00:00Z"

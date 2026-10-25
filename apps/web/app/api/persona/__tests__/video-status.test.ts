@@ -166,7 +166,37 @@ describe('GET /api/persona/video-status/:taskId', () => {
       // The generation row found by the engine_task_id fallback (the batch
       // case: prepaid under `batch:<id>` with no per-task charge row).
       fallbackGenerationId: string | null = null,
+      // The durable engine_task_state row the 404 path consults before
+      // recording a failure. Default null (no persisted row) keeps the old
+      // verdict side effects running; `{ state: 1, data: { videos: [...] } }`
+      // triggers the completed-backfill branch instead.
+      durableTask: { state?: number; data?: unknown; error?: unknown } | null = null,
+      // The published scheduled_posts slot proof the 404 path consults when
+      // the durable row is absent (MAJOR 1: the video-status verdict MUST
+      // match the slot-gone verdict — a published slot means delivered
+      // value, the row backfills completed and nothing is refunded).
+      publishedSlot: boolean = false,
     ) {
+      const durableSingle = vi
+        .fn()
+        .mockResolvedValue({
+          data:
+            durableTask && durableTask.state !== undefined
+              ? { state: durableTask.state, data: durableTask.data ?? {} }
+              : null,
+          error: durableTask?.error ?? null,
+        });
+      const durableLimit = vi.fn().mockReturnValue({ maybeSingle: durableSingle });
+      const durableEq2 = vi.fn().mockReturnValue({ limit: durableLimit });
+      const durableEq1 = vi.fn().mockReturnValue({ eq: durableEq2 });
+      const durableSelect = vi.fn().mockReturnValue({ eq: durableEq1 });
+      const publishedLimit = vi
+        .fn()
+        .mockResolvedValue({ data: publishedSlot ? [{ id: 'slot-1' }] : [], error: null });
+      const publishedEq3 = vi.fn().mockReturnValue({ limit: publishedLimit });
+      const publishedEq2 = vi.fn().mockReturnValue({ eq: publishedEq3 });
+      const publishedEq1 = vi.fn().mockReturnValue({ eq: publishedEq2 });
+      const publishedSelect = vi.fn().mockReturnValue({ eq: publishedEq1 });
       const chargeSingle = vi
         .fn()
         .mockResolvedValue({ data: generationId ? { generation_id: generationId } : null, error: null });
@@ -196,6 +226,8 @@ describe('GET /api/persona/video-status/:taskId', () => {
       let videoGenerationCalls = 0;
       const from = vi.fn().mockImplementation((table: string) => {
         if (table !== 'video_generations') {
+          if (table === 'engine_task_state') return { select: durableSelect };
+          if (table === 'scheduled_posts') return { select: publishedSelect };
           return { select: chargeSelect };
         }
         // With no charge row the FIRST video_generations read is the task-id
@@ -548,6 +580,93 @@ describe('GET /api/persona/video-status/:taskId', () => {
             errorMessage: 'req-1: task not found',
             tokensRefunded: true,
           }),
+        );
+      } finally {
+        updateSpy.mockRestore();
+      }
+    });
+
+    it('backfills completed on an engine 404 when a published slot proves delivery (MAJOR 1)', async () => {
+      // The video-status verdict must match the slot-gone verdict: a
+      // published slot for the task is delivered value even without a
+      // durable engine row — the row backfills completed and NOTHING is
+      // refunded (the pre-fix code failed + refunded here).
+      mockTaskBody({ status: 404, message: 'req-1: task not found' }, 404);
+      const serviceClient = mockServiceClient('gen-1', null, null, null, true);
+      const updateSpy = vi
+        .spyOn(videoGeneration, 'recordGenerationUpdate')
+        .mockResolvedValue(undefined);
+      try {
+        const response = await poll();
+        expect(response.status).toBe(410);
+        expect(await response.json()).toMatchObject({ success: false, terminal: true });
+        expect(updateSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            generationId: 'gen-1',
+            status: 'completed',
+            engineTaskId: 'task-1',
+          }),
+        );
+        expect(refundTokens).not.toHaveBeenCalledWith(serviceClient, USER_ID, 'gen-1');
+      } finally {
+        updateSpy.mockRestore();
+      }
+    });
+
+    it('does NOT record a failure on an engine 404 when the durable read itself errors (unverifiable is not failed)', async () => {
+      // Review round: the pre-fix code treated a durable/published READ ERROR
+      // like "no proof" and fell through to the failed+refund verdict —
+      // contradicting the gone-settle policy that an unverifiable state
+      // writes nothing. The route must answer non-terminal so the next poll
+      // retries.
+      mockTaskBody({ status: 404, message: 'req-1: task not found' }, 404);
+      const serviceClient = mockServiceClient(
+        'gen-1',
+        null,
+        null,
+        { error: { message: 'connection reset' } },
+      );
+      const updateSpy = vi
+        .spyOn(videoGeneration, 'recordGenerationUpdate')
+        .mockResolvedValue(undefined);
+      try {
+        const response = await poll();
+        expect(response.status).toBe(502); // non-terminal, not 410
+        expect(updateSpy).not.toHaveBeenCalled();
+        expect(refundTokens).not.toHaveBeenCalledWith(serviceClient, USER_ID, 'gen-1');
+      } finally {
+        updateSpy.mockRestore();
+      }
+    });
+
+    it('backfills completed on an engine 404 when the durable task state proves the render finished', async () => {
+      // Production case (2026-10): the engine 404'd tasks it had already
+      // completed (redeploy window). The persisted engine_task_state row is
+      // the tie-breaker: the video exists, so the row settles completed
+      // instead of failed, and nothing is refunded for delivered value.
+      mockTaskBody({ status: 404, message: 'req-1: task not found' }, 404);
+      const serviceClient = mockServiceClient('gen-1', null, null, {
+        state: 1,
+        data: { videos: ['render/final-1.mp4'] },
+      });
+      const updateSpy = vi
+        .spyOn(videoGeneration, 'recordGenerationUpdate')
+        .mockResolvedValue(undefined);
+      try {
+        const response = await poll();
+        expect(response.status).toBe(410);
+        expect(await response.json()).toMatchObject({ success: false, terminal: true });
+        expect(updateSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            generationId: 'gen-1',
+            status: 'completed',
+            engineTaskId: 'task-1',
+          }),
+        );
+        expect(refundTokens).not.toHaveBeenCalledWith(
+          serviceClient,
+          USER_ID,
+          'gen-1',
         );
       } finally {
         updateSpy.mockRestore();

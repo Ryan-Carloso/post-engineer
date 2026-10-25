@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { logger } from '@/lib/logger';
 import Link from 'next/link';
 import AccountCard from '@/components/account-card';
 import { ProviderIcon } from '@/components/provider-icon';
@@ -68,7 +69,21 @@ function describeFailure(fallback: string, body: DefaultsResponse): string {
   return typeof body.error === 'string' && body.error !== '' ? body.error : fallback;
 }
 
+// Same uuid shape the API route validates server-side: a non-uuid id here is
+// a placeholder from an un-persisted persona, never a fetchable row.
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 async function fetchDefaults(personaId: string, loadError: string): Promise<PublishingDefaults> {
+  // The section only runs fetches for a persisted persona; a non-uuid id
+  // means a placeholder reached this component (the same caller that
+  // produced the 15 production "invalid uuid 'p-1'" warnings) — no fetch,
+  // no 400, defaults stay empty until the persona exists.
+  if (!UUID_SHAPE.test(personaId)) {
+    logger.warn('[persona-publishing-accounts] non-uuid personaId; skipping defaults fetch', {
+      personaId,
+    });
+    return { youtube: [], instagram: [], bluesky: [], linkedin: [] };
+  }
   const res = await fetch(`/api/persona/publishing-accounts?personaId=${encodeURIComponent(personaId)}`);
   const body = (await res.json()) as DefaultsResponse;
   if (!res.ok || body.success !== true) throw new Error(describeFailure(loadError, body));

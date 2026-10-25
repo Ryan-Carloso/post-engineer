@@ -30,8 +30,10 @@ export const BATCH_GENERATION_PREFIX = 'batch:';
 
 //---------------
 // SLOT_GENERATION_SEPARATOR — a slot id is `<batch>:slot:<slot_id>`.
+// Exported: gone-settle needs it to distinguish a batch's charge key from
+// one of its slot rows before deciding which generation a task settles.
 //---------------
-const SLOT_GENERATION_SEPARATOR = ':slot:';
+export const SLOT_GENERATION_SEPARATOR = ':slot:';
 
 //---------------
 // batchGenerationId — strip the `:slot:<id>` suffix to get the batch charge
@@ -52,21 +54,31 @@ function isGenerationId(value: unknown): value is string {
 //---------------
 // resolveGoneGenerationId — the generation to settle for a dead task.
 //
-// Returns undefined when nothing provably belongs to this task: an
-// unresolvable task must NOT be guessed into a refund, since a wrong match
-// refunds another generation's tokens. A query ERROR is thrown (not
-// swallowed into undefined) so the caller can distinguish "nothing to
-// settle" from "could not check" — the billing rule that a failed check
-// logs loudly rather than looking like a clean no-op.
+// Returns { generationId, batchChargeKey }: batchChargeKey marks an id that
+// came from the prepaid-batch LEDGER fallback (the shared
+// `batch:<schedule_id>` charge). A batch charge key names the whole batch,
+// never one slot's row, so callers must NOT settle a verdict against it —
+// sibling slot rows are settled through their own tasks. Returns undefined
+// when nothing provably belongs to this task: an unresolvable task must NOT
+// be guessed into a refund, since a wrong match refunds another
+// generation's tokens. A query ERROR is thrown (not swallowed into
+// undefined) so the caller can distinguish "nothing to settle" from "could
+// not check" — the billing rule that a failed check logs loudly rather
+// than looking like a clean no-op.
 //
 // Service-role callers bypass RLS, so every query is explicitly scoped by
 // user_id; ownership is never inferred from the task id.
 //---------------
+export interface GoneGenerationResolution {
+  generationId: string;
+  batchChargeKey: boolean;
+}
+
 export async function resolveGoneGenerationId(
   supabase: SupabaseClient,
   userId: string,
   taskId: string,
-): Promise<string | undefined> {
+): Promise<GoneGenerationResolution | undefined> {
   const { data: byTask, error: byTaskError } = await supabase
     .from('video_generations')
     .select('generation_id')
@@ -75,7 +87,11 @@ export async function resolveGoneGenerationId(
     .limit(1)
     .maybeSingle();
   if (byTaskError) throw new Error(`generation lookup by task id failed: ${byTaskError.message}`);
-  if (isGenerationId(byTask?.generation_id)) return byTask.generation_id;
+  if (isGenerationId(byTask?.generation_id)) {
+    // Found on the row itself: this is the exact generation the task
+    // dispatched under — never the shared batch charge.
+    return { generationId: byTask.generation_id, batchChargeKey: false };
+  }
 
   // No video_generations row names the task id. A scheduled post's slot
   // row always carries one, so this is the defensive path — but it is also
@@ -102,5 +118,11 @@ export async function resolveGoneGenerationId(
     .limit(1)
     .maybeSingle();
   if (chargeError) throw new Error(`batch charge lookup failed: ${chargeError.message}`);
-  return isGenerationId(charge?.generation_id) ? charge.generation_id : undefined;
+  if (isGenerationId(charge?.generation_id)) {
+    // The prepaid batch charge: a BILLING key shared by the schedule's slot
+    // rows (see the module header). Marked so callers refuse to settle a
+    // slot verdict against it.
+    return { generationId: charge.generation_id, batchChargeKey: true };
+  }
+  return undefined;
 }
