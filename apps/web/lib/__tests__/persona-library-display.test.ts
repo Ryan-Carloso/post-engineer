@@ -70,4 +70,47 @@ describe('pickLibraryDisplayImage', () => {
     );
     expect(picked?.id).toBe('mine');
   });
+
+  it('returns nothing when every row belongs to another persona', () => {
+    expect(
+      pickLibraryDisplayImage(
+        [img({ id: 'other', persona_id: 'p-2', is_primary: true })],
+        'p-1',
+      ),
+    ).toBeUndefined();
+  });
+
+  it('keeps the first primary when two rows are marked primary', () => {
+    const picked = pickLibraryDisplayImage(
+      [
+        img({ id: 'first-primary', persona_id: 'p-1', is_primary: true, created_at: '2026-01-01T00:00:00Z' }),
+        img({ id: 'second-primary', persona_id: 'p-1', is_primary: true, created_at: '2026-03-01T00:00:00Z' }),
+      ],
+      'p-1',
+    );
+    expect(picked?.id).toBe('first-primary');
+  });
+
+  it('picks the newest created_at when the array is oldest-first', () => {
+    const picked = pickLibraryDisplayImage(
+      [
+        img({ id: 'old', persona_id: 'p-1', created_at: '2026-01-01T00:00:00Z' }),
+        img({ id: 'new', persona_id: 'p-1', created_at: '2026-04-01T00:00:00Z' }),
+      ],
+      'p-1',
+    );
+    expect(picked?.id).toBe('new');
+  });
+
+  it('breaks a created_at tie with the larger id', () => {
+    const picked = pickLibraryDisplayImage(
+      [
+        img({ id: 'aa', persona_id: 'p-1', created_at: '2026-01-02T00:00:00Z' }),
+        img({ id: 'ab', persona_id: 'p-1', created_at: '2026-01-02T00:00:00Z' }),
+      ],
+      'p-1',
+    );
+    expect(picked?.id).toBe('ab');
+  });
 });
+

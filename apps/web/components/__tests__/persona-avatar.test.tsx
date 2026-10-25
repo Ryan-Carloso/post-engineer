@@ -67,6 +67,13 @@ describe('PersonaAvatar', () => {
     expect(screen.getByAltText('Viva Leve')).toHaveAttribute('src', 'https://x.test/l.png');
   });
 
+  it('skips an empty avatar URL and uses the library', () => {
+    render(
+      <PersonaAvatar avatarUrl="" photoUrl="" libraryUrl="https://x.test/l.png" name="Viva Leve" />,
+    );
+    expect(screen.getByAltText('Viva Leve')).toHaveAttribute('src', 'https://x.test/l.png');
+  });
+
   it('ignores an empty library URL the same as a missing one', () => {
     render(<PersonaAvatar libraryUrl="" name="Viva Leve" />);
 

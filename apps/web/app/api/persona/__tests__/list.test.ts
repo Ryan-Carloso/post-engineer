@@ -359,4 +359,46 @@ describe('GET /api/persona/list', () => {
     expect(body.personas[0].libraryUrl).toBeUndefined();
     expect(body.personas[0].photoUrl).toBe(`https://supabase.test/signed/${USER_ID}/foto.png`);
   });
+
+  it('still lists a persona whose only face is the library image', async () => {
+    mockSupabase({
+      personas: [
+        {
+          id: 'p-lib',
+          name: 'Lib Only',
+          photo_path: null,
+          avatar_url: null,
+          voice_id: null,
+          voice_audio_path: null,
+          created_at: '2026-08-29T00:00:00Z',
+          language: null,
+          video_aspect: null,
+          script_prompt: null,
+          paragraph_number: null,
+        },
+      ],
+      images: [
+        {
+          id: 'img-lib',
+          persona_id: 'p-lib',
+          image_path: `${USER_ID}/p-lib/face.png`,
+          is_primary: false,
+          created_at: '2026-02-01T00:00:00Z',
+        },
+      ],
+    });
+
+    const res = await GET(new Request('http://localhost:3434/api/persona/list'));
+    const body = (await res.json()) as {
+      personas: Array<{ id: string; libraryUrl?: string; avatarUrl?: string; photoUrl?: string }>;
+    };
+
+    expect(res.status).toBe(200);
+    expect(body.personas).toHaveLength(1);
+    expect(body.personas[0].avatarUrl).toBeUndefined();
+    expect(body.personas[0].photoUrl).toBeUndefined();
+    expect(body.personas[0].libraryUrl).toBe(
+      `https://supabase.test/signed/${USER_ID}/p-lib/face.png`,
+    );
+  });
 });
