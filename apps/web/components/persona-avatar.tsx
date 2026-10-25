@@ -58,6 +58,7 @@ export default function PersonaAvatar({
   // stays a blank circle forever (same guard as account-card.tsx).
   const [failedCount, setFailedCount] = useState(0);
   useEffect(() => {
+    // A URL change is a new candidate chain and must start at 0.
     setFailedCount(0);
   }, [avatarUrl, photoUrl, libraryUrl]);
   const imageUrl = candidates[failedCount];

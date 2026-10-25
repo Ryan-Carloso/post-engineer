@@ -179,7 +179,7 @@ function mockSupabase(
         createSignedUrl: vi.fn(async (path: string, _expires: number) => {
           signed.push(path);
           if (overrides.signErrorPaths?.includes(path)) {
-            return { data: null, error: { message: 'sign failed' } };
+            return { data: { signedUrl: 'https://bad.example/signed' }, error: { message: 'sign failed' } };
           }
           if (overrides.signEmptyUrlPaths?.includes(path)) {
             return { data: { signedUrl: '' }, error: null };
@@ -384,6 +384,16 @@ describe('GET /api/persona/list', () => {
     expect(res.status).toBe(200);
     expect(body.personas[0].libraryUrl).toBeUndefined();
     expect(body.personas[0].photoUrl).toBe(`https://supabase.test/signed/${USER_ID}/foto.png`);
+  });
+
+  it('omits photoUrl when createSignedUrl returns error even if data.signedUrl is set', async () => {
+    mockSupabase({ signErrorPaths: [`${USER_ID}/foto.png`] });
+
+    const res = await GET(new Request('http://localhost:3434/api/persona/list'));
+    const body = (await res.json()) as { personas: Array<{ photoUrl?: string }> };
+
+    expect(res.status).toBe(200);
+    expect(body.personas[0].photoUrl).toBeUndefined();
   });
 
   it('still lists a persona whose only face is the library image', async () => {

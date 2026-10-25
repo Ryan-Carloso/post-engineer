@@ -161,10 +161,13 @@ async function signedUrl(
   path: string | null,
 ): Promise<string | undefined> {
   if (!path) return undefined;
-  const { data } = await supabase.storage
+  const { data, error } = await supabase.storage
     .from('personas')
     .createSignedUrl(path, SIGNED_URL_EXPIRES_SECONDS);
-  return data?.signedUrl;
+  if (error || data === null || data === undefined || !data.signedUrl) {
+    return undefined;
+  }
+  return data.signedUrl;
 }
 
 async function signedLibraryUrl(
