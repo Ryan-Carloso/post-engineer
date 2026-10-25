@@ -281,6 +281,7 @@ describe('ingestRemotePersonaFaces', () => {
   });
 
   it('counts an update error as failed', async () => {
+    const remove = vi.fn(async () => ({ error: null }));
     const supabase = {
       from: vi.fn(() => ({
         select: vi.fn(() => ({
@@ -300,6 +301,7 @@ describe('ingestRemotePersonaFaces', () => {
       storage: {
         from: vi.fn(() => ({
           upload: vi.fn(async (path: string) => ({ data: { path }, error: null })),
+          remove,
         })),
       },
     };
@@ -308,6 +310,7 @@ describe('ingestRemotePersonaFaces', () => {
       lookupImpl: publicLookup(),
     });
     expect(result).toEqual({ migrated: 0, skipped: 0, failed: 1 });
+    expect(remove).toHaveBeenCalledWith(['u1/ok/photo.png']);
   });
 });
 

@@ -81,7 +81,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   }
 
   const hasPhoto = body.photo !== null;
-  const hasAvatarUrl = typeof body.values.avatarUrl === 'string' && body.values.avatarUrl.trim() !== '';
+  const hasAvatarUrl = body.values.avatarUrl !== null;
   const visualError = validateVisualCues(hasPhoto, hasAvatarUrl);
   if (visualError) {
     return errorResponse(400, visualError, 'POST /api/persona');
@@ -161,7 +161,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     return errorResponse(500, 'Failed to upload photo.', 'POST /api/persona');
   }
 
-  let avatarUrl = hasAvatarUrl ? body.values.avatarUrl : null;
+  let avatarUrl = body.values.avatarUrl;
   let photoPathToRollback = photoPath;
   if (photoPathToRollback === null && typeof avatarUrl === 'string') {
     const resolved = await resolvePersonaAvatar(supabase, user.id, personaId, avatarUrl);
@@ -356,8 +356,6 @@ async function patchHandler(request: Request): Promise<NextResponse> {
     if (typeof persona.photo_path === 'string' && persona.photo_path && persona.photo_path !== photoPath) {
       stalePaths.push(persona.photo_path);
     }
-  } else if (typeof patch.avatarUrl === 'string' && patch.avatarUrl.trim() === '') {
-    updates.avatar_url = null;
   } else if (patch.avatarUrl !== null) {
     const resolved = await resolvePersonaAvatar(supabase, user.id, personaId, patch.avatarUrl, {
       existingPhotoPath: typeof persona.photo_path === 'string' ? persona.photo_path : null,

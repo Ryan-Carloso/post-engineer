@@ -357,6 +357,7 @@ export async function ingestRemotePersonaFaces(
       .eq('user_id', row.user_id);
     if (updateError) {
       logger.error('[persona-remote-face] update failed', updateError, { personaId: row.id });
+      await rollbackStoragePath(supabase, resolved.photoPath);
       failed += 1;
       continue;
     }
