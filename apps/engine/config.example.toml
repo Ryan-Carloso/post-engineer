@@ -576,7 +576,8 @@ upload_post_youtube_privacy_status = "public"
 # docker-compose.yml). House voices come from app/services/voice_catalog.json.
 # api_key MUST equal the CHATTERBOX_HTTP_SECRET the tts service was started
 # with (the server 401s without it); same value as [cloned_voices]
-# registry_api_key below.
+# registry_api_key below. Under docker-compose the MPT_CHATTERBOX_BASE_URL /
+# MPT_CHATTERBOX_API_KEY env vars override these two values.
 base_url = "http://127.0.0.1:4123/v1"
 api_key = ""
 model_id = "chatterbox"
