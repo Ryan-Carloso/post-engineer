@@ -1739,12 +1739,16 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(200);
       const events = capturedEvents.filter((entry) => entry.event === 'voice_fallback_applied');
       expect(events).toHaveLength(1);
-      const fromVoice = events[0]?.properties.from_voice as string;
+      const event = events[0];
+      if (event === undefined) {
+        throw new Error('expected a voice_fallback_applied capture');
+      }
+      const fromVoice = String(event.properties.from_voice);
       expect(fromVoice).not.toContain('hunter2');
       expect(fromVoice).not.toContain('sk-abcdefghijklmnopqrstuvwxyz');
       expect(fromVoice).toContain('[redacted]');
       expect(fromVoice.length).toBeLessThanOrEqual(500);
-      expect(events[0]?.distinctId).toBe(USER_ID);
+      expect(event.distinctId).toBe(USER_ID);
     });
 
     it('keeps the gender a legacy -Female suffix spells out', async () => {
