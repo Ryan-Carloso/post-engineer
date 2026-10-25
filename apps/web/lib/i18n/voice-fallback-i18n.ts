@@ -22,6 +22,8 @@ export const voiceFallbackStrings = {
         'The voice {fromVoice} is no longer available; new videos will use {toVoice}. You can change it in Persona → Voice.',
       voiceFallbackMissingWarning:
         'No usable voice is configured; new videos would use {toVoice}. You can change it in Persona → Voice.',
+      voiceUnavailableWarning:
+        'This persona’s voice is unavailable and there is no default voice for its language. Update the persona.',
     },
   },
   pt: {
@@ -38,6 +40,8 @@ export const voiceFallbackStrings = {
         'A voz {fromVoice} deixou de estar disponível; novos vídeos usarão {toVoice}. Podes mudar em Persona → Voz.',
       voiceFallbackMissingWarning:
         'Não há voz configurada; novos vídeos usarão {toVoice}. Podes mudar em Persona → Voz.',
+      voiceUnavailableWarning:
+        'A voz desta persona não está disponível e não há voz padrão para o idioma. Atualize a persona.',
     },
   },
 } as const;

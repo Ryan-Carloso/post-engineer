@@ -92,17 +92,14 @@ const PersonaPageContent = () => {
     if (!persona) return;
     const store = usePersonaStore.getState();
     store.setName(persona.name);
-    // avatarUrl is a CHOSEN character (public/caracter-samples or an AI
-    // avatar). photoUrl is the 1h signed link to an uploaded photo — putting
-    // it here made every save send it back as avatarUrl, which either stored
-    // an expiring URL or (with the visual-identity check) 500'd. A photo
-    // persona simply has no character selected.
+    // avatarUrl is a chosen character; photoUrl is a 1h signed upload link
+    // and must not be written back as avatarUrl.
     store.setAvatarUrl(persona.avatarUrl ?? null);
     store.setStoredPhotoUrl(persona.photoUrl ?? null);
     store.setVoiceId(persona.voiceId ?? null);
+    store.setLanguage(persona.language ?? null);
     store.setVideoAspect(persona.videoAspect ?? '9:16');
-    // The column is nullable (migration 018), so a persona created before the
-    // layout existed has none — fall back to what every older video rendered.
+    // Nullable layout (migration 018): older personas rendered standard.
     store.setVideoLayout(persona.videoLayout ?? 'standard');
     store.setScriptPrompt(persona.scriptPrompt ?? '');
     store.setCtaText(persona.ctaText ?? '');
@@ -141,22 +138,19 @@ const PersonaPageContent = () => {
           <section className="space-y-6 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
             <PersonaNameField />
             <PersonaAvatarSection />
-            {/* Image library needs a PERSISTED persona, and the loaded data:
-                while the list is fetching (or errored) editingPersona is
-                undefined and the section stays hidden instead of flashing
-                for a persona that does not exist yet. Every persona is faced
-                (migration 007), so there is no faceless gate here anymore —
-                a legacy persona without a photo is exactly the case this
-                library exists to fix. */}
+            {/* Library needs a persisted, loaded persona (no flash while the
+                list is fetching). Every persona is faced (migration 007). */}
             {editingPersonaId && editingPersona !== undefined ? (
               <PersonaImageLibrarySection personaId={editingPersonaId} />
             ) : null}
-            {/* Face quality + estimated cost per video. The face itself is
-                always there; only the resolution is chosen here. */}
+            {/* Face quality + estimated cost per video. */}
             <PersonaTokensSection />
           </section>
           <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
-            <PersonaVoiceSection voiceHydrated={isPersonaVoiceHydrated(editingPersonaId, editingPersona)} />
+            <PersonaVoiceSection
+              voiceHydrated={isPersonaVoiceHydrated(editingPersonaId, editingPersona)}
+              isEditing={Boolean(editingPersonaId)}
+            />
           </section>
           <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
             <PersonaPreferencesSection />

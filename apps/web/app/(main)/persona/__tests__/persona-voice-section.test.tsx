@@ -9,6 +9,7 @@ import { isPersonaVoiceHydrated, PersonaVoiceSection } from '../persona-voice-se
 const sectionMocks = vi.hoisted(() => ({
   result: null as { success: boolean; error: string } | null,
   voiceId: null as string | null,
+  language: null as string | null,
   voices: [] as Array<{ id: string; label: string | null; provider: string; gender: string | null; accent: string | null; kind: string; description: string | null }>,
 }));
 
@@ -23,6 +24,9 @@ vi.mock('@/lib/store', () => {
     },
     get voiceId() {
       return sectionMocks.voiceId;
+    },
+    get language() {
+      return sectionMocks.language;
     },
   };
   const usePersonaStore = Object.assign(
@@ -80,6 +84,7 @@ describe('PersonaVoiceSection', () => {
   beforeEach(() => {
     sectionMocks.result = null;
     sectionMocks.voiceId = 'chatterbox:kokoro_af_heart';
+    sectionMocks.language = null;
     sectionMocks.voices = [
       { id: 'chatterbox:kokoro_af_heart', label: 'Heart', provider: 'kokoro', gender: 'female', accent: 'us', kind: 'standard', description: null },
     ];
@@ -175,9 +180,24 @@ describe('PersonaVoiceSection', () => {
   it('warns with the missing-voice copy when the loaded persona has no voice', () => {
     // The list route omits a missing voice_id; the page writes null.
     sectionMocks.voiceId = null;
-    render(<PersonaVoiceSection voiceHydrated />);
+    render(<PersonaVoiceSection voiceHydrated isEditing />);
     const warning = screen.getByTestId('persona-voice-fallback-warning');
     expect(warning).toHaveTextContent('persona.voiceFallbackMissingWarning');
+  });
+
+  it('does not warn VOICE_MISSING on a pristine create form', () => {
+    sectionMocks.voiceId = null;
+    render(<PersonaVoiceSection voiceHydrated isEditing={false} />);
+    expect(screen.queryByTestId('persona-voice-fallback-warning')).not.toBeInTheDocument();
+  });
+
+  it('shows VOICE_UNAVAILABLE for a non-English persona with a broken voice', () => {
+    sectionMocks.voiceId = 'energetic';
+    sectionMocks.language = 'pt';
+    render(<PersonaVoiceSection voiceHydrated isEditing />);
+    expect(screen.getByTestId('persona-voice-fallback-warning')).toHaveTextContent(
+      'persona.voiceUnavailableWarning',
+    );
   });
 
   it('does not warn for a not-yet-loaded persona whose store voiceId is still null', () => {

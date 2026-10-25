@@ -1816,6 +1816,17 @@ describe('POST /api/videos/generate-and-schedule', () => {
       ]);
     });
 
+    it('does not persist a voice swap when spend returns spent !== true', async () => {
+      setup({
+        ...DEFAULT_CFG,
+        persona: { ...PERSONA, voice_id: 'energetic' },
+        spend: { spent: false, balance: 2 },
+      });
+      const res = await post(baseBody());
+      expect(res.status).toBe(402);
+      expect(updates.filter((row) => row.table === 'personas')).toEqual([]);
+    });
+
     it('survives a persist ERROR object the same way (no throw, warning kept)', async () => {
       vi.mocked(getPostHogServer).mockReturnValue(recordingClient as never);
       setup({ ...DEFAULT_CFG, persona: { ...PERSONA, voice_id: null, voice_audio_path: null }, updateErrorTables: ['personas'] });

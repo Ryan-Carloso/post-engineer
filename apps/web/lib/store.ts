@@ -212,6 +212,8 @@ interface PersonaFormState {
       the link expires in 1h. */
   storedPhotoUrl: string | null;
   voiceId: string | null;
+  /** Persona script language (edit hydrate). Voice fallback uses this. */
+  language: string | null;
   videoAspect: string;
   /** How the persona is composed with the b-roll during the hook.
    *  'standard' = the avatar fills the frame; 'react' = the frame splits,
@@ -232,6 +234,7 @@ interface PersonaFormState {
   setAvatarUrl: (url: string | null) => void;
   setStoredPhotoUrl: (url: string | null) => void;
   setVoiceId: (id: string | null) => void;
+  setLanguage: (language: string | null) => void;
   setVideoAspect: (value: string) => void;
   setVideoLayout: (value: string) => void;
   setScriptPrompt: (value: string) => void;
@@ -250,6 +253,7 @@ const initialPersonaState = {
   avatarUrl: null,
   storedPhotoUrl: null,
   voiceId: null,
+  language: null,
   videoAspect: '9:16',
   videoLayout: 'standard',
   scriptPrompt: '',
@@ -268,6 +272,7 @@ export const usePersonaStore = create<PersonaFormState>()(
     setAvatarUrl: (avatarUrl) => set({ avatarUrl }),
     setStoredPhotoUrl: (storedPhotoUrl) => set({ storedPhotoUrl }),
     setVoiceId: (voiceId) => set({ voiceId }),
+    setLanguage: (language) => set({ language }),
     setVideoAspect: (videoAspect) => set({ videoAspect }),
     setVideoLayout: (videoLayout) => set({ videoLayout }),
     setScriptPrompt: (scriptPrompt) => set({ scriptPrompt }),

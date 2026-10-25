@@ -23,12 +23,17 @@ export function isPersonaVoiceHydrated(
 
 export const PersonaVoiceSection = ({
   voiceHydrated = true,
+  isEditing = false,
 }: {
   voiceHydrated?: boolean;
+  /** True while editing a saved persona. The create form starts with a
+   *  null voiceId; VOICE_MISSING must not warn until a persona exists. */
+  isEditing?: boolean;
 }) => {
   const { t } = useI18n();
   const result = usePersonaStore((s) => s.result);
   const savedVoiceId = usePersonaStore((s) => s.voiceId);
+  const language = usePersonaStore((s) => s.language);
   const voicesQuery = useVoicesQuery();
   const [voiceTab, setVoiceTab] = useState<'house' | 'clone'>('house');
 
@@ -40,18 +45,23 @@ export const PersonaVoiceSection = ({
   // before the user ever generates a video, so the swap the API persists is
   // never a surprise. A freshly picked voice from either tab is in the
   // catalog by construction, so the warning only ever names a stale id.
+  // Language comes from the persona store so a legacy non-English row is
+  // not promised an English house swap the API will refuse.
   //---------------
   const catalogIds = new Set((voicesQuery.data ?? []).map((voice) => voice.id));
   // Skip the check while the catalog is loading, failed, or empty: an empty
   // set would flag every house voice as retired, and a load failure is
   // already surfaced by the picker's own retry states.
-  // Language is omitted: this screen never sees a non-English persona.
-  // Create/edit is gated to English (#252) until other languages launch.
   const resolution =
     !voiceHydrated || catalogIds.size === 0
       ? null
-      : resolvePersonaVoice(savedVoiceId, undefined, { catalogIds });
+      : resolvePersonaVoice(savedVoiceId, language, { catalogIds });
+  const unavailable = resolution?.kind === 'unavailable';
   const fallback = resolution?.kind === 'fallback' ? resolution : null;
+  const showMissing = isEditing && fallback?.reason === VOICE_FALLBACK_REASONS.VOICE_MISSING;
+  const showFallback =
+    fallback !== null &&
+    (fallback.reason !== VOICE_FALLBACK_REASONS.VOICE_MISSING || showMissing);
   const fallbackKey =
     fallback?.reason === VOICE_FALLBACK_REASONS.VOICE_MISSING
       ? 'persona.voiceFallbackMissingWarning'
@@ -60,7 +70,11 @@ export const PersonaVoiceSection = ({
   return (
     <section data-error-field="voice">
       <SectionDivider label={t('persona.voiceLabel')} />
-      {fallback !== null ? (
+      {unavailable ? (
+        <p role="status" className="mb-3 rounded-xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800" data-testid="persona-voice-fallback-warning">
+          {t('persona.voiceUnavailableWarning')}
+        </p>
+      ) : showFallback && fallback !== null ? (
         <p role="status" className="mb-3 rounded-xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800" data-testid="persona-voice-fallback-warning">
           {fallback.fromVoice.length === 0
             ? t(fallbackKey, { toVoice: fallback.toVoice })

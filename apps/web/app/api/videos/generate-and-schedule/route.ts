@@ -689,12 +689,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
     }
   }
 
-  // Persist a voice swap only after every request-level validation that can
-  // still 400: a rejected generate must not rewrite personas.voice_id.
-  if (prep.voiceFallback !== undefined && personaId !== null) {
-    await persistVoiceSwap(supabase, userId, personaId, prep.voiceFallback);
-  }
-
   // 6. Cost for the whole operation, computed BEFORE the charge.
   const perVideoCost = computeVideoTokens(prep.faceless, prep.faceQuality);
   const totalCost = perVideoCost * topics.length;
@@ -841,6 +835,13 @@ async function postHandler(request: Request): Promise<NextResponse> {
     tokenCost: totalCost,
     generationId: idem.generationId,
   });
+
+  // Persist a voice swap only after a successful spend (or a ledger hit
+  // that already charged): a 402 / failed lookup must not rewrite
+  // personas.voice_id. Slot dispatch still sees the swapped id on prep.
+  if (prep.voiceFallback !== undefined && personaId !== null) {
+    await persistVoiceSwap(supabase, userId, personaId, prep.voiceFallback);
+  }
 
   // 9. Insert the schedule. The id is deterministic (idempotency anchor).
   // scheduled_at is a legacy column that always stays NULL during dispatch,
