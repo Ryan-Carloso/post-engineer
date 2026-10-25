@@ -49,6 +49,19 @@ export async function register() {
     const { startInternalScheduler, isSchedulerEnabled } = await import('./lib/scheduler-jobs');
     if (isSchedulerEnabled()) {
       startInternalScheduler();
+    } else if (process.env.NODE_ENV === 'production') {
+      // Never silent: the scheduler owns post-metrics AND billing
+      // reconciliation (stuckgeneration checks, stale auto-refunds). A
+      // production deploy with the scheduler disabled means no refund or
+      // reconcile ever lands, so say exactly why it was skipped, once.
+      console.warn(
+        '[web] internal scheduler DISABLED in production: ' +
+          `NODE_ENV=${process.env.NODE_ENV ?? 'unset'} ` +
+          `NEXT_RUNTIME=${process.env.NEXT_RUNTIME ?? 'unset'} ` +
+          `SCHEDULER_ENABLED=${process.env.SCHEDULER_ENABLED ?? 'unset'}. ` +
+          'Set NODE_ENV=production or SCHEDULER_ENABLED=true and redeploy — ' +
+          'stuck-generation reconciliation and post metrics will not run.',
+      );
     }
   }
 }

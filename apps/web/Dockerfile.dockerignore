@@ -1,0 +1,14 @@
+# Build context is the monorepo root (apps/web/docker-compose.yml), so
+# without this file `COPY apps/web ./apps/web` also copies the host's
+# apps/web/node_modules over the one `pnpm install --frozen-lockfile` just
+# built in the image. A stale host install then hides newly added
+# dependencies ("Module not found: @radix-ui/react-aspect-ratio"), and the
+# prod web build has failed on every deploy since 2026-10-23.
+# apps/web/.env is deliberately NOT ignored: NEXT_PUBLIC_* vars are inlined
+# at build time from it.
+**/node_modules
+**/.next
+.git
+**/coverage
+**/.stryker-tmp
+apps/engine

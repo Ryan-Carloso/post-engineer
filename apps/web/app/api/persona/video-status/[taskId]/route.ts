@@ -11,6 +11,7 @@ import {
 import { apiErrorResponse } from '@/lib/api-error';
 import { rewriteVideoUrls, SAFE_TASK_ID } from '@/lib/video-urls';
 import { taskPayload, taskState, extractTaskError } from '@/lib/engine-task-state';
+import { hasPublishedSlotForTask, readDurableTaskState } from '@/lib/generation/gone-settle';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
@@ -50,11 +51,69 @@ async function getHandler(
     });
     const body: unknown = await response.json().catch(() => null);
     if (response.status === 404) {
-      // The engine no longer knows this task — polling again will 404
-      // forever, so this is terminal: fail the generation with
-      // engine_restart and refund, exactly like a numeric failed state.
-      // 410 Gone tells the caller to stop polling.
+      // The engine no longer serves this task. Its HTTP verdict is not
+      // trusted on its own, and it may not cost the user a refund either:
+      // the SAME verdict the slot-gone path applies decides here (see
+      // lib/generation/gone-settle.ts):
+      //   1. durable engine_task_state COMPLETE with a render → completed;
+      //   2. a published scheduled_posts slot for the task → completed
+      //      (delivered value — never refunded);
+      //   3. only otherwise the failed+refund verdict stands.
       const supabase = createSupabaseServiceClient();
+      const durable = await readDurableTaskState(supabase, auth.userId, taskId);
+      let delivered: boolean = durable.complete && durable.hasVideos;
+      if (!delivered) {
+        const published = await hasPublishedSlotForTask(supabase, auth.userId, taskId);
+        if (published === null) {
+          // The published-slot read failed: the state is unverifiable, and the
+          // gone-settle policy says an unverifiable state must not record a
+          // terminal verdict (or a refund). Answer non-terminal; the next
+          // poll retries and the billing reconcile is the eventual backstop.
+          return apiErrorResponse(502, 'Video service is unavailable.', {
+            route: 'GET /api/persona/video-status',
+          });
+        }
+        delivered = published === true;
+      }
+      if (!delivered && durable.errored) {
+        // The durable row could not be READ (not merely absent) and there is
+        // no published-slot proof to consult instead: without it, "the task
+        // died" is unproven, so no `failed` verdict and no refund — log and
+        // answer non-terminal for the next poll to retry.
+        return apiErrorResponse(502, 'Video service is unavailable.', {
+          route: 'GET /api/persona/video-status',
+        });
+      }
+      if (delivered) {
+        const generationId = await lookupChargeGenerationId(supabase, auth.userId, taskId);
+        const resolution = generationId ?? (await resolveGenerationIdByEngineTask(supabase, auth.userId, taskId));
+        if (resolution) {
+          const { data: history } = await supabase
+            .from('video_generations')
+            .select('status, tokens_refunded')
+            .eq('generation_id', resolution)
+            .maybeSingle();
+          if (!terminalAlreadyRecorded(history, 'completed')) {
+            await recordGenerationUpdate({
+              supabase,
+              generationId: resolution,
+              status: 'completed',
+              engineTaskId: taskId,
+            });
+          }
+        }
+        return NextResponse.json(
+          {
+            success: false,
+            terminal: true,
+            error: 'The video task no longer exists on the generation engine.',
+          },
+          { status: 410 },
+        );
+      }
+      // Nothing proves the video finished: the historical failed verdict
+      // stands (failed with engine_restart and refund, exactly like a
+      // numeric failed state; 410 tells the caller to stop polling).
       await recordTerminalFailure({
         supabase,
         userId: auth.userId,
