@@ -13,7 +13,7 @@ from loguru import logger
 
 from app.models.schema import VideoParams
 from app.services import longcat, longcat_breaker, persona_hook, state as sm
-from app.services.analytics import track_event
+from app.services.analytics import scrub_error_text, track_event
 from app.services.intro_cost import IntroCostReport
 
 AVATAR_DISABLED_WARNING_CODE = "avatar_disabled"
@@ -123,7 +123,8 @@ def refund_face_premium(task_id: str, premium: int) -> None:
             )
     except Exception as inner_exp:  # noqa: BLE001 — refund is best-effort here
         logger.error(
-            f"refund_batch_tokens failed for task {task_id} face premium: {inner_exp}"
+            "refund_batch_tokens failed for task "
+            f"{task_id} face premium: {scrub_error_text(str(inner_exp))}"
         )
 
 

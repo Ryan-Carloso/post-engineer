@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -14,14 +15,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.models.schema import PersonaParams, VideoParams
 from app.services import longcat, longcat_faceless_fallback as lff
-
-
-def _breaker_path(breaker_root: str):
-    def _path(root=None):
-        base = root if root is not None else breaker_root
-        return os.path.join(base, "marker.json")
-
-    return _path
+from app.services import longcat_breaker
+from test.services.longcat_breaker_path import breaker_path as _breaker_path
 
 
 class TestLongcatFacelessFallback(unittest.TestCase):
@@ -97,3 +92,65 @@ class TestLongcatFacelessFallback(unittest.TestCase):
                 self.assertFalse(honored.startswith(breaker_root))
             finally:
                 os.rmdir(outside)
+
+    def test_should_emit_event_warns_when_the_marker_write_fails(self):
+        now = datetime(2026, 10, 25, 9, 0, tzinfo=timezone.utc)
+        with tempfile.TemporaryDirectory() as breaker_root, \
+             patch.object(longcat_breaker, "_write_state", return_value=False), \
+             patch.object(longcat_breaker.logger, "warning") as warn:
+            self.assertFalse(longcat_breaker.should_emit_event(now, root=breaker_root))
+        self.assertTrue(any("did not persist" in str(c) for c in warn.call_args_list))
+
+    def test_should_alert_warns_when_the_marker_write_fails(self):
+        now = datetime(2026, 10, 25, 12, 0, tzinfo=timezone.utc)
+        with tempfile.TemporaryDirectory() as breaker_root, \
+             patch.object(longcat_breaker, "_write_state", return_value=False), \
+             patch.object(longcat_breaker.logger, "warning") as warn:
+            self.assertFalse(longcat_breaker.should_alert(now, root=breaker_root))
+        self.assertTrue(any("did not persist" in str(c) for c in warn.call_args_list))
+
+    def test_refund_error_is_scrubbed_before_the_log(self):
+        state = MagicMock()
+        state.get_task.return_value = {
+            "user_id": "alice",
+            "generation_id": "batch:sched-9:slot:slot-1",
+        }
+        state._rpc = MagicMock(side_effect=RuntimeError("/secret/path/token.json boom"))
+        with patch.object(lff.sm, "state", state), \
+             patch.object(lff.logger, "error") as log_error:
+            lff.refund_face_premium("t-refund", 1)
+        message = str(log_error.call_args)
+        self.assertNotIn("/secret/path/token.json", message)
+        self.assertIn("refund_batch_tokens failed", message)
+
+    def test_should_alert_hour_bucket_allows_the_next_hour(self):
+        with tempfile.TemporaryDirectory() as breaker_root:
+            first = datetime(2026, 10, 25, 12, 59, tzinfo=timezone.utc)
+            same = datetime(2026, 10, 25, 12, 0, tzinfo=timezone.utc)
+            next_hour = datetime(2026, 10, 25, 13, 0, tzinfo=timezone.utc)
+            self.assertTrue(longcat_breaker.should_alert(first, root=breaker_root))
+            self.assertFalse(longcat_breaker.should_alert(same, root=breaker_root))
+            self.assertTrue(longcat_breaker.should_alert(next_hour, root=breaker_root))
+
+    def test_report_alerts_again_in_the_next_hour_bucket(self):
+        """should_alert keys on %Y-%m-%dT%H: the next hour is a new alert."""
+        first = datetime(2026, 10, 25, 12, 30, tzinfo=timezone.utc)
+        next_hour = datetime(2026, 10, 25, 13, 0, tzinfo=timezone.utc)
+        with patch.dict(os.environ, {"TEST_ACCOUNT_USER_IDS": "someone-else"}), \
+                tempfile.TemporaryDirectory() as breaker_root, \
+                patch.object(lff, "datetime") as dt:
+            dt.now.side_effect = [first, next_hour]
+            dt.timezone = timezone
+            state = MagicMock()
+            state.get_task.return_value = {"user_id": "real-user"}
+            with patch.object(lff.longcat_breaker, "_state_path",
+                              side_effect=_breaker_path(breaker_root)), \
+                    patch.object(lff.sm, "state", state), \
+                    patch.object(lff.sm, "persist_state_update"), \
+                    patch.object(lff, "track_event"), \
+                    patch.object(lff, "_discord_notify") as discord, \
+                    patch.object(lff.logger, "error") as log_error:
+                lff.report_longcat_faceless_fallback("t1", {"user_id": "real-user"})
+                lff.report_longcat_faceless_fallback("t2", {"user_id": "real-user-2"})
+                self.assertEqual(log_error.call_count, 2)
+                self.assertEqual(discord.call_count, 2)

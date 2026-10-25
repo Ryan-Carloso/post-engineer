@@ -5,6 +5,7 @@ import {
   fetchEngineScriptAngle,
   fetchEnginePostMetricsSource,
   fetchEngineTaskProgress,
+  warningsFromTask,
   ENGINE_TASK_PROGRESS_TIMEOUT_MS,
 } from '../engine-tasks';
 
@@ -80,6 +81,13 @@ describe('fetchEngineTaskProgress', () => {
     expect(result.gone).toBe(true);
     expect(result.state).toBe(-1);
     expect(result.progress).toBe(0);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('carries user_warning_codes from the task record', async () => {
+    mockEngine({ body: { progress: 45, state: 4, user_warning_codes: ['avatar_disabled', '', 1] } });
+    const result = await fetchEngineTaskProgress(TASK_ID, 'user-1');
+    expect(result.warnings).toEqual(['avatar_disabled']);
   });
 
   it('reports a live task as not gone', async () => {
@@ -238,6 +246,20 @@ describe('fetchEngineScriptAngle', () => {
   });
 });
 
+describe('warningsFromTask', () => {
+  it('returns [] for a missing task or a non-array codes field', () => {
+    expect(warningsFromTask(null)).toEqual([]);
+    expect(warningsFromTask({})).toEqual([]);
+    expect(warningsFromTask({ user_warning_codes: 'avatar_disabled' })).toEqual([]);
+  });
+
+  it('keeps only non-empty strings', () => {
+    expect(warningsFromTask({ user_warning_codes: ['avatar_disabled', '', null, 2] })).toEqual([
+      'avatar_disabled',
+    ]);
+  });
+});
+
 describe('fetchEnginePublishResults', () => {
   it('still returns the publish_results array through the shared task fetch', async () => {
     vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
@@ -257,11 +279,18 @@ describe('fetchEnginePostMetricsSource', () => {
   }
 
   it('returns publish results and the trimmed angle from one task read', async () => {
-    mockEngine({ status: 200, body: { publish_results: [{ provider: 'youtube' }], script_angle: ' Myth ' } });
+    mockEngine({
+      status: 200,
+      body: {
+        publish_results: [{ provider: 'youtube' }],
+        script_angle: ' Myth ',
+        user_warning_codes: ['avatar_disabled'],
+      },
+    });
     await expect(fetchEnginePostMetricsSource(TASK_ID, 'user-1')).resolves.toEqual({
       publishResults: [{ provider: 'youtube' }],
       scriptAngle: 'Myth',
-      warnings: [],
+      warnings: ['avatar_disabled'],
     });
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
   });

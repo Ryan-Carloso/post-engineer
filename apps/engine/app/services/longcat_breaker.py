@@ -29,6 +29,8 @@ import tempfile
 from datetime import datetime, timezone
 from typing import Any
 
+from loguru import logger
+
 
 def _state_path(root: str | None = None) -> str:
     if root is not None:
@@ -126,7 +128,11 @@ def should_emit_event(now: datetime, root: str | None = None) -> bool:
     if state.get("last_event_day") == today:
         return False
     state["last_event_day"] = today
-    _write_state(path, state)
+    if not _write_state(path, state):
+        logger.warning(
+            "longcat breaker event marker did not persist (marker write failed)"
+        )
+        return False
     return True
 
 
@@ -160,5 +166,9 @@ def should_alert(now: datetime, root: str | None = None) -> bool:
     if state.get("last_alert_hour", "") == hour_bucket:
         return False
     state["last_alert_hour"] = hour_bucket
-    _write_state(path, state)
+    if not _write_state(path, state):
+        logger.warning(
+            "longcat breaker alert marker did not persist (marker write failed)"
+        )
+        return False
     return True

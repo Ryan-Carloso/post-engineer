@@ -17,6 +17,7 @@ from app.services.intro_cost import IntroCostReport, completion_cost_kwargs
 from app.services import intro_cost as intro_cost_module
 from app.models.schema import MaterialInfo, PersonaParams, VideoParams
 from app.utils import utils
+from test.services.longcat_breaker_path import breaker_path as _breaker_path
 
 resources_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources")
 RUN_INTEGRATION_TESTS = os.environ.get("MPT_RUN_INTEGRATION_TESTS", "").lower() in {
@@ -24,13 +25,6 @@ RUN_INTEGRATION_TESTS = os.environ.get("MPT_RUN_INTEGRATION_TESTS", "").lower() 
     "true",
     "yes",
 }
-
-def _breaker_path(breaker_root: str):
-    def _path(root=None):
-        base = root if root is not None else breaker_root
-        return os.path.join(base, "marker.json")
-
-    return _path
 
 
 class TestTaskService(unittest.TestCase):
