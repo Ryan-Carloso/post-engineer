@@ -22,6 +22,16 @@ function readPlatformVersion(): string {
   }
 }
 
+function readBuiltAt(): string {
+  const injected = process.env.BUILT_AT?.trim();
+  if (injected) return injected;
+  try {
+    return fs.readFileSync(path.join(__dirname, ".built-at"), "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
 const nextConfig: NextConfig = {
   /* config options here */
   // Standalone output: the Docker image (apps/web/Dockerfile) copies only
@@ -32,6 +42,7 @@ const nextConfig: NextConfig = {
     PR_NUMBER: process.env.PR_NUMBER?.trim() ?? '',
     BUILD: process.env.BUILD?.trim() ?? '',
     COMMIT: process.env.COMMIT?.trim() ?? '',
+    BUILT_AT: readBuiltAt(),
   },
   serverExternalPackages: ['googleapis', 'google-auth-library'],
   images: {
