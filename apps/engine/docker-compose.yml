@@ -58,7 +58,9 @@ services:
       resources:
         limits:
           cpus: "3.0"
-          memory: 6g
+          # Sized for the 16 GB VPS: CPU inference peaks with several agents
+          # in flight, so the old 6g cap tuned for the 8 GB box no longer fits.
+          memory: 8g
     logging:
       driver: json-file
       options:
@@ -103,7 +105,8 @@ services:
           cpus: "3.0"
           # Measured: Phonon + Kokoro resident ~1.5 GB; Chatterbox Nano adds
           # ~3 GB while clones are in use and is unloaded after 5 idle min.
-          memory: 5g
+          # 7g headroom on the 16 GB host; the old 5g cap was for the 8 GB box.
+          memory: 7g
     logging:
       driver: json-file
       options:
