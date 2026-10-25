@@ -29,13 +29,12 @@ name: opencode-review
 #   model list to rot — same convention as the engine's
 #   _PROVIDER_DEFAULT_MODELS); one OPENROUTER_API_KEY secret serves both
 #   tiers (free models cost $0 even on a paid key).
-#   Paid tiers run only when their key is set (zai → ZAI_API_KEY,
-#   openrouter → OPENROUTER_API_KEY, opencode → OPENCODE_ZEN_API_KEY for
-#   paid OpenCode Zen models; free opencode/* models need no secret).
-# - A second pass (REVIEW_MODEL_VERIFY, default a different provider) confirms
-#   or refutes pass 1. It is skipped when its key is missing, or when the
-#   diff is docs/assets-only and pass 1 has no CRITICAL/MAJOR. If pass 2
-#   drops every finding, the comment keeps pass 1.
+#   Paid OpenRouter needs OPENROUTER_API_KEY; paid OpenCode Zen needs
+#   OPENCODE_ZEN_API_KEY. Free opencode/*-free models need no secret.
+# - A second pass (REVIEW_MODEL_VERIFY, a different OpenCode free model)
+#   confirms or refutes pass 1. OpenCode free verify runs with no paid key.
+#   It is skipped when the diff is docs/assets-only and pass 1 has no
+#   CRITICAL/MAJOR. If pass 2 drops every finding, the comment keeps pass 1.
 # - Findings are mechanically grounded: verify-review-grounding.py accepts a
 #   backticked Location, re-anchors line numbers from the verbatim quote, and
 #   exits 1 when every finding is unverified. Unmatched findings are still
@@ -54,7 +53,8 @@ name: opencode-review
 #   pass came from a free model (exact id match, not a substring).
 #
 # Setup:
-# 1. Optional: add `ZAI_API_KEY` and/or `OPENROUTER_API_KEY` for paid tiers.
+# 1. Optional: OPENROUTER_API_KEY (OpenRouter free/paid) and/or
+#    OPENCODE_ZEN_API_KEY (paid OpenCode Zen). Review still runs with no secrets.
 # 2. Optional repo variables: REVIEW_MODEL_PRIMARY, REVIEW_MODEL_VERIFY,
 #    and REVIEW_MODEL_CHAIN_OVERRIDE (comma-separated attempt list).
 
@@ -69,22 +69,13 @@ concurrency:
 
 env:
   # REVIEW_MODEL_PRIMARY is the first attempt. Empty repo variable falls
-  # through to the Coding Plan model. OPENCODE_MODEL is the same default
-  # and is deduped when it matches the primary.
-  REVIEW_MODEL_PRIMARY: ${{ vars.REVIEW_MODEL_PRIMARY || 'zai-coding-plan/glm-5.3-flash' }}
-  REVIEW_MODEL_VERIFY: ${{ vars.REVIEW_MODEL_VERIFY || 'openrouter/z-ai/glm-5.3-flash' }}
-  OPENCODE_MODEL: zai-coding-plan/glm-5.3-flash
-  # Permanently-free fallback on the z.ai standard API so reviews survive
-  # Coding Plan quota exhaustion. Kept to glm-4.7-flash only — glm-4.5-flash
-  # was removed for poor review quality. Tried after the paid tiers.
-  ZAI_FREE_MODEL: glm-4.7-flash
-  # OpenRouter tiers. The free tier uses the special router id (no hardcoded
-  # model list to rot — same convention as the engine's _PROVIDER_DEFAULT_MODELS);
-  # the paid tier pins z-ai/glm-5.3-flash (verified live on the OpenRouter
-  # models API) instead of the auto router, for predictable review quality.
-  # One OPENROUTER_API_KEY serves both tiers. The free router is last.
+  # through to OpenCode free. OPENCODE_MODEL is the same default and is
+  # deduped when it matches the primary. VERIFY is a different preferredFree id.
+  REVIEW_MODEL_PRIMARY: ${{ vars.REVIEW_MODEL_PRIMARY || 'opencode/glm-5.3-flash-free' }}
+  REVIEW_MODEL_VERIFY: ${{ vars.REVIEW_MODEL_VERIFY || 'opencode/deepseek-v4.1-flash-free' }}
+  OPENCODE_MODEL: opencode/glm-5.3-flash-free
+  # OpenRouter last-resort free router (needs OPENROUTER_API_KEY when used).
   OPENROUTER_FREE_MODEL: openrouter/free
-  OPENROUTER_MODEL: z-ai/glm-5.3-flash
   # Optional comma-separated override of the runtime attempt list.
   REVIEW_MODEL_CHAIN_OVERRIDE: ${{ vars.REVIEW_MODEL_CHAIN_OVERRIDE || '' }}
 
@@ -189,9 +180,7 @@ jobs:
           REVIEW_MODEL_CHAIN_OVERRIDE: ${{ env.REVIEW_MODEL_CHAIN_OVERRIDE }}
           REVIEW_MODEL_PRIMARY: ${{ env.REVIEW_MODEL_PRIMARY }}
           OPENCODE_MODEL: ${{ env.OPENCODE_MODEL }}
-          OPENROUTER_MODEL: ${{ env.OPENROUTER_MODEL }}
           OPENROUTER_FREE_MODEL: ${{ env.OPENROUTER_FREE_MODEL }}
-          ZAI_FREE_MODEL: ${{ env.ZAI_FREE_MODEL }}
         run: |
           set -euo pipefail
           python3 .github/scripts/select-review-models.py \
@@ -230,21 +219,8 @@ jobs:
           for spec in chain.get("attempts") or []:
               add(groups, spec)
           add(groups, os.environ.get("REVIEW_MODEL_VERIFY", ""))
-          # OPENCODE_MODEL is provider/model; its provider bucket is already
-          # filled by add(). Also register the coding-plan model id explicitly
-          # when OPENCODE_MODEL points at zai-coding-plan.
           providers = {}
           endpoints = {
-              "zai-coding-plan": (
-                  "Z.AI GLM Coding Plan",
-                  "https://api.z.ai/api/coding/paas/v4",
-                  "ZAI_API_KEY",
-              ),
-              "zai-standard": (
-                  "Z.AI Standard API",
-                  "https://api.z.ai/api/paas/v4",
-                  "ZAI_API_KEY",
-              ),
               "openrouter": (
                   "OpenRouter",
                   "https://openrouter.ai/api/v1",
@@ -263,7 +239,7 @@ jobs:
               name, base_url, key_var = endpoints[provider]
               if not os.environ.get(key_var):
                   continue
-              # "npm": "@ai-sdk/openai-compatible" — same package for z.ai and OpenRouter.
+              # "npm": "@ai-sdk/openai-compatible" — same package for OpenCode and OpenRouter.
               providers[provider] = {
                   "npm": "@ai-sdk/openai-compatible",
                   "name": name,
@@ -280,8 +256,6 @@ jobs:
               base_url = provider["options"]["baseURL"]
               if base_url == "https://opencode.ai/zen/v1":
                   key_var = "OPENCODE_ZEN_API_KEY"
-              elif "z.ai" in base_url:
-                  key_var = "ZAI_API_KEY"
               else:
                   key_var = "OPENROUTER_API_KEY"
               provider["options"]["apiKey"] = "{env:%s}" % key_var
@@ -549,10 +523,11 @@ jobs:
               [ -n "${OPENROUTER_API_KEY:-}" ] && key_ok=true
               ;;
             opencode)
-              [ -n "${OPENCODE_ZEN_API_KEY:-}" ] && key_ok=true
-              ;;
-            zai-coding-plan|zai-standard)
-              [ -n "${ZAI_API_KEY:-}" ] && key_ok=true
+              if [[ "$verify" == *-free ]] || python3 -c "import json,sys; sys.exit(0 if sys.argv[1] in json.load(open('.github/review/model-preferences.json')).get('preferredFree',[]) else 1)" "$verify"; then
+                key_ok=true
+              elif [ -n "${OPENCODE_ZEN_API_KEY:-}" ]; then
+                key_ok=true
+              fi
               ;;
           esac
           if [ "$key_ok" != true ] || { [ "$code" != true ] && [ "$has_major" != true ]; }; then

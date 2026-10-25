@@ -55,21 +55,32 @@ opencode/new-discovery-free
   "limit": {"context": 500000, "output": 64000},
   "capabilities": {"toolcall": true, "input": {"image": false}}
 }
+opencode/mimo-v2.6-flash-free
+{
+  "id": "mimo-v2.6-flash-free",
+  "cost": {"input": 0, "output": 0},
+  "limit": {"context": 200000, "output": 32000},
+  "capabilities": {"toolcall": true, "input": {"image": false}}
+}
 """
+
+
+def _env(**overrides: str) -> dict[str, str]:
+    env = {
+        "HAS_OPENROUTER_KEY": "false",
+        "HAS_OPENCODE_KEY": "false",
+        "REVIEW_MODEL_PRIMARY": "opencode/glm-5.3-flash-free",
+        "OPENCODE_MODEL": "opencode/glm-5.3-flash-free",
+        "OPENROUTER_FREE_MODEL": "openrouter/free",
+    }
+    env.update(overrides)
+    return env
 
 
 def test_preferred_available_models_keep_rank_order(mod):
     prefs = json.loads(PREFS_PATH.read_text(encoding="utf-8"))
     available = mod.parse_opencode_verbose(SAMPLE_OPENCODE_VERBOSE)
-    env = {
-        "HAS_ZAI_KEY": "false",
-        "HAS_OPENROUTER_KEY": "false",
-        "REVIEW_MODEL_PRIMARY": "zai-coding-plan/glm-5.3-flash",
-        "OPENCODE_MODEL": "zai-coding-plan/glm-5.3-flash",
-        "OPENROUTER_MODEL": "z-ai/glm-5.3-flash",
-        "OPENROUTER_FREE_MODEL": "openrouter/free",
-        "ZAI_FREE_MODEL": "glm-4.7-flash",
-    }
+    env = _env()
     attempts, free_models, _ = mod.build_chain(prefs, available, env)
     assert attempts[0] == "opencode/glm-5.3-flash-free"
     assert attempts[1] == "opencode/deepseek-v4.1-flash-free"
@@ -78,19 +89,31 @@ def test_preferred_available_models_keep_rank_order(mod):
     assert attempts[0] in free_models
 
 
+def test_review_model_primary_is_first_attempt(mod):
+    prefs = json.loads(PREFS_PATH.read_text(encoding="utf-8"))
+    available = mod.parse_opencode_verbose(SAMPLE_OPENCODE_VERBOSE)
+    env = _env(REVIEW_MODEL_PRIMARY="opencode/mimo-v2.6-flash-free")
+    attempts, _, _ = mod.build_chain(prefs, available, env)
+    assert attempts[0] == "opencode/mimo-v2.6-flash-free"
+
+
+def test_opencode_model_follows_primary_when_different(mod):
+    prefs = json.loads(PREFS_PATH.read_text(encoding="utf-8"))
+    available = mod.parse_opencode_verbose(SAMPLE_OPENCODE_VERBOSE)
+    env = _env(
+        REVIEW_MODEL_PRIMARY="opencode/glm-5.3-flash-free",
+        OPENCODE_MODEL="opencode/deepseek-v4.1-flash-free",
+    )
+    attempts, _, _ = mod.build_chain(prefs, available, env)
+    assert attempts[0] == "opencode/glm-5.3-flash-free"
+    assert attempts[1] == "opencode/deepseek-v4.1-flash-free"
+
+
 def test_missing_preferred_model_is_skipped(mod):
     prefs = json.loads(PREFS_PATH.read_text(encoding="utf-8"))
     # beam-free is preferred but not in the sample catalog.
     available = mod.parse_opencode_verbose(SAMPLE_OPENCODE_VERBOSE)
-    env = {
-        "HAS_ZAI_KEY": "false",
-        "HAS_OPENROUTER_KEY": "false",
-        "REVIEW_MODEL_PRIMARY": "zai-coding-plan/glm-5.3-flash",
-        "OPENCODE_MODEL": "zai-coding-plan/glm-5.3-flash",
-        "OPENROUTER_MODEL": "z-ai/glm-5.3-flash",
-        "OPENROUTER_FREE_MODEL": "openrouter/free",
-        "ZAI_FREE_MODEL": "glm-4.7-flash",
-    }
+    env = _env()
     attempts, _, decisions = mod.build_chain(prefs, available, env)
     assert "opencode/beam-free" not in attempts
     skipped = [d for d in decisions if d.model_id == "opencode/beam-free"]
@@ -107,15 +130,7 @@ def test_openrouter_entries_skipped_without_key(mod):
             tool_support=True,
         )
     }
-    env = {
-        "HAS_ZAI_KEY": "false",
-        "HAS_OPENROUTER_KEY": "false",
-        "REVIEW_MODEL_PRIMARY": "zai-coding-plan/glm-5.3-flash",
-        "OPENCODE_MODEL": "zai-coding-plan/glm-5.3-flash",
-        "OPENROUTER_MODEL": "z-ai/glm-5.3-flash",
-        "OPENROUTER_FREE_MODEL": "openrouter/free",
-        "ZAI_FREE_MODEL": "glm-4.7-flash",
-    }
+    env = _env()
     attempts, _, decisions = mod.build_chain(prefs, available, env)
     assert "openrouter/thinkingmachines/inkling:free" not in attempts
     assert any(
@@ -127,15 +142,7 @@ def test_openrouter_entries_skipped_without_key(mod):
 
 def test_discovery_failure_uses_static_preferred_list(mod):
     prefs = json.loads(PREFS_PATH.read_text(encoding="utf-8"))
-    env = {
-        "HAS_ZAI_KEY": "false",
-        "HAS_OPENROUTER_KEY": "false",
-        "REVIEW_MODEL_PRIMARY": "zai-coding-plan/glm-5.3-flash",
-        "OPENCODE_MODEL": "zai-coding-plan/glm-5.3-flash",
-        "OPENROUTER_MODEL": "z-ai/glm-5.3-flash",
-        "OPENROUTER_FREE_MODEL": "openrouter/free",
-        "ZAI_FREE_MODEL": "glm-4.7-flash",
-    }
+    env = _env()
     attempts, _, _ = mod.build_chain(prefs, {}, env, discovery_failed=True)
     assert attempts[0] == "opencode/glm-5.3-flash-free"
     assert "opencode/deepseek-v4.1-flash-free" in attempts
@@ -143,16 +150,9 @@ def test_discovery_failure_uses_static_preferred_list(mod):
 
 def test_chain_override_replaces_discovery(mod, tmp_path):
     prefs = json.loads(PREFS_PATH.read_text(encoding="utf-8"))
-    env = {
-        "HAS_ZAI_KEY": "false",
-        "HAS_OPENROUTER_KEY": "false",
-        "REVIEW_MODEL_CHAIN_OVERRIDE": "opencode/glm-5.3-flash-free,opencode/deepseek-v4.1-flash-free",
-        "REVIEW_MODEL_PRIMARY": "zai-coding-plan/glm-5.3-flash",
-        "OPENCODE_MODEL": "zai-coding-plan/glm-5.3-flash",
-        "OPENROUTER_MODEL": "z-ai/glm-5.3-flash",
-        "OPENROUTER_FREE_MODEL": "openrouter/free",
-        "ZAI_FREE_MODEL": "glm-4.7-flash",
-    }
+    env = _env(
+        REVIEW_MODEL_CHAIN_OVERRIDE="opencode/glm-5.3-flash-free,opencode/deepseek-v4.1-flash-free",
+    )
     attempts, _, _ = mod.build_chain(prefs, {}, env)
     assert attempts == [
         "opencode/glm-5.3-flash-free",
@@ -165,20 +165,12 @@ def test_paid_fallbacks_survive_chain_length_cap(mod):
     prefs["maxChainLength"] = 8
     prefs["maxDiscoveredFree"] = 5
     available = mod.parse_opencode_verbose(SAMPLE_OPENCODE_VERBOSE)
-    env = {
-        "HAS_ZAI_KEY": "true",
-        "HAS_OPENROUTER_KEY": "true",
-        "REVIEW_MODEL_PRIMARY": "zai-coding-plan/glm-5.3-flash",
-        "OPENCODE_MODEL": "zai-coding-plan/glm-5.3-flash",
-        "OPENROUTER_MODEL": "z-ai/glm-5.3-flash",
-        "OPENROUTER_FREE_MODEL": "openrouter/free",
-        "ZAI_FREE_MODEL": "glm-4.7-flash",
-    }
+    env = _env(HAS_OPENROUTER_KEY="true", HAS_OPENCODE_KEY="true")
     attempts, _, _ = mod.build_chain(prefs, available, env)
-    assert "zai-coding-plan/glm-5.3-flash" in attempts
+    assert "opencode/glm-5.3-flash" in attempts
     assert attempts[-1] == "openrouter/openrouter/free"
     assert len(attempts) <= 8
-    assert attempts.index("zai-coding-plan/glm-5.3-flash") > 0
+    assert attempts.index("opencode/glm-5.3-flash") > 0
 
 
 def test_paid_opencode_fallback_runs_after_free_chain(mod):
@@ -191,22 +183,11 @@ def test_paid_opencode_fallback_runs_after_free_chain(mod):
         tool_support=True,
         zero_cost=False,
     )
-    env = {
-        "HAS_ZAI_KEY": "false",
-        "HAS_OPENROUTER_KEY": "false",
-        "HAS_OPENCODE_KEY": "true",
-        "REVIEW_MODEL_PRIMARY": "zai-coding-plan/glm-5.3-flash",
-        "OPENCODE_MODEL": "zai-coding-plan/glm-5.3-flash",
-        "OPENROUTER_MODEL": "z-ai/glm-5.3-flash",
-        "OPENROUTER_FREE_MODEL": "openrouter/free",
-        "ZAI_FREE_MODEL": "glm-4.7-flash",
-    }
+    env = _env(HAS_OPENCODE_KEY="true")
     attempts, _, decisions = mod.build_chain(prefs, available, env)
     assert attempts[0] == "opencode/glm-5.3-flash-free"
-    assert "zai-coding-plan/glm-5.3-flash" not in attempts
     assert attempts[-1] == "opencode/glm-5.3-flash"
-    skipped = [d for d in decisions if d.model_id == "zai-coding-plan/glm-5.3-flash"]
-    assert skipped and "key missing" in skipped[0].reason
+    assert all("zai" not in d.model_id for d in decisions)
 
 
 def test_paid_opencode_fallback_skipped_without_zen_key(mod):
@@ -219,16 +200,7 @@ def test_paid_opencode_fallback_skipped_without_zen_key(mod):
         tool_support=True,
         zero_cost=False,
     )
-    env = {
-        "HAS_ZAI_KEY": "false",
-        "HAS_OPENROUTER_KEY": "false",
-        "HAS_OPENCODE_KEY": "false",
-        "REVIEW_MODEL_PRIMARY": "zai-coding-plan/glm-5.3-flash",
-        "OPENCODE_MODEL": "zai-coding-plan/glm-5.3-flash",
-        "OPENROUTER_MODEL": "z-ai/glm-5.3-flash",
-        "OPENROUTER_FREE_MODEL": "openrouter/free",
-        "ZAI_FREE_MODEL": "glm-4.7-flash",
-    }
+    env = _env()
     attempts, _, decisions = mod.build_chain(prefs, available, env)
     assert "opencode/glm-5.3-flash" not in attempts
     assert any(
@@ -245,13 +217,11 @@ def test_main_writes_chain_file(mod, tmp_path, monkeypatch):
     def fake_cli(_argv):
         return 0, SAMPLE_OPENCODE_VERBOSE, ""
 
-    monkeypatch.setenv("HAS_ZAI_KEY", "false")
     monkeypatch.setenv("HAS_OPENROUTER_KEY", "false")
-    monkeypatch.setenv("REVIEW_MODEL_PRIMARY", "zai-coding-plan/glm-5.3-flash")
-    monkeypatch.setenv("OPENCODE_MODEL", "zai-coding-plan/glm-5.3-flash")
-    monkeypatch.setenv("OPENROUTER_MODEL", "z-ai/glm-5.3-flash")
+    monkeypatch.setenv("HAS_OPENCODE_KEY", "false")
+    monkeypatch.setenv("REVIEW_MODEL_PRIMARY", "opencode/glm-5.3-flash-free")
+    monkeypatch.setenv("OPENCODE_MODEL", "opencode/glm-5.3-flash-free")
     monkeypatch.setenv("OPENROUTER_FREE_MODEL", "openrouter/free")
-    monkeypatch.setenv("ZAI_FREE_MODEL", "glm-4.7-flash")
 
     monkeypatch.setattr(
         mod,
@@ -275,3 +245,11 @@ def test_main_writes_chain_file(mod, tmp_path, monkeypatch):
     payload = json.loads(out.read_text(encoding="utf-8"))
     assert payload["attempts"]
     assert payload["freeModels"]
+
+
+def test_preferences_drop_zai_paid_fallbacks():
+    prefs = json.loads(PREFS_PATH.read_text(encoding="utf-8"))
+    keys = [spec.get("key") for spec in prefs.get("paidFallbacks") or []]
+    models = [str(spec.get("model", "")) + str(spec.get("modelEnv", "")) for spec in prefs.get("paidFallbacks") or []]
+    assert "zai" not in keys
+    assert all("zai" not in item and "z-ai" not in item for item in models)

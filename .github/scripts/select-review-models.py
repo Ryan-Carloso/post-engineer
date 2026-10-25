@@ -216,16 +216,16 @@ def provider_key_ok(model_id: str, key_kind: str, env: dict[str, str]) -> bool:
     provider = model_id.split("/", 1)[0]
     if key_kind == "opencode":
         # Paid OpenCode Zen models bill behind OPENCODE_ZEN_API_KEY; free
-        # opencode/* models need no secret at all.
+        # opencode/*-free models need no secret at all.
+        if provider == "opencode" and (
+            model_id.endswith("-free") or env.get("HAS_OPENCODE_KEY") == "true"
+        ):
+            return True
         return env.get("HAS_OPENCODE_KEY") == "true"
     if provider == "opencode":
-        return True
-    if key_kind == "zai":
-        return env.get("HAS_ZAI_KEY") == "true"
+        return model_id.endswith("-free") or env.get("HAS_OPENCODE_KEY") == "true"
     if key_kind == "openrouter":
         return env.get("HAS_OPENROUTER_KEY") == "true"
-    if provider in ("zai-coding-plan", "zai-standard"):
-        return env.get("HAS_ZAI_KEY") == "true"
     if provider == "openrouter":
         return env.get("HAS_OPENROUTER_KEY") == "true"
     return False
@@ -287,6 +287,12 @@ def build_chain(
         return attempts, [m for m in free_ids if m in attempts], decisions
 
     preferred = list(prefs.get("preferredFree") or [])
+    configured: list[str] = []
+    for key in ("REVIEW_MODEL_PRIMARY", "OPENCODE_MODEL"):
+        model_id = env.get(key, "").strip()
+        if model_id and model_id not in configured:
+            configured.append(model_id)
+    preferred = configured + [item for item in preferred if item not in configured]
     if discovery_failed:
         log("Discovery failed; using static preferred free list without availability checks.")
         for model_id in preferred:
@@ -360,9 +366,7 @@ def build_chain(
         if denied:
             decisions.append(ChainDecision(model_id, False, denied))
             continue
-        counts_as_free = model_id == f"openrouter/{env.get('OPENROUTER_FREE_MODEL', '')}" or (
-            model_id == f"zai-standard/{env.get('ZAI_FREE_MODEL', '')}"
-        )
+        counts_as_free = model_id == f"openrouter/{env.get('OPENROUTER_FREE_MODEL', '')}"
         add_paid(model_id, "paid fallback", counts_as_free)
 
     max_len = int(prefs.get("maxChainLength") or 8)
@@ -425,8 +429,6 @@ def main() -> int:
     env = dict(os.environ)
     if env.get("HAS_OPENROUTER_KEY") != "true" and env.get("OPENROUTER_API_KEY"):
         env["HAS_OPENROUTER_KEY"] = "true"
-    if env.get("HAS_ZAI_KEY") != "true" and env.get("ZAI_API_KEY"):
-        env["HAS_ZAI_KEY"] = "true"
     if env.get("HAS_OPENCODE_KEY") != "true" and env.get("OPENCODE_ZEN_API_KEY"):
         env["HAS_OPENCODE_KEY"] = "true"
 
