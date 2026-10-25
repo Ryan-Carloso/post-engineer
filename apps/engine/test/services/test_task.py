@@ -1454,7 +1454,7 @@ class TestArchiveFinalVideos(unittest.TestCase):
              patch.object(lff, "track_event") as track, \
              patch.object(tm.video, "generate_video"):
             with open(os_module.path.join(breaker_root, "marker.json"), "w", encoding="utf-8") as fh:
-                json_module.dump({"until": "2026-11-01T00:00:00+00:00"}, fh)
+                json_module.dump({"until": lff.longcat_breaker._first_of_next_month(datetime.now(UTC))}, fh)
             final_paths, combined_paths, intro_report = tm.generate_final_videos(
                 task_id, params, ["clip.mp4"], "voice.mp3", "sub.srt", "script", "none"
             )
