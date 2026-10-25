@@ -4,12 +4,12 @@ STRATEGY (Ryan, 2026-10 — LongCat→faceless fallback addenda):
 
 - "workspace disabled" (HTTP 404 with the gateway's
   ``modal-http: workspace … is disabled`` body, production 2026-10-19) is
-  NOT actionable: credits return only on the 1st of next month. Once the
-  breaker trips the engine STOPS calling LongCat entirely — every faced
-  post goes straight to faceless with the user warning — until the first
-  day of the next month (UTC), when the next attempt is allowed. If the
-  backend still answers "disabled", the breaker trips again for another
-  month.
+  NOT actionable: credits return only on the 1st of next month. The
+  breaker is TEST_ACCOUNT_USER_IDS only: those accounts stop calling
+  LongCat and go faceless until the 1st of next month (UTC). Real users
+  never trip it — they keep attempting LongCat and alert loudly. If a
+  test-account attempt still answers "disabled", the breaker trips again
+  for another month.
 - The state PERSISTS across restarts: a small JSON marker under the
   engine's storage volume (utils.storage_dir). Memory-only state would
   re-enable the billing-dead backend after every redeploy.
