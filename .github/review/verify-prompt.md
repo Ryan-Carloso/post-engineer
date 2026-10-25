@@ -21,6 +21,8 @@ Then do one gap sweep: walk `review-checklist.md` and, if pass 1 missed a
 CRITICAL or MAJOR issue, add it in the same format. Do not add MINOR findings
 in this pass.
 
-End with the `Verdict:` line. Same output rules as pass 1: Location lines are
+End with the `Verdict: APPROVE | REQUEST_CHANGES` line (zero findings =>
+APPROVE and `No material findings.`; any finding, including MINOR =>
+REQUEST_CHANGES). Same output rules as pass 1: Location lines are
 plain `path:START-END` with no backticks, quotes are verbatim from HEAD, no
 process narration.
