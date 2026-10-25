@@ -19,7 +19,8 @@ For EACH finding in `pass1.md`:
 
 Then do one gap sweep: walk `review-checklist.md` and, if pass 1 missed a
 CRITICAL or MAJOR issue, add it in the same format. Do not add MINOR findings
-in this pass.
+in this pass. If pass 1 posted a MINOR that is only a test-count mismatch or
+a test-helper extraction, drop it. Keep MINORs that are lying comments.
 
 End with the `Verdict: APPROVE | REQUEST_CHANGES` line (zero findings =>
 APPROVE and `No material findings.`; any finding, including MINOR =>

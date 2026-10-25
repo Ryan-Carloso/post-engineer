@@ -24,29 +24,25 @@ alone is not enough:
 4. Read the module-level docstrings of touched modules — this repo writes its
    policies there (e.g. `apps/engine/app/services/analytics.py`).
 5. Compare what the PR body claims against what the diff actually does
-   (scope, base branch, tests listed, "no behaviour change" claims).
+   (scope, base branch, "no behaviour change" claims). Do not report a
+   mismatch between PR-body test counts and the suite.
 6. For each heuristic warning in `pr-context.md`, either report it as a
    finding or write one `Refuted:` line explaining why it does not apply.
 
 Work through `review-checklist.md` section by section before writing output.
-Spend your effort on correctness and security first.
 
 ## What to report
 
-Report every issue a careful senior reviewer would raise, including:
+A finding exists only when at least one of these is true:
 
-- Bugs and behaviour regressions (including edge cases: empty collections,
-  None/missing keys, retries, restarts, partial failure).
-- Security/privacy: untrusted or free-text data reaching logs, analytics,
-  Discord, PR comments, client bundles, or error messages without the
-  repo's scrubbing helpers.
-- Contract breaks across files (callers, consumers, persisted shapes).
-- PR hygiene that changes what merges: wrong base branch for a stacked PR,
-  diff containing another open PR's commits, description that does not match
-  the diff.
-- Test defects that make tests prove less than they claim: dead or
-  overridden mocks, assertions that can't fail, misleading comments,
-  missing tests for the risky path.
+- The wrong code can refund, leak, or break a caller/contract.
+- A test asserts the opposite of what the code under test actually runs.
+- A comment or docstring describes the opposite of the code (future readers
+  will follow the comment). Keep this class.
+
+Do not report: PR body test counts vs the suite, duplicated test-helper
+extraction, or generic readability/maintainability with no lying comment
+and no bug path.
 
 Do not report pure style preferences. Do not invent issues. But **absence of code is a finding** (a missing guard, a missing scrub call, a missing test): quote the nearest existing lines where the code should be, verbatim.
 
@@ -57,12 +53,16 @@ Do not report pure style preferences. Do not invent issues. But **absence of cod
 - `MAJOR` — wrong behaviour on a realistic edge path, a broken cross-file
   contract, merging this PR would merge unintended code, or a missing test for
   the risky path.
-- `MINOR` — real but low-impact: misleading test or comment, dead mock,
-  missing context in telemetry, maintainability debt that will cause bugs.
+- `MINOR` — real but low-impact: a lying comment/docstring, a test that asserts
+  the opposite of what runs, a dead mock, or an assertion that cannot fail.
 
 Write the entire review in English. Headings, findings, explanations, and the verdict line are English.
 
 ## Output format (machine-checked — deviations are dropped)
+
+Output starts at `## OpenCode review — <sha>` (HEAD sha from `pr-context.md`)
+and ends at the Verdict line. No Work State, Objective, Next Move, or process
+narration. Grounding drops anything after Verdict.
 
 For each finding:
 
@@ -90,9 +90,7 @@ Rules for `**Location:**`:
 
 After the findings, write one line: `Verdict: APPROVE | REQUEST_CHANGES`.
 
-- Zero findings => `Verdict: APPROVE` and the line `No material findings.`
-- One or more findings of any severity (CRITICAL, MAJOR, or MINOR) =>
-  `Verdict: REQUEST_CHANGES`. MINOR is a severity label on a finding; it
-  does not have its own verdict.
-
-No preamble, no narration of your process.
+- APPROVE only with zero `###` headings and the line `No material findings.`
+- If any `### CRITICAL|MAJOR|MINOR` exists, Verdict MUST be `REQUEST_CHANGES`.
+  APPROVE plus a posted MINOR is a format bug. MINOR is a severity label, not
+  a verdict.

@@ -80,7 +80,6 @@ Trigger: always. Use `pr-context.md`.
   merges #N → MAJOR.
 - Does the diff contain files the body does not mention (another feature,
   generated assets, unrelated tests)?
-- Does the "How"/"Tests" section match the diff (file names, test counts)?
 
 ## 6. Test quality
 
@@ -96,8 +95,6 @@ Trigger: any changed test file.
 - The risky path has a test: the security property (scrubbing), the
   empty-input path, the all-failed path, telemetry failure not breaking the
   main path.
-- Repeated setUp/fixture blocks across new test files → suggest a shared
-  helper (MINOR).
 - Web tests mocking an engine upstream must mock the real envelope
   `{status, message, body}`.
 
