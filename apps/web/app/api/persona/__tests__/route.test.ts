@@ -37,6 +37,10 @@ vi.mock('@/lib/analytics', () => ({
 vi.mock('node:dns/promises', () => ({
   lookup: vi.fn(async () => [{ address: '1.2.3.4' }]),
 }));
+vi.mock('@/lib/rate-limit', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/rate-limit')>();
+  return { ...actual, applyRateLimit: vi.fn(async () => null) };
+});
 
 import { POST, PATCH, DELETE } from '../route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -118,7 +122,11 @@ function stubPngFetch() {
 }
 
 function stubFetchResponse(response: Response) {
-  stubPinnedHttp(response.status, new Uint8Array());
+  stubPinnedHttp(
+    response.status,
+    new Uint8Array(),
+    response.headers.get('content-type') ?? 'text/plain',
+  );
 }
 
 describe('POST /api/persona — toda persona tem rosto', () => {

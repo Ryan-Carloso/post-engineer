@@ -15,7 +15,11 @@ export function restorePinnedHttp(): void {
 }
 
 /** Intercept requestPinned (http/https.request) so route tests skip real DNS. */
-export function stubPinnedHttp(status: number, body: Uint8Array = new Uint8Array()): void {
+export function stubPinnedHttp(
+  status: number,
+  body: Uint8Array = new Uint8Array(),
+  contentType = 'image/png',
+): void {
   const impl = (
     _url: URL,
     _opts: object,
@@ -37,7 +41,7 @@ export function stubPinnedHttp(status: number, body: Uint8Array = new Uint8Array
         resume: () => void;
       };
       incoming.statusCode = status;
-      incoming.headers = { 'content-type': 'image/png' };
+      incoming.headers = { 'content-type': contentType };
       incoming.resume = () => undefined;
       callback?.(incoming);
       queueMicrotask(() => {

@@ -31,7 +31,12 @@ function mockSupabase(opts: {
   const uploaded = opts.uploaded ?? [];
   return {
     from: vi.fn(() => ({
-      select: vi.fn(() => Promise.resolve({ data: opts.rows ?? [], error: null })),
+      select: vi.fn(() => ({
+        range: vi.fn(async (from: number, to: number) => ({
+          data: (opts.rows ?? []).slice(from, to + 1),
+          error: null,
+        })),
+      })),
       update: vi.fn((values: Record<string, unknown>) => {
         updates.push(values);
         return {
@@ -56,6 +61,7 @@ describe('persona-remote-face classify', () => {
   it('keeps caracter-samples and data:image without downloading', () => {
     expect(isKeptAvatarUrl('/caracter-samples/file-3.png')).toBe(true);
     expect(isKeptAvatarUrl('https://post-engineer.com/caracter-samples/file-3.png')).toBe(true);
+    expect(isKeptAvatarUrl('https://cdn.post-engineer.com/caracter-samples/file-3.png')).toBe(true);
     expect(isKeptAvatarUrl('data:image/png;base64,IA')).toBe(true);
     expect(isRemoteAvatarUrl('https://cdn.example/face.png')).toBe(true);
     expect(isRemoteAvatarUrl('/caracter-samples/file-3.png')).toBe(false);
@@ -222,10 +228,39 @@ describe('ingestRemotePersonaFaces', () => {
     expect(uploaded).toEqual([{ path: 'u1/ok/photo.png', upsert: true }]);
   });
 
+  it('pages persona listing in batches of at most 1000', async () => {
+    const sample = {
+      id: 'sample',
+      user_id: 'u1',
+      avatar_url: '/caracter-samples/file-3.png',
+      photo_path: null,
+    };
+    const ranges: Array<[number, number]> = [];
+    const supabase = {
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({
+          range: vi.fn(async (from: number, to: number) => {
+            ranges.push([from, to]);
+            if (from === 0) {
+              return { data: Array.from({ length: 1000 }, () => sample), error: null };
+            }
+            return { data: [sample], error: null };
+          }),
+        })),
+      })),
+      storage: { from: vi.fn() },
+    };
+    const result = await ingestRemotePersonaFaces(supabase as never);
+    expect(ranges).toEqual([[0, 999], [1000, 1999]]);
+    expect(result.skipped).toBe(1001);
+  });
+
   it('throws when listing personas fails', async () => {
     const supabase = {
       from: vi.fn(() => ({
-        select: vi.fn(async () => ({ data: null, error: { message: 'db' } })),
+        select: vi.fn(() => ({
+          range: vi.fn(async () => ({ data: null, error: { message: 'db' } })),
+        })),
       })),
       storage: { from: vi.fn() },
     };
@@ -237,9 +272,11 @@ describe('ingestRemotePersonaFaces', () => {
   it('counts an update error as failed', async () => {
     const supabase = {
       from: vi.fn(() => ({
-        select: vi.fn(async () => ({
-          data: [{ id: 'ok', user_id: 'u1', avatar_url: 'https://cdn.example/ok.png', photo_path: null }],
-          error: null,
+        select: vi.fn(() => ({
+          range: vi.fn(async () => ({
+            data: [{ id: 'ok', user_id: 'u1', avatar_url: 'https://cdn.example/ok.png', photo_path: null }],
+            error: null,
+          })),
         })),
         update: vi.fn(() => ({
           eq: vi.fn(() => ({

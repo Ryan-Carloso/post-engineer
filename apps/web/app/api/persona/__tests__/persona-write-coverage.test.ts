@@ -62,6 +62,7 @@ describe('POST/PATCH personaWrite coverage', () => {
     const res = await POST(new Request('http://localhost/api/persona', { method: 'POST', body: form }));
     expect(res.status).toBe(429);
     expect(applyRateLimit).toHaveBeenCalledWith(expect.any(Request), RATE_LIMITS.personaWrite, USER_ID);
+    expect(RATE_LIMITS.personaWrite.limit).toBe(20);
   });
 
   it('returns 429 when personaWrite rejects PATCH', async () => {
@@ -81,12 +82,27 @@ describe('POST/PATCH personaWrite coverage', () => {
   it('rolls back the ingested photo when library add fails after insert', async () => {
     const removed: string[][] = [];
     const chain = (result: unknown) => {
-      const node: Record<string, unknown> = {};
-      for (const method of ['select', 'eq', 'neq', 'in', 'insert', 'update', 'delete', 'single']) {
-        node[method] = vi.fn(() => node);
+      const node: Record<string, ReturnType<typeof vi.fn>> = {
+        select: vi.fn(),
+        eq: vi.fn(),
+        neq: vi.fn(),
+        in: vi.fn(),
+        insert: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+        single: vi.fn().mockResolvedValue(result),
+      };
+      for (const method of ['select', 'eq', 'neq', 'in', 'insert', 'update', 'delete'] as const) {
+        node[method].mockReturnThis();
       }
-      node.then = (resolve: (value: unknown) => void) => Promise.resolve(result).then(resolve);
-      return node;
+      return Object.assign(node, {
+        then(
+          onFulfilled: (value: unknown) => unknown,
+          onRejected?: (reason: unknown) => unknown,
+        ) {
+          return Promise.resolve(result).then(onFulfilled, onRejected);
+        },
+      });
     };
     const client = {
       from: vi.fn((table: string) => {
@@ -128,7 +144,7 @@ describe('POST/PATCH personaWrite coverage', () => {
     expect(removed.some((paths) => paths.some((path) => path.endsWith('/photo.png')))).toBe(true);
   });
 
-  it('removes ingestedPhotoPath when the persona insert fails', async () => {
+  it('removes photoPathToRollback when the persona insert fails', async () => {
     const removed: string[][] = [];
     const client = {
       from: vi.fn(() => ({

@@ -55,7 +55,8 @@ export function isKeptAvatarUrl(value: string): boolean {
   }
   try {
     const parsed = new URL(trimmed);
-    if (parsed.hostname !== 'post-engineer.com' && parsed.hostname !== 'www.post-engineer.com') {
+    const host = parsed.hostname.toLowerCase();
+    if (host !== 'post-engineer.com' && !host.endsWith('.post-engineer.com')) {
       return false;
     }
     return isPublicAssetPath(parsed.pathname);
@@ -305,21 +306,31 @@ export interface IngestRemoteFacesResult {
   failed: number;
 }
 
+const INGEST_PAGE_SIZE = 1000;
+
 export async function ingestRemotePersonaFaces(
   supabase: SupabaseClient,
   deps: RemoteFaceFetchDeps = {},
 ): Promise<IngestRemoteFacesResult> {
-  const { data, error } = await supabase
-    .from('personas')
-    .select('id, user_id, avatar_url, photo_path');
-  if (error || !data) {
-    logger.error('[persona-remote-face] list personas failed', error);
-    throw new Error('Failed to list personas for remote-face ingest.');
+  const rows: RemoteFaceRow[] = [];
+  let offset = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from('personas')
+      .select('id, user_id, avatar_url, photo_path')
+      .range(offset, offset + INGEST_PAGE_SIZE - 1);
+    if (error || !data) {
+      logger.error('[persona-remote-face] list personas failed', error?.message);
+      throw new Error('Failed to list personas for remote-face ingest.');
+    }
+    rows.push(...(data as RemoteFaceRow[]));
+    if (data.length < INGEST_PAGE_SIZE) break;
+    offset += INGEST_PAGE_SIZE;
   }
   let migrated = 0;
   let skipped = 0;
   let failed = 0;
-  for (const row of data as RemoteFaceRow[]) {
+  for (const row of rows) {
     const avatar = typeof row.avatar_url === 'string' ? row.avatar_url : '';
     if (typeof row.photo_path === 'string' && row.photo_path.length > 0) {
       skipped += 1;
@@ -344,7 +355,7 @@ export async function ingestRemotePersonaFaces(
       .eq('id', row.id)
       .eq('user_id', row.user_id);
     if (updateError) {
-      logger.error('[persona-remote-face] update failed', updateError, { personaId: row.id });
+      logger.error('[persona-remote-face] update failed', updateError.message, { personaId: row.id });
       failed += 1;
       continue;
     }

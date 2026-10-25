@@ -165,13 +165,13 @@ async function postHandler(request: Request): Promise<NextResponse> {
   }
 
   let avatarUrl = body.values.avatarUrl;
-  let ingestedPhotoPath = photoPath;
-  if (ingestedPhotoPath === null && typeof avatarUrl === 'string') {
+  let photoPathToRollback = photoPath;
+  if (photoPathToRollback === null && typeof avatarUrl === 'string') {
     const resolved = await resolvePersonaAvatar(supabase, user.id, personaId, avatarUrl);
     if (!resolved.ok) {
       return errorResponse(400, resolved.error, 'POST /api/persona');
     }
-    ingestedPhotoPath = resolved.photoPath;
+    photoPathToRollback = resolved.photoPath;
     avatarUrl = resolved.avatarUrl;
   }
 
@@ -184,7 +184,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       id: personaId,
       user_id: user.id,
       name: (body.values.name ?? '').trim(),
-      photo_path: ingestedPhotoPath,
+      photo_path: photoPathToRollback,
       avatar_url: avatarUrl,
       voice_id: body.values.voiceId,
       language: body.values.language,
@@ -209,7 +209,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   if (insertError || !persona) {
     // Insert never landed: remove the ingested object so it does not orphan.
-    await rollbackStoragePath(supabase, ingestedPhotoPath);
+    await rollbackStoragePath(supabase, photoPathToRollback);
     return errorResponse(500, 'Failed to create persona.', 'POST /api/persona', {
       cause: insertError,
     });
@@ -269,7 +269,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
           }
         }
       }
-      await rollbackStoragePath(supabase, ingestedPhotoPath);
+      await rollbackStoragePath(supabase, photoPathToRollback);
       return errorResponse(added.status, added.error, 'POST /api/persona');
     }
     libraryImageIds = added.images.map((image) => image.id);
