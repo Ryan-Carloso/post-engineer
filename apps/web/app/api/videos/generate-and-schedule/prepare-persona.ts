@@ -17,6 +17,7 @@ import { isEngineUsablePersonaImageUrl } from '@/lib/engine-image-url';
 import { getPostHogServer } from '@/lib/posthog-server';
 import { logger } from '@/lib/logger';
 import { trackApiEvent } from '@/lib/analytics';
+import { scrubSecrets, redactCredentialFragments } from '@/lib/scrub';
 import type { FaceQuality } from '@/lib/tokens';
 import {
   resolvePersonaVoice,
@@ -292,7 +293,10 @@ async function persistVoiceSwap(
         userId,
       });
     }
-    getPostHogServer()?.captureAs(userId, VOICE_FALLBACK_WARNING_CODE, {
+    // Voice ids can carry user-typed fragments or clone ids; scrub the same
+    // way trackApiEvent does (secret keys + credential fragments + 500 cap)
+    // while keeping captureAs so the event stays attributed to the user.
+    const props = scrubSecrets({
       from_voice: info.fromVoice,
       to_voice: info.toVoice,
       reason: info.reason,
@@ -300,6 +304,10 @@ async function persistVoiceSwap(
       // stored voice to name.
       from_voice_present: info.reason !== VOICE_FALLBACK_REASONS.VOICE_MISSING,
     });
+    for (const [k, v] of Object.entries(props)) {
+      if (typeof v === 'string') props[k] = redactCredentialFragments(v).slice(0, 500);
+    }
+    getPostHogServer()?.captureAs(userId, VOICE_FALLBACK_WARNING_CODE, props);
   } catch (error) {
     logger.error('[generate-and-schedule] persistVoiceSwap threw; swap persisted no-op', error, {
       personaId,

@@ -156,4 +156,11 @@ describe('PersonaVoiceSection', () => {
     // warning here would flag every valid house voice.
     expect(screen.queryByTestId('persona-voice-fallback-warning')).not.toBeInTheDocument();
   });
+
+  it('does not warn that a clone is unavailable when the catalog listed no clones', () => {
+    sectionMocks.voiceId = 'chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb';
+    // House-only catalog: clone merge degraded, not proof the clone is gone.
+    render(<PersonaVoiceSection />);
+    expect(screen.queryByTestId('persona-voice-fallback-warning')).not.toBeInTheDocument();
+  });
 });

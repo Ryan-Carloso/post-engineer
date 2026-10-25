@@ -27,6 +27,22 @@
 //---------------
 
 import { cloneKeyOf, isCloneVoiceId } from '@/lib/voice-catalog';
+
+function catalogContainsClone(catalogIds: ReadonlySet<string>): boolean {
+  for (const id of catalogIds) {
+    if (isCloneVoiceId(id)) return true;
+  }
+  return false;
+}
+
+function catalogListsCloneKey(catalogIds: ReadonlySet<string>, voiceId: string): boolean {
+  const key = cloneKeyOf(voiceId);
+  if (key === null || key.length === 0) return false;
+  for (const id of catalogIds) {
+    if (isCloneVoiceId(id) && cloneKeyOf(id) === key) return true;
+  }
+  return false;
+}
 import { isEnglishLanguage } from '@/lib/language-gate';
 
 /** Stable warning code surfaced by the dispatch API when a persona voice
@@ -176,8 +192,16 @@ export function resolvePersonaVoice(
   if (isCloneVoiceId(trimmed)) {
     const key = cloneKeyOf(trimmed) ?? '';
     if (opts.catalogIds !== undefined) {
-      if (opts.catalogIds.has(trimmed)) return { kind: 'valid', voiceId: trimmed };
-      return fallbackResolution(trimmed, VOICE_FALLBACK_REASONS.CLONE_UNAVAILABLE, null, language);
+      // Compare by clone KEY: personas still store `chatterbox:<key>` while
+      // the served catalog lists `chatterbox_nano:<key>` (voice-catalog.ts).
+      if (catalogListsCloneKey(opts.catalogIds, trimmed)) {
+        return { kind: 'valid', voiceId: trimmed };
+      }
+      // A catalog with zero clone rows is a degraded merge, not proof the
+      // clone is gone — treat it as "catalog not loaded" and fall through.
+      if (catalogContainsClone(opts.catalogIds)) {
+        return fallbackResolution(trimmed, VOICE_FALLBACK_REASONS.CLONE_UNAVAILABLE, null, language);
+      }
     }
     if (opts.cloneAvailable === false) {
       return fallbackResolution(trimmed, VOICE_FALLBACK_REASONS.CLONE_UNAVAILABLE, null, language);

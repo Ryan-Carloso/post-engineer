@@ -1729,6 +1729,24 @@ describe('POST /api/videos/generate-and-schedule', () => {
       ]);
     });
 
+    it('scrubs credential fragments out of from_voice before the PostHog capture', async () => {
+      vi.mocked(getPostHogServer).mockReturnValue(recordingClient as never);
+      setup({
+        ...DEFAULT_CFG,
+        persona: { ...PERSONA, voice_id: 'https://user:hunter2@voices.example/sk-abcdefghijklmnopqrstuvwxyz' },
+      });
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+      const events = capturedEvents.filter((entry) => entry.event === 'voice_fallback_applied');
+      expect(events).toHaveLength(1);
+      const fromVoice = events[0]?.properties.from_voice as string;
+      expect(fromVoice).not.toContain('hunter2');
+      expect(fromVoice).not.toContain('sk-abcdefghijklmnopqrstuvwxyz');
+      expect(fromVoice).toContain('[redacted]');
+      expect(fromVoice.length).toBeLessThanOrEqual(500);
+      expect(events[0]?.distinctId).toBe(USER_ID);
+    });
+
     it('keeps the gender a legacy -Female suffix spells out', async () => {
       setup({ ...DEFAULT_CFG, persona: { ...PERSONA, voice_id: 'zh-CN-XiaoyiNeural-Female' } });
       const res = await post(baseBody());

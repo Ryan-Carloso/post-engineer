@@ -61,6 +61,22 @@ describe('resolvePersonaVoice', () => {
       });
     });
 
+    it('accepts a legacy chatterbox: clone when the catalog serves chatterbox_nano:<same key>', () => {
+      const catalogIds = new Set(['chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb']);
+      expect(resolvePersonaVoice('chatterbox:uaaaaaaaaaaaa_bbbbbbbbbbbb', 'en-US', { catalogIds })).toEqual({
+        kind: 'valid',
+        voiceId: 'chatterbox:uaaaaaaaaaaaa_bbbbbbbbbbbb',
+      });
+    });
+
+    it('accepts a chatterbox_nano: clone when the catalog still lists chatterbox:<same key>', () => {
+      const catalogIds = new Set(['chatterbox:uaaaaaaaaaaaa_bbbbbbbbbbbb']);
+      expect(resolvePersonaVoice('chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb', 'en-US', { catalogIds })).toEqual({
+        kind: 'valid',
+        voiceId: 'chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb',
+      });
+    });
+
     it('accepts a clone the caller reports as available', () => {
       expect(
         resolvePersonaVoice('chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb', 'en-US', { cloneAvailable: true }),
@@ -161,13 +177,25 @@ describe('resolvePersonaVoice', () => {
       });
     });
 
-    it('swaps an unavailable clone when the served catalog no longer lists it', () => {
-      const catalogIds = new Set(['chatterbox:kokoro_af_heart']);
+    it('swaps an unavailable clone when the served catalog lists other clones but not this key', () => {
+      const catalogIds = new Set([
+        'chatterbox:kokoro_af_heart',
+        'chatterbox_nano:ucccccccccccc_dddddddddddd',
+      ]);
       expect(resolvePersonaVoice('chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb', 'en-US', { catalogIds })).toEqual({
         kind: 'fallback',
         fromVoice: 'chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb',
         toVoice: 'chatterbox:kokoro_af_heart',
         reason: VOICE_FALLBACK_REASONS.CLONE_UNAVAILABLE,
+      });
+    });
+
+    it('does not treat a clone as unavailable when the catalog merge omitted every clone row', () => {
+      const catalogIds = new Set(['chatterbox:kokoro_af_heart']);
+      expect(resolvePersonaVoice('chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb', 'en-US', { catalogIds })).toEqual({
+        kind: 'clone',
+        voiceId: 'chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb',
+        key: 'uaaaaaaaaaaaa_bbbbbbbbbbbb',
       });
     });
 
