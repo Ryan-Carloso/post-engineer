@@ -20,16 +20,20 @@ name: openbot-notify
 # warnings too (continue-on-error): telemetry must never fail a build it
 # is only observing.
 #
-# At most two wakes per head SHA: the first failure-family conclusion
-# among relayed workflows, and one end-of-CI green (every latest relayed
-# run success/skipped, none queued/in_progress). Later failures of the
-# same SHA skip. Latest run is counted per workflow name; the completing
-# run is excluded from the "already failed" check so the first failure
-# still sends. Non-workflow check runs never gate the relay (0 events is
-# not acceptable). Two finishers in the same second may both send — 2 is
-# acceptable, 0 is not. `Release MCP (auto)` IS in the list so main
-# pushes keep the invariant. A hung queued/in_progress runner is the
-# accepted gap. A transient query failure fails OPEN (send).
+# At most two PR-CI wakes per head SHA, plus a separate budget for the
+# scheduled test-flight / test-flight-faceless runs (they do not share a
+# PR head SHA and must not consume or suppress the PR failure/green
+# wake). PR-CI: exactly one failure wake — the lowest-id latest real
+# failure (failure/timed_out/action_required/startup_failure). Concurrent
+# finishers both see the same winner, so one sends and 0 wakes cannot
+# happen; 2 is acceptable if the API has not listed the other run yet.
+# Cancelled (concurrency) is not a real failure and cannot suppress one.
+# A rerun (same run id, run_attempt > 1) skips; GitHub does not keep the
+# old attempt in the runs list. Green: none of the PR-pool latest runs
+# queued/in_progress and every latest is success/skipped. Non-workflow
+# check runs never gate the relay. `Release MCP (auto)` stays in the PR
+# pool. A hung queued/in_progress runner is the accepted gap. A
+# transient query failure fails OPEN (send).
 #
 # Signature: x-openbot-signature = "sha256=" + hex HMAC-SHA256 over
 # "<timestamp>.<delivery-id>.<exact body bytes>", keyed by the secret —
@@ -82,6 +86,11 @@ jobs:
           # for the last-finisher query. relay.test.sh pins this list and
           # the trigger block's `workflows:` stay identical.
           RELAYED_WORKFLOWS: CI,mutation,opencode-review,file-size,api-naming,parity-exclusion-guard,CodeQL Advanced,Deploy,Release MCP (auto),test-flight-faceless,test-flight
+          # Daily flights share a main SHA, not a PR head. They stay in
+          # RELAYED_WORKFLOWS (and the trigger list) so GitHub still
+          # delivers their completions, but the decision scores them in a
+          # separate pool so they cannot eat the PR twice-per-SHA budget.
+          SCHEDULED_RELAYED_WORKFLOWS: test-flight-faceless,test-flight
           EVENT_NAME: ${{ github.event_name }}
           EVENT_ACTION: ${{ github.event.action }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number || '' }}
@@ -93,6 +102,7 @@ jobs:
           # The completing workflow_run id (not this notify job): excluded
           # when asking whether another relayed workflow already failed.
           WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id || '' }}
+          WORKFLOW_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt || '' }}
           # Token for the last-finisher query (actions: read only). Fork
           # pull_request events never reach this call: the secrets guard
           # above exits first.
@@ -104,11 +114,10 @@ jobs:
             echo "OPENBOT_WEBHOOK_URL/OPENBOT_WEBHOOK_SECRET not available (fork PR or unset) — nothing sent"
             exit 0
           fi
-          # relay_decision — at most two wakes per head SHA. Failure-family
-          # sends only when no other relayed workflow's latest run already
-          # failed. success/skipped sends only when none are queued/
-          # in_progress and every latest relayed run is success or skipped.
-          # pull_request events always relay (babysit ignores that path).
+          # relay_decision — PR-CI: one failure wake (lowest-id real
+          # failure) and one all-green wake per head SHA. Scheduled
+          # flights use a separate pool. pull_request always relays
+          # (babysit ignores that path).
           relay_decision() {
             case "$1" in
               pull_request) echo send; return ;;
@@ -126,16 +135,16 @@ jobs:
             # malformed/missing input or a jq runtime error — either way the
             # ::warning:: makes it visible and the relay still fires.
             # Counting is done inside gh --jq (no checkout, no python indent).
-            # relay.test.sh pins this exact filter against sample JSON.
-            JQ_FILTER='[.workflow_runs[] | select(.name as $n | ($ENV.RELAYED_WORKFLOWS | split(",") | index($n)))] as $runs | ($runs | group_by(.name) | map(max_by([.id, (.run_attempt // 0)]))) as $latest | ($runs | map(select((.id | tostring) != ($ENV.WORKFLOW_RUN_ID // ""))) | group_by(.name) | map(max_by([.id, (.run_attempt // 0)]))) as $other | [($latest | map(select(.status=="queued" or .status=="in_progress")) | length), (if ($other | map(select(.conclusion=="failure" or .conclusion=="timed_out" or .conclusion=="cancelled" or .conclusion=="action_required" or .conclusion=="startup_failure")) | length) > 0 then 1 else 0 end), (if (($latest | map(select(.status=="queued" or .status=="in_progress")) | length) == 0 and ($latest | all(.conclusion=="success" or .conclusion=="skipped"))) then 1 else 0 end)] | join(" ")'
+            # relay.test.sh extracts this JQ_FILTER from the yml (one source).
+            JQ_FILTER='($ENV.RELAYED_WORKFLOWS | split(",")) as $all | (($ENV.SCHEDULED_RELAYED_WORKFLOWS // "") | split(",") | map(select(length > 0))) as $sched | ($ENV.WORKFLOW_NAME // "") as $me | (if ($sched | index($me)) then $sched else ($all - $sched) end) as $pool | ($ENV.WORKFLOW_RUN_ID | tonumber? // 0) as $cur | (($ENV.CONCLUSION // "") as $c | $c == "failure" or $c == "timed_out" or $c == "action_required" or $c == "startup_failure" or $c == "cancelled") as $fail_kind | [.workflow_runs[] | select(.name as $n | ($pool | index($n)))] as $listed | (if $fail_kind and $cur != 0 and ([ $listed[].id ] | index($cur) | not) then $listed + [{name:$me, id:$cur, run_attempt:($ENV.WORKFLOW_RUN_ATTEMPT | tonumber? // 1), status:"completed", conclusion:($ENV.CONCLUSION // "")}] else $listed end) as $runs | ($runs | group_by(.name) | map(max_by([.id, (.run_attempt // 0)]))) as $latest | [$latest[] | select(.conclusion == "failure" or .conclusion == "timed_out" or .conclusion == "action_required" or .conclusion == "startup_failure")] as $real | (if ($real | length) > 0 then ([$real[].id] | min) else (([$latest[] | select(.conclusion == "cancelled") | .id] | min) // $cur) end) as $winner | [($latest | map(select(.status=="queued" or .status=="in_progress")) | length), (if $cur != 0 and $cur == $winner then 1 else 0 end), (if (($latest | map(select(.status=="queued" or .status=="in_progress")) | length) == 0 and ($latest | all(.conclusion=="success" or .conclusion=="skipped"))) then 1 else 0 end)] | join(" ")'
             summarize_runs() {
               gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$HEAD_SHA&per_page=100" --jq "$JQ_FILTER"
             }
             summary=$(summarize_runs) || {
               echo "::warning::last-finisher pending query failed (gh api/--jq); failing OPEN" >&2
-              summary="0 0 1"
+              summary="0 1 1"
             }
-            read pending other_failed all_ok <<< "$summary"
+            read pending is_winner all_ok <<< "$summary"
             if [ "$kind" = "success" ] && [ "${pending:-0}" -gt 0 ]; then
               # One late retry: a run that completes while another's
               # completion event is still in flight must not be missed by
@@ -143,12 +152,16 @@ jobs:
               sleep 60
               summary=$(summarize_runs) || {
                 echo "::warning::last-finisher pending retry query failed (gh api/--jq); failing OPEN" >&2
-                summary="0 0 1"
+                summary="0 1 1"
               }
-              read pending other_failed all_ok <<< "$summary"
+              read pending is_winner all_ok <<< "$summary"
             fi
             if [ "$kind" = "failure" ]; then
-              if [ "${other_failed:-0}" -gt 0 ]; then echo skip; else echo send; fi
+              # GitHub reruns keep the run id and bump run_attempt; the
+              # runs list does not return the old attempt, so attempt>1
+              # is a later failure of the same SHA and must skip.
+              if [ "${WORKFLOW_RUN_ATTEMPT:-1}" -gt 1 ]; then echo skip; return; fi
+              if [ "${is_winner:-0}" -eq 1 ]; then echo send; else echo skip; fi
               return
             fi
             if [ "${pending:-0}" -gt 0 ] || [ "${all_ok:-0}" -eq 0 ]; then echo skip; else echo send; fi
