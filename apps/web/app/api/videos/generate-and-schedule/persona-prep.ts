@@ -7,6 +7,7 @@ import { getPersonaDefaultAccounts } from '@/lib/persona-publishing-accounts';
 import { IMAGE_BUCKET } from '@/lib/persona-images';
 import { logger } from '@/lib/logger';
 import type { FaceQuality } from '@/lib/tokens';
+import type { VoiceFallbackInfo } from '@/lib/voice-fallback';
 
 const SIGNED_URL_TTL_SECONDS = 3600;
 
@@ -38,6 +39,10 @@ export interface PersonaPrep {
   faceQuality: FaceQuality;
   voiceAudioUrl?: string;
   voiceIdValue?: string;
+  /** The applied voice swap (issue #277): the persona's stored voice was
+   *  invalid and the dispatch speaks with toVoice instead. Surfaced in the
+   *  response as a stable warning so the UI can tell the user. */
+  voiceFallback?: VoiceFallbackInfo;
   avatarUrl: string | null;
   photoPath: string | null;
   niche: string | null;

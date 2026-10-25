@@ -8,12 +8,21 @@ import { PersonaVoiceSection } from '../persona-voice-section';
 
 const sectionMocks = vi.hoisted(() => ({
   result: null as { success: boolean; error: string } | null,
+  voiceId: null as string | null,
+  voices: [] as Array<{ id: string; label: string | null; provider: string; gender: string | null; accent: string | null; kind: string; description: string | null }>,
+}));
+
+vi.mock('@/lib/api', () => ({
+  useVoicesQuery: vi.fn(() => ({ data: sectionMocks.voices, isLoading: false, isError: false })),
 }));
 
 vi.mock('@/lib/store', () => {
   const state = {
     get result() {
       return sectionMocks.result;
+    },
+    get voiceId() {
+      return sectionMocks.voiceId;
     },
   };
   const usePersonaStore = Object.assign(
@@ -62,6 +71,10 @@ vi.mock('../voice-clone-picker', () => ({
 describe('PersonaVoiceSection', () => {
   beforeEach(() => {
     sectionMocks.result = null;
+    sectionMocks.voiceId = null;
+    sectionMocks.voices = [
+      { id: 'chatterbox:kokoro_af_heart', label: 'Heart', provider: 'kokoro', gender: 'female', accent: 'us', kind: 'standard', description: null },
+    ];
   });
 
   it('shows the house picker by default and hides the clone panel', () => {
@@ -118,5 +131,29 @@ describe('PersonaVoiceSection', () => {
     sectionMocks.result = { success: false, error: 'persona.errName' };
     render(<PersonaVoiceSection />);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('warns when the saved voice is no longer in the served catalog', () => {
+    sectionMocks.voiceId = 'chatterbox:retired_voice';
+    render(<PersonaVoiceSection />);
+    const warning = screen.getByTestId('persona-voice-fallback-warning');
+    // Amber, never red: a swap with a visible path forward, not an error.
+    expect(warning.className).toContain('amber');
+    expect(warning).toHaveTextContent('persona.voiceFallbackWarning');
+  });
+
+  it('does not warn for a house voice the catalog serves', () => {
+    sectionMocks.voiceId = 'chatterbox:kokoro_af_heart';
+    render(<PersonaVoiceSection />);
+    expect(screen.queryByTestId('persona-voice-fallback-warning')).not.toBeInTheDocument();
+  });
+
+  it('does not warn while the catalog has not loaded', () => {
+    sectionMocks.voices = [];
+    sectionMocks.voiceId = 'chatterbox:kokoro_af_heart';
+    render(<PersonaVoiceSection />);
+    // An empty catalog is a loading/failed state, not proof of retirement:
+    // warning here would flag every valid house voice.
+    expect(screen.queryByTestId('persona-voice-fallback-warning')).not.toBeInTheDocument();
   });
 });

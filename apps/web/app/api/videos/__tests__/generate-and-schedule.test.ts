@@ -23,7 +23,19 @@ vi.mock('@/lib/rate-limit', async (importOriginal) => {
 
 vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn() }));
 
-vi.mock('@/lib/posthog-server', () => ({ getPostHogServer: vi.fn() }));
+const { capturedEvents, recordingClient } = vi.hoisted(() => {
+  const capturedEvents: Array<{ distinctId: string; event: string; properties?: Record<string, unknown> }> = [];
+  const recordingClient = {
+    captureAs: (distinctId: string, event: string, properties?: Record<string, unknown>) => {
+      capturedEvents.push({ distinctId, event, properties });
+    },
+  };
+  return { capturedEvents, recordingClient };
+});
+
+vi.mock('@/lib/posthog-server', () => ({
+  getPostHogServer: vi.fn(() => recordingClient),
+}));
 
 vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
@@ -92,7 +104,7 @@ const PERSONA = {
   name: 'Ana',
   photo_path: null,
   avatar_url: 'https://cdn.example/avatar.png',
-  voice_id: 'voice-1',
+  voice_id: 'chatterbox:kokoro_af_heart',
   voice_audio_path: null,
   language: 'en',
   video_aspect: '9:16',
@@ -147,6 +159,9 @@ interface DbConfig {
   engineNoTaskIdSubjects?: string[];
   /** Makes the per-slot refund_batch_tokens RPC fail. */
   refundBatchErrorCode?: string;
+  /** Whether the user's cloned_voices table has a ready row (issue #277
+   *  clone-availability lookup). Default: no rows. */
+  cloneReady?: boolean;
 }
 
 const rpcCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
@@ -268,6 +283,11 @@ function makeClient(cfg: DbConfig): unknown {
         if (name === 'persona_default_accounts') {
           return Promise.resolve({ data: cfg.personaDefaultAccounts ?? [], error: null }).then(resolve, reject);
         }
+        if (name === 'cloned_voices') {
+          // The clone availability lookup (issue #277) resolves a ready row
+          // only when the fixture says so; anything else is unavailable.
+          return Promise.resolve({ data: cfg.cloneReady ? [{ engine_voice_key: 'x' }] : [], error: null }).then(resolve, reject);
+        }
         if (name === 'token_transactions') {
           if (cfg.ledgerError) {
             return Promise.resolve({ data: null, error: { code: 'XX000', message: 'db down' } }).then(resolve, reject);
@@ -330,6 +350,7 @@ function setup(cfg: DbConfig = {}): void {
   for (const key of Object.keys(inserts)) delete inserts[key];
   updates.length = 0;
   deletes.length = 0;
+  capturedEvents.length = 0;
 
   vi.mocked(requireSupabaseSession).mockResolvedValue({
     auth: { userId: USER_ID, personaIds: null },
@@ -1636,16 +1657,126 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(payload.persona.voice_id).toBeUndefined();
     });
 
-    it('rejects a request with no voice configured anywhere', async () => {
+    it('swaps a persona with no voice configured for the language default (issue #277)', async () => {
       setup({ ...DEFAULT_CFG, persona: { ...PERSONA, voice_id: null, voice_audio_path: null } });
       const res = await post(baseBody());
       const json = await res.json();
-      expect(res.status).toBe(400);
-      expect(json.code).toBe('VALIDATION_FAILED');
-      expect(json.error).toBe(
-        'No voice available: the persona has no voice configured and no custom audio_url was provided.',
-      );
-      expect(json.field).toBe('options.audioUrl');
+      // No voice is NOT a failure: the persona's language (English) has a
+      // house default, so the dispatch proceeds with it before any spend.
+      expect(res.status).toBe(200);
+      expect(json.success).toBe(true);
+      expect(json.warnings).toEqual([
+        { code: 'voice_fallback_applied', fromVoice: '', toVoice: 'chatterbox:kokoro_af_heart' },
+      ]);
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+      const enginePersona = payload.persona as Record<string, unknown>;
+      expect(enginePersona.voice_id).toBe('chatterbox:kokoro_af_heart');
+      // The swap is persisted on the persona, in one user-scoped update.
+      const swapUpdate = updates.find((u) => u.table === 'personas');
+      expect(swapUpdate?.fields).toEqual({ voice_id: 'chatterbox:kokoro_af_heart' });
+    });
+
+    it('swaps an unrouteable persona voice for the language default and reports the swap', async () => {
+      // Capture through the shared recording client: a prior test's
+      // mockReturnValue must not leak into this one's assertions.
+      vi.mocked(getPostHogServer).mockReturnValue(recordingClient as never);
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, voice_id: 'energetic' } });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(200);
+      expect(json.success).toBe(true);
+      expect(json.warnings).toEqual([
+        { code: 'voice_fallback_applied', fromVoice: 'energetic', toVoice: 'chatterbox:kokoro_af_heart' },
+      ]);
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+      expect((payload.persona as Record<string, unknown>).voice_id).toBe('chatterbox:kokoro_af_heart');
+      const swapUpdate = updates.find((u) => u.table === 'personas');
+      expect(swapUpdate?.fields).toEqual({ voice_id: 'chatterbox:kokoro_af_heart' });
+      // The swap is telemetry, never silence: the PostHog event carries the
+      // voice ids and the reason, and no personal data. (withApiErrorReporting
+      // also captures its own success event; only the fallback event is
+      // pinned here.)
+      expect(capturedEvents.filter((entry) => entry.event === 'voice_fallback_applied')).toEqual([
+        {
+          distinctId: USER_ID,
+          event: 'voice_fallback_applied',
+          properties: {
+            from_voice: 'energetic',
+            to_voice: 'chatterbox:kokoro_af_heart',
+            reason: 'unknown_voice',
+            from_voice_present: true,
+          },
+        },
+      ]);
+    });
+
+    it('keeps the gender a legacy -Female suffix spells out', async () => {
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, voice_id: 'zh-CN-XiaoyiNeural-Female' } });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(json.warnings).toEqual([
+        { code: 'voice_fallback_applied', fromVoice: 'zh-CN-XiaoyiNeural-Female', toVoice: 'chatterbox:kokoro_af_heart' },
+      ]);
+    });
+
+    it('swaps a male-suffixed legacy voice for the male default', async () => {
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, voice_id: 'default-Male' } });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(json.warnings).toEqual([
+        { code: 'voice_fallback_applied', fromVoice: 'default-Male', toVoice: 'chatterbox:kokoro_am_michael' },
+      ]);
+    });
+
+    it('never swaps an explicit per-request voice: the engine fails loudly on it', async () => {
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, voice_id: 'energetic' } });
+      const res = await post(baseBody({ options: { voiceId: 'also-invalid' } }));
+      const json = await res.json();
+      expect(res.status).toBe(200);
+      expect(json.warnings).toBeUndefined();
+      // The persona's stored (invalid) voice is NOT swapped either: the
+      // explicit request voice is what this post speaks with.
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+      expect((payload.persona as Record<string, unknown>).voice_id).toBe('also-invalid');
+      expect(updates.find((u) => u.table === 'personas')).toBeUndefined();
+    });
+
+    it('swaps an unavailable clone for the language default', async () => {
+      setup({
+        ...DEFAULT_CFG,
+        persona: { ...PERSONA, voice_id: 'chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb' },
+        cloneReady: false,
+      });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(200);
+      expect(json.warnings).toEqual([
+        {
+          code: 'voice_fallback_applied',
+          fromVoice: 'chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb',
+          toVoice: 'chatterbox:kokoro_af_heart',
+        },
+      ]);
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+      expect((payload.persona as Record<string, unknown>).voice_id).toBe('chatterbox:kokoro_af_heart');
+      const swapUpdate = updates.find((u) => u.table === 'personas');
+      expect(swapUpdate?.fields).toEqual({ voice_id: 'chatterbox:kokoro_af_heart' });
+    });
+
+    it('dispatches a ready clone untouched, with no swap and no warning', async () => {
+      setup({
+        ...DEFAULT_CFG,
+        persona: { ...PERSONA, voice_id: 'chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb' },
+        cloneReady: true,
+      });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(200);
+      expect(json.warnings).toBeUndefined();
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+      expect((payload.persona as Record<string, unknown>).voice_id).toBe('chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb');
+      expect(updates.find((u) => u.table === 'personas')).toBeUndefined();
+      expect(capturedEvents.filter((entry) => entry.event === 'voice_fallback_applied')).toEqual([]);
     });
 
     it('404s with the pinned-image status when the pinned image cannot be resolved', async () => {

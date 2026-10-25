@@ -107,6 +107,33 @@ describe('createPost', () => {
     });
   });
 
+  it('narrows the voice-fallback warning out of the response envelope (issue #277)', async () => {
+    stubFetch(jsonResponse({ ...SUCCESS_BODY, warnings: [{ code: 'voice_fallback_applied', fromVoice: 'energetic', toVoice: 'chatterbox:kokoro_af_heart' }] }));
+
+    const result = await createPost(INPUT);
+
+    expect(result.success).toBe(true);
+    expect(result.voiceFallback).toEqual({ fromVoice: 'energetic', toVoice: 'chatterbox:kokoro_af_heart' });
+  });
+
+  it('ignores warnings it does not recognize and malformed fallback entries', async () => {
+    stubFetch(jsonResponse({ ...SUCCESS_BODY, warnings: [{ code: 'other_code', fromVoice: 'x', toVoice: 'y' }, { code: 'voice_fallback_applied', toVoice: 'v' }] }));
+
+    const result = await createPost(INPUT);
+
+    expect(result.success).toBe(true);
+    expect(result.voiceFallback).toBeNull();
+  });
+
+  it('reports a failed create with a null voice fallback', async () => {
+    stubFetch(jsonResponse({ success: false, error: 'nope', code: 'VALIDATION_FAILED' }, { ok: false, status: 400 }));
+
+    const result = await createPost(INPUT);
+
+    expect(result.success).toBe(false);
+    expect(result.voiceFallback).toBeNull();
+  });
+
   it('omits the schedule plan in asap mode', async () => {
     const fetchMock = stubFetch(jsonResponse({ ...SUCCESS_BODY, slots: [] }));
 
@@ -340,6 +367,7 @@ const SEED_RESULT: CreatePostResult = {
   code: null,
   need: null,
   have: null,
+  voiceFallback: null,
   slots: [
     { slotId: 'slot-b', slotAt: '2030-06-02T09:00:00.000Z', topic: 'Topic two', taskId: null, status: 'pending' },
     { slotId: 'slot-a', slotAt: '2030-06-01T09:00:00.000Z', topic: 'Topic one', taskId: 't1', status: 'pending' },

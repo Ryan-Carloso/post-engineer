@@ -399,6 +399,12 @@ export interface NewPostOutcome {
   code: string | null;
   need: number | null;
   have: number | null;
+  /**
+   * The applied persona-voice swap (issue #277), when the dispatch replaced
+   * an unavailable voice. Rendered as an amber note on the success banner.
+   * `fromVoice` is '' when the persona had no stored voice at all.
+   */
+  voiceFallback: { fromVoice: string; toVoice: string } | null;
 }
 
 const initialNewPostState = {

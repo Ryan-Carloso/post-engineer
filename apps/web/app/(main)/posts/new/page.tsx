@@ -23,11 +23,8 @@ import {
   CoinsIcon,
   ComposeIcon,
   FilmIcon,
-  GlobeIcon,
-  PlayIcon,
   PlusIcon,
   SpinnerIcon,
-  TrashIcon,
   AlertIcon,
   CheckIcon,
   SparklesIcon,
@@ -50,6 +47,7 @@ import {
   SCHEDULE_MAX_AHEAD_DAYS,
 } from '@/lib/schedule-window';
 import { computeVideoTokens, type FaceQuality } from '@/lib/tokens';
+import { NewPostScheduleField } from './schedule-field';
 
 //---------------
 // NewPostPage — creates a post: pick the persona, the topic, the accounts to
@@ -62,21 +60,6 @@ import { computeVideoTokens, type FaceQuality } from '@/lib/tokens';
 // source instead of receiving props.
 //---------------
 
-// Short timezone list; the browser timezone goes first, so the common case
-// needs no scrolling. The server validates the zone (isValidTimezone) and
-// rejects anything unknown.
-const COMMON_TIMEZONES = [
-  'UTC',
-  'America/Sao_Paulo',
-  'America/New_York',
-  'America/Los_Angeles',
-  'Europe/Lisbon',
-  'Europe/London',
-  'Europe/Berlin',
-  'Asia/Tokyo',
-  'Asia/Shanghai',
-  'Australia/Sydney',
-];
 
 // Form card: the same shell as the persona/personas screens.
 const CARD_CLASS = 'rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6';
@@ -84,8 +67,6 @@ const PRIMARY_BUTTON_CLASS =
   'inline-flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-accent-hover hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60 [&_svg]:size-4';
 const SECONDARY_BUTTON_CLASS =
   'inline-flex items-center justify-center gap-2 rounded-xl border border-neutral-300 bg-white px-4 py-2.5 text-sm font-semibold text-neutral-700 transition-colors hover:border-neutral-400 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40 [&_svg]:size-4';
-const ICON_BUTTON_CLASS =
-  'flex size-10 shrink-0 items-center justify-center rounded-xl border border-neutral-200 bg-white text-neutral-400 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30 [&_svg]:size-4';
 
 //---------------
 // ERROR_KEY_BY_CODE — server failure code (lib/error-codes.ts) to translated
@@ -286,6 +267,7 @@ async function handleSubmit(
       code: response.code,
       need: response.need,
       have: response.have,
+      voiceFallback: response.voiceFallback ?? null,
     };
     store.setResult(outcome);
   } finally {
@@ -361,6 +343,19 @@ const NewPostFeedback = () => {
                 count: result.slotCount,
               })}
           </p>
+          {/* The voice swap is a committed mutation with a user-visible
+              consequence: amber, never red (same convention as the persona
+              image warnings), rendered before the redirect to the post. */}
+          {result.voiceFallback ? (
+            <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800" data-testid="voice-fallback-warning">
+              {result.voiceFallback.fromVoice.length === 0
+                ? t('newPost.voiceFallbackMissingWarning', { toVoice: result.voiceFallback.toVoice })
+                : t('newPost.voiceFallbackWarning', {
+                  fromVoice: result.voiceFallback.fromVoice,
+                  toVoice: result.voiceFallback.toVoice,
+                })}
+            </p>
+          ) : null}
         </div>
       </div>
     );
@@ -798,187 +793,6 @@ const NewPostAccountsField = () => {
 // Publishing plan — the first publish (wall-clock time + timezone) and the
 // daily times.
 //---------------
-//---------------
-// When to publish — the Schedule/ASAP mode picker plus the schedule inputs
-// (scheduled mode only). In ASAP mode there is no date or time to pick: the
-// video is published the moment generation finishes, so the section explains
-// that on the option card instead of showing inputs the server would ignore.
-// Same card pattern as the persona picker (shadcn RadioGroup + Label,
-// sr-only item as the real control).
-//---------------
-const PUBLISH_MODE_OPTIONS = [
-  {
-    value: 'scheduled',
-    labelKey: 'newPost.publishModeScheduled',
-    hintKey: 'newPost.publishModeScheduledHint',
-    icon: 'scheduled',
-  },
-  {
-    value: 'asap',
-    labelKey: 'newPost.publishModeAsap',
-    hintKey: 'newPost.publishModeAsapHint',
-    icon: 'asap',
-  },
-] as const;
-
-const NewPostPublishModePicker = () => {
-  const { t } = useI18n();
-  const publishMode = useNewPostStore((s) => s.publishMode);
-  const setPublishMode = useNewPostStore((s) => s.setPublishMode);
-  return (
-    <RadioGroup
-      value={publishMode}
-      onValueChange={(value) => setPublishMode(value === 'asap' ? 'asap' : 'scheduled')}
-      aria-label={t('newPost.publishModeLabel')}
-      className="grid gap-3 sm:grid-cols-2"
-    >
-      {PUBLISH_MODE_OPTIONS.map((option) => {
-        const selected = publishMode === option.value;
-        const itemId = `new-post-publish-mode-${option.value}`;
-        return (
-          <Label
-            key={option.value}
-            htmlFor={itemId}
-            data-selected={selected ? 'true' : 'false'}
-            className={cn(
-              'flex cursor-pointer items-start gap-3 rounded-2xl border bg-white p-3 transition-colors',
-              'has-focus-visible:ring-2 has-focus-visible:ring-accent/40 has-focus-visible:ring-offset-2',
-              selected
-                ? 'border-accent bg-accent/5 ring-1 ring-accent'
-                : 'border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50',
-            )}
-          >
-            <RadioGroupItem
-              value={option.value}
-              id={itemId}
-              aria-label={t(option.labelKey)}
-              className="sr-only"
-            />
-            <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-neutral-500">
-              {option.icon === 'asap' ? <PlayIcon /> : <CalendarIcon />}
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold text-neutral-900">
-                {t(option.labelKey)}
-              </span>
-              <span className="mt-0.5 block text-xs leading-5 text-neutral-500">
-                {t(option.hintKey)}
-              </span>
-            </span>
-            {selected ? (
-              <span className="shrink-0 text-accent">
-                <CheckIcon />
-              </span>
-            ) : null}
-          </Label>
-        );
-      })}
-    </RadioGroup>
-  );
-};
-
-//---------------
-// The date/time/timezone inputs for scheduled mode. Unmounted (not hidden)
-// in ASAP mode so stale values can never leak into the request.
-//---------------
-const NewPostScheduledInputs = () => {
-  const { t } = useI18n();
-  const startAt = useNewPostStore((s) => s.startAt);
-  const times = useNewPostStore((s) => s.times);
-  const timezone = useNewPostStore((s) => s.timezone);
-  const setStartAt = useNewPostStore((s) => s.setStartAt);
-  const setTime = useNewPostStore((s) => s.setTime);
-  const addTime = useNewPostStore((s) => s.addTime);
-  const removeTime = useNewPostStore((s) => s.removeTime);
-  const setTimezone = useNewPostStore((s) => s.setTimezone);
-
-  const timezoneOptions = useMemo(() => {
-    const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    return [...new Set([browserZone, timezone, ...COMMON_TIMEZONES])];
-  }, [timezone]);
-
-  return (
-    <>
-      <SectionTitle
-        icon={<CalendarIcon />}
-        label={t('newPost.startAtLabel')}
-        hint={t('newPost.startAtHint')}
-      />
-      <input
-        type="datetime-local"
-        value={startAt}
-        aria-label={t('newPost.startAtLabel')}
-        onChange={(event) => setStartAt(event.target.value)}
-        className={cn(INPUT_CLASS, 'mt-0')}
-      />
-
-      <div>
-        <label className="flex items-center gap-2 text-sm font-medium text-neutral-700">
-          <GlobeIcon />
-          {t('newPost.timezoneLabel')}
-        </label>
-        <p className="mt-1 text-xs text-neutral-500">{t('newPost.timezoneHint')}</p>
-        <select
-          value={timezone}
-          onChange={(event) => setTimezone(event.target.value)}
-          aria-label={t('newPost.timezoneLabel')}
-          className={cn(INPUT_CLASS, 'cursor-pointer')}
-        >
-          {timezoneOptions.map((zone) => (
-            <option key={zone} value={zone}>
-              {zone}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <p className="text-sm font-medium text-neutral-700">{t('newPost.timesLabel')}</p>
-        <p className="mt-1 text-xs text-neutral-500">{t('newPost.timesHint')}</p>
-        <div className="mt-3 space-y-2">
-          {times.map((time, index) => (
-            <div key={index} className="flex items-center gap-2">
-              <input
-                type="time"
-                value={time}
-                aria-label={`${t('newPost.timesLabel')} ${index + 1}`}
-                onChange={(event) => setTime(index, event.target.value)}
-                className={cn(INPUT_CLASS, 'mt-0')}
-              />
-              <button
-                type="button"
-                onClick={() => removeTime(index)}
-                disabled={times.length <= 1}
-                aria-label={`${t('newPost.removeTime')} ${index + 1}`}
-                className={ICON_BUTTON_CLASS}
-              >
-                <TrashIcon />
-              </button>
-            </div>
-          ))}
-        </div>
-        <button type="button" onClick={addTime} className={cn(SECONDARY_BUTTON_CLASS, 'mt-3')}>
-          <PlusIcon />
-          {t('newPost.addTime')}
-        </button>
-      </div>
-    </>
-  );
-};
-
-const NewPostScheduleField = () => {
-  const { t } = useI18n();
-  const publishMode = useNewPostStore((s) => s.publishMode);
-
-  return (
-    <section className={cn(CARD_CLASS, 'space-y-5')}>
-      <SectionTitle icon={<CalendarIcon />} label={t('newPost.publishModeLabel')} />
-      <NewPostPublishModePicker />
-      {publishMode === 'asap' ? null : <NewPostScheduledInputs />}
-    </section>
-  );
-};
-
 //---------------
 // Schedule preview — computed by the SAME distributeSlots the API calls, so
 // what the user sees is what will be created, with a warning when a slot falls

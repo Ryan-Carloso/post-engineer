@@ -6,6 +6,7 @@ import { ptDictionary as basePtDictionary, type Dictionary as BaseDictionary } f
 import { enDictionary as baseEnDictionary } from './en';
 import { publishingAccountsStrings } from './publishing-accounts';
 import { metricsStrings } from './metrics-i18n';
+import { voiceFallbackStrings } from './voice-fallback-i18n';
 import type { Locale } from './types';
 
 //---------------
@@ -20,7 +21,8 @@ import type { Locale } from './types';
 export const ptDictionary = {
   ...basePtDictionary,
   apiKeys: { ...basePtDictionary.apiKeys, ...publishingAccountsStrings.pt.apiKeys },
-  persona: { ...basePtDictionary.persona, ...publishingAccountsStrings.pt.persona },
+  persona: { ...basePtDictionary.persona, ...publishingAccountsStrings.pt.persona, ...voiceFallbackStrings.pt.persona },
+  newPost: { ...basePtDictionary.newPost, ...voiceFallbackStrings.pt.newPost },
   nav: { ...basePtDictionary.nav, ...metricsStrings.pt.nav },
   metrics: metricsStrings.pt.metrics,
 };
@@ -28,13 +30,15 @@ export const ptDictionary = {
 export const enDictionary = {
   ...baseEnDictionary,
   apiKeys: { ...baseEnDictionary.apiKeys, ...publishingAccountsStrings.en.apiKeys },
-  persona: { ...baseEnDictionary.persona, ...publishingAccountsStrings.en.persona },
+  persona: { ...baseEnDictionary.persona, ...publishingAccountsStrings.en.persona, ...voiceFallbackStrings.en.persona },
+  newPost: { ...baseEnDictionary.newPost, ...voiceFallbackStrings.en.newPost },
   nav: { ...baseEnDictionary.nav, ...metricsStrings.en.nav },
   metrics: metricsStrings.en.metrics,
 };
 
 type PublishingAccountsKeys = typeof publishingAccountsStrings.en;
 type MetricsKeys = typeof metricsStrings.en;
+type VoiceFallbackKeys = typeof voiceFallbackStrings.en;
 export type Dictionary = BaseDictionary & {
   [Section in keyof PublishingAccountsKeys]: {
     [Key in keyof PublishingAccountsKeys[Section]]: string;
@@ -42,6 +46,10 @@ export type Dictionary = BaseDictionary & {
 } & {
   [Section in keyof MetricsKeys]: {
     [Key in keyof MetricsKeys[Section]]: string;
+  };
+} & {
+  [Section in keyof VoiceFallbackKeys]: {
+    [Key in keyof VoiceFallbackKeys[Section]]: string;
   };
 };
 

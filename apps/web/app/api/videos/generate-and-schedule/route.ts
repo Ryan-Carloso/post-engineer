@@ -26,8 +26,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { isPersonaAllowed } from '@/lib/api-keys';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { apiErrorResponse } from '@/lib/api-error';
-import { ERROR_CODES, formatErrorMessage, type ErrorCode } from '@/lib/error-codes';
+import { ERROR_CODES, formatErrorMessage } from '@/lib/error-codes';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from '@/lib/language-gate';
 import {
   distributeSlots,
@@ -37,8 +36,15 @@ import {
 } from '@/lib/schedule/slot-distribution';
 import { validateScheduleWindow } from '@/lib/schedule-window';
 import { isValidTimezone } from '@/lib/timezone';
-import { computeVideoTokens, toFiniteNumber, type FaceQuality } from '@/lib/tokens';
-import { resolvePostWithoutPersona, resolvePublishingAccounts, signedUrl, type PersonaPrep } from './persona-prep';
+import { computeVideoTokens, toFiniteNumber } from '@/lib/tokens';
+import { resolvePublishingAccounts, signedUrl } from './persona-prep';
+import {
+  MAX_TOPIC_CHARS,
+  preparePost,
+  SlotDispatchError,
+  coded,
+  validationFailed,
+} from './prepare-persona';
 import { violatedConstraint, SCHEDULE_PK_CONSTRAINT, SCHEDULES_PERSONA_OWNER_CONSTRAINT } from './constraint-violations';
 import {
   buildJobPayload,
@@ -56,13 +62,13 @@ import { resolveIdempotency } from '@/lib/idempotency';
 import { VALID_SCHEDULE_PROVIDERS } from '@/app/api/schedule/route';
 import { trackApiEvent } from '@/lib/analytics';
 import { logger } from '@/lib/logger';
-import { ensureEngineImageUrl, isEngineUsablePersonaImageUrl } from '@/lib/engine-image-url';
+import { VOICE_FALLBACK_WARNING_CODE } from '@/lib/voice-fallback';
+import { ensureEngineImageUrl } from '@/lib/engine-image-url';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
-const ROUTE = 'POST /api/videos/generate-and-schedule';
 // Shared with the /posts/new form so the UI cap and the API cap can't drift.
+const ROUTE = 'POST /api/videos/generate-and-schedule';
 const MAX_TOPICS = MAX_POST_TOPICS;
-const MAX_TOPIC_CHARS = 300;
 const MAX_SCRIPT_PROMPT_CHARS = 2000;
 // Mirrors the engine's PersonaParams caps (apps/engine/app/models/schema.py):
 // rejecting at the same boundary here is what turns an opaque engine
@@ -138,29 +144,6 @@ interface SlotResult {
 // Small helpers
 //---------------
 
-/** Structured failure: stable code + human message + optional field. */
-function coded(
-  status: number,
-  code: ErrorCode,
-  message: string,
-  field?: string,
-  extra?: Record<string, unknown>,
-): NextResponse {
-  return apiErrorResponse(status, message, { code, field, route: ROUTE, extra });
-}
-
-/** Per-slot dispatch failure: marks the slot failed, refunds its prepaid
- * cost, and records history so the failure is never silent. */
-class SlotDispatchError extends Error {
-  readonly errorCode: string;
-
-  constructor(errorCode: string, message: string) {
-    super(message);
-    this.name = 'SlotDispatchError';
-    this.errorCode = errorCode;
-  }
-}
-
 //---------------
 // Validation helpers — all run BEFORE any token is charged.
 //---------------
@@ -188,17 +171,6 @@ interface ValidatedInput {
   paragraphNumber?: number;
   language?: string;
   niche?: string;
-}
-
-/** Track + return a validation failure. Nothing is charged on this path. */
-function validationFailed(
-  code: ErrorCode,
-  message: string,
-  field?: string,
-  status = 400,
-): NextResponse {
-  trackApiEvent('video_creation_validation_failed', { errorCode: code, field: field ?? null });
-  return coded(status, code, message, field);
 }
 
 function validateTopics(rawTopics: string[]): string[] | NextResponse {
@@ -530,160 +502,6 @@ async function validateAccounts(
     }
   }
   return accountIds;
-}
-
-
-/**
- * Resolve what the video needs: the persona's editorial definition (voice,
- * script, aspect, niche, language) or — for a post created without one —
- * the request's own options. The resolved values are snapshotted onto the
- * schedule so the engine never has to re-derive them at tick time, and so
- * editing the persona later cannot rewrite an already-queued video.
- *
- * The persona lookup enforces ownership explicitly: the service client
- * bypasses RLS, so the user_id predicate is the trust boundary.
- */
-async function preparePost(
-  supabase: SupabaseClient,
-  userId: string,
-  personaId: string | null,
-  opts: {
-    faceless: boolean;
-    audioUrl?: string;
-    imageId?: string;
-    voiceId?: string;
-    scriptPrompt?: string;
-    videoAspect?: '9:16' | '16:9';
-    videoLayout?: 'standard' | 'react';
-    paragraphNumber?: number;
-    language?: string;
-    niche?: string;
-  },
-): Promise<PersonaPrep | NextResponse> {
-  if (personaId === null) {
-    return resolvePostWithoutPersona(opts);
-  }
-  return preparePersona(supabase, userId, personaId, opts);
-}
-
-
-/**
- * Load the persona (ownership enforced: service-role bypasses RLS, so the
- * user_id predicate is the trust boundary) and resolve the request-level
- * voice/photo inputs. Runs before any token is charged.
- */
-async function preparePersona(
-  supabase: SupabaseClient,
-  userId: string,
-  personaId: string,
-  opts: {
-    faceless: boolean;
-    audioUrl?: string;
-    imageId?: string;
-    voiceId?: string;
-    scriptPrompt?: string;
-    videoAspect?: '9:16' | '16:9';
-    videoLayout?: 'standard' | 'react';
-    paragraphNumber?: number;
-    language?: string;
-    niche?: string;
-  },
-): Promise<PersonaPrep | NextResponse> {
-  const { data: persona, error: personaError } = await supabase
-    .from('personas')
-    .select(
-      'id, name, photo_path, avatar_url, voice_id, voice_audio_path, language, video_aspect, video_layout, script_prompt, cta_text, paragraph_number, niche, face_quality',
-    )
-    .eq('id', personaId)
-    .eq('user_id', userId)
-    .single();
-
-  if (personaError || !persona) {
-    // PGRST116 = zero rows (not found); anything else is a DB failure,
-    // which must not masquerade as "not found".
-    if (personaError && personaError.code !== 'PGRST116') {
-      logger.error('[generate-and-schedule] persona lookup failed', personaError, { userId });
-      return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
-    }
-    return validationFailed(ERROR_CODES.PERSONA_NOT_FOUND, formatErrorMessage(ERROR_CODES.PERSONA_NOT_FOUND), 'personaId', 404);
-  }
-
-  // Stored persona values reach the engine verbatim: validate the caps here,
-  // before the token gate, so a legacy row fails fast instead of opaque-502.
-  const niche = (persona.niche as string | null) ?? null;
-  if (niche && niche.trim().length > 0 && niche.length > MAX_TOPIC_CHARS) {
-    return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'Persona niche must be at most 300 characters: update the persona.', 'personaId');
-  }
-  const language = (persona.language as string | null) ?? null;
-  if (language && language.trim().length > 0 && language.length > 35) {
-    return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'Persona language must be at most 35 characters: update the persona.', 'personaId');
-  }
-  // English-only launch: the effective language (per-post override, else
-  // the persona's stored language) must be English — a legacy persona in
-  // another language cannot create videos until the lock lifts.
-  const effectiveLanguage = opts.language ?? language;
-  if (effectiveLanguage && effectiveLanguage.trim().length > 0 && !isEnglishLanguage(effectiveLanguage)) {
-    return validationFailed(ERROR_CODES.VALIDATION_FAILED, ONLY_ENGLISH_VIDEOS_MESSAGE, 'personaId');
-  }
-  const paragraphNumber = (persona.paragraph_number as number | null) ?? null;
-  if (
-    paragraphNumber !== null &&
-    (typeof paragraphNumber !== 'number' || !Number.isInteger(paragraphNumber) || paragraphNumber < 1 || paragraphNumber > 10)
-  ) {
-    return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'Persona paragraph_number must be an integer between 1 and 10: update the persona.', 'personaId');
-  }
-  // Persona image: a faced post sends the stored avatar_url to the engine,
-  // which only discovers an unusable one at ~75% of the pipeline — after the
-  // charge ("persona image download rejected"). Fail fast here instead.
-  // Skipped for faceless posts (no photo is sent) and for a pinned library
-  // image, which replaces the persona photo and is checked separately below.
-  const avatarUrl = (persona.avatar_url as string | null) ?? null;
-  if (!opts.faceless && !opts.imageId && avatarUrl && !isEngineUsablePersonaImageUrl(avatarUrl)) {
-    return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'Persona image URL must be a valid http(s) URL or a data:image/ URI: update the persona.', 'personaId');
-  }
-  // Voice: custom per-request audio wins; otherwise the persona voice.
-  // The engine requires exactly one of voice_id / voice_audio_url.
-  const voiceAudioUrl = opts.audioUrl ?? (await signedUrl(supabase, (persona.voice_audio_path as string | null) ?? null));
-  const voiceIdValue = opts.audioUrl ? undefined : (opts.voiceId || (persona.voice_id as string | null) || undefined);
-  if (!voiceAudioUrl && !voiceIdValue) {
-    if (persona.voice_audio_path) {
-      return coded(503, ERROR_CODES.VALIDATION_FAILED, 'Voice audio is configured for this persona but could not be loaded. Please try again.');
-    }
-    return validationFailed(
-      ERROR_CODES.VALIDATION_FAILED,
-      'No voice available: the persona has no voice configured and no custom audio_url was provided.',
-      'options.audioUrl',
-    );
-  }
-
-  const faceQuality: FaceQuality = persona.face_quality === 'very_good' ? 'very_good' : 'ok';
-  return {
-    personaName: (persona.name as string) ?? 'Persona',
-    // The per-post choice, carried through to pricing, the engine payload and
-    // the slot row (the engine's batch pipeline reads it from there). There
-    // is no persona-level mix anymore: a persona is always faced.
-    faceless: opts.faceless,
-    faceQuality,
-    voiceAudioUrl,
-    voiceIdValue,
-    avatarUrl,
-    photoPath: (persona.photo_path as string | null) ?? null,
-    // The persona's editorial definition, each overridable per post. These
-    // resolved values are snapshotted onto the schedule (not re-read at tick
-    // time), so a persona edited after this moment cannot rewrite this video.
-    niche: opts.niche ?? niche,
-    scriptPrompt: opts.scriptPrompt ?? ((persona.script_prompt as string | null) ?? null),
-    ctaText: (persona.cta_text as string | null) ?? null,
-    language: effectiveLanguage,
-    videoAspect: opts.videoAspect ?? ((persona.video_aspect as string | null) ?? null),
-    // Layout is snapshotted like aspect: a persona edited after this moment
-    // must not rewrite how this post was composed.
-    videoLayout: opts.videoLayout ?? ((persona.video_layout as string | null) ?? null),
-    paragraphNumber: opts.paragraphNumber ?? paragraphNumber,
-    // Every persona is faced, so a post WITH the face must resolve one; only a
-    // faceless post may proceed without any image.
-    photoRequired: !opts.faceless,
-  };
 }
 
 //---------------
@@ -1408,10 +1226,22 @@ async function postHandler(request: Request): Promise<NextResponse> {
   });
 
   const durationMs = Date.now() - startedAt;
+  // The voice swap is a committed mutation with a user-visible consequence:
+  // it travels as a stable warning code (rendered amber, never red) so the
+  // UI can tell the user which voice was replaced and by what.
+  const voiceFallbackWarning =
+    prep.voiceFallback === undefined
+      ? null
+      : {
+        code: VOICE_FALLBACK_WARNING_CODE,
+        fromVoice: prep.voiceFallback.fromVoice,
+        toVoice: prep.voiceFallback.toVoice,
+      };
   const envelope = {
     schedule: { id: idem.scheduleId, mode },
     slots: results,
     replayed: false,
+    ...(voiceFallbackWarning !== null ? { warnings: [voiceFallbackWarning] } : {}),
   };
   if (failed > 0 && accepted === 0) {
     // Every video failed (each already refunded): report the operation as
