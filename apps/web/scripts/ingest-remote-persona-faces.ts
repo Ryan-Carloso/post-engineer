@@ -9,12 +9,12 @@
 // Do not run this against production from the PR; four muse.ai avatar_url
 // rows are 404 and cannot be repaired (see the ingest run log for ids).
 //
-//   pnpm exec tsx apps/web/scripts/ingest-remote-persona-faces.ts
+//   pnpm --dir apps/web ingest-remote-faces
 //---------------
 
 import { createClient } from '@supabase/supabase-js';
 
-import { ingestRemotePersonaFaces } from '@/lib/persona-remote-face';
+import { ingestRemotePersonaFaces } from '../lib/persona-remote-face';
 
 async function main(): Promise<void> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;

@@ -32,9 +32,11 @@ function mockSupabase(opts: {
   return {
     from: vi.fn(() => ({
       select: vi.fn(() => ({
-        range: vi.fn(async (from: number, to: number) => ({
-          data: (opts.rows ?? []).slice(from, to + 1),
-          error: null,
+        order: vi.fn(() => ({
+          range: vi.fn(async (from: number, to: number) => ({
+            data: (opts.rows ?? []).slice(from, to + 1),
+            error: null,
+          })),
         })),
       })),
       update: vi.fn((values: Record<string, unknown>) => {
@@ -236,21 +238,28 @@ describe('ingestRemotePersonaFaces', () => {
       photo_path: null,
     };
     const ranges: Array<[number, number]> = [];
+    const orders: string[] = [];
     const supabase = {
       from: vi.fn(() => ({
         select: vi.fn(() => ({
-          range: vi.fn(async (from: number, to: number) => {
-            ranges.push([from, to]);
-            if (from === 0) {
-              return { data: Array.from({ length: 1000 }, () => sample), error: null };
-            }
-            return { data: [sample], error: null };
+          order: vi.fn((column: string) => {
+            orders.push(column);
+            return {
+              range: vi.fn(async (from: number, to: number) => {
+                ranges.push([from, to]);
+                if (from === 0) {
+                  return { data: Array.from({ length: 1000 }, () => sample), error: null };
+                }
+                return { data: [sample], error: null };
+              }),
+            };
           }),
         })),
       })),
       storage: { from: vi.fn() },
     };
     const result = await ingestRemotePersonaFaces(supabase as never);
+    expect(orders).toEqual(['id', 'id']);
     expect(ranges).toEqual([[0, 999], [1000, 1999]]);
     expect(result.skipped).toBe(1001);
   });
@@ -259,7 +268,9 @@ describe('ingestRemotePersonaFaces', () => {
     const supabase = {
       from: vi.fn(() => ({
         select: vi.fn(() => ({
-          range: vi.fn(async () => ({ data: null, error: { message: 'db' } })),
+          order: vi.fn(() => ({
+            range: vi.fn(async () => ({ data: null, error: { message: 'db' } })),
+          })),
         })),
       })),
       storage: { from: vi.fn() },
@@ -273,9 +284,11 @@ describe('ingestRemotePersonaFaces', () => {
     const supabase = {
       from: vi.fn(() => ({
         select: vi.fn(() => ({
-          range: vi.fn(async () => ({
-            data: [{ id: 'ok', user_id: 'u1', avatar_url: 'https://cdn.example/ok.png', photo_path: null }],
-            error: null,
+          order: vi.fn(() => ({
+            range: vi.fn(async () => ({
+              data: [{ id: 'ok', user_id: 'u1', avatar_url: 'https://cdn.example/ok.png', photo_path: null }],
+              error: null,
+            })),
           })),
         })),
         update: vi.fn(() => ({

@@ -318,6 +318,7 @@ export async function ingestRemotePersonaFaces(
     const { data, error } = await supabase
       .from('personas')
       .select('id, user_id, avatar_url, photo_path')
+      .order('id')
       .range(offset, offset + INGEST_PAGE_SIZE - 1);
     if (error || !data) {
       logger.error('[persona-remote-face] list personas failed', error);
