@@ -5,6 +5,8 @@
 //---------------
 
 import { lookup } from 'node:dns/promises';
+import http from 'node:http';
+import https from 'node:https';
 import { isIP } from 'node:net';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -22,6 +24,8 @@ import {
 } from '@/lib/persona-images';
 
 export const REMOTE_FACE_TIMEOUT_MS = 10_000;
+
+const nativeFetch = globalThis.fetch;
 
 const MIME_TO_EXT: Record<string, string> = {
   'image/jpeg': 'jpg',
@@ -45,9 +49,19 @@ export interface RemoteFaceFetchDeps {
 export function isKeptAvatarUrl(value: string): boolean {
   const trimmed = value.trim();
   if (trimmed.startsWith('data:image')) return true;
-  const sameOrigin = toSameOriginAssetPath(trimmed);
-  if (sameOrigin !== null && isPublicAssetPath(sameOrigin)) return true;
-  return false;
+  if (trimmed.startsWith('/')) {
+    const path = toSameOriginAssetPath(trimmed);
+    return path !== null && isPublicAssetPath(path);
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.hostname !== 'post-engineer.com' && parsed.hostname !== 'www.post-engineer.com') {
+      return false;
+    }
+    return isPublicAssetPath(parsed.pathname);
+  } catch {
+    return false;
+  }
 }
 
 export function isRemoteAvatarUrl(value: string): boolean {
@@ -55,7 +69,10 @@ export function isRemoteAvatarUrl(value: string): boolean {
   return isHttpUrl(trimmed) && !isKeptAvatarUrl(trimmed);
 }
 
-async function assertPublicHttpUrl(url: string, lookupImpl: DnsLookupAll): Promise<{ ok: true } | { ok: false; error: string }> {
+async function assertPublicHttpUrl(
+  url: string,
+  lookupImpl: DnsLookupAll,
+): Promise<{ ok: true; addresses: string[] } | { ok: false; error: string }> {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -66,17 +83,93 @@ async function assertPublicHttpUrl(url: string, lookupImpl: DnsLookupAll): Promi
     return { ok: false, error: REMOTE_FACE_ERROR };
   }
   try {
-    const addresses = isIP(parsed.hostname)
+    const records = isIP(parsed.hostname)
       ? [{ address: parsed.hostname }]
       : await lookupImpl(parsed.hostname, { all: true });
-    const allPublic = addresses.length > 0 && addresses.every((a) => isPublicIp(a.address));
+    const addresses = records.map((record) => record.address);
+    const allPublic = addresses.length > 0 && addresses.every((address) => isPublicIp(address));
     if (!allPublic) {
       return { ok: false, error: REMOTE_FACE_ERROR };
     }
+    return { ok: true, addresses };
   } catch {
     return { ok: false, error: REMOTE_FACE_ERROR };
   }
-  return { ok: true };
+}
+
+function requestPinned(url: string, addresses: string[]): Promise<Response> {
+  const parsed = new URL(url);
+  const transport = parsed.protocol === 'https:' ? https : http;
+  return new Promise((resolve, reject) => {
+    const req = transport.request(
+      parsed,
+      {
+        lookup(_hostname, _options, callback) {
+          const address = addresses[0];
+          callback(null, address, address.includes(':') ? 6 : 4);
+        },
+      },
+      (incoming) => {
+        const status = incoming.statusCode ?? 0;
+        if (status >= 300 && status < 400) {
+          incoming.resume();
+          resolve(new Response(null, { status }));
+          return;
+        }
+        const chunks: Buffer[] = [];
+        let size = 0;
+        incoming.on('data', (chunk: Buffer) => {
+          size += chunk.length;
+          if (size > MAX_IMAGE_BYTES) {
+            req.destroy();
+            resolve(new Response(null, { status: 413 }));
+            return;
+          }
+          chunks.push(chunk);
+        });
+        incoming.on('end', () => {
+          resolve(
+            new Response(Buffer.concat(chunks, size), {
+              status,
+              headers: { 'content-type': String(incoming.headers['content-type'] ?? '') },
+            }),
+          );
+        });
+        incoming.on('error', reject);
+      },
+    );
+    req.setTimeout(REMOTE_FACE_TIMEOUT_MS, () => {
+      req.destroy(new Error('timeout'));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+async function readCappedBody(response: Response): Promise<Buffer | null> {
+  const declared = Number(response.headers.get('content-length') ?? Number.NaN);
+  if (Number.isFinite(declared) && declared > MAX_IMAGE_BYTES) {
+    return null;
+  }
+  const reader = response.body?.getReader();
+  if (!reader) {
+    return null;
+  }
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    size += value.byteLength;
+    if (size > MAX_IMAGE_BYTES) {
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks.push(value);
+  }
+  if (size === 0) return null;
+  return Buffer.concat(chunks, size);
 }
 
 export async function downloadPublicImage(
@@ -91,10 +184,13 @@ export async function downloadPublicImage(
 
   let response: Response;
   try {
-    response = await fetchImpl(url, {
-      redirect: 'error',
-      signal: AbortSignal.timeout(REMOTE_FACE_TIMEOUT_MS),
-    });
+    response =
+      fetchImpl === nativeFetch
+        ? await requestPinned(url, safety.addresses)
+        : await fetchImpl(url, {
+            redirect: 'error',
+            signal: AbortSignal.timeout(REMOTE_FACE_TIMEOUT_MS),
+          });
   } catch {
     return { error: REMOTE_FACE_ERROR };
   }
@@ -103,11 +199,10 @@ export async function downloadPublicImage(
   }
   let buffer: Buffer;
   try {
-    buffer = Buffer.from(await response.arrayBuffer());
+    const capped = await readCappedBody(response);
+    if (!capped) return { error: REMOTE_FACE_ERROR };
+    buffer = capped;
   } catch {
-    return { error: REMOTE_FACE_ERROR };
-  }
-  if (buffer.length === 0 || buffer.length > MAX_IMAGE_BYTES) {
     return { error: REMOTE_FACE_ERROR };
   }
   const detected = detectMagicMimeType(buffer);
@@ -136,6 +231,7 @@ export async function uploadPersonaPhotoBytes(
   const path = personaAssetPath(userId, personaId, `photo.${extension}`);
   const { error } = await supabase.storage.from(IMAGE_BUCKET).upload(path, bytes, {
     contentType: mime,
+    upsert: true,
   });
   if (error) {
     logger.error('[persona-remote-face] storage upload failed', error, { path });

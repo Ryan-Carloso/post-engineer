@@ -275,10 +275,10 @@ async function postHandler(request: Request): Promise<NextResponse> {
           }
         }
       }
-      if (photoPath) {
+      if (ingestedPhotoPath ?? photoPath) {
         const { error: photoRollbackError } = await supabase.storage
           .from(IMAGE_BUCKET)
-          .remove([photoPath]);
+          .remove([ingestedPhotoPath ?? photoPath]);
         if (photoRollbackError) {
           logger.error('[api/persona] photo rollback failed', photoRollbackError);
         }

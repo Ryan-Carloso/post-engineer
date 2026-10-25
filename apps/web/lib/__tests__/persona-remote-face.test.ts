@@ -8,6 +8,7 @@ import {
   resolvePersonaAvatar,
   REMOTE_FACE_ERROR,
 } from '@/lib/persona-remote-face';
+import { MAX_IMAGE_BYTES } from '@/lib/persona-images';
 
 const PNG_BYTES = Uint8Array.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
@@ -24,7 +25,7 @@ function pngResponse(): Response {
 function mockSupabase(opts: {
   rows?: Array<Record<string, unknown>>;
   updates?: Array<Record<string, unknown>>;
-  uploaded?: Array<{ path: string }>;
+  uploaded?: Array<{ path: string; upsert?: boolean }>;
 }) {
   const updates = opts.updates ?? [];
   const uploaded = opts.uploaded ?? [];
@@ -42,8 +43,8 @@ function mockSupabase(opts: {
     })),
     storage: {
       from: vi.fn(() => ({
-        upload: vi.fn(async (path: string) => {
-          uploaded.push({ path });
+        upload: vi.fn(async (path: string, _bytes: Uint8Array, options: { upsert?: boolean }) => {
+          uploaded.push({ path, upsert: options?.upsert });
           return { data: { path }, error: null };
         }),
       })),
@@ -58,6 +59,11 @@ describe('persona-remote-face classify', () => {
     expect(isKeptAvatarUrl('data:image/png;base64,IA')).toBe(true);
     expect(isRemoteAvatarUrl('https://cdn.example/face.png')).toBe(true);
     expect(isRemoteAvatarUrl('/caracter-samples/file-3.png')).toBe(false);
+  });
+
+  it('does not keep caracter-samples paths on a third-party host', () => {
+    expect(isKeptAvatarUrl('https://attacker.example/caracter-samples/x.png')).toBe(false);
+    expect(isRemoteAvatarUrl('https://attacker.example/caracter-samples/x.png')).toBe(true);
   });
 });
 
@@ -122,7 +128,7 @@ describe('resolvePersonaAvatar', () => {
       photoPath: 'user-1/persona-1/photo.png',
       avatarUrl: null,
     });
-    expect(uploaded).toEqual([{ path: 'user-1/persona-1/photo.png' }]);
+    expect(uploaded).toEqual([{ path: 'user-1/persona-1/photo.png', upsert: true }]);
   });
 
   it('keeps a non-http path as avatar_url without fetching', async () => {
@@ -191,7 +197,7 @@ describe('ingestRemotePersonaFaces', () => {
     });
     expect(result).toEqual({ migrated: 1, skipped: 2, failed: 1 });
     expect(updates).toEqual([{ photo_path: 'u1/ok/photo.png', avatar_url: null }]);
-    expect(uploaded).toEqual([{ path: 'u1/ok/photo.png' }]);
+    expect(uploaded).toEqual([{ path: 'u1/ok/photo.png', upsert: true }]);
   });
 
   it('throws when listing personas fails', async () => {
@@ -263,6 +269,28 @@ describe('downloadPublicImage extra guards', () => {
   it('refuses an empty body', async () => {
     const result = await downloadPublicImage('https://cdn.example/face.png', {
       fetchImpl: vi.fn(async () => new Response(new Uint8Array(), { status: 200 })) as never,
+      lookupImpl: publicLookup(),
+    });
+    expect(result).toEqual({ error: REMOTE_FACE_ERROR });
+  });
+
+  it('refuses a declared content-length above the image cap without reading the body', async () => {
+    const fetchImpl = vi.fn(async () => new Response(PNG_BYTES, {
+      status: 200,
+      headers: { 'content-length': String(20 * 1024 * 1024) },
+    }));
+    const result = await downloadPublicImage('https://cdn.example/face.png', {
+      fetchImpl: fetchImpl as never,
+      lookupImpl: publicLookup(),
+    });
+    expect(result).toEqual({ error: REMOTE_FACE_ERROR });
+  });
+
+  it('caps the body while reading instead of after a full buffer', async () => {
+    const oversize = new Uint8Array(MAX_IMAGE_BYTES + 1).fill(1);
+    oversize.set(PNG_BYTES);
+    const result = await downloadPublicImage('https://cdn.example/face.png', {
+      fetchImpl: vi.fn(async () => new Response(oversize, { status: 200 })) as never,
       lookupImpl: publicLookup(),
     });
     expect(result).toEqual({ error: REMOTE_FACE_ERROR });

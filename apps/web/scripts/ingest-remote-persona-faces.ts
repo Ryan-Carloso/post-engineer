@@ -6,8 +6,8 @@
 // 404 / non-image -> leave the row.
 // A second run is a no-op (rows with photo_path, samples, data:image skipped).
 //
-// Do not run this against production from the PR. Ryan Porto, Ryan, Nia,
-// and Ryan - Europa Na Estrada are 404 on muse.ai and cannot be repaired.
+// Do not run this against production from the PR; four muse.ai avatar_url
+// rows are 404 and cannot be repaired (see the ingest run log for ids).
 //
 //   pnpm exec tsx apps/web/scripts/ingest-remote-persona-faces.ts
 //---------------
