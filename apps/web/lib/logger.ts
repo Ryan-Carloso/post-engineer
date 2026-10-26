@@ -31,7 +31,7 @@ function safeJson(value: unknown): string {
   }
 }
 
-function toError(cause: unknown): Error {
+export function toError(cause: unknown): Error {
   if (cause instanceof Error) return cause;
   if (isRecord(cause) && typeof cause.message === 'string' && cause.message.length > 0) {
     return new Error(cause.message);
@@ -101,7 +101,11 @@ function reportErrorToPostHog(message: string, cause: unknown, metadata?: Record
       ...safeMetadata,
     };
     if (!(cause instanceof Error) && cause !== undefined) properties['cause'] = sanitizeReportBody(cause);
-    client.capture('$exception', properties);
+    error.message = String(properties['$exception_message']);
+    if (typeof properties['$exception_stacktrace'] === 'string') {
+      error.stack = properties['$exception_stacktrace'];
+    }
+    client.captureException(error, properties);
   } catch {
     // Telemetry must never break the request path.
   }

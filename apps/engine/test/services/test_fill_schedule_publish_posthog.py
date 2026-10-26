@@ -111,6 +111,8 @@ class FillSchedulePublishPostHogTests(TestCase):
         self.assertEqual(props["slotId"], "slot-1")
         self.assertEqual(props["task_id"], "t-1")
         self.assertEqual(props["user_id"], "user-1")
+        self.assertTrue(props["reason"])
+        self.assertNotIn("<redacted>", props["reason"])
 
     def test_response_body_truncated_to_500_chars(self) -> None:
         from app.services.upload_publisher import PublishError
@@ -180,6 +182,7 @@ class FillSchedulePublishPostHogTests(TestCase):
         self.assertEqual(props["provider"], "youtube")
         self.assertIsNone(props["status_code"])
         self.assertEqual(props["response_body"], "")
+        self.assertTrue(props["reason"])
 
     def test_r2_read_failure_emits_event_with_unknown_provider(self) -> None:
         # read_final_video_r2 raising BEFORE the provider loop is the case
@@ -199,6 +202,7 @@ class FillSchedulePublishPostHogTests(TestCase):
         self.assertEqual(props["provider"], "unknown")
         self.assertIsNone(props["status_code"])
         self.assertEqual(props["response_body"], "")
+        self.assertTrue(props["reason"])
 
     def test_success_emits_no_provider_failed_event(self) -> None:
         store = _FakeStore()

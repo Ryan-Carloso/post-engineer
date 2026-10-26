@@ -352,6 +352,7 @@ class FailTaskTests(unittest.TestCase):
         self.assertEqual(props["flow"], "direct")
         self.assertEqual(props["stage"], "audio")
         self.assertIn("boom", props["reason"])
+        self.assertTrue(props["reason"])
 
     def test_failed_reason_scrubs_full_message_before_truncation(self):
         # Regression: truncate-then-scrub lets a secret fragmented by the
@@ -366,12 +367,14 @@ class FailTaskTests(unittest.TestCase):
             patch.object(tm.task_webhook, "notify_terminal_task"),
             patch.object(tm, "send_discord", return_value=True),
             patch.object(
-                tm, "scrub_error_text", wraps=analytics_module.scrub_error_text
+                analytics_module,
+                "scrub_error_text",
+                wraps=analytics_module.scrub_error_text,
             ) as scrub,
         ):
             tm._fail_task(self.task_id, error, _params(), stage="audio")
         # The scrubber received the whole message, not the truncated slice.
-        scrub.assert_called_once_with(str(error), max_chars=200)
+        scrub.assert_any_call(str(error), max_chars=200)
         _, props = track.call_args[0]
         self.assertIn("[redacted]", props["reason"])
         self.assertNotIn("TOPSECRET123", props["reason"])

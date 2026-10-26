@@ -1187,7 +1187,7 @@ class PublishDueTests(unittest.TestCase):
         with (
             patch.object(pub_module, "track_event") as track,
             patch.object(
-                pub_module,
+                analytics_module,
                 "scrub_error_text",
                 wraps=analytics_module.scrub_error_text,
             ) as scrub,
@@ -1197,14 +1197,14 @@ class PublishDueTests(unittest.TestCase):
             )
         self.assertEqual(published, 0)
         # The scrubber received the whole message, not the truncated slice.
-        # (scrub is also called once for the publish_provider_failed event's
-        # response_body; filter to the video_publish_failed reason call.)
         reason_calls = [c for c in scrub.call_args_list if c[1].get("max_chars") == 200]
-        self.assertEqual(len(reason_calls), 1)
-        # The reason wraps the raw error with the failed providers; the
-        # scrubber must see the full wrapped message (with the secret) so
-        # scrubbing happens before truncation.
-        scrubbed_input = reason_calls[0][0][0]
+        wrapped = [
+            c[0][0]
+            for c in reason_calls
+            if str(error) in c[0][0] and "youtube" in c[0][0]
+        ]
+        self.assertTrue(wrapped)
+        scrubbed_input = wrapped[0]
         self.assertIn(str(error), scrubbed_input)
         self.assertIn("youtube", scrubbed_input)
         failed_calls = [
