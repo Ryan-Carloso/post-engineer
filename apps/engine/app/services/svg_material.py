@@ -443,10 +443,12 @@ def resolve_material_path(
 ) -> str:
     """Material to a local video file, or "" when it must be skipped.
 
-    Catalog SVGs are fetched from the catalog and rendered into a clip; every
-    other provider is downloaded. Face detection runs only on downloaded footage: an illustrated
-    clip has no real face to screen, and the detector would discard most of the
-    cartoon catalog for nothing.
+    Catalog SVGs are fetched from the catalog and rendered into a clip.
+    Neutral provider clips are rendered locally (no download, no face
+    detection). Every other provider is downloaded. Face detection runs
+    only on downloaded footage: an illustrated clip has no real face to
+    screen, and the detector would discard most of the cartoon catalog
+    for nothing.
     """
     if item.provider == "neutral":
         from app.services import material_verification

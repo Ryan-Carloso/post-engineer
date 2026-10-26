@@ -39,6 +39,10 @@ from loguru import logger
 from app.config import config
 from app.models.schema import MaterialInfo, VideoAspect
 from app.services.analytics import track_event
+from app.services.neutral_background import (  # noqa: F401 - re-export for callers
+    render_neutral_clip,
+    render_neutral_png,
+)
 
 # A clip is only used when letterboxing it against the target aspect
 # stays within this ceiling. Side bars (pillarbox) are always rejected.
@@ -220,7 +224,7 @@ class OnnxClipScorer:
 
     def score(self, candidate_url: str, phrase: str) -> float:
         try:
-            import onnxruntime  # noqa: F401 - availability probe only
+            import onnxruntime  # type: ignore[import-untyped]  # noqa: F401
         except ImportError as exc:
             raise VerificationUnavailable(
                 "onnxruntime is not installed; install onnxruntime and "
@@ -288,7 +292,7 @@ def _fallback_decision(
     previous_asset: Optional[SvgAssetRef],
     used_asset_ids: set,
 ) -> SegmentDecision:
-    broader = _SUBJECT_BROADER.get(subject) if subject else None
+    broader = _broader_category_for(subject)
     if subject is not None:
         thematic = subject_to_asset.get(subject)
         if thematic is not None and thematic.asset_id not in used_asset_ids:
@@ -380,6 +384,7 @@ def apply_verification(
     selected: List[MaterialInfo] = []
     decisions: List[SegmentDecision] = []
     for phrase, candidates in groups:
+        reusable_id = previous_asset.asset_id if previous_asset is not None else ""
         decision = select_for_segment(
             phrase=phrase,
             candidates=candidates,
@@ -387,7 +392,7 @@ def apply_verification(
             config=cfg,
             subject_to_asset=mapping,
             previous_asset=previous_asset,
-            used_asset_ids=used,
+            used_asset_ids=used - {reusable_id},
         )
         decisions.append(decision)
         if decision.tier == TIER_STOCK_VERIFIED:
@@ -427,7 +432,7 @@ def subject_to_asset_from_config() -> dict:
                 mapping[subject] = SvgAssetRef(
                     asset_id=os.path.basename(path),
                     subject=subject,
-                    broader_category=_SUBJECT_BROADER.get(subject) or "",
+                    broader_category=_broader_category_for(subject) or "",
                     relative_path=path,
                 )
     return mapping
@@ -442,6 +447,17 @@ def summarize_decisions(decisions: Sequence[SegmentDecision]) -> dict:
     return summary
 
 
+def _broader_category_for(subject: Optional[str]) -> Optional[str]:
+    if not subject:
+        return None
+    mapped = _SUBJECT_BROADER.get(subject)
+    if mapped:
+        return mapped
+    if subject in {value for value in _SUBJECT_BROADER.values() if value}:
+        return subject
+    return None
+
+
 def emit_material_fallback_summary(
     task_id: str, decisions: Sequence[SegmentDecision]
 ) -> None:
@@ -450,51 +466,3 @@ def emit_material_fallback_summary(
     track_event(
         "material_fallback_summary", {"task_id": task_id, **summarize_decisions(decisions)}
     )
-
-
-def render_neutral_png(save_dir: str) -> str:
-    """Render an abstract neutral background PNG: gradient plus soft
-    circles, implying no place, dish, or person."""
-    from PIL import Image, ImageDraw
-
-    width, height = 720, 1280
-    from PIL import ImageOps
-
-    gradient = ImageOps.colorize(
-        Image.linear_gradient("L").resize((1, height)),
-        black=(31, 42, 51),
-        white=(58, 74, 86),
-    )
-    image = gradient.resize((width, height)).convert("RGBA")
-    overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(overlay)
-    for center_x, center_y, radius, alpha in (
-        (180, 320, 220, 28),
-        (540, 640, 280, 22),
-        (360, 980, 240, 26),
-    ):
-        draw.ellipse(
-            (center_x - radius, center_y - radius, center_x + radius, center_y + radius),
-            fill=(255, 255, 255, alpha),
-        )
-    image = Image.alpha_composite(image, overlay)
-    os.makedirs(save_dir, exist_ok=True)
-    path = os.path.join(save_dir, "neutral-background.png")
-    image.convert("RGB").save(path, format="PNG")
-    return path
-
-
-def render_neutral_clip(
-    save_dir: str, clip_duration: int, video_aspect: VideoAspect
-) -> str:
-    """Turn the neutral background PNG into a video clip, or "" on failure."""
-    try:
-        from app.services import image_material
-
-        png_path = render_neutral_png(save_dir)
-        return image_material.render_image_file_to_mp4(
-            png_path, clip_duration=max(1, int(clip_duration))
-        )
-    except Exception as exc:  # noqa: BLE001 - a failed neutral is a skipped clip
-        logger.warning(f"neutral clip render failed: {exc}")
-        return ""

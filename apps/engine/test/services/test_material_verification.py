@@ -20,7 +20,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.config import config
-from app.models.schema import MaterialInfo
+from app.models.schema import MaterialInfo, VideoAspect
 from app.services import material, material_verification
 from app.services.material_verification import (
     OnnxClipScorer,
@@ -32,8 +32,10 @@ from app.services.material_verification import (
     emit_material_fallback_summary,
     identify_subject,
     phrase_at,
+    render_neutral_clip,
     render_neutral_png,
     select_for_segment,
+    subject_to_asset_from_config,
     summarize_decisions,
     verification_config,
 )
@@ -318,6 +320,40 @@ class TestNeutralPng(unittest.TestCase):
                 header = handle.read(8)
             self.assertEqual(header, b"\x89PNG\r\n\x1a\n")
 
+    def test_neutral_png_matches_video_aspect_resolution(self):
+        import tempfile
+
+        from PIL import Image
+
+        for aspect in (VideoAspect.landscape, VideoAspect.square):
+            with tempfile.TemporaryDirectory() as tmp:
+                path = render_neutral_png(tmp, aspect)
+                with Image.open(path) as image:
+                    self.assertEqual(image.size, aspect.to_resolution())
+
+    def test_neutral_clip_png_matches_landscape_and_square(self):
+        import tempfile
+
+        from PIL import Image
+
+        captured = {}
+
+        def fake_render(png_path, clip_duration):
+            captured["size"] = Image.open(png_path).size
+            captured["duration"] = clip_duration
+            return png_path.replace(".png", ".mp4")
+
+        for aspect in (VideoAspect.landscape, VideoAspect.square):
+            captured.clear()
+            with tempfile.TemporaryDirectory() as tmp:
+                with patch(
+                    "app.services.image_material.render_image_file_to_mp4",
+                    side_effect=fake_render,
+                ):
+                    clip = render_neutral_clip(tmp, 4, aspect)
+            self.assertTrue(clip.endswith(".mp4"))
+            self.assertEqual(captured["size"], aspect.to_resolution())
+
 
 class TestFallbackSummary(unittest.TestCase):
     def test_summary_counts_per_tier(self):
@@ -405,6 +441,39 @@ class TestApplyVerification(unittest.TestCase):
         self.assertEqual(items[0].url, "https://example.com/x.mp4")
         self.assertEqual(decisions, [])
 
+    def test_apply_verification_second_fallback_reuses_previous_svg(self):
+        """Reuse is reachable through apply_verification, not only a
+        hand-built empty used set. Second phrase has no thematic or
+        broader mapping of its own; previous is compatible via broader."""
+        groups = [
+            ("Bacalhau dish", []),
+            ("Tripas dish", []),
+        ]
+        items, decisions = apply_verification(
+            groups,
+            scorer=_reference_scorer,
+            config=self.cfg,
+            subject_to_asset={
+                "bacalhau_dish": _svg("bacalhau-1", "bacalhau_dish", "porto_food")
+            },
+        )
+        self.assertEqual(decisions[0].tier, "svg_thematic")
+        self.assertEqual(decisions[1].tier, "svg_reused")
+        self.assertEqual(decisions[1].svg_asset_id, "bacalhau-1")
+        self.assertEqual(items[1].provider, "svg")
+
+    def test_category_key_mapping_gets_itself_as_broader(self):
+        original = dict(config.app)
+        try:
+            config.app["material_subject_to_asset"] = {
+                "porto_food": "catalog/porto-food-1.svg"
+            }
+            mapping = subject_to_asset_from_config()
+        finally:
+            config.app.clear()
+            config.app.update(original)
+        self.assertEqual(mapping["porto_food"].broader_category, "porto_food")
+
 
 class TestDownloadVideosVerificationHook(unittest.TestCase):
     def setUp(self):
@@ -429,7 +498,18 @@ class TestDownloadVideosVerificationHook(unittest.TestCase):
         def fake_search(search_term, minimum_duration, video_aspect):
             if "Ribeira" in search_term:
                 return [_candidate("https://example.com/porto-ribeira-verified.mp4")]
-            return [_candidate("https://example.com/dumplings.mp4")]
+            if "Bacalhau" in search_term:
+                return [_candidate("https://example.com/dumplings.mp4")]
+            return [_candidate("https://example.com/unknown.mp4")]
+
+        original_resolve = material.svg_material.resolve_material_path
+
+        def fake_resolve(item, *args, **kwargs):
+            if item.provider == "neutral":
+                return original_resolve(item, *args, **kwargs)
+            if item.provider == "svg":
+                return "/tmp/svg-clip.mp4"
+            return f"/tmp/{item.url.split('/')[-1]}.mp4"
 
         with (
             patch.object(
@@ -438,30 +518,29 @@ class TestDownloadVideosVerificationHook(unittest.TestCase):
             patch.object(
                 material.svg_material,
                 "resolve_material_path",
-                side_effect=lambda item, *args, **kwargs: (
-                    f"/tmp/{item.url.split('/')[-1]}.mp4"
-                    if item.provider != "svg"
-                    else "/tmp/svg-clip.mp4"
-                ),
+                side_effect=fake_resolve,
             ),
             patch.object(
                 material_verification,
                 "render_neutral_clip",
                 return_value="/tmp/neutral.mp4",
-            ),
+            ) as render_neutral,
         ):
             paths = material.download_videos(
                 "task-1",
-                ["Ribeira in Porto", "Bacalhau dish"],
+                ["Ribeira in Porto", "Bacalhau dish", "A quiet afternoon"],
                 audio_duration=100,
                 max_clip_duration=5,
                 material_scorer=lambda url, phrase: (
                     0.42 if "verified" in url else 0.18
                 ),
             )
-        # Verified stock downloads, failed stock becomes an SVG clip.
+        render_neutral.assert_called()
+        # Verified stock downloads, failed stock becomes an SVG clip,
+        # unidentified phrase becomes a locally rendered neutral clip.
         self.assertIn("/tmp/porto-ribeira-verified.mp4.mp4", paths)
         self.assertIn("/tmp/svg-clip.mp4", paths)
+        self.assertIn("/tmp/neutral.mp4", paths)
 
 
 if __name__ == "__main__":
