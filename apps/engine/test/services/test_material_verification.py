@@ -350,6 +350,31 @@ class TestFallbackSummary(unittest.TestCase):
             self.assertNotIn("http", str(value))
             self.assertNotIn("/", str(value) if isinstance(value, str) else "")
 
+    def test_summary_event_carries_user_id_when_known(self):
+        decisions = [SegmentDecision(tier="svg_catalog", phrase="Waterfront")]
+        with patch(
+            "app.services.material_verification.track_event"
+        ) as track_event:
+            emit_material_fallback_summary("task-123", decisions, user_id="user-123")
+        properties = track_event.call_args[0][1]
+        self.assertEqual(properties["user_id"], "user-123")
+
+    def test_summary_event_omits_user_id_by_default(self):
+        decisions = [SegmentDecision(tier="svg_catalog", phrase="Waterfront")]
+        with patch(
+            "app.services.material_verification.track_event"
+        ) as track_event:
+            emit_material_fallback_summary("task-123", decisions)
+        self.assertNotIn("user_id", track_event.call_args[0][1])
+
+    def test_summary_event_omits_unknown_user_id(self):
+        decisions = [SegmentDecision(tier="svg_catalog", phrase="Waterfront")]
+        with patch(
+            "app.services.material_verification.track_event"
+        ) as track_event:
+            emit_material_fallback_summary("task-123", decisions, user_id="unknown")
+        self.assertNotIn("user_id", track_event.call_args[0][1])
+
 
 class TestApplyVerification(unittest.TestCase):
     def setUp(self):

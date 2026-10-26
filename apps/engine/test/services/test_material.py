@@ -242,7 +242,7 @@ class TestScriptOrderSvgNeutralFallback(unittest.TestCase):
             patch.object(
                 material.material_verification,
                 "verified_script_order_groups",
-                side_effect=lambda groups, task_id, scorer: groups,
+                side_effect=lambda groups, task_id, scorer, **kwargs: groups,
             ),
             patch.object(material.svg_material, "resolve_material_path", side_effect=fake_resolve),
         ):
@@ -320,6 +320,62 @@ class TestFlatDownloadSvgNeutralFallback(unittest.TestCase):
             )
 
         self.assertEqual(result, ["/tmp/neutral.mp4"])
+
+
+class TestDownloadVideosUserIdThreading(unittest.TestCase):
+    def setUp(self):
+        self.original_app_config = dict(config.app)
+
+    def tearDown(self):
+        config.app.clear()
+        config.app.update(self.original_app_config)
+
+    def _run(self, match_script_order):
+        item = material.MaterialInfo(
+            provider="pexels", url="https://v.example/x.mp4", duration=3
+        )
+        decision = material.material_verification.SegmentDecision(
+            tier="stock_verified", phrase="x"
+        )
+
+        def fake_search(search_term, minimum_duration, video_aspect):
+            return [item]
+
+        with (
+            patch.dict(config.app, {"material_directory": "", "material_verification_enabled": True}),
+            patch.object(material, "search_videos_pexels", side_effect=fake_search),
+            patch.object(
+                material.material_verification,
+                "apply_verification",
+                return_value=([item], [decision]),
+            ),
+            patch.object(
+                material.material_verification, "track_event"
+            ) as track_event,
+            patch.object(
+                material.svg_material,
+                "resolve_material_path",
+                return_value="/tmp/x.mp4",
+            ),
+        ):
+            result = material.download_videos(
+                task_id="user-id-thread",
+                search_terms=["x"],
+                source="pexels",
+                audio_duration=3,
+                max_clip_duration=3,
+                match_script_order=match_script_order,
+                user_id="user-123",
+            )
+        self.assertEqual(result, ["/tmp/x.mp4"])
+        properties = track_event.call_args[0][1]
+        self.assertEqual(properties["user_id"], "user-123")
+
+    def test_flat_path_event_carries_user_id(self):
+        self._run(match_script_order=False)
+
+    def test_script_order_path_event_carries_user_id(self):
+        self._run(match_script_order=True)
 
 
 class TestVideoSourceMix(unittest.TestCase):

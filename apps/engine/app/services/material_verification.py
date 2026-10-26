@@ -351,13 +351,13 @@ def neutral_item_for(item: MaterialInfo) -> MaterialInfo:
 
 
 def verified_script_order_groups(
-    groups, task_id, scorer, catalog_search: Optional[CatalogSearch] = None
+    groups, task_id, scorer, catalog_search: Optional[CatalogSearch] = None, user_id: str = ""
 ):
     """Apply verification to script-order groups, one pick per phrase."""
     selected, decisions = apply_verification(
         groups, scorer=scorer, catalog_search=catalog_search
     )
-    emit_material_fallback_summary(task_id, decisions)
+    emit_material_fallback_summary(task_id, decisions, user_id)
     return [(decision.phrase, [item]) for decision, item in zip(decisions, selected)]
 
 
@@ -420,10 +420,14 @@ def summarize_decisions(decisions: Sequence[SegmentDecision]) -> dict:
 
 
 def emit_material_fallback_summary(
-    task_id: str, decisions: Sequence[SegmentDecision]
+    task_id: str, decisions: Sequence[SegmentDecision], user_id: str = ""
 ) -> None:
     """Emit one aggregate PostHog event per video generation: counts per
-    tier plus task id only, no free text, phrases, URLs, or paths."""
-    track_event(
-        "material_fallback_summary", {"task_id": task_id, **summarize_decisions(decisions)}
-    )
+    tier plus task id, and the owner's user_id when known, no free text,
+    phrases, URLs, or paths. The user_id keeps the event attributed to
+    the real person instead of the engine pseudo-person; the "unknown"
+    sentinel is omitted, same as optional identity props."""
+    properties = {"task_id": task_id, **summarize_decisions(decisions)}
+    if user_id and user_id != "unknown":
+        properties["user_id"] = user_id
+    track_event("material_fallback_summary", properties)
