@@ -69,21 +69,23 @@ class TestResolveWithNeutralFallback(unittest.TestCase):
         self.assertEqual(result, "")
         self.assertEqual(calls, ["neutral"])
 
-    def test_neutral_render_failure_propagates_to_caller(self):
+    def test_neutral_retry_failure_returns_empty_path(self):
+        """The neutral path never raises in production: render_neutral_clip
+        logs a warning and returns "", so the helper returns "" and the
+        caller skips the segment."""
+
         def resolve(item, save_dir, max_clip_duration, exclude_faces, video_aspect):
-            if item.provider == "svg":
-                return ""
-            raise RuntimeError("neutral render failed")
+            return ""
 
         with patch.object(
             material_fallback.svg_material, "resolve_material_path", side_effect=resolve
         ):
-            with self.assertRaises(RuntimeError):
-                material_fallback.resolve_with_neutral_fallback(
-                    _item("svg", "Traveler eating local food.svg"),
-                    "",
-                    3,
-                    None,
-                    VideoAspect.portrait,
-                    True,
-                )
+            result = material_fallback.resolve_with_neutral_fallback(
+                _item("svg", "Traveler eating local food.svg"),
+                "",
+                3,
+                None,
+                VideoAspect.portrait,
+                True,
+            )
+        self.assertEqual(result, "")

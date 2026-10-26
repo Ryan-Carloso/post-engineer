@@ -17,10 +17,13 @@ siglip-base-patch16-224 export):
   (``preprocessor_config.json``) live next to the model file; the model
   path itself comes from config (``material_verification_model_path``).
 
-Scoring is fail-closed: a missing model, tokenizer, preprocessor, ffmpeg,
-or onnxruntime raises VerificationUnavailable, and a candidate whose
+Scoring is fail-closed: a missing model, tokenizer, ffmpeg, or
+onnxruntime raises VerificationUnavailable, and a candidate whose
 frames cannot be scored at all raises it too. A scorer that cannot run
-must never pass stock footage.
+must never pass stock footage. A missing or unreadable
+preprocessor_config.json does NOT raise: the built-in defaults (mean/std
+0.5, size 224) are used, which are only correct for the Xenova SigLIP
+export.
 """
 
 from __future__ import annotations
