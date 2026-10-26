@@ -38,7 +38,11 @@ def render_neutral_png(
     circles, implying no place, dish, or person."""
     from PIL import Image, ImageDraw, ImageOps
 
-    width, height = video_aspect.to_resolution()
+    # VideoParams defaults video_aspect to the unvalidated string "9:16"
+    # (pydantic does not validate defaults); coerce so a string aspect
+    # never crashes the renderer. Idempotent for enum members.
+    aspect = VideoAspect(video_aspect)
+    width, height = aspect.to_resolution()
     scale_x = width / _BASE_WIDTH
     scale_y = height / _BASE_HEIGHT
     radius_scale = min(scale_x, scale_y)

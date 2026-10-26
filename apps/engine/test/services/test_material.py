@@ -322,6 +322,47 @@ class TestFlatDownloadSvgNeutralFallback(unittest.TestCase):
         self.assertEqual(result, ["/tmp/neutral.mp4"])
 
 
+class TestDownloadVideosCoercesStringAspect(unittest.TestCase):
+    def setUp(self):
+        self.original_app_config = dict(config.app)
+
+    def tearDown(self):
+        config.app.clear()
+        config.app.update(self.original_app_config)
+
+    def test_flat_path_coerces_string_aspect_before_resolve(self):
+        from app.models.schema import VideoAspect
+
+        item = material.MaterialInfo(
+            provider="pexels", url="https://v.example/x.mp4", duration=3
+        )
+
+        def fake_search(search_term, minimum_duration, video_aspect):
+            return [item]
+
+        with (
+            patch.dict(config.app, {"material_directory": "", "material_verification_enabled": False}),
+            patch.object(material, "search_videos_pexels", side_effect=fake_search),
+            patch.object(
+                material.svg_material,
+                "resolve_material_path",
+                return_value="/tmp/x.mp4",
+            ) as resolve,
+        ):
+            result = material.download_videos(
+                task_id="str-aspect",
+                search_terms=["x"],
+                source="pexels",
+                audio_duration=3,
+                max_clip_duration=3,
+                video_aspect="9:16",
+            )
+        self.assertEqual(result, ["/tmp/x.mp4"])
+        resolve_aspect = resolve.call_args[0][4]
+        self.assertIsInstance(resolve_aspect, VideoAspect)
+        self.assertEqual(resolve_aspect, VideoAspect.portrait)
+
+
 class TestSvgOnlySkipsVerification(unittest.TestCase):
     def setUp(self):
         self.original_app_config = dict(config.app)

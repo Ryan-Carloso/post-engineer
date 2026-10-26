@@ -135,23 +135,6 @@ def verification_config() -> VerificationConfig:
     )
 
 
-def phrase_at(
-    timestamp: float, phrases: Sequence[tuple[str, float, float]]
-) -> Optional[str]:
-    """The phrase active at a timestamp, from (text, start, end) phrases."""
-    if not phrases:
-        return None
-    for text, start, end in phrases:
-        if start <= timestamp < end:
-            return text
-    if timestamp < phrases[0][1]:
-        return phrases[0][0]
-    for text, start, _end in reversed(phrases):
-        if start <= timestamp:
-            return text
-    return phrases[-1][0]
-
-
 @dataclass(frozen=True)
 class SvgAssetRef:
     """One R2 catalog SVG asset, identified by its catalog id."""
@@ -251,7 +234,9 @@ def _score_candidates(
             scorer_failed = True
             continue
         except Exception as exc:  # noqa: BLE001 - scorer must not break selection
-            logger.warning(f"material scorer failed for candidate: {exc}")
+            logger.warning(
+                f"material scorer failed for candidate: {type(exc).__name__}"
+            )
             scorer_failed = True
             continue
         if score is None or not math.isfinite(score):
@@ -285,7 +270,7 @@ def _fallback_decision(
     try:
         assets = list(search(phrase))
     except Exception as exc:  # noqa: BLE001 - catalog failure is a neutral, not a crash
-        logger.warning(f"material catalog search failed: {exc}")
+        logger.warning(f"material catalog search failed: {type(exc).__name__}")
         assets = []
     for rank, asset in enumerate(assets):
         if asset.asset_id in used_asset_ids:

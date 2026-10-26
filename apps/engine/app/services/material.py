@@ -333,6 +333,7 @@ def download_videos(
     exclude_faces: bool | None = None,
     material_scorer=None,
 ) -> List[str]:
+    video_aspect = VideoAspect(video_aspect)  # coerce unvalidated "9:16" default
     search_videos = _build_search_videos(source, video_aspect, source_mix)
 
     # Svg-only mix (faceless svg mode) has no stock to verify, so

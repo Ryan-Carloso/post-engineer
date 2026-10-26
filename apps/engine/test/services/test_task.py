@@ -448,6 +448,34 @@ class TestGetVideoMaterialsRandomSourceCascade(unittest.TestCase):
         self.assertEqual(dv.call_args.kwargs.get("source_mix"), ["svg"])
         shuffle.assert_not_called()
 
+    def test_svg_mode_empty_catalog_with_default_aspect_falls_back_to_neutral(self):
+        import os
+        import tempfile
+
+        # VideoParams defaults video_aspect to the unvalidated string
+        # "9:16"; the shared neutral renderer must coerce it, or the
+        # catalog-empty svg task fails instead of getting its clip.
+        params = VideoParams(video_subject="x", faceless_material="svg")
+        self.assertEqual(params.video_aspect, "9:16")
+        with tempfile.TemporaryDirectory() as tmp:
+            with (
+                patch.object(tm.material, "download_videos", return_value=[]),
+                patch.object(tm.utils, "task_dir", return_value=tmp),
+                patch(
+                    "app.services.image_material.render_image_file_to_mp4",
+                    return_value=os.path.join(tmp, "neutral.mp4"),
+                ),
+                patch.object(tm, "_fail_task") as fail_task,
+            ):
+                result = tm.get_video_materials(
+                    task_id="svg-str-aspect",
+                    params=params,
+                    video_terms=["x"],
+                    audio_duration=10,
+                )
+        self.assertEqual(result, [os.path.join(tmp, "neutral.mp4")])
+        fail_task.assert_not_called()
+
     def test_svg_mode_empty_catalog_falls_back_to_neutral(self):
         params = VideoParams(video_subject="x", faceless_material="svg")
 

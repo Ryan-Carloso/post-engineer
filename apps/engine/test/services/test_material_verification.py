@@ -34,7 +34,6 @@ from app.services.material_verification import (
     _catalog_search,
     apply_verification,
     emit_material_fallback_summary,
-    phrase_at,
     render_neutral_clip,
     render_neutral_png,
     select_for_segment,
@@ -86,39 +85,6 @@ class TestVerificationConfig(unittest.TestCase):
         config.app["material_verification_min_score"] = "not-a-number"
         cfg = verification_config()
         self.assertEqual(cfg.min_score, 0.01)
-
-
-class TestPhraseAtTimestamp(unittest.TestCase):
-    def test_frame_timestamp_maps_to_active_phrase(self):
-        phrases = [
-            ("Market in the morning", 0.0, 4.0),
-            ("Dish on the table", 4.0, 8.0),
-            ("Waterfront at sunset", 8.0, 12.0),
-        ]
-        self.assertEqual(phrase_at(1.0, phrases), "Market in the morning")
-        self.assertEqual(phrase_at(5.0, phrases), "Dish on the table")
-        self.assertEqual(phrase_at(9.0, phrases), "Waterfront at sunset")
-
-    def test_timestamp_before_first_phrase_uses_first_phrase(self):
-        phrases = [("Waterfront at sunset", 4.0, 8.0)]
-        self.assertEqual(phrase_at(0.5, phrases), "Waterfront at sunset")
-
-    def test_timestamp_in_gap_uses_most_recent_started_phrase(self):
-        phrases = [
-            ("Market in the morning", 0.0, 4.0),
-            ("Dish on the table", 8.0, 12.0),
-            ("Waterfront at sunset", 16.0, 20.0),
-        ]
-        self.assertEqual(
-            phrase_at(6.0, phrases), "Market in the morning"
-        )
-
-    def test_timestamp_after_last_phrase_uses_last_phrase(self):
-        phrases = [
-            ("Market in the morning", 0.0, 4.0),
-            ("Waterfront at sunset", 8.0, 12.0),
-        ]
-        self.assertEqual(phrase_at(25.0, phrases), "Waterfront at sunset")
 
 
 class TestSelectForSegment(unittest.TestCase):
@@ -277,6 +243,20 @@ class TestNeutralPng(unittest.TestCase):
                 self.assertEqual(image.size, VideoAspect.portrait.to_resolution())
             with Image.open(landscape_path) as image:
                 self.assertEqual(image.size, VideoAspect.landscape.to_resolution())
+
+    def test_neutral_png_accepts_string_aspect(self):
+        import tempfile
+
+        from PIL import Image
+
+        with tempfile.TemporaryDirectory() as tmp:
+            # VideoParams defaults video_aspect to the unvalidated string
+            # "9:16" (pydantic does not validate defaults); the renderer
+            # must coerce it instead of crashing on .to_resolution().
+            path = render_neutral_png(tmp, "9:16")
+            self.assertTrue(os.path.isfile(path))
+            with Image.open(path) as image:
+                self.assertEqual(image.size, VideoAspect.portrait.to_resolution())
 
     def test_neutral_png_save_dir_never_contains_colon(self):
         import tempfile
