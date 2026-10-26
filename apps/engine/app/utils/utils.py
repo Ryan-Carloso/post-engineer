@@ -171,11 +171,12 @@ def run_in_background(func, *args, **kwargs):
 
 
 def time_convert_seconds_to_hmsm(seconds) -> str:
-    hours = int(seconds // 3600)
-    seconds = seconds % 3600
-    minutes = int(seconds // 60)
-    milliseconds = int(seconds * 1000) % 1000
-    seconds = int(seconds % 60)
+    # Round to whole milliseconds first: float seconds like 24.8 are
+    # 24.7999..., and truncating each field wrote ",799".
+    total_ms = int(round(seconds * 1000))
+    hours, rest = divmod(total_ms, 3_600_000)
+    minutes, rest = divmod(rest, 60_000)
+    seconds, milliseconds = divmod(rest, 1000)
     return "{:02d}:{:02d}:{:02d},{:03d}".format(hours, minutes, seconds, milliseconds)
 
 
