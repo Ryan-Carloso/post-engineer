@@ -490,18 +490,18 @@ def _download_videos_by_script_order(
                 logger.info(
                     f"downloading ordered video for '{search_term}': {item.url}"
                 )
-                saved_video_path = svg_material.resolve_material_path(
-                    item,
-                    material_directory,
-                    max_clip_duration,
-                    exclude_faces,
-                    video_aspect,
-                )
-                if not saved_video_path and verification_enabled and (
-                    item.provider not in ("svg", "neutral")
-                ):
-                    # Failed verified stock degrades to neutral, never
-                    # to unverified stock from the original pool.
+                try:
+                    saved_video_path = svg_material.resolve_material_path(
+                        item,
+                        material_directory,
+                        max_clip_duration,
+                        exclude_faces,
+                        video_aspect,
+                    )
+                except Exception:
+                    saved_video_path = ""
+                if not saved_video_path and verification_enabled and item.provider != "neutral":
+                    # Failed stock or catalog SVG degrades to neutral, never to unverified stock.
                     saved_video_path = svg_material.resolve_material_path(
                         material_verification.neutral_item_for(item),
                         material_directory,
