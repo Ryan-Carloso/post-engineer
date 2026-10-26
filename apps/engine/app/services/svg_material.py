@@ -448,6 +448,15 @@ def resolve_material_path(
     clip has no real face to screen, and the detector would discard most of the
     cartoon catalog for nothing.
     """
+    if item.provider == "neutral":
+        from app.services import material_verification
+
+        if not save_dir:
+            save_dir = utils.storage_dir("cache_videos")
+        return material_verification.render_neutral_clip(
+            save_dir, max_clip_duration, video_aspect
+        )
+
     if item.provider == "svg":
         rendered = _persist_svg_item(item, save_dir, max_clip_duration, video_aspect)
         if rendered:

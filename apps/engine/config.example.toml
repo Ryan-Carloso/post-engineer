@@ -449,6 +449,29 @@ svg_search_mode = "texto"
 # fitted to the target aspect so combine_videos keeps the clip; this only
 # decides what shows in the padding around it.
 svg_canvas_background = "#FFFFFF"
+
+# Verified stock material selection (PR: verified stock or thematic SVG
+# fallback). Off by default: existing behavior is preserved exactly until
+# an operator enables it. When enabled, stock is used only when a scorer
+# clears it (minimum score plus runner-up margin, both relative scores,
+# never probabilities); otherwise the fixed fallback order applies:
+# thematic SVG, broader-category SVG, reused SVG, neutral background.
+# The scorer is pluggable; the default ONNX scorer needs onnxruntime and
+# a SigLIP ONNX model, and fails closed (stock treated as unverified)
+# until both are present. Scores are tied to the scoring model:
+# recalibrate min_score and runner_up_margin when the model changes,
+# using verified Porto footage (must pass) and the three known mismatches
+# (bacalhau vs dumplings, Porto Alegre shop, Ribeira waterfront for
+# interior streets; all must fail) as the calibration set.
+# material_subject_to_asset maps a subject key to a catalog relative path
+# and is the only source for thematic SVG selection: the fallback path
+# never runs a catalog text search. Example:
+# material_subject_to_asset = { ribeira = "catalog/ribeira.svg" }
+material_verification_enabled = false
+material_verification_min_score = 0.33
+material_verification_runner_up_margin = 0.05
+material_verification_model_path = ""
+material_subject_to_asset = {}
 redis_db = 0
 redis_password = ""
 

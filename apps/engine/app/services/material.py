@@ -9,7 +9,12 @@ from loguru import logger
 
 from app.config import config
 from app.models.schema import MaterialInfo, VideoAspect, VideoConcatMode
-from app.services import svg_catalog, svg_material
+from app.services import material_verification, svg_catalog, svg_material
+from app.services.material_verification import (
+    MAX_LETTERBOX_BARS as MAX_LETTERBOX_BARS,
+    _ratio_matches as _ratio_matches,
+    _source_resolution_allowed as _source_resolution_allowed,
+)
 from app.services.video_download import _get_tls_verify
 # save_video lives in video_download; re-exported here because existing
 # callers (and tests) import it from material.
@@ -40,43 +45,6 @@ def get_api_key(cfg_key: str):
         _api_key_counter += 1
         return api_keys[_api_key_counter % len(api_keys)]
 
-
-#---------------
-# Ceiling for the horizontal (top/bottom) letterbox bars: a clip is only
-# used when letterboxing it against the target video_aspect stays within
-# this ceiling. Side bars (pillarbox) are not accepted — clips whose shape
-# would be taller/narrower than the canvas are rejected immediately.
-#---------------
-MAX_LETTERBOX_BARS = 0.35
-MAX_SOURCE_LONG_EDGE = 1920
-
-
-def _source_resolution_allowed(width: int, height: int) -> bool:
-    """Reject 4K source files before downloading them to the CPU worker."""
-    return max(width, height) <= MAX_SOURCE_LONG_EDGE
-
-
-def _ratio_matches(width: int, height: int, aspect: VideoAspect) -> bool:
-    """
-    True when the clip against the target video_aspect produces only
-    horizontal (top/bottom) bars within the MAX_LETTERBOX_BARS ceiling. Side
-    bars (pillarbox) are always rejected — clips taller/narrower than the
-    canvas are discarded immediately.
-
-    Missing/zero dimensions reject (e.g. Coverr is 99% landscape; without
-    dimensions, don't risk it).
-    """
-    if width <= 0 or height <= 0:
-        return False
-    file_ratio = width / height
-    target_w, target_h = aspect.to_resolution()
-    target_ratio = target_w / target_h
-    # Reject side bars: the clip must be at least as wide as the canvas
-    # (file_ratio >= target_ratio).
-    if file_ratio < target_ratio:
-        return False
-    bars = 1 - target_ratio / file_ratio
-    return bars <= MAX_LETTERBOX_BARS
 
 
 def search_videos_pexels(
@@ -363,6 +331,7 @@ def download_videos(
     match_script_order: bool = False,
     source_mix: List[str] = None,
     exclude_faces: bool | None = None,
+    material_scorer=None,
 ) -> List[str]:
     search_videos = _build_search_videos(source, video_aspect, source_mix)
 
@@ -382,10 +351,12 @@ def download_videos(
             max_clip_duration=max_clip_duration,
             material_directory=material_directory,
             exclude_faces=exclude_faces,
+            material_scorer=material_scorer,
         )
 
     valid_video_items = []
     valid_video_urls = []
+    term_groups = []
     found_duration = 0.0
     for search_term in search_terms:
         video_items = search_videos(
@@ -395,15 +366,25 @@ def download_videos(
         )
         logger.info(f"found {len(video_items)} videos for '{search_term}'")
 
+        term_items = []
         for item in video_items:
             if item.url not in valid_video_urls:
-                valid_video_items.append(item)
+                term_items.append(item)
                 valid_video_urls.append(item.url)
                 found_duration += item.duration
+        valid_video_items.extend(term_items)
+        term_groups.append((search_term, term_items))
 
     logger.info(
         f"found total videos: {len(valid_video_items)}, required duration: {audio_duration} seconds, found duration: {found_duration} seconds"
     )
+    if material_verification.verification_config().enabled:
+        valid_video_items, decisions = material_verification.apply_verification(
+            term_groups,
+            scorer=material_scorer,
+            subject_to_asset=material_verification.subject_to_asset_from_config(),
+        )
+        material_verification.emit_material_fallback_summary(task_id, decisions)
     video_paths = []
 
     concat_mode_value = getattr(video_concat_mode, "value", video_concat_mode)
@@ -446,6 +427,7 @@ def _download_videos_by_script_order(
     max_clip_duration: int,
     material_directory: str,
     exclude_faces: bool | None = None,
+    material_scorer=None,
 ) -> List[str]:
     """
     Download materials in script order.
@@ -486,6 +468,16 @@ def _download_videos_by_script_order(
         f"found total ordered video candidates: {sum(len(items) for _, items in candidate_groups)}, "
         f"required duration: {audio_duration} seconds, found duration: {found_duration} seconds"
     )
+    if material_verification.verification_config().enabled:
+        selected, decisions = material_verification.apply_verification(
+            candidate_groups,
+            scorer=material_scorer,
+            subject_to_asset=material_verification.subject_to_asset_from_config(),
+        )
+        material_verification.emit_material_fallback_summary(task_id, decisions)
+        candidate_groups = [
+            (decision.phrase, [item]) for decision, item in zip(decisions, selected)
+        ]
 
     video_paths = []
     total_duration = 0.0
