@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800">
+  <rect x="0" y="0" width="800" height="800" fill="#FFFFFF"/>
+  <!-- Bolhao market hall: arched facade, striped awnings, fruit stalls -->
+  <g stroke="#222222" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M 90 300 Q 400 240 710 300 L 710 660 Q 400 690 90 660 Z" fill="#F7E8C3"/>
+    <path d="M 150 300 Q 400 200 650 300" fill="none"/>
+    <path d="M 120 360 L 120 640 M 680 360 L 680 640" />
+  </g>
+  <g font-family="sans-serif" font-size="64" font-weight="bold" fill="#222222" text-anchor="middle">
+    <text x="400" y="180">Bolhão</text>
+  </g>
+  <g stroke="#222222" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 130 380 L 330 380 L 310 440 L 150 440 Z" fill="#E2574C"/>
+    <path d="M 150 380 L 190 440 M 210 380 L 230 440 M 270 380 L 270 440" stroke="#FFFFFF" stroke-width="3"/>
+    <path d="M 470 380 L 670 380 L 650 440 L 490 440 Z" fill="#3E8E5A"/>
+    <path d="M 490 380 L 530 440 M 550 380 L 570 440 M 610 380 L 610 440" stroke="#FFFFFF" stroke-width="3"/>
+    <rect x="150" y="500" width="220" height="110" rx="10" fill="#F2A541"/>
+    <rect x="430" y="500" width="220" height="110" rx="10" fill="#7CB342"/>
+    <circle cx="190" cy="540" r="22" fill="#E8751A"/>
+    <circle cx="250" cy="540" r="22" fill="#E8751A"/>
+    <circle cx="310" cy="540" r="22" fill="#E8751A"/>
+    <circle cx="190" cy="580" r="22" fill="#E8751A"/>
+    <circle cx="250" cy="580" r="22" fill="#E8751A"/>
+    <circle cx="470" cy="540" r="18" fill="#2E7D32"/>
+    <circle cx="530" cy="540" r="18" fill="#558B2F"/>
+    <circle cx="590" cy="540" r="18" fill="#2E7D32"/>
+    <circle cx="500" cy="580" r="18" fill="#558B2F"/>
+    <circle cx="560" cy="580" r="18" fill="#2E7D32"/>
+    <path d="M 130 640 L 670 640" stroke="#222222" stroke-width="5"/>
+  </g>
+</svg>

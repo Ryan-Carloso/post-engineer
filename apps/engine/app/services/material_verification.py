@@ -17,10 +17,17 @@ Fallback order, never using rejected stock or misleading assets:
 
 SVG selection uses the explicit mapping, never the catalog text search.
 Scoring is pluggable through an option (the repo's injection pattern).
-The default scorer is lazy ONNX: without onnxruntime and a SigLIP model
-it raises VerificationUnavailable, so stock is treated as unverified.
-Scoring is fail-closed. Deploy step still owed: onnxruntime, a SigLIP
-ONNX model, and frame sampling wired into OnnxClipScorer.score.
+The default scorer is lazy ONNX (see siglip_scorer): without onnxruntime,
+a SigLIP model, and its tokenizer it raises VerificationUnavailable, so
+stock is treated as unverified. Scoring is fail-closed. Frame sampling
+and ONNX inference are wired into OnnxClipScorer.score; still owed before
+enabling verification in production: a SigLIP model whose scores were
+validated to separate true pairs from mismatches, and a recalibration of
+the threshold and margin on that model. The Xenova SigLIP ONNX export
+available in the sandbox did NOT separate true pairs from mismatches
+(all cross-modal cosines near zero, ranking wrong on two-way retrieval),
+so the threshold below is still the uncalibrated stub ordering value,
+kept unchanged, and verification stays off by default.
 
 This module also owns the aspect/resolution helpers moved out of
 material.py, which is grandfathered over the file-size cap: material.py
@@ -44,6 +51,10 @@ from app.services.analytics import track_event
 from app.services.neutral_background import (  # noqa: F401 - re-export for callers
     render_neutral_clip,
     render_neutral_png,
+)
+from app.services.siglip_scorer import (  # noqa: F401 - re-export for callers
+    SiglipScorer,
+    VerificationUnavailable,
 )
 
 # A clip is only used when letterboxing it against the target aspect
@@ -70,17 +81,14 @@ def _ratio_matches(width: int, height: int, aspect: VideoAspect) -> bool:
     return 1 - target_ratio / file_ratio <= MAX_LETTERBOX_BARS
 
 
-class VerificationUnavailable(Exception):
-    """The scorer cannot run (missing dependency or model)."""
-
-
-# Initial calibrated values, derived from the four known cases on the
-# scorer's relative scale: verified Porto scores above the threshold and
-# the three known mismatches score below it. The threshold sits between
-# the highest mismatch and the verified case; the margin is smaller than
-# the verified case's lead over its runner-up. These values are tied to
-# the scoring model: recalibrate them when the model changes, using the
-# same four cases as the calibration set.
+# Uncalibrated stub-ordering values, kept unchanged: the threshold sits
+# between the highest known mismatch and the verified case on the STUB
+# scale, and the margin is smaller than the verified case's stub lead.
+# These values are tied to the scoring model and are NOT calibrated
+# against the wired SigLIP scorer (see the module docstring): recalibrate
+# them on a validated model, using the same four cases as the
+# calibration set, before enabling verification. Verification stays off
+# by default until then.
 DEFAULT_MIN_SCORE = 0.33
 DEFAULT_RUNNER_UP_MARGIN = 0.05
 
@@ -144,6 +152,7 @@ _SUBJECT_PATTERNS = (
     ("ribeira", "ribeira"),
     ("tasca", "tasca"),
     ("bacalhau", "bacalhau_dish"),
+    ("narrow streets", "porto_streets"),
 )
 
 _SUBJECT_BROADER = {
@@ -153,6 +162,7 @@ _SUBJECT_BROADER = {
     "bolhao_market": "porto_market",
     "ribeira": "porto_places",
     "porto_alegre": None,
+    "porto_streets": "porto_places",
 }
 
 
@@ -223,31 +233,23 @@ Scorer = Callable[[str, str], Optional[float]]
 
 
 class OnnxClipScorer:
-    """Lazy CLIP/SigLIP ONNX scorer. Raises VerificationUnavailable
-    until onnxruntime and a SigLIP model are installed: a scorer that
-    cannot run must never pass stock footage."""
+    """Lazy CLIP/SigLIP ONNX scorer, wired through SiglipScorer.
+
+    The scorer is constructed per verification call and loads the model
+    and tokenizer lazily on first use; a scorer that cannot run raises
+    VerificationUnavailable and must never pass stock footage. The
+    model path comes from config (material_verification_model_path);
+    the tokenizer and preprocessor config sit next to the model file.
+    """
+
+    def __init__(self) -> None:
+        self._delegate: Optional[SiglipScorer] = None
 
     def score(self, candidate_url: str, phrase: str) -> float:
-        try:
-            import onnxruntime  # type: ignore[import-untyped]  # noqa: F401
-        except ImportError as exc:
-            raise VerificationUnavailable(
-                "onnxruntime is not installed; install onnxruntime and "
-                "download a SigLIP ONNX model to enable stock verification"
-            ) from exc
-        model_path = str(config.app.get("material_verification_model_path", "")).strip()
-        if not model_path or not os.path.isfile(model_path):
-            raise VerificationUnavailable(
-                "material_verification_model_path is not set or missing; "
-                "download a SigLIP ONNX model to enable stock verification"
-            )
-        # Frame sampling and ONNX inference are not wired yet: raising
-        # here keeps verification fail-closed instead of passing stock
-        # on an unimplemented scorer.
-        raise VerificationUnavailable(
-            "SigLIP frame scoring is not wired yet; wire frame sampling "
-            "into OnnxClipScorer.score before enabling verification"
-        )
+        if self._delegate is None:
+            model_path = str(config.app.get("material_verification_model_path", "")).strip()
+            self._delegate = SiglipScorer(model_path)
+        return self._delegate.score(candidate_url, phrase)
 
 
 def _score_candidates(

@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800">
+  <rect x="0" y="0" width="800" height="800" fill="#FFFFFF"/>
+  <!-- Narrow Porto streets: steep lane, tall colourful houses, laundry line -->
+  <g stroke="#222222" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 90 640 L 300 640 L 430 300 L 710 300" fill="none"/>
+    <path d="M 300 640 L 430 300" stroke="#B0BEC5" stroke-width="3"/>
+    <rect x="100" y="220" width="130" height="420" fill="#E2574C"/>
+    <rect x="240" y="180" width="130" height="460" fill="#F2A541"/>
+    <rect x="480" y="180" width="130" height="460" fill="#3E8E5A"/>
+    <rect x="620" y="220" width="130" height="420" fill="#5C9BD5"/>
+    <g fill="#FFFFFF" stroke="#222222" stroke-width="3">
+      <rect x="125" y="250" width="30" height="30"/>
+      <rect x="175" y="250" width="30" height="30"/>
+      <rect x="265" y="210" width="30" height="30"/>
+      <rect x="315" y="210" width="30" height="30"/>
+      <rect x="505" y="210" width="30" height="30"/>
+      <rect x="555" y="210" width="30" height="30"/>
+      <rect x="645" y="250" width="30" height="30"/>
+      <rect x="695" y="250" width="30" height="30"/>
+    </g>
+    <path d="M 240 200 Q 400 260 620 200" fill="none" stroke="#222222" stroke-width="3"/>
+    <rect x="300" y="225" width="34" height="40" fill="#FFFFFF"/>
+    <rect x="380" y="235" width="34" height="40" fill="#E8A0BF"/>
+    <rect x="460" y="230" width="34" height="40" fill="#FFFFFF"/>
+    <path d="M 90 640 L 710 640" stroke="#222222" stroke-width="5"/>
+    <circle cx="400" cy="560" r="16" fill="#222222"/>
+    <path d="M 400 576 L 390 620 M 400 576 L 410 620" stroke="#222222" stroke-width="4"/>
+  </g>
+  <g font-family="sans-serif" font-size="44" font-weight="bold" fill="#222222" text-anchor="middle">
+    <text x="400" y="720">NARROW STREETS</text>
+  </g>
+</svg>

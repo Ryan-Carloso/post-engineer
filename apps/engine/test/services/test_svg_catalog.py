@@ -322,6 +322,12 @@ class SvgCatalogR2Tests(unittest.TestCase):
         self.assertEqual(os.path.realpath(resolved), os.path.realpath(cached))
         self.assertEqual(self.fake.requested_keys, [])
 
+    def test_resolve_asset_path_bundled_asset_skips_r2(self):
+        resolved = svg_catalog.resolve_asset_path("porto/tripas-dish.svg")
+        self.assertTrue(os.path.isfile(resolved))
+        self.assertTrue(resolved.endswith("porto/tripas-dish.svg"))
+        self.assertEqual(self.fake.requested_keys, [])
+
     def test_resolve_asset_path_cache_miss_downloads(self):
         resolved = svg_catalog.resolve_asset_path("Animals 3/hen money.svg")
         self.assertTrue(os.path.isfile(resolved))

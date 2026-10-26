@@ -152,6 +152,11 @@ class TestIdentifySubject(unittest.TestCase):
     def test_unknown_phrase_has_no_subject(self):
         self.assertIsNone(identify_subject("A quiet afternoon somewhere"))
 
+    def test_narrow_streets_identifies_porto_streets(self):
+        self.assertEqual(
+            identify_subject("Walk the narrow streets of Porto"), "porto_streets"
+        )
+
 
 class TestSelectForSegment(unittest.TestCase):
     def setUp(self):
@@ -238,6 +243,21 @@ class TestSelectForSegment(unittest.TestCase):
         )
         self.assertEqual(decision.tier, "svg_thematic")
         self.assertEqual(decision.fallback_reason, "no_candidates")
+
+    def test_narrow_streets_triggers_porto_streets_svg(self):
+        decision = select_for_segment(
+            phrase="Walk the narrow streets of Porto",
+            candidates=[],
+            scorer=_reference_scorer,
+            config=self.cfg,
+            subject_to_asset={
+                "porto_streets": _svg(
+                    "narrow-streets", "porto_streets", "porto_places"
+                )
+            },
+        )
+        self.assertEqual(decision.tier, "svg_thematic")
+        self.assertEqual(decision.svg_asset_id, "narrow-streets")
 
     def test_broader_category_tier_when_no_thematic_asset(self):
         decision = select_for_segment(
