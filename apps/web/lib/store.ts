@@ -355,9 +355,9 @@ export interface NewPostState {
    */
   faceless: boolean;
   /**
-   * What fills a faceless video: 'broll' (stock footage first, the
-   * previous behaviour) or 'svg' (catalog illustrations only). Only read
-   * when faceless is true; a with-face post never sends it.
+   * What fills the video, with or without a face: 'broll' (stock footage
+   * only) or 'svg' (catalog illustrations only). Sent on every post; the
+   * two never mix.
    */
   facelessMaterial: 'broll' | 'svg';
   /** Last create outcome, so every local component can render it without
