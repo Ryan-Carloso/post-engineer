@@ -118,6 +118,7 @@ module = [
     "PIL.*",
     "cv2.*",
     "toml.*",
+    "onnxruntime.*",
 ]
 ignore_missing_imports = true
 
