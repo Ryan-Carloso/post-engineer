@@ -105,7 +105,7 @@ export const GeneratePersonaVideosOptionsShape = {
   videoLayout: z
     .enum(VIDEO_LAYOUTS)
     .optional()
-    .describe('How the persona hook is composed with the b-roll. Overrides the persona when one is given; a post without a persona defaults to "standard". Same render cost either way.'),
+    .describe('How the persona hook is composed with the video material (facelessMaterial: real clips or drawings). Overrides the persona when one is given; a post without a persona defaults to "standard". Same render cost either way.'),
   paragraphNumber: z.number().int().min(1).max(10).optional().describe('Paragraph count (1-10). Overrides the persona when one is given.'),
   language: z
     .string()

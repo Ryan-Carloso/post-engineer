@@ -25,6 +25,8 @@ export interface ProgressHistoryEntry {
 // to feature-detect.
 export interface GenerationFacts {
   faceless: boolean;
+  /** Stock only or drawings only (migration 029); 'broll' for older posts. */
+  material: 'broll' | 'svg';
   language: string | null;
   voiceId: string | null;
   videoAspect: string | null;
@@ -96,6 +98,7 @@ export function narrowProgressHistory(value: unknown): ProgressHistoryEntry[] {
 export function narrowGeneration(value: unknown): GenerationFacts {
   const fallback: GenerationFacts = {
     faceless: false,
+    material: 'broll',
     language: null,
     voiceId: null,
     videoAspect: null,
@@ -113,6 +116,7 @@ export function narrowGeneration(value: unknown): GenerationFacts {
     // Only the literal true counts — mirrors the route and the engine's
     // slot_faceless rule.
     faceless: record.faceless === true,
+    material: record.material === 'svg' ? 'svg' : 'broll',
     language: text('language'),
     voiceId: text('voiceId'),
     videoAspect: text('videoAspect'),

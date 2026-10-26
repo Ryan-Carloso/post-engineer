@@ -703,7 +703,7 @@ export const enDictionary: Dictionary = {
     businessDesc: 'For creators and teams that want to scale.',
     faqTitle: 'Frequently asked questions',
     faq1Q: 'Do I need to appear in the videos?',
-    faq1A: 'No. Your personas get AI-generated avatars, and when you create a post you choose whether the video shows the face or is 100% faceless, with stock footage and synthetic narration.',
+    faq1A: 'No. Your personas get AI-generated avatars, and when you create a post you choose whether the video shows the persona\'s face or not, and whether the rest of the video uses real clips or drawings, with synthetic narration.',
     faq2Q: 'How do plan credits work?',
     faq2A: 'Each published video consumes credits from your plan. The Starter plan includes 30 videos per month and credits renew every month.',
     faq3Q: 'Can I cancel at any time?',

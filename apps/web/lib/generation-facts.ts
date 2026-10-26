@@ -13,7 +13,7 @@
 // in getHandler is the thing that 500s.
 //---------------
 export function buildGenerationFacts(
-  row: { faceless: boolean | null },
+  row: { faceless: boolean | null; faceless_material?: string | null },
   scheduleRow: {
     post_language: string | null;
     post_voice_id: string | null;
@@ -25,6 +25,7 @@ export function buildGenerationFacts(
   },
 ): {
   faceless: boolean;
+  material: 'broll' | 'svg';
   language: string | null;
   voiceId: string | null;
   videoAspect: string | null;
@@ -39,6 +40,9 @@ export function buildGenerationFacts(
   // report object-literal property lines, so this keeps every fact visible
   // to the coverage gate.
   const faceless = row.faceless === true;
+  // Only the literal 'svg' counts — mirrors the engine's slot_material rule,
+  // so a row predating migration 029 reads as the stock it rendered with.
+  const material = row.faceless_material === 'svg' ? 'svg' : 'broll';
   const language = scheduleRow.post_language ?? null;
   const voiceId = scheduleRow.post_voice_id ?? null;
   const videoAspect = scheduleRow.post_video_aspect ?? null;
@@ -51,6 +55,6 @@ export function buildGenerationFacts(
   const paragraphNumber = scheduleRow.post_paragraph_number ?? null;
   const faceQuality = scheduleRow.post_face_quality ?? null;
   return {
-    faceless, language, voiceId, videoAspect, videoLayout, niche, paragraphNumber, faceQuality,
+    faceless, material, language, voiceId, videoAspect, videoLayout, niche, paragraphNumber, faceQuality,
   };
 }

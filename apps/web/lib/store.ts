@@ -213,9 +213,9 @@ interface PersonaFormState {
   storedPhotoUrl: string | null;
   voiceId: string | null;
   videoAspect: string;
-  /** How the persona is composed with the b-roll during the hook.
+  /** How the persona is composed with the video material during the hook.
    *  'standard' = the avatar fills the frame; 'react' = the frame splits,
-   *  avatar on top and b-roll below. See VIDEO_LAYOUTS in persona-schema. */
+   *  avatar on top and the video material below. See VIDEO_LAYOUTS in persona-schema. */
   videoLayout: string;
   scriptPrompt: string;
   /** The persona's call to action ('' = the engine picks a generic one). */

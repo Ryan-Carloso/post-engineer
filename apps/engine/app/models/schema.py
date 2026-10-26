@@ -37,7 +37,7 @@ class LipSyncQuality(str, Enum):
 
 
 class VideoLayout(str, Enum):
-    """How the persona is composed with the b-roll during the hook."""
+    """How the persona is composed with the video material during the hook."""
 
     standard = "standard"
     react = "react"
@@ -132,9 +132,9 @@ class VideoParams(BaseModel):
     video_terms: Optional[str | list] = None  # Keywords used to generate the video
     video_aspect: Optional[VideoAspect] = VideoAspect.portrait.value
     video_concat_mode: Optional[VideoConcatMode] = VideoConcatMode.random.value
-    # How the persona meets the b-roll during the hook. "standard" fills the
-    # frame with the avatar; "react" splits the frame in half (avatar on top,
-    # b-roll below). Per-request only, never config.toml: an editorial choice
+    # How the persona meets the video material during the hook. "standard"
+    # fills the frame with the avatar; "react" splits the frame in half
+    # (avatar on top, the post's material below: stock or drawings). Per-request only, never config.toml: an editorial choice
     # per post, not a site-wide rendering default. The default is the enum's
     # own first member so a caller that omits the field gets the behaviour
     # every pre-existing video already had.

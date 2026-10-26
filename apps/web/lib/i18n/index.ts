@@ -14,7 +14,7 @@ import type { Locale } from './types';
 // grandfathered over the 500-line file-size cap and may not grow a single
 // line, so the feature's copy lives in ./publishing-accounts and is merged
 // here. The faceless material copy follows the same pattern
-// (./faceless-material-i18n, merged into newPost below). The exported
+// (./faceless-material-i18n, merged into newPost/posts/personas below). The exported
 // dictionaries stay reference-identical per locale
 // (dictionaries.pt === ptDictionary), and the Dictionary/TranslationKey
 // contract below covers the merged keys.
@@ -27,6 +27,8 @@ export const ptDictionary = {
   nav: { ...basePtDictionary.nav, ...metricsStrings.pt.nav },
   metrics: metricsStrings.pt.metrics,
   newPost: { ...basePtDictionary.newPost, ...facelessMaterialStrings.pt.newPost },
+  posts: { ...basePtDictionary.posts, ...facelessMaterialStrings.pt.posts },
+  personas: { ...basePtDictionary.personas, ...facelessMaterialStrings.pt.personas },
 };
 
 export const enDictionary = {
@@ -36,6 +38,8 @@ export const enDictionary = {
   nav: { ...baseEnDictionary.nav, ...metricsStrings.en.nav },
   metrics: metricsStrings.en.metrics,
   newPost: { ...baseEnDictionary.newPost, ...facelessMaterialStrings.en.newPost },
+  posts: { ...baseEnDictionary.posts, ...facelessMaterialStrings.en.posts },
+  personas: { ...baseEnDictionary.personas, ...facelessMaterialStrings.en.personas },
 };
 
 type PublishingAccountsKeys = typeof publishingAccountsStrings.en;

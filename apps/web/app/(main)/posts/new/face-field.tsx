@@ -7,6 +7,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { CARD_CLASS, SectionTitle } from './section';
+import { MaterialPreview } from './material-preview';
 
 //---------------
 // Video face — every persona has a face; "no face" is chosen here, per
@@ -51,12 +52,14 @@ export const NewPostFaceField = () => {
       value: 'broll',
       label: t('newPost.faceMaterialBroll'),
       hint: t('newPost.faceMaterialBrollHint'),
+      previewAlt: t('newPost.faceMaterialBrollPreviewAlt'),
       icon: <FilmIcon />,
     },
     {
       value: 'svg',
       label: t('newPost.faceMaterialSvg'),
       hint: t('newPost.faceMaterialSvgHint'),
+      previewAlt: t('newPost.faceMaterialSvgPreviewAlt'),
       icon: <ImageIcon />,
     },
   ] as const;
@@ -146,14 +149,12 @@ export const NewPostFaceField = () => {
                   aria-label={option.label}
                   className="sr-only"
                 />
-                <span
-                  className={cn(
-                    'mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full',
-                    selected ? 'bg-accent text-white' : 'bg-neutral-100 text-neutral-500',
-                  )}
-                >
-                  {option.icon}
-                </span>
+                <MaterialPreview
+                  material={option.value}
+                  alt={option.previewAlt}
+                  fallbackIcon={option.icon}
+                  selected={selected}
+                />
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-semibold text-neutral-900">{option.label}</span>
                   <span className="mt-0.5 block text-xs leading-5 text-neutral-500">{option.hint}</span>

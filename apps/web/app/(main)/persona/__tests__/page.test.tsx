@@ -465,7 +465,7 @@ describe('app/(main)/persona/page — PersonaPage', () => {
     expect(formData.get('scriptPrompt')).toBe('Storytelling forte');
   });
 
-  it('creation sends the chosen layout (persona on top, b-roll below)', async () => {
+  it('creation sends the chosen layout (persona on top, material below)', async () => {
     const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });
 

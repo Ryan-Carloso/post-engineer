@@ -182,7 +182,7 @@ interface ValidatedInput {
   voiceId?: string;
   videoAspect?: '9:16' | '16:9';
   /** 'standard' = the avatar fills the frame; 'react' = the frame splits,
-   *  avatar on top and b-roll below. Absent means standard. */
+   *  avatar on top and the video material below. Absent means standard. */
   videoLayout?: 'standard' | 'react';
   paragraphNumber?: number;
   language?: string;
