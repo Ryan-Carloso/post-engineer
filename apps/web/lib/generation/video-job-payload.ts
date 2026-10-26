@@ -51,6 +51,10 @@ const REQUEST_FORWARD_FIELDS: ReadonlyArray<string> = [
   // the web-side slot id); it must survive the allowlist so boot orphan
   // triage can requeue web-created tasks on engine restart.
   'slot_id',
+  // faceless_material is a first-class engine field (VideoParams carries
+  // it as the per-post faceless material choice); without it a faceless
+  // post's svg choice would be dropped here and silently render broll.
+  'faceless_material',
 ];
 
 export interface JobPersona {
