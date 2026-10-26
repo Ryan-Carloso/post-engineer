@@ -213,9 +213,9 @@ interface PersonaFormState {
   storedPhotoUrl: string | null;
   voiceId: string | null;
   videoAspect: string;
-  /** How the persona is composed with the b-roll during the hook.
+  /** How the persona is composed with the video material during the hook.
    *  'standard' = the avatar fills the frame; 'react' = the frame splits,
-   *  avatar on top and b-roll below. See VIDEO_LAYOUTS in persona-schema. */
+   *  avatar on top and the video material below. See VIDEO_LAYOUTS in persona-schema. */
   videoLayout: string;
   scriptPrompt: string;
   /** The persona's call to action ('' = the engine picks a generic one). */
@@ -348,12 +348,18 @@ export interface NewPostState {
    */
   publishMode: 'scheduled' | 'asap';
   /**
-   * Generate this batch WITHOUT a face: 100% stock footage, no lipsync, and
-   * no persona image in the library (the persona still supplies the voice,
-   * niche and script prompt — and is still required). Personas are always
-   * faced; this is the only place "no face" lives now.
+   * Generate this batch WITHOUT a face: no lipsync, and no persona image
+   * in the library (the persona still supplies the voice, niche and script
+   * prompt — and is still required). Personas are always faced; this is
+   * the only place "no face" lives now.
    */
   faceless: boolean;
+  /**
+   * What fills the video, with or without a face: 'broll' (stock footage
+   * only) or 'svg' (catalog illustrations only). Sent on every post; the
+   * two never mix.
+   */
+  facelessMaterial: 'broll' | 'svg';
   /** Last create outcome, so every local component can render it without
       props. A projection of api.ts' CreatePostResult (only the fields the UI
       reads) — declared here so lib/store.ts never imports lib/api.ts, which
@@ -375,6 +381,7 @@ export interface NewPostState {
   setTimezone: (value: string) => void;
   setPublishMode: (mode: 'scheduled' | 'asap') => void;
   setFaceless: (faceless: boolean) => void;
+  setFacelessMaterial: (facelessMaterial: 'broll' | 'svg') => void;
   setResult: (result: NewPostOutcome | null) => void;
   setValidationKey: (key: TranslationKey | null) => void;
   setPending: (pending: boolean) => void;
@@ -412,6 +419,8 @@ const initialNewPostState = {
   publishMode: 'scheduled' as 'scheduled' | 'asap',
   // Default is WITH the persona's face; "no face" is the opt-in.
   faceless: false,
+  // Default material is broll: the previous behaviour, stock first.
+  facelessMaterial: 'broll' as 'broll' | 'svg',
   result: null as NewPostOutcome | null,
   validationKey: null as TranslationKey | null,
   pending: false,
@@ -442,6 +451,7 @@ export const useNewPostStore = create<NewPostState>()(
     setTimezone: (timezone) => set({ timezone }),
     setPublishMode: (publishMode) => set({ publishMode }),
     setFaceless: (faceless) => set({ faceless }),
+    setFacelessMaterial: (facelessMaterial) => set({ facelessMaterial }),
     setResult: (result) => set({ result }),
     setValidationKey: (validationKey) => set({ validationKey }),
     setPending: (pending) => set({ pending }),

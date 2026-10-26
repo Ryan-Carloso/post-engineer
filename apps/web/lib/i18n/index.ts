@@ -6,13 +6,16 @@ import { ptDictionary as basePtDictionary, type Dictionary as BaseDictionary } f
 import { enDictionary as baseEnDictionary } from './en';
 import { publishingAccountsStrings } from './publishing-accounts';
 import { metricsStrings } from './metrics-i18n';
+import { facelessMaterialStrings } from './faceless-material-i18n';
 import type { Locale } from './types';
 
 //---------------
 // Per-persona default publishing accounts (issue #212): en.ts/pt.ts are
 // grandfathered over the 500-line file-size cap and may not grow a single
 // line, so the feature's copy lives in ./publishing-accounts and is merged
-// here. The exported dictionaries stay reference-identical per locale
+// here. The faceless material copy follows the same pattern
+// (./faceless-material-i18n, merged into newPost/posts/personas below). The exported
+// dictionaries stay reference-identical per locale
 // (dictionaries.pt === ptDictionary), and the Dictionary/TranslationKey
 // contract below covers the merged keys.
 //---------------
@@ -23,6 +26,9 @@ export const ptDictionary = {
   persona: { ...basePtDictionary.persona, ...publishingAccountsStrings.pt.persona },
   nav: { ...basePtDictionary.nav, ...metricsStrings.pt.nav },
   metrics: metricsStrings.pt.metrics,
+  newPost: { ...basePtDictionary.newPost, ...facelessMaterialStrings.pt.newPost },
+  posts: { ...basePtDictionary.posts, ...facelessMaterialStrings.pt.posts },
+  personas: { ...basePtDictionary.personas, ...facelessMaterialStrings.pt.personas },
 };
 
 export const enDictionary = {
@@ -31,10 +37,14 @@ export const enDictionary = {
   persona: { ...baseEnDictionary.persona, ...publishingAccountsStrings.en.persona },
   nav: { ...baseEnDictionary.nav, ...metricsStrings.en.nav },
   metrics: metricsStrings.en.metrics,
+  newPost: { ...baseEnDictionary.newPost, ...facelessMaterialStrings.en.newPost },
+  posts: { ...baseEnDictionary.posts, ...facelessMaterialStrings.en.posts },
+  personas: { ...baseEnDictionary.personas, ...facelessMaterialStrings.en.personas },
 };
 
 type PublishingAccountsKeys = typeof publishingAccountsStrings.en;
 type MetricsKeys = typeof metricsStrings.en;
+type FacelessMaterialKeys = typeof facelessMaterialStrings.en;
 export type Dictionary = BaseDictionary & {
   [Section in keyof PublishingAccountsKeys]: {
     [Key in keyof PublishingAccountsKeys[Section]]: string;
@@ -42,6 +52,10 @@ export type Dictionary = BaseDictionary & {
 } & {
   [Section in keyof MetricsKeys]: {
     [Key in keyof MetricsKeys[Section]]: string;
+  };
+} & {
+  [Section in keyof FacelessMaterialKeys]: {
+    [Key in keyof FacelessMaterialKeys[Section]]: string;
   };
 };
 

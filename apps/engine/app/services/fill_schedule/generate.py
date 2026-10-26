@@ -26,6 +26,7 @@ from app.services.fill_schedule.support import (
     notify_safe,
     post_identity,
     slot_faceless,
+    slot_material,
     slot_user_id,
     token_cost,
     track_refund_issued,
@@ -115,6 +116,9 @@ class BatchGenerator:
                 # before migration 018) and a NULL persona column, which is
                 # the behaviour every existing video already has.
                 video_layout=identity.get("video_layout") or "standard",
+                # Per-post material (scheduled_posts, migration 029), forwarded
+                # exactly like the web's direct dispatch does.
+                faceless_material=slot_material(slot),
                 video_script_prompt=identity.get("script_prompt") or "",
                 video_cta=identity.get("cta_text") or "",
                 # Snapshot (post_language) already resolved by post_identity();

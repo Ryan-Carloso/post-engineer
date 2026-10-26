@@ -1111,9 +1111,8 @@ export function usePostDetailQuery(id: string) {
 }
 
 //---------------
-// Create post — POST /api/videos/generate-and-schedule. One call mints the
-// videos AND their publishing schedule (1-10 topics, one slot each): the
-// web had no client for this route until the /posts/new screen.
+// Create post — POST /api/videos/generate-and-schedule: one call mints the
+// videos AND their publishing schedule.
 //---------------
 
 export interface CreatePostInput {
@@ -1123,23 +1122,22 @@ export interface CreatePostInput {
   topics: string[];
   providers: string[];
   accounts: Record<string, string[]>;
-  /** 'scheduled' (default): publish at the slot times. 'asap': publish each
-      video the moment generation finishes, with no scheduled time. */
+  /** 'scheduled' (default) or 'asap' (publish the moment generation finishes). */
   mode?: 'scheduled' | 'asap';
-  /** Offset-aware ISO instant the publishing window opens. Required unless
-      mode is 'asap'. */
+  /** Offset-aware ISO instant the window opens; required unless mode is 'asap'. */
   startAt?: string;
-  /** Daily publish times as "HH:MM", wall clock in `timezone`. Required
-      unless mode is 'asap'. */
+  /** Daily publish times as "HH:MM", wall clock in `timezone`; required unless mode is 'asap'. */
   times?: string[];
   /** Required unless mode is 'asap' (the server defaults it to 'UTC'). */
   timezone?: string;
-  /** Generate without a face (100% stock, no lipsync). Personas are always
-      faced; this is the per-post choice. Sent explicitly — the server is the
+  /** Generate without a face (no lipsync). Personas are always faced;
+      this is the per-post choice. Sent explicitly — the server is the
       billing authority and prices the two cases differently. */
   faceless: boolean;
-  /** Required only without a persona: the engine needs exactly one voice and
-      there is no persona to inherit it from. */
+  /** What fills the video, with or without a face: 'broll' (stock
+      footage only) or 'svg' (catalog illustrations only). Never mixed. */
+  facelessMaterial?: 'broll' | 'svg';
+  /** Required only without a persona: the engine needs exactly one voice. */
   voiceId?: string;
 }
 
@@ -1170,8 +1168,7 @@ export interface CreatePostResult {
 
 //---------------
 // narrowCreatedSlots — the payload crosses a network boundary, so every
-// field the success screen reads is checked; a malformed entry is dropped
-// instead of reaching the UI as `undefined`.
+// field the success screen reads is checked; a malformed entry is dropped.
 //---------------
 function narrowCreatedSlots(value: unknown): CreatedSlot[] {
   if (!Array.isArray(value)) return [];
@@ -1198,12 +1195,13 @@ export async function createPost(input: CreatePostInput): Promise<CreatePostResu
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      // Spreading rather than `personaId: input.personaId` so a persona-less
-      // post sends no key at all: the server distinguishes absent from empty.
+      // Spreading so a persona-less post sends no key at all: the server
+      // distinguishes absent from empty.
       ...(input.personaId !== undefined ? { personaId: input.personaId } : {}),
       topics: input.topics,
       options: {
         faceless: input.faceless,
+        ...(input.facelessMaterial !== undefined ? { facelessMaterial: input.facelessMaterial } : {}),
         ...(input.voiceId !== undefined ? { voiceId: input.voiceId } : {}),
       },
       publishing: {

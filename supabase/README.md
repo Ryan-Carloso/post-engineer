@@ -33,6 +33,8 @@ the order — you never need to guess or read docs to know what comes next:
 | 025 | `migrations/025_post-metrics.sql` | Per-video performance snapshots (`post_metrics`: views/likes/comments/saves at 24h and 7d) with owner-read RLS, `post_metrics_done` (posts finished per window, service-role only), plus the hourly `post-metrics-hourly` pg_cron job (`schedule_post_metrics()`) (superseded by 027: the hourly run now happens in the web app) |
 | 026 | `migrations/026_post-metrics-dimensions.sql` | Metrics dimensions on `post_metrics`: `persona_id` (filled by a BEFORE INSERT trigger from the post's schedule; NULL for faceless posts) and `script_angle` (written by the web collector from the engine task record), so the metrics dashboard filters by persona, account, network and script angle without joins. Existing snapshots are backfilled for `persona_id` |
 | 027 | `migrations/027_internal-scheduler.sql` | In-app scheduler replaces the pg_cron/pg_net HTTP triggers: unschedules `post-metrics-hourly`/`billing-reconcile-daily` and drops `schedule_post_metrics()`/`schedule_billing_reconcile()` (both guarded), adds `scheduler_leases` + `try_acquire_scheduler_lease()` (service-role only) — the web app (`apps/web/lib/scheduler-jobs.ts`) runs the jobs in-process, one run per tick across replicas |
+| 028 | `migrations/028_publish_retry_backoff.sql` | Publish retry backoff: `scheduled_posts.publish_not_before`, skipped by `ready_due_slots` until the delay elapses |
+| 029 | `migrations/029_scheduled-posts-material.sql` | Per-post video material (`scheduled_posts.faceless_material`, `'broll'` or `'svg'`, default `'broll'`), forwarded by the engine batch pipeline |
 
 ## How to apply
 

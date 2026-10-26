@@ -432,9 +432,9 @@ redis_port = 6379
 # Private SVG catalog (Doodly bundle). The artwork and its index are licensed
 # and live in Cloudflare R2: they are fetched on demand and cached under
 # <svg_cache_dir>, and are never committed. SVG is opt-in and defaults to
-# off: without `svg_catalog_enabled` there is no SVG, and material search
-# uses only the stock providers. When enabled, the catalog is searched first
-# and the stock providers cover keywords it has no artwork for. It needs
+# off: without `svg_catalog_enabled` there is no SVG. When enabled, the
+# catalog serves only posts whose material is "svg"; "broll" posts stay
+# stock only and never get catalog artwork. It needs
 # `svg_r2_prefix` and the R2_* credentials — a missing one, or an unreachable
 # index, fails the render instead of silently degrading to stock.
 svg_catalog_enabled = false
@@ -449,6 +449,28 @@ svg_search_mode = "texto"
 # fitted to the target aspect so combine_videos keeps the clip; this only
 # decides what shows in the padding around it.
 svg_canvas_background = "#FFFFFF"
+
+# Verified stock material selection. Off by default: existing behavior is
+# preserved exactly until an operator enables it. When enabled, stock is
+# used only when a scorer clears it (minimum score plus runner-up margin,
+# both relative scores, never probabilities); a segment whose stock is not
+# verified is dropped, never replaced — broll mode is stock only, so no
+# catalog SVG and no neutral background ever substitutes for it. When no
+# segment verifies, the download fails like any other empty stock search.
+# R2 is the only source of SVG artwork: there is no subject mapping and
+# no bundled artwork.
+# The scorer is pluggable; the default ONNX scorer needs onnxruntime and
+# a SigLIP ONNX model, and fails closed (stock treated as unverified)
+# until both are present. Scores are tied to the scoring model:
+# recalibrate min_score and runner_up_margin when the model changes.
+# Verification stays off by default. The threshold and margin below are
+# calibrated on the padded SigLIP scorer against real Pixabay candidates
+# (see material_verification.py); Pexels was not measurable from the
+# sandbox (read timeout).
+material_verification_enabled = false
+material_verification_min_score = 0.01
+material_verification_runner_up_margin = 0.005
+material_verification_model_path = ""
 redis_db = 0
 redis_password = ""
 

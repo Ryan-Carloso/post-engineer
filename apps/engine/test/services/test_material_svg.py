@@ -316,8 +316,8 @@ class BuildSearchVideosSvgRoutingTests(unittest.TestCase):
 
 
 class SvgCatalogCascadeTests(unittest.TestCase):
-    """get_video_materials always passes a stock source_mix; an enabled
-    catalog must still be searched, first."""
+    """A stock source_mix (broll mode) never searches the catalog, even
+    when it is enabled: broll videos are stock only, never mixed."""
 
     def _search(self, catalog_enabled):
         calls = []
@@ -345,10 +345,10 @@ class SvgCatalogCascadeTests(unittest.TestCase):
             items = resolved("money", 3)
         return calls, items
 
-    def test_enabled_catalog_is_searched_before_stock(self):
+    def test_enabled_catalog_is_never_added_to_a_stock_cascade(self):
         calls, items = self._search(True)
-        self.assertEqual(calls, ["svg"])
-        self.assertEqual(items[0].provider, "svg")
+        self.assertEqual(calls, ["pixabay", "pexels"])
+        self.assertEqual(items, [])
 
     def test_disabled_catalog_is_never_searched(self):
         calls, _ = self._search(False)

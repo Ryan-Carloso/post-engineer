@@ -601,7 +601,7 @@ def replace_video_intro_with_lipsync(
         The avatar fills the frame (scale + pad). The b-roll's first
         ``duration`` seconds are replaced outright.
     ``react``
-        The frame is split in half: the avatar on top, the b-roll below.
+        The frame is split in half: the avatar on top, the video material below.
         Same splice, different intro encode.
 
     Both layouts share everything after the intro encode — the tail is

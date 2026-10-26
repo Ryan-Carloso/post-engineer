@@ -13,9 +13,10 @@ import { InlineFieldError, SectionDivider } from './persona-section-parts';
 //---------------
 
 //---------------
-// PersonaLayoutFieldset — how the persona meets the b-roll in the opening.
-// 'standard' fills the frame with the avatar; 'react' splits it, avatar on
-// top and b-roll below. The list comes from VIDEO_LAYOUTS, the same constant
+// PersonaLayoutFieldset — how the persona meets the video material in the
+// opening. 'standard' fills the frame with the avatar; 'react' splits it,
+// avatar on top and the material chosen per post (real clips or drawings)
+// below. The list comes from VIDEO_LAYOUTS, the same constant
 // the API validates against, so a new layout can never appear in the UI
 // without the server accepting it.
 //---------------
@@ -25,6 +26,7 @@ const PersonaLayoutFieldset = () => {
   return (
     <fieldset>
       <legend className="text-sm font-semibold text-neutral-800">{t('personas.layoutLabel')}</legend>
+      <p className="mt-1 text-xs leading-5 text-neutral-500">{t('personas.layoutHint')}</p>
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
         {VIDEO_LAYOUTS.map((layout) => {
           const isSelected = videoLayout === layout;

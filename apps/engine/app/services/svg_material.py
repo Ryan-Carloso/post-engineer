@@ -185,7 +185,10 @@ def _persist_svg_item(
 
     item.url is the asset's catalog-relative path; the artwork is fetched
     (or read from the local catalog cache) only on a clip cache miss. A
-    missing asset raises FileNotFoundError for the caller to log and skip.
+    missing asset raises FileNotFoundError for the caller to log and skip
+    the clip; svg mode degrades to a single neutral clip only when the
+    whole catalog yields nothing (task.get_video_materials), never per
+    segment.
 
     Cached by a digest of the asset path and the aspect: the same asset in two
     aspects is two different clips. The drawn clip's key also carries the clip
@@ -443,10 +446,11 @@ def resolve_material_path(
 ) -> str:
     """Material to a local video file, or "" when it must be skipped.
 
-    Catalog SVGs are fetched from the catalog and rendered into a clip; every
-    other provider is downloaded. Face detection runs only on downloaded footage: an illustrated
-    clip has no real face to screen, and the detector would discard most of the
-    cartoon catalog for nothing.
+    Catalog SVGs are fetched from the catalog and rendered into a clip.
+    Every other provider is downloaded. Face detection runs
+    only on downloaded footage: an illustrated clip has no real face to
+    screen, and the detector would discard most of the cartoon catalog
+    for nothing.
     """
     if item.provider == "svg":
         rendered = _persist_svg_item(item, save_dir, max_clip_duration, video_aspect)

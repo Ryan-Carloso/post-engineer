@@ -125,7 +125,7 @@ describe('GET /api/posts/[id]', () => {
       },
       persona: { id: 'persona-1', name: 'Viva Leve' },
       generation: {
-        faceless: false,
+        faceless: false, material: 'broll',
         language: null,
         voiceId: null,
         videoAspect: null,

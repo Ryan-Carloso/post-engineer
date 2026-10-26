@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 256" width="144" height="256" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <rect width="144" height="256" fill="#fff" stroke="none"/>
+  <!-- Original line art for the "drawings" material preview (not catalog art). -->
+  <path d="M8 200 H136"/>
+  <rect x="50" y="128" width="78" height="56" rx="3"/>
+  <rect x="57" y="135" width="64" height="42" rx="1"/>
+  <path d="M42 184 H136 L130 194 H48 Z"/>
+  <path d="M12 166 V142 H36 V166 Q36 176 24 176 Q12 176 12 166 Z"/>
+  <path d="M36 148 Q46 148 46 156 Q46 163 36 163"/>
+  <path d="M18 132 Q14 124 20 118 Q26 112 22 104"/>
+  <path d="M30 132 Q26 124 32 118 Q38 112 34 104"/>
+  <path d="M66 148 H104 M66 158 H96 M66 168 H110"/>
+</svg>

@@ -19,6 +19,7 @@ import {
 } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import AccountCard from '@/components/account-card';
+import { buildGenerationRows } from './generation-rows';
 import { DetailProgressBar } from './detail-progress-bar';
 import { ScriptAngleSection } from './script-angle-section';
 import { ExternalLinkIcon } from '@/lib/ui';
@@ -404,31 +405,7 @@ export const GenerationFactsSection = ({
   personaName: string;
 }) => {
   const { t } = useI18n();
-  const rows: { label: string; value: string }[] = [
-    { label: t('posts.generationPersonaLabel'), value: personaName },
-    {
-      label: t('posts.generationFaceLabel'),
-      value: generation.faceless ? t('posts.generationFaceless') : t('posts.generationWithFace'),
-    },
-  ];
-  if (generation.language !== null) {
-    rows.push({ label: t('posts.generationLanguageLabel'), value: generation.language });
-  }
-  if (generation.voiceId !== null) {
-    rows.push({ label: t('posts.generationVoiceLabel'), value: generation.voiceId });
-  }
-  if (generation.videoAspect !== null) {
-    rows.push({ label: t('posts.generationFormatLabel'), value: generation.videoAspect });
-  }
-  if (generation.niche !== null) {
-    rows.push({ label: t('posts.generationNicheLabel'), value: generation.niche });
-  }
-  if (generation.paragraphNumber !== null) {
-    rows.push({
-      label: t('posts.generationParagraphsLabel'),
-      value: String(generation.paragraphNumber),
-    });
-  }
+  const rows = buildGenerationRows(generation, personaName, t);
   return (
     <section aria-label={t('posts.generationFactsLabel')} className="mt-6">
       <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">

@@ -322,6 +322,14 @@ class SvgCatalogR2Tests(unittest.TestCase):
         self.assertEqual(os.path.realpath(resolved), os.path.realpath(cached))
         self.assertEqual(self.fake.requested_keys, [])
 
+    def test_resolve_asset_path_has_no_bundled_fallback(self):
+        """R2 is the only source: a cache miss must go to R2, never to a
+        repo-bundled directory. The bundled helper no longer exists."""
+        self.assertFalse(hasattr(svg_catalog, "_bundled_dir"))
+        resolved = svg_catalog.resolve_asset_path("Animals 3/hen money.svg")
+        self.assertTrue(os.path.isfile(resolved))
+        self.assertIn(f"{self.PREFIX}/Animals 3/hen money.svg", self.fake.requested_keys)
+
     def test_resolve_asset_path_cache_miss_downloads(self):
         resolved = svg_catalog.resolve_asset_path("Animals 3/hen money.svg")
         self.assertTrue(os.path.isfile(resolved))
@@ -390,35 +398,11 @@ class SvgCatalogR2Tests(unittest.TestCase):
         self.assertEqual([a.title for a in assets], ["Café na Praça"])
 
 
-class LeadCascadeTests(unittest.TestCase):
+class SvgCatalogConfigTests(unittest.TestCase):
     def _config(self, values):
         patcher = patch.object(svg_catalog.config, "app", values)
         patcher.start()
         self.addCleanup(patcher.stop)
-
-    def test_enabled_catalog_leads_the_cascade(self):
-        self._config({"svg_catalog_enabled": True, "svg_r2_prefix": "p"})
-        self.assertEqual(
-            svg_catalog.lead_cascade(["coverr", "pexels", "pixabay"]),
-            ["svg", "coverr", "pexels", "pixabay"],
-        )
-
-    def test_enabled_catalog_is_never_listed_twice(self):
-        self._config({"svg_catalog_enabled": True, "svg_r2_prefix": "p"})
-        self.assertEqual(
-            svg_catalog.lead_cascade(["pexels", "svg"]), ["svg", "pexels"]
-        )
-
-    def test_disabled_catalog_keeps_the_cascade(self):
-        self._config({"svg_catalog_enabled": False})
-        self.assertEqual(
-            svg_catalog.lead_cascade(["coverr", "pexels"]), ["coverr", "pexels"]
-        )
-
-    def test_enabled_without_prefix_fails_fast(self):
-        self._config({"svg_catalog_enabled": True, "svg_r2_prefix": ""})
-        with self.assertRaises(ValueError):
-            svg_catalog.lead_cascade(["pexels"])
 
     def test_bucket_defaults_to_the_video_storage_bucket(self):
         from app.services import video_storage
