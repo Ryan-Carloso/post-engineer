@@ -995,7 +995,6 @@ def get_video_materials(task_id, params, video_terms, audio_duration):
         # Force material downloads to round-robin in keyword order so an early
         # keyword can't download too many clips and squeeze later script
         # themes out of the final timeline.
-        tracking_user_id = _task_tracking_context(task_id).get("user_id")
         downloaded_videos = material.download_videos(
             task_id=task_id,
             search_terms=video_terms,
@@ -1010,7 +1009,6 @@ def get_video_materials(task_id, params, video_terms, audio_duration):
             match_script_order=params.match_materials_to_script,
             source_mix=source_order,
             exclude_faces=persona_lipsync_active(params),
-            user_id=tracking_user_id if isinstance(tracking_user_id, str) else "",
         )
         if not downloaded_videos:
             _fail_task(task_id, "failed to download videos", params, stage="download")

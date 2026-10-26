@@ -332,7 +332,6 @@ def download_videos(
     source_mix: List[str] = None,
     exclude_faces: bool | None = None,
     material_scorer=None,
-    user_id: str = "",
 ) -> List[str]:
     search_videos = _build_search_videos(source, video_aspect, source_mix)
 
@@ -353,7 +352,6 @@ def download_videos(
             material_directory=material_directory,
             exclude_faces=exclude_faces,
             material_scorer=material_scorer,
-            user_id=user_id,
         )
 
     valid_video_items = []
@@ -386,7 +384,7 @@ def download_videos(
             term_groups,
             scorer=material_scorer,
         )
-        material_verification.emit_material_fallback_summary(task_id, decisions, user_id)
+        material_verification.emit_material_fallback_summary(task_id, decisions)
     video_paths = []
 
     concat_mode_value = getattr(video_concat_mode, "value", video_concat_mode)
@@ -431,7 +429,6 @@ def _download_videos_by_script_order(
     material_directory: str,
     exclude_faces: bool | None = None,
     material_scorer=None,
-    user_id: str = "",
 ) -> List[str]:
     """
     Download materials in script order.
@@ -477,7 +474,7 @@ def _download_videos_by_script_order(
     verification_enabled = material_verification.verification_config().enabled
     if verification_enabled:
         candidate_groups = material_verification.verified_script_order_groups(
-            candidate_groups, task_id, material_scorer, user_id=user_id
+            candidate_groups, task_id, material_scorer
         )
 
     video_paths = []

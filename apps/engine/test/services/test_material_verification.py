@@ -352,27 +352,60 @@ class TestFallbackSummary(unittest.TestCase):
 
     def test_summary_event_carries_user_id_when_known(self):
         decisions = [SegmentDecision(tier="svg_catalog", phrase="Waterfront")]
-        with patch(
-            "app.services.material_verification.track_event"
-        ) as track_event:
-            emit_material_fallback_summary("task-123", decisions, user_id="user-123")
+        with (
+            patch(
+                "app.services.material_verification.sm.state.get_task",
+                return_value={"user_id": "user-123"},
+            ),
+            patch(
+                "app.services.material_verification.track_event"
+            ) as track_event,
+        ):
+            emit_material_fallback_summary("task-123", decisions)
         properties = track_event.call_args[0][1]
         self.assertEqual(properties["user_id"], "user-123")
 
     def test_summary_event_omits_user_id_by_default(self):
         decisions = [SegmentDecision(tier="svg_catalog", phrase="Waterfront")]
-        with patch(
-            "app.services.material_verification.track_event"
-        ) as track_event:
+        with (
+            patch(
+                "app.services.material_verification.sm.state.get_task",
+                return_value={},
+            ),
+            patch(
+                "app.services.material_verification.track_event"
+            ) as track_event,
+        ):
             emit_material_fallback_summary("task-123", decisions)
         self.assertNotIn("user_id", track_event.call_args[0][1])
 
-    def test_summary_event_omits_unknown_user_id(self):
+    def test_summary_event_omits_unknown_or_non_string_user_id(self):
         decisions = [SegmentDecision(tier="svg_catalog", phrase="Waterfront")]
-        with patch(
-            "app.services.material_verification.track_event"
-        ) as track_event:
-            emit_material_fallback_summary("task-123", decisions, user_id="unknown")
+        for row in ({"user_id": "unknown"}, {"user_id": 123}, {"user_id": None}):
+            with (
+                patch(
+                    "app.services.material_verification.sm.state.get_task",
+                    return_value=row,
+                ),
+                patch(
+                    "app.services.material_verification.track_event"
+                ) as track_event,
+            ):
+                emit_material_fallback_summary("task-123", decisions)
+            self.assertNotIn("user_id", track_event.call_args[0][1])
+
+    def test_summary_event_degrades_when_state_unreadable(self):
+        decisions = [SegmentDecision(tier="svg_catalog", phrase="Waterfront")]
+        with (
+            patch(
+                "app.services.material_verification.sm.state.get_task",
+                side_effect=RuntimeError("state down"),
+            ),
+            patch(
+                "app.services.material_verification.track_event"
+            ) as track_event,
+        ):
+            emit_material_fallback_summary("task-123", decisions)
         self.assertNotIn("user_id", track_event.call_args[0][1])
 
 

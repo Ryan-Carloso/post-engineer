@@ -242,7 +242,7 @@ class TestScriptOrderSvgNeutralFallback(unittest.TestCase):
             patch.object(
                 material.material_verification,
                 "verified_script_order_groups",
-                side_effect=lambda groups, task_id, scorer, **kwargs: groups,
+                side_effect=lambda groups, task_id, scorer: groups,
             ),
             patch.object(material.svg_material, "resolve_material_path", side_effect=fake_resolve),
         ):
@@ -350,6 +350,11 @@ class TestDownloadVideosUserIdThreading(unittest.TestCase):
                 return_value=([item], [decision]),
             ),
             patch.object(
+                material.material_verification.sm.state,
+                "get_task",
+                return_value={"user_id": "user-123"},
+            ),
+            patch.object(
                 material.material_verification, "track_event"
             ) as track_event,
             patch.object(
@@ -365,7 +370,6 @@ class TestDownloadVideosUserIdThreading(unittest.TestCase):
                 audio_duration=3,
                 max_clip_duration=3,
                 match_script_order=match_script_order,
-                user_id="user-123",
             )
         self.assertEqual(result, ["/tmp/x.mp4"])
         properties = track_event.call_args[0][1]
