@@ -597,6 +597,27 @@ describe('POST /api/videos/generate-and-schedule', () => {
       });
     });
 
+    it('sends faceless_material svg to the engine for an illustration-only faceless post', async () => {
+      const res = await post(baseBody({ options: { faceless: true, facelessMaterial: 'svg' } }));
+      expect(res.status).toBe(200);
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+      expect(payload.faceless_material).toBe('svg');
+    });
+
+    it('defaults a faceless post without a material choice to broll', async () => {
+      const res = await post(baseBody({ options: { faceless: true } }));
+      expect(res.status).toBe(200);
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+      expect(payload.faceless_material).toBe('broll');
+    });
+
+    it('sends no faceless_material key for a with-face post', async () => {
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+      expect(payload).not.toHaveProperty('faceless_material');
+    });
+
     it('sends lipsync: false and no persona quality for a faceless post', async () => {
       const res = await post(baseBody({ options: { faceless: true } }));
       expect(res.status).toBe(200);
@@ -727,6 +748,18 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const json = await res.json();
       expect(res.status).toBe(400);
       expect(json.field).toBe('options.imageId');
+    });
+
+    it('rejects facelessMaterial on a with-face request', async () => {
+      const res = await post(baseBody({ options: { facelessMaterial: 'svg' } }));
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.field).toBe('options.facelessMaterial');
+    });
+
+    it('rejects an unknown facelessMaterial value', async () => {
+      const res = await post(baseBody({ options: { faceless: true, facelessMaterial: 'stock' } }));
+      expect(res.status).toBe(400);
     });
 
     it('rejects scriptPrompts with the wrong length', async () => {
