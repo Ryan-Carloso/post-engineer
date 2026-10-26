@@ -95,6 +95,7 @@ jobs:
           EVENT_ACTION: ${{ github.event.action }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number || '' }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha || '' }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref || github.event.workflow_run.head_branch || '' }}
           WORKFLOW_NAME: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.name || '' }}
           CONCLUSION: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion || '' }}
           RUN_ID: ${{ github.run_id }}
@@ -112,6 +113,10 @@ jobs:
           set -euo pipefail
           if [ -z "${OPENBOT_WEBHOOK_URL:-}" ] || [ -z "${OPENBOT_WEBHOOK_SECRET:-}" ]; then
             echo "OPENBOT_WEBHOOK_URL/OPENBOT_WEBHOOK_SECRET not available (fork PR or unset) — nothing sent"
+            exit 0
+          fi
+          if [ -z "${HEAD_BRANCH:-}" ] || [ "${HEAD_BRANCH#openbot/}" = "${HEAD_BRANCH}" ]; then
+            echo "skipping relay: head branch is empty or not openbot/*"
             exit 0
           fi
           # relay_decision — PR-CI: one failure wake (lowest-id real

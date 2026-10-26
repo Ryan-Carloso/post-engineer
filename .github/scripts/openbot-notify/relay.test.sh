@@ -15,6 +15,8 @@
 # separate; success/skipped send only when the pool has no pending and
 # every latest is success/skipped; 60s retry; query/--jq fail OPEN;
 # pull_request sends without querying. Trigger workflows == RELAYED_WORKFLOWS.
+# Prefix: empty / feat/x / main skip before send; openbot/foo still uses
+# relay_decision (pull_request send, first-failure / all-green).
 #
 # Runs standalone: bash .github/scripts/openbot-notify/relay.test.sh
 #---------------
@@ -32,6 +34,8 @@ sync_line 'sleep 60'
 sync_line 'if [ "${WORKFLOW_RUN_ATTEMPT:-1}" -gt 1 ]; then echo skip; return; fi'
 sync_line 'if [ "${is_winner:-0}" -eq 1 ]; then echo send; else echo skip; fi'
 sync_line 'if [ "${pending:-0}" -gt 0 ] || [ "${all_ok:-0}" -eq 0 ]; then echo skip; else echo send; fi'
+sync_line 'HEAD_BRANCH: ${{ github.event.pull_request.head.ref || github.event.workflow_run.head_branch || '"''"' }}'
+sync_line 'if [ -z "${HEAD_BRANCH:-}" ] || [ "${HEAD_BRANCH#openbot/}" = "${HEAD_BRANCH}" ]; then'
 
 # --- The counting expression: extracted from the yml (one source). ---------
 JQ_FILTER=$(sed -n "s/^[[:space:]]*JQ_FILTER='\\(.*\\)'$/\\1/p" "$YML" | head -n1)
@@ -174,6 +178,16 @@ expect() { # expect <want> <got> <case name>
   [ "$2" = "$1" ] || { echo "FAIL [$3]: expected $1, got $2"; fail=1; }
 }
 
+# Prefix gate (yml exits 0 before relay_decision / curl). Empty or not
+# openbot/* never sends; openbot/foo still uses relay_decision.
+gated_decision() {
+  if [ -z "${HEAD_BRANCH:-}" ] || [ "${HEAD_BRANCH#openbot/}" = "${HEAD_BRANCH}" ]; then
+    echo skip
+    return
+  fi
+  relay_decision "$1" "$2"
+}
+
 # Query failure fails OPEN (send) — 2 events ok, 0 not.
 printf '%s\n' FAIL > "$STATE"
 expect send "$(relay_decision workflow_run failure 2>/dev/null)" "failure query-fail sends"
@@ -255,5 +269,23 @@ expect skip "$(relay_decision cron success 2>/dev/null)" "unknown event skips"
 printf '%s\n%s\n' "$PENDING_DOC" "$PENDING_DOC" > "$STATE"
 expect send "$(relay_decision pull_request synchronize 2>/dev/null)" "pull_request sends"
 [ "$(head -c1 "$STATE")" = "{" ] || { echo "FAIL [pull_request bypasses the pending query]: state was consumed"; fail=1; }
+
+HEAD_BRANCH=
+expect skip "$(gated_decision pull_request synchronize 2>/dev/null)" "empty branch skips"
+HEAD_BRANCH=feat/x
+expect skip "$(gated_decision pull_request synchronize 2>/dev/null)" "feat/x skips"
+HEAD_BRANCH=main
+expect skip "$(gated_decision workflow_run failure 2>/dev/null)" "main skips"
+HEAD_BRANCH=openbot/foo
+printf '%s\n%s\n' "$PENDING_DOC" "$PENDING_DOC" > "$STATE"
+expect send "$(gated_decision pull_request synchronize 2>/dev/null)" "openbot/foo pull_request sends"
+CONCLUSION=failure
+WORKFLOW_NAME=CI
+WORKFLOW_RUN_ID=42
+printf '%s\n' "$FIRST_FAIL_DOC" > "$STATE"
+expect send "$(gated_decision workflow_run failure 2>/dev/null)" "openbot/foo first failure sends"
+CONCLUSION=success
+printf '%s\n' "$ALL_GREEN_DOC" > "$STATE"
+expect send "$(gated_decision workflow_run success 2>/dev/null)" "openbot/foo all-green sends"
 
 [ "$fail" = 0 ] && echo "relay.test.sh: ALL PASS" || { echo "relay.test.sh: FAILURES"; exit 1; }
