@@ -10,9 +10,9 @@ import { CARD_CLASS, SectionTitle } from './section';
 import { MaterialPreview } from './material-preview';
 
 //---------------
-// Video face — every persona has a face; "no face" is chosen here, per
-// post (no lipsync, no library image). With a persona selected, "with the
-// face" is the normal choice. Without one there is nothing to render, so
+// Video face — whether the persona appears speaking (lipsync) or the post
+// is voice only (no lipsync, no library image), chosen here per post. With
+// a persona selected, "appears speaking" is the normal choice. Without one there is nothing to render, so
 // the choice collapses to "no face" and the control says why. Same card
 // pattern as the persona picker above: shadcn RadioGroup as the sr-only
 // item + Label as the clickable card.
