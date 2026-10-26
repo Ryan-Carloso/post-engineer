@@ -267,6 +267,61 @@ class TestScriptOrderSvgNeutralFallback(unittest.TestCase):
         self.assertEqual(result, ["/tmp/neutral.mp4"])
 
 
+class TestFlatDownloadSvgNeutralFallback(unittest.TestCase):
+    def setUp(self):
+        self.original_app_config = dict(config.app)
+
+    def tearDown(self):
+        config.app.clear()
+        config.app.update(self.original_app_config)
+
+    def test_failed_svg_in_flat_path_falls_back_to_neutral(self):
+        """
+        The non-script-order path must keep the same guarantee: with
+        verification on, a catalog SVG that fails to render degrades to
+        neutral instead of silently losing its phrase (verification left
+        no second candidate for it).
+        """
+        svg_item = material.MaterialInfo(
+            provider="svg", url="Traveler eating local food.svg", duration=3
+        )
+
+        def fake_search(search_term, minimum_duration, video_aspect):
+            return [svg_item]
+
+        def fake_resolve(item, save_dir, max_clip_duration, exclude_faces, video_aspect):
+            if item.provider == "svg":
+                return ""
+            if item.provider == "neutral":
+                return "/tmp/neutral.mp4"
+            raise AssertionError(f"unexpected provider {item.provider}")
+
+        with (
+            patch.dict(config.app, {"material_directory": "", "material_verification_enabled": True}),
+            patch.object(material, "search_videos_pexels", side_effect=fake_search),
+            patch.object(
+                material.material_verification,
+                "apply_verification",
+                return_value=([svg_item], []),
+            ),
+            patch.object(
+                material.material_verification,
+                "emit_material_fallback_summary",
+                return_value=None,
+            ),
+            patch.object(material.svg_material, "resolve_material_path", side_effect=fake_resolve),
+        ):
+            result = material.download_videos(
+                task_id="flat-svg-fallback",
+                search_terms=["eating local food"],
+                source="pexels",
+                audio_duration=3,
+                max_clip_duration=3,
+            )
+
+        self.assertEqual(result, ["/tmp/neutral.mp4"])
+
+
 class TestVideoSourceMix(unittest.TestCase):
     """
     Provider mix (pexels + pixabay + coverr): per-keyword cascade search.

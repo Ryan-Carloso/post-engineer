@@ -185,7 +185,8 @@ def _persist_svg_item(
 
     item.url is the asset's catalog-relative path; the artwork is fetched
     (or read from the local catalog cache) only on a clip cache miss. A
-    missing asset raises FileNotFoundError for the caller to log and skip.
+    missing asset raises FileNotFoundError for the caller to log and
+    degrade to neutral when verification is enabled.
 
     Cached by a digest of the asset path and the aspect: the same asset in two
     aspects is two different clips. The drawn clip's key also carries the clip

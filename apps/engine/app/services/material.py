@@ -9,7 +9,7 @@ from loguru import logger
 
 from app.config import config
 from app.models.schema import MaterialInfo, VideoAspect, VideoConcatMode
-from app.services import material_verification, svg_catalog, svg_material
+from app.services import material_fallback, material_verification, svg_catalog, svg_material
 from app.services.material_verification import (
     MAX_LETTERBOX_BARS as MAX_LETTERBOX_BARS,
     _ratio_matches as _ratio_matches,
@@ -378,7 +378,8 @@ def download_videos(
     logger.info(
         f"found total videos: {len(valid_video_items)}, required duration: {audio_duration} seconds, found duration: {found_duration} seconds"
     )
-    if material_verification.verification_config().enabled:
+    verification_enabled = material_verification.verification_config().enabled
+    if verification_enabled:
         valid_video_items, decisions = material_verification.apply_verification(
             term_groups,
             scorer=material_scorer,
@@ -394,12 +395,13 @@ def download_videos(
     for item in valid_video_items:
         try:
             logger.info(f"downloading video: {item.url}")
-            saved_video_path = svg_material.resolve_material_path(
+            saved_video_path = material_fallback.resolve_with_neutral_fallback(
                 item,
                 material_directory,
                 max_clip_duration,
                 exclude_faces,
                 video_aspect,
+                verification_enabled,
             )
             if saved_video_path:
                 logger.info(f"video saved: {os.path.basename(saved_video_path)}")
@@ -490,25 +492,14 @@ def _download_videos_by_script_order(
                 logger.info(
                     f"downloading ordered video for '{search_term}': {item.url}"
                 )
-                try:
-                    saved_video_path = svg_material.resolve_material_path(
-                        item,
-                        material_directory,
-                        max_clip_duration,
-                        exclude_faces,
-                        video_aspect,
-                    )
-                except Exception:
-                    saved_video_path = ""
-                if not saved_video_path and verification_enabled and item.provider != "neutral":
-                    # Failed stock or catalog SVG degrades to neutral, never to unverified stock.
-                    saved_video_path = svg_material.resolve_material_path(
-                        material_verification.neutral_item_for(item),
-                        material_directory,
-                        max_clip_duration,
-                        exclude_faces,
-                        video_aspect,
-                    )
+                saved_video_path = material_fallback.resolve_with_neutral_fallback(
+                    item,
+                    material_directory,
+                    max_clip_duration,
+                    exclude_faces,
+                    video_aspect,
+                    verification_enabled,
+                )
                 if not saved_video_path:
                     continue
 
