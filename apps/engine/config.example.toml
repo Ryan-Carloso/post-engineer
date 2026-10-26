@@ -450,36 +450,26 @@ svg_search_mode = "texto"
 # decides what shows in the padding around it.
 svg_canvas_background = "#FFFFFF"
 
-# Verified stock material selection (PR: verified stock or thematic SVG
-# fallback). Off by default: existing behavior is preserved exactly until
-# an operator enables it. When enabled, stock is used only when a scorer
-# clears it (minimum score plus runner-up margin, both relative scores,
-# never probabilities); otherwise the fixed fallback order applies:
-# thematic SVG, broader-category SVG, reused SVG, neutral background.
+# Verified stock material selection (PR: verified stock or R2 catalog
+# SVG fallback). Off by default: existing behavior is preserved exactly
+# until an operator enables it. When enabled, stock is used only when a
+# scorer clears it (minimum score plus runner-up margin, both relative
+# scores, never probabilities); otherwise the fixed fallback order
+# applies: R2 catalog SVG searched with the segment phrase, next-best
+# unused catalog match, neutral background. R2 is the only source of
+# SVG artwork: there is no subject mapping and no bundled artwork.
 # The scorer is pluggable; the default ONNX scorer needs onnxruntime and
 # a SigLIP ONNX model, and fails closed (stock treated as unverified)
 # until both are present. Scores are tied to the scoring model:
-# recalibrate min_score and runner_up_margin when the model changes,
-# using verified Porto footage (must pass) and the three known mismatches
-# (bacalhau vs dumplings, Porto Alegre shop, Ribeira waterfront for
-# interior streets; all must fail) as the calibration set.
-# material_subject_to_asset maps a subject key to a catalog relative path
-# and is the only source for thematic SVG selection: the fallback path
-# never runs a catalog text search. The Porto assets below are bundled
-# in the repo under assets/svg/porto/ and resolve without any R2 call
-# (see svg_catalog.resolve_asset_path); the licensed catalog still comes
-# from R2. Broader keys (porto_food, porto_market, porto_places) are
-# category fallbacks: a tasca interior carries no specific dish, a
-# Bolhao market is a Porto market, a Ribeira waterfront is a Porto
-# place. Verification stays off
-# by default: the threshold and margin below are still the uncalibrated
-# stub-ordering values (see material_verification.py), pending
-# recalibration on a validated SigLIP model.
+# recalibrate min_score and runner_up_margin when the model changes.
+# Verification stays off by default. The threshold and margin below are
+# calibrated on the padded SigLIP scorer against real Pixabay candidates
+# (see material_verification.py); Pexels was not measurable from the
+# sandbox (read timeout).
 material_verification_enabled = false
-material_verification_min_score = 0.33
-material_verification_runner_up_margin = 0.05
+material_verification_min_score = 0.01
+material_verification_runner_up_margin = 0.005
 material_verification_model_path = ""
-material_subject_to_asset = { bolhao_market = "porto/bolhao-market.svg", tripas_dish = "porto/tripas-dish.svg", tasca = "porto/tasca.svg", ribeira = "porto/ribeira-waterfront.svg", porto_streets = "porto/narrow-streets.svg", porto_food = "porto/tasca.svg", porto_market = "porto/bolhao-market.svg", porto_places = "porto/ribeira-waterfront.svg" }
 redis_db = 0
 redis_password = ""
 

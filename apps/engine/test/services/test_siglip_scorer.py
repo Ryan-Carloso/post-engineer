@@ -44,8 +44,26 @@ class _StubTokenizer:
         def __init__(self, ids):
             self.ids = ids
 
+    def __init__(self):
+        self.seen_texts = []
+        self.seen_input_ids = []
+
     def encode(self, text):
+        self.seen_texts.append(text)
         return self._Encoding([1, 2, 3])
+
+    def token_to_id(self, token):
+        # Mirrors the real tokenizer config: pad_token is "</s>", id 1.
+        return 1 if token == "</s>" else None
+
+
+class _CapturingSession(_StubSession):
+    def __init__(self):
+        self.seen_input_ids = []
+
+    def run(self, _outputs, inputs):
+        self.seen_input_ids.append(list(inputs["input_ids"][0]))
+        return super().run(_outputs, inputs)
 
 
 def _make_png(path, gray):
@@ -78,6 +96,86 @@ class TestSiglipScorer(unittest.TestCase):
             # logit 5.0, sigmoid ~0.993.
             score = scorer.score(clip, "a waterfall")
             self.assertAlmostEqual(score, 1.0 / (1.0 + math.exp(-5.0)), places=4)
+
+    def test_text_is_lowercased_and_padded_to_64_with_pad_id(self):
+        """SigLIP has no attention mask, so unpadded ids collapse to
+        logit ~-20 and no stock ever passes. This pins the fix: lowercase
+        text, ids padded to exactly 64 with the pad id (1). Removing the
+        padding must fail this test (mutation-verified by hand: a stub
+        session that records input_ids sees the unpadded list)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            frame = os.path.join(tmp, "frame.png")
+            _make_png(frame, 255)
+            clip = os.path.join(tmp, "clip.mp4")
+            _make_clip(clip)
+            _make_clip(os.path.join(tmp, "model.onnx"))
+            with open(os.path.join(tmp, "tokenizer.json"), "w") as handle:
+                handle.write("{}")
+            tokenizer = _StubTokenizer()
+            session = _CapturingSession()
+            scorer = SiglipScorer(
+                os.path.join(tmp, "model.onnx"),
+                session_factory=lambda _path: session,
+                tokenizer_factory=lambda _path: tokenizer,
+                frame_sampler=lambda _video, _times, _dir: [frame],
+            )
+            scorer.score(clip, "A Glass of Red Wine")
+            self.assertEqual(tokenizer.seen_texts, ["a glass of red wine"])
+            self.assertEqual(len(session.seen_input_ids), 1)
+            input_ids = session.seen_input_ids[0]
+            self.assertEqual(len(input_ids), 64)
+            self.assertEqual(input_ids[:3], [1, 2, 3])
+            self.assertEqual(input_ids[3:], [1] * 61)
+
+    def test_scoring_reuses_engine_cache_before_temp_download(self):
+        """The scorer must ask the stock cache first (no save_dir), not
+        re-download every candidate into a fresh temp dir. A tmp-only
+        scorer still scores, so this pins the call arguments, not just
+        the score."""
+        import unittest.mock as mock
+
+        with tempfile.TemporaryDirectory() as tmp:
+            frame = os.path.join(tmp, "frame.png")
+            _make_png(frame, 255)
+            clip = os.path.join(tmp, "clip.mp4")
+            _make_clip(clip)
+            _make_clip(os.path.join(tmp, "model.onnx"))
+            with open(os.path.join(tmp, "tokenizer.json"), "w") as handle:
+                handle.write("{}")
+            scorer = SiglipScorer(
+                os.path.join(tmp, "model.onnx"),
+                session_factory=lambda _path: _StubSession(),
+                tokenizer_factory=lambda _path: _StubTokenizer(),
+                frame_sampler=lambda _video, _times, _dir: [frame],
+            )
+            from app.services import video_download
+
+            calls = []
+
+            def fake_save_video(url, save_dir=""):
+                calls.append(save_dir)
+                return clip
+
+            with mock.patch.object(
+                video_download, "save_video", side_effect=fake_save_video
+            ):
+                scorer.score("https://cdn.example/clip.mp4", "a waterfall")
+            # First call: default cache dir (no explicit save_dir).
+            self.assertEqual(calls[0], "")
+            self.assertEqual(len(calls), 1)
+
+    def test_svg_path_is_never_sent_to_stock_downloader(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _make_clip(os.path.join(tmp, "model.onnx"))
+            with open(os.path.join(tmp, "tokenizer.json"), "w") as handle:
+                handle.write("{}")
+            scorer = SiglipScorer(
+                os.path.join(tmp, "model.onnx"),
+                session_factory=lambda _path: _StubSession(),
+                tokenizer_factory=lambda _path: _StubTokenizer(),
+            )
+            with self.assertRaises(VerificationUnavailable):
+                scorer.score("catalog/traveler-eating-local-food.svg", "food")
 
     def test_best_frame_wins(self):
         with tempfile.TemporaryDirectory() as tmp:

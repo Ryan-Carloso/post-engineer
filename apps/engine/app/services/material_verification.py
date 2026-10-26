@@ -1,33 +1,30 @@
-"""Verified stock material selection with thematic SVG fallback.
+"""Verified stock material selection with R2 catalog SVG fallback.
 
 Stock is verified only when a scorer clears it: the best candidate must
 reach the minimum score and beat the runner-up by the margin. Scores are
 relative, never probabilities; unscored candidates are never verified.
 
 Fallback order, never using rejected stock or misleading assets:
-1. Thematic SVG from the explicit subject-to-asset mapping.
-2. Broader-category SVG: semantically compatible, same domain, no
-   contradictory entity, no identifiable wrong place.
-3. Reused SVG: the most recent compatible background. That asset is
-   exempt from the not-already-used guard (it was just shown); any
-   other asset already used in the current video is never reused.
-   Compatible means the same subject or the same broader category.
+1. Verified stock (see above).
+2. R2 catalog SVG: the catalog is searched with the segment's phrase,
+   using the existing catalog search (svg_catalog.search over its SQLite
+   index). The first catalog match not already used in this video is
+   tier svg_catalog.
+3. Next-best catalog match: when the first catalog match was already
+   used in this video, the next unused match is tier svg_catalog_alt.
+   The same catalog asset is never used twice in one video.
 4. Neutral background: stylized and abstract, implying no specific
    subject (no skyline, no dish, no text, no identifiable place).
 
-SVG selection uses the explicit mapping, never the catalog text search.
+R2 is the only source of SVG artwork. There is no subject mapping, no
+keyword table, and no bundled or local artwork anywhere in this flow:
+catalog items carry provider="svg" and are rendered through
+svg_material.resolve_material_path by the caller.
+
 Scoring is pluggable through an option (the repo's injection pattern).
 The default scorer is lazy ONNX (see siglip_scorer): without onnxruntime,
 a SigLIP model, and its tokenizer it raises VerificationUnavailable, so
-stock is treated as unverified. Scoring is fail-closed. Frame sampling
-and ONNX inference are wired into OnnxClipScorer.score; still owed before
-enabling verification in production: a SigLIP model whose scores were
-validated to separate true pairs from mismatches, and a recalibration of
-the threshold and margin on that model. The Xenova SigLIP ONNX export
-available in the sandbox did NOT separate true pairs from mismatches
-(all cross-modal cosines near zero, ranking wrong on two-way retrieval),
-so the threshold below is still the uncalibrated stub ordering value,
-kept unchanged, and verification stays off by default.
+stock is treated as unverified. Scoring is fail-closed.
 
 This module also owns the aspect/resolution helpers moved out of
 material.py, which is grandfathered over the file-size cap: material.py
@@ -37,9 +34,6 @@ re-exports them, so existing callers keep working.
 from __future__ import annotations
 
 import math
-import os
-import re
-import unicodedata
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Sequence
 
@@ -81,27 +75,26 @@ def _ratio_matches(width: int, height: int, aspect: VideoAspect) -> bool:
     return 1 - target_ratio / file_ratio <= MAX_LETTERBOX_BARS
 
 
-# Uncalibrated stub-ordering values, kept unchanged: the threshold sits
-# between the highest known mismatch and the verified case on the STUB
-# scale, and the margin is smaller than the verified case's stub lead.
-# These values are tied to the scoring model and are NOT calibrated
-# against the wired SigLIP scorer (see the module docstring): recalibrate
-# them on a validated model, using the same four cases as the
-# calibration set, before enabling verification. Verification stays off
-# by default until then.
-DEFAULT_MIN_SCORE = 0.33
-DEFAULT_RUNNER_UP_MARGIN = 0.05
+# Threshold and margin, calibrated on the padded SigLIP scorer
+# (Xenova siglip-base-patch16-224, model_q4.onnx) against real Pixabay
+# candidates: 9 matched phrases scored 0.0006-0.2852, all 9 rotated
+# mismatches scored 0.0000. The minimum sits above the mismatch floor
+# and below every genuine match except the weakest (rain, 0.0006, which
+# correctly falls back); the margin is half the minimum, so a top score
+# must clear the runner-up by more than a near-tie. Pexels could not be
+# measured from this sandbox (60s read timeout), so these values are
+# Pixabay-measured, not Pexels-measured.
+DEFAULT_MIN_SCORE = 0.01
+DEFAULT_RUNNER_UP_MARGIN = 0.005
 
 TIER_STOCK_VERIFIED = "stock_verified"
-TIER_SVG_THEMATIC = "svg_thematic"
-TIER_SVG_BROADER = "svg_broader"
-TIER_SVG_REUSED = "svg_reused"
+TIER_SVG_CATALOG = "svg_catalog"
+TIER_SVG_CATALOG_ALT = "svg_catalog_alt"
 TIER_NEUTRAL = "neutral"
 ALL_TIERS = (
     TIER_STOCK_VERIFIED,
-    TIER_SVG_THEMATIC,
-    TIER_SVG_BROADER,
-    TIER_SVG_REUSED,
+    TIER_SVG_CATALOG,
+    TIER_SVG_CATALOG_ALT,
     TIER_NEUTRAL,
 )
 
@@ -141,49 +134,6 @@ def verification_config() -> VerificationConfig:
     )
 
 
-# Deterministic subject identification: phrases are normalized (accents
-# stripped, punctuation removed) and matched against an explicit ordered
-# table. "Porto Alegre" is checked before any Porto subject so a
-# Brazilian shop is never identified as a Porto subject.
-_SUBJECT_PATTERNS = (
-    ("porto alegre", "porto_alegre"),
-    ("tripas", "tripas_dish"),
-    ("bolhao", "bolhao_market"),
-    ("ribeira", "ribeira"),
-    ("tasca", "tasca"),
-    ("bacalhau", "bacalhau_dish"),
-    ("narrow streets", "porto_streets"),
-)
-
-_SUBJECT_BROADER = {
-    "tripas_dish": "porto_food",
-    "bacalhau_dish": "porto_food",
-    "tasca": "porto_food",
-    "bolhao_market": "porto_market",
-    "ribeira": "porto_places",
-    "porto_alegre": None,
-    "porto_streets": "porto_places",
-}
-
-
-def _normalize_text(text: str) -> str:
-    stripped = "".join(
-        char
-        for char in unicodedata.normalize("NFKD", text.lower())
-        if not unicodedata.combining(char)
-    )
-    return re.sub(r"[^a-z0-9]+", " ", stripped).strip()
-
-
-def identify_subject(phrase: str) -> Optional[str]:
-    """Identify a phrase's subject deterministically, or None when unknown."""
-    normalized = f" {_normalize_text(phrase)} "
-    for pattern, subject in _SUBJECT_PATTERNS:
-        if f" {pattern} " in normalized:
-            return subject
-    return None
-
-
 def phrase_at(
     timestamp: float, phrases: Sequence[tuple[str, float, float]]
 ) -> Optional[str]:
@@ -203,11 +153,9 @@ def phrase_at(
 
 @dataclass(frozen=True)
 class SvgAssetRef:
-    """One SVG asset, identified by its catalog id, never by a search term."""
+    """One R2 catalog SVG asset, identified by its catalog id."""
 
     asset_id: str
-    subject: str
-    broader_category: str
     relative_path: str
 
 
@@ -222,7 +170,6 @@ class SegmentDecision:
     svg_relative_path: Optional[str] = None
     svg_asset: Optional[SvgAssetRef] = None
     fallback_reason: Optional[str] = None
-    subject: Optional[str] = None
 
 
 # A scorer maps a candidate URL and a phrase to a relative similarity
@@ -230,6 +177,10 @@ class SegmentDecision:
 # return a probability; the threshold and margin are calibrated on its
 # own scale.
 Scorer = Callable[[str, str], Optional[float]]
+
+# A catalog search maps a segment phrase to ranked catalog assets, best
+# first. The production search is svg_catalog.search; tests inject a stub.
+CatalogSearch = Callable[[str], Sequence[SvgAssetRef]]
 
 
 class OnnxClipScorer:
@@ -252,15 +203,47 @@ class OnnxClipScorer:
         return self._delegate.score(candidate_url, phrase)
 
 
+# Catalog FTS ANDs every token, and no catalog title contains a bare
+# article, so a sentence phrase ("a traveler eating local food") would
+# match nothing while its content words match. Articles carry no topic
+# meaning, so they are stripped before the catalog query. This is generic
+# text normalization, not a subject mapping.
+_CATALOG_STOPWORDS = frozenset({"a", "an", "the"})
+
+
+def _catalog_search(phrase: str) -> Sequence[SvgAssetRef]:
+    """Production catalog search: ranked R2 catalog assets for a phrase."""
+    from app.services import svg_catalog
+
+    if not svg_catalog.is_enabled():
+        return []
+    query = " ".join(
+        token
+        for token in phrase.split()
+        if token.strip(".,;:!?\"'()[]{}").lower() not in _CATALOG_STOPWORDS
+    )
+    if not query:
+        return []
+    return [
+        SvgAssetRef(asset_id=asset.asset_id, relative_path=asset.relative_path)
+        for asset in svg_catalog.search(query, limit=5)
+    ]
+
+
 def _score_candidates(
     candidates: Sequence[MaterialInfo], phrase: str, scorer: Optional[Scorer]
 ) -> tuple[List[tuple[MaterialInfo, float]], bool]:
-    """Score candidates, highest first, tie-broken by URL. Returns
-    (scored candidates, scorer_failed); unscored footage is unverified."""
+    """Score stock candidates, highest first, tie-broken by URL.
+
+    Catalog SVG and neutral items are not stock and are never scored:
+    scoring them would route a catalog relative path through the stock
+    downloader, which rejects non-http URLs. Returns (scored, failed).
+    """
     active_scorer = scorer if scorer is not None else OnnxClipScorer().score
+    stock = [c for c in candidates if c.provider not in ("svg", "neutral")]
     scored: List[tuple[MaterialInfo, float]] = []
     scorer_failed = False
-    for candidate in candidates:
+    for candidate in stock:
         try:
             score = active_scorer(candidate.url, phrase)
         except VerificationUnavailable:
@@ -287,39 +270,28 @@ def _svg_decision(
         svg_relative_path=asset.relative_path,
         svg_asset=asset,
         fallback_reason=reason,
-        subject=asset.subject,
     )
 
 
 def _fallback_decision(
     phrase: str,
-    subject: Optional[str],
     reason: str,
-    subject_to_asset: dict,
-    previous_asset: Optional[SvgAssetRef],
+    catalog_search: Optional[CatalogSearch],
     used_asset_ids: set,
 ) -> SegmentDecision:
-    broader = _broader_category_for(subject)
-    if subject is not None:
-        thematic = subject_to_asset.get(subject)
-        if thematic is not None and thematic.asset_id not in used_asset_ids:
-            return _svg_decision(TIER_SVG_THEMATIC, phrase, thematic, reason)
-    if broader is not None:
-        broader_asset = subject_to_asset.get(broader)
-        if broader_asset is not None and broader_asset.asset_id not in used_asset_ids:
-            return _svg_decision(TIER_SVG_BROADER, phrase, broader_asset, reason)
-    if (
-        previous_asset is not None
-        and previous_asset.asset_id not in used_asset_ids
-        and (
-            previous_asset.subject == subject
-            or previous_asset.broader_category == broader
-        )
-    ):
-        return _svg_decision(TIER_SVG_REUSED, phrase, previous_asset, reason)
-    return SegmentDecision(
-        tier=TIER_NEUTRAL, phrase=phrase, fallback_reason=reason, subject=None
-    )
+    """First unused catalog match, or neutral when the catalog is empty."""
+    search = catalog_search if catalog_search is not None else _catalog_search
+    try:
+        assets = list(search(phrase))
+    except Exception as exc:  # noqa: BLE001 - catalog failure is a neutral, not a crash
+        logger.warning(f"material catalog search failed: {exc}")
+        assets = []
+    for rank, asset in enumerate(assets):
+        if asset.asset_id in used_asset_ids:
+            continue
+        tier = TIER_SVG_CATALOG if rank == 0 else TIER_SVG_CATALOG_ALT
+        return _svg_decision(tier, phrase, asset, reason)
+    return SegmentDecision(tier=TIER_NEUTRAL, phrase=phrase, fallback_reason=reason)
 
 
 def select_for_segment(
@@ -327,20 +299,18 @@ def select_for_segment(
     candidates: Sequence[MaterialInfo],
     scorer: Optional[Scorer] = None,
     config: Optional[VerificationConfig] = None,
-    subject_to_asset: Optional[dict] = None,
-    previous_asset: Optional[SvgAssetRef] = None,
+    catalog_search: Optional[CatalogSearch] = None,
     used_asset_ids: Optional[set] = None,
 ) -> SegmentDecision:
-    """Choose verified stock or the first fallback. Mapping is a dict lookup."""
+    """Choose verified stock or the first catalog/neutral fallback."""
     cfg = config or verification_config()
-    mapping = subject_to_asset or {}
     used = set(used_asset_ids or set())
-    subject = identify_subject(phrase)
 
     def fallback(reason: str) -> SegmentDecision:
-        return _fallback_decision(phrase, subject, reason, mapping, previous_asset, used)
+        return _fallback_decision(phrase, reason, catalog_search, used)
 
-    if not candidates:
+    stock = [c for c in candidates if c.provider not in ("svg", "neutral")]
+    if not stock:
         decision = fallback("no_candidates")
     else:
         scored, scorer_failed = _score_candidates(candidates, phrase, scorer)
@@ -357,7 +327,7 @@ def select_for_segment(
                 decision = fallback("runner_up_margin_too_small")
             else:
                 decision = SegmentDecision(
-                    tier=TIER_STOCK_VERIFIED, phrase=phrase, stock_url=top.url, subject=subject
+                    tier=TIER_STOCK_VERIFIED, phrase=phrase, stock_url=top.url
                 )
     # Log the fallback reason and the selected asset, never the phrase,
     # the candidate URL, or a local path: logs stay scrubbed by design.
@@ -380,10 +350,12 @@ def neutral_item_for(item: MaterialInfo) -> MaterialInfo:
     return neutral
 
 
-def verified_script_order_groups(groups, task_id, scorer):
+def verified_script_order_groups(
+    groups, task_id, scorer, catalog_search: Optional[CatalogSearch] = None
+):
     """Apply verification to script-order groups, one pick per phrase."""
     selected, decisions = apply_verification(
-        groups, scorer=scorer, subject_to_asset=subject_to_asset_from_config()
+        groups, scorer=scorer, catalog_search=catalog_search
     )
     emit_material_fallback_summary(task_id, decisions)
     return [(decision.phrase, [item]) for decision, item in zip(decisions, selected)]
@@ -393,7 +365,7 @@ def apply_verification(
     groups: Sequence[tuple[str, Sequence[MaterialInfo]]],
     scorer: Optional[Scorer] = None,
     config: Optional[VerificationConfig] = None,
-    subject_to_asset: Optional[dict] = None,
+    catalog_search: Optional[CatalogSearch] = None,
 ) -> tuple[List[MaterialInfo], List[SegmentDecision]]:
     """Apply verification to groups, in order. Disabled verification passes
     candidates through unchanged, preserving existing behavior."""
@@ -403,21 +375,17 @@ def apply_verification(
         for _phrase, candidates in groups:
             flattened.extend(candidates)
         return flattened, []
-    mapping = subject_to_asset or {}
     used: set = set()
-    previous_asset: Optional[SvgAssetRef] = None
     selected: List[MaterialInfo] = []
     decisions: List[SegmentDecision] = []
     for phrase, candidates in groups:
-        reusable_id = previous_asset.asset_id if previous_asset is not None else ""
         decision = select_for_segment(
             phrase=phrase,
             candidates=candidates,
             scorer=scorer,
             config=cfg,
-            subject_to_asset=mapping,
-            previous_asset=previous_asset,
-            used_asset_ids=used - {reusable_id},
+            catalog_search=catalog_search,
+            used_asset_ids=used,
         )
         decisions.append(decision)
         if decision.tier == TIER_STOCK_VERIFIED:
@@ -433,7 +401,6 @@ def apply_verification(
             item.duration = candidates[0].duration if candidates else 5
             selected.append(item)
             used.add(decision.svg_asset_id or "")
-            previous_asset = decision.svg_asset
         else:
             item = MaterialInfo()
             item.provider = "neutral"
@@ -443,26 +410,6 @@ def apply_verification(
     return selected, decisions
 
 
-def subject_to_asset_from_config() -> dict:
-    """Build the explicit subject-to-asset mapping from config.
-
-    Config value material_subject_to_asset maps a subject key to a catalog
-    relative path. The asset id logged is the file name only, never a path.
-    """
-    raw = config.app.get("material_subject_to_asset", {})
-    mapping: dict = {}
-    if isinstance(raw, dict):
-        for subject, path in raw.items():
-            if isinstance(subject, str) and isinstance(path, str) and path:
-                mapping[subject] = SvgAssetRef(
-                    asset_id=os.path.basename(path),
-                    subject=subject,
-                    broader_category=_broader_category_for(subject) or "",
-                    relative_path=path,
-                )
-    return mapping
-
-
 def summarize_decisions(decisions: Sequence[SegmentDecision]) -> dict:
     """Counts per tier, with every tier present even at zero."""
     summary = {tier: 0 for tier in ALL_TIERS}
@@ -470,17 +417,6 @@ def summarize_decisions(decisions: Sequence[SegmentDecision]) -> dict:
         if decision.tier in summary:
             summary[decision.tier] += 1
     return summary
-
-
-def _broader_category_for(subject: Optional[str]) -> Optional[str]:
-    if not subject:
-        return None
-    mapped = _SUBJECT_BROADER.get(subject)
-    if mapped:
-        return mapped
-    if subject in {value for value in _SUBJECT_BROADER.values() if value}:
-        return subject
-    return None
 
 
 def emit_material_fallback_summary(

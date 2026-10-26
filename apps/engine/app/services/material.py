@@ -382,7 +382,6 @@ def download_videos(
         valid_video_items, decisions = material_verification.apply_verification(
             term_groups,
             scorer=material_scorer,
-            subject_to_asset=material_verification.subject_to_asset_from_config(),
         )
         material_verification.emit_material_fallback_summary(task_id, decisions)
     video_paths = []
@@ -461,8 +460,10 @@ def _download_videos_by_script_order(
             valid_video_urls.add(item.url)
             found_duration += item.duration
 
-        if term_items:
-            candidate_groups.append((search_term, term_items))
+        # Empty terms still enter candidate_groups: with verification on,
+        # a term with no stock candidates falls back to a catalog SVG or
+        # neutral instead of silently losing its segment.
+        candidate_groups.append((search_term, term_items))
 
     logger.info(
         f"found total ordered video candidates: {sum(len(items) for _, items in candidate_groups)}, "

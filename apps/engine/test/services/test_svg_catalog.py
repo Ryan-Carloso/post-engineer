@@ -322,20 +322,13 @@ class SvgCatalogR2Tests(unittest.TestCase):
         self.assertEqual(os.path.realpath(resolved), os.path.realpath(cached))
         self.assertEqual(self.fake.requested_keys, [])
 
-    def test_resolve_asset_path_bundled_asset_skips_r2(self):
-        resolved = svg_catalog.resolve_asset_path("porto/tripas-dish.svg")
+    def test_resolve_asset_path_has_no_bundled_fallback(self):
+        """R2 is the only source: a cache miss must go to R2, never to a
+        repo-bundled directory. The bundled helper no longer exists."""
+        self.assertFalse(hasattr(svg_catalog, "_bundled_dir"))
+        resolved = svg_catalog.resolve_asset_path("Animals 3/hen money.svg")
         self.assertTrue(os.path.isfile(resolved))
-        self.assertTrue(resolved.endswith("porto/tripas-dish.svg"))
-        self.assertEqual(self.fake.requested_keys, [])
-
-    def test_bundled_dir_is_root_anchored(self):
-        # A cwd-relative bundled dir only resolves when tests run from the
-        # engine root; production must not depend on the working directory.
-        self.assertEqual(
-            svg_catalog._bundled_dir(),
-            os.path.join(svg_catalog.root_dir, "assets", "svg"),
-        )
-        self.assertTrue(os.path.isabs(svg_catalog._bundled_dir()))
+        self.assertIn(f"{self.PREFIX}/Animals 3/hen money.svg", self.fake.requested_keys)
 
     def test_resolve_asset_path_cache_miss_downloads(self):
         resolved = svg_catalog.resolve_asset_path("Animals 3/hen money.svg")

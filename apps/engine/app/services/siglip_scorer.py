@@ -52,6 +52,15 @@ _DEFAULT_MEAN = (0.5, 0.5, 0.5)
 _DEFAULT_STD = (0.5, 0.5, 0.5)
 _DEFAULT_IMAGE_SIZE = 224
 
+# Text length and padding for the SigLIP text tower. The export has no
+# attention-mask input, so padding tokens are attended: unpadded input
+# collapses every logit to about -20 (sigmoid 0.0) and no stock ever
+# passes. The tokenizer config next to the model declares
+# pad_token="</s>" and model_max_length=64; the fallbacks below only
+# cover a model dir without that config file.
+_DEFAULT_MAX_TEXT_LENGTH = 64
+_DEFAULT_PAD_ID = 1
+
 
 def _sigmoid(value: float) -> float:
     if value >= 0:
@@ -220,6 +229,48 @@ class SiglipScorer:
             self._tokenizer = self._tokenizer_factory(tokenizer_path)
         return self._tokenizer
 
+    def _text_config(self, tokenizer: object) -> tuple:
+        """(max_length, pad_id) for the text tower, from the tokenizer.
+
+        The tokenizer config next to the model is authoritative when
+        present (pad_token + model_max_length). Without it, the pad
+        token's own id is used, falling back to the SigLIP default 1.
+        """
+        model_dir = os.path.dirname(os.path.abspath(self._model_path))
+        max_length = _DEFAULT_MAX_TEXT_LENGTH
+        pad_token = None
+        config_path = os.path.join(model_dir, "tokenizer_config.json")
+        try:
+            with open(config_path, "r", encoding="utf-8") as handle:
+                raw = json.load(handle)
+            if isinstance(raw.get("model_max_length"), int):
+                max_length = raw["model_max_length"]
+            if isinstance(raw.get("pad_token"), str):
+                pad_token = raw["pad_token"]
+        except (OSError, ValueError):
+            pass
+        token_to_id = getattr(tokenizer, "token_to_id", None)
+        if callable(token_to_id):
+            for candidate in ([pad_token] if pad_token else []) + ["</s>", "<pad>"]:
+                try:
+                    found = token_to_id(candidate)
+                except Exception:  # noqa: BLE001 - any tokenizer failure falls back
+                    found = None
+                if isinstance(found, int):
+                    return max_length, found
+        pad_id = getattr(tokenizer, "pad_token_id", None)
+        if isinstance(pad_id, int):
+            return max_length, pad_id
+        return max_length, _DEFAULT_PAD_ID
+
+    def _encode_text(self, tokenizer: object, phrase: str) -> List[int]:
+        """Lowercased token ids, padded (or truncated) to the max length."""
+        max_length, pad_id = self._text_config(tokenizer)
+        token_ids = tokenizer.encode(phrase.lower()).ids  # type: ignore[attr-defined]
+        if not token_ids:
+            raise VerificationUnavailable("phrase produced no tokens")
+        return (list(token_ids)[:max_length] + [pad_id] * max_length)[:max_length]
+
     def _image_array(self, frame_path: str) -> object:
         """One frame as a normalized NCHW float array for the model."""
         import numpy as np
@@ -259,12 +310,28 @@ class SiglipScorer:
         raise ValueError("model outputs neither logits nor embeds")
 
     def _local_video_path(self, candidate_url: str, tmp_dir: str) -> str:
-        """A local file for the candidate: the file itself, or a download."""
+        """A local file for the candidate: the file itself, or a download.
+
+        Catalog SVG relative paths are never stock: they must not reach
+        the stock downloader (which rejects non-http URLs). The caller
+        filters provider="svg" items out of stock scoring; this guard is
+        the second line of defence for a stray SVG path.
+        """
         if os.path.isfile(candidate_url):
             return candidate_url
+        if candidate_url.lower().endswith(".svg"):
+            raise VerificationUnavailable(
+                "catalog SVG material is not scored as stock footage"
+            )
         from app.services import video_download
 
-        path = video_download.save_video(candidate_url, save_dir=tmp_dir)
+        # Reuse the engine stock cache first: the material pipeline usually
+        # already downloaded this clip, and re-downloading it into a fresh
+        # temp dir on every score wastes a download per candidate. The
+        # temp-dir download stays as the fallback for uncached candidates.
+        path = video_download.save_video(candidate_url)
+        if not path:
+            path = video_download.save_video(candidate_url, save_dir=tmp_dir)
         if not path or not os.path.isfile(path):
             raise VerificationUnavailable(
                 "candidate clip could not be downloaded for scoring"
@@ -275,9 +342,7 @@ class SiglipScorer:
         """Best frame score for a candidate clip, or VerificationUnavailable."""
         session = self._session_or_raise()
         tokenizer = self._tokenizer_or_raise()
-        token_ids = tokenizer.encode(phrase).ids  # type: ignore[attr-defined]
-        if not token_ids:
-            raise VerificationUnavailable("phrase produced no tokens")
+        token_ids = self._encode_text(tokenizer, phrase)
         with tempfile.TemporaryDirectory() as tmp_dir:
             video_path = self._local_video_path(candidate_url, tmp_dir)
             times = _sample_frame_times(_probe_duration_seconds(video_path))

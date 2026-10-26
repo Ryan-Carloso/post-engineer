@@ -253,24 +253,14 @@ def _ensure_index() -> str:
         return local
 
 
-def _bundled_dir() -> str:
-    """Repo-bundled SVG artwork (assets/svg), checked after the cache.
-
-    The licensed catalog lives in R2, but the thematic Porto fallbacks are
-    part of the product itself, so they ship in the repo and resolve
-    without any R2 call. The bundled path uses the same guard as the
-    cache path, so a relative path still cannot escape its directory.
-    """
-    return os.path.join(root_dir, "assets", "svg")
-
-
 def resolve_asset_path(relative_path: str) -> str:
     """Resolve an index-relative path to the cached file, fetching from R2 on miss.
 
-    Resolution order: local cache, then repo-bundled artwork, then R2.
-    The R2 key is the index's relative path under the catalog prefix. The
-    relative path comes from the catalog index, not from the caller, but it
-    still travels through the generic path guard: a tampered or rebuilt index
+    Resolution order: local cache, then R2. R2 is the only source of SVG
+    artwork: no bundled or local artwork is ever resolved here. The R2 key
+    is the index's relative path under the catalog prefix. The relative
+    path comes from the catalog index, not from the caller, but it still
+    travels through the generic path guard: a tampered or rebuilt index
     must not be able to point the renderer at an arbitrary file.
     """
     root = _cache_dir()
@@ -283,11 +273,6 @@ def resolve_asset_path(relative_path: str) -> str:
         raise ValueError("not an svg file")
     if os.path.isfile(resolved):
         return resolved
-    bundled = file_security.resolve_path_within_directory(
-        _bundled_dir(), relative_path, require_file=False
-    )
-    if os.path.isfile(bundled):
-        return bundled
     prefix = _require_r2_config()
     _download_key(f"{prefix}/{relative_path}", resolved)
     return resolved
