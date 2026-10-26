@@ -111,13 +111,14 @@ describe('logger', () => {
 
 describe('logger production routing', () => {
   const capture = vi.fn();
+  const captureException = vi.fn();
 
   beforeEach(() => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.clearAllMocks();
-    (getPostHogServer as ReturnType<typeof vi.fn>).mockReturnValue({ capture });
+    (getPostHogServer as ReturnType<typeof vi.fn>).mockReturnValue({ capture, captureException });
   });
 
   afterEach(() => {
@@ -129,8 +130,8 @@ describe('logger production routing', () => {
     vi.stubEnv('NODE_ENV', 'production');
     const logId = logger.error('insert failed', new Error('db down'));
 
-    expect(capture).toHaveBeenCalledTimes(1);
-    const [, props] = capture.mock.calls[0] as [string, Record<string, unknown>];
+    expect(captureException).toHaveBeenCalledTimes(1);
+    const [, props] = captureException.mock.calls[0] as [Error, Record<string, unknown>];
     // The errorId returned to API clients must match the logId in the
     // PostHog event — otherwise users cannot correlate their report.
     expect(props['logId']).toBe(logId);
@@ -143,9 +144,10 @@ describe('logger production routing', () => {
     const err = new Error('insert boom');
     logger.error('insert failed', err, { endpoint: '/api/schedule' });
 
-    expect(capture).toHaveBeenCalledTimes(1);
-    const [event, props] = capture.mock.calls[0] as [string, Record<string, unknown>];
-    expect(event).toBe('$exception');
+    expect(captureException).toHaveBeenCalledTimes(1);
+    const [captured, props] = captureException.mock.calls[0] as [Error, Record<string, unknown>];
+    expect(captured).toBeInstanceOf(Error);
+    expect(captured.message).toBe('insert boom');
     expect(props).toMatchObject({
       $exception_message: 'insert boom',
       log_message: 'insert failed',
@@ -161,9 +163,9 @@ describe('logger production routing', () => {
     // the mocked one here — this test pins the reporting behavior only.
     vi.stubEnv('NODE_ENV', 'test');
     logger.error('insert failed', new Error('x'));
-    expect(capture).toHaveBeenCalledTimes(1);
-    const [event] = capture.mock.calls[0] as [string, Record<string, unknown>];
-    expect(event).toBe('$exception');
+    expect(captureException).toHaveBeenCalledTimes(1);
+    const [captured] = captureException.mock.calls[0] as [Error];
+    expect(captured).toBeInstanceOf(Error);
     expect(console.error).toHaveBeenCalled();
   });
 
@@ -172,9 +174,9 @@ describe('logger production routing', () => {
     const pgError = { message: 'new row violates check constraint "schedules_providers_check"', code: '23514' };
     logger.error('insert failed', pgError);
 
-    expect(capture).toHaveBeenCalledTimes(1);
-    const [event, props] = capture.mock.calls[0] as [string, Record<string, unknown>];
-    expect(event).toBe('$exception');
+    expect(captureException).toHaveBeenCalledTimes(1);
+    const [captured, props] = captureException.mock.calls[0] as [Error, Record<string, unknown>];
+    expect(captured).toBeInstanceOf(Error);
     expect(props['$exception_message']).toContain('schedules_providers_check');
     // Object causes are serialized to sanitized JSON (never raw objects to
     // a third-party cloud). The failure stays visible in the PostHog issue.
@@ -217,7 +219,7 @@ describe('logger production routing', () => {
     vi.stubEnv('NODE_ENV', 'production');
     logger.logUploadError('log-id', new Error('upload boom'), { provider: 'youtube' });
     logger.logOAuthError('log-id', new Error('oauth boom'));
-    expect(capture).toHaveBeenCalledTimes(2);
+    expect(captureException).toHaveBeenCalledTimes(2);
     expect(console.error).toHaveBeenCalledTimes(2);
   });
 
@@ -228,8 +230,8 @@ describe('logger production routing', () => {
       'upstream 500: invalid request https://engine.internal/run?api_key=sk-live-secret-12345 detail',
     );
 
-    expect(capture).toHaveBeenCalledTimes(1);
-    const [, props] = capture.mock.calls[0] as [string, Record<string, unknown>];
+    expect(captureException).toHaveBeenCalledTimes(1);
+    const [, props] = captureException.mock.calls[0] as [Error, Record<string, unknown>];
     const cause = props['cause'] as string;
     expect(cause).not.toContain('sk-live-secret-12345');
     expect(cause).toContain('api_key=[redacted]');
@@ -242,7 +244,7 @@ describe('logger production routing', () => {
       'call failed: Authorization Bearer abcdef123456, dsn https://user:pass@host/db',
     );
 
-    const [, props] = capture.mock.calls[0] as [string, Record<string, unknown>];
+    const [, props] = captureException.mock.calls[0] as [Error, Record<string, unknown>];
     const cause = props['cause'] as string;
     expect(cause).not.toContain('abcdef123456');
     expect(cause).toContain('Bearer [redacted]');
@@ -253,7 +255,7 @@ describe('logger production routing', () => {
     vi.stubEnv('NODE_ENV', 'production');
     logger.error('engine failed', `prefix ${'x'.repeat(500)}`);
 
-    const [, props] = capture.mock.calls[0] as [string, Record<string, unknown>];
+    const [, props] = captureException.mock.calls[0] as [Error, Record<string, unknown>];
     expect((props['cause'] as string).length).toBeLessThanOrEqual(200);
   });
 
@@ -262,7 +264,7 @@ describe('logger production routing', () => {
     const pgError = { message: 'boom', code: '23514' };
     logger.error('insert failed', pgError);
 
-    const [, props] = capture.mock.calls[0] as [string, Record<string, unknown>];
+    const [, props] = captureException.mock.calls[0] as [Error, Record<string, unknown>];
     const cause = props['cause'] as string;
     expect(typeof cause).toBe('string');
     expect(JSON.parse(cause)).toEqual(pgError);
@@ -272,7 +274,7 @@ describe('logger production routing', () => {
     vi.stubEnv('NODE_ENV', 'production');
     logger.error('insert failed', { message: 'boom', api_key: 'sk-secret' });
 
-    const [, props] = capture.mock.calls[0] as [string, Record<string, unknown>];
+    const [, props] = captureException.mock.calls[0] as [Error, Record<string, unknown>];
     const cause = props['cause'] as string;
     expect(cause).not.toContain('sk-secret');
     expect(cause).toContain('[redacted]');

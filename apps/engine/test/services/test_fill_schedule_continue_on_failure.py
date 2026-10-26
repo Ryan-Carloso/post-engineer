@@ -122,6 +122,7 @@ class ContinueOnProviderFailureTests(unittest.TestCase):
         props = partial_calls[0][0][1]
         self.assertEqual(props["failed_providers"], ["youtube"])
         self.assertEqual(props["published_providers"], ["bluesky"])
+        self.assertTrue(props["reason"])
 
     def test_all_providers_fail_goes_through_retry_path(self):
         """Every provider down: slot back to ready (retryable), not published."""

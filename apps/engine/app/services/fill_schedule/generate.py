@@ -13,7 +13,7 @@ from app.models.schema import TaskVideoRequest
 from app.models import const as model_const
 from app.services import notify as notify_module
 from app.services import task as tm
-from app.services.analytics import scrub_secret_values, track_event
+from app.services.analytics import nonempty_error_reason, scrub_secret_values, track_event
 from app.services.fill_schedule.constants import (
     SLOT_FAILED,
     SLOT_GENERATING,
@@ -229,7 +229,7 @@ class BatchGenerator:
                 # mid-key would leave a fragment the key-anchored pattern
                 # can no longer match, leaking the raw remainder into
                 # PostHog properties.
-                "reason": scrub_secret_values(str(exc))[:200],
+                "reason": nonempty_error_reason(str(exc), type(exc).__name__),
             }
             if task_id is not None:
                 failed_props["task_id"] = task_id

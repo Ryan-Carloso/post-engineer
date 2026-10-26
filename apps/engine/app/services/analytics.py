@@ -27,6 +27,14 @@ publish paths (task_publish, fill_schedule). It is scrubbed with
 scrub_error_text (secrets + machine-local paths) before capture and never
 reaches Discord or the task error string.
 
+Deliberate exception (PR #306): the ai_request event for a failed LongCat call
+carries response_body, up to 500 chars of LongCat's upstream HTTP error
+response, so a failed submit is diagnosable in PostHog from the actual
+reason instead of only its status code. It is scrubbed with
+scrub_error_text (secrets + machine-local paths) at the call site before
+capture and never reaches the exception message, Discord, or the task
+error string.
+
 Deliberate exception (PR #250): the script_angle_generated event carries
 angle, LLM output derived from the user's own topic and already persisted
 as product data on the task record (the user sees it in post detail). The
@@ -303,6 +311,15 @@ def track_event(
         pass
 
 
+def nonempty_error_reason(text: str, fallback: str, max_chars: int = 200) -> str:
+    """Scrubbed failure why, never empty: empty text falls back to type name."""
+    cleaned = scrub_error_text(text, max_chars=max_chars).strip()
+    if cleaned:
+        return cleaned
+    fallback_clean = scrub_error_text(fallback, max_chars=max_chars).strip()
+    return fallback_clean or "Error"
+
+
 def track_ai_request(properties: dict[str, Any]) -> None:
     """Track one AI backend call (LLM or Modal).
 
@@ -312,8 +329,8 @@ def track_ai_request(properties: dict[str, Any]) -> None:
     for llm; operation/job_id for modal) and, on failure, a pre-sanitized
     error. track_event redacts whole properties whose KEY names a secret
     as a backstop and never raises — free-text fields (error,
-    response_preview) must be scrubbed by the caller first, which the
-    llm/modal paths do via scrub_error_text.
+    response_preview, response_body) must be scrubbed by the caller first,
+    which the llm/modal paths do via scrub_error_text.
 
     LLM calls additionally emit the standard PostHog AI-observability
     `$ai_generation` event (see track_ai_generation): one trace per call
@@ -321,6 +338,10 @@ def track_ai_request(properties: dict[str, Any]) -> None:
     error and response_preview, so failures and regressions are readable
     in the AI product without sending prompts.
     """
+    if properties.get("success") is False:
+        err = properties.get("error")
+        if not isinstance(err, str) or not err.strip():
+            properties["error"] = "Error"
     track_event("ai_request", properties)
     # Also emit the standard PostHog AI-observability event so the LLM call
     # appears as a trace/generation in the AI product. Only the llm backend:

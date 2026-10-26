@@ -12,6 +12,12 @@ from app.services import notify as notify_module
 from app.services import upload_publisher
 from app.services import video_storage
 from app.services.analytics import scrub_error_text, track_event
+from app.services.fill_schedule.publish_events import (
+    partial_failure_properties,
+    provider_failed_properties,
+    publish_failed_properties,
+    publish_tracking_context,
+)
 from app.services.fill_schedule.constants import (
     MAX_PUBLISH_ATTEMPTS,
     PUBLISH_RETRY_DELAY_SECONDS,
@@ -26,7 +32,6 @@ from app.services.fill_schedule.publish_results import (
     merge_prior_published,
 )
 from app.services.fill_schedule.store import ScheduleStore
-from app.services.fill_schedule.publish_tracking import publish_tracking_context
 from app.services.fill_schedule.support import (
     notify_safe,
     post_identity,
@@ -36,8 +41,6 @@ from app.services.fill_schedule.support import (
     track_refund_issued,
 )
 from app.services.state import persist_state_update
-
-_publish_tracking_context = publish_tracking_context
 
 
 class _AllProvidersFailed(Exception):
@@ -100,7 +103,7 @@ class BatchPublisher:
             if not self.store.claim_ready_slot(str(slot["id"])):
                 # another tick/process already claimed (or published) this slot
                 continue
-            track_event("video_publish_started", _publish_tracking_context(slot, schedule))
+            track_event("video_publish_started", publish_tracking_context(slot, schedule))
             task = self.task_state.get_task(str(slot["task_id"]))
             videos = (task or {}).get("videos") or []
             object_path = (task or {}).get("video_storage_path")
@@ -113,11 +116,9 @@ class BatchPublisher:
                 # failed event with the reason, not just the started one.
                 track_event(
                     "video_publish_failed",
-                    {
-                        **_publish_tracking_context(slot, schedule),
-                        "reason": "task has no finished videos",
-                        "retryable": False,
-                    },
+                    publish_failed_properties(
+                        slot, schedule, "task has no finished videos", retryable=False
+                    ),
                 )
                 continue
             if not isinstance(object_path, str) or not object_path:
@@ -184,15 +185,9 @@ class BatchPublisher:
                             )
                             track_event(
                                 "publish_provider_failed",
-                                {
-                                    **_publish_tracking_context(slot, schedule),
-                                    "provider": provider_name,
-                                    "status_code": getattr(exc, "status_code", None),
-                                    "response_body": scrub_error_text(
-                                        getattr(exc, "response_body", None) or "",
-                                        max_chars=500,
-                                    ),
-                                },
+                                provider_failed_properties(
+                                    slot, schedule, provider_name, exc
+                                ),
                                 immediate=True,
                             )
                             continue
@@ -238,11 +233,13 @@ class BatchPublisher:
                         # failure instead of leaving only a server log.
                         track_event(
                             "video_publish_partial_failure",
-                            {
-                                **_publish_tracking_context(slot, schedule),
-                                "failed_providers": ["state-write"],
-                                "published_providers": published_providers,
-                            },
+                            partial_failure_properties(
+                                slot,
+                                schedule,
+                                ["state-write"],
+                                published_providers,
+                                "state-write",
+                            ),
                         )
                 if not published_providers:
                     # Every provider failed: fall through to the retry/fail
@@ -256,7 +253,7 @@ class BatchPublisher:
                 track_event(
                     "video_published",
                     {
-                        **_publish_tracking_context(slot, schedule),
+                        **publish_tracking_context(slot, schedule),
                         "providers": published_providers,
                     },
                 )
@@ -274,11 +271,13 @@ class BatchPublisher:
                     # body — it reaches Discord).
                     track_event(
                         "video_publish_partial_failure",
-                        {
-                            **_publish_tracking_context(slot, schedule),
-                            "failed_providers": failed_providers,
-                            "published_providers": published_providers,
-                        },
+                        partial_failure_properties(
+                            slot,
+                            schedule,
+                            failed_providers,
+                            published_providers,
+                            first_error,
+                        ),
                     )
                     notify_safe(
                         self.notify,
@@ -310,14 +309,7 @@ class BatchPublisher:
                 if not isinstance(exc, _AllProvidersFailed):
                     track_event(
                         "publish_provider_failed",
-                        {
-                            **_publish_tracking_context(slot, schedule),
-                            "provider": str(provider) if provider else "unknown",
-                            "status_code": getattr(exc, "status_code", None),
-                            "response_body": scrub_error_text(
-                                getattr(exc, "response_body", None) or "", max_chars=500
-                            ),
-                        },
+                        provider_failed_properties(slot, schedule, provider, exc),
                         immediate=True,
                     )
                 attempts = int(slot.get("publish_attempts") or 0) + 1
@@ -352,17 +344,14 @@ class BatchPublisher:
                     )
                 track_event(
                     "video_publish_failed",
-                    {
-                        **_publish_tracking_context(slot, schedule),
-                        # Keep the diagnostic tail and strip local paths:
-                        # scrub_error_text scrubs the full message before
-                        # truncating, so a cut landing mid-key cannot leave
-                        # a fragment the key-anchored pattern can no longer
-                        # match.
-                        "reason": scrub_error_text(str(exc), max_chars=200),
-                        "retryable": attempts < MAX_PUBLISH_ATTEMPTS,
-                        "attempts": attempts,
-                    },
+                    publish_failed_properties(
+                        slot,
+                        schedule,
+                        str(exc),
+                        type(exc).__name__,
+                        retryable=attempts < MAX_PUBLISH_ATTEMPTS,
+                        attempts=attempts,
+                    ),
                     # Same lone-event rationale as publish_provider_failed
                     # above: flush so the failure is visible immediately.
                     immediate=True,
@@ -404,13 +393,9 @@ class BatchPublisher:
         if emit_failed_event:
             track_event(
                 "video_publish_failed",
-                {
-                    **_publish_tracking_context(slot, schedule),
-                    # Same scrub-then-truncate convention as the exception
-                    # path: the reason is client-visible in the error column.
-                    "reason": scrub_error_text(error, max_chars=200),
-                    "retryable": False,
-                },
+                publish_failed_properties(
+                    slot, schedule, error, retryable=False
+                ),
             )
         user_id = slot_user_id(slot)
         schedule_id = schedule.get("id")

@@ -44,7 +44,7 @@ from app.services.persona_hook import (
     resolve_exhausted_hook,
 )
 from app.services.bgm_history import history_repository
-from app.services.analytics import scrub_error_text, scrub_secret_values, track_event
+from app.services.analytics import nonempty_error_reason, scrub_secret_values, track_event
 from app.services.notify import safe_reason, send_discord, task_failed_msg
 from app.utils import file_security, ssrf, utils
 
@@ -408,7 +408,7 @@ def _fail_task(
         # Keep the diagnostic tail and strip local paths; the helper
         # scrubs the full message before truncating so a mid-key cut
         # cannot leave a fragment the pattern can no longer match.
-        context["reason"] = scrub_error_text(str(error), max_chars=200)
+        context["reason"] = nonempty_error_reason(str(error), error_type, max_chars=200)
         track_event("video_generation_failed", context)
     # Terminal webhook (at most once per task, deduped inside): a failing
     # delivery only logs, it never changes the task outcome.

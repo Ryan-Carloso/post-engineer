@@ -1599,6 +1599,22 @@ class TestAIRequestTracking(unittest.TestCase):
         props = track.call_args[0][0]
         self.assertEqual(len(props["error"]), 500)
 
+    def test_track_llm_request_failure_empty_error_is_filled(self):
+        config.app["llm_provider"] = "groq"
+        config.app["groq_model_name"] = ""
+        with patch.object(llm, "track_ai_request") as track:
+            llm._track_llm_request(
+                provider="groq",
+                primary_provider="groq",
+                fallback_used=False,
+                duration_ms=1,
+                success=False,
+                error="",
+            )
+        props = track.call_args[0][0]
+        self.assertFalse(props["success"])
+        self.assertTrue(props["error"])
+
     def test_track_llm_request_scrubs_credential_fragments(self):
         # response_preview ships truncated model output; credential-shaped
         # fragments echoed in it must be redacted before reaching PostHog.

@@ -88,6 +88,9 @@ describe('onRequestError', () => {
       onRequestError('string failure', { path: '/p', method: 'GET' }, { routerKind: 'App Router' }),
     ).resolves.toBeUndefined();
     expect(captureException).toHaveBeenCalledTimes(1);
+    const [captured] = (captureException as ReturnType<typeof vi.fn>).mock.calls[0] as [unknown];
+    expect(captured).toBeInstanceOf(Error);
+    expect((captured as Error).message).toContain('string failure');
   });
 });
 
