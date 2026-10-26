@@ -328,6 +328,15 @@ class SvgCatalogR2Tests(unittest.TestCase):
         self.assertTrue(resolved.endswith("porto/tripas-dish.svg"))
         self.assertEqual(self.fake.requested_keys, [])
 
+    def test_bundled_dir_is_root_anchored(self):
+        # A cwd-relative bundled dir only resolves when tests run from the
+        # engine root; production must not depend on the working directory.
+        self.assertEqual(
+            svg_catalog._bundled_dir(),
+            os.path.join(svg_catalog.root_dir, "assets", "svg"),
+        )
+        self.assertTrue(os.path.isabs(svg_catalog._bundled_dir()))
+
     def test_resolve_asset_path_cache_miss_downloads(self):
         resolved = svg_catalog.resolve_asset_path("Animals 3/hen money.svg")
         self.assertTrue(os.path.isfile(resolved))

@@ -168,6 +168,11 @@ only_mutate = []
 #   and backend tests (test/services/test_local_tts_*.py) import them.
 # - scripts/changed_functions.py: test/scripts/test_changed_functions.py
 #   imports it; without the copy test collection errors and every shard fails.
+# - assets/svg/porto: the repo-bundled Porto fallbacks that
+#   test/services/test_svg_catalog.py resolves via svg_catalog._bundled_dir().
+#   Without the copy, the bundled-asset test fails inside the mutants/
+#   working copy (no assets/ there), mutmut's stats run aborts, and every
+#   shard whose test set includes that test fails.
 also_copy = [
     "config.example.toml",
     "cli.py",
@@ -180,6 +185,7 @@ also_copy = [
     "local_tts/routing.py",
     "local_tts/backends.py",
     "scripts/changed_functions.py",
+    "assets/svg/porto",
 ]
 # Test exclusions for mutmut runs (these still run in the main engine CI job):
 # - test_mypy_config.py pins the CI workflow file layout (.github/workflows/),
