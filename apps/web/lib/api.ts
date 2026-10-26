@@ -1134,8 +1134,8 @@ export interface CreatePostInput {
       this is the per-post choice. Sent explicitly — the server is the
       billing authority and prices the two cases differently. */
   faceless: boolean;
-  /** What fills a faceless video: 'broll' (stock first) or 'svg'
-      (catalog illustrations only). Only sent when faceless is true. */
+  /** What fills the video, with or without a face: 'broll' (stock
+      footage only) or 'svg' (catalog illustrations only). Never mixed. */
   facelessMaterial?: 'broll' | 'svg';
   /** Required only without a persona: the engine needs exactly one voice. */
   voiceId?: string;
@@ -1201,9 +1201,7 @@ export async function createPost(input: CreatePostInput): Promise<CreatePostResu
       topics: input.topics,
       options: {
         faceless: input.faceless,
-        ...(input.faceless && input.facelessMaterial !== undefined
-          ? { facelessMaterial: input.facelessMaterial }
-          : {}),
+        ...(input.facelessMaterial !== undefined ? { facelessMaterial: input.facelessMaterial } : {}),
         ...(input.voiceId !== undefined ? { voiceId: input.voiceId } : {}),
       },
       publishing: {

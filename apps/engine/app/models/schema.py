@@ -142,10 +142,10 @@ class VideoParams(BaseModel):
     video_transition_mode: Optional[VideoTransitionMode] = None
     video_clip_duration: Optional[int] = Field(default=2, ge=1, le=60)
     match_materials_to_script: bool = True
-    # Faceless material choice, per request only (like video_layout, never
-    # config.toml): "broll" keeps the previous stock cascade, "svg" uses
-    # only the R2 SVG catalog. The web sends it explicitly for faceless
-    # posts; any other caller omitting it gets the previous behaviour.
+    # Material choice, per request only (like video_layout, never
+    # config.toml), for posts with or without a face: "broll" is stock
+    # only, "svg" is only the R2 SVG catalog; the two never mix. The web
+    # sends it on every post; a caller omitting it gets "broll".
     faceless_material: Literal["broll", "svg"] = "broll"
     video_materials: Optional[List[MaterialInfo]] = (
         None  # Materials used to generate the video

@@ -171,9 +171,9 @@ interface ValidatedInput {
   times: string[];
   timezone: string;
   faceless: boolean;
-  /** Resolved in validateOptions: 'broll' for faceless posts that omit it,
-   *  undefined for with-face posts (a material choice there is a 400). */
-  facelessMaterial?: 'broll' | 'svg';
+  /** Resolved in validateOptions: 'broll' when omitted. Applies to every
+   *  post, with or without a face (stock only, or illustrations only). */
+  facelessMaterial: 'broll' | 'svg';
   audioUrl?: string;
   imageId?: string;
   scriptPrompt?: string;
@@ -265,16 +265,6 @@ function validateOptions(
   if (typeof faceless !== 'boolean') {
     return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'options.faceless must be a boolean.', 'options.faceless');
   }
-  // The material choice only means something for a faceless video: a
-  // with-face post carrying one is a caller bug, rejected here before any
-  // token is charged rather than silently ignored downstream.
-  if (!faceless && facelessMaterial !== undefined) {
-    return validationFailed(
-      ERROR_CODES.VALIDATION_FAILED,
-      'options.facelessMaterial requires options.faceless to be true.',
-      'options.facelessMaterial',
-    );
-  }
   if (audioUrl !== undefined && !isHttpUrl(audioUrl)) {
     return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'options.audioUrl must be a valid http(s) URL.', 'options.audioUrl');
   }
@@ -346,7 +336,7 @@ function validateOptions(
   }
   return {
     faceless,
-    facelessMaterial: faceless ? (facelessMaterial ?? 'broll') : undefined,
+    facelessMaterial: facelessMaterial ?? 'broll',
     audioUrl,
     imageId: imageId?.trim(),
     scriptPrompt,
@@ -1193,6 +1183,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         status: 'pending',
         topic: topics[i],
         faceless: prep.faceless,
+        faceless_material: validatedOptions.facelessMaterial,
       })),
     )
     .select('id, slot_at, topic');
@@ -1297,10 +1288,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
         // engine's persona_lipsync_active also returns false when no visual is
         // attached, and a faceless job carries no photo_url.
         lipsync: !prep.faceless,
-        // Faceless material rides the payload under its snake_case name; with-face posts carry no key (validated above).
-        ...(validatedOptions.facelessMaterial !== undefined
-          ? { faceless_material: validatedOptions.facelessMaterial }
-          : {}),
+        // The material choice rides the payload under its snake_case name on every post, face or not.
+        faceless_material: validatedOptions.facelessMaterial,
       });
       if (!hasNonEmptyString(payload.video_subject)) {
         throw new SlotDispatchError('empty_subject', 'Video subject is empty.');

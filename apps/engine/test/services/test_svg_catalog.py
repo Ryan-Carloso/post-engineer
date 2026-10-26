@@ -398,35 +398,11 @@ class SvgCatalogR2Tests(unittest.TestCase):
         self.assertEqual([a.title for a in assets], ["Café na Praça"])
 
 
-class LeadCascadeTests(unittest.TestCase):
+class SvgCatalogConfigTests(unittest.TestCase):
     def _config(self, values):
         patcher = patch.object(svg_catalog.config, "app", values)
         patcher.start()
         self.addCleanup(patcher.stop)
-
-    def test_enabled_catalog_leads_the_cascade(self):
-        self._config({"svg_catalog_enabled": True, "svg_r2_prefix": "p"})
-        self.assertEqual(
-            svg_catalog.lead_cascade(["coverr", "pexels", "pixabay"]),
-            ["svg", "coverr", "pexels", "pixabay"],
-        )
-
-    def test_enabled_catalog_is_never_listed_twice(self):
-        self._config({"svg_catalog_enabled": True, "svg_r2_prefix": "p"})
-        self.assertEqual(
-            svg_catalog.lead_cascade(["pexels", "svg"]), ["svg", "pexels"]
-        )
-
-    def test_disabled_catalog_keeps_the_cascade(self):
-        self._config({"svg_catalog_enabled": False})
-        self.assertEqual(
-            svg_catalog.lead_cascade(["coverr", "pexels"]), ["coverr", "pexels"]
-        )
-
-    def test_enabled_without_prefix_fails_fast(self):
-        self._config({"svg_catalog_enabled": True, "svg_r2_prefix": ""})
-        with self.assertRaises(ValueError):
-            svg_catalog.lead_cascade(["pexels"])
 
     def test_bucket_defaults_to_the_video_storage_bucket(self):
         from app.services import video_storage

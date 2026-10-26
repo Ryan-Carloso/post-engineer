@@ -5,7 +5,6 @@ import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { ImageIcon } from '@/lib/ui';
 import { logger } from '@/lib/logger';
-import { logClientError } from '@/lib/client-logger';
 import { describeImageSource } from '@/lib/image-source';
 
 //---------------
@@ -84,10 +83,15 @@ export default function PersonaAvatar({
   // perfectly good photo for the initials. A real failure leaves the element
   // in the document; an aborted one is already detached.
   //---------------
+  //---------------
+  // A broken photo is a handled, degraded state (the next candidate or the
+  // initials take over), so it is a warning: still logged and reported, but
+  // not a console.error, which the Next dev overlay shows as an "Issue".
+  //---------------
   const handleImageError = (event: React.SyntheticEvent<HTMLImageElement>) => {
     if (!event.currentTarget.isConnected) return;
     setFailedCount((count) => count + 1);
-    logClientError('[persona-avatar] avatar image failed to load', undefined, {
+    logger.warn('[persona-avatar] avatar image failed to load', {
       name,
       source: describeImageSource(imageUrl),
     });

@@ -118,17 +118,6 @@ def is_enabled() -> bool:
     return True
 
 
-def lead_cascade(source_mix: List[str]) -> List[str]:
-    """Put "svg" first in a material source cascade when the catalog is on.
-
-    The stock providers then serve as fallback for keywords the catalog has
-    no artwork for. Raises like is_enabled when the flag is on without a
-    prefix, so a misconfigured catalog fails the render instead of using stock.
-    """
-    rest = [name for name in source_mix if name != "svg"]
-    return ["svg", *rest] if is_enabled() else list(source_mix)
-
-
 def _r2_client():
     """The video-storage R2 client, after checking every R2_* variable is set.
 

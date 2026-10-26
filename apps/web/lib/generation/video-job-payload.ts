@@ -52,7 +52,7 @@ const REQUEST_FORWARD_FIELDS: ReadonlyArray<string> = [
   // triage can requeue web-created tasks on engine restart.
   'slot_id',
   // faceless_material is a first-class engine field (VideoParams carries
-  // it as the per-post faceless material choice); without it a faceless
+  // it as the per-post material choice, face or not); without it a
   // post's svg choice would be dropped here and silently render broll.
   'faceless_material',
 ];

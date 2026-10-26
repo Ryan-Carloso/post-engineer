@@ -208,7 +208,13 @@ class TestMaterialTlsVerification(unittest.TestCase):
         self.assertEqual(result, ["/tmp/a1.mp4", "/tmp/b1.mp4", "/tmp/a2.mp4"])
 
 
-class TestScriptOrderSvgNeutralFallback(unittest.TestCase):
+class TestBrollVerificationDropsRejectedSegments(unittest.TestCase):
+    """
+    Broll mode is stock only: with verification on, a segment whose stock
+    is rejected is dropped. It is never replaced by a catalog SVG or a
+    neutral clip, and the catalog is never searched.
+    """
+
     def setUp(self):
         self.original_app_config = dict(config.app)
 
@@ -216,110 +222,56 @@ class TestScriptOrderSvgNeutralFallback(unittest.TestCase):
         config.app.clear()
         config.app.update(self.original_app_config)
 
-    def _run_with_svg_failure(self, svg_failure):
-        """
-        One script-order term whose only candidate is a catalog SVG that
-        fails to render. Verification is on; the segment must still come
-        back as a neutral clip, never as a dropped term.
-        """
-        svg_item = material.MaterialInfo(
-            provider="svg", url="Traveler eating local food.svg", duration=3
-        )
+    def _run(self, match_script_order):
+        clips = {
+            "good topic": [
+                material.MaterialInfo(provider="pexels", url="https://v.example/good.mp4", duration=3)
+            ],
+            "bad topic": [
+                material.MaterialInfo(provider="pexels", url="https://v.example/bad.mp4", duration=3)
+            ],
+        }
+        resolved = []
 
         def fake_search(search_term, minimum_duration, video_aspect):
-            return [svg_item]
+            return clips[search_term]
 
         def fake_resolve(item, save_dir, max_clip_duration, exclude_faces, video_aspect):
-            if item.provider == "svg":
-                return svg_failure()
-            if item.provider == "neutral":
-                return "/tmp/neutral.mp4"
-            raise AssertionError(f"unexpected provider {item.provider}")
+            resolved.append((item.provider, item.url))
+            return f"/tmp/{item.url.rsplit('/', 1)[-1]}"
+
+        def scorer(url, phrase):
+            return 0.9 if url.endswith("good.mp4") else 0.0
 
         with (
             patch.dict(config.app, {"material_directory": "", "material_verification_enabled": True}),
             patch.object(material, "search_videos_pexels", side_effect=fake_search),
             patch.object(
-                material.material_verification,
-                "verified_script_order_groups",
-                side_effect=lambda groups, task_id, scorer: groups,
+                material.svg_material.svg_catalog,
+                "search",
+                side_effect=AssertionError("broll mode must never search the catalog"),
             ),
-            patch.object(material.svg_material, "resolve_material_path", side_effect=fake_resolve),
-        ):
-            return material.download_videos(
-                task_id="svg-fallback",
-                search_terms=["eating local food"],
-                source="pexels",
-                audio_duration=3,
-                max_clip_duration=3,
-                match_script_order=True,
-            )
-
-    def test_failed_svg_render_falls_back_to_neutral(self):
-        result = self._run_with_svg_failure(lambda: "")
-        self.assertEqual(result, ["/tmp/neutral.mp4"])
-
-    def test_missing_svg_asset_falls_back_to_neutral(self):
-        def raise_missing():
-            raise FileNotFoundError("Traveler eating local food.svg")
-
-        result = self._run_with_svg_failure(raise_missing)
-        self.assertEqual(result, ["/tmp/neutral.mp4"])
-
-
-class TestFlatDownloadSvgNeutralFallback(unittest.TestCase):
-    def setUp(self):
-        self.original_app_config = dict(config.app)
-
-    def tearDown(self):
-        config.app.clear()
-        config.app.update(self.original_app_config)
-
-    def test_failed_svg_in_flat_path_falls_back_to_neutral(self):
-        """
-        The non-script-order path must keep the same guarantee: with
-        verification on, a catalog SVG that fails to render degrades to
-        neutral instead of silently losing its phrase (verification left
-        no second candidate for it).
-        """
-        svg_item = material.MaterialInfo(
-            provider="svg", url="Traveler eating local food.svg", duration=3
-        )
-
-        def fake_search(search_term, minimum_duration, video_aspect):
-            return [svg_item]
-
-        def fake_resolve(item, save_dir, max_clip_duration, exclude_faces, video_aspect):
-            if item.provider == "svg":
-                return ""
-            if item.provider == "neutral":
-                return "/tmp/neutral.mp4"
-            raise AssertionError(f"unexpected provider {item.provider}")
-
-        with (
-            patch.dict(config.app, {"material_directory": "", "material_verification_enabled": True}),
-            patch.object(material, "search_videos_pexels", side_effect=fake_search),
-            patch.object(
-                material.material_verification,
-                "apply_verification",
-                return_value=([svg_item], []),
-            ),
-            patch.object(
-                material.material_verification,
-                "emit_material_fallback_summary",
-                return_value=None,
-            ),
+            patch.object(material.material_verification, "track_event"),
             patch.object(material.svg_material, "resolve_material_path", side_effect=fake_resolve),
         ):
             result = material.download_videos(
-                task_id="flat-svg-fallback",
-                search_terms=["eating local food"],
+                task_id="broll-drop",
+                search_terms=["good topic", "bad topic"],
                 source="pexels",
                 audio_duration=3,
                 max_clip_duration=3,
+                match_script_order=match_script_order,
+                source_mix=["pexels"],
+                material_scorer=scorer,
             )
+        self.assertEqual(resolved, [("pexels", "https://v.example/good.mp4")])
+        self.assertEqual(result, ["/tmp/good.mp4"])
 
-        self.assertEqual(result, ["/tmp/neutral.mp4"])
+    def test_flat_path_drops_rejected_segment(self):
+        self._run(match_script_order=False)
+
+    def test_script_order_path_drops_rejected_segment(self):
+        self._run(match_script_order=True)
 
 
 class TestDownloadVideosCoercesStringAspect(unittest.TestCase):

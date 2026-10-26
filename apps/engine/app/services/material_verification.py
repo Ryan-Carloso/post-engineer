@@ -1,25 +1,14 @@
-"""Verified stock material selection with R2 catalog SVG fallback.
+"""Verified stock material selection for broll mode.
 
 Stock is verified only when a scorer clears it: the best candidate must
 reach the minimum score and beat the runner-up by the margin. Scores are
 relative, never probabilities; unscored candidates are never verified.
 
-Fallback order, never using rejected stock or misleading assets:
-1. Verified stock (see above).
-2. R2 catalog SVG: the catalog is searched with the segment's phrase,
-   using the existing catalog search (svg_catalog.search over its SQLite
-   index). The first catalog match not already used in this video is
-   tier svg_catalog.
-3. Next-best catalog match: when the first catalog match was already
-   used in this video, the next unused match is tier svg_catalog_alt.
-   The same catalog asset is never used twice in one video.
-4. Neutral background: stylized and abstract, implying no specific
-   subject (no skyline, no dish, no text, no identifiable place).
-
-R2 is the only source of SVG artwork. There is no subject mapping, no
-keyword table, and no bundled or local artwork anywhere in this flow:
-catalog items carry provider="svg" and are rendered through
-svg_material.resolve_material_path by the caller.
+A segment with no verified stock is dropped: broll mode is stock only,
+so a rejected clip is never replaced by a catalog SVG, a neutral
+background, or the rejected clip itself. The remaining verified clips
+fill the timeline; when none is left the download fails like any other
+empty stock search. Svg mode never runs verification (catalog only).
 
 Scoring is pluggable through an option (the repo's injection pattern).
 The default scorer is lazy ONNX (see siglip_scorer): without onnxruntime,
@@ -89,15 +78,8 @@ DEFAULT_MIN_SCORE = 0.01
 DEFAULT_RUNNER_UP_MARGIN = 0.005
 
 TIER_STOCK_VERIFIED = "stock_verified"
-TIER_SVG_CATALOG = "svg_catalog"
-TIER_SVG_CATALOG_ALT = "svg_catalog_alt"
-TIER_NEUTRAL = "neutral"
-ALL_TIERS = (
-    TIER_STOCK_VERIFIED,
-    TIER_SVG_CATALOG,
-    TIER_SVG_CATALOG_ALT,
-    TIER_NEUTRAL,
-)
+TIER_DROPPED = "dropped"
+ALL_TIERS = (TIER_STOCK_VERIFIED, TIER_DROPPED)
 
 
 @dataclass(frozen=True)
@@ -135,14 +117,6 @@ def verification_config() -> VerificationConfig:
     )
 
 
-@dataclass(frozen=True)
-class SvgAssetRef:
-    """One R2 catalog SVG asset, identified by its catalog id."""
-
-    asset_id: str
-    relative_path: str
-
-
 @dataclass
 class SegmentDecision:
     """The material chosen for one script segment."""
@@ -150,10 +124,7 @@ class SegmentDecision:
     tier: str
     phrase: str
     stock_url: Optional[str] = None
-    svg_asset_id: Optional[str] = None
-    svg_relative_path: Optional[str] = None
-    svg_asset: Optional[SvgAssetRef] = None
-    fallback_reason: Optional[str] = None
+    drop_reason: Optional[str] = None
 
 
 # A scorer maps a candidate URL and a phrase to a relative similarity
@@ -161,10 +132,6 @@ class SegmentDecision:
 # return a probability; the threshold and margin are calibrated on its
 # own scale.
 Scorer = Callable[[str, str], Optional[float]]
-
-# A catalog search maps a segment phrase to ranked catalog assets, best
-# first. The production search is svg_catalog.search; tests inject a stub.
-CatalogSearch = Callable[[str], Sequence[SvgAssetRef]]
 
 
 class OnnxClipScorer:
@@ -187,41 +154,14 @@ class OnnxClipScorer:
         return self._delegate.score(candidate_url, phrase)
 
 
-# Catalog FTS ANDs every token, and no catalog title contains a bare
-# article, so a sentence phrase ("a traveler eating local food") would
-# match nothing while its content words match. Articles carry no topic
-# meaning, so they are stripped before the catalog query. This is generic
-# text normalization, not a subject mapping.
-_CATALOG_STOPWORDS = frozenset({"a", "an", "the"})
-
-
-def _catalog_search(phrase: str) -> Sequence[SvgAssetRef]:
-    """Production catalog search: ranked R2 catalog assets for a phrase."""
-    from app.services import svg_catalog
-
-    if not svg_catalog.is_enabled():
-        return []
-    query = " ".join(
-        token
-        for token in phrase.split()
-        if token.strip(".,;:!?\"'()[]{}").lower() not in _CATALOG_STOPWORDS
-    )
-    if not query:
-        return []
-    return [
-        SvgAssetRef(asset_id=asset.asset_id, relative_path=asset.relative_path)
-        for asset in svg_catalog.search(query, limit=5)
-    ]
-
-
 def _score_candidates(
     candidates: Sequence[MaterialInfo], phrase: str, scorer: Optional[Scorer]
 ) -> tuple[List[tuple[MaterialInfo, float]], bool]:
     """Score stock candidates, highest first, tie-broken by URL.
 
     Catalog SVG and neutral items are not stock and are never scored:
-    scoring them would route a catalog relative path through the stock
-    downloader, which rejects non-http URLs. Returns (scored, failed).
+    scoring them would route a non-http path through the stock
+    downloader. Returns (scored, failed).
     """
     active_scorer = scorer if scorer is not None else OnnxClipScorer().score
     stock = [c for c in candidates if c.provider not in ("svg", "neutral")]
@@ -246,114 +186,61 @@ def _score_candidates(
     return scored, scorer_failed
 
 
-def _svg_decision(
-    tier: str, phrase: str, asset: SvgAssetRef, reason: str
-) -> SegmentDecision:
-    return SegmentDecision(
-        tier=tier,
-        phrase=phrase,
-        svg_asset_id=asset.asset_id,
-        svg_relative_path=asset.relative_path,
-        svg_asset=asset,
-        fallback_reason=reason,
-    )
-
-
-def _fallback_decision(
-    phrase: str,
-    reason: str,
-    catalog_search: Optional[CatalogSearch],
-    used_asset_ids: set,
-) -> SegmentDecision:
-    """First unused catalog match, or neutral when the catalog is empty."""
-    search = catalog_search if catalog_search is not None else _catalog_search
-    try:
-        assets = list(search(phrase))
-    except Exception as exc:  # noqa: BLE001 - catalog failure is a neutral, not a crash
-        logger.warning(f"material catalog search failed: {type(exc).__name__}")
-        assets = []
-    for rank, asset in enumerate(assets):
-        if asset.asset_id in used_asset_ids:
-            continue
-        tier = TIER_SVG_CATALOG if rank == 0 else TIER_SVG_CATALOG_ALT
-        return _svg_decision(tier, phrase, asset, reason)
-    return SegmentDecision(tier=TIER_NEUTRAL, phrase=phrase, fallback_reason=reason)
-
-
 def select_for_segment(
     phrase: str,
     candidates: Sequence[MaterialInfo],
     scorer: Optional[Scorer] = None,
     config: Optional[VerificationConfig] = None,
-    catalog_search: Optional[CatalogSearch] = None,
-    used_asset_ids: Optional[set] = None,
 ) -> SegmentDecision:
-    """Choose verified stock or the first catalog/neutral fallback."""
+    """Choose verified stock for one segment, or drop the segment."""
     cfg = config or verification_config()
-    used = set(used_asset_ids or set())
 
-    def fallback(reason: str) -> SegmentDecision:
-        return _fallback_decision(phrase, reason, catalog_search, used)
+    def drop(reason: str) -> SegmentDecision:
+        return SegmentDecision(tier=TIER_DROPPED, phrase=phrase, drop_reason=reason)
 
     stock = [c for c in candidates if c.provider not in ("svg", "neutral")]
     if not stock:
-        decision = fallback("no_candidates")
+        decision = drop("no_candidates")
     else:
         scored, scorer_failed = _score_candidates(candidates, phrase, scorer)
         if scorer_failed and not scored:
-            decision = fallback("scorer_unavailable")
+            decision = drop("scorer_unavailable")
         elif not scored:
-            decision = fallback("score_below_threshold")
+            decision = drop("score_below_threshold")
         else:
             top, top_score = scored[0]
             second_score = scored[1][1] if len(scored) > 1 else None
             if top_score < cfg.min_score:
-                decision = fallback("score_below_threshold")
+                decision = drop("score_below_threshold")
             elif second_score is not None and top_score - second_score < cfg.runner_up_margin:
-                decision = fallback("runner_up_margin_too_small")
+                decision = drop("runner_up_margin_too_small")
             else:
                 decision = SegmentDecision(
                     tier=TIER_STOCK_VERIFIED, phrase=phrase, stock_url=top.url
                 )
-    # Log the fallback reason and the selected asset, never the phrase,
-    # the candidate URL, or a local path: logs stay scrubbed by design.
-    selected = decision.svg_asset_id or (
-        "stock" if decision.tier == TIER_STOCK_VERIFIED else "neutral"
-    )
+    # Log the tier and the drop reason only, never the phrase, the
+    # candidate URL, or a local path: logs stay scrubbed by design.
     logger.info(
-        f"material verification: tier={decision.tier} "
-        f"reason={decision.fallback_reason} asset={selected}"
+        f"material verification: tier={decision.tier} reason={decision.drop_reason}"
     )
     return decision
 
 
-def neutral_item_for(item: MaterialInfo) -> MaterialInfo:
-    """A neutral clip item for a failed stock download, same duration."""
-    neutral = MaterialInfo()
-    neutral.provider = "neutral"
-    neutral.url = ""
-    neutral.duration = item.duration
-    return neutral
-
-
-def verified_script_order_groups(
-    groups, task_id, scorer, catalog_search: Optional[CatalogSearch] = None
-):
-    """Apply verification to script-order groups, one pick per phrase."""
-    selected, decisions = apply_verification(
-        groups, scorer=scorer, catalog_search=catalog_search
-    )
+def verified_script_order_groups(groups, task_id, scorer):
+    """Apply verification to script-order groups, one pick per kept phrase."""
+    selected, decisions = apply_verification(groups, scorer=scorer)
     emit_material_fallback_summary(task_id, decisions)
-    return [(decision.phrase, [item]) for decision, item in zip(decisions, selected)]
+    kept = [d for d in decisions if d.tier == TIER_STOCK_VERIFIED]
+    return [(decision.phrase, [item]) for decision, item in zip(kept, selected)]
 
 
 def apply_verification(
     groups: Sequence[tuple[str, Sequence[MaterialInfo]]],
     scorer: Optional[Scorer] = None,
     config: Optional[VerificationConfig] = None,
-    catalog_search: Optional[CatalogSearch] = None,
 ) -> tuple[List[MaterialInfo], List[SegmentDecision]]:
-    """Apply verification to groups, in order. Disabled verification passes
+    """Apply verification to groups, in order: verified stock is kept,
+    every other segment is dropped. Disabled verification passes
     candidates through unchanged, preserving existing behavior."""
     cfg = config or verification_config()
     if not cfg.enabled:
@@ -361,38 +248,23 @@ def apply_verification(
         for _phrase, candidates in groups:
             flattened.extend(candidates)
         return flattened, []
-    used: set = set()
     selected: List[MaterialInfo] = []
     decisions: List[SegmentDecision] = []
     for phrase, candidates in groups:
         decision = select_for_segment(
-            phrase=phrase,
-            candidates=candidates,
-            scorer=scorer,
-            config=cfg,
-            catalog_search=catalog_search,
-            used_asset_ids=used,
+            phrase=phrase, candidates=candidates, scorer=scorer, config=cfg
         )
-        decisions.append(decision)
         if decision.tier == TIER_STOCK_VERIFIED:
             match = next(
                 (item for item in candidates if item.url == decision.stock_url), None
             )
-            if match is not None:
+            if match is None:
+                decision = SegmentDecision(
+                    tier=TIER_DROPPED, phrase=phrase, drop_reason="verified_url_missing"
+                )
+            else:
                 selected.append(match)
-        elif decision.svg_asset is not None:
-            item = MaterialInfo()
-            item.provider = "svg"
-            item.url = decision.svg_relative_path or ""
-            item.duration = candidates[0].duration if candidates else 5
-            selected.append(item)
-            used.add(decision.svg_asset_id or "")
-        else:
-            item = MaterialInfo()
-            item.provider = "neutral"
-            item.url = ""
-            item.duration = candidates[0].duration if candidates else 5
-            selected.append(item)
+        decisions.append(decision)
     return selected, decisions
 
 

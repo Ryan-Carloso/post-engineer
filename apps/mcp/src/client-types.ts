@@ -77,6 +77,8 @@ export interface GeneratePersonaVideosInput {
   timezone?: string;
   options?: {
     faceless?: boolean;
+    /** Stock footage only ('broll') or drawn illustrations only ('svg'), with or without a face. */
+    facelessMaterial?: 'broll' | 'svg';
     audioUrl?: string;
     imageId?: string;
     scriptPrompt?: string;

@@ -269,7 +269,7 @@ async function handleSubmit(
       // in that mode, so the flag is coerced rather than left to a hidden
       // toggle (which would still hold its "with face" default).
       faceless: store.withoutPersona ? true : store.faceless,
-      ...(store.withoutPersona || store.faceless ? { facelessMaterial: store.facelessMaterial } : {}),
+      facelessMaterial: store.facelessMaterial,
       ...(store.withoutPersona ? { voiceId: store.voiceId.trim() } : {}),
     });
     // Projects the response onto what the banner reads: the raw API error text
@@ -431,7 +431,7 @@ const NewPostPersonaField = () => {
           htmlFor="new-post-persona-none"
           data-selected={withoutPersona ? 'true' : 'false'}
           className={cn(
-            'flex cursor-pointer items-center gap-3 rounded-2xl border bg-white p-3 transition-colors',
+            'relative flex cursor-pointer items-center gap-3 rounded-2xl border bg-white p-3 transition-colors',
             'has-focus-visible:ring-2 has-focus-visible:ring-accent/40 has-focus-visible:ring-offset-2',
             withoutPersona
               ? 'border-accent bg-accent/5 ring-1 ring-accent'
@@ -470,7 +470,7 @@ const NewPostPersonaField = () => {
               htmlFor={itemId}
               data-selected={selected ? 'true' : 'false'}
               className={cn(
-                'flex cursor-pointer items-center gap-3 rounded-2xl border bg-white p-3 transition-colors',
+                'relative flex cursor-pointer items-center gap-3 rounded-2xl border bg-white p-3 transition-colors',
                 // Focus uses the same navy as the selection (the `ring` token is
                 // a different blue and would fight the selected ring).
                 'has-focus-visible:ring-2 has-focus-visible:ring-accent/40 has-focus-visible:ring-offset-2',
@@ -753,7 +753,7 @@ const NewPostPublishModePicker = () => {
             htmlFor={itemId}
             data-selected={selected ? 'true' : 'false'}
             className={cn(
-              'flex cursor-pointer items-start gap-3 rounded-2xl border bg-white p-3 transition-colors',
+              'relative flex cursor-pointer items-start gap-3 rounded-2xl border bg-white p-3 transition-colors',
               'has-focus-visible:ring-2 has-focus-visible:ring-accent/40 has-focus-visible:ring-offset-2',
               selected
                 ? 'border-accent bg-accent/5 ring-1 ring-accent'

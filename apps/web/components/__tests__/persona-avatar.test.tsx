@@ -186,7 +186,7 @@ describe('PersonaAvatar', () => {
 
     fireEvent.error(image);
 
-    expect(mockClientError).not.toHaveBeenCalled();
+    expect(mockWarn).not.toHaveBeenCalled();
   });
 
   //---------------
@@ -194,7 +194,7 @@ describe('PersonaAvatar', () => {
   // to be silent. The logged source is redacted (a storage URL's query holds
   // the signature token).
   //---------------
-  it('reports a failed image with a redacted source', () => {
+  it('warns (not errors) about a failed image with a redacted source', () => {
     render(
       <PersonaAvatar
         avatarUrl="https://abc.supabase.co/storage/v1/object/sign/personas/a.png?token=SECRET"
@@ -204,10 +204,10 @@ describe('PersonaAvatar', () => {
 
     fireEvent.error(screen.getByAltText('Viva Leve'));
 
-    expect(mockClientError).toHaveBeenCalledTimes(1);
-    const [message, error, metadata] = mockClientError.mock.calls[0] as [string, unknown, Record<string, unknown>];
+    expect(mockClientError).not.toHaveBeenCalled();
+    expect(mockWarn).toHaveBeenCalledTimes(1);
+    const [message, metadata] = mockWarn.mock.calls[0] as [string, Record<string, unknown>];
     expect(message).toBe('[persona-avatar] avatar image failed to load');
-    expect(error).toBeUndefined();
     expect(metadata).toEqual({
       name: 'Viva Leve',
       source: 'https://abc.supabase.co/storage/v1/object/sign/personas/a.png',

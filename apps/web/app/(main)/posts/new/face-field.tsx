@@ -16,10 +16,9 @@ import { CARD_CLASS, SectionTitle } from './section';
 // pattern as the persona picker above: shadcn RadioGroup as the sr-only
 // item + Label as the clickable card.
 //
-// When "no face" is selected, a second card group asks what fills the
-// video: stock footage first ("broll", the previous behaviour) or catalog
-// illustrations only ("svg"). It is hidden for with-face posts, where
-// there is no faceless material to choose.
+// A second card group asks what fills the video, with or without a face:
+// stock footage only ("broll", the default) or catalog illustrations only
+// ("svg"). The two never mix in one video.
 //---------------
 export const NewPostFaceField = () => {
   const { t } = useI18n();
@@ -80,7 +79,7 @@ export const NewPostFaceField = () => {
               htmlFor={itemId}
               data-selected={selected ? 'true' : 'false'}
               className={cn(
-                'flex cursor-pointer items-start gap-3 rounded-2xl border bg-white p-3 transition-colors',
+                'relative flex cursor-pointer items-start gap-3 rounded-2xl border bg-white p-3 transition-colors',
                 'has-focus-visible:ring-2 has-focus-visible:ring-accent/40 has-focus-visible:ring-offset-2',
                 selected
                   ? 'border-accent bg-accent/5 ring-1 ring-accent'
@@ -114,63 +113,61 @@ export const NewPostFaceField = () => {
           );
         })}
       </RadioGroup>
-      {faceless ? (
-        <div className="space-y-3 border-t border-neutral-100 pt-4">
-          <div>
-            <p className="text-sm font-semibold text-neutral-900">{t('newPost.faceMaterialLabel')}</p>
-            <p className="mt-0.5 text-xs leading-5 text-neutral-500">{t('newPost.faceMaterialHint')}</p>
-          </div>
-          <RadioGroup
-            value={facelessMaterial}
-            onValueChange={(value) => setFacelessMaterial(value === 'svg' ? 'svg' : 'broll')}
-            aria-label={t('newPost.faceMaterialLabel')}
-            className="grid gap-3"
-          >
-            {materialOptions.map((option) => {
-              const itemId = `new-post-face-material-${option.value}`;
-              const selected = facelessMaterial === option.value;
-              return (
-                <Label
-                  key={option.value}
-                  htmlFor={itemId}
-                  data-selected={selected ? 'true' : 'false'}
+      <div className="space-y-3 border-t border-neutral-100 pt-4">
+        <div>
+          <p className="text-sm font-semibold text-neutral-900">{t('newPost.faceMaterialLabel')}</p>
+          <p className="mt-0.5 text-xs leading-5 text-neutral-500">{t('newPost.faceMaterialHint')}</p>
+        </div>
+        <RadioGroup
+          value={facelessMaterial}
+          onValueChange={(value) => setFacelessMaterial(value === 'svg' ? 'svg' : 'broll')}
+          aria-label={t('newPost.faceMaterialLabel')}
+          className="grid gap-3"
+        >
+          {materialOptions.map((option) => {
+            const itemId = `new-post-face-material-${option.value}`;
+            const selected = facelessMaterial === option.value;
+            return (
+              <Label
+                key={option.value}
+                htmlFor={itemId}
+                data-selected={selected ? 'true' : 'false'}
+                className={cn(
+                  'relative flex cursor-pointer items-start gap-3 rounded-2xl border bg-white p-3 transition-colors',
+                  'has-focus-visible:ring-2 has-focus-visible:ring-accent/40 has-focus-visible:ring-offset-2',
+                  selected
+                    ? 'border-accent bg-accent/5 ring-1 ring-accent'
+                    : 'border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50',
+                )}
+              >
+                <RadioGroupItem
+                  value={option.value}
+                  id={itemId}
+                  aria-label={option.label}
+                  className="sr-only"
+                />
+                <span
                   className={cn(
-                    'flex cursor-pointer items-start gap-3 rounded-2xl border bg-white p-3 transition-colors',
-                    'has-focus-visible:ring-2 has-focus-visible:ring-accent/40 has-focus-visible:ring-offset-2',
-                    selected
-                      ? 'border-accent bg-accent/5 ring-1 ring-accent'
-                      : 'border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50',
+                    'mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full',
+                    selected ? 'bg-accent text-white' : 'bg-neutral-100 text-neutral-500',
                   )}
                 >
-                  <RadioGroupItem
-                    value={option.value}
-                    id={itemId}
-                    aria-label={option.label}
-                    className="sr-only"
-                  />
-                  <span
-                    className={cn(
-                      'mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full',
-                      selected ? 'bg-accent text-white' : 'bg-neutral-100 text-neutral-500',
-                    )}
-                  >
-                    {option.icon}
+                  {option.icon}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-neutral-900">{option.label}</span>
+                  <span className="mt-0.5 block text-xs leading-5 text-neutral-500">{option.hint}</span>
+                </span>
+                {selected ? (
+                  <span className="mt-0.5 shrink-0 text-accent">
+                    <CheckIcon />
                   </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-semibold text-neutral-900">{option.label}</span>
-                    <span className="mt-0.5 block text-xs leading-5 text-neutral-500">{option.hint}</span>
-                  </span>
-                  {selected ? (
-                    <span className="mt-0.5 shrink-0 text-accent">
-                      <CheckIcon />
-                    </span>
-                  ) : null}
-                </Label>
-              );
-            })}
-          </RadioGroup>
-        </div>
-      ) : null}
+                ) : null}
+              </Label>
+            );
+          })}
+        </RadioGroup>
+      </div>
     </section>
   );
 };

@@ -9,7 +9,7 @@ from loguru import logger
 
 from app.config import config
 from app.models.schema import MaterialInfo, VideoAspect, VideoConcatMode
-from app.services import material_fallback, material_verification, svg_catalog, svg_material
+from app.services import material_verification, svg_material
 from app.services.material_verification import (
     MAX_LETTERBOX_BARS as MAX_LETTERBOX_BARS,
     _ratio_matches as _ratio_matches,
@@ -285,8 +285,9 @@ def _build_search_videos(
 
     Without `source_mix`: behaves as before — only the `source` provider.
     With `source_mix` (2+ providers): cascades per keyword in list order; a
-    provider is only queried when the previous ones returned no material. An
-    enabled SVG catalog always leads the cascade (svg_catalog.lead_cascade).
+    provider is only queried when the previous ones returned no material.
+    The catalog runs only when "svg" is in the mix (svg mode): it is never
+    added to a stock cascade, so a broll video stays stock only.
     """
     providers = {
         "svg": svg_material.search_videos_svg,
@@ -295,7 +296,7 @@ def _build_search_videos(
         "coverr": search_videos_coverr,
     }
     if source_mix:
-        chain = [providers[n] for n in svg_catalog.lead_cascade(source_mix) if n in providers]
+        chain = [providers[n] for n in source_mix if n in providers]
     else:
         chain = [providers.get(source, search_videos_pexels)]
 
@@ -336,7 +337,7 @@ def download_videos(
     video_aspect = VideoAspect(video_aspect)  # coerce unvalidated "9:16" default
     search_videos = _build_search_videos(source, video_aspect, source_mix)
 
-    # Svg-only mix (faceless svg mode) has no stock to verify, so
+    # Svg-only mix (svg material mode) has no stock to verify, so
     # verification is skipped on both paths below.
     svg_only = source_mix == ["svg"]
 
@@ -401,13 +402,12 @@ def download_videos(
     for item in valid_video_items:
         try:
             logger.info(f"downloading video: {item.url}")
-            saved_video_path = material_fallback.resolve_with_neutral_fallback(
+            saved_video_path = svg_material.resolve_material_path(
                 item,
                 material_directory,
                 max_clip_duration,
                 exclude_faces,
                 video_aspect,
-                verification_enabled,
             )
             if saved_video_path:
                 logger.info(f"video saved: {os.path.basename(saved_video_path)}")
@@ -469,10 +469,8 @@ def _download_videos_by_script_order(
             valid_video_urls.add(item.url)
             found_duration += item.duration
 
-        # Empty terms still enter candidate_groups: with verification on,
-        # a term with no stock candidates falls back to a catalog SVG or
-        # neutral instead of silently losing its segment.
-        candidate_groups.append((search_term, term_items))
+        if term_items:
+            candidate_groups.append((search_term, term_items))
 
     logger.info(
         f"found total ordered video candidates: {sum(len(items) for _, items in candidate_groups)}, "
@@ -501,13 +499,12 @@ def _download_videos_by_script_order(
                 logger.info(
                     f"downloading ordered video for '{search_term}': {item.url}"
                 )
-                saved_video_path = material_fallback.resolve_with_neutral_fallback(
+                saved_video_path = svg_material.resolve_material_path(
                     item,
                     material_directory,
                     max_clip_duration,
                     exclude_faces,
                     video_aspect,
-                    verification_enabled,
                 )
                 if not saved_video_path:
                     continue

@@ -1,8 +1,10 @@
-"""Faceless material selection for video creation.
+"""Material selection for video creation, with or without a face.
 
 Two modes, chosen per post by the caller (never a site-wide default):
 
-- "broll": the previous stock cascade (pexels, pixabay, coverr).
+- "broll": stock only (pexels, pixabay, coverr). The SVG catalog is
+  never queried, even when enabled, and a segment whose stock fails
+  verification is dropped, never replaced by artwork.
 - "svg": only the R2 SVG catalog. No stock provider is ever queried in
   this mode, so a segment can never leak a stock clip into an
   illustration-only video. If the catalog yields nothing at all, the
