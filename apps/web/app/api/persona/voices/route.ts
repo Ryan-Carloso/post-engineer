@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
-import { logger } from '@/lib/logger';
-import { isVoiceOption, toVoiceOption } from '@/lib/voice-catalog';
+import { requireSupabaseSession } from '@/lib/request-auth';
+import { fetchPersonaVoiceOptions } from '@/lib/voice-catalog-fetch';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 //---------------
@@ -11,64 +10,16 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 // Auth = Supabase session (cookie) OR personal API key (Bearer/x-api-key, MCP).
 //---------------
 
-function moneyPrintBaseUrl(): string {
-  const url = process.env.MONEYPRINT_API_URL;
-  if (!url) {
-    throw new Error('MONEYPRINT_API_URL is not defined');
-  }
-  return url.replace(/\/+$/, '');
-}
-
 async function getHandler(request?: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
 
-  let baseUrl: string;
-  try {
-    baseUrl = moneyPrintBaseUrl();
-  } catch (error) {
-    logger.error('[api/persona/voices] env missing', error);
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Configuration error.' },
-      { status: 500 },
-    );
+  const result = await fetchPersonaVoiceOptions(auth.userId);
+  if (!result.ok) {
+    return NextResponse.json({ success: false, error: result.error }, { status: result.status });
   }
 
-  try {
-    const upstream = await fetch(`${baseUrl}/api/v1/personas/voices`, {
-      headers: engineAuthHeaders(auth.userId),
-      cache: 'no-store',
-    });
-
-    if (!upstream.ok) {
-      logger.error('[api/persona/voices] money-print error', undefined, { status: upstream.status });
-      return NextResponse.json(
-        { success: false, error: 'Voices unavailable.' },
-        { status: 502 },
-      );
-    }
-
-    // The engine wraps payloads in its BaseResponse envelope
-    // ({ status, message, body }); the catalog lives under `body`.
-    const envelope: { body?: unknown } = await upstream.json();
-    const data = envelope.body;
-    if (!Array.isArray(data) || !data.every(isVoiceOption)) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid voices payload.' },
-        { status: 502 },
-      );
-    }
-
-    return NextResponse.json({
-      voices: data.map(toVoiceOption),
-    });
-  } catch (error) {
-    logger.error('[api/persona/voices] money-print unreachable', error);
-    return NextResponse.json(
-      { success: false, error: 'Voices service unreachable.' },
-      { status: 502 },
-    );
-  }
+  return NextResponse.json({ voices: result.voices });
 }
 
 //---------------

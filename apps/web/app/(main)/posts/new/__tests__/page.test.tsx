@@ -670,6 +670,30 @@ describe('NewPostPage', () => {
     expect(screen.queryByRole('button', { name: 'newPost.addTopic' })).not.toBeInTheDocument();
   });
 
+  it('renders the voice-fallback note on a successful create', async () => {
+    mockMutateAsync.mockResolvedValue({
+      success: true,
+      scheduleId: 's1',
+      scheduleMode: 'scheduled',
+      slots: [{ slotId: 'slot-1', slotAt: '2030-06-01T09:00:00.000Z', topic: 'Topic one', taskId: 't1', status: 'generating' }],
+      replayed: false,
+      error: null,
+      code: null,
+      need: null,
+      have: null,
+      voiceFallback: { fromVoice: 'energetic', toVoice: 'chatterbox:kokoro_af_heart' },
+    });
+    fillValidDraft();
+    render(<NewPostPage />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'newPost.submit' }));
+
+    const warning = await screen.findByTestId('voice-fallback-warning');
+    // Amber, never red: the swap is a consequence, not a failure.
+    expect(warning.className).toContain('amber');
+    expect(warning).toHaveTextContent('newPost.voiceFallbackWarning');
+  });
+
   it('does not replay a previous visit outcome when the screen is reopened', async () => {
     useNewPostStore.getState().setResult({
       success: true,
@@ -680,6 +704,7 @@ describe('NewPostPage', () => {
       code: null,
       need: null,
       have: null,
+      voiceFallback: null,
     });
     fillValidDraft();
 

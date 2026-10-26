@@ -24,6 +24,7 @@ export const ERROR_CODES = {
   INSUFFICIENT_TOKENS: 'INSUFFICIENT_TOKENS',
   RATE_LIMIT_EXCEEDED: 'RATE_LIMIT_EXCEEDED',
   VALIDATION_FAILED: 'VALIDATION_FAILED',
+  VOICE_UNAVAILABLE: 'VOICE_UNAVAILABLE',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
   ENGINE_UNAVAILABLE: 'ENGINE_UNAVAILABLE',
 } as const;
@@ -46,6 +47,7 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   INSUFFICIENT_TOKENS: 'You need {need} tokens, but only have {have}.',
   RATE_LIMIT_EXCEEDED: 'Too many video generation requests. Please try again later.',
   VALIDATION_FAILED: 'Request validation failed.',
+  VOICE_UNAVAILABLE: 'The persona’s voice is unavailable and there is no default voice for its language. Update the persona.',
   // Never leak internals: unexpected failures get this safe message; the
   // technical detail goes to server logs (and errorId) only.
   INTERNAL_ERROR: 'Something went wrong. Please try again later.',

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { QueryClient, UseQueryResult } from '@tanstack/react-query';
+import type { UseQueryResult } from '@tanstack/react-query';
 import { createSupabaseClient } from '@/lib/supabase/client';
 import { useUploadStore } from '@/lib/store';
 import type { PublicAccountItem, BlueskyAccountData, LinkedinAccountData } from '@/lib/providers/registry';
@@ -16,6 +16,8 @@ import type {
   VoiceOption,
 } from '@/lib/types';
 import { isVoiceOption } from './voice-catalog';
+import { seedCreatedPostCaches } from './generation/created-post-caches';
+import { VOICE_FALLBACK_WARNING_CODE } from './voice-fallback';
 import { logger } from '@/lib/logger';
 import type { PublishLink } from '@/lib/publish-links';
 import { narrowGeneration, narrowProgressHistory, narrowPublishLinks, type GenerationFacts, type ProgressHistoryEntry } from './slot-detail';
@@ -1164,6 +1166,10 @@ export interface CreatePostResult {
   /** INSUFFICIENT_TOKENS only: tokens needed / tokens available. */
   need: number | null;
   have: number | null;
+  /** The applied persona-voice swap (issue #277), when the dispatch had to
+      replace an unavailable voice. `fromVoice` is '' when the persona had
+      no stored voice at all — the UI renders its own copy for that case. */
+  voiceFallback: { fromVoice: string; toVoice: string } | null;
 }
 
 //---------------
@@ -1187,6 +1193,30 @@ function narrowCreatedSlots(value: unknown): CreatedSlot[] {
     });
   }
   return slots;
+}
+
+//---------------
+// narrowVoiceFallbackWarning — the dispatch response's `warnings` array
+// crosses a network boundary, so every field is checked; only the stable
+// voice-fallback code is recognized, and a malformed entry narrows to null.
+//---------------
+function narrowVoiceFallbackWarning(body: Record<string, unknown> | null): {
+  fromVoice: string;
+  toVoice: string;
+} | null {
+  if (body === null) return null;
+  const warnings = body.warnings;
+  if (!Array.isArray(warnings)) return null;
+  for (const entry of warnings) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const record = entry as Record<string, unknown>;
+    if (record.code !== VOICE_FALLBACK_WARNING_CODE) continue;
+    if (typeof record.fromVoice !== 'string' || typeof record.toVoice !== 'string' || record.toVoice.length === 0) {
+      continue;
+    }
+    return { fromVoice: record.fromVoice, toVoice: record.toVoice };
+  }
+  return null;
 }
 
 export async function createPost(input: CreatePostInput): Promise<CreatePostResult> {
@@ -1249,6 +1279,7 @@ export async function createPost(input: CreatePostInput): Promise<CreatePostResu
     code: body !== null && typeof body.code === 'string' ? body.code : null,
     need: body !== null && typeof body.need === 'number' ? body.need : null,
     have: body !== null && typeof body.have === 'number' ? body.have : null,
+    voiceFallback: narrowVoiceFallbackWarning(body),
   };
   // A non-ok response, an unreadable body, or success:false is never success.
   if (!response.ok || body === null || body.success !== true) return failure;
@@ -1269,6 +1300,7 @@ export function useCreatePostMutation() {
       // race could otherwise hide the new post until the next poll. The
       // invalidations below still converge every cache to server truth.
       seedCreatedPostCaches(queryClient, input, result);
+
       void queryClient.invalidateQueries({ queryKey: ['fill-schedule-status'] });
       void queryClient.invalidateQueries({ queryKey: ['fill-schedules'] });
       void queryClient.invalidateQueries({ queryKey: ['video-generations'] });
@@ -1276,77 +1308,7 @@ export function useCreatePostMutation() {
   });
 }
 
-//---------------
-// seedCreatedPostCaches — write the mutation response straight into the
-// list caches so the new post is visible the instant the user lands back
-// on /posts. Seeded slots merge into `upcoming` (deduped by id, sorted
-// by slot time); progress starts at 0 and the next poll fills live values.
-//---------------
-export function seedCreatedPostCaches(
-  queryClient: QueryClient,
-  input: CreatePostInput,
-  result: CreatePostResult,
-): void {
-  const scheduleId = result.scheduleId;
-  if (scheduleId === null || result.slots.length === 0) return;
-
-  // Sort by slot time first: the queue position is the chronological
-  // position among the created slots.
-  const ordered = [...result.slots].sort((a, b) => (a.slotAt < b.slotAt ? -1 : a.slotAt > b.slotAt ? 1 : 0));
-  const seededSlots: ScheduledSlot[] = ordered.map((slot, index) => ({
-    id: slot.slotId,
-    scheduleId,
-    slotAt: slot.slotAt,
-    // The API presents the DB 'pending' state as 'awaiting' (see
-    // presentStatus in lib/schedule-slot-presentation.ts).
-    status: (slot.status === 'pending' ? 'awaiting' : slot.status) as ScheduledSlot['status'],
-    topic: slot.topic,
-    error: null,
-    publishedAt: null,
-    taskId: slot.taskId,
-    progress: 0,
-    stage: null,
-    // Queue position is local to this created batch (ordered by slot time);
-    // the next poll overwrites it with the true engine queue position.
-    queuePosition: index + 1,
-    queueTotal: ordered.length,
-    retryable: null,
-  }));
-
-  const seededSchedule: ScheduleConfig = {
-    id: scheduleId,
-    personaId: input.personaId ?? null,
-    providers: input.providers,
-    youtubeAccountIds: input.accounts.youtube ?? [],
-    instagramAccountIds: input.accounts.instagram ?? [],
-    linkedinAccountIds: input.accounts.linkedin ?? [],
-    blueskyAccountIds: input.accounts.bluesky ?? [],
-    daysOfWeek: [],
-    startHour: null,
-    endHour: null,
-    postsPerDay: result.slots.length,
-    timezone: input.timezone ?? 'UTC',
-    active: true,
-    publishMode: input.mode ?? 'scheduled',
-  };
-
-  const statusCaches = queryClient.getQueriesData<{ upcoming: ScheduledSlot[]; recent: ScheduledSlot[] }>({
-    queryKey: ['fill-schedule-status'],
-  });
-  for (const [key, data] of statusCaches) {
-    if (!data) continue;
-    const knownIds = new Set(data.upcoming.map((slot) => slot.id));
-    const merged = [...data.upcoming, ...seededSlots.filter((slot) => !knownIds.has(slot.id))].sort((a, b) =>
-      a.slotAt < b.slotAt ? -1 : a.slotAt > b.slotAt ? 1 : 0,
-    );
-    queryClient.setQueryData(key, { ...data, upcoming: merged });
-  }
-
-  const schedules = queryClient.getQueryData<ScheduleConfig[]>(['fill-schedules']) ?? [];
-  if (!schedules.some((schedule) => schedule.id === scheduleId)) {
-    queryClient.setQueryData(['fill-schedules'], [...schedules, seededSchedule]);
-  }
-}
+export { seedCreatedPostCaches } from './generation/created-post-caches';
 
 export {
   fetchYouTubeAccounts,
