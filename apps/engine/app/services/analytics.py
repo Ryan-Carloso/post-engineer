@@ -27,7 +27,7 @@ publish paths (task_publish, fill_schedule). It is scrubbed with
 scrub_error_text (secrets + machine-local paths) before capture and never
 reaches Discord or the task error string.
 
-Deliberate exception: the ai_request event for a failed LongCat call
+Deliberate exception (PR #306): the ai_request event for a failed LongCat call
 carries response_body, up to 500 chars of LongCat's upstream HTTP error
 response, so a failed submit is diagnosable in PostHog from the actual
 reason instead of only its status code. It is scrubbed with
