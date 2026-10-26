@@ -18,6 +18,7 @@ Contract pinned here:
 """
 
 import base64
+from contextlib import ExitStack
 from unittest.mock import patch
 
 import pytest
@@ -123,19 +124,26 @@ class TestHookOutsideWindowNeverRegeneratesOrFails:
 
 
 class TestLipsyncIntroIsCappedNotSkipped:
-    def _prepare(self, tmp_path, hook_end):
-        with (
-            patch.object(task_service.utils, "task_dir", return_value=str(tmp_path)),
-            patch.object(task_service.subtitle, "file_to_subtitles", return_value=_WHISPER_CUES),
-            patch.object(task_service, "_find_hook_end_seconds", return_value=hook_end),
-            patch.object(
-                task_service.longcat, "generate_intro", return_value=("intro.mp4", 0.5, "job-1")
-            ) as intro,
-            patch.object(
-                task_service.video, "compose_lipsync_layout", return_value="combined.mp4"
-            ) as compose,
-            patch.object(persona_hook, "track_event") as track,
-        ):
+    def _prepare(self, tmp_path, cues=_WHISPER_CUES, hook_end=None, audio_seconds=30.0):
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(task_service.utils, "task_dir", return_value=str(tmp_path)))
+            stack.enter_context(patch.object(task_service.subtitle, "file_to_subtitles", return_value=cues))
+            stack.enter_context(
+                patch.object(task_service.voice, "get_audio_duration", return_value=audio_seconds)
+            )
+            if hook_end is not None:
+                stack.enter_context(
+                    patch.object(persona_hook, "_find_hook_end_seconds", return_value=hook_end)
+                )
+            intro = stack.enter_context(
+                patch.object(
+                    task_service.longcat, "generate_intro", return_value=("intro.mp4", 0.5, "job-1")
+                )
+            )
+            compose = stack.enter_context(
+                patch.object(task_service.video, "compose_lipsync_layout", return_value="combined.mp4")
+            )
+            track = stack.enter_context(patch.object(persona_hook, "track_event"))
             result = task_service.prepare_persona_lipsync_video(
                 task_id="task-1",
                 params=_lipsync_params(),
@@ -148,22 +156,56 @@ class TestLipsyncIntroIsCappedNotSkipped:
         return result, intro, compose, track
 
     def test_hook_past_the_ceiling_lipsyncs_the_first_12_seconds_once(self, tmp_path):
-        result, intro, compose, track = self._prepare(tmp_path, 14.6)
+        result, intro, compose, track = self._prepare(tmp_path, hook_end=14.6)
         assert result == ("combined.mp4", 0.5, "job-1")
         intro.assert_called_once()
         assert intro.call_args.kwargs["duration_seconds"] == 12.0
         assert compose.call_args.kwargs["duration"] == 12.0
-        assert track.call_args[0][0] == "persona_hook_clamped"
+        assert [c[0][0] for c in track.call_args_list] == ["persona_hook_clamped"]
 
     def test_hook_inside_the_ceiling_is_used_as_is(self, tmp_path):
-        _, intro, compose, track = self._prepare(tmp_path, 9.5)
+        _, intro, compose, track = self._prepare(tmp_path, hook_end=9.5)
         assert intro.call_args.kwargs["duration_seconds"] == 9.5
         assert compose.call_args.kwargs["duration"] == 9.5
         track.assert_not_called()
 
-    def test_unmeasurable_hook_skips_the_intro_without_gpu(self, tmp_path):
-        with pytest.raises(persona_hook.LipsyncIntroSkipped):
-            self._prepare(tmp_path, 0.0)
+
+class TestHookEstimatedWithoutSubtitles:
+    """Subtitles off, or custom audio on a non-Whisper provider, leave no
+    timed cues. The user paid for the face, so the hook end is estimated
+    from the audio length by the hook's character share instead of
+    skipping the intro. Only an unknown audio length skips it."""
+
+    def test_estimate_is_the_hook_share_of_the_audio(self):
+        script = "Hook here.\n\nBody text that runs."
+        hook, total = len("Hookhere"), len("HookhereBodytextthatruns")
+        assert persona_hook.estimate_hook_end_seconds(script, 24.0) == pytest.approx(24.0 * hook / total)
+
+    def test_estimate_without_a_duration_is_zero(self):
+        assert persona_hook.estimate_hook_end_seconds("Hook.\n\nBody.", 0.0) == 0.0
+
+    def test_no_subtitles_renders_an_estimated_intro_once(self, tmp_path):
+        prepare = TestLipsyncIntroIsCappedNotSkipped()
+        result, intro, compose, track = prepare._prepare(tmp_path, cues=[], audio_seconds=30.0)
+        expected = persona_hook.estimate_hook_end_seconds(_WHISPER_SCRIPT, 30.0)
+        assert result == ("combined.mp4", 0.5, "job-1")
+        intro.assert_called_once()
+        assert intro.call_args.kwargs["duration_seconds"] == pytest.approx(expected)
+        assert compose.call_args.kwargs["duration"] == pytest.approx(expected)
+        assert [c[0][0] for c in track.call_args_list] == ["persona_hook_estimated"]
+
+    def test_unknown_audio_length_returns_no_intro_without_gpu(self, tmp_path):
+        prepare = TestLipsyncIntroIsCappedNotSkipped()
+        result, intro, compose, track = prepare._prepare(tmp_path, cues=[], audio_seconds=0.0)
+        assert result is None
+        intro.assert_not_called()
+        compose.assert_not_called()
+        assert [c[0][0] for c in track.call_args_list] == ["persona_hook_lipsync_skipped"]
+
+    def test_no_skip_exception_type_remains(self):
+        # A skip is an explicit None return, never an exception a generic
+        # `except ValueError` could swallow.
+        assert not hasattr(persona_hook, "LipsyncIntroSkipped")
 
 
 def test_report_lipsync_intro_skipped_tracks_immediately(monkeypatch):

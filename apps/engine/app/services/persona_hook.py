@@ -33,28 +33,17 @@ PERSONA_HOOK_TARGET_WORDS_MAX = 30
 # Past the GPU ceiling the intro is capped instead (lipsync_window_seconds).
 
 
-class LipsyncIntroSkipped(ValueError):
-    """The hook end could not be measured, so no intro is rendered.
-
-    Raised before any GPU work when the subtitles carry no timed speech.
-    Callers catch it and ship the normal video, hook still spoken.
-    """
-
-    def __init__(self, hook_end_seconds: float):
-        self.hook_end_seconds = hook_end_seconds
-        super().__init__(f"persona hook end not measurable ({hook_end_seconds:g}s)")
-
-
 def report_lipsync_intro_skipped(task_id: str, hook_end_seconds: float) -> None:
-    """Log and track a skipped lipsync intro (hook end not measurable).
+    """Log and track a skipped lipsync intro.
 
-    The video still ships (normal layout, hook spoken) — this records why
-    the intro is missing. immediate=True: a lone skip event would otherwise
-    sit in the analytics queue.
+    Only when the hook end can be neither measured (no timed subtitles) nor
+    estimated (audio length unknown) — a real failure, not a normal branch.
+    The video still ships (normal layout, hook spoken). immediate=True: a
+    lone skip event would otherwise sit in the analytics queue.
     """
     logger.warning(
-        f"persona hook end not measurable ({hook_end_seconds:g}s); "
-        "skipping lipsync intro, shipping normal video"
+        f"persona hook end unknown ({hook_end_seconds:g}s) and audio length "
+        "unknown; skipping lipsync intro, shipping normal video"
     )
     track_event(
         "persona_hook_lipsync_skipped",
@@ -94,6 +83,62 @@ def report_hook_clamped(task_id: str, hook_end_seconds: float, window_seconds: f
             "lipsync_seconds": round(window_seconds, 2),
         },
     )
+
+
+def report_hook_estimated(task_id: str, hook_end_seconds: float) -> None:
+    """Log and track a hook end estimated from the audio length.
+
+    Kept apart from the skip event: an estimate still renders the intro.
+    """
+    logger.warning(
+        f"persona hook end not in the subtitles; estimated at {hook_end_seconds:g}s "
+        "from the audio length"
+    )
+    track_event(
+        "persona_hook_estimated",
+        {"task_id": task_id, "hook_end_seconds": round(hook_end_seconds, 2)},
+    )
+
+
+def _spoken_length(text: str) -> int:
+    return len(re.sub(r"[^\w]+", "", text.casefold()))
+
+
+def estimate_hook_end_seconds(video_script: str, audio_seconds: float) -> float:
+    """The hook's share of the audio, by spoken characters; 0.0 when unknown."""
+    paragraphs = [p for p in re.split(r"\n\s*\n", video_script.strip()) if p.strip()]
+    total = sum(_spoken_length(p) for p in paragraphs)
+    if audio_seconds <= 0 or total == 0:
+        return 0.0
+    return audio_seconds * _spoken_length(paragraphs[0]) / total
+
+
+def resolve_lipsync_window(
+    task_id: str,
+    video_script: str,
+    subtitles: Sequence[tuple[int, str, str]],
+    audio_seconds: float,
+    ceiling_seconds: float,
+) -> float | None:
+    """Seconds of lipsync intro to render, or None to ship without one.
+
+    Measured from the subtitles when they carry timed speech; otherwise
+    estimated from the audio length (subtitles off, or custom audio on a
+    provider without timings) — an imprecise cut only moves where the face
+    hands over to the material. None only when the audio length is also
+    unknown. The result is capped at the GPU ceiling.
+    """
+    hook_end = _find_hook_end_seconds(video_script, subtitles)
+    if hook_end <= 0:
+        hook_end = estimate_hook_end_seconds(video_script, audio_seconds)
+        if hook_end <= 0:
+            report_lipsync_intro_skipped(task_id, hook_end)
+            return None
+        report_hook_estimated(task_id, hook_end)
+    window = lipsync_window_seconds(hook_end, ceiling_seconds)
+    if window < hook_end:
+        report_hook_clamped(task_id, hook_end, window)
+    return window
 
 
 def lipsync_window_seconds(hook_end_seconds: float, ceiling_seconds: float) -> float:

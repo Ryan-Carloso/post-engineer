@@ -1016,22 +1016,19 @@ def generate_final_videos(
     video_for_render = combined_video_path
     if persona_lipsync_active(params):
         logger.info("generating persona lip-sync intro")
-        try:
-            video_for_render, intro_cost_usd, intro_job_id = prepare_persona_lipsync_video(
-                task_id=task_id,
-                params=params,
-                audio_file=audio_file,
-                background_video=combined_video_path,
-                index=1,
-                video_script=video_script,
-                subtitle_path=subtitle_path,
-            )
-        except persona_hook.LipsyncIntroSkipped as exc:
-            persona_hook.report_lipsync_intro_skipped(task_id, exc.hook_end_seconds)
-        else:
-            intro_report = IntroCostReport(
-                ran=True, cost_usd=intro_cost_usd, job_id=intro_job_id
-            )
+        intro = prepare_persona_lipsync_video(
+            task_id=task_id,
+            params=params,
+            audio_file=audio_file,
+            background_video=combined_video_path,
+            index=1,
+            video_script=video_script,
+            subtitle_path=subtitle_path,
+        )
+        # None: no intro (already reported); the normal video ships.
+        if intro is not None:
+            video_for_render, intro_cost_usd, intro_job_id = intro
+            intro_report = IntroCostReport(ran=True, cost_usd=intro_cost_usd, job_id=intro_job_id)
         # Experimental face-fill: close the video on the persona so weak
         # stock never has to fill the tail. Best-effort — ANY failure
         # (Modal down, unreadable file) degrades to the intro-only video;
@@ -1121,12 +1118,23 @@ def prepare_persona_lipsync_video(
     index: int,
     video_script: str,
     subtitle_path: str,
-) -> tuple[str, float | None, str | None]:
+) -> tuple[str, float | None, str | None] | None:
     """Generate the persona intro through a complete hook paragraph.
 
     Returns (output_path, intro_cost_usd, intro_job_id): the Modal GPU cost
-    in USD (None when the job reports no cost) and the Modal job id.
+    in USD (None when the job reports no cost) and the Modal job id. Returns
+    None, before any download or GPU work, when the hook end can be neither
+    measured nor estimated (persona_hook.resolve_lipsync_window).
     """
+    # Measured from the subtitles, else estimated from the audio length;
+    # capped at the GPU ceiling so the Modal container never sees a render
+    # past the LongCat segment ceiling (the rest of the hook plays as voice).
+    hook_duration = persona_hook.resolve_lipsync_window(
+        task_id, video_script, subtitle.file_to_subtitles(subtitle_path),
+        voice.get_audio_duration(audio_file), PERSONA_LIPSYNC_MAX_SECONDS,
+    )
+    if hook_duration is None:
+        return None
     persona = params.persona
     if persona is None:
         raise longcat.LongCatError("lip sync requires a persona")
@@ -1167,18 +1175,6 @@ def prepare_persona_lipsync_video(
                 f"persona image download failed: {exc}"
             ) from exc
 
-    subtitles = subtitle.file_to_subtitles(subtitle_path)
-    # Measure only: a hook outside the quality window ships as is. Past the
-    # GPU ceiling the intro is capped (never skipped, never re-rendered):
-    # the persona lip-syncs the first PERSONA_LIPSYNC_MAX_SECONDS and the
-    # rest of the hook plays as voice over the material, so the Modal
-    # container never sees a render past the LongCat segment ceiling.
-    hook_end = _find_hook_end_seconds(video_script, subtitles)
-    if hook_end <= 0:
-        raise persona_hook.LipsyncIntroSkipped(hook_end)
-    hook_duration = persona_hook.lipsync_window_seconds(hook_end, PERSONA_LIPSYNC_MAX_SECONDS)
-    if hook_duration < hook_end:
-        persona_hook.report_hook_clamped(task_id, hook_end, hook_duration)
     lipsync_path = path.join(task_dir, f"lipsync-intro-{index}.mp4")
     _, intro_cost_usd, intro_job_id = longcat.generate_intro(
         image_path=image_path,
