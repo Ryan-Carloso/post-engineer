@@ -27,6 +27,14 @@ publish paths (task_publish, fill_schedule). It is scrubbed with
 scrub_error_text (secrets + machine-local paths) before capture and never
 reaches Discord or the task error string.
 
+Deliberate exception (PR #306): the ai_request event for a failed LongCat call
+carries response_body, up to 500 chars of LongCat's upstream HTTP error
+response, so a failed submit is diagnosable in PostHog from the actual
+reason instead of only its status code. It is scrubbed with
+scrub_error_text (secrets + machine-local paths) at the call site before
+capture and never reaches the exception message, Discord, or the task
+error string.
+
 Deliberate exception (PR #250): the script_angle_generated event carries
 angle, LLM output derived from the user's own topic and already persisted
 as product data on the task record (the user sees it in post detail). The
@@ -312,8 +320,8 @@ def track_ai_request(properties: dict[str, Any]) -> None:
     for llm; operation/job_id for modal) and, on failure, a pre-sanitized
     error. track_event redacts whole properties whose KEY names a secret
     as a backstop and never raises — free-text fields (error,
-    response_preview) must be scrubbed by the caller first, which the
-    llm/modal paths do via scrub_error_text.
+    response_preview, response_body) must be scrubbed by the caller first,
+    which the llm/modal paths do via scrub_error_text.
 
     LLM calls additionally emit the standard PostHog AI-observability
     `$ai_generation` event (see track_ai_generation): one trace per call

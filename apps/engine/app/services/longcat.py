@@ -38,6 +38,17 @@ from app.services.analytics import scrub_error_text, track_ai_request
 class LongCatError(RuntimeError):
     """Raised when LongCat cannot produce a valid intro video."""
 
+    def __init__(
+        self, message: str, response_body: str | None = None
+    ) -> None:
+        super().__init__(message)
+        # Upstream HTTP error body, for PostHog only. Kept OUT of the
+        # message: the message reaches Discord alerts via safe_reason
+        # and the client-visible task error, and the body is
+        # remote-controlled text that could echo sensitive data
+        # (e.g. an auth page). Same split as PublishError.response_body.
+        self.response_body = response_body
+
 
 Request = Callable[..., requests.Response]
 
@@ -202,8 +213,13 @@ def _json_object(response: requests.Response) -> dict[str, object]:
 
 def _raise_for_status(response: requests.Response, operation: str) -> None:
     if response.status_code >= 300:
+        try:
+            body = response.text[:500] if response.text else None
+        except Exception:
+            body = None
         raise LongCatError(
-            f"LongCat {operation} failed with HTTP {response.status_code}"
+            f"LongCat {operation} failed with HTTP {response.status_code}",
+            response_body=body,
         )
 
 
@@ -301,16 +317,21 @@ def generate_intro(
             job_ids,
         )
     except Exception as e:
-        track_ai_request(
-            {
-                "backend": "modal",
-                "operation": "generate_intro",
-                "job_id": job_ids[0] if job_ids else "",
-                "duration_ms": int((time.monotonic() - start) * 1000),
-                "success": False,
-                "error": scrub_error_text(str(e)),
-            }
-        )
+        failure_props: dict[str, object] = {
+            "backend": "modal",
+            "operation": "generate_intro",
+            "job_id": job_ids[0] if job_ids else "",
+            "duration_ms": int((time.monotonic() - start) * 1000),
+            "success": False,
+            "error": scrub_error_text(str(e)),
+        }
+        # The upstream body is PostHog-only: scrubbed here, never in the
+        # exception message, so it never reaches Discord or the task
+        # error. Without it a 404 submit is only a status code.
+        body = getattr(e, "response_body", None)
+        if body:
+            failure_props["response_body"] = scrub_error_text(body)
+        track_ai_request(failure_props)
         raise
     success_props: dict[str, object] = {
         "backend": "modal",
