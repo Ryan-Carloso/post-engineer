@@ -560,3 +560,35 @@ class TestAIObservabilityGeneration:
         # Both events were attempted (mocks record even a raising call);
         # the point is the side_effect propagated to nobody.
         assert events == ["ai_request", "$ai_generation"]
+
+
+def test_nonempty_error_reason_falls_back_to_type_name():
+    assert analytics.nonempty_error_reason("", "OSError") == "OSError"
+    assert analytics.nonempty_error_reason("   ", "ValueError") == "ValueError"
+    assert analytics.nonempty_error_reason("disk gone", "OSError") == "disk gone"
+
+
+def test_track_ai_request_failure_error_never_empty():
+    with mock.patch.dict(os.environ, {"POSTHOG_API_KEY": "phc_test_key"}):
+        with mock.patch("posthog.Posthog") as mock_cls:
+            instance = mock_cls.return_value
+            analytics.track_ai_request(
+                {
+                    "backend": "llm",
+                    "success": False,
+                    "error": "",
+                    "provider": "groq",
+                    "model": "x",
+                    "primary_provider": "groq",
+                    "fallback_used": False,
+                    "duration_ms": 1,
+                    "response_chars": 0,
+                    "response_preview": "",
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0,
+                }
+            )
+            props = instance.capture.call_args_list[0].kwargs["properties"]
+            assert props["error"]
+            assert props["success"] is False

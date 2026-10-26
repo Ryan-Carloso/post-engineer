@@ -262,7 +262,7 @@ def _track_llm_request(
             "fallback_used": fallback_used,
             "duration_ms": duration_ms,
             "success": success,
-            "error": scrub_error_text(error or ""),
+            "error": scrub_error_text(error or "") or ("" if success else "Exception"),
             "response_chars": len(response_text),
             # Scrub the full text BEFORE truncating: a cut landing mid-key
             # would otherwise leave a secret fragment the pattern can't see.

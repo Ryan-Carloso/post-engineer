@@ -35,7 +35,9 @@ class PostHogSinkTests(unittest.TestCase):
         event_name, properties = track_event.call_args[0]
         assert event_name == "$exception"
         assert properties["$exception_message"] == "boom"
-        assert "$exception_type" not in properties
+        assert properties["$exception_type"] == "Error"
+        assert properties["$exception_types"] == ["Error"]
+        assert properties["$exception_stacktrace"] == ""
 
     def test_plain_error_record_includes_exception_list(self):
         # PostHog error tracking requires $exception_list on every $exception
@@ -126,6 +128,7 @@ class PostHogSinkTests(unittest.TestCase):
         event_name, properties = track_event.call_args[0]
         assert event_name == "$exception"
         assert properties["$exception_type"] == "ValueError"
+        assert properties["$exception_types"] == ["ValueError"]
         assert properties["$exception_message"] == "kaput"
 
     def test_record_with_exception_builds_exception_list_from_tuple(self):
@@ -190,6 +193,8 @@ class PostHogSinkTests(unittest.TestCase):
         assert properties["task_id"] == "task-1"
         assert properties["http_status_code"] == 404
         assert properties["$exception_list"][0]["type"] == "HttpException"
+        assert properties["$exception_type"] == "HttpException"
+        assert properties["$exception_types"] == ["HttpException"]
 
     def test_stacktrace_frames_capped(self):
         # The _MAX_STACKTRACE_FRAMES cap keeps deep tracebacks (e.g.

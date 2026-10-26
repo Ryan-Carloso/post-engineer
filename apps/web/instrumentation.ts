@@ -1,4 +1,5 @@
 import { formatBuildInfo, getBuildInfo } from "./lib/version";
+import { toError } from "./lib/logger";
 import { flushPostHog, getPostHogServer } from "./lib/posthog-server";
 
 //---------------
@@ -90,7 +91,7 @@ export async function onRequestError(
   try {
     const client = getPostHogServer();
     if (!client) return;
-    client.captureException(error, {
+    client.captureException(toError(error), {
       path: request.path,
       method: request.method,
       routerKind: context.routerKind,

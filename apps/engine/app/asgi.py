@@ -191,9 +191,6 @@ def _loguru_posthog_sink(message) -> None:
                 "type": "raw",
                 "frames": _stacktrace_frames(exception[2]),
             }
-            properties["$exception_type"] = exc_type_name
-            properties["$exception_message"] = exc_message
-            properties["$exception_stacktrace"] = stacktrace_text
         else:
             # No live exception tuple (e.g. HttpException logs its own flat
             # message): synthesize the entry so the event still ingests.
@@ -206,10 +203,16 @@ def _loguru_posthog_sink(message) -> None:
                 else "Error"
             )
             exc_message = str(properties["$exception_message"])
+            stacktrace_text = ""
             stacktrace = {"type": "raw", "frames": []}
             fingerprint = _flat_log_fingerprint(record, exc_type_name)
             if fingerprint is not None:
                 properties["$exception_fingerprint"] = fingerprint
+        properties["$exception_type"] = exc_type_name
+        properties["$exception_message"] = exc_message
+        properties["$exception_stacktrace"] = stacktrace_text
+        # HogQL Error Tracking queries `$exception_types.1` (1-indexed).
+        properties["$exception_types"] = [exc_type_name]
         properties["$exception_list"] = [
             _exception_list_entry(exc_type_name, exc_message, stacktrace)
         ]
