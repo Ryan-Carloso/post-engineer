@@ -320,6 +320,24 @@ class TestNeutralPng(unittest.TestCase):
                 header = handle.read(8)
             self.assertEqual(header, b"\x89PNG\r\n\x1a\n")
 
+    def test_neutral_png_save_dir_never_contains_colon(self):
+        import tempfile
+
+        from app.services.neutral_background import _colon_free_dir
+
+        self.assertEqual(_colon_free_dir("16:9"), "1920x1080")
+        self.assertEqual(_colon_free_dir("1:1"), "1080x1080")
+        self.assertEqual(_colon_free_dir("9:16"), "1080x1920")
+        with tempfile.TemporaryDirectory() as tmp:
+            dirty = os.path.join(tmp, "16:9")
+            path = render_neutral_png(dirty, VideoAspect.landscape)
+            self.assertNotIn(":", path)
+            self.assertTrue(path.endswith("neutral-background.png"))
+            self.assertTrue(os.path.isfile(path))
+            self.assertEqual(
+                os.path.dirname(path), os.path.join(tmp, "16x9")
+            )
+
     def test_neutral_png_matches_video_aspect_resolution(self):
         import tempfile
 

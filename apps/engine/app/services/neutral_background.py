@@ -17,6 +17,20 @@ _CIRCLES = (
 )
 
 
+def _colon_free_dir(save_dir: str) -> str:
+    """Directory for the PNG. GitHub artifact upload rejects ':' in paths
+    (VideoAspect values are '16:9', '9:16', '1:1'). Mutants that pass the
+    aspect as save_dir must still land in a colon-free folder."""
+    text = str(save_dir)
+    if ":" not in text:
+        return text
+    try:
+        width, height = VideoAspect(text).to_resolution()
+    except ValueError:
+        return text.replace(":", "x")
+    return f"{width}x{height}"
+
+
 def render_neutral_png(
     save_dir: str, video_aspect: VideoAspect = VideoAspect.portrait
 ) -> str:
@@ -45,8 +59,9 @@ def render_neutral_png(
             fill=(255, 255, 255, alpha),
         )
     image = Image.alpha_composite(image, overlay)
-    os.makedirs(save_dir, exist_ok=True)
-    path = os.path.join(save_dir, "neutral-background.png")
+    out_dir = _colon_free_dir(save_dir)
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, "neutral-background.png")
     image.convert("RGB").save(path, format="PNG")
     return path
 
