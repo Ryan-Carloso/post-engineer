@@ -92,6 +92,11 @@ export type VoiceResolution =
   | ({ kind: 'fallback' } & VoiceFallbackInfo)
   | { kind: 'unavailable' };
 
+// English-only for now (launch lock, #252): these are the English house
+// defaults. When other languages launch, replace this single pair with a
+// per-language default map and resolve defaultVoiceFor() by the persona's
+// language — the fallback path already takes the language, it just has no
+// non-English target to pick yet.
 //---------------
 // The house default voices, one per gender plus the gender-less default.
 // Precedent: the engine's LEGACY_VOICE_ALIASES resolve the retired config
