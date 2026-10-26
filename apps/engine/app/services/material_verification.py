@@ -8,8 +8,10 @@ Fallback order, never using rejected stock or misleading assets:
 1. Thematic SVG from the explicit subject-to-asset mapping.
 2. Broader-category SVG: semantically compatible, same domain, no
    contradictory entity, no identifiable wrong place.
-3. Reused SVG: the most recent compatible background, only when its
-   subject matches and it was not already used in the current video.
+3. Reused SVG: the most recent compatible background. That asset is
+   exempt from the not-already-used guard (it was just shown); any
+   other asset already used in the current video is never reused.
+   Compatible means the same subject or the same broader category.
 4. Neutral background: stylized and abstract, implying no specific
    subject (no skyline, no dish, no text, no identifiable place).
 
@@ -183,6 +185,9 @@ def phrase_at(
             return text
     if timestamp < phrases[0][1]:
         return phrases[0][0]
+    for text, start, _end in reversed(phrases):
+        if start <= timestamp:
+            return text
     return phrases[-1][0]
 
 
@@ -362,6 +367,24 @@ def select_for_segment(
         f"reason={decision.fallback_reason} asset={selected}"
     )
     return decision
+
+
+def neutral_item_for(item: MaterialInfo) -> MaterialInfo:
+    """A neutral clip item for a failed stock download, same duration."""
+    neutral = MaterialInfo()
+    neutral.provider = "neutral"
+    neutral.url = ""
+    neutral.duration = item.duration
+    return neutral
+
+
+def verified_script_order_groups(groups, task_id, scorer):
+    """Apply verification to script-order groups, one pick per phrase."""
+    selected, decisions = apply_verification(
+        groups, scorer=scorer, subject_to_asset=subject_to_asset_from_config()
+    )
+    emit_material_fallback_summary(task_id, decisions)
+    return [(decision.phrase, [item]) for decision, item in zip(decisions, selected)]
 
 
 def apply_verification(

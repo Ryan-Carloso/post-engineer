@@ -123,6 +123,23 @@ class TestPhraseAtTimestamp(unittest.TestCase):
         phrases = [("Ribeira at sunset", 4.0, 8.0)]
         self.assertEqual(phrase_at(0.5, phrases), "Ribeira at sunset")
 
+    def test_timestamp_in_gap_uses_most_recent_started_phrase(self):
+        phrases = [
+            ("Bolhao market in the morning", 0.0, 4.0),
+            ("Tripas dish on the table", 8.0, 12.0),
+            ("Ribeira at sunset", 16.0, 20.0),
+        ]
+        self.assertEqual(
+            phrase_at(6.0, phrases), "Bolhao market in the morning"
+        )
+
+    def test_timestamp_after_last_phrase_uses_last_phrase(self):
+        phrases = [
+            ("Bolhao market in the morning", 0.0, 4.0),
+            ("Ribeira at sunset", 8.0, 12.0),
+        ]
+        self.assertEqual(phrase_at(25.0, phrases), "Ribeira at sunset")
+
 
 class TestIdentifySubject(unittest.TestCase):
     def test_subject_is_deterministic_and_porto_alegre_is_not_porto(self):
@@ -559,6 +576,124 @@ class TestDownloadVideosVerificationHook(unittest.TestCase):
         self.assertIn("/tmp/porto-ribeira-verified.mp4.mp4", paths)
         self.assertIn("/tmp/svg-clip.mp4", paths)
         self.assertIn("/tmp/neutral.mp4", paths)
+
+    def test_download_videos_script_order_with_verification_keeps_each_phrase(
+        self,
+    ):
+        config.app["material_verification_enabled"] = True
+        config.app["material_verification_min_score"] = 0.33
+        config.app["material_verification_runner_up_margin"] = 0.05
+        config.app["material_subject_to_asset"] = {
+            "bacalhau_dish": "catalog/bacalhau-1.svg"
+        }
+        config.proxy.clear()
+
+        def fake_search(search_term, minimum_duration, video_aspect):
+            if "Ribeira" in search_term:
+                return [_candidate("https://example.com/porto-ribeira-verified.mp4")]
+            if "Bacalhau" in search_term:
+                return [_candidate("https://example.com/dumplings.mp4")]
+            return [_candidate("https://example.com/unknown.mp4")]
+
+        original_resolve = material.svg_material.resolve_material_path
+
+        def fake_resolve(item, *args, **kwargs):
+            if item.provider == "neutral":
+                return original_resolve(item, *args, **kwargs)
+            if item.provider == "svg":
+                return "/tmp/svg-clip.mp4"
+            return f"/tmp/{item.url.split('/')[-1]}.mp4"
+
+        with (
+            patch.object(
+                material, "_build_search_videos", return_value=fake_search
+            ),
+            patch.object(
+                material.svg_material,
+                "resolve_material_path",
+                side_effect=fake_resolve,
+            ),
+            patch.object(
+                material_verification,
+                "render_neutral_clip",
+                return_value="/tmp/neutral.mp4",
+            ),
+        ):
+            paths = material.download_videos(
+                "task-1",
+                ["Ribeira in Porto", "Bacalhau dish", "A quiet afternoon"],
+                audio_duration=100,
+                max_clip_duration=5,
+                match_script_order=True,
+                material_scorer=lambda url, phrase: (
+                    0.42 if "verified" in url else 0.18
+                ),
+            )
+        # One clip per phrase, in script order: verified stock, then the
+        # SVG fallback, then neutral. No phrase is dropped by the zip
+        # between decisions and selected items.
+        self.assertEqual(
+            paths,
+            [
+                "/tmp/porto-ribeira-verified.mp4.mp4",
+                "/tmp/svg-clip.mp4",
+                "/tmp/neutral.mp4",
+            ],
+        )
+
+    def test_download_videos_script_order_failed_stock_falls_back_to_neutral(
+        self,
+    ):
+        config.app["material_verification_enabled"] = True
+        config.app["material_verification_min_score"] = 0.33
+        config.app["material_verification_runner_up_margin"] = 0.05
+        config.app["material_subject_to_asset"] = {
+            "bacalhau_dish": "catalog/bacalhau-1.svg"
+        }
+        config.proxy.clear()
+
+        def fake_search(search_term, minimum_duration, video_aspect):
+            if "Ribeira" in search_term:
+                return [_candidate("https://example.com/porto-ribeira-verified.mp4")]
+            return [_candidate("https://example.com/dumplings.mp4")]
+
+        original_resolve = material.svg_material.resolve_material_path
+
+        def fake_resolve(item, *args, **kwargs):
+            if item.provider == "neutral":
+                return original_resolve(item, *args, **kwargs)
+            if item.provider == "svg":
+                return "/tmp/svg-clip.mp4"
+            return ""
+
+        with (
+            patch.object(
+                material, "_build_search_videos", return_value=fake_search
+            ),
+            patch.object(
+                material.svg_material,
+                "resolve_material_path",
+                side_effect=fake_resolve,
+            ),
+            patch.object(
+                material_verification,
+                "render_neutral_clip",
+                return_value="/tmp/neutral.mp4",
+            ),
+        ):
+            paths = material.download_videos(
+                "task-1",
+                ["Ribeira in Porto", "Bacalhau dish"],
+                audio_duration=100,
+                max_clip_duration=5,
+                match_script_order=True,
+                material_scorer=lambda url, phrase: (
+                    0.42 if "verified" in url else 0.18
+                ),
+            )
+        # A failed verified-stock download must not lose the segment:
+        # it degrades to a neutral clip instead of contributing nothing.
+        self.assertEqual(paths, ["/tmp/neutral.mp4", "/tmp/svg-clip.mp4"])
 
 
 if __name__ == "__main__":

@@ -468,16 +468,11 @@ def _download_videos_by_script_order(
         f"found total ordered video candidates: {sum(len(items) for _, items in candidate_groups)}, "
         f"required duration: {audio_duration} seconds, found duration: {found_duration} seconds"
     )
-    if material_verification.verification_config().enabled:
-        selected, decisions = material_verification.apply_verification(
-            candidate_groups,
-            scorer=material_scorer,
-            subject_to_asset=material_verification.subject_to_asset_from_config(),
+    verification_enabled = material_verification.verification_config().enabled
+    if verification_enabled:
+        candidate_groups = material_verification.verified_script_order_groups(
+            candidate_groups, task_id, material_scorer
         )
-        material_verification.emit_material_fallback_summary(task_id, decisions)
-        candidate_groups = [
-            (decision.phrase, [item]) for decision, item in zip(decisions, selected)
-        ]
 
     video_paths = []
     total_duration = 0.0
@@ -501,6 +496,18 @@ def _download_videos_by_script_order(
                     exclude_faces,
                     video_aspect,
                 )
+                if not saved_video_path and verification_enabled and (
+                    item.provider not in ("svg", "neutral")
+                ):
+                    # Failed verified stock degrades to neutral, never
+                    # to unverified stock from the original pool.
+                    saved_video_path = svg_material.resolve_material_path(
+                        material_verification.neutral_item_for(item),
+                        material_directory,
+                        max_clip_duration,
+                        exclude_faces,
+                        video_aspect,
+                    )
                 if not saved_video_path:
                     continue
 
