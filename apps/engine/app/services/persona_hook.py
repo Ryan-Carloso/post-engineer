@@ -113,22 +113,45 @@ def estimate_hook_end_seconds(video_script: str, audio_seconds: float) -> float:
     return audio_seconds * _spoken_length(paragraphs[0]) / total
 
 
+def hook_end_from_words(
+    video_script: str, words: Sequence[tuple[str, float, float]]
+) -> float:
+    """End of the hook's last word, from Whisper word boundaries; 0.0 if none.
+
+    Walks the words until their spoken length reaches the hook's (length,
+    not exact text, so Whisper rewording still lines up). Speech shorter
+    than the hook ends at the last word.
+    """
+    paragraphs = [p for p in re.split(r"\n\s*\n", video_script.strip()) if p.strip()]
+    hook_length = _spoken_length(paragraphs[0]) if paragraphs else 0
+    spoken = 0
+    for text, _start, end in words:
+        spoken += _spoken_length(text)
+        if spoken >= hook_length:
+            return end
+    return words[-1][2] if words else 0.0
+
+
 def resolve_lipsync_window(
     task_id: str,
     video_script: str,
     subtitles: Sequence[tuple[int, str, str]],
     audio_seconds: float,
     ceiling_seconds: float,
+    words: Sequence[tuple[str, float, float]] = (),
 ) -> float | None:
     """Seconds of lipsync intro to render, or None to ship without one.
 
-    Measured from the subtitles when they carry timed speech; otherwise
+    Exact from Whisper word boundaries when they were kept; else measured
+    from the subtitle cues when they carry timed speech; otherwise
     estimated from the audio length (subtitles off, or custom audio on a
     provider without timings) — an imprecise cut only moves where the face
     hands over to the material. None only when the audio length is also
     unknown. The result is capped at the GPU ceiling.
     """
-    hook_end = _find_hook_end_seconds(video_script, subtitles)
+    hook_end = hook_end_from_words(video_script, words)
+    if hook_end <= 0:
+        hook_end = _find_hook_end_seconds(video_script, subtitles)
     if hook_end <= 0:
         hook_end = estimate_hook_end_seconds(video_script, audio_seconds)
         if hook_end <= 0:

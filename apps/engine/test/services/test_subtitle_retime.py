@@ -88,3 +88,50 @@ def test_line_for_line_match_is_left_untouched():
     )
     text, _ = _correct(srt, "Hello there. General Kenobi.")
     assert text == srt
+
+
+class _Word:
+    def __init__(self, word, start, end):
+        self.word, self.start, self.end = word, start, end
+
+
+class _Segment:
+    def __init__(self, words):
+        self.words = words
+        self.start = words[0].start
+        self.end = words[-1].end
+
+
+class _Info:
+    language = "en"
+    language_probability = 1.0
+
+
+class _FakeModel:
+    def __init__(self, segments):
+        self._segments = segments
+
+    def transcribe(self, *args, **kwargs):
+        return iter(self._segments), _Info()
+
+
+def test_whisper_word_boundaries_are_kept_next_to_the_srt(tmp_path, monkeypatch):
+    words = [_Word(" Stop", 0.1, 0.4), _Word(" here.", 0.4, 0.9), _Word(" Body", 1.2, 1.6), _Word(" text.", 1.6, 2.0)]
+    monkeypatch.setattr(subtitle, "WhisperModel", object)
+    monkeypatch.setattr(subtitle, "model", _FakeModel([_Segment(words)]))
+    srt = tmp_path / "subtitle.srt"
+    subtitle.create("audio.mp3", str(srt))
+    assert subtitle.file_to_words(str(srt)) == [
+        ("Stop", 0.1, 0.4),
+        ("here.", 0.4, 0.9),
+        ("Body", 1.2, 1.6),
+        ("text.", 1.6, 2.0),
+    ]
+
+
+def test_missing_or_malformed_word_file_reads_as_no_words(tmp_path):
+    srt = tmp_path / "subtitle.srt"
+    assert subtitle.file_to_words(str(srt)) == []
+    assert subtitle.file_to_words("") == []
+    Path(subtitle.words_path(str(srt))).write_text("not json", encoding="utf-8")
+    assert subtitle.file_to_words(str(srt)) == []

@@ -1132,6 +1132,7 @@ def prepare_persona_lipsync_video(
     hook_duration = persona_hook.resolve_lipsync_window(
         task_id, video_script, subtitle.file_to_subtitles(subtitle_path),
         voice.get_audio_duration(audio_file), PERSONA_LIPSYNC_MAX_SECONDS,
+        words=subtitle.file_to_words(subtitle_path),
     )
     if hook_duration is None:
         return None

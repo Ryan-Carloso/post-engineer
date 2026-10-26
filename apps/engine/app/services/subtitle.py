@@ -1,3 +1,4 @@
+import json
 import os.path
 import re
 from timeit import default_timer as timer
@@ -64,6 +65,9 @@ def create(audio_file, subtitle_file: str = ""):
 
     start = timer()
     subtitles = []
+    # Every word with its own boundaries: the SRT below collapses them into
+    # sentence cues, but the persona hook needs where its last word ends.
+    spoken_words = []
 
     def recognized(seg_text, seg_start, seg_end):
         seg_text = seg_text.strip()
@@ -88,6 +92,8 @@ def create(audio_file, subtitle_file: str = ""):
         if segment.words:
             is_segmented = False
             for word in segment.words:
+                if word.word.strip():
+                    spoken_words.append((word.word.strip(), float(word.start), float(word.end)))
                 if not is_segmented:
                     seg_start = word.start
                     is_segmented = True
@@ -138,7 +144,31 @@ def create(audio_file, subtitle_file: str = ""):
     sub = "\n".join(lines) + "\n"
     with open(subtitle_file, "w", encoding="utf-8") as f:
         f.write(sub)
+    with open(words_path(subtitle_file), "w", encoding="utf-8") as f:
+        json.dump(spoken_words, f)
     logger.info(f"subtitle file created: {subtitle_file}")
+
+
+def words_path(subtitle_file: str) -> str:
+    """Where Whisper's word boundaries are kept, next to the subtitle."""
+    return f"{subtitle_file}.words.json"
+
+
+def file_to_words(subtitle_file: str) -> list[tuple[str, float, float]]:
+    """Whisper word boundaries saved next to `subtitle_file`, or [].
+
+    Only Whisper writes them; any other provider, a missing file or a
+    malformed one reads as no words, and callers fall back to the cues.
+    """
+    if not subtitle_file or not os.path.isfile(words_path(subtitle_file)):
+        return []
+    try:
+        with open(words_path(subtitle_file), encoding="utf-8") as f:
+            raw = json.load(f)
+        return [(str(text), float(start), float(end)) for text, start, end in raw]
+    except (OSError, ValueError, TypeError) as exc:
+        logger.warning(f"unreadable word boundaries next to the subtitle: {type(exc).__name__}")
+        return []
 
 
 def file_to_subtitles(filename):

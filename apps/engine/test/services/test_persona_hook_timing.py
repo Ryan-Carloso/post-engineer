@@ -224,3 +224,31 @@ def test_clamp_event_carries_only_numbers(monkeypatch):
     assert tracked == [
         ("persona_hook_clamped", {"task_id": "task-9", "hook_end_seconds": 14.6, "lipsync_seconds": 12.0})
     ]
+
+
+class TestHookEndFromWhisperWords:
+    """Whisper already returns word boundaries; when they are kept, the hook
+    ends exactly at the end of its last word — no interpolation."""
+
+    _WORDS = [
+        ("Stop", 0.14, 0.5), ("wasting", 0.5, 0.9), ("your", 0.9, 1.0), ("trip", 1.0, 1.3),
+        ("stuck", 1.3, 1.6), ("in", 1.6, 1.7), ("a", 1.7, 1.75), ("ninety-minute", 1.75, 2.6),
+        ("line", 2.6, 2.9), ("for", 2.9, 3.0), ("the", 3.0, 3.1), ("original,", 3.1, 3.7),
+        ("it's", 3.9, 4.1), ("not", 4.1, 4.3), ("worth", 4.3, 4.6), ("it.", 4.6, 4.95),
+        ("Stop", 5.4, 5.7), ("eating", 5.7, 6.0),
+    ]
+
+    def test_hook_ends_at_its_last_word(self):
+        assert persona_hook.hook_end_from_words(_WHISPER_SCRIPT, self._WORDS) == pytest.approx(4.95)
+
+    def test_no_words_measures_zero(self):
+        assert persona_hook.hook_end_from_words(_WHISPER_SCRIPT, []) == 0.0
+
+    def test_words_win_over_coarse_cues(self, monkeypatch):
+        tracked = []
+        monkeypatch.setattr(persona_hook, "track_event", lambda *a, **k: tracked.append(a[0]))
+        window = persona_hook.resolve_lipsync_window(
+            "task-1", _WHISPER_SCRIPT, _WHISPER_CUES, 30.0, 12.0, words=self._WORDS
+        )
+        assert window == pytest.approx(4.95)
+        assert tracked == []
