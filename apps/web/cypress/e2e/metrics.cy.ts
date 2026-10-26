@@ -75,7 +75,7 @@ describe('metrics dashboard', () => {
 
     // Window + metric controls re-render the summary (24h is the
     // default window, so switch to 7 days to force a refetch).
-    cy.contains('button', '7 dias').click();
+    cy.contains('button', '7 dias no ar').click();
     cy.wait('@getMetrics');
     cy.contains('button', 'Curtidas').click();
     cy.contains('Média de curtidas').scrollIntoView().should('be.visible');
