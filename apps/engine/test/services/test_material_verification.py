@@ -258,6 +258,26 @@ class TestNeutralPng(unittest.TestCase):
                 header = handle.read(8)
             self.assertEqual(header, b"\x89PNG\r\n\x1a\n")
 
+    def test_neutral_png_filename_carries_aspect(self):
+        import tempfile
+
+        from PIL import Image
+
+        with tempfile.TemporaryDirectory() as tmp:
+            portrait_path = render_neutral_png(tmp, VideoAspect.portrait)
+            landscape_path = render_neutral_png(tmp, VideoAspect.landscape)
+            self.assertNotEqual(portrait_path, landscape_path)
+            self.assertTrue(
+                portrait_path.endswith("neutral-background-1080x1920.png")
+            )
+            self.assertTrue(
+                landscape_path.endswith("neutral-background-1920x1080.png")
+            )
+            with Image.open(portrait_path) as image:
+                self.assertEqual(image.size, VideoAspect.portrait.to_resolution())
+            with Image.open(landscape_path) as image:
+                self.assertEqual(image.size, VideoAspect.landscape.to_resolution())
+
     def test_neutral_png_save_dir_never_contains_colon(self):
         import tempfile
 
@@ -270,7 +290,7 @@ class TestNeutralPng(unittest.TestCase):
             dirty = os.path.join(tmp, "16:9")
             path = render_neutral_png(dirty, VideoAspect.landscape)
             self.assertNotIn(":", path)
-            self.assertTrue(path.endswith("neutral-background.png"))
+            self.assertTrue(path.endswith("neutral-background-1920x1080.png"))
             self.assertTrue(os.path.isfile(path))
             self.assertEqual(
                 os.path.dirname(path), os.path.join(tmp, "16x9")

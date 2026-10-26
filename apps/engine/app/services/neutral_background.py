@@ -61,7 +61,11 @@ def render_neutral_png(
     image = Image.alpha_composite(image, overlay)
     out_dir = _colon_free_dir(save_dir)
     os.makedirs(out_dir, exist_ok=True)
-    path = os.path.join(out_dir, "neutral-background.png")
+    # The aspect rides in the filename: the shared cache dir serves every
+    # task, and concurrent tasks with different aspects must never share
+    # one scratch PNG (and its derived mp4) — a landscape render would
+    # otherwise overwrite a portrait clip mid-generation.
+    path = os.path.join(out_dir, f"neutral-background-{width}x{height}.png")
     image.convert("RGB").save(path, format="PNG")
     return path
 
