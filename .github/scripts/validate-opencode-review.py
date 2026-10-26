@@ -80,9 +80,6 @@ def main() -> int:
         "opencode --standalone run" not in text and "opencode run --standalone" not in text,
     )
 
-    # z.ai Coding Plan provider wiring
-    check("z.ai coding endpoint configured", "https://api.z.ai/api/coding/paas/v4" in text)
-    check("z.ai standard endpoint configured", "https://api.z.ai/api/paas/v4" in text)
     check(
         "api key built from env placeholder",
         '"{env:%s}" % key_var' in text,
@@ -92,11 +89,9 @@ def main() -> int:
         "providers map to their own key variable",
         '''if base_url == "https://opencode.ai/zen/v1":
                   key_var = "OPENCODE_ZEN_API_KEY"''' in text
-        and '''elif "z.ai" in base_url:
-                  key_var = "ZAI_API_KEY"''' in text
         and '''else:
                   key_var = "OPENROUTER_API_KEY"''' in text,
-        "opencode/z.ai/openrouter providers must map to their own key variable",
+        "opencode/openrouter providers must map to their own key variable",
     )
     check("OpenCode Zen endpoint configured", "https://opencode.ai/zen/v1" in text)
     check(
@@ -105,16 +100,39 @@ def main() -> int:
         and "OPENCODE_ZEN_API_KEY" in text[text.index("Scrub secrets from review output") :],
     )
     check("no ZHIPU_API_KEY references", "ZHIPU_API_KEY" not in text)
-    check("OPENCODE_MODEL default set", "OPENCODE_MODEL: zai-coding-plan/" in text)
-    check("z.ai fallback model default set", "ZAI_FREE_MODEL: glm-" in text)
     check(
-        "z.ai fallback model is a permanently-free Flash model",
-        re.search(r"^\s*ZAI_FREE_MODEL:\s*glm-\S*flash\s*$", text, re.M) is not None,
-        "ZAI_FREE_MODEL must stay a free Flash model (e.g. glm-4.7-flash) "
-        "so the fallback survives quota exhaustion",
+        "OPENCODE_MODEL default is OpenCode free",
+        "OPENCODE_MODEL: opencode/glm-5.3-flash-free" in text,
     )
-    # glm-4.5-flash was dropped from the chain (poor review quality):
-    # neither the env var nor the model id may remain.
+    check(
+        "REVIEW_MODEL_PRIMARY default is OpenCode free",
+        "opencode/glm-5.3-flash-free" in text
+        and "REVIEW_MODEL_PRIMARY:" in text,
+    )
+    check(
+        "REVIEW_MODEL_VERIFY default is a different OpenCode free model",
+        "REVIEW_MODEL_VERIFY:" in text
+        and "opencode/deepseek-v4.1-flash-free" in text,
+    )
+    env_defaults = [
+        line
+        for line in text.splitlines()
+        if re.match(
+            r"^\s+(REVIEW_MODEL_PRIMARY|REVIEW_MODEL_VERIFY|OPENCODE_MODEL|OPENROUTER_MODEL|ZAI_FREE_MODEL):",
+            line,
+        )
+    ]
+    env_blob = "\n".join(env_defaults)
+    check(
+        "workflow defaults have no zai-coding-plan",
+        "zai-coding-plan" not in env_blob,
+        env_blob,
+    )
+    check(
+        "workflow defaults have no z-ai/glm-5.3-flash",
+        "z-ai/glm-5.3-flash" not in env_blob,
+        env_blob,
+    )
     check(
         "no ZAI_FREE_MODEL_FALLBACK references",
         "ZAI_FREE_MODEL_FALLBACK" not in text,
@@ -139,9 +157,8 @@ def main() -> int:
         "must use the OpenRouter free router id, not a concrete model",
     )
     check(
-        "OPENROUTER_MODEL default set",
-        "OPENROUTER_MODEL: z-ai/glm-5.3-flash" in text,
-        "paid tier must pin z-ai/glm-5.3-flash, not the auto router",
+        "no OPENROUTER_MODEL paid z-ai default",
+        "OPENROUTER_MODEL: z-ai/glm-5.3-flash" not in text,
     )
     check(
         "OpenRouter endpoint configured",
@@ -149,12 +166,18 @@ def main() -> int:
     )
     check(
         "OpenRouter provider uses openai-compatible package",
-        text.count('"npm": "@ai-sdk/openai-compatible"') >= 2,
-        "the openrouter provider must use the same npm package as z.ai",
+        text.count('"npm": "@ai-sdk/openai-compatible"') >= 1,
+        "the openrouter provider must use the openai-compatible package",
     )
     prefs_path = Path(__file__).resolve().parent.parent / "review" / "model-preferences.json"
     check("model preferences file exists", prefs_path.is_file(), str(prefs_path))
     prefs = json.loads(prefs_path.read_text()) if prefs_path.is_file() else {}
+    paid_keys = [spec.get("key") for spec in prefs.get("paidFallbacks") or []]
+    check(
+        "model preferences have no zai paidFallback keys",
+        "zai" not in paid_keys,
+        f"keys={paid_keys}",
+    )
     check(
         "select-review-models.py invoked in workflow",
         "select-review-models.py" in text,
@@ -223,6 +246,20 @@ def main() -> int:
         "Verdict: APPROVE | REQUEST_CHANGES" in prompt
         and "APPROVE_WITH_NITS" not in prompt,
         "Ryan: any posted finding is REQUEST_CHANGES; there is no NITS verdict",
+    )
+    check(
+        "APPROVE requires zero ### headings",
+        "zero `###` headings" in prompt and "No material findings." in prompt,
+    )
+    check(
+        "pass 2 OpenCode free needs no paid key",
+        '[[ "$verify" == *-free ]]' in text
+        and "preferredFree" in text
+        and 'grep -F -q "\\"$verify\\""' not in text,
+    )
+    check(
+        "pass 2 paid OpenCode still needs zen key",
+        "OPENCODE_ZEN_API_KEY" in text[text.index("key_ok=false") :],
     )
     verify_prompt = (prompt_path.parent / "verify-prompt.md").read_text()
     check(

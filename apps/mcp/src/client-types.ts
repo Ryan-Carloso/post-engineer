@@ -23,7 +23,7 @@ export interface PersonaLibraryImageInput {
 }
 
 /**
- * How the persona hook is composed with the b-roll. Mirrors the server's
+ * How the persona hook is composed with the video material. Mirrors the server's
  * accepted values so an unknown layout is a compile error here rather than
  * a 400 from the API.
  */
@@ -77,6 +77,8 @@ export interface GeneratePersonaVideosInput {
   timezone?: string;
   options?: {
     faceless?: boolean;
+    /** Stock footage only ('broll') or drawn illustrations only ('svg'), with or without a face. */
+    facelessMaterial?: 'broll' | 'svg';
     audioUrl?: string;
     imageId?: string;
     scriptPrompt?: string;

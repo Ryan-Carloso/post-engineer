@@ -309,7 +309,7 @@ describe('NewPostPage', () => {
       startAt: START_INSTANT,
       times: ['09:00'],
       timezone: 'UTC',
-      faceless: false,
+      faceless: false, facelessMaterial: 'broll',
     });
     // The created slot's own page, not the list: it is where the video and
     // its live progress are.
@@ -545,6 +545,75 @@ describe('NewPostPage', () => {
     );
     expect(screen.getByText('newPost.costValueOne:cost=1')).toBeInTheDocument();
     expect(useNewPostStore.getState().faceless).toBe(true);
+  });
+
+  it('shows the material choice while the persona shows its face too', () => {
+    fillValidDraft();
+    render(<NewPostPage />);
+
+    expect(screen.getByRole('radio', { name: 'newPost.faceWithAvatar' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('radio', { name: 'newPost.faceMaterialSvg' })).toBeInTheDocument();
+  });
+
+  it('shows the material choice for a faceless post, defaulting to broll', async () => {
+    fillValidDraft();
+    render(<NewPostPage />);
+
+    await userEvent.click(screen.getByRole('radio', { name: 'newPost.faceFaceless' }));
+
+    expect(screen.getByRole('radio', { name: 'newPost.faceMaterialBroll' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    expect(screen.getByRole('radio', { name: 'newPost.faceMaterialSvg' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    );
+    expect(useNewPostStore.getState().facelessMaterial).toBe('broll');
+  });
+
+  it('sends facelessMaterial svg when the illustration choice is picked', async () => {
+    mockMutateAsync.mockResolvedValue({
+      success: true,
+      scheduleId: 's1',
+      slots: [],
+      replayed: false,
+      error: null,
+      code: null,
+      need: null,
+      have: null,
+    });
+    fillValidDraft();
+    useNewPostStore.getState().setFaceless(true);
+    render(<NewPostPage />);
+
+    await userEvent.click(screen.getByRole('radio', { name: 'newPost.faceMaterialSvg' }));
+    await userEvent.click(screen.getByRole('button', { name: 'newPost.submit' }));
+
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    expect(mockMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ faceless: true, facelessMaterial: 'svg' }),
+    );
+  });
+
+  it('sends facelessMaterial svg for a with-face post', async () => {
+    mockMutateAsync.mockResolvedValue({
+      success: true,
+      scheduleId: 's1',
+      slots: [],
+      replayed: false,
+      error: null,
+      code: null,
+      need: null,
+      have: null,
+    });
+    fillValidDraft();
+    render(<NewPostPage />);
+    await userEvent.click(screen.getByRole('radio', { name: 'newPost.faceMaterialSvg' }));
+    await userEvent.click(screen.getByRole('button', { name: 'newPost.submit' }));
+
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    expect(mockMutateAsync.mock.calls[0][0]).toMatchObject({ faceless: false, facelessMaterial: 'svg' });
   });
 
   it('uses the singular cost copy for one one-token video', () => {

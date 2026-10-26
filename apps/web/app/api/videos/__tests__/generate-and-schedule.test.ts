@@ -565,21 +565,21 @@ describe('POST /api/videos/generate-and-schedule', () => {
       // scheduled_posts.faceless is where the per-post choice lives: the
       // engine's batch pipeline reads it when it refunds a failed slot. A
       // slot created without it would be re-priced as a faced video.
-      const res = await post(baseBody({ options: { faceless: true } }));
+      const res = await post(baseBody({ options: { faceless: true, facelessMaterial: 'svg' } }));
       expect(res.status).toBe(200);
       const slotRows = inserts['scheduled_posts'] as Array<Record<string, unknown>>;
       expect(slotRows).toHaveLength(2);
       for (const row of slotRows) {
-        expect(row.faceless).toBe(true);
+        expect(row).toMatchObject({ faceless: true, faceless_material: 'svg' });
       }
     });
 
-    it('stores faceless: false for a post with the persona face', async () => {
+    it('stores faceless: false and the default broll material for a post with the persona face', async () => {
       const res = await post(baseBody());
       expect(res.status).toBe(200);
       const slotRows = inserts['scheduled_posts'] as Array<Record<string, unknown>>;
       for (const row of slotRows) {
-        expect(row.faceless).toBe(false);
+        expect(row).toMatchObject({ faceless: false, faceless_material: 'broll' });
       }
     });
 
@@ -641,6 +641,27 @@ describe('POST /api/videos/generate-and-schedule', () => {
         mode: 'asap',
         slotAt: expect.any(String),
       });
+    });
+
+    it('sends faceless_material svg to the engine for an illustration-only faceless post', async () => {
+      const res = await post(baseBody({ options: { faceless: true, facelessMaterial: 'svg' } }));
+      expect(res.status).toBe(200);
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+      expect(payload.faceless_material).toBe('svg');
+    });
+
+    it('defaults a faceless post without a material choice to broll', async () => {
+      const res = await post(baseBody({ options: { faceless: true } }));
+      expect(res.status).toBe(200);
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+      expect(payload.faceless_material).toBe('broll');
+    });
+
+    it('defaults a with-face post without a material choice to broll', async () => {
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+      expect(payload.faceless_material).toBe('broll');
     });
 
     it('sends lipsync: false and no persona quality for a faceless post', async () => {
@@ -773,6 +794,18 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const json = await res.json();
       expect(res.status).toBe(400);
       expect(json.field).toBe('options.imageId');
+    });
+
+    it('accepts facelessMaterial svg on a with-face request and sends it with lipsync', async () => {
+      const res = await post(baseBody({ options: { facelessMaterial: 'svg' } }));
+      expect(res.status).toBe(200);
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+      expect(payload).toMatchObject({ faceless_material: 'svg', lipsync_enabled: true });
+    });
+
+    it('rejects an unknown facelessMaterial value', async () => {
+      const res = await post(baseBody({ options: { faceless: true, facelessMaterial: 'stock' } }));
+      expect(res.status).toBe(400);
     });
 
     it('rejects scriptPrompts with the wrong length', async () => {

@@ -5,6 +5,10 @@ import { isScopedApiKey } from '@/lib/api-keys';
 import { logger } from '@/lib/logger';
 import { describeImageSource, toSameOriginAssetPath } from '@/lib/image-source';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import {
+  pickLibraryDisplayImage,
+  type LibraryDisplayImage,
+} from '@/lib/persona-library-display';
 
 //---------------
 // GET /api/persona/list — the logged-in user's personas.
@@ -32,43 +36,85 @@ async function getHandler(request: Request): Promise<NextResponse> {
     .eq('user_id', auth.userId);
 
   // A key with explicit scope only sees the authorized personas.
-  if (isScopedApiKey(auth)) {
-    query = query.in('id', auth.personaIds ?? []);
+  const scopedIds = auth.personaIds;
+  if (isScopedApiKey(auth) && scopedIds) {
+    query = query.in('id', scopedIds);
   }
 
   const { data, error } = await query.order('created_at', { ascending: false });
 
   if (error) {
-    logger.error('[api/persona/list] query failed', error);
+    logger.error('[api/persona/list] query failed', error.message);
     return NextResponse.json(
       { success: false, error: 'Failed to list personas.' },
       { status: 500 },
     );
   }
 
+  const records = data === null || data === undefined ? [] : data;
+  const personaIds = records.map((record) => record.id as string);
+  let libraryRows: LibraryDisplayImage[] = [];
+  if (personaIds.length > 0) {
+    const { data: images, error: imagesError } = await supabase
+      .from('persona_images')
+      .select('id, persona_id, image_path, is_primary, created_at')
+      .in('persona_id', personaIds)
+      .eq('user_id', auth.userId);
+    if (imagesError) {
+      logger.error('[api/persona/list] persona_images query failed', imagesError.message);
+      return NextResponse.json(
+        { success: false, error: 'Failed to list personas.' },
+        { status: 500 },
+      );
+    }
+    libraryRows = (images ?? []) as LibraryDisplayImage[];
+  }
+
   const personas = await Promise.all(
-    (data ?? []).map(async (record) => ({
-      id: record.id as string,
-      name: record.name as string,
-      createdAt: record.created_at as string,
-      // Normalized to same-origin: rows created before this fix stored the
-      // absolute production URL (the faces API hands out `${APP_URL}/...`),
-      // so local dev fetched production — and an unauthenticated fetch of a
-      // public asset is bounced to /landing by the middleware, i.e. HTML
-      // where an image is expected. Third-party URLs stay untouched.
-      avatarUrl: toSameOriginAssetPath(record.avatar_url as string | null) ?? undefined,
-      photoUrl: await signedUrl(supabase, record.photo_path as string | null),
-      voiceId: (record.voice_id as string | null) ?? undefined,
-      voiceAudioUrl: await signedUrl(supabase, record.voice_audio_path as string | null),
-      language: (record.language as string | null) ?? undefined,
-      videoAspect: (record.video_aspect as string | null) ?? undefined,
-      videoLayout: (record.video_layout as string | null) ?? undefined,
-      scriptPrompt: (record.script_prompt as string | null) ?? undefined,
-      ctaText: (record.cta_text as string | null) ?? undefined,
-      paragraphNumber: (record.paragraph_number as number | null) ?? undefined,
-      niche: (record.niche as string | null) ?? undefined,
-      faceQuality: (record.face_quality as string | null) ?? undefined,
-    })),
+    records.map(async (record) => {
+      const chosen = pickLibraryDisplayImage(libraryRows, record.id as string);
+      const libraryUrl = chosen
+        ? await signedLibraryUrl(supabase, chosen.image_path, record.id as string)
+        : undefined;
+      // Named locals so Istanbul and V8 both record the optional-field
+      // lines (Codecov merged the Cypress 0-hit map onto the object
+      // literal and treated these as uncovered).
+      const avatarUrl = toSameOriginAssetPath(record.avatar_url as string | null) ?? undefined;
+      const photoUrl = await signedUrl(supabase, record.photo_path as string | null, 'photo');
+      const voiceId = (record.voice_id as string | null) ?? undefined;
+      const voiceAudioUrl = await signedUrl(supabase, record.voice_audio_path as string | null, 'voice');
+      const language = (record.language as string | null) ?? undefined;
+      const videoAspect = (record.video_aspect as string | null) ?? undefined;
+      const videoLayout = (record.video_layout as string | null) ?? undefined;
+      const scriptPrompt = (record.script_prompt as string | null) ?? undefined;
+      const ctaText = (record.cta_text as string | null) ?? undefined;
+      const paragraphNumber = (record.paragraph_number as number | null) ?? undefined;
+      const niche = (record.niche as string | null) ?? undefined;
+      const faceQuality = (record.face_quality as string | null) ?? undefined;
+      return {
+        id: record.id as string,
+        name: record.name as string,
+        createdAt: record.created_at as string,
+        // Normalized to same-origin: rows created before this fix stored the
+        // absolute production URL (the faces API hands out `${APP_URL}/...`),
+        // so local dev fetched production — and an unauthenticated fetch of a
+        // public asset is bounced to /landing by the middleware, i.e. HTML
+        // where an image is expected. Third-party URLs stay untouched.
+        avatarUrl,
+        photoUrl,
+        libraryUrl,
+        voiceId,
+        voiceAudioUrl,
+        language,
+        videoAspect,
+        videoLayout,
+        scriptPrompt,
+        ctaText,
+        paragraphNumber,
+        niche,
+        faceQuality,
+      };
+    }),
   );
 
   //---------------
@@ -79,7 +125,9 @@ async function getHandler(request: Request): Promise<NextResponse> {
   //---------------
   for (const persona of personas) {
     const avatarSource = describeImageSource(persona.avatarUrl);
-    if (avatarSource === null && persona.photoUrl === undefined) {
+    const hasPhoto = persona.photoUrl !== undefined;
+    const hasLibrary = persona.libraryUrl !== undefined;
+    if (avatarSource === null && !hasPhoto && !hasLibrary) {
       logger.warn('[api/persona/list] persona has no avatar source', {
         personaId: persona.id,
         name: persona.name,
@@ -89,11 +137,15 @@ async function getHandler(request: Request): Promise<NextResponse> {
     logger.debug('[api/persona/list] persona avatar source', {
       personaId: persona.id,
       avatarSource,
-      hasPhoto: persona.photoUrl !== undefined,
+      hasPhoto,
+      hasLibrary,
     });
   }
   const withFace = personas.filter(
-    (persona) => persona.avatarUrl !== undefined || persona.photoUrl !== undefined,
+    (persona) =>
+      persona.avatarUrl !== undefined ||
+      persona.photoUrl !== undefined ||
+      persona.libraryUrl !== undefined,
   ).length;
   logger.info('[api/persona/list] listed personas', {
     total: personas.length,
@@ -107,12 +159,30 @@ async function getHandler(request: Request): Promise<NextResponse> {
 async function signedUrl(
   supabase: ReturnType<typeof createSupabaseServiceClient>,
   path: string | null,
+  kind: 'photo' | 'voice' | 'library',
+  metadata?: Record<string, unknown>,
 ): Promise<string | undefined> {
   if (!path) return undefined;
-  const { data } = await supabase.storage
+  const { data, error } = await supabase.storage
     .from('personas')
     .createSignedUrl(path, SIGNED_URL_EXPIRES_SECONDS);
-  return data?.signedUrl;
+  if (error || data === null || data === undefined || !data.signedUrl) {
+    logger.error(
+      `[api/persona/list] ${kind} sign failed`,
+      error?.message ?? 'missing signedUrl',
+      metadata,
+    );
+    return undefined;
+  }
+  return data.signedUrl;
+}
+
+async function signedLibraryUrl(
+  supabase: ReturnType<typeof createSupabaseServiceClient>,
+  path: string,
+  personaId: string,
+): Promise<string | undefined> {
+  return signedUrl(supabase, path, 'library', { personaId });
 }
 
 //---------------

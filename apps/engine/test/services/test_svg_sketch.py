@@ -323,8 +323,8 @@ class DrawPaceTests(unittest.TestCase):
         self.assertEqual(svg_sketch.draw_seconds(1e9), svg_sketch.DRAW_MAX_SECONDS)
 
     def test_mid_length_is_proportional_to_the_speed(self):
-        length = svg_sketch.PENCIL_SPEED_PX_PER_SECOND * 2.5
-        self.assertAlmostEqual(svg_sketch.draw_seconds(length), 2.5)
+        length = svg_sketch.PENCIL_SPEED_PX_PER_SECOND * 1.25
+        self.assertAlmostEqual(svg_sketch.draw_seconds(length), 1.25)
 
     def test_unmeasured_length_gets_the_ceiling(self):
         # Art we cannot measure must still read as drawn, never pop in.
@@ -332,10 +332,10 @@ class DrawPaceTests(unittest.TestCase):
         self.assertEqual(svg_sketch.draw_seconds(0.0), svg_sketch.DRAW_MAX_SECONDS)
 
     def test_frame_count_scales_with_length(self):
-        length = svg_sketch.PENCIL_SPEED_PX_PER_SECOND * 2.5
+        length = svg_sketch.PENCIL_SPEED_PX_PER_SECOND * 1.25
         self.assertEqual(
             svg_sketch.draw_frame_count(length),
-            round(2.5 * svg_sketch.DRAW_FPS),
+            round(1.25 * svg_sketch.DRAW_FPS),
         )
 
     def test_frame_count_is_at_least_two(self):
@@ -344,8 +344,8 @@ class DrawPaceTests(unittest.TestCase):
     def test_longer_stroke_draws_for_longer(self):
         speed = svg_sketch.PENCIL_SPEED_PX_PER_SECOND
         self.assertGreater(
-            svg_sketch.draw_frame_count(speed * 3.0),
-            svg_sketch.draw_frame_count(speed * 2.0),
+            svg_sketch.draw_frame_count(speed * 1.5),
+            svg_sketch.draw_frame_count(speed * 1.0),
         )
 
     def test_ink_proxy_scales_with_ink_area(self):

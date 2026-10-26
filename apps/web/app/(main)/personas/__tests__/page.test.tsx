@@ -122,6 +122,59 @@ describe('app/(main)/personas/page — PersonasPage', () => {
     expect(screen.queryByText('personas.emptyTitle')).toBeNull();
   });
 
+  it('shows the library face when the card has no avatar or photo', () => {
+    vi.mocked(usePersonaListQuery).mockReturnValue({
+      data: [
+        {
+          id: 'p-lib',
+          name: 'Carla Library',
+          createdAt: '2026-08-29T00:00:00Z',
+          libraryUrl: 'https://x.test/library.png',
+        },
+      ],
+      isLoading: false,
+    } as never);
+    render(<PersonasPage />, { wrapper: createWrapper() });
+    expect(screen.getByAltText('Carla Library')).toHaveAttribute('src', 'https://x.test/library.png');
+  });
+
+  it('shows the library face after the card avatar and photo fail to load', () => {
+    vi.mocked(usePersonaListQuery).mockReturnValue({
+      data: [
+        {
+          id: 'p-chain',
+          name: 'Eva Chain',
+          createdAt: '2026-08-29T00:00:00Z',
+          avatarUrl: 'https://x.test/avatar.png',
+          photoUrl: 'https://x.test/photo.png',
+          libraryUrl: 'https://x.test/library.png',
+        },
+      ],
+      isLoading: false,
+    } as never);
+    render(<PersonasPage />, { wrapper: createWrapper() });
+    fireEvent.error(screen.getByAltText('Eva Chain'));
+    fireEvent.error(screen.getByAltText('Eva Chain'));
+    expect(screen.getByAltText('Eva Chain')).toHaveAttribute('src', 'https://x.test/library.png');
+  });
+
+  it('prefers the avatar on the card over the library face', () => {
+    vi.mocked(usePersonaListQuery).mockReturnValue({
+      data: [
+        {
+          id: 'p-both',
+          name: 'Dana Both',
+          createdAt: '2026-08-29T00:00:00Z',
+          avatarUrl: 'https://x.test/avatar.png',
+          libraryUrl: 'https://x.test/library.png',
+        },
+      ],
+      isLoading: false,
+    } as never);
+    render(<PersonasPage />, { wrapper: createWrapper() });
+    expect(screen.getByAltText('Dana Both')).toHaveAttribute('src', 'https://x.test/avatar.png');
+  });
+
   it('lista tem botão para criar outras personas', () => {
     render(<PersonasPage />, { wrapper: createWrapper() });
     const cta = screen.getByRole('link', { name: 'personas.createNew' });

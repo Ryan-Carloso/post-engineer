@@ -1,31 +1,37 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { ImageIcon } from '@/lib/ui';
 import { logger } from '@/lib/logger';
-import { logClientError } from '@/lib/client-logger';
 import { describeImageSource } from '@/lib/image-source';
 
 //---------------
-// PersonaAvatar — the persona's face, as the app shows it everywhere: the
-// avatar (AI) or the uploaded photo, falling back to a neutral glyph when the
-// persona has neither (faceless). Extracted from the persona card so the
-// create-post picker and the persona list can't drift (same size, same ring,
-// same `unoptimized` — the URLs are Supabase signed links, not an optimizer
-// source).
+// PersonaAvatar — avatar, then photo, then library, then initials (or a
+// glyph when the name has no letters). The personas list passes libraryUrl;
+// the create-post picker does not. Shared size, ring, and `unoptimized`
+// (Supabase signed links, not an optimizer source).
 //---------------
 
 export interface PersonaAvatarProps {
-  /** Avatar first, then photo: the avatar is what the user picked last. */
+  /** Avatar, then photo, then library: the first URL that loads wins. */
   avatarUrl?: string;
   photoUrl?: string;
+  libraryUrl?: string;
   /** Used as the alt text and to build the deterministic gradient fallback. */
   name: string;
   className?: string;
   /** Rendered size of the square image (px). Defaults to the card size. */
   size?: number;
+}
+
+function displayCandidates(avatarUrl?: string, photoUrl?: string, libraryUrl?: string): string[] {
+  const urls: string[] = [];
+  if (typeof avatarUrl === 'string' && avatarUrl.length > 0) urls.push(avatarUrl);
+  if (typeof photoUrl === 'string' && photoUrl.length > 0) urls.push(photoUrl);
+  if (typeof libraryUrl === 'string' && libraryUrl.length > 0) urls.push(libraryUrl);
+  return urls;
 }
 
 /**
@@ -40,18 +46,24 @@ function personaInitials(name: string): string {
 export default function PersonaAvatar({
   avatarUrl,
   photoUrl,
+  libraryUrl,
   name,
   className,
   size = 48,
 }: PersonaAvatarProps) {
-  const imageUrl = avatarUrl ?? photoUrl;
+  const candidates = displayCandidates(avatarUrl, photoUrl, libraryUrl);
   const initials = personaInitials(name);
   // A signed Supabase URL can 403 after it expires: without this the avatar
   // stays a blank circle forever (same guard as account-card.tsx).
-  const [imageFailed, setImageFailed] = useState(false);
+  const [failedCount, setFailedCount] = useState(0);
+  const loggedEmptyChain = useRef(false);
   useEffect(() => {
-    setImageFailed(false);
-  }, [imageUrl]);
+    // A URL change is a new candidate chain and must start at 0.
+    setFailedCount(0);
+    loggedEmptyChain.current = false;
+  }, [avatarUrl, photoUrl, libraryUrl]);
+  const imageUrl = candidates[failedCount];
+  const imageFailed = failedCount >= candidates.length;
 
   //---------------
   // Why no photo: the two silent causes are "the row has no avatar at all"
@@ -60,9 +72,9 @@ export default function PersonaAvatar({
   // Supabase signature token lives in the query string).
   //---------------
   useEffect(() => {
-    if (imageUrl === undefined) {
-      logger.debug('[persona-avatar] no avatar source, showing initials', { name });
-    }
+    if (imageUrl !== undefined || loggedEmptyChain.current) return;
+    loggedEmptyChain.current = true;
+    logger.debug('[persona-avatar] no avatar source, showing initials', { name });
   }, [imageUrl, name]);
 
   //---------------
@@ -71,10 +83,15 @@ export default function PersonaAvatar({
   // perfectly good photo for the initials. A real failure leaves the element
   // in the document; an aborted one is already detached.
   //---------------
+  //---------------
+  // A broken photo is a handled, degraded state (the next candidate or the
+  // initials take over), so it is a warning: still logged and reported, but
+  // not a console.error, which the Next dev overlay shows as an "Issue".
+  //---------------
   const handleImageError = (event: React.SyntheticEvent<HTMLImageElement>) => {
     if (!event.currentTarget.isConnected) return;
-    setImageFailed(true);
-    logClientError('[persona-avatar] avatar image failed to load', undefined, {
+    setFailedCount((count) => count + 1);
+    logger.warn('[persona-avatar] avatar image failed to load', {
       name,
       source: describeImageSource(imageUrl),
     });

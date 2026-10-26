@@ -1,0 +1,104 @@
+import {
+  createServer,
+  type IncomingMessage,
+  type RequestListener,
+  type Server,
+  type ServerResponse,
+} from 'node:http';
+import { AddressInfo } from 'node:net';
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@/lib/generation/custom-audio', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/generation/custom-audio')>();
+  return { ...actual, isPublicIp: () => true };
+});
+
+import { downloadPublicImage, REMOTE_FACE_ERROR } from '@/lib/persona-remote-face';
+import { MAX_IMAGE_BYTES } from '@/lib/persona-images';
+
+const PNG_BYTES = Uint8Array.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+]);
+
+function listen(handler: RequestListener): Promise<{ server: Server; url: string }> {
+  return new Promise((resolve) => {
+    const server = createServer(handler);
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address() as AddressInfo;
+      resolve({ server, url: `http://127.0.0.1:${port}/face.png` });
+    });
+  });
+}
+
+describe('downloadPublicImage requestPinned', () => {
+  let server: Server | undefined;
+
+  afterEach(() => {
+    server?.close();
+    server = undefined;
+  });
+
+  it('downloads a public PNG through requestPinned when fetchImpl is omitted', async () => {
+    const started = await listen((_req: IncomingMessage, res: ServerResponse) => {
+      res.writeHead(200, { 'content-type': 'image/png' });
+      res.end(Buffer.from(PNG_BYTES));
+    });
+    server = started.server;
+    const result = await downloadPublicImage(started.url, {
+      lookupImpl: vi.fn(async () => [{ address: '127.0.0.1' }]),
+    });
+    expect(result).toMatchObject({ mime: 'image/png', extension: 'png' });
+  });
+
+  it('returns REMOTE_FACE_ERROR on 302 without following the redirect', async () => {
+    const started = await listen((_req: IncomingMessage, res: ServerResponse) => {
+      res.writeHead(302, { Location: 'http://evil.example/steal' });
+      res.end();
+    });
+    server = started.server;
+    const result = await downloadPublicImage(started.url, {
+      lookupImpl: vi.fn(async () => [{ address: '127.0.0.1' }]),
+    });
+    expect(result).toEqual({ error: REMOTE_FACE_ERROR });
+  });
+
+  it('still pins when globalThis.fetch is a wrapper unless fetchImpl is passed', async () => {
+    const originalFetch = globalThis.fetch;
+    const wrapper = vi.fn(originalFetch);
+    globalThis.fetch = wrapper as typeof fetch;
+    try {
+      const started = await listen((_req: IncomingMessage, res: ServerResponse) => {
+        res.writeHead(302, { Location: 'http://evil.example/steal' });
+        res.end();
+      });
+      server = started.server;
+      const pinned = await downloadPublicImage(started.url, {
+        lookupImpl: vi.fn(async () => [{ address: '127.0.0.1' }]),
+      });
+      expect(pinned).toEqual({ error: REMOTE_FACE_ERROR });
+      expect(wrapper).not.toHaveBeenCalled();
+      const injected = vi.fn(async () => new Response(null, { status: 302 }));
+      const unpinned = await downloadPublicImage('https://cdn.example/face.png', {
+        fetchImpl: injected as never,
+        lookupImpl: vi.fn(async () => [{ address: '1.2.3.4' }]),
+      });
+      expect(unpinned).toEqual({ error: REMOTE_FACE_ERROR });
+      expect(injected).toHaveBeenCalledOnce();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('returns REMOTE_FACE_ERROR when the pinned body exceeds the image cap', async () => {
+    const started = await listen((_req: IncomingMessage, res: ServerResponse) => {
+      res.writeHead(200, { 'content-type': 'image/png' });
+      res.end(Buffer.alloc(MAX_IMAGE_BYTES + 1, 1));
+    });
+    server = started.server;
+    const result = await downloadPublicImage(started.url, {
+      lookupImpl: vi.fn(async () => [{ address: '127.0.0.1' }]),
+    });
+    expect(result).toEqual({ error: REMOTE_FACE_ERROR });
+  });
+});

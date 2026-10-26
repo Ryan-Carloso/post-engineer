@@ -828,7 +828,7 @@ describe('GET /api/schedule/slots/[slotId] generation facts', () => {
       SNAPSHOT_SCHEDULE_ROW,
     );
     expect(generation).toEqual({
-      faceless: true,
+      faceless: true, material: 'broll',
       language: 'pt-BR',
       voiceId: 'ana_neural',
       videoAspect: '9:16',
@@ -855,7 +855,7 @@ describe('GET /api/schedule/slots/[slotId] generation facts', () => {
     // never has to feature-detect.
     const generation = await getGeneration(SLOT_DETAIL_ROW, SCHEDULE_ROW);
     expect(generation).toEqual({
-      faceless: false,
+      faceless: false, material: 'broll',
       language: null,
       voiceId: null,
       videoAspect: null,
@@ -1141,7 +1141,7 @@ describe('slot id normalization', () => {
       client.calls
         .filter((c) => c.table === 'scheduled_posts' && c.op === 'select')
         .map((c) => c.args),
-    ).toEqual([['id, schedule_id, slot_at, status, topic, error, published_at, task_id, faceless']]);
+    ).toEqual([['id, schedule_id, slot_at, status, topic, error, published_at, task_id, faceless, faceless_material']]);
     expect(
       client.calls
         .filter((c) => c.table === 'scheduled_posts' && c.op === 'eq')

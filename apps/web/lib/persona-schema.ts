@@ -8,7 +8,7 @@ import { z } from 'zod';
 
 export const VALID_VIDEO_ASPECTS = ['9:16', '16:9', '1:1'] as const;
 export const FACE_QUALITIES = ['ok', 'very_good'] as const;
-// How the persona is composed with the b-roll during the hook. Must match
+// How the persona is composed with the video material during the hook. Must match
 // the CHECK constraint in supabase/migrations/018 and the engine's
 // VideoLayout enum — persona-video-layout-migration.test.ts pins all three.
 export const VIDEO_LAYOUTS = ['standard', 'react'] as const;

@@ -208,6 +208,221 @@ class TestMaterialTlsVerification(unittest.TestCase):
         self.assertEqual(result, ["/tmp/a1.mp4", "/tmp/b1.mp4", "/tmp/a2.mp4"])
 
 
+class TestBrollVerificationDropsRejectedSegments(unittest.TestCase):
+    """
+    Broll mode is stock only: with verification on, a segment whose stock
+    is rejected is dropped. It is never replaced by a catalog SVG or a
+    neutral clip, and the catalog is never searched.
+    """
+
+    def setUp(self):
+        self.original_app_config = dict(config.app)
+
+    def tearDown(self):
+        config.app.clear()
+        config.app.update(self.original_app_config)
+
+    def _run(self, match_script_order):
+        clips = {
+            "good topic": [
+                material.MaterialInfo(provider="pexels", url="https://v.example/good.mp4", duration=3)
+            ],
+            "bad topic": [
+                material.MaterialInfo(provider="pexels", url="https://v.example/bad.mp4", duration=3)
+            ],
+        }
+        resolved = []
+
+        def fake_search(search_term, minimum_duration, video_aspect):
+            return clips[search_term]
+
+        def fake_resolve(item, save_dir, max_clip_duration, exclude_faces, video_aspect):
+            resolved.append((item.provider, item.url))
+            return f"/tmp/{item.url.rsplit('/', 1)[-1]}"
+
+        def scorer(url, phrase):
+            return 0.9 if url.endswith("good.mp4") else 0.0
+
+        with (
+            patch.dict(config.app, {"material_directory": "", "material_verification_enabled": True}),
+            patch.object(material, "search_videos_pexels", side_effect=fake_search),
+            patch.object(
+                material.svg_material.svg_catalog,
+                "search",
+                side_effect=AssertionError("broll mode must never search the catalog"),
+            ),
+            patch.object(material.material_verification, "track_event"),
+            patch.object(material.svg_material, "resolve_material_path", side_effect=fake_resolve),
+        ):
+            result = material.download_videos(
+                task_id="broll-drop",
+                search_terms=["good topic", "bad topic"],
+                source="pexels",
+                audio_duration=3,
+                max_clip_duration=3,
+                match_script_order=match_script_order,
+                source_mix=["pexels"],
+                material_scorer=scorer,
+            )
+        self.assertEqual(resolved, [("pexels", "https://v.example/good.mp4")])
+        self.assertEqual(result, ["/tmp/good.mp4"])
+
+    def test_flat_path_drops_rejected_segment(self):
+        self._run(match_script_order=False)
+
+    def test_script_order_path_drops_rejected_segment(self):
+        self._run(match_script_order=True)
+
+
+class TestDownloadVideosCoercesStringAspect(unittest.TestCase):
+    def setUp(self):
+        self.original_app_config = dict(config.app)
+
+    def tearDown(self):
+        config.app.clear()
+        config.app.update(self.original_app_config)
+
+    def test_flat_path_coerces_string_aspect_before_resolve(self):
+        from app.models.schema import VideoAspect
+
+        item = material.MaterialInfo(
+            provider="pexels", url="https://v.example/x.mp4", duration=3
+        )
+
+        def fake_search(search_term, minimum_duration, video_aspect):
+            return [item]
+
+        with (
+            patch.dict(config.app, {"material_directory": "", "material_verification_enabled": False}),
+            patch.object(material, "search_videos_pexels", side_effect=fake_search),
+            patch.object(
+                material.svg_material,
+                "resolve_material_path",
+                return_value="/tmp/x.mp4",
+            ) as resolve,
+        ):
+            result = material.download_videos(
+                task_id="str-aspect",
+                search_terms=["x"],
+                source="pexels",
+                audio_duration=3,
+                max_clip_duration=3,
+                video_aspect="9:16",
+            )
+        self.assertEqual(result, ["/tmp/x.mp4"])
+        resolve_aspect = resolve.call_args[0][4]
+        self.assertIsInstance(resolve_aspect, VideoAspect)
+        self.assertEqual(resolve_aspect, VideoAspect.portrait)
+
+
+class TestSvgOnlySkipsVerification(unittest.TestCase):
+    def setUp(self):
+        self.original_app_config = dict(config.app)
+
+    def tearDown(self):
+        config.app.clear()
+        config.app.update(self.original_app_config)
+
+    def _run(self, match_script_order):
+        svg_item = material.MaterialInfo(
+            provider="svg", url="catalog/art.svg", duration=3
+        )
+
+        def fake_search(search_term, minimum_duration, video_aspect):
+            return [svg_item]
+
+        with (
+            patch.dict(config.app, {"material_directory": "", "material_verification_enabled": True}),
+            patch.object(material.svg_material, "search_videos_svg", side_effect=fake_search),
+            patch.object(
+                material.material_verification,
+                "apply_verification",
+                side_effect=AssertionError("verification must not run in svg-only mode"),
+            ),
+            patch.object(
+                material.svg_material,
+                "resolve_material_path",
+                return_value="/tmp/art.mp4",
+            ),
+        ):
+            result = material.download_videos(
+                task_id="svg-only-bypass",
+                search_terms=["art"],
+                source="pexels",
+                audio_duration=3,
+                max_clip_duration=3,
+                match_script_order=match_script_order,
+                source_mix=["svg"],
+            )
+        self.assertEqual(result, ["/tmp/art.mp4"])
+
+    def test_flat_svg_only_skips_verification(self):
+        self._run(match_script_order=False)
+
+    def test_script_order_svg_only_skips_verification(self):
+        self._run(match_script_order=True)
+
+
+class TestDownloadVideosUserIdThreading(unittest.TestCase):
+    def setUp(self):
+        self.original_app_config = dict(config.app)
+
+    def tearDown(self):
+        config.app.clear()
+        config.app.update(self.original_app_config)
+
+    def _run(self, match_script_order):
+        item = material.MaterialInfo(
+            provider="pexels", url="https://v.example/x.mp4", duration=3
+        )
+        decision = material.material_verification.SegmentDecision(
+            tier="stock_verified", phrase="x"
+        )
+
+        def fake_search(search_term, minimum_duration, video_aspect):
+            return [item]
+
+        with (
+            patch.dict(config.app, {"material_directory": "", "material_verification_enabled": True}),
+            patch.object(material, "search_videos_pexels", side_effect=fake_search),
+            patch.object(
+                material.material_verification,
+                "apply_verification",
+                return_value=([item], [decision]),
+            ),
+            patch.object(
+                material.material_verification.sm.state,
+                "get_task",
+                return_value={"user_id": "user-123"},
+            ),
+            patch.object(
+                material.material_verification, "track_event"
+            ) as track_event,
+            patch.object(
+                material.svg_material,
+                "resolve_material_path",
+                return_value="/tmp/x.mp4",
+            ),
+        ):
+            result = material.download_videos(
+                task_id="user-id-thread",
+                search_terms=["x"],
+                source="pexels",
+                audio_duration=3,
+                max_clip_duration=3,
+                match_script_order=match_script_order,
+            )
+        self.assertEqual(result, ["/tmp/x.mp4"])
+        properties = track_event.call_args[0][1]
+        self.assertEqual(properties["user_id"], "user-123")
+
+    def test_flat_path_event_carries_user_id(self):
+        self._run(match_script_order=False)
+
+    def test_script_order_path_event_carries_user_id(self):
+        self._run(match_script_order=True)
+
+
 class TestVideoSourceMix(unittest.TestCase):
     """
     Provider mix (pexels + pixabay + coverr): per-keyword cascade search.

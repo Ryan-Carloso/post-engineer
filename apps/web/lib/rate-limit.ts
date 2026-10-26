@@ -59,6 +59,8 @@ export const RATE_LIMITS = {
   // Persona delete: multi-table destructive cascade plus engine fan-out.
   // Lower than the preview — a delete is rare and irreversible.
   personaDelete: { name: 'persona-delete', limit: 10, windowMs: 60_000 },
+  // Persona POST/PATCH: remote ingest can fetch attacker-chosen URLs (10s).
+  personaWrite: { name: 'persona-write', limit: 20, windowMs: 60_000 },
   // Unified post detail: a cheap GET, but polled by the detail page while
   // a video generates — the limit is generous enough for polling.
   postDetail: { name: 'post-detail', limit: 120, windowMs: 60_000 },

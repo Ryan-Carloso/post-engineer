@@ -358,10 +358,11 @@ class TestTaskService(unittest.TestCase):
 
 class TestGetVideoMaterialsRandomSourceCascade(unittest.TestCase):
     """
-    Source selection is fixed by the engine: remote download ALWAYS uses the
-    3 sources (pexels, pixabay, coverr) in shuffled order — starting source
-    drawn per task, rest in cascade. No API field and no
-    configuration; local materials (video_materials) replace the download.
+    Broll mode (the default) keeps the previous behaviour: remote download
+    uses the 3 stock sources (pexels, pixabay, coverr) in shuffled order —
+    starting source drawn per task, rest in cascade. Svg mode instead
+    queries the R2 catalog only (source_mix ["svg"]); local materials
+    (video_materials) replace the download in both modes.
     """
 
     def test_remote_download_always_uses_shuffled_three_sources(self):
@@ -428,6 +429,120 @@ class TestGetVideoMaterialsRandomSourceCascade(unittest.TestCase):
         self.assertEqual(result, ["/tmp/a.mp4"])
         preprocess.assert_called_once()
         dv.assert_not_called()
+
+    def test_svg_mode_queries_catalog_only(self):
+        params = VideoParams(video_subject="x", faceless_material="svg")
+
+        with (
+            patch.object(tm.random, "shuffle") as shuffle,
+            patch.object(tm.material, "download_videos", return_value=["s.mp4"]) as dv,
+        ):
+            result = tm.get_video_materials(
+                task_id="svg-only",
+                params=params,
+                video_terms=["x"],
+                audio_duration=10,
+            )
+
+        self.assertEqual(result, ["s.mp4"])
+        self.assertEqual(dv.call_args.kwargs.get("source_mix"), ["svg"])
+        shuffle.assert_not_called()
+
+    def test_svg_mode_empty_catalog_with_default_aspect_falls_back_to_neutral(self):
+        import os
+        import tempfile
+
+        # VideoParams defaults video_aspect to the unvalidated string
+        # "9:16"; the shared neutral renderer must coerce it, or the
+        # catalog-empty svg task fails instead of getting its clip.
+        params = VideoParams(video_subject="x", faceless_material="svg")
+        self.assertEqual(params.video_aspect, "9:16")
+        with tempfile.TemporaryDirectory() as tmp:
+            with (
+                patch.object(tm.material, "download_videos", return_value=[]),
+                patch.object(tm.utils, "task_dir", return_value=tmp),
+                patch(
+                    "app.services.image_material.render_image_file_to_mp4",
+                    return_value=os.path.join(tmp, "neutral.mp4"),
+                ),
+                patch.object(tm, "_fail_task") as fail_task,
+            ):
+                result = tm.get_video_materials(
+                    task_id="svg-str-aspect",
+                    params=params,
+                    video_terms=["x"],
+                    audio_duration=10,
+                )
+        self.assertEqual(result, [os.path.join(tmp, "neutral.mp4")])
+        fail_task.assert_not_called()
+
+    def test_svg_mode_empty_catalog_falls_back_to_neutral(self):
+        params = VideoParams(video_subject="x", faceless_material="svg")
+
+        with (
+            patch.object(tm.material, "download_videos", return_value=[]) as dv,
+            patch.object(
+                tm.material.material_verification,
+                "render_neutral_clip",
+                return_value="neutral.mp4",
+            ) as neutral,
+            patch.object(tm, "_fail_task") as fail_task,
+        ):
+            result = tm.get_video_materials(
+                task_id="svg-neutral",
+                params=params,
+                video_terms=["x"],
+                audio_duration=10,
+            )
+
+        self.assertEqual(result, ["neutral.mp4"])
+        dv.assert_called_once()
+        neutral.assert_called_once()
+        fail_task.assert_not_called()
+
+    def test_svg_mode_neutral_failure_fails_task(self):
+        params = VideoParams(video_subject="x", faceless_material="svg")
+
+        with (
+            patch.object(tm.material, "download_videos", return_value=[]),
+            patch.object(
+                tm.material.material_verification,
+                "render_neutral_clip",
+                return_value="",
+            ),
+            patch.object(tm, "_fail_task") as fail_task,
+        ):
+            result = tm.get_video_materials(
+                task_id="svg-fail",
+                params=params,
+                video_terms=["x"],
+                audio_duration=10,
+            )
+
+        self.assertIsNone(result)
+        fail_task.assert_called_once()
+
+    def test_broll_mode_never_uses_neutral(self):
+        params = VideoParams(video_subject="x", faceless_material="broll")
+
+        with (
+            patch.object(tm.material, "download_videos", return_value=[]) as dv,
+            patch.object(
+                tm.material.material_verification, "render_neutral_clip"
+            ) as neutral,
+            patch.object(tm, "_fail_task") as fail_task,
+        ):
+            result = tm.get_video_materials(
+                task_id="broll-fail",
+                params=params,
+                video_terms=["x"],
+                audio_duration=10,
+            )
+
+        self.assertIsNone(result)
+        dv.assert_called_once()
+        neutral.assert_not_called()
+        fail_task.assert_called_once()
 
 class TestGenerateFinalVideosSingleOutput(unittest.TestCase):
     """

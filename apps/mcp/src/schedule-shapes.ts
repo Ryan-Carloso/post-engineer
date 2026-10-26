@@ -91,6 +91,10 @@ function httpsUrlField(fieldName: string) {
 
 export const GeneratePersonaVideosOptionsShape = {
   faceless: z.boolean().optional().describe('Generate faceless (no face). With a persona this drops only the face — the persona voice, niche and script prompt still apply. Without a persona it is REQUIRED.'),
+  facelessMaterial: z
+    .enum(['broll', 'svg'])
+    .optional()
+    .describe('What fills the video, with or without a face: "broll" = real stock footage only, "svg" = drawn illustrations only. The two never mix. Defaults to "broll".'),
   audioUrl: httpsUrlField('audioUrl').optional().describe('Public URL of custom audio for the videos (overrides the persona voice).'),
   imageId: z.string().min(1, 'imageId must be a non-empty string').optional().describe('Library image ID to use for every video (overrides the deterministic per-video selection; see list_persona_images).'),
   scriptPrompt: z.string().optional().describe('Script prompt override applied to every video in this call.'),
@@ -101,7 +105,7 @@ export const GeneratePersonaVideosOptionsShape = {
   videoLayout: z
     .enum(VIDEO_LAYOUTS)
     .optional()
-    .describe('How the persona hook is composed with the b-roll. Overrides the persona when one is given; a post without a persona defaults to "standard". Same render cost either way.'),
+    .describe('How the persona hook is composed with the video material (facelessMaterial: real clips or drawings). Overrides the persona when one is given; a post without a persona defaults to "standard". Same render cost either way.'),
   paragraphNumber: z.number().int().min(1).max(10).optional().describe('Paragraph count (1-10). Overrides the persona when one is given.'),
   language: z
     .string()

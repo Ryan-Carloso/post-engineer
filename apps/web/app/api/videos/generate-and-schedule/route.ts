@@ -2,20 +2,15 @@
 // POST /api/videos/generate-and-schedule — the single generate+schedule operation.
 //
 // Product rule: a video and its publishing schedule are always born together.
-// One request carries 1–10 topics, a persona (required, even for faceless),
-// publishing destinations and a publish-time plan. The API validates
-// everything, charges the total token cost atomically, creates the schedule
-// + slots, dispatches one engine generation per slot and binds each task_id
-// to its slot. No orphan videos, no schedule-only creation, no per-video
-// manual times, no recurrence.
+// One request carries 1–10 topics, a persona, publishing destinations and a
+// publish-time plan. The API validates everything, charges the total token
+// cost atomically, creates the schedule + slots, dispatches one engine
+// generation per slot and binds each task_id to its slot.
 //
 // Backend flow: validate input -> auth -> rate limit -> persona scope +
 // ownership -> providers + accounts -> distribute slots -> window check
 // -> cost -> idempotency pre-checks -> ONE atomic spend_tokens -> insert
-// schedule -> insert slots -> dispatch engine tasks per slot (slot ->
-// generating + task_id, or failed + per-slot refund).
-// The engine's 60s tick reconciles generating -> ready/failed and
-// publishes ready slots at slot_at; scheduled_at stays NULL now.
+// schedule -> insert slots -> dispatch engine tasks per slot.
 //---------------
 
 import { NextResponse } from 'next/server';
@@ -103,6 +98,7 @@ const PublishingSchema = z.object({
 const OptionsSchema = z
   .object({
     faceless: z.boolean().optional(),
+    facelessMaterial: z.enum(['broll', 'svg']).optional(),
     audioUrl: z.string().optional(),
     imageId: z.string().optional(),
     scriptPrompt: z.string().optional(),
@@ -159,6 +155,9 @@ interface ValidatedInput {
   times: string[];
   timezone: string;
   faceless: boolean;
+  /** Resolved in validateOptions: 'broll' when omitted. Applies to every
+   *  post, with or without a face (stock only, or illustrations only). */
+  facelessMaterial: 'broll' | 'svg';
   audioUrl?: string;
   imageId?: string;
   scriptPrompt?: string;
@@ -167,7 +166,7 @@ interface ValidatedInput {
   voiceId?: string;
   videoAspect?: '9:16' | '16:9';
   /** 'standard' = the avatar fills the frame; 'react' = the frame splits,
-   *  avatar on top and b-roll below. Absent means standard. */
+   *  avatar on top and the video material below. Absent means standard. */
   videoLayout?: 'standard' | 'react';
   paragraphNumber?: number;
   language?: string;
@@ -224,6 +223,7 @@ function validateOptions(
 ): Omit<ValidatedInput, 'personaId' | 'topics' | 'providers' | 'accountIds' | 'startAt' | 'times' | 'timezone'> | NextResponse {
   const {
     faceless = false,
+    facelessMaterial,
     audioUrl,
     imageId,
     scriptPrompt,
@@ -258,8 +258,7 @@ function validateOptions(
     return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'options.voiceId must be a non-empty string.', 'options.voiceId');
   }
   // Caps mirroring the persona's own validation, so a persona-less post is
-  // rejected with the same message the persona editor would give rather than
-  // failing later at the engine with an opaque validation error.
+  // rejected with the persona editor's message, not an opaque engine error.
   if (language !== undefined && language.length > MAX_LANGUAGE_CHARS) {
     return validationFailed(
       ERROR_CODES.VALIDATION_FAILED,
@@ -268,8 +267,7 @@ function validateOptions(
     );
   }
   // English-only launch: a video in any other language is rejected here
-  // (and again on the effective language in preparePersona, which covers
-  // the persona's stored language when the request does not override it).
+  // (and again on the effective language in preparePersona).
   if (language !== undefined && language.trim().length > 0 && !isEnglishLanguage(language)) {
     return validationFailed(
       ERROR_CODES.VALIDATION_FAILED,
@@ -311,6 +309,7 @@ function validateOptions(
   }
   return {
     faceless,
+    facelessMaterial: facelessMaterial ?? 'broll',
     audioUrl,
     imageId: imageId?.trim(),
     scriptPrompt,
@@ -372,9 +371,7 @@ function validateSlots(
 // contract: a schedule plan with distributed, window-checked slots.
 // 'asap' publishes each video the moment generation finishes: no schedule
 // plan is accepted (a stray one would be silently ignored, so it is a 400),
-// and every slot lands at the request time — the engine's tick publishes
-// ready slots with slot_at <= now, so no engine change is needed for the
-// immediate publish.
+// and every slot lands at the request time.
 //---------------
 type PublishMode = 'scheduled' | 'asap';
 
@@ -436,9 +433,8 @@ function validatePublishMode(
 
 //---------------
 // Social account validation. One query loads all of the user's accounts;
-// each requested id must belong to the user AND to the requested provider.
-// More precise than assertAccountsOwned: distinguishes "not yours" from
-// "yours but for another provider", with a per-provider field.
+// each requested id must belong to the user AND to the requested provider,
+// distinguishing "not yours" from "yours but for another provider".
 //---------------
 async function validateAccounts(
   supabase: SupabaseClient,
@@ -504,6 +500,7 @@ async function validateAccounts(
   }
   return accountIds;
 }
+
 
 //---------------
 // Replay helper: fetch an existing schedule + slots for an idempotent retry.
@@ -578,10 +575,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
   if (validatedOptions instanceof NextResponse) return validatedOptions;
 
   // A post without a persona has no face to render and no voice to speak
-  // with: the engine's PersonaParams requires exactly one voice, and a face
-  // post without a persona has nothing to render at all. Both are refused
-  // here, before auth and before any charge, instead of failing opaquely at
-  // generation time.
+  // with: the engine's PersonaParams requires exactly one voice. Both are
+  // refused here, before auth and before any charge.
   if (personaId === null) {
     if (!validatedOptions.faceless) {
       return validationFailed(
@@ -623,7 +618,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   const userId = auth.userId;
 
   // 3. Rate limit: one call can mint up to 10 videos, so the profile is
-  // lower than the single video-job one. Keyed by user id.
+  // lower than the single video-job one, keyed by user id.
   const limited = await applyRateLimit(request, RATE_LIMITS.generateAndSchedule, userId);
   if (limited) {
     const retryAfter = limited.headers.get('Retry-After') ?? '60';
@@ -680,9 +675,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   // Pinned library image: fail fast when the id does not resolve, before
   // any charge. Per-topic resolution still happens at dispatch time.
-  // A library image belongs to a persona, so it can only be requested with
-  // one — validateOptions already rejects imageId on faceless requests, and
-  // a faceless post without a persona is refused above.
   const requestedImageId =
     personaId !== null ? (validatedOptions.imageId?.trim() || null) : null;
   if (requestedImageId && personaId !== null) {
@@ -852,12 +844,10 @@ async function postHandler(request: Request): Promise<NextResponse> {
   }
 
   // 9. Insert the schedule. The id is deterministic (idempotency anchor).
-  // scheduled_at is a legacy column that always stays NULL during dispatch,
-  // so the engine's immediate one-off path cannot race us and
-  // double-generate; the tick only reconciles our generating slots.
+  // scheduled_at stays NULL during dispatch, so the engine's immediate
+  // one-off path cannot race us and double-generate.
   // NOTE: do not add keys here that are not columns on public.schedules —
   // PostgREST rejects the whole insert on an unknown key (every call 500s).
-  // publish_mode is a real column (migration 015).
   const sortedTimes = [...new Set(times.map((t) => t.trim()))].sort();
   const { error: scheduleError } = await supabase.from('schedules').insert({
     id: idem.scheduleId,
@@ -1018,8 +1008,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
   // 10. Insert the slots (pending). The id is database-generated; the
   // returned rows carry it for the per-slot dispatch below.
   // `faceless` is stored ON the slot, not derived from the persona at read
-  // time: it is a per-post choice, and the engine's batch pipeline (which
-  // prices a slot when it refunds a failure) reads it from this row.
+  // time: it is a per-post choice, and the engine's batch pipeline reads it
+  // from this row when it prices a slot's failure refund.
   const { data: slotRows, error: slotsError } = await supabase
     .from('scheduled_posts')
     .insert(
@@ -1030,6 +1020,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         status: 'pending',
         topic: topics[i],
         faceless: prep.faceless,
+        faceless_material: validatedOptions.facelessMaterial,
       })),
     )
     .select('id, slot_at, topic');
@@ -1134,6 +1125,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
         // engine's persona_lipsync_active also returns false when no visual is
         // attached, and a faceless job carries no photo_url.
         lipsync: !prep.faceless,
+        // The material choice rides the payload under its snake_case name on every post, face or not.
+        faceless_material: validatedOptions.facelessMaterial,
       });
       if (!hasNonEmptyString(payload.video_subject)) {
         throw new SlotDispatchError('empty_subject', 'Video subject is empty.');
@@ -1286,7 +1279,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
 //---------------
 // 5xx reporting: handled server errors reach PostHog error tracking.
-// The user id is resolved lazily, only when a 5xx is actually reported,
-// so the happy path pays nothing.
+// The user id is resolved lazily, only when a 5xx is actually reported.
 //---------------
 export const POST = withApiErrorReporting(ROUTE, postHandler, { getUserId: resolveReportingUserId });

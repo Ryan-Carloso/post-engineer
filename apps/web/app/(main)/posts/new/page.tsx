@@ -29,7 +29,6 @@ import {
   CheckIcon,
   SparklesIcon,
   INPUT_CLASS,
-  SECTION_LABEL_CLASS,
 } from '@/lib/ui';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
@@ -48,6 +47,8 @@ import {
 } from '@/lib/schedule-window';
 import { computeVideoTokens, type FaceQuality } from '@/lib/tokens';
 import { NewPostScheduleField } from './schedule-field';
+import { CARD_CLASS, SectionTitle } from './section';
+import { NewPostFaceField } from './face-field';
 
 //---------------
 // NewPostPage — creates a post: pick the persona, the topic, the accounts to
@@ -61,8 +62,6 @@ import { NewPostScheduleField } from './schedule-field';
 //---------------
 
 
-// Form card: the same shell as the persona/personas screens.
-const CARD_CLASS = 'rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6';
 const PRIMARY_BUTTON_CLASS =
   'inline-flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-accent-hover hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60 [&_svg]:size-4';
 const SECONDARY_BUTTON_CLASS =
@@ -252,6 +251,7 @@ async function handleSubmit(
       // in that mode, so the flag is coerced rather than left to a hidden
       // toggle (which would still hold its "with face" default).
       faceless: store.withoutPersona ? true : store.faceless,
+      facelessMaterial: store.facelessMaterial,
       ...(store.withoutPersona ? { voiceId: store.voiceId.trim() } : {}),
     });
     // Projects the response onto what the banner reads: the raw API error text
@@ -427,7 +427,7 @@ const NewPostPersonaField = () => {
           htmlFor="new-post-persona-none"
           data-selected={withoutPersona ? 'true' : 'false'}
           className={cn(
-            'flex cursor-pointer items-center gap-3 rounded-2xl border bg-white p-3 transition-colors',
+            'relative flex cursor-pointer items-center gap-3 rounded-2xl border bg-white p-3 transition-colors',
             'has-focus-visible:ring-2 has-focus-visible:ring-accent/40 has-focus-visible:ring-offset-2',
             withoutPersona
               ? 'border-accent bg-accent/5 ring-1 ring-accent'
@@ -466,7 +466,7 @@ const NewPostPersonaField = () => {
               htmlFor={itemId}
               data-selected={selected ? 'true' : 'false'}
               className={cn(
-                'flex cursor-pointer items-center gap-3 rounded-2xl border bg-white p-3 transition-colors',
+                'relative flex cursor-pointer items-center gap-3 rounded-2xl border bg-white p-3 transition-colors',
                 // Focus uses the same navy as the selection (the `ring` token is
                 // a different blue and would fight the selected ring).
                 'has-focus-visible:ring-2 has-focus-visible:ring-accent/40 has-focus-visible:ring-offset-2',
@@ -490,94 +490,6 @@ const NewPostPersonaField = () => {
               </span>
               {selected ? (
                 <span className="shrink-0 text-accent">
-                  <CheckIcon />
-                </span>
-              ) : null}
-            </Label>
-          );
-        })}
-      </RadioGroup>
-    </section>
-  );
-};
-
-//---------------
-// Video face — every persona has a face; "no face" is chosen here, per
-// post (100% stock footage, no lipsync, no library image). With a persona
-// selected, "with the face" is the normal choice. Without one there is
-// nothing to render, so the choice collapses to "no face" and the control
-// says why. Same card pattern as the persona picker above: shadcn RadioGroup
-// as the sr-only item + Label as the clickable card.
-//---------------
-const NewPostFaceField = () => {
-  const { t } = useI18n();
-  const faceless = useNewPostStore((s) => s.faceless);
-  const setFaceless = useNewPostStore((s) => s.setFaceless);
-  const withoutPersona = useNewPostStore((s) => s.withoutPersona);
-
-  const facelessOption = {
-    value: 'faceless',
-    faceless: true,
-    label: t('newPost.faceFaceless'),
-    hint: withoutPersona
-      ? t('newPost.faceFacelessNoPersonaHint')
-      : t('newPost.faceFacelessHint'),
-  } as const;
-  const withFaceOption = {
-    value: 'face',
-    faceless: false,
-    label: t('newPost.faceWithAvatar'),
-    hint: t('newPost.faceWithAvatarHint'),
-  } as const;
-  // No persona means no face to render, so the "with face" option is not
-  // merely preselected away — it is not offered at all.
-  const options = withoutPersona ? [facelessOption] : [withFaceOption, facelessOption];
-
-  return (
-    <section className={cn(CARD_CLASS, 'space-y-4')}>
-      <SectionTitle icon={<SparklesIcon />} label={t('newPost.faceLabel')} hint={t('newPost.faceHint')} />
-      <RadioGroup
-        value={faceless ? 'faceless' : 'face'}
-        onValueChange={(value) => setFaceless(value === 'faceless')}
-        aria-label={t('newPost.faceLabel')}
-        className="grid gap-3"
-      >
-        {options.map((option) => {
-          const itemId = `new-post-face-${option.value}`;
-          const selected = faceless === option.faceless;
-          return (
-            <Label
-              key={option.value}
-              htmlFor={itemId}
-              data-selected={selected ? 'true' : 'false'}
-              className={cn(
-                'flex cursor-pointer items-start gap-3 rounded-2xl border bg-white p-3 transition-colors',
-                'has-focus-visible:ring-2 has-focus-visible:ring-accent/40 has-focus-visible:ring-offset-2',
-                selected
-                  ? 'border-accent bg-accent/5 ring-1 ring-accent'
-                  : 'border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50',
-              )}
-            >
-              <RadioGroupItem
-                value={option.value}
-                id={itemId}
-                aria-label={option.label}
-                className="sr-only"
-              />
-              <span
-                className={cn(
-                  'mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full',
-                  selected ? 'bg-accent text-white' : 'bg-neutral-100 text-neutral-500',
-                )}
-              >
-                {option.faceless ? <FilmIcon /> : <SparklesIcon />}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-semibold text-neutral-900">{option.label}</span>
-                <span className="mt-0.5 block text-xs leading-5 text-neutral-500">{option.hint}</span>
-              </span>
-              {selected ? (
-                <span className="mt-0.5 shrink-0 text-accent">
                   <CheckIcon />
                 </span>
               ) : null}
@@ -791,10 +703,7 @@ const NewPostAccountsField = () => {
 };
 
 //---------------
-// Publishing plan — the first publish (wall-clock time + timezone) and the
-// daily times.
-//---------------
-//---------------
+
 // Schedule preview — computed by the SAME distributeSlots the API calls, so
 // what the user sees is what will be created, with a warning when a slot falls
 // outside the 3h-30d window.
@@ -1026,22 +935,6 @@ const NewPostLoadError = () => {
 function pluralKey(count: number, one: TranslationKey, many: TranslationKey): TranslationKey {
   return count === 1 ? one : many;
 }
-
-//---------------
-// SectionTitle — section label in the same persona/personas pattern: icon
-// + uppercase label + short hint.
-//---------------
-const SectionTitle = ({ icon, label, hint }: { icon: React.ReactNode; label: string; hint?: string }) => (
-  <div className="flex items-start gap-2.5">
-    <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-neutral-100 text-neutral-500 [&_svg]:size-4">
-      {icon}
-    </span>
-    <div>
-      <p className={SECTION_LABEL_CLASS}>{label}</p>
-      {hint ? <p className="mt-1 text-xs leading-5 text-neutral-500">{hint}</p> : null}
-    </div>
-  </div>
-);
 
 //---------------
 // Skeleton — UI placeholders only: no hooks, no store, no queries.

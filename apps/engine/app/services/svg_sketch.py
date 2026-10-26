@@ -39,11 +39,14 @@ _CANVAS_MARGIN = 0.12
 # as long as the artwork's strokes take to trace — simple art finishes fast,
 # detailed art takes longer. The duration is bounded on both sides so a
 # trivial icon never blinks in and a huge illustration never stalls a clip.
+# The pace is deliberately fast: even the longest draw finishes within
+# roughly the first half of a typical 4-second segment, and the finished
+# artwork then holds for the remainder of the clip (see fit_frames_to_clip).
 # Speeds are in canvas pixels: callers convert their stroke measure (SVG
 # user units for line art, ink area for raster art) before asking.
-PENCIL_SPEED_PX_PER_SECOND = 1100.0
-DRAW_MIN_SECONDS = 1.5
-DRAW_MAX_SECONDS = 4.0
+PENCIL_SPEED_PX_PER_SECOND = 2200.0
+DRAW_MIN_SECONDS = 0.75
+DRAW_MAX_SECONDS = 2.0
 DRAW_FPS = 30
 
 

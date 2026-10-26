@@ -14,6 +14,7 @@ from app.config import config
 from app.models import const
 from app.models.schema import VideoConcatMode, VideoParams
 from app.services import (
+    faceless_material,
     llm,
     longcat,
     material,
@@ -48,19 +49,16 @@ from app.services.notify import safe_reason, send_discord, task_failed_msg
 from app.utils import file_security, ssrf, utils
 
 #---------------
-# Remote material sources, always used in cascade with per-task shuffled
-# order (random start for variety, rest as fallback). Fixed — no API field.
+# Remote material sources for broll mode, used in cascade with per-task
+# shuffled order (random start for variety, rest as fallback).
 #---------------
 REMOTE_VIDEO_SOURCES: list[str] = ["pexels", "pixabay", "coverr"]
 
 #---------------
 # _fail_task — marks a task FAILED and sends one Discord alert per task.
-# Failure sites are scattered (phase helpers mark FAILED and start()
-# re-checks), so recent-ids dedupes to one alert per task. The cache is a
-# bounded deque; the bound only evicts after MAX_FAILED_ALERTS *other
-# distinct* failures, so a same-id retry inside the window still dedupes
-# (retries use fresh ids in practice; a restart resets the cache).
-# Check-and-add holds a lock so concurrent failures dedupe to one alert.
+# Failure sites are scattered, so recent-ids dedupes to one alert per task;
+# the bounded deque only evicts after MAX_FAILED_ALERTS *other distinct*
+# failures. Check-and-add holds a lock so concurrent failures dedupe.
 #---------------
 MAX_FAILED_ALERTS = 1000
 # The critical section is microseconds; the timeout only matters if a
@@ -72,8 +70,7 @@ _discord_notified_failed_tasks_lock = Lock()
 
 #---------------
 # Terminal-event emission dedup: the FIRST _fail_task notice for a task
-# always emits video_generation_failed, even when FAILED was already
-# written; later notices stay deduped. Bounded like the alert cache.
+# always emits video_generation_failed; later notices stay deduped.
 #---------------
 MAX_FAILED_EVENT_IDS = 1000
 _failed_event_emitted_tasks: deque[str] = deque(maxlen=MAX_FAILED_EVENT_IDS)
@@ -434,10 +431,8 @@ def persona_lipsync_active(params: VideoParams) -> bool:
     """True when the job should generate the persona's lip-sync intro.
 
     Requires a persona with a visual identity (photo_url OR avatar_url) AND
-    lipsync_enabled. A faceless persona (no visual) — or one with
-    lipsync_enabled=False — contributes only the voice and the video is
-    rendered normally, with no face filter on the material
-    (exclude_faces=False in get_video_materials).
+    lipsync_enabled; otherwise the voice only is used, with no face filter
+    on the material (exclude_faces=False in get_video_materials).
     """
     persona = params.persona
     if persona is None or not bool(params.lipsync_enabled):
@@ -446,8 +441,7 @@ def persona_lipsync_active(params: VideoParams) -> bool:
 
 
 # Regeneration attempts for an overshooting persona hook before the task
-# fails. Each attempt costs one LLM call plus one TTS call; the hook prompt
-# already targets the configured window, so retries should be rare.
+# fails; each attempt costs one LLM plus one TTS call.
 _PERSONA_HOOK_MAX_RETRIES = 2
 
 # Product-fixed persona pacing ("always this way"): the face-fill outro
@@ -980,21 +974,21 @@ def get_video_materials(task_id, params, video_terms, audio_duration):
         )
         if not materials:
             _fail_task(task_id, "no valid materials found", params, stage="materials")
-            logger.error(
-                "no valid materials found, please check the materials and try again."
-            )
+            logger.error("no valid materials found, please check the materials and try again.")
             return None
         return [material_info.url for material_info in materials]
     else:
-        source_order = list(REMOTE_VIDEO_SOURCES)
-        random.shuffle(source_order)
-        logger.info(
-            f"\n\n## downloading videos from {' -> '.join(source_order)} (random cascade)"
-        )
-        # Ordered-match mode only applies when explicitly enabled by the user.
-        # Force material downloads to round-robin in keyword order so an early
-        # keyword can't download too many clips and squeeze later script
-        # themes out of the final timeline.
+        # Svg mode queries the catalog only: no stock provider runs, so an
+        # illustration-only video can never gain a stock clip.
+        if params.faceless_material == "svg":
+            source_order = faceless_material.svg_source_order()
+        else:
+            source_order = list(REMOTE_VIDEO_SOURCES)
+            random.shuffle(source_order)
+        logger.info(f"\n\n## downloading videos from {' -> '.join(source_order)}")
+        # Ordered-match mode only applies when explicitly enabled: downloads
+        # round-robin in keyword order so an early keyword can't squeeze
+        # later script themes out of the final timeline.
         downloaded_videos = material.download_videos(
             task_id=task_id,
             search_terms=video_terms,
@@ -1010,10 +1004,17 @@ def get_video_materials(task_id, params, video_terms, audio_duration):
             source_mix=source_order,
             exclude_faces=persona_lipsync_active(params),
         )
+        if not downloaded_videos and params.faceless_material == "svg":
+            # Catalog empty: one neutral clip from the shared renderer, never stock.
+            neutral = material.material_verification.render_neutral_clip(
+                utils.task_dir(task_id), audio_duration, params.video_aspect
+            )
+            downloaded_videos = [neutral] if neutral else []
         if not downloaded_videos:
             _fail_task(task_id, "failed to download videos", params, stage="download")
             logger.error(
-                "failed to download videos, maybe the network is not available. if you are in China, please use a VPN."
+                "failed to download videos, maybe the network is not available."
+                " if you are in China, please use a VPN."
             )
             return None
         return downloaded_videos
@@ -1024,8 +1025,7 @@ def generate_final_videos(
 ) -> tuple[list[str], list[str], IntroCostReport]:
     """Assemble the final videos.
 
-    Returns (final_video_paths, combined_video_paths, intro_report): the
-    intro cost outcome (whether it ran, the Modal GPU cost, the job id).
+    Returns (final_video_paths, combined_video_paths, intro_report).
     """
     final_video_paths = []
     combined_video_paths = []

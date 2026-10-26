@@ -64,6 +64,16 @@ describe('buildJobPayload — request allowlist', () => {
     expect(payload.generation_id).toBe('gen-1');
   });
 
+  it('forwards faceless_material so an svg choice is not dropped into broll', () => {
+    const payload = buildJobPayload(persona(), {
+      video_subject: 'myth busting',
+      lipsync: false,
+      faceless_material: 'svg',
+    });
+    expect(payload.faceless_material).toBe('svg');
+    expect(payload).not.toHaveProperty('lipsync');
+  });
+
   it('warns once with the dropped key names, capped at ten', () => {
     buildJobPayload(persona(), { a: 1, b: 2, c: 3 });
     expect(warn).toHaveBeenCalledTimes(1);
