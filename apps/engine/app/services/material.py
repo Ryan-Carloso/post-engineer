@@ -335,6 +335,10 @@ def download_videos(
 ) -> List[str]:
     search_videos = _build_search_videos(source, video_aspect, source_mix)
 
+    # Svg-only mix (faceless svg mode) has no stock to verify, so
+    # verification is skipped on both paths below.
+    svg_only = source_mix == ["svg"]
+
     material_directory = config.app.get("material_directory", "").strip()
     if material_directory == "task":
         material_directory = utils.task_dir(task_id)
@@ -352,6 +356,7 @@ def download_videos(
             material_directory=material_directory,
             exclude_faces=exclude_faces,
             material_scorer=material_scorer,
+            skip_verification=svg_only,
         )
 
     valid_video_items = []
@@ -378,7 +383,7 @@ def download_videos(
     logger.info(
         f"found total videos: {len(valid_video_items)}, required duration: {audio_duration} seconds, found duration: {found_duration} seconds"
     )
-    verification_enabled = material_verification.verification_config().enabled
+    verification_enabled = material_verification.verification_config().enabled and not svg_only
     if verification_enabled:
         valid_video_items, decisions = material_verification.apply_verification(
             term_groups,
@@ -429,6 +434,7 @@ def _download_videos_by_script_order(
     material_directory: str,
     exclude_faces: bool | None = None,
     material_scorer=None,
+    skip_verification: bool = False,
 ) -> List[str]:
     """
     Download materials in script order.
@@ -471,7 +477,9 @@ def _download_videos_by_script_order(
         f"found total ordered video candidates: {sum(len(items) for _, items in candidate_groups)}, "
         f"required duration: {audio_duration} seconds, found duration: {found_duration} seconds"
     )
-    verification_enabled = material_verification.verification_config().enabled
+    verification_enabled = (
+        material_verification.verification_config().enabled and not skip_verification
+    )
     if verification_enabled:
         candidate_groups = material_verification.verified_script_order_groups(
             candidate_groups, task_id, material_scorer

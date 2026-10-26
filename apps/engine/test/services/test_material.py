@@ -322,6 +322,54 @@ class TestFlatDownloadSvgNeutralFallback(unittest.TestCase):
         self.assertEqual(result, ["/tmp/neutral.mp4"])
 
 
+class TestSvgOnlySkipsVerification(unittest.TestCase):
+    def setUp(self):
+        self.original_app_config = dict(config.app)
+
+    def tearDown(self):
+        config.app.clear()
+        config.app.update(self.original_app_config)
+
+    def _run(self, match_script_order):
+        svg_item = material.MaterialInfo(
+            provider="svg", url="catalog/art.svg", duration=3
+        )
+
+        def fake_search(search_term, minimum_duration, video_aspect):
+            return [svg_item]
+
+        with (
+            patch.dict(config.app, {"material_directory": "", "material_verification_enabled": True}),
+            patch.object(material.svg_material, "search_videos_svg", side_effect=fake_search),
+            patch.object(
+                material.material_verification,
+                "apply_verification",
+                side_effect=AssertionError("verification must not run in svg-only mode"),
+            ),
+            patch.object(
+                material.svg_material,
+                "resolve_material_path",
+                return_value="/tmp/art.mp4",
+            ),
+        ):
+            result = material.download_videos(
+                task_id="svg-only-bypass",
+                search_terms=["art"],
+                source="pexels",
+                audio_duration=3,
+                max_clip_duration=3,
+                match_script_order=match_script_order,
+                source_mix=["svg"],
+            )
+        self.assertEqual(result, ["/tmp/art.mp4"])
+
+    def test_flat_svg_only_skips_verification(self):
+        self._run(match_script_order=False)
+
+    def test_script_order_svg_only_skips_verification(self):
+        self._run(match_script_order=True)
+
+
 class TestDownloadVideosUserIdThreading(unittest.TestCase):
     def setUp(self):
         self.original_app_config = dict(config.app)

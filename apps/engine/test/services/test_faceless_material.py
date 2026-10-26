@@ -1,11 +1,8 @@
-import os
 import unittest
-from unittest.mock import patch
 
 import pydantic
-from PIL import Image
 
-from app.models.schema import VideoAspect, VideoParams
+from app.models.schema import VideoParams
 from app.services import faceless_material as fm
 
 
@@ -34,45 +31,6 @@ class TestFacelessMaterialSchema(unittest.TestCase):
     def test_unknown_material_is_rejected(self):
         with self.assertRaises(pydantic.ValidationError):
             VideoParams(video_subject="x", faceless_material="stock")
-
-
-class TestNeutralClip(unittest.TestCase):
-    def test_neutral_clip_renders_gradient_still_and_returns_clip(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            with (
-                patch.object(fm.utils, "task_dir", return_value=tmp),
-                patch(
-                    "app.services.image_material.render_image_file_to_mp4",
-                    return_value=os.path.join(tmp, "neutral.mp4"),
-                ) as render,
-            ):
-                result = fm.neutral_clip_path("t1", 10.0, VideoAspect.portrait)
-            self.assertEqual(result, os.path.join(tmp, "neutral.mp4"))
-            png_path = os.path.join(tmp, "neutral.png")
-            self.assertTrue(os.path.isfile(png_path))
-            with Image.open(png_path) as image:
-                self.assertEqual(image.size, (1080, 1920))
-                top = image.getpixel((540, 0))
-                bottom = image.getpixel((540, 1919))
-            self.assertTrue(sum(top) > sum(bottom))
-            render.assert_called_once()
-
-    def test_neutral_clip_failure_returns_empty(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            with (
-                patch.object(fm.utils, "task_dir", return_value=tmp),
-                patch(
-                    "app.services.image_material.render_image_file_to_mp4",
-                    return_value="",
-                ),
-            ):
-                self.assertEqual(
-                    fm.neutral_clip_path("t1", 10.0, VideoAspect.portrait), ""
-                )
 
 
 if __name__ == "__main__":

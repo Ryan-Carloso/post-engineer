@@ -1005,9 +1005,10 @@ def get_video_materials(task_id, params, video_terms, audio_duration):
             exclude_faces=persona_lipsync_active(params),
         )
         if not downloaded_videos and params.faceless_material == "svg":
-            # Catalog empty: one neutral clip, never stock, never a failure
-            # for a video the user asked to be illustration-only.
-            neutral = faceless_material.neutral_clip_path(task_id, audio_duration, params.video_aspect)
+            # Catalog empty: one neutral clip from the shared renderer, never stock.
+            neutral = material.material_verification.render_neutral_clip(
+                utils.task_dir(task_id), audio_duration, params.video_aspect
+            )
             downloaded_videos = [neutral] if neutral else []
         if not downloaded_videos:
             _fail_task(task_id, "failed to download videos", params, stage="download")

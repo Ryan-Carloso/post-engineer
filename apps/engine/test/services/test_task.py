@@ -454,7 +454,9 @@ class TestGetVideoMaterialsRandomSourceCascade(unittest.TestCase):
         with (
             patch.object(tm.material, "download_videos", return_value=[]) as dv,
             patch.object(
-                tm.faceless_material, "neutral_clip_path", return_value="neutral.mp4"
+                tm.material.material_verification,
+                "render_neutral_clip",
+                return_value="neutral.mp4",
             ) as neutral,
             patch.object(tm, "_fail_task") as fail_task,
         ):
@@ -475,7 +477,11 @@ class TestGetVideoMaterialsRandomSourceCascade(unittest.TestCase):
 
         with (
             patch.object(tm.material, "download_videos", return_value=[]),
-            patch.object(tm.faceless_material, "neutral_clip_path", return_value=""),
+            patch.object(
+                tm.material.material_verification,
+                "render_neutral_clip",
+                return_value="",
+            ),
             patch.object(tm, "_fail_task") as fail_task,
         ):
             result = tm.get_video_materials(
@@ -493,7 +499,9 @@ class TestGetVideoMaterialsRandomSourceCascade(unittest.TestCase):
 
         with (
             patch.object(tm.material, "download_videos", return_value=[]) as dv,
-            patch.object(tm.faceless_material, "neutral_clip_path") as neutral,
+            patch.object(
+                tm.material.material_verification, "render_neutral_clip"
+            ) as neutral,
             patch.object(tm, "_fail_task") as fail_task,
         ):
             result = tm.get_video_materials(
