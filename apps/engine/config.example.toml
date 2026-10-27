@@ -457,7 +457,8 @@ svg_canvas_background = "#FFFFFF"
 # not verify is dropped, never replaced by catalog SVG or a neutral
 # background — except when no segment verifies at all: scored segments
 # then keep their best-scored clips as an unverified fallback, and only
-# unscored or scorer-unavailable segments stay dropped.
+# unscored or scorer-unavailable segments, plus scored segments whose
+# candidates were all already taken by another segment, stay dropped.
 # R2 is the only source of SVG artwork: there is no subject mapping and
 # no bundled artwork.
 # The scorer is pluggable; the default scorer is SigLIP on ONNX (onnxruntime

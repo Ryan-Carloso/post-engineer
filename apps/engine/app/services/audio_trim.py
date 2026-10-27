@@ -101,16 +101,16 @@ def trim_trailing_silence(audio_file: str) -> Optional[float]:
     return new_length
 
 
-def task_local_copy(audio_file: str, task_dir: str) -> str:
+def task_local_copy(audio_file: str, task_dir: str) -> Optional[str]:
     """Return a task-local path for `audio_file`, copying shared files in.
 
     trim_after_last_word cuts in place: a custom audio file resolved from
     the shared local_videos directory must never be cut there, or every
     later task reusing it would hear the cut version. A file already
     inside the task directory passes through unchanged; anything else is
-    copied into the task directory first. On a copy failure the original
-    path is returned so the task degrades to the previous behavior
-    instead of failing on the trim step.
+    copied into the task directory first. On any failure None is returned
+    so the caller skips the trim: handing the original path back would
+    cut the shared file, the exact bug this helper exists to prevent.
     """
     try:
         task_root = os.path.realpath(task_dir)
@@ -118,7 +118,7 @@ def task_local_copy(audio_file: str, task_dir: str) -> str:
         if audio_real == task_root or audio_real.startswith(task_root + os.sep):
             return audio_file
     except OSError:
-        return audio_file
+        return None
     dest = os.path.join(task_dir, os.path.basename(audio_file) or "audio")
     try:
         os.makedirs(task_dir, exist_ok=True)
@@ -129,7 +129,7 @@ def task_local_copy(audio_file: str, task_dir: str) -> str:
         shutil.copyfile(audio_real, dest)
     except OSError as exc:
         logger.warning(f"voiceover tail: could not copy shared audio into the task dir: {type(exc).__name__}")
-        return audio_file
+        return None
     logger.info("voiceover tail: copied shared audio into the task dir before trimming")
     return dest
 

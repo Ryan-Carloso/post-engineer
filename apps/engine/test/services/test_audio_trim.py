@@ -294,9 +294,10 @@ def test_a_task_dir_symlink_to_shared_audio_is_replaced_not_written_through(tmp_
     assert shared.read_bytes() == b"x"
 
 
-def test_a_realpath_failure_returns_the_original_audio(tmp_path):
+def test_a_realpath_failure_skips_the_trim(tmp_path):
     # Degrade, don't fail: a realpath OSError (vanished path mid-flight)
-    # must return the original path, as the docstring promises.
+    # returns None so the caller skips the trim — returning the original
+    # path would cut the shared file in place, the bug this helper fixes.
     shared_dir = tmp_path / "shared"
     task_dir = tmp_path / "task"
     shared_dir.mkdir()
@@ -304,15 +305,15 @@ def test_a_realpath_failure_returns_the_original_audio(tmp_path):
     shared = shared_dir / "voice.mp3"
     shared.write_bytes(b"x")
     with patch.object(audio_trim.os.path, "realpath", side_effect=OSError("vanished")):
-        assert audio_trim.task_local_copy(str(shared), str(task_dir)) == str(shared)
+        assert audio_trim.task_local_copy(str(shared), str(task_dir)) is None
     assert not (task_dir / "voice.mp3").exists()
     assert shared.read_bytes() == b"x"
 
 
-def test_a_copy_failure_returns_the_original_audio(tmp_path):
+def test_a_copy_failure_skips_the_trim(tmp_path):
     # Degrade, don't fail: when the copy into the task dir fails, the
-    # task keeps the original path (previous behavior) instead of
-    # failing on the trim step, and the shared file stays untouched.
+    # caller skips the trim instead of failing the task, and the shared
+    # file stays untouched (and untrimmed).
     shared_dir = tmp_path / "shared"
     task_dir = tmp_path / "task"
     shared_dir.mkdir()
@@ -320,10 +321,24 @@ def test_a_copy_failure_returns_the_original_audio(tmp_path):
     shared = shared_dir / "voice.mp3"
     shared.write_bytes(b"x")
     with patch.object(audio_trim.shutil, "copyfile", side_effect=OSError("read-only task dir")) as copy:
-        assert audio_trim.task_local_copy(str(shared), str(task_dir)) == str(shared)
+        assert audio_trim.task_local_copy(str(shared), str(task_dir)) is None
     copy.assert_called_once()
     assert not (task_dir / "voice.mp3").exists()
     assert shared.read_bytes() == b"x"
+
+
+def test_task_start_copies_shared_audio_before_the_word_cut():
+    # Pin the task.start wiring: the task-local copy must precede the
+    # in-place word cut, or the shared original gets cut (see the
+    # task_local_copy tests above). Same source-scan pattern as the
+    # word-cut ordering test.
+    from app.services import task
+
+    source = inspect.getsource(task.start)
+    copy_call = source.index("audio_trim.task_local_copy(")
+    word_cut = source.index("audio_trim.trim_after_last_word(")
+    assert copy_call < word_cut
+    assert "if task_local is not None:" in source
 
 
 def test_media_duration_probes_any_media_file():
