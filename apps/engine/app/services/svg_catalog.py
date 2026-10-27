@@ -27,6 +27,7 @@ import sqlite3
 import tempfile
 import threading
 import time
+import unicodedata
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -299,6 +300,63 @@ def _connect() -> sqlite3.Connection:
 _ANY_WORD_STOPWORDS = frozenset(
     {"a", "an", "the", "at", "of", "in", "on", "for", "to", "and", "or", "with", "by", "from", "is"}
 )
+# Abstract or generic script words: a drawing matched on one of these alone
+# ("Business Maze" for "total structural collapse business") has nothing to
+# do with the video, so they never carry an any-word match either.
+_GENERIC_WORDS = frozenset(
+    {
+        "actually", "best", "business", "collapse", "great", "integrity", "life",
+        "number", "rest", "structural", "success", "thing", "things", "time",
+        "top", "total", "way", "why", "work", "works", "here", "that", "this",
+        "one", "two", "three", "four", "five",
+        "person", "persons", "people", "man", "men", "woman", "women", "guy",
+        "guys", "someone", "crowd", "line", "lines",
+        # Container nouns: a drawing that merely holds one says nothing about the
+        # moment ("Many Activities In A Building" for a restaurant).
+        "object", "objects", "place", "places", "building", "buildings", "sign",
+        "signs", "street", "streets", "city", "spot", "area", "location",
+        # Adjectives and interface words say nothing about what is drawn ("long"
+        # matched "Writing A Long List" for "long cafe queue").
+        "long", "short", "big", "small", "large", "old", "new", "modern", "vintage",
+        "classic", "famous", "popular", "local", "traditional", "authentic",
+        "original", "real", "hidden", "crowded", "busy", "contemporary", "urban",
+        "icon", "icons", "button", "buttons", "closeup",
+    }
+)
+
+
+def _fold(text: str) -> str:
+    """Casefold and strip diacritics, like the index tokenizer ("Café" ~ "cafe")."""
+    decomposed = unicodedata.normalize("NFKD", text.casefold())
+    return "".join(char for char in decomposed if not unicodedata.combining(char))
+
+
+def _meaningful_tokens(term: str) -> List[str]:
+    """Folded tokens of `term` that are neither filler nor generic."""
+    cleaned = "".join(char if char.isalnum() else " " for char in _fold(term))
+    ignored = _ANY_WORD_STOPWORDS | _GENERIC_WORDS
+    return [token for token in cleaned.split() if token not in ignored]
+
+
+def _title_matches(title: str, tokens: List[str]) -> bool:
+    """True when a title word shares a stem with one of the query tokens.
+
+    FTS also matches tags and labels, which are loose ("crowd" tags a
+    mosquito drawing): a drawing is shown only when its title names what
+    the script talks about. The stem drops up to two trailing letters
+    ("restaurants" ~ "restaurant", "trap" ~ "trapped"); tokens shorter than
+    four letters must match a title word exactly.
+    """
+    words = "".join(char if char.isalnum() else " " for char in _fold(title)).split()
+    for token in tokens:
+        if len(token) < 4:
+            if token in words:
+                return True
+            continue
+        stem = token[: max(4, len(token) - 2)]
+        if any(word.startswith(stem) for word in words):
+            return True
+    return False
 
 
 def _fts_query(term: str, any_word: bool = False) -> str:
@@ -313,7 +371,8 @@ def _fts_query(term: str, any_word: bool = False) -> str:
     cleaned = "".join(char if char.isalnum() else " " for char in term)
     tokens = cleaned.split()
     if any_word:
-        tokens = [token for token in tokens if token.casefold() not in _ANY_WORD_STOPWORDS]
+        ignored = _ANY_WORD_STOPWORDS | _GENERIC_WORDS
+        tokens = [token for token in tokens if token.casefold() not in ignored]
     if not tokens:
         return ""
     return (" OR " if any_word else " ").join(f'"{token}"' for token in tokens)
@@ -369,17 +428,64 @@ def search(search_term: str, limit: int = 5) -> List[SvgAsset]:
 
     # An unreachable or unreadable index raises: the catalog is enabled, so a
     # silent [] would quietly turn every render into stock footage.
+    tokens = _meaningful_tokens(search_term)
     connection = _connect()
     try:
         rows = connection.execute(query, (match, max(1, int(limit)))).fetchall()
-        if not rows and fallback and fallback != match:
+        assets = _gated_assets(rows, tokens)
+        if not assets and fallback and fallback != match:
             rows = connection.execute(query, (fallback, max(1, int(limit)))).fetchall()
+            assets = _gated_assets(rows, tokens)
     finally:
         connection.close()
+    return assets
 
+
+def _gated_assets(rows: List[sqlite3.Row], tokens: List[str]) -> List[SvgAsset]:
+    """Usable assets whose title matches the query, one per title.
+
+    The catalog holds the same artwork under several packs ("Cafe" twice):
+    two of them back to back read as one drawing frozen on screen.
+    """
     assets: List[SvgAsset] = []
+    seen_titles = set()
     for row in rows:
         asset = _asset_from_row(row)
-        if asset is not None:
-            assets.append(asset)
+        if asset is None or not _title_matches(asset.title, tokens):
+            continue
+        key = _fold(asset.title).strip()
+        if key in seen_titles:
+            continue
+        seen_titles.add(key)
+        assets.append(asset)
     return assets
+
+def search_best(alternatives: List[str], limit: int = 5) -> List[SvgAsset]:
+    """Assets for the first alternative that matches anything.
+
+    Alternatives run specific to generic ("francesinha", "sandwich plate",
+    "food"): a right generic drawing beats a loose any-word match on a later
+    alternative, and an empty list means no alternative matched.
+    """
+    for alternative in alternatives:
+        assets = search(alternative, limit)
+        if assets:
+            return assets
+    return []
+
+
+def search_candidates(alternatives: List[str], per_alternative: int = 3, cap: int = 8) -> List[SvgAsset]:
+    """Candidates from EVERY alternative, most specific first, without repeats.
+
+    search_best stops at the first alternative with a match: a specific one
+    that hit "Security Opening The Door" hid the "Cafe" its generic
+    alternative would have found. The picker rates the whole list instead.
+    """
+    found: List[SvgAsset] = []
+    seen: set = set()
+    for alternative in alternatives:
+        for asset in search(alternative, per_alternative):
+            if asset.asset_id not in seen:
+                seen.add(asset.asset_id)
+                found.append(asset)
+    return found[:cap]

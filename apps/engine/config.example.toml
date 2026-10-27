@@ -459,17 +459,22 @@ svg_canvas_background = "#FFFFFF"
 # segment verifies, the download fails like any other empty stock search.
 # R2 is the only source of SVG artwork: there is no subject mapping and
 # no bundled artwork.
-# The scorer is pluggable; the default ONNX scorer needs onnxruntime and
-# a SigLIP ONNX model, and fails closed (stock treated as unverified)
-# until both are present. Scores are tied to the scoring model:
-# recalibrate min_score and runner_up_margin when the model changes.
-# Verification stays off by default. The threshold and margin below are
-# calibrated on the padded SigLIP scorer against real Pixabay candidates
-# (see material_verification.py); Pexels was not measurable from the
-# sandbox (read timeout).
+# The scorer is pluggable; the default scorer is SigLIP on ONNX (onnxruntime
+# ships with the engine). It scores the preview image that Pexels, Pixabay and
+# Coverr return for each clip (about 8 candidates per segment), so
+# verification adds about a minute per video and downloads no extra clips.
+# The model (about 220 MB, Apache-2.0, pinned revision and SHA-256 in
+# app/services/siglip_model.py) is fetched on first use, or at boot, into the
+# directory of material_verification_model_path; that directory must be
+# writable and persisted (in Docker, under the /app/storage volume). Without
+# the model the scorer fails closed (stock treated as unverified).
+# Scores are tied to the scoring model: recalibrate min_score and
+# runner_up_margin when the model changes.
+# Verification stays off by default.
 material_verification_enabled = false
 material_verification_min_score = 0.01
 material_verification_runner_up_margin = 0.005
+# Docker: "/app/storage/models/siglip/model_q4.onnx"
 material_verification_model_path = ""
 redis_db = 0
 redis_password = ""

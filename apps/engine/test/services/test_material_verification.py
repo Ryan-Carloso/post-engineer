@@ -276,7 +276,9 @@ class TestFallbackSummary(unittest.TestCase):
             SegmentDecision(tier="dropped", phrase="c"),
         ]
         summary = summarize_decisions(decisions)
-        self.assertEqual(summary, {"stock_verified": 1, "dropped": 2})
+        self.assertEqual(
+            summary, {"stock_verified": 1, "stock_unverified": 0, "dropped": 2}
+        )
 
     def test_summary_event_carries_counts_and_task_id_only(self):
         decisions = [SegmentDecision(tier="dropped", phrase="Waterfront")]

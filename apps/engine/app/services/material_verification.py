@@ -23,6 +23,8 @@ re-exports them, so existing callers keep working.
 from __future__ import annotations
 
 import math
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Sequence
 
@@ -30,6 +32,7 @@ from loguru import logger
 
 from app.config import config
 from app.models.schema import MaterialInfo, VideoAspect
+from app.services import siglip_model
 from app.services import state as sm
 from app.services.analytics import track_event
 from app.services.neutral_background import (  # noqa: F401 - re-export for callers
@@ -78,8 +81,11 @@ DEFAULT_MIN_SCORE = 0.01
 DEFAULT_RUNNER_UP_MARGIN = 0.005
 
 TIER_STOCK_VERIFIED = "stock_verified"
+# No segment verified: each keeps its best-scored candidate instead of failing the video.
+TIER_STOCK_UNVERIFIED = "stock_unverified"
 TIER_DROPPED = "dropped"
-ALL_TIERS = (TIER_STOCK_VERIFIED, TIER_DROPPED)
+ALL_TIERS = (TIER_STOCK_VERIFIED, TIER_STOCK_UNVERIFIED, TIER_DROPPED)
+KEPT_TIERS = (TIER_STOCK_VERIFIED, TIER_STOCK_UNVERIFIED)
 
 
 @dataclass(frozen=True)
@@ -125,6 +131,8 @@ class SegmentDecision:
     phrase: str
     stock_url: Optional[str] = None
     drop_reason: Optional[str] = None
+    # Best-scored candidate of a segment that scored but did not verify.
+    best_url: Optional[str] = None
 
 
 # A scorer maps a candidate URL and a phrase to a relative similarity
@@ -134,24 +142,38 @@ class SegmentDecision:
 Scorer = Callable[[str, str], Optional[float]]
 
 
+# Preview images are tiny, so scoring is bounded by candidate count and run
+# in parallel: about 8 candidates per segment, 4 at a time.
+MAX_SCORED_PER_SEGMENT = 8
+SCORE_WORKERS = 4
+
+_shared_scorers: dict = {}
+_shared_lock = threading.Lock()
+
+
+def _shared_scorer(model_path: str) -> SiglipScorer:
+    """One scorer per model path: the ONNX session is loaded once, not per segment."""
+    with _shared_lock:
+        scorer = _shared_scorers.get(model_path)
+        if scorer is None:
+            siglip_model.ensure_model(model_path)
+            scorer = SiglipScorer(model_path)
+            _shared_scorers[model_path] = scorer
+        return scorer
+
+
 class OnnxClipScorer:
     """Lazy CLIP/SigLIP ONNX scorer, wired through SiglipScorer.
 
-    The scorer is constructed per verification call and loads the model
-    and tokenizer lazily on first use; a scorer that cannot run raises
-    VerificationUnavailable and must never pass stock footage. The
-    model path comes from config (material_verification_model_path);
-    the tokenizer and preprocessor config sit next to the model file.
+    The model files are fetched on first use (siglip_model) and the session
+    is shared by every segment of the process. A scorer that cannot run
+    raises VerificationUnavailable and must never pass stock footage. The
+    model path comes from config (material_verification_model_path).
     """
 
-    def __init__(self) -> None:
-        self._delegate: Optional[SiglipScorer] = None
-
     def score(self, candidate_url: str, phrase: str) -> float:
-        if self._delegate is None:
-            model_path = str(config.app.get("material_verification_model_path", "")).strip()
-            self._delegate = SiglipScorer(model_path)
-        return self._delegate.score(candidate_url, phrase)
+        model_path = str(config.app.get("material_verification_model_path", "")).strip()
+        return _shared_scorer(model_path).score(candidate_url, phrase)
 
 
 def _score_candidates(
@@ -161,24 +183,32 @@ def _score_candidates(
 
     Catalog SVG and neutral items are not stock and are never scored:
     scoring them would route a non-http path through the stock
-    downloader. Returns (scored, failed).
+    downloader. Only the first MAX_SCORED_PER_SEGMENT candidates are
+    scored, by their preview image when they have one. Returns
+    (scored, failed).
     """
     active_scorer = scorer if scorer is not None else OnnxClipScorer().score
     stock = [c for c in candidates if c.provider not in ("svg", "neutral")]
-    scored: List[tuple[MaterialInfo, float]] = []
-    scorer_failed = False
-    for candidate in stock:
+
+    def attempt(candidate: MaterialInfo) -> tuple[Optional[float], bool]:
+        target = getattr(candidate, "thumbnail", "") or candidate.url
         try:
-            score = active_scorer(candidate.url, phrase)
+            return active_scorer(target, phrase), False
         except VerificationUnavailable:
-            scorer_failed = True
-            continue
+            return None, True
         except Exception as exc:  # noqa: BLE001 - scorer must not break selection
             logger.warning(
                 f"material scorer failed for candidate: {type(exc).__name__}"
             )
-            scorer_failed = True
-            continue
+            return None, True
+
+    chosen = stock[:MAX_SCORED_PER_SEGMENT]
+    with ThreadPoolExecutor(max_workers=SCORE_WORKERS) as pool:
+        outcomes = list(pool.map(attempt, chosen))
+    scored: List[tuple[MaterialInfo, float]] = []
+    scorer_failed = False
+    for candidate, (score, failed) in zip(chosen, outcomes):
+        scorer_failed = scorer_failed or failed
         if score is None or not math.isfinite(score):
             continue
         scored.append((candidate, float(score)))
@@ -195,8 +225,10 @@ def select_for_segment(
     """Choose verified stock for one segment, or drop the segment."""
     cfg = config or verification_config()
 
-    def drop(reason: str) -> SegmentDecision:
-        return SegmentDecision(tier=TIER_DROPPED, phrase=phrase, drop_reason=reason)
+    def drop(reason: str, best_url: Optional[str] = None) -> SegmentDecision:
+        return SegmentDecision(
+            tier=TIER_DROPPED, phrase=phrase, drop_reason=reason, best_url=best_url
+        )
 
     stock = [c for c in candidates if c.provider not in ("svg", "neutral")]
     if not stock:
@@ -211,9 +243,9 @@ def select_for_segment(
             top, top_score = scored[0]
             second_score = scored[1][1] if len(scored) > 1 else None
             if top_score < cfg.min_score:
-                decision = drop("score_below_threshold")
+                decision = drop("score_below_threshold", top.url)
             elif second_score is not None and top_score - second_score < cfg.runner_up_margin:
-                decision = drop("runner_up_margin_too_small")
+                decision = drop("runner_up_margin_too_small", top.url)
             else:
                 decision = SegmentDecision(
                     tier=TIER_STOCK_VERIFIED, phrase=phrase, stock_url=top.url
@@ -230,7 +262,7 @@ def verified_script_order_groups(groups, task_id, scorer):
     """Apply verification to script-order groups, one pick per kept phrase."""
     selected, decisions = apply_verification(groups, scorer=scorer)
     emit_material_fallback_summary(task_id, decisions)
-    kept = [d for d in decisions if d.tier == TIER_STOCK_VERIFIED]
+    kept = [d for d in decisions if d.tier in KEPT_TIERS]
     return [(decision.phrase, [item]) for decision, item in zip(kept, selected)]
 
 
@@ -265,7 +297,34 @@ def apply_verification(
             else:
                 selected.append(match)
         decisions.append(decision)
+    if not selected:
+        selected, decisions = _keep_best_scored(groups, decisions)
     return selected, decisions
+
+
+def _keep_best_scored(
+    groups: Sequence[tuple[str, Sequence[MaterialInfo]]],
+    decisions: List[SegmentDecision],
+) -> tuple[List[MaterialInfo], List[SegmentDecision]]:
+    """When no segment verified, keep each scored segment's best candidate.
+
+    Segments the scorer never scored (no candidates, scorer unavailable)
+    stay dropped: a verifier that cannot run still fails closed.
+    """
+    selected: List[MaterialInfo] = []
+    kept: List[SegmentDecision] = []
+    for (_phrase, candidates), decision in zip(groups, decisions):
+        match = next((c for c in candidates if c.url == decision.best_url), None)
+        if decision.best_url is None or match is None:
+            kept.append(decision)
+            continue
+        selected.append(match)
+        kept.append(
+            SegmentDecision(
+                tier=TIER_STOCK_UNVERIFIED, phrase=decision.phrase, stock_url=match.url
+            )
+        )
+    return selected, kept
 
 
 def summarize_decisions(decisions: Sequence[SegmentDecision]) -> dict:

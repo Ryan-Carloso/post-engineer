@@ -16,7 +16,7 @@ from loguru import logger
 
 from app.config import config
 from app.models.schema import MaterialInfo, VideoAspect
-from app.services import image_material, svg_catalog, svg_draw, svg_pencil, svg_sketch, video_download
+from app.services import image_material, svg_catalog, svg_pick, svg_terms, svg_draw, svg_pencil, svg_sketch, video_download
 from app.utils import utils
 
 
@@ -40,6 +40,10 @@ def search_videos_svg(
 ) -> List[MaterialInfo]:
     """Look up catalog SVG assets matching a keyword.
 
+    The keyword may hold "a | b | c" alternatives (svg_terms); the first one
+    with a match wins (svg_catalog.search_best). A pinned keyword
+    ("path:<catalog path>", svg_pick) is that drawing, unsearched.
+
     The material url is the asset's catalog-relative path: the artwork is
     fetched from R2 only when resolve_material_path renders it, so unused
     matches cost nothing. The aspect is unused: a catalog entry is a still
@@ -48,13 +52,17 @@ def search_videos_svg(
     del video_aspect
     if not svg_catalog.is_enabled():
         return []
+    pinned = svg_pick.pinned_path(search_term)
+    if pinned is not None:
+        # Already picked for its script moment (svg_pick): no search.
+        return [MaterialInfo(provider="svg", url=pinned, duration=minimum_duration)]
     return [
         MaterialInfo(
             provider="svg",
             url=asset.relative_path,
             duration=minimum_duration,
         )
-        for asset in svg_catalog.search(search_term)
+        for asset in svg_catalog.search_best(svg_terms.parse_alternatives(search_term))
     ]
 
 

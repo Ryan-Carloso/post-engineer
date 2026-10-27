@@ -14,18 +14,23 @@ from app.config import config
 from app.models import const
 from app.models.schema import VideoConcatMode, VideoParams
 from app.services import (
+    audio_trim,
     faceless_material,
     llm,
     longcat,
     material,
     persona_hook,
+    place_photos,
     script_angle,
+    stock_term_judge,
     subtitle,
+    svg_terms,
     twelvelabs,
     video,
     video_storage,
     voice,
     upload_post,
+    web_search_facts,
 )
 from app.services import state as sm
 from app.services import persona_image
@@ -41,6 +46,7 @@ from app.services.persona_hook import (
     _limit_generated_script,
 )
 from app.services.bgm_history import history_repository
+from app.services.stock_terms import PERSONA_SELECTIVE_STOCK_MIN_SCORE  # noqa: F401 - pinned by tests
 from app.services.analytics import nonempty_error_reason, scrub_secret_values, track_event
 from app.services.notify import safe_reason, send_discord, task_failed_msg
 from app.utils import file_security, ssrf, utils
@@ -447,7 +453,6 @@ def persona_lipsync_active(params: VideoParams) -> bool:
 PERSONA_LIPSYNC_MAX_SECONDS = 12.0
 FACE_FILL_MIN_SECONDS = 5.0
 FACE_FILL_MAX_SECONDS = 8.0
-PERSONA_SELECTIVE_STOCK_MIN_SCORE = 0.3
 
 
 def _ensure_persona_hook_fits(
@@ -473,7 +478,7 @@ def _ensure_persona_hook_fits(
     return video_script, audio_file, audio_duration, sub_maker, subtitle_path
 
 
-def _resolve_script_angle(task_id: str, params: VideoParams) -> str:
+def _resolve_script_angle(task_id: str, params: VideoParams, facts=None) -> str:
     """Pick a specific angle for the topic, or "" to script the bare topic.
 
     The implementation lives in script_angle.py (this module is
@@ -482,7 +487,8 @@ def _resolve_script_angle(task_id: str, params: VideoParams) -> str:
     them on this module.
     """
     return script_angle.resolve_script_angle(
-        task_id, params, track_event=track_event, tracking_context=_task_tracking_context(task_id)
+        task_id, params, track_event=track_event, tracking_context=_task_tracking_context(task_id),
+        facts=facts,
     )
 
 
@@ -490,8 +496,10 @@ def generate_script(task_id, params):
     logger.info("\n\n## generating video script")
     video_script = params.video_script.strip()
     angle = ""
+    facts = None  # one web search per video, shared by the angle and every script call
     if not video_script:
-        angle = _resolve_script_angle(task_id, params)
+        facts = web_search_facts.fetch_facts(params.video_subject, language=params.video_language)
+        angle = _resolve_script_angle(task_id, params, facts)
         script_prompt = params.video_script_prompt
         if persona_lipsync_active(params):
             # The lip-sync intro paragraph doubles as the retention hook, so
@@ -510,7 +518,7 @@ def generate_script(task_id, params):
             paragraph_number=params.paragraph_number,
             video_script_prompt=script_prompt,
             custom_system_prompt=params.custom_system_prompt,
-            angle=angle, cta=params.video_cta,
+            angle=angle, cta=params.video_cta, facts=facts,
         )
     else:
         # Log only the size — the script itself is user content and must not
@@ -540,7 +548,7 @@ def generate_script(task_id, params):
                 custom_system_prompt=params.custom_system_prompt,
                 target_words_min=PERSONA_HOOK_TARGET_WORDS_MIN,
                 target_words_max=PERSONA_HOOK_TARGET_WORDS_MAX,
-                angle=angle, include_cta=False,
+                angle=angle, include_cta=False, facts=facts,
             )
             body = llm.generate_script(
                 video_subject=params.video_subject,
@@ -554,7 +562,7 @@ def generate_script(task_id, params):
                 custom_system_prompt=params.custom_system_prompt,
                 target_words_min=72,
                 target_words_max=94,
-                angle=angle, cta=params.video_cta,
+                angle=angle, cta=params.video_cta, facts=facts,
             )
             video_script = _limit_generated_script(f"{hook.strip()}\n\n{body.strip()}")
             paragraphs = [paragraph.strip() for paragraph in re.split(r"\n\s*\n", video_script) if paragraph.strip()]
@@ -572,7 +580,10 @@ def generate_script(task_id, params):
 def generate_terms(task_id, params, video_script):
     logger.info("\n\n## generating video terms")
     video_terms = params.video_terms
-    if not video_terms:
+    if params.faceless_material == "svg":
+        # Catalog terms carry specific-to-generic alternatives (svg_terms).
+        video_terms = svg_terms.resolve_svg_terms(params, video_script)
+    elif not video_terms:
         # With ordered material matching enabled, the keywords themselves must
         # also be generated in script narrative order; otherwise later ordered
         # download and ordered concat can only reuse one global theme set and
@@ -613,65 +624,9 @@ def generate_terms(task_id, params, video_script):
     # Always on, ALL video kinds (not persona-specific): weak terms never
     # reach the download queue. If every term is filtered the original list
     # is kept, so the worst case is the pre-filter behavior.
-    video_terms = _filter_weak_stock_terms(params, video_terms)
+    video_terms = stock_term_judge.select_terms(params, video_terms, video_script)
 
     return video_terms
-
-
-def _stock_adhesion_score(term: str, subject: str) -> float:
-    """Offline adhesion score between a stock search term and the subject.
-
-    Deterministic token-overlap fallback used when TwelveLabs Marengo
-    embeddings are unavailable: the share of the term's significant tokens
-    (length >= 3, casefolded, unique) that also appear in the subject. A
-    term with no significant tokens scores 0.0 — it says nothing the subject
-    confirms, and weak terms are exactly what selective stock drops.
-    """
-    def tokens(text: str) -> set[str]:
-        # Unicode-letter-initial tokens only; short tokens (a, de, o) carry
-        # no adhesion signal.
-        return {
-            token
-            for token in re.findall(r"[^\W\d_][\w]*", text.casefold(), re.UNICODE)
-            if len(token) >= 3
-        }
-
-    term_tokens = tokens(term)
-    if not term_tokens:
-        return 0.0
-    subject_tokens = tokens(subject)
-    return len(term_tokens & subject_tokens) / len(term_tokens)
-
-
-def _filter_weak_stock_terms(params: VideoParams, video_terms: list[str]) -> list[str]:
-    """Drop stock terms whose adhesion to the subject scores below the floor.
-
-    Always on: weak stock never enters the download queue, so the timeline
-    holds the persona/strong footage instead of swapping frames with
-    off-topic B-roll. If every term is filtered, the original list is kept —
-    a video with some stock beats a task failure for lack of footage.
-    """
-    if not params.video_subject or len(video_terms) <= 1:
-        return video_terms
-    min_score = PERSONA_SELECTIVE_STOCK_MIN_SCORE
-    kept = [
-        term
-        for term in video_terms
-        if _stock_adhesion_score(term, params.video_subject) >= min_score
-    ]
-    if not kept:
-        logger.warning(
-            "selective stock filtered every term; keeping the original list"
-        )
-        return video_terms
-    dropped = [term for term in video_terms if term not in kept]
-    if dropped:
-        # Log counts, not term content — terms are user-derived content.
-        logger.info(
-            f"selective stock kept {len(kept)}/{len(video_terms)} terms "
-            f"(min score {min_score}); {len(dropped)} weak terms dropped"
-        )
-    return kept
 
 
 def save_script_data(task_id, video_script, video_terms, params):
@@ -858,6 +813,7 @@ def generate_audio(task_id, params, video_script):
                          "(check voice name, provider API key, network)")
             return None, None, None
         sub_maker = result.sub_maker
+        audio_trim.trim_trailing_silence(audio_file)  # the video is cut to the file's length
         audio_duration = math.ceil(voice.get_audio_duration(sub_maker))
         if audio_duration == 0:
             _fail_task(task_id, "failed to get audio duration", params, stage="audio")
@@ -922,7 +878,7 @@ def generate_subtitle(task_id, params, video_script, sub_maker, audio_file):
     return subtitle_path
 
 
-def get_video_materials(task_id, params, video_terms, audio_duration):
+def get_video_materials(task_id, params, video_terms, audio_duration, photos=()):
     if params.video_materials:
         logger.info("\n\n## preprocess local materials")
         materials = video.preprocess_video(
@@ -938,6 +894,7 @@ def get_video_materials(task_id, params, video_terms, audio_duration):
         # illustration-only video can never gain a stock clip.
         if params.faceless_material == "svg":
             source_order = faceless_material.svg_source_order()
+            video_terms = svg_terms.fit_to_audio(video_terms, audio_duration)
         else:
             source_order = list(REMOTE_VIDEO_SOURCES)
             random.shuffle(source_order)
@@ -955,11 +912,22 @@ def get_video_materials(task_id, params, video_terms, audio_duration):
                 else params.video_concat_mode
             ),
             audio_duration=audio_duration,
-            max_clip_duration=params.video_clip_duration,
+            max_clip_duration=svg_terms.clip_seconds(params, len(video_terms), audio_duration),
             match_script_order=params.match_materials_to_script,
             source_mix=source_order,
             exclude_faces=persona_lipsync_active(params),
         )
+        if params.faceless_material == "svg":
+            svg_terms.report_coverage(
+                task_id,
+                len(downloaded_videos),
+                svg_terms.clip_seconds(params, len(downloaded_videos), audio_duration) or 0,
+                audio_duration,
+            )
+        if photos and downloaded_videos:
+            downloaded_videos = place_photos.splice_photos(
+                downloaded_videos, photos, svg_terms.clip_seconds(params, len(downloaded_videos), audio_duration)
+            )
         if not downloaded_videos and params.faceless_material == "svg":
             # Catalog empty: one neutral clip from the shared renderer, never stock.
             neutral = material.material_verification.render_neutral_clip(
@@ -1009,7 +977,7 @@ def generate_final_videos(
         video_aspect=params.video_aspect,
         video_concat_mode=video_concat_mode,
         video_transition_mode=video_transition_mode,
-        max_clip_duration=params.video_clip_duration,
+        max_clip_duration=svg_terms.combine_clip_seconds(params, len(downloaded_videos), audio_file),
         threads=params.n_threads,
     )
 
@@ -1432,6 +1400,14 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             _complete_task(task_id, params, subtitle_path=subtitle_path)
             return {"subtitle_path": subtitle_path}
 
+        # The video is cut to the audio file's length: drop the dead air after the
+        # last spoken word (Whisper word times; Chatterbox ends with a silent tail).
+        trimmed_seconds = audio_trim.trim_after_last_word(
+            audio_file, subtitle.file_to_words(subtitle_path)
+        )
+        if trimmed_seconds is not None:
+            audio_duration = math.ceil(trimmed_seconds)
+
         # 4b. Persona hook guard: the lip-sync intro needs the hook to end
         # between 3 and 6 seconds. Validate now — before the expensive
         # material/download/combine stages — and regenerate an overshooting
@@ -1459,8 +1435,21 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
 
         # 5. Get video materials
         phases.begin("materials")
+        # Persona videos keep their lip-sync intro and face outro on screen: a
+        # photo fits only between them. Random concatenation scrambles the
+        # timeline, so a photo's moment would be lost.
+        photo_window = (
+            (PERSONA_LIPSYNC_MAX_SECONDS, audio_duration - FACE_FILL_MAX_SECONDS)
+            if persona_lipsync_active(params)
+            else None
+        )
+        photos = []
+        if params.match_materials_to_script:
+            photos = place_photos.prepare_photos(
+                task_id, params, video_script, subtitle_path, audio_duration, window=photo_window
+            )
         downloaded_videos = get_video_materials(
-            task_id, params, video_terms, audio_duration
+            task_id, params, video_terms, audio_duration, photos
         )
         phases.complete("materials")
         if not downloaded_videos:

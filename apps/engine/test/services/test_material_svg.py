@@ -32,7 +32,7 @@ class SearchVideosSvgTests(unittest.TestCase):
     @patch("app.services.svg_material.svg_catalog")
     def test_maps_catalog_assets_to_material_info(self, mock_catalog):
         mock_catalog.is_enabled.return_value = True
-        mock_catalog.search.return_value = [
+        mock_catalog.search_best.return_value = [
             type(
                 "A",
                 (),
@@ -53,9 +53,18 @@ class SearchVideosSvgTests(unittest.TestCase):
     @patch("app.services.svg_material.svg_catalog")
     def test_passes_search_term_and_limit(self, mock_catalog):
         mock_catalog.is_enabled.return_value = True
-        mock_catalog.search.return_value = []
-        svg_material.search_videos_svg("money", 4)
-        mock_catalog.search.assert_called_once_with("money")
+        mock_catalog.search_best.return_value = []
+        svg_material.search_videos_svg("money | coins", 4)
+        mock_catalog.search_best.assert_called_once_with(["money", "coins"])
+
+
+class PinnedPathTests(unittest.TestCase):
+    @patch("app.services.svg_material.svg_catalog")
+    def test_pinned_path_skips_the_search(self, mock_catalog):
+        mock_catalog.is_enabled.return_value = True
+        items = svg_material.search_videos_svg("path:Pack/Sandwich.svg", 5)
+        mock_catalog.search_best.assert_not_called()
+        self.assertEqual([(i.url, i.duration) for i in items], [("Pack/Sandwich.svg", 5)])
 
 
 class RasterizeSvgTests(unittest.TestCase):

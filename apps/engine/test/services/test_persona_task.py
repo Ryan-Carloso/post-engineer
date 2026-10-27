@@ -12,6 +12,7 @@ from unittest.mock import patch
 from pydantic import ValidationError
 
 from app.models.schema import PersonaParams, VideoParams
+from app.services import stock_terms
 from app.services import task as task_service
 from app.services import video as video_service
 from app.services.task import (
@@ -348,7 +349,7 @@ class TestSelectiveStockFilter:
 
     def _filter(self, subject, terms):
         params = VideoParams(video_subject=subject)
-        return task_service._filter_weak_stock_terms(params, terms)
+        return stock_terms.filter_weak_stock_terms(params, terms)
 
     def test_weak_term_is_dropped_strong_kept_in_order(self):
         kept = self._filter(
@@ -376,7 +377,7 @@ class TestSelectiveStockFilter:
         terms = ["gato selado"]
         params = VideoParams(video_subject="portagens europa")
         params.video_subject = ""
-        assert task_service._filter_weak_stock_terms(params, terms) == terms
+        assert stock_terms.filter_weak_stock_terms(params, terms) == terms
 
 
 def _subtitles_for_face_fill():
