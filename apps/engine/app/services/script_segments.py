@@ -39,7 +39,7 @@ MAX_TERMS_PER_SEGMENT = 10
 _TERMINAL_PUNCTUATION = (".", "!", "?", "。", "！", "？")
 _EMOJI_PATTERN = re.compile(
     "["
-    "\U0001f300-\U0001faff"
+    "\U0001f300-\U0001faff"  # codeql[py/overly-large-range]: false positive — the three ranges in this class are disjoint (1F300-1FAFF, 2600-27BF, 1F000-1F2FF) plus FE0F, the broad emoji block is intentional, and a match only REJECTS spoken text, so wider matching can never bypass a filter here.
     "\U00002600-\U000027bf"
     "\U0001f000-\U0001f2ff"
     "\uFE0F"
