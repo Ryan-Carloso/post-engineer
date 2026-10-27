@@ -12,8 +12,14 @@ from openai.types.chat import ChatCompletion
 
 from app.config import config
 from app.services.analytics import scrub_error_text, scrub_secret_values, track_ai_request
+from app.services import script_claims, stock_terms, web_search_facts
 from app.services.llm_providers import validate_llm_provider
 from app.services.script_prompts import DEFAULT_SCRIPT_CTA_INSTRUCTION, DEFAULT_SCRIPT_SYSTEM_PROMPT
+from app.services.script_language_rules import (  # noqa: F401 - failure retries use these
+    _find_foreign_script,
+    _strip_foreign_script,
+    _uses_latin_script,
+)
 from app.utils import secret_redaction
 
 _max_retries = 5
@@ -1012,6 +1018,7 @@ def build_script_prompt(
     target_words_min: int | None = None,
     target_words_max: int | None = None,
     angle: str = "", cta: str = "", include_cta: bool = True,
+    facts: list[dict[str, str]] | None = None,
 ) -> str:
     paragraph_number = _normalize_script_paragraph_number(paragraph_number)
     video_script_prompt = _limit_script_text(
@@ -1041,6 +1048,11 @@ def build_script_prompt(
         prompt += f"\n- number of paragraphs: {paragraph_number}"
     if language:
         prompt += f"\n- language: {language}"
+    # Web search results come with the contract context (before the user's
+    # additional requirements) so the model treats them as constraints, not
+    # suggestions, and keeps names/prices from the sources instead of
+    # inventing them. They are search snippets, not verified facts.
+    prompt += web_search_facts.format_facts_block(facts or [])
     # A partial script (a standalone hook regenerated for timing) must not
     # end with a call to action: the rest of the script already has one.
     if not include_cta:
@@ -1062,34 +1074,6 @@ def build_script_prompt(
     return prompt
 
 
-# Characters from non-Latin writing systems that must never reach TTS or
-# burnt-in subtitles when the requested language uses the Latin script.
-# Ranges: CJK Extension A, CJK Unified Ideographs, CJK symbols + Hiragana +
-# Katakana, Hangul syllables.
-_FOREIGN_SCRIPT_RE = re.compile("[㐀-䶿一-鿿　-ヿ가-힯]+")
-
-# Languages normally written in the Latin script: only these get the
-# foreign-script guard. A video in zh/ja/ko legitimately contains CJK and
-# must never be rejected or stripped.
-_LATIN_SCRIPT_LANGUAGES = {"pt", "en", "es", "fr", "it", "de", "nl"}
-
-
-def _uses_latin_script(language: str) -> bool:
-    """True when the requested language is normally written in Latin script."""
-    base = (language or "").strip().lower().replace("_", "-").split("-", 1)[0]
-    return base in _LATIN_SCRIPT_LANGUAGES
-
-
-def _find_foreign_script(text: str) -> list[str]:
-    """All runs of non-Latin-script characters found in the text."""
-    return _FOREIGN_SCRIPT_RE.findall(text or "")
-
-
-def _strip_foreign_script(text: str) -> str:
-    """Remove non-Latin-script characters; the last-resort degradation."""
-    return _FOREIGN_SCRIPT_RE.sub("", text or "")
-
-
 def generate_script(
     video_subject: str,
     language: str = "",
@@ -1099,6 +1083,7 @@ def generate_script(
     target_words_min: int | None = None,
     target_words_max: int | None = None,
     angle: str = "", cta: str = "", include_cta: bool = True,
+    facts: list[dict[str, str]] | None = None,
 ) -> str:
     paragraph_number = _normalize_script_paragraph_number(paragraph_number)
     video_script_prompt = _limit_script_text(
@@ -1107,6 +1092,10 @@ def generate_script(
     custom_system_prompt = _limit_script_text(
         custom_system_prompt, MAX_SCRIPT_SYSTEM_PROMPT_LENGTH, "custom_system_prompt"
     )
+    # None: a direct caller (the /scripts endpoint) searches for itself; the
+    # task passes the one search it already made, empty or not.
+    if facts is None:
+        facts = web_search_facts.fetch_facts(video_subject, language=language)
     prompt = build_script_prompt(
         video_subject=video_subject,
         language=language,
@@ -1116,6 +1105,7 @@ def generate_script(
         target_words_min=target_words_min,
         target_words_max=target_words_max,
         angle=angle, cta=cta, include_cta=include_cta,
+        facts=facts,
     )
     final_script = ""
     logger.info(
@@ -1179,6 +1169,13 @@ def generate_script(
         logger.error(f"failed to generate video script: {final_script}")
     else:
         logger.success(f"completed: \n{final_script}")
+    if facts and final_script and "Error: " not in final_script:
+        # Judged against the search results; with none there is nothing to judge by.
+        final_script = script_claims.enforce(
+            final_script,
+            [video_subject, angle, cta, video_script_prompt, *(f.get("text", "") for f in facts)],
+            lambda note: format_response(_generate_response_with_fallback(prompt=prompt + note)),
+        )
     # Last resort: never ship foreign-script characters to TTS or burnt-in
     # subtitles. The guard is only active for languages written in the Latin
     # script — a zh/ja/ko video legitimately contains these characters.
@@ -1257,64 +1254,7 @@ def generate_terms(
     amount: int = 5,
     match_script_order: bool = False,
 ) -> List[str]:
-    if match_script_order:
-        goal = (
-            f"Generate {amount} chronological stock-video search terms that follow "
-            "the order of topics in the video script."
-        )
-        ordering_rule = (
-            "6. keep the terms in the same order as the script narration; "
-            "earlier terms must describe earlier visual moments."
-        )
-        # In ordered-keywords mode, the example count must match `amount`, so
-        # the model isn't misled by a fixed 4-example set into returning too
-        # few keywords for long copy and hurting material coverage.
-        example_terms = [
-            "opening visual topic",
-            *[
-                f"script visual topic {index}"
-                for index in range(2, max(amount, 1))
-            ],
-            "final visual topic",
-        ]
-        output_example = json.dumps(example_terms[:amount], ensure_ascii=False)
-    else:
-        goal = (
-            f"Generate {amount} search terms for stock videos, depending on the "
-            "subject of a video."
-        )
-        ordering_rule = ""
-        output_example = (
-            '["search term 1", "search term 2", "search term 3",'
-            '"search term 4", "search term 5"]'
-        )
-
-    prompt = f"""
-# Role: Video Search Terms Generator
-
-## Goals:
-{goal}
-
-## Constrains:
-1. the search terms are to be returned as a json-array of strings.
-2. each search term should consist of 1-3 words, always add the main subject of the video.
-3. you must only return the json-array of strings. you must not return anything else. you must not return the script.
-4. the search terms must be related to the subject of the video.
-5. reply with english search terms only.
-{ordering_rule}
-
-## Output Example:
-{output_example}
-
-## Context:
-### Video Subject
-{video_subject}
-
-### Video Script
-{video_script}
-
-Please note that you must use English for generating video search terms; Chinese is not accepted.
-""".strip()
+    prompt = stock_terms.terms_prompt(video_subject, video_script, amount, match_script_order)
 
     logger.info(
         f"subject: {video_subject}, match_script_order: {match_script_order}"

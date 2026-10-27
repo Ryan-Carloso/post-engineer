@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from app.config import config
 from app.models.schema import VideoScriptRequest, VideoSocialMetadataRequest
 from app.services import llm
+from app.services import web_search_facts
 
 
 def _auth_headers() -> dict[str, str]:
@@ -28,6 +29,62 @@ RUN_INTEGRATION_TESTS = os.environ.get("MPT_RUN_INTEGRATION_TESTS", "").lower() 
     "true",
     "yes",
 }
+
+
+class TestWebFactsInPrompt(unittest.TestCase):
+    """Web search results fetched before scripting are injected into the
+    script prompt so names/prices come from sources, never LLM-invented."""
+
+    def test_build_script_prompt_injects_facts_with_sources(self):
+        prompt = llm.build_script_prompt(
+            "best francesinha Porto",
+            language="pt",
+            video_script_prompt="keep the tone casual",
+            facts=[
+                {
+                    "text": "Cafe Santiago serves the classic francesinha for about 11 euros.",
+                    "url": "https://example.com/porto-1",
+                }
+            ],
+        )
+
+        self.assertIn("Cafe Santiago serves the classic francesinha", prompt)
+        self.assertIn("source: https://example.com/porto-1", prompt)
+        # The facts block must come BEFORE the additional user requirements —
+        # keep contract context first, the user prompt last.
+        self.assertLess(
+            prompt.index("Web search results"),
+            prompt.index("Additional User Requirements"),
+        )
+        # Search snippets are not verified: the label must not claim it.
+        self.assertNotIn("Verified", prompt)
+
+    def test_build_script_prompt_without_facts_has_no_facts_block(self):
+        prompt = llm.build_script_prompt("how redis works", language="en")
+
+        self.assertNotIn("Web search results", prompt)
+
+    def test_generate_script_fetches_facts_for_the_subject(self):
+        with patch.object(
+            llm, "_generate_response_with_fallback", return_value="clean script body"
+        ) as generate, patch.object(
+            web_search_facts,
+            "fetch_facts",
+            return_value=[
+                {
+                    "text": "Francesinha Columbus opens at 12:00.",
+                    "url": "https://example.com/porto-2",
+                }
+            ],
+        ) as fetch:
+            llm.generate_script(video_subject="best francesinha Porto", language="pt")
+
+        fetch.assert_called_once()
+        self.assertEqual(fetch.call_args.args[0], "best francesinha Porto")
+        fetch.assert_called_with(
+            "best francesinha Porto", language="pt"
+        )
+        self.assertIn("Francesinha Columbus opens at 12:00.", generate.call_args.kwargs["prompt"])
 
 
 class TestScriptPromptOptions(unittest.TestCase):
