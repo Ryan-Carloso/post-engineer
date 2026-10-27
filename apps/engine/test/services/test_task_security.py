@@ -57,7 +57,7 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
             patch("socket.getaddrinfo", return_value=_addrinfo(*resolved_ips)),
             patch("requests.get", return_value=response or _FakeImageResponse()),
             patch.object(tm.subtitle, "file_to_subtitles", return_value=[]),
-            patch.object(tm, "_find_hook_end_seconds", return_value=1.0),
+            patch.object(tm.persona_hook, "_find_hook_end_seconds", return_value=1.0),
             patch.object(tm.longcat, "generate_intro", return_value=("intro.mp4", 0.05, "job-1")),
             patch.object(
                 tm.video, "replace_video_intro_with_lipsync", return_value="final.mp4"

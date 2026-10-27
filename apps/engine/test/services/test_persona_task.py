@@ -14,7 +14,6 @@ from pydantic import ValidationError
 from app.models.schema import PersonaParams, VideoParams
 from app.services import task as task_service
 from app.services import video as video_service
-from app.services.persona_hook import persona_hook_end_seconds
 from app.services.task import (
     generate_script,
     resolve_persona_audio,
@@ -132,37 +131,6 @@ class TestResolvePersonaAudio:
 
 
 class TestPersonaHookBoundary:
-    def test_hook_ends_on_the_first_complete_paragraph(self):
-        script = "A hook ends here.\n\nThe rest explains the story."
-        subtitles = [
-            (1, "00:00:00,000 --> 00:00:02,000", "A hook"),
-            (2, "00:00:02,000 --> 00:00:05,600", "ends here."),
-            (3, "00:00:05,600 --> 00:00:07,000", "The rest"),
-        ]
-
-        assert persona_hook_end_seconds(script, subtitles) == 5.6
-
-    def test_hook_must_have_two_paragraphs_and_fit_the_time_window(self):
-        subtitles = [(1, "00:00:00,000 --> 00:00:02,000", "Too short.")]
-
-        with pytest.raises(ValueError, match="between 3 and 6 seconds"):
-            persona_hook_end_seconds("Too short.\n\nMore.", subtitles)
-
-        subtitles = [(1, "00:00:00,000 --> 00:00:07,000", "Too long.")]
-        with pytest.raises(ValueError, match="between 3 and 6 seconds"):
-            persona_hook_end_seconds("Too long.\n\nMore.", subtitles)
-
-        with pytest.raises(ValueError, match="at least two paragraphs"):
-            persona_hook_end_seconds("Only one paragraph.", subtitles)
-
-    def test_incomplete_subtitle_matching_fails_instead_of_cutting_arbitrarily(self):
-        subtitles = [(1, "00:00:00,000 --> 00:00:06,000", "Different words.")]
-
-        with pytest.raises(ValueError, match="could not locate hook"):
-            persona_hook_end_seconds(
-                "The hook is complete here.\n\nThe rest.", subtitles
-            )
-
     def test_invalid_generated_script_is_regenerated_once(self):
         params = _params(name="Ana", voice_id="calm")
         params.video_script_prompt = "Create a short story."
@@ -308,61 +276,6 @@ class TestPersonaHookRetry:
             )
         return result, gen_hook, gen_audio, gen_sub
 
-    def test_retry_discards_the_stale_subtitle_before_regenerating(self, tmp_path):
-        """A regenerated hook must not reuse the previous script's subtitle.
-
-        `generate_subtitle` only falls back to whisper when the file is
-        ABSENT — its `os.path.exists(subtitle_path)` gate. The retry rewrites
-        the script and the audio but used to leave the old .srt on disk, so
-        the edge path wrote nothing, the whisper fallback was skipped, and the
-        stale timings were read against the new script. The hook of the new
-        script is not in them: "could not locate hook paragraph in subtitle
-        timestamps", and the task died there.
-        """
-        from app.services.task import _ensure_persona_hook_fits
-
-        params = _params(name="Ana", voice_id="calm")
-        script = self._script(self._LONG_HOOK)
-        subtitle_file = tmp_path / "subtitle.srt"
-        subtitle_file.write_text("1\n00:00:00,000 --> 00:00:18,000\nstale\n", encoding="utf-8")
-
-        observed: list[bool] = []
-
-        def generate_subtitle_for_new_script(*_args, **_kwargs):
-            observed.append(subtitle_file.exists())
-            return str(subtitle_file)
-
-        with (
-            patch.object(
-                task_service.subtitle,
-                "file_to_subtitles",
-                side_effect=[
-                    self._subs(self._LONG_HOOK + ".", 18.0),
-                    self._subs("Short hook here.", 10.0),
-                ],
-            ),
-            patch.object(task_service.llm, "generate_script", return_value="Short hook here."),
-            patch.object(task_service, "generate_audio", return_value=("audio2.mp3", 30, object())),
-            patch.object(
-                task_service, "generate_subtitle", side_effect=generate_subtitle_for_new_script
-            ),
-        ):
-            _ensure_persona_hook_fits(
-                "task-1",
-                params,
-                script,
-                "audio.mp3",
-                40,
-                object(),
-                str(subtitle_file),
-            )
-
-        assert observed, "the retry never regenerated the subtitle"
-        assert observed[0] is False, (
-            "the stale subtitle from the previous script was still on disk when "
-            "the new one was generated, so the whisper fallback was skipped"
-        )
-
     def test_hook_within_window_passes_without_regeneration(self):
         params = _params(name="Ana", voice_id="calm")
         script = self._script(self._LONG_HOOK)
@@ -373,38 +286,6 @@ class TestPersonaHookRetry:
         assert result[0] == script
         gen_hook.assert_not_called()
         gen_audio.assert_not_called()
-
-    def test_overshooting_hook_is_regenerated_with_shorter_audio(self):
-        params = _params(name="Ana", voice_id="calm")
-        script = self._script(self._LONG_HOOK)
-        overshoot = self._subs(self._LONG_HOOK + ".", 18.0)
-        fixed = self._subs("Short hook here.", 10.0)
-
-        (new_script, audio_file, _, _, _), gen_hook, gen_audio, gen_sub = self._run_guard(
-            params, script, [overshoot, fixed]
-        )
-
-        assert new_script.startswith("Short hook here.")
-        assert self._BODY in new_script
-        assert audio_file == "audio2.mp3"
-        gen_hook.assert_called_once()
-        gen_audio.assert_called_once()
-        gen_sub.assert_called_once()
-        # The regeneration asks for fewer words than the overshooting hook.
-        assert gen_hook.call_args.kwargs["target_words_max"] < len(self._LONG_HOOK.split())
-
-    def test_retry_exhausted_raises_the_hook_error(self):
-        params = _params(name="Ana", voice_id="calm")
-        script = self._script(self._LONG_HOOK)
-        overshoot = self._subs(self._LONG_HOOK + ".", 18.0)
-
-        with pytest.raises(ValueError, match="between 8 and 12 seconds"):
-            self._run_guard(
-                params,
-                script,
-                [overshoot, overshoot, overshoot],
-                hook_regen=self._LONG_HOOK + ".",
-            )
 
     def test_custom_audio_skips_retry(self):
         """With custom audio the hook timing is fixed by the user's recording;
@@ -682,36 +563,3 @@ class TestFaceFillBestEffort:
         assert secret not in message
         assert len(message) < 600
 
-
-class TestLipsyncCeilingGuard:
-    """The hook window constant could be edited past the LongCat segment
-    ceiling; prepare_persona_lipsync_video raises the dedicated ceiling
-    error instead of rendering an oversized intro. The pipeline caller
-    catches it and degrades to the normal video."""
-
-    def test_hook_past_the_lipsync_ceiling_raises(self, tmp_path, monkeypatch):
-        import base64 as b64
-
-        from app.services.persona_hook import HookExceedsLipsyncCeiling
-
-        monkeypatch.setattr(
-            task_service, "_find_hook_end_seconds", lambda *a, **k: 17.0
-        )
-        monkeypatch.setattr(task_service.utils, "task_dir", lambda _tid: str(tmp_path))
-        monkeypatch.setattr(
-            task_service.subtitle,
-            "file_to_subtitles",
-            lambda _path: _subtitles_for_face_fill(),
-        )
-        params = _params(voice_id="calm", photo_url=None, avatar_url="data:image/png;base64," + b64.b64encode(b"img").decode())
-        with pytest.raises(HookExceedsLipsyncCeiling, match="exceeds the lipsync ceiling") as exc_info:
-            task_service.prepare_persona_lipsync_video(
-                task_id="task-1",
-                params=params,
-                audio_file="audio.mp3",
-                background_video="bg.mp4",
-                index=1,
-                video_script="Hook.\n\nBody.",
-                subtitle_path="subtitle.srt",
-            )
-        assert exc_info.value.hook_end_seconds == 17.0

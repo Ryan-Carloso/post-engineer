@@ -1,20 +1,17 @@
-"""Persona hook measurement, retry, and telemetry helpers.
+"""Persona hook measurement, lipsync window, and telemetry helpers.
 
 Extracted from app.services.task so the task module stays under the
-file-size ratchet. The app.services imports here are leaf modules (llm,
-analytics) that never import back into the task pipeline, so there is no
-import cycle.
+file-size ratchet. The app.services import here is a leaf module
+(analytics) that never imports back into the task pipeline, so there is
+no import cycle.
 """
 
-import os
 import re
 from typing import Sequence
 
 from loguru import logger
 
 from app.config import config
-from app.models.schema import VideoParams
-from app.services import llm
 from app.services.analytics import track_event
 
 
@@ -29,74 +26,24 @@ PERSONA_HOOK_TARGET_WORDS_MIN = 20
 PERSONA_HOOK_TARGET_WORDS_MAX = 30
 
 
-# A hook that misses the quality window is only a cosmetic miss: the intro
-# runs shorter or longer than ideal, but the video is still watchable.
-# Failing the whole generation over it punishes the user for LLM variance,
-# so once the retries are exhausted the pipeline ships the best effort
-# instead. Past this duration the intro is structurally broken (it eats the
-# opening and no retry can salvage it), so the task still fails as before.
-PERSONA_HOOK_HARD_FAIL_SECONDS = 15.0
-
-
-def resolve_exhausted_hook(
-    end_seconds: float, window_min: float, window_max: float, attempts: int
-) -> None:
-    """Terminal decision after the persona hook retries are exhausted.
-
-    Raises only when the hook runs past PERSONA_HOOK_HARD_FAIL_SECONDS.
-    Otherwise logs the best-effort shipment and returns, letting the caller
-    proceed with the mistimed hook instead of failing the user's video.
-    """
-    if end_seconds > PERSONA_HOOK_HARD_FAIL_SECONDS:
-        raise ValueError(
-            f"persona hook must end between {window_min:g} and "
-            f"{window_max:g} seconds, got {end_seconds:g}"
-        )
-    logger.warning(
-        f"persona hook ended at {end_seconds:g}s, outside the "
-        f"{window_min:g}-{window_max:g}s window after {attempts} attempts; "
-        "shipping best effort instead of failing the task"
-    )
-
-
-class HookExceedsLipsyncCeiling(ValueError):
-    """The hook fits the product rule but not the GPU lipsync renderer.
-
-    A hook in the 12-15s dead zone ships best-effort upstream (under the
-    15s hard fail) yet would SIGKILL the Modal container past the LongCat
-    segment ceiling. Subclasses ValueError so existing ceiling guards
-    keep failing loudly; callers that degrade instead catch this type.
-    """
-
-    def __init__(self, hook_end_seconds: float, ceiling_seconds: float):
-        self.hook_end_seconds = hook_end_seconds
-        self.ceiling_seconds = ceiling_seconds
-        super().__init__(
-            "persona hook exceeds the lipsync ceiling: hook ends at "
-            f"{hook_end_seconds:g}s, max {ceiling_seconds:g}s"
-        )
-
-
-def ensure_hook_within_lipsync_ceiling(hook_end_seconds: float, ceiling_seconds: float) -> None:
-    """Fail fast when the hook cannot be rendered by the GPU lipsync pipeline.
-
-    Lets the caller degrade to the normal video (hook still spoken) instead
-    of burning GPU on a render the container cannot survive.
-    """
-    if hook_end_seconds > ceiling_seconds:
-        raise HookExceedsLipsyncCeiling(hook_end_seconds, ceiling_seconds)
+# A hook outside the 8-12s quality window is only a cosmetic miss: the
+# intro runs shorter or longer than ideal, but the video is watchable. It
+# never fails the task and never regenerates the hook — a regeneration
+# re-runs the LLM plus the whole TTS (minutes of CPU for local voices).
+# Past the GPU ceiling the intro is capped instead (lipsync_window_seconds).
 
 
 def report_lipsync_intro_skipped(task_id: str, hook_end_seconds: float) -> None:
-    """Log and track a lipsync-intro skip over the GPU ceiling.
+    """Log and track a skipped lipsync intro.
 
-    The video still ships (normal layout, hook spoken) — this records why
-    the intro is missing. immediate=True: a lone skip event would otherwise
-    sit in the analytics queue.
+    Only when the hook end can be neither measured (no timed subtitles) nor
+    estimated (audio length unknown) — a real failure, not a normal branch.
+    The video still ships (normal layout, hook spoken). immediate=True: a
+    lone skip event would otherwise sit in the analytics queue.
     """
     logger.warning(
-        f"persona hook exceeds the lipsync ceiling ({hook_end_seconds:g}s); "
-        "skipping lipsync intro, shipping normal video"
+        f"persona hook end unknown ({hook_end_seconds:g}s) and audio length "
+        "unknown; skipping lipsync intro, shipping normal video"
     )
     track_event(
         "persona_hook_lipsync_skipped",
@@ -105,85 +52,167 @@ def report_lipsync_intro_skipped(task_id: str, hook_end_seconds: float) -> None:
     )
 
 
+def report_hook_outside_window(task_id: str, hook_end_seconds: float) -> None:
+    """Log and track a hook outside the quality window; the video ships as is."""
+    logger.warning(
+        f"persona hook ended at {hook_end_seconds:g}s, outside the "
+        f"{PERSONA_HOOK_MIN_SECONDS:g}-{PERSONA_HOOK_MAX_SECONDS:g}s window; "
+        "shipping it as is (no regeneration)"
+    )
+    track_event(
+        "persona_hook_outside_window",
+        {"task_id": task_id, "hook_end_seconds": round(hook_end_seconds, 2)},
+    )
+
+
+def report_hook_clamped(task_id: str, hook_end_seconds: float, window_seconds: float) -> None:
+    """Log and track a hook longer than the lipsync ceiling.
+
+    The persona lip-syncs the first `window_seconds`; the rest of the hook
+    plays as voice over the material.
+    """
+    logger.warning(
+        f"persona hook ends at {hook_end_seconds:g}s, past the lipsync ceiling; "
+        f"lip-syncing the first {window_seconds:g}s only"
+    )
+    track_event(
+        "persona_hook_clamped",
+        {
+            "task_id": task_id,
+            "hook_end_seconds": round(hook_end_seconds, 2),
+            "lipsync_seconds": round(window_seconds, 2),
+        },
+    )
+
+
+def report_hook_estimated(task_id: str, hook_end_seconds: float) -> None:
+    """Log and track a hook end estimated from the audio length.
+
+    Kept apart from the skip event: an estimate still renders the intro.
+    """
+    logger.warning(
+        f"persona hook end not in the subtitles; estimated at {hook_end_seconds:g}s "
+        "from the audio length"
+    )
+    track_event(
+        "persona_hook_estimated",
+        {"task_id": task_id, "hook_end_seconds": round(hook_end_seconds, 2)},
+    )
+
+
+def _spoken_length(text: str) -> int:
+    return len(re.sub(r"[^\w]+", "", text.casefold()))
+
+
+def estimate_hook_end_seconds(video_script: str, audio_seconds: float) -> float:
+    """The hook's share of the audio, by spoken characters; 0.0 when unknown."""
+    paragraphs = [p for p in re.split(r"\n\s*\n", video_script.strip()) if p.strip()]
+    total = sum(_spoken_length(p) for p in paragraphs)
+    if audio_seconds <= 0 or total == 0:
+        return 0.0
+    return audio_seconds * _spoken_length(paragraphs[0]) / total
+
+
+def hook_end_from_words(
+    video_script: str, words: Sequence[tuple[str, float, float]]
+) -> float:
+    """End of the hook's last word, from Whisper word boundaries; 0.0 if none.
+
+    Walks the words until their spoken length reaches the hook's (length,
+    not exact text, so Whisper rewording still lines up). Speech shorter
+    than the hook ends at the last word.
+    """
+    paragraphs = [p for p in re.split(r"\n\s*\n", video_script.strip()) if p.strip()]
+    hook_length = _spoken_length(paragraphs[0]) if paragraphs else 0
+    spoken = 0
+    for text, _start, end in words:
+        spoken += _spoken_length(text)
+        if spoken >= hook_length:
+            return end
+    return words[-1][2] if words else 0.0
+
+
+def resolve_lipsync_window(
+    task_id: str,
+    video_script: str,
+    subtitles: Sequence[tuple[int, str, str]],
+    audio_seconds: float,
+    ceiling_seconds: float,
+    words: Sequence[tuple[str, float, float]] = (),
+) -> float | None:
+    """Seconds of lipsync intro to render, or None to ship without one.
+
+    Exact from Whisper word boundaries when they were kept; else measured
+    from the subtitle cues when they carry timed speech; otherwise
+    estimated from the audio length (subtitles off, or custom audio on a
+    provider without timings) — an imprecise cut only moves where the face
+    hands over to the material. None only when the audio length is also
+    unknown. The result is capped at the GPU ceiling.
+    """
+    hook_end = hook_end_from_words(video_script, words)
+    if hook_end <= 0:
+        hook_end = _find_hook_end_seconds(video_script, subtitles)
+    if hook_end <= 0:
+        hook_end = estimate_hook_end_seconds(video_script, audio_seconds)
+        if hook_end <= 0:
+            report_lipsync_intro_skipped(task_id, hook_end)
+            return None
+        report_hook_estimated(task_id, hook_end)
+    window = lipsync_window_seconds(hook_end, ceiling_seconds)
+    if window < hook_end:
+        report_hook_clamped(task_id, hook_end, window)
+    return window
+
+
+def lipsync_window_seconds(hook_end_seconds: float, ceiling_seconds: float) -> float:
+    """Seconds of lipsync intro: the hook, capped at the GPU ceiling."""
+    return min(hook_end_seconds, ceiling_seconds)
+
+
+_CUE_TIMING_RE = re.compile(
+    r"(\d+):(\d+):(\d+)[,\.](\d+)\s*-->\s*(\d+):(\d+):(\d+)[,\.](\d+)"
+)
+
+
+def _timestamp_seconds(hours: str, minutes: str, seconds: str, millis: str) -> float:
+    return int(hours) * 3600 + int(minutes) * 60 + int(seconds) + int(millis) / 1000
+
+
 def _find_hook_end_seconds(
     video_script: str,
     subtitles: Sequence[tuple[int, str, str]],
 ) -> float:
-    """Return the raw subtitle end boundary of the first script paragraph.
+    """Return where the hook (first script paragraph) ends in the speech.
 
-    Raises ValueError for structural problems (fewer than two paragraphs,
-    hook without terminal punctuation, hook not found in the subtitles).
-    The 3-6s window check lives in persona_hook_end_seconds so callers that
-    need the raw measurement (e.g. the hook retry) can decide for themselves.
+    Never raises: the hook timing only shapes the lipsync intro, so it must
+    never fail the task. Matching is by spoken length, not exact words, so
+    it survives Whisper rewording ("90 minute" -> "ninety-minute"). Inside
+    the cue that crosses the hook's length the end is interpolated by the
+    share of characters: Whisper cues are coarse and one cue can hold the
+    hook plus part of the body. A script with one paragraph is all hook;
+    speech shorter than the hook ends at the last cue. 0.0 means there is
+    no timed speech to measure.
     """
-    paragraphs = [
-        paragraph.strip()
-        for paragraph in re.split(r"\n\s*\n", video_script.strip())
-        if paragraph.strip()
-    ]
-    if len(paragraphs) < 2:
-        raise ValueError("persona script must contain at least two paragraphs")
-    if not re.search(r"[.!?。！？]$", paragraphs[0]):
-        raise ValueError("persona hook must end with terminal punctuation")
-
     def normalize(text: str) -> str:
         return re.sub(r"[^\w]+", "", text.casefold())
 
-    hook = normalize(paragraphs[0])
-    spoken = ""
+    paragraphs = [p for p in re.split(r"\n\s*\n", video_script.strip()) if p.strip()]
+    hook_length = len(normalize(paragraphs[0])) if paragraphs else 0
+    spoken_length = 0
+    last_end = 0.0
     for _, timing, text in subtitles:
-        match = re.search(
-            r"\d+:\d+:\d+[,\.]\d+\s*-->\s*(\d+):(\d+):(\d+)[,\.](\d+)",
-            timing,
-        )
+        match = _CUE_TIMING_RE.search(timing)
         if match is None:
             continue
-        spoken += normalize(text)
-        if hook and hook in spoken:
-            return (
-                int(match.group(1)) * 3600
-                + int(match.group(2)) * 60
-                + int(match.group(3))
-                + int(match.group(4)) / 1000
-            )
-
-    raise ValueError("could not locate hook paragraph in subtitle timestamps")
-
-
-def persona_hook_end_seconds(
-    video_script: str,
-    subtitles: Sequence[tuple[int, str, str]],
-    minimum_seconds: float = 3.0,
-    maximum_seconds: float = 6.0,
-) -> float:
-    """Return the subtitle boundary that completes the first script paragraph."""
-    end_seconds = _find_hook_end_seconds(video_script, subtitles)
-    if not minimum_seconds <= end_seconds <= maximum_seconds:
-        raise ValueError(
-            f"persona hook must end between {minimum_seconds:g} and "
-            f"{maximum_seconds:g} seconds, got {end_seconds:g}"
-        )
-    return end_seconds
-
-
-def _discard_stale_subtitle(subtitle_path: str) -> None:
-    """Delete a subtitle that no longer matches the script it was cut from.
-
-    Best-effort on purpose: a missing file is already the state we want, and a
-    locked file must not fail the retry — the regenerated subtitle simply
-    overwrites it.
-    """
-    if not subtitle_path:
-        return
-    try:
-        os.remove(subtitle_path)
-    except FileNotFoundError:
-        return
-    except OSError as exc:
-        logger.warning(
-            f"could not remove the stale subtitle {subtitle_path}: {exc}; "
-            "the regenerated subtitle may be skipped by the whisper fallback"
-        )
+        start = _timestamp_seconds(*match.groups()[:4])
+        end = _timestamp_seconds(*match.groups()[4:])
+        cue_length = len(normalize(text))
+        last_end = end
+        if cue_length and spoken_length + cue_length >= hook_length:
+            share = (hook_length - spoken_length) / cue_length
+            return start + (end - start) * share
+        spoken_length += cue_length
+    return last_end
 
 
 _SENTENCE_END_RE = re.compile(r"(?<=[.!?。！？])\s+")
@@ -238,104 +267,3 @@ def _limit_generated_script(script: str) -> str:
                 return f"{trimmed_head}{separator}{closing}"
         return closing
     return _cut_to_budget(normalized, limit)
-
-
-def _persisted_script_angle(task_id: str) -> str:
-    """Return the script angle persisted on the task record, or "".
-
-    resolve_script_angle stored the angle when the script was first
-    generated; the timing retry runs later (after audio/subtitles), in a
-    different call frame that never received it. A read failure degrades
-    to no angle — the retry still works, just on the bare topic — but it
-    is logged, never silently swallowed.
-    """
-    from app.services import state as sm
-
-    try:
-        task = sm.state.get_task(task_id)
-    except Exception as exc:  # noqa: BLE001 - degrade to no angle, logged
-        logger.warning(f"could not read the persisted script angle for {task_id}: {exc}")
-        return ""
-    angle = task.get("script_angle") if task is not None else None
-    return angle if isinstance(angle, str) else ""
-
-
-def _regenerate_fitting_hook(
-    task_id: str,
-    params: VideoParams,
-    video_script: str,
-    measured_seconds: float,
-    angle: str | None = None,
-) -> str:
-    """Regenerate only the hook paragraph, sized toward the configured window.
-
-    The rest of the script (body paragraphs) is kept verbatim: only the
-    hook timing was wrong. Emits a persona_hook_retry event per attempt so a
-    retry loop that never converges is diagnosable from PostHog without
-    reaching for VPS logs. Only counts and timings are reported — never the
-    script text, which is user content.
-
-    The regenerated hook is built around the same angle as the original
-    script: an explicit `angle` wins, otherwise the angle persisted on the
-    task record is reused. Dropping it would drift the retry onto the bare
-    topic the angle was chosen to replace.
-    """
-    if angle is None:
-        angle = _persisted_script_angle(task_id)
-    window_min = PERSONA_HOOK_MIN_SECONDS
-    window_max = PERSONA_HOOK_MAX_SECONDS
-    words_min = PERSONA_HOOK_TARGET_WORDS_MIN
-    words_max = PERSONA_HOOK_TARGET_WORDS_MAX
-    paragraphs = [
-        paragraph.strip()
-        for paragraph in re.split(r"\n\s*\n", video_script.strip())
-        if paragraph.strip()
-    ]
-    hook_words = len(paragraphs[0].split())
-    # Aim for the window center: scale the observed word count by the
-    # target/measured ratio, clamped to a sane hook size.
-    if measured_seconds > 0:
-        word_cap = round(hook_words * (window_min + window_max) / 2 / measured_seconds)
-    else:
-        word_cap = (words_min + words_max) // 2
-    word_cap = max(words_min, min(words_max, word_cap))
-    logger.warning(
-        f"persona hook ended at {measured_seconds:g}s ({hook_words} words), "
-        f"outside the {window_min:g}-{window_max:g}s window; regenerating a hook "
-        f"of at most {word_cap} words"
-    )
-    track_event(
-        "persona_hook_retry",
-        {
-            "task_id": task_id,
-            "measured_seconds": round(measured_seconds, 2),
-            "hook_words": hook_words,
-            "word_cap": word_cap,
-        },
-    )
-    body = "\n\n".join(paragraphs[1:])
-    # Contract and body come FIRST, the user prompt last: llm.generate_script
-    # caps video_script_prompt at MAX_SCRIPT_PROMPT_LENGTH by keeping the
-    # head, so a near-limit user prompt placed first would silently truncate
-    # away the contract and the body the hook must open.
-    hook_prompt = (
-        f"Return only a standalone hook paragraph: "
-        f"one complete sentence of at most {word_cap} words ending with terminal "
-        f"punctuation, designed to take {window_min:g} to {window_max:g} seconds "
-        "when spoken. It must open this exact video, whose remaining "
-        f"narration is: {body}"
-    )
-    if params.video_script_prompt:
-        hook_prompt += f"\n\nAdditional user requirements: {params.video_script_prompt}"
-    hook = llm.generate_script(
-        video_subject=params.video_subject,
-        language=params.video_language,
-        paragraph_number=1,
-        video_script_prompt=hook_prompt,
-        custom_system_prompt=params.custom_system_prompt,
-        target_words_min=words_min,
-        target_words_max=word_cap,
-        angle=angle,
-        include_cta=False,
-    )
-    return _limit_generated_script(f"{hook.strip()}\n\n{body}")

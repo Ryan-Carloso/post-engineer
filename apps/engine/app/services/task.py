@@ -37,11 +37,8 @@ from app.services.persona_hook import (
     PERSONA_HOOK_MIN_SECONDS,
     PERSONA_HOOK_TARGET_WORDS_MAX,
     PERSONA_HOOK_TARGET_WORDS_MIN,
-    _discard_stale_subtitle,
     _find_hook_end_seconds,
     _limit_generated_script,
-    _regenerate_fitting_hook,
-    resolve_exhausted_hook,
 )
 from app.services.bgm_history import history_repository
 from app.services.analytics import nonempty_error_reason, scrub_secret_values, track_event
@@ -440,10 +437,6 @@ def persona_lipsync_active(params: VideoParams) -> bool:
     return persona.photo_url is not None or persona.avatar_url is not None
 
 
-# Regeneration attempts for an overshooting persona hook before the task
-# fails; each attempt costs one LLM plus one TTS call.
-_PERSONA_HOOK_MAX_RETRIES = 2
-
 # Product-fixed persona pacing ("always this way"): the face-fill outro
 # closes the video. Deliberately NOT config-driven — validated against GPU
 # intro cost and lipsync quality windows; tunable knobs reopen those
@@ -466,55 +459,18 @@ def _ensure_persona_hook_fits(
     sub_maker,
     subtitle_path: str,
 ):
-    """Validate the persona hook duration right after subtitles exist.
+    """Measure the persona hook once, right after subtitles exist.
 
-    The lip-sync intro wants the hook to end inside the configured persona
-    hook window. When TTS generated the audio, a mistimed hook is LLM
-    variance — regenerate a fitting hook (plus its audio/subtitles) instead
-    of failing the whole task, unless it runs past PERSONA_HOOK_HARD_FAIL_SECONDS.
-    With custom audio the hook timing is fixed by the user's recording, so a
-    mistiming still fails the task as before.
-
-    Returns the (possibly regenerated) script/audio/subtitle tuple. A
-    (None, None, None) audio triple means generate_audio already failed the
-    task; the caller handles it through the normal audio-failure path.
+    A hook outside the quality window is logged and tracked, never
+    regenerated (that re-runs the LLM plus the whole TTS) and never fails
+    the task. The lipsync intro later caps it at the GPU ceiling. Returns
+    the script/audio/subtitle tuple unchanged.
     """
-    if not persona_lipsync_active(params) or sub_maker is None:
-        return video_script, audio_file, audio_duration, sub_maker, subtitle_path
-    window_min = PERSONA_HOOK_MIN_SECONDS
-    window_max = PERSONA_HOOK_MAX_SECONDS
-    attempts = _PERSONA_HOOK_MAX_RETRIES + 1
-    for attempt in range(attempts):
-        try:
-            end_seconds = _find_hook_end_seconds(
-                video_script, subtitle.file_to_subtitles(subtitle_path)
-            )
-        except ValueError:
-            # Structural hook problem (missing paragraph, no terminal
-            # punctuation, hook not found in subtitles): regenerating a
-            # shorter hook cannot fix it — fail the task as before.
-            raise
-        if window_min <= end_seconds <= window_max:
-            return video_script, audio_file, audio_duration, sub_maker, subtitle_path
-        if attempt + 1 >= attempts:
-            resolve_exhausted_hook(end_seconds, window_min, window_max, attempts)
-            track_event(
-                "persona_hook_best_effort",
-                {"task_id": task_id, "hook_end_seconds": round(end_seconds, 2)},
-            )
-            return video_script, audio_file, audio_duration, sub_maker, subtitle_path
-        video_script = _regenerate_fitting_hook(task_id, params, video_script, end_seconds)
-        audio_file, audio_duration, sub_maker = generate_audio(task_id, params, video_script)
-        if not audio_file:
-            return video_script, None, None, None, subtitle_path
-        # The retry rewrites the script, so the existing subtitle describes a
-        # script that no longer exists. `generate_subtitle` only falls back to
-        # whisper when the file is ABSENT (its os.path.exists gate), so leaving
-        # it behind makes the edge path write nothing, skips the fallback, and
-        # hands the stale timings back for a hook that is not in them.
-        _discard_stale_subtitle(subtitle_path)
-        subtitle_path = generate_subtitle(task_id, params, video_script, sub_maker, audio_file)
-    raise AssertionError("unreachable: hook retry loop always returns or raises")
+    if persona_lipsync_active(params) and sub_maker is not None:
+        end_seconds = _find_hook_end_seconds(video_script, subtitle.file_to_subtitles(subtitle_path))
+        if not PERSONA_HOOK_MIN_SECONDS <= end_seconds <= PERSONA_HOOK_MAX_SECONDS:
+            persona_hook.report_hook_outside_window(task_id, end_seconds)
+    return video_script, audio_file, audio_duration, sub_maker, subtitle_path
 
 
 def _resolve_script_angle(task_id: str, params: VideoParams) -> str:
@@ -1060,22 +1016,19 @@ def generate_final_videos(
     video_for_render = combined_video_path
     if persona_lipsync_active(params):
         logger.info("generating persona lip-sync intro")
-        try:
-            video_for_render, intro_cost_usd, intro_job_id = prepare_persona_lipsync_video(
-                task_id=task_id,
-                params=params,
-                audio_file=audio_file,
-                background_video=combined_video_path,
-                index=1,
-                video_script=video_script,
-                subtitle_path=subtitle_path,
-            )
-        except persona_hook.HookExceedsLipsyncCeiling as exc:
-            persona_hook.report_lipsync_intro_skipped(task_id, exc.hook_end_seconds)
-        else:
-            intro_report = IntroCostReport(
-                ran=True, cost_usd=intro_cost_usd, job_id=intro_job_id
-            )
+        intro = prepare_persona_lipsync_video(
+            task_id=task_id,
+            params=params,
+            audio_file=audio_file,
+            background_video=combined_video_path,
+            index=1,
+            video_script=video_script,
+            subtitle_path=subtitle_path,
+        )
+        # None: no intro (already reported); the normal video ships.
+        if intro is not None:
+            video_for_render, intro_cost_usd, intro_job_id = intro
+            intro_report = IntroCostReport(ran=True, cost_usd=intro_cost_usd, job_id=intro_job_id)
         # Experimental face-fill: close the video on the persona so weak
         # stock never has to fill the tail. Best-effort — ANY failure
         # (Modal down, unreadable file) degrades to the intro-only video;
@@ -1165,12 +1118,24 @@ def prepare_persona_lipsync_video(
     index: int,
     video_script: str,
     subtitle_path: str,
-) -> tuple[str, float | None, str | None]:
+) -> tuple[str, float | None, str | None] | None:
     """Generate the persona intro through a complete hook paragraph.
 
     Returns (output_path, intro_cost_usd, intro_job_id): the Modal GPU cost
-    in USD (None when the job reports no cost) and the Modal job id.
+    in USD (None when the job reports no cost) and the Modal job id. Returns
+    None, before any download or GPU work, when the hook end can be neither
+    measured nor estimated (persona_hook.resolve_lipsync_window).
     """
+    # Measured from the subtitles, else estimated from the audio length;
+    # capped at the GPU ceiling so the Modal container never sees a render
+    # past the LongCat segment ceiling (the rest of the hook plays as voice).
+    hook_duration = persona_hook.resolve_lipsync_window(
+        task_id, video_script, subtitle.file_to_subtitles(subtitle_path),
+        voice.get_audio_duration(audio_file), PERSONA_LIPSYNC_MAX_SECONDS,
+        words=subtitle.file_to_words(subtitle_path),
+    )
+    if hook_duration is None:
+        return None
     persona = params.persona
     if persona is None:
         raise longcat.LongCatError("lip sync requires a persona")
@@ -1211,17 +1176,6 @@ def prepare_persona_lipsync_video(
                 f"persona image download failed: {exc}"
             ) from exc
 
-    subtitles = subtitle.file_to_subtitles(subtitle_path)
-    # Measure only: a hook that missed the quality window already shipped
-    # best-effort upstream — re-validating the window here would fail the
-    # video for the same mistiming. The GPU ceiling below still applies.
-    hook_duration = _find_hook_end_seconds(video_script, subtitles)
-    # Explicit GPU-ceiling guard: the hook is measured, not window-checked,
-    # above (a mistimed hook ships best-effort), so an oversized intro
-    # degrades to the normal video here instead of SIGKILLing inside the
-    # Modal container past the LongCat segment ceiling (pinned by
-    # test_hook_constants_stay_inside_the_gpu_ceiling).
-    persona_hook.ensure_hook_within_lipsync_ceiling(hook_duration, PERSONA_LIPSYNC_MAX_SECONDS)
     lipsync_path = path.join(task_dir, f"lipsync-intro-{index}.mp4")
     _, intro_cost_usd, intro_job_id = longcat.generate_intro(
         image_path=image_path,

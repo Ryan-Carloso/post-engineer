@@ -255,60 +255,6 @@ class TestCtaSafeTrim:
         assert result == closing
 
 
-class TestHookRegenerationContext:
-    def test_regenerated_hook_sees_the_body_and_has_no_cta(self):
-        params = _persona_params()
-        script = "Hook antigo e longo demais.\n\nCorpo do vídeo. Segue pra mais."
-        with patch.object(persona_hook.llm, "generate_script", return_value="Hook novo.") as generate:
-            result = persona_hook._regenerate_fitting_hook("hook-task", params, script, 20.0)
-
-        assert result == "Hook novo.\n\nCorpo do vídeo. Segue pra mais."
-        kwargs = generate.call_args.kwargs
-        assert kwargs["include_cta"] is False
-        assert "remaining narration is: Corpo do vídeo. Segue pra mais." in kwargs["video_script_prompt"]
-
-    def test_regenerated_hook_reuses_the_persisted_angle(self):
-        # The angle was resolved (and persisted on the task record) when the
-        # script was first generated; a timing retry must build the new hook
-        # around the same angle, not the bare topic.
-        from app.services import state as sm
-
-        params = _persona_params()
-        script = "Hook antigo e longo demais.\n\nCorpo do vídeo. Segue pra mais."
-        sm.persist_state_update(sm.state, "hook-angle-task", script_angle="O erro que amarga o café")
-        try:
-            with patch.object(persona_hook.llm, "generate_script", return_value="Hook novo.") as generate:
-                persona_hook._regenerate_fitting_hook("hook-angle-task", params, script, 20.0)
-        finally:
-            sm.state.delete_task("hook-angle-task")
-
-        assert generate.call_args.kwargs["angle"] == "O erro que amarga o café"
-
-    def test_regenerated_hook_without_a_persisted_angle_passes_no_angle(self):
-        params = _persona_params()
-        script = "Hook antigo e longo demais.\n\nCorpo do vídeo. Segue pra mais."
-        with patch.object(persona_hook.llm, "generate_script", return_value="Hook novo.") as generate:
-            persona_hook._regenerate_fitting_hook("hook-no-angle-task", params, script, 20.0)
-
-        assert generate.call_args.kwargs["angle"] == ""
-
-    def test_contract_and_body_survive_the_prompt_cap_with_a_near_limit_user_prompt(self):
-        # video_script_prompt is capped at 2000 chars by llm.generate_script
-        # (truncation keeps the head): the regeneration contract and the
-        # injected body must sit inside that head, ahead of the user prompt,
-        # or a near-limit user prompt silently drops them.
-        params = _persona_params(video_script_prompt="u" * 1900)
-        script = "Hook antigo e longo demais.\n\nCorpo do vídeo. Segue pra mais."
-        with patch.object(persona_hook.llm, "generate_script", return_value="Hook novo.") as generate:
-            persona_hook._regenerate_fitting_hook("hook-task", params, script, 20.0)
-
-        prompt = generate.call_args.kwargs["video_script_prompt"]
-        kept = prompt[: llm.MAX_SCRIPT_PROMPT_LENGTH]
-        assert "Return only a standalone hook paragraph" in kept
-        assert "remaining narration is: Corpo do vídeo. Segue pra mais." in kept
-        assert prompt.index("Return only a standalone hook paragraph") < prompt.index("u" * 100)
-
-
 class TestTaskPromptOrdering:
     def test_contracts_precede_a_near_limit_user_prompt_in_task_script_prompts(self):
         # Same cap hazard as the hook retry: llm truncates video_script_prompt

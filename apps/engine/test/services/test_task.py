@@ -1316,10 +1316,9 @@ class TestArchiveFinalVideos(unittest.TestCase):
             upload.assert_not_called()
 
 
-    def test_generate_final_videos_degrades_past_the_lipsync_ceiling(self):
-        """A hook in the 12-15s dead zone skips the lipsync intro and ships
-        the normal video instead of failing the task."""
-        from app.services.persona_hook import HookExceedsLipsyncCeiling
+    def test_generate_final_videos_degrades_when_the_hook_is_unmeasurable(self):
+        """No intro (hook end neither measured nor estimated) ships the
+        normal video instead of failing the task."""
 
         task_id = "ceiling-degrade"
         params = VideoParams(
@@ -1330,13 +1329,12 @@ class TestArchiveFinalVideos(unittest.TestCase):
                 voice_id="test-voice",
             ),
         )
-        ceiling = HookExceedsLipsyncCeiling(14.6, 12.0)
         with patch.object(tm.sm.state, "get_task", return_value={"user_id": "alice"}), \
             patch.object(tm.history_repository, "recent", return_value=[]), \
             patch.object(tm, "_update_task"), \
             patch.object(tm.video, "combine_videos"), \
             patch.object(
-                tm, "prepare_persona_lipsync_video", side_effect=ceiling
+                tm, "prepare_persona_lipsync_video", return_value=None
             ), \
             patch.object(
                 tm, "_apply_persona_face_fill", side_effect=lambda **k: k["video_file"]
@@ -1355,12 +1353,8 @@ class TestArchiveFinalVideos(unittest.TestCase):
         self.assertEqual(
             generate_video.call_args.kwargs["video_path"], combined_paths[0]
         )
-        # The skip is observable in PostHog.
-        track.assert_called_once_with(
-            "persona_hook_lipsync_skipped",
-            {"task_id": task_id, "hook_end_seconds": 14.6},
-            immediate=True,
-        )
+        # The skip was already reported inside the intro step.
+        track.assert_not_called()
 
 if __name__ == "__main__":
     unittest.main()

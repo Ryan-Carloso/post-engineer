@@ -293,19 +293,30 @@ def _connect() -> sqlite3.Connection:
     return connection
 
 
-def _fts_query(term: str) -> str:
+# Filler words carry no subject: in an any-word query they would match
+# nearly every title, so they are dropped there (never from the all-words
+# query, where they cannot widen the result).
+_ANY_WORD_STOPWORDS = frozenset(
+    {"a", "an", "the", "at", "of", "in", "on", "for", "to", "and", "or", "with", "by", "from", "is"}
+)
+
+
+def _fts_query(term: str, any_word: bool = False) -> str:
     """Build a safe FTS5 MATCH expression from free text.
 
     FTS5 raises on bare operators and unbalanced quotes, and the search terms
     come from an LLM-written script, so punctuation must be neutralized before
     it reaches the query. Every token is quoted, which makes it a literal term
-    and removes any operator meaning.
+    and removes any operator meaning. By default every token must match (FTS5
+    ANDs them); `any_word` ORs the non-filler tokens instead.
     """
     cleaned = "".join(char if char.isalnum() else " " for char in term)
     tokens = cleaned.split()
+    if any_word:
+        tokens = [token for token in tokens if token.casefold() not in _ANY_WORD_STOPWORDS]
     if not tokens:
         return ""
-    return " ".join(f'"{token}"' for token in tokens)
+    return (" OR " if any_word else " ").join(f'"{token}"' for token in tokens)
 
 
 def _asset_from_row(row: sqlite3.Row) -> Optional[SvgAsset]:
@@ -345,6 +356,10 @@ def search(search_term: str, limit: int = 5) -> List[SvgAsset]:
     match = _fts_query(search_term)
     if not match:
         return []
+    # All words first; when one unknown word zeroes that (LLM terms like
+    # "queue at restaurant"), retry with any word, ranked by relevance so
+    # assets matching more words come first.
+    fallback = _fts_query(search_term, any_word=True)
 
     query = (
         "SELECT s.title AS title, a.id AS id, a.data AS data "
@@ -357,6 +372,8 @@ def search(search_term: str, limit: int = 5) -> List[SvgAsset]:
     connection = _connect()
     try:
         rows = connection.execute(query, (match, max(1, int(limit)))).fetchall()
+        if not rows and fallback and fallback != match:
+            rows = connection.execute(query, (fallback, max(1, int(limit)))).fetchall()
     finally:
         connection.close()
 
