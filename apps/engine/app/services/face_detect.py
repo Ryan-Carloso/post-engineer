@@ -108,3 +108,36 @@ def video_contains_face(
                 cap.release()
             except Exception:
                 pass
+
+
+def image_contains_face(image_path: str) -> bool:
+    """True if the still image contains a detected human face (always on).
+
+    Same Haar cascade as video_contains_face, for stills such as place
+    photos. Missing OpenCV, an unloadable cascade or an unreadable image
+    make it return False: an unrelated failure never blocks the material.
+    """
+    cv2 = _load_cv2()
+    if cv2 is None:
+        return False
+    cascade = cv2.CascadeClassifier(
+        cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+    )
+    if cascade.empty():
+        logger.warning("face detection: Haar cascade failed to load; filter inactive")
+        return False
+    try:
+        image = cv2.imread(image_path)
+        if image is None:
+            return False
+        height, width = image.shape[:2]
+        if width > 360:
+            image = cv2.resize(
+                image, (360, max(1, int(height * 360 / width))), interpolation=cv2.INTER_AREA
+            )
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(24, 24))
+        return len(faces) > 0
+    except Exception as exc:  # noqa: BLE001 - never block over an unrelated failure
+        logger.warning(f"face detection failed for '{image_path}': {exc}")
+        return False

@@ -456,3 +456,8 @@ def startup_event():
         reconcile_pending_registrations()
     except Exception as exc:  # noqa: BLE001 - startup continues regardless
         logger.warning(f"cloned voice pending reconcile failed: {exc}")
+    # Visual verifier model: fetched into the persisted storage volume when
+    # [app] material_verification_enabled is on; a failure never stops the boot.
+    from app.services import siglip_model
+
+    siglip_model.warm()
