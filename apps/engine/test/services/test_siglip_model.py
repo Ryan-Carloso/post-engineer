@@ -158,6 +158,32 @@ def test_warm_fetches_the_model_when_verification_is_on(monkeypatch, tmp_path):
     assert called == [path]
 
 
+def test_warm_never_stops_the_boot_when_makedirs_fails(monkeypatch, tmp_path):
+    # Regression: warm() only caught VerificationUnavailable, but
+    # ensure_model's os.makedirs (and a getsize race in _present) raise
+    # OSError, which stopped the boot despite the "never stops the boot"
+    # contract in asgi.py and in warm()'s own docstring.
+    monkeypatch.setitem(siglip_model.config.app, "material_verification_enabled", True)
+    monkeypatch.setitem(siglip_model.config.app, "material_verification_model_path", str(tmp_path / "siglip" / siglip_model.MODEL_FILE))
+
+    def fail(path, fetch=None):
+        raise OSError("read-only model volume")
+
+    monkeypatch.setattr(siglip_model, "ensure_model", fail)
+    siglip_model.warm()  # must not raise
+
+
+def test_a_model_directory_os_error_is_unavailable_not_a_crash(monkeypatch, tmp_path, files):
+    def boom(path, exist_ok=False):
+        raise OSError("read-only volume")
+
+    monkeypatch.setattr(os, "makedirs", boom)
+    model_path = str(tmp_path / "siglip" / siglip_model.MODEL_FILE)
+    with pytest.raises(VerificationUnavailable) as caught:
+        siglip_model.ensure_model(model_path, fetch=_Fetcher(files))
+    assert str(tmp_path) not in str(caught.value)
+
+
 def test_warm_never_stops_the_boot_when_the_download_fails(monkeypatch, tmp_path):
     monkeypatch.setitem(siglip_model.config.app, "material_verification_enabled", True)
     monkeypatch.setitem(siglip_model.config.app, "material_verification_model_path", str(tmp_path / siglip_model.MODEL_FILE))

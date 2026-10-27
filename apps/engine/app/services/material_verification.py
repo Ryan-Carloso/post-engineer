@@ -4,11 +4,13 @@ Stock is verified only when a scorer clears it: the best candidate must
 reach the minimum score and beat the runner-up by the margin. Scores are
 relative, never probabilities; unscored candidates are never verified.
 
-A segment with no verified stock is dropped: broll mode is stock only,
-so a rejected clip is never replaced by a catalog SVG, a neutral
-background, or the rejected clip itself. The remaining verified clips
-fill the timeline; when none is left the download fails like any other
-empty stock search. Svg mode never runs verification (catalog only).
+A segment with no verified stock is dropped when another segment
+verifies: broll mode is stock only, so a rejected clip is never
+replaced by a catalog SVG, a neutral background, or the rejected clip
+itself. When no segment verifies at all, scored segments keep their
+best-scored clips as an unverified fallback instead of failing the
+download; only segments the scorer never scored (no candidates, scorer
+unavailable) stay dropped. Svg mode never runs verification (catalog only).
 
 Scoring is pluggable through an option (the repo's injection pattern).
 The default scorer is lazy ONNX (see siglip_scorer): without onnxruntime,

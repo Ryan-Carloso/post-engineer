@@ -451,12 +451,13 @@ svg_search_mode = "texto"
 svg_canvas_background = "#FFFFFF"
 
 # Verified stock material selection. Off by default: existing behavior is
-# preserved exactly until an operator enables it. When enabled, stock is
-# used only when a scorer clears it (minimum score plus runner-up margin,
-# both relative scores, never probabilities); a segment whose stock is not
-# verified is dropped, never replaced — broll mode is stock only, so no
-# catalog SVG and no neutral background ever substitutes for it. When no
-# segment verifies, the download fails like any other empty stock search.
+# preserved exactly until an operator enables it. When enabled, a segment
+# is verified only when a scorer clears it (minimum score plus runner-up
+# margin, both relative scores, never probabilities). A segment that does
+# not verify is dropped, never replaced by catalog SVG or a neutral
+# background — except when no segment verifies at all: scored segments
+# then keep their best-scored clips as an unverified fallback, and only
+# unscored or scorer-unavailable segments stay dropped.
 # R2 is the only source of SVG artwork: there is no subject mapping and
 # no bundled artwork.
 # The scorer is pluggable; the default scorer is SigLIP on ONNX (onnxruntime

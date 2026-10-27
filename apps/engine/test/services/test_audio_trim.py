@@ -7,6 +7,7 @@ any failure keeps the original file, never fails the task.
 """
 
 import inspect
+import os
 import shutil
 import subprocess
 from unittest.mock import patch
@@ -229,6 +230,68 @@ def test_voice_is_cut_after_the_last_word_once_the_subtitle_exists():
     word_cut = source.index("audio_trim.trim_after_last_word(")
     assert subtitle_step < word_cut < source.index("_ensure_persona_hook_fits(")
     assert "audio_duration = math.ceil(trimmed_seconds)" in source
+
+
+def _fake_word_cut(calls):
+    """ffmpeg stub that writes the trimmed file next to the input, like _cut."""
+
+    def run(cmd, **kwargs):
+        calls.append(cmd)
+        input_path = cmd[cmd.index("-i") + 1]
+        root, ext = os.path.splitext(input_path)
+        with open(f"{root}.trimmed{ext}", "wb") as handle:
+            handle.write(b"y")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    return run
+
+
+def test_a_shared_custom_audio_file_is_never_trimmed_in_place(tmp_path):
+    # Regression: a custom audio file from the shared local_videos dir was
+    # cut in place by the word-based trim, so reusing it in a later task
+    # heard the cut version. The shared file must stay byte-identical
+    # while the task-local copy is still trimmed.
+    shared_dir = tmp_path / "shared"
+    task_dir = tmp_path / "task"
+    shared_dir.mkdir()
+    task_dir.mkdir()
+    shared = shared_dir / "voice.mp3"
+    shared.write_bytes(b"x")
+    words = [("a", 0.0, 1.0), ("b", 20.0, 28.4)]
+    with patch.object(
+        audio_trim.subprocess, "run", side_effect=_fake_word_cut([])
+    ), patch.object(audio_trim, "_duration", return_value=33.0):
+        local = audio_trim.task_local_copy(str(shared), str(task_dir))
+        assert local == str(task_dir / "voice.mp3")
+        assert (task_dir / "voice.mp3").read_bytes() == b"x"
+        assert audio_trim.trim_after_last_word(local, words) == 29.0
+    assert shared.read_bytes() == b"x"
+    assert (task_dir / "voice.mp3").read_bytes() == b"y"
+
+
+def test_a_task_local_audio_file_passes_through_unchanged(tmp_path):
+    task_dir = tmp_path / "task"
+    task_dir.mkdir()
+    audio = task_dir / "audio.mp3"
+    audio.write_bytes(b"x")
+    assert audio_trim.task_local_copy(str(audio), str(task_dir)) == str(audio)
+    assert audio.read_bytes() == b"x"
+
+
+def test_a_task_dir_symlink_to_shared_audio_is_replaced_not_written_through(tmp_path):
+    shared_dir = tmp_path / "shared"
+    task_dir = tmp_path / "task"
+    shared_dir.mkdir()
+    task_dir.mkdir()
+    shared = shared_dir / "voice.mp3"
+    shared.write_bytes(b"x")
+    link = task_dir / "voice.mp3"
+    link.symlink_to(shared)
+    local = audio_trim.task_local_copy(str(link), str(task_dir))
+    assert local == str(link)
+    assert not link.is_symlink()
+    assert link.read_bytes() == b"x"
+    assert shared.read_bytes() == b"x"
 
 
 def test_media_duration_probes_any_media_file():

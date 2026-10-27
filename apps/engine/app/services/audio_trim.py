@@ -9,6 +9,7 @@ failure keeps the original file and never fails the task.
 
 import os
 import re
+import shutil
 import subprocess
 from collections.abc import Sequence
 from typing import Optional
@@ -98,6 +99,39 @@ def trim_trailing_silence(audio_file: str) -> Optional[float]:
         return None
     logger.info(f"voiceover tail: silence cut, audio now {new_length:.2f}s (was {duration:.2f}s)")
     return new_length
+
+
+def task_local_copy(audio_file: str, task_dir: str) -> str:
+    """Return a task-local path for `audio_file`, copying shared files in.
+
+    trim_after_last_word cuts in place: a custom audio file resolved from
+    the shared local_videos directory must never be cut there, or every
+    later task reusing it would hear the cut version. A file already
+    inside the task directory passes through unchanged; anything else is
+    copied into the task directory first. On a copy failure the original
+    path is returned so the task degrades to the previous behavior
+    instead of failing on the trim step.
+    """
+    try:
+        task_root = os.path.realpath(task_dir)
+        audio_real = os.path.realpath(audio_file)
+        if audio_real == task_root or audio_real.startswith(task_root + os.sep):
+            return audio_file
+    except OSError:
+        return audio_file
+    dest = os.path.join(task_dir, os.path.basename(audio_file) or "audio")
+    try:
+        os.makedirs(task_dir, exist_ok=True)
+        # A task-dir symlink pointing at the shared file must be replaced,
+        # not written through: copying onto it would cut the shared original.
+        if os.path.islink(dest):
+            os.unlink(dest)
+        shutil.copyfile(audio_real, dest)
+    except OSError as exc:
+        logger.warning(f"voiceover tail: could not copy shared audio into the task dir: {type(exc).__name__}")
+        return audio_file
+    logger.info("voiceover tail: copied shared audio into the task dir before trimming")
+    return dest
 
 
 def trim_after_last_word(audio_file: str, words: Sequence[tuple[str, float, float]]) -> Optional[float]:

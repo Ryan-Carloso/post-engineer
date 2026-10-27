@@ -1402,9 +1402,9 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
 
         # The video is cut to the audio file's length: drop the dead air after the
         # last spoken word (Whisper word times; Chatterbox ends with a silent tail).
+        audio_file = audio_trim.task_local_copy(audio_file, utils.task_dir(task_id))
         trimmed_seconds = audio_trim.trim_after_last_word(
-            audio_file, subtitle.file_to_words(subtitle_path)
-        )
+            audio_file, subtitle.file_to_words(subtitle_path))
         if trimmed_seconds is not None:
             audio_duration = math.ceil(trimmed_seconds)
 
