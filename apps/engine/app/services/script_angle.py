@@ -9,13 +9,19 @@ may cache an llm function at import time, or the patches would be
 bypassed.
 """
 
+from collections.abc import Sequence
+
 from loguru import logger
 
 from app.models.schema import VideoParams
+from app.services import web_search_facts
 from app.services.analytics import scrub_error_text, scrub_secret_values
+from app.services.web_search_facts import Fact
 
 
-def generate_script_angle(video_subject: str, language: str = "", niche: str = "") -> str:
+def generate_script_angle(
+    video_subject: str, language: str = "", niche: str = "", facts: Sequence[Fact] | None = None
+) -> str:
     """Turn a bare topic into one specific, curiosity-driven angle.
 
     Users only type a topic ("coffee"); scripting the topic directly yields
@@ -36,10 +42,17 @@ specific angle for a 30 to 40 second vertical video that makes people stop scrol
 Good angles are concrete and create curiosity: a common mistake, a counterintuitive
 fact, a surprising number, a myth to debunk, a before/after, or a "stop doing X".
 Avoid vague or generic angles ("the benefits of X", "everything about X").
+The angle must be concrete and visual: name the exact dish, object, place or number,
+something a viewer can picture. No vague stand-ins ("the famous institution", "this spot").
+Never invent names, prices or facts you are not sure are real. Use a proper name (place, brand, person) only when the topic or the web search results give it; otherwise name the dish, object or situation.
+Do not mention street addresses or phone numbers, and add no waiting times, crowds or ratings the results do not state.
 
 Topic: {subject}"""
     if niche:
         prompt += f"\nChannel niche: {niche}"
+    # Same search the script prompt gets: the angle must not name a place the
+    # results do not list (it used to, then overrode the results).
+    prompt += web_search_facts.format_facts_block(facts or [])
     if language:
         prompt += f"\nWrite the angle in this language: {language}"
     prompt += (
@@ -64,7 +77,9 @@ Topic: {subject}"""
     return llm._limit_script_text(angle, llm.MAX_SCRIPT_ANGLE_LENGTH, "angle")
 
 
-def resolve_script_angle(task_id: str, params: VideoParams, *, track_event, tracking_context) -> str:
+def resolve_script_angle(
+    task_id: str, params: VideoParams, *, track_event, tracking_context, facts: Sequence[Fact] | None = None
+) -> str:
     """Pick a specific angle for the topic, or "" to script the bare topic.
 
     The angle is an enhancement: an LLM failure here degrades to the raw
@@ -81,6 +96,7 @@ def resolve_script_angle(task_id: str, params: VideoParams, *, track_event, trac
             video_subject=params.video_subject,
             language=params.video_language,
             niche=niche,
+            facts=facts,
         )
     except Exception as exc:
         logger.warning(

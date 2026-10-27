@@ -679,3 +679,25 @@ intro_duration_seconds = 5
 [bgm]
 # Automatic BGM selection uses only tracks explicitly listed in this catalog.
 catalog_file = "resource/songs/catalog.toml"
+
+[search]
+# Optional pre-script fact lookup. Off by default: turning it on needs
+# TAVILY_API_KEY or EXA_API_KEY in the environment (never in this file), and
+# with enabled = true and no key at all the engine refuses to start.
+# One search per video fetches up to max_facts results (place names, prices,
+# addresses) with source URLs, injected as plain text into the script prompt.
+# Only one provider answers per video: the first in "providers" with results
+# wins; the next runs only when it has no key, errors or finds nothing. A
+# failing lookup never stops the video.
+enabled = false
+providers = ["tavily", "exa"]
+max_facts = 5
+timeout_seconds = 8.0
+# Photos of named places, for every video type: drawings, stock footage and persona videos
+# (a persona video keeps its face intro and outro on screen). When the script names a
+# place the subject does not cover, one extra Tavily image search looks for its
+# photo; only an image whose title or description names the place is used, at most
+# 2 per video, in place of the clip nearest to the spoken name. The photos are
+# third-party content: whoever switches this on takes the rights risk. Off by
+# default; needs TAVILY_API_KEY (the only provider that describes its images).
+place_photos = false

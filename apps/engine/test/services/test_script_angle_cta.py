@@ -123,7 +123,9 @@ class TestTaskAngleThreading:
             result = task_service.generate_script("angle-task", params)
 
         assert result == "Hook is complete.\n\nDetails follow."
-        angle.assert_called_once_with(video_subject="café", language="pt-BR", niche="barista caseiro")
+        angle.assert_called_once_with(
+            video_subject="café", language="pt-BR", niche="barista caseiro", facts=[]
+        )
         assert [c.kwargs["angle"] for c in generate.call_args_list] == ["O erro"] * 3
         # The regenerated hook is not the end of the video: no CTA there.
         assert generate.call_args_list[1].kwargs["include_cta"] is False
