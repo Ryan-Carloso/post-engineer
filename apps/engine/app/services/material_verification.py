@@ -168,6 +168,7 @@ def _shared_scorer(model_path: str) -> SiglipScorer:
         if scorer is None:
             siglip_model.ensure_model(model_path)
             scorer = SiglipScorer(model_path)
+            scorer.warm()
             _shared_scorers[model_path] = scorer
         return scorer
 

@@ -181,6 +181,11 @@ class SiglipScorer:
         self._tokenizer: Optional[object] = None
         self._mean, self._std, self._size = self._load_preprocessor()
 
+    def warm(self) -> None:
+        """Open the ONNX session and tokenizer once, before any parallel score()."""
+        self._session_or_raise()
+        self._tokenizer_or_raise()
+
     @staticmethod
     def _default_session_factory(model_path: str) -> object:
         try:

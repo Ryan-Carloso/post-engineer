@@ -84,13 +84,17 @@ def test_a_failing_candidate_does_not_stop_the_others():
     assert len(scored) == 2 and failed is True
 
 
-def test_the_default_scorer_is_initialized_before_the_worker_pool():
+def test_the_onnx_session_opens_before_the_worker_pool():
     order = []
     real_pool = ThreadPoolExecutor
 
-    class Fake:
-        def __init__(self, path):
-            order.append("init")
+    class Tracking(mv.SiglipScorer):
+        def __init__(self, model_path, **kwargs):
+            super().__init__(
+                model_path,
+                session_factory=lambda _path: order.append("session") or object(),
+                tokenizer_factory=lambda _path: object(),
+            )
 
         def score(self, target, phrase):
             return 0.5
@@ -100,12 +104,17 @@ def test_the_default_scorer_is_initialized_before_the_worker_pool():
         return real_pool(*args, **kwargs)
 
     mv._shared_scorers.clear()
-    with patch.object(mv, "SiglipScorer", Fake), patch.object(mv.siglip_model, "ensure_model"), patch.dict(
+    with patch.object(mv, "SiglipScorer", Tracking), patch.object(
+        mv.siglip_model, "ensure_model"
+    ), patch.dict(
         mv.config.app, {"material_verification_model_path": "/m/model_q4.onnx"}
-    ), patch.object(mv, "ThreadPoolExecutor", pool):
+    ), patch.object(mv, "ThreadPoolExecutor", pool), patch(
+        "app.services.siglip_scorer.os.path.isfile", return_value=True
+    ):
         mv._score_candidates(_stock(2), "one", None)
-    assert order[0] == "init"
+    assert order[0] == "session"
     assert "pool" in order
+    assert order.index("session") < order.index("pool")
 
 
 def test_the_default_scorer_is_shared_between_segments():
@@ -114,6 +123,9 @@ def test_the_default_scorer_is_shared_between_segments():
     class Fake:
         def __init__(self, path):
             built.append(path)
+
+        def warm(self):
+            pass
 
         def score(self, target, phrase):
             return 0.5
@@ -132,6 +144,9 @@ def test_the_default_scorer_makes_sure_the_model_is_there():
 
     class Fake:
         def __init__(self, path):
+            pass
+
+        def warm(self):
             pass
 
         def score(self, target, phrase):
