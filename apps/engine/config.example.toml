@@ -459,17 +459,22 @@ svg_canvas_background = "#FFFFFF"
 # segment verifies, the download fails like any other empty stock search.
 # R2 is the only source of SVG artwork: there is no subject mapping and
 # no bundled artwork.
-# The scorer is pluggable; the default ONNX scorer needs onnxruntime and
-# a SigLIP ONNX model, and fails closed (stock treated as unverified)
-# until both are present. Scores are tied to the scoring model:
-# recalibrate min_score and runner_up_margin when the model changes.
-# Verification stays off by default. The threshold and margin below are
-# calibrated on the padded SigLIP scorer against real Pixabay candidates
-# (see material_verification.py); Pexels was not measurable from the
-# sandbox (read timeout).
+# The scorer is pluggable; the default scorer is SigLIP on ONNX (onnxruntime
+# ships with the engine). It scores the preview image that Pexels, Pixabay and
+# Coverr return for each clip (about 8 candidates per segment), so
+# verification adds about a minute per video and downloads no extra clips.
+# The model (about 220 MB, Apache-2.0, pinned revision and SHA-256 in
+# app/services/siglip_model.py) is fetched on first use, or at boot, into the
+# directory of material_verification_model_path; that directory must be
+# writable and persisted (in Docker, under the /app/storage volume). Without
+# the model the scorer fails closed (stock treated as unverified).
+# Scores are tied to the scoring model: recalibrate min_score and
+# runner_up_margin when the model changes.
+# Verification stays off by default.
 material_verification_enabled = false
 material_verification_min_score = 0.01
 material_verification_runner_up_margin = 0.005
+# Docker: "/app/storage/models/siglip/model_q4.onnx"
 material_verification_model_path = ""
 redis_db = 0
 redis_password = ""
@@ -679,3 +684,25 @@ intro_duration_seconds = 5
 [bgm]
 # Automatic BGM selection uses only tracks explicitly listed in this catalog.
 catalog_file = "resource/songs/catalog.toml"
+
+[search]
+# Optional pre-script fact lookup. Off by default: turning it on needs
+# TAVILY_API_KEY or EXA_API_KEY in the environment (never in this file), and
+# with enabled = true and no key at all the engine refuses to start.
+# One search per video fetches up to max_facts results (place names, prices,
+# addresses) with source URLs, injected as plain text into the script prompt.
+# Only one provider answers per video: the first in "providers" with results
+# wins; the next runs only when it has no key, errors or finds nothing. A
+# failing lookup never stops the video.
+enabled = false
+providers = ["tavily", "exa"]
+max_facts = 5
+timeout_seconds = 8.0
+# Photos of named places, for every video type: drawings, stock footage and persona videos
+# (a persona video keeps its face intro and outro on screen). When the script names a
+# place the subject does not cover, one extra Tavily image search looks for its
+# photo; only an image whose title or description names the place is used, at most
+# 2 per video, in place of the clip nearest to the spoken name. The photos are
+# third-party content: whoever switches this on takes the rights risk. Off by
+# default; needs TAVILY_API_KEY (the only provider that describes its images).
+place_photos = false

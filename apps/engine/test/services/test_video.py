@@ -1365,7 +1365,13 @@ class TestFfmpegReencode(unittest.TestCase):
                                         )
 
             self.assertEqual(result, combined_video_path)
-            ffmpeg_mock.assert_called_once()
+            # The clip is 6s for a 10.1s voice: one re-encode for the clip, then
+            # the looped copy is TRIMMED to the 4.1s left (a whole second copy
+            # would overshoot the voice by 1.9s of picture over silence).
+            self.assertEqual(ffmpeg_mock.call_count, 2)
+            trim = ffmpeg_mock.call_args_list[1].kwargs
+            self.assertTrue(trim["out"].endswith("loop-trim.mp4"))
+            self.assertAlmostEqual(trim["end_time"], 4.1, places=2)
             write_mock.assert_not_called()
 
     def test_combine_videos_uses_moviepy_when_transition(self):
@@ -1408,7 +1414,10 @@ class TestFfmpegReencode(unittest.TestCase):
 
             self.assertEqual(result, combined_video_path)
             write_mock.assert_called()
-            ffmpeg_mock.assert_not_called()
+            # Under a transition the first pass is MoviePy, never the ffmpeg fast
+            # path: the only ffmpeg call allowed is the final loop trim.
+            outs = [call.kwargs["out"] for call in ffmpeg_mock.call_args_list]
+            self.assertTrue(all(out.endswith("loop-trim.mp4") for out in outs), outs)
 
 
 class TestFontContainment(unittest.TestCase):

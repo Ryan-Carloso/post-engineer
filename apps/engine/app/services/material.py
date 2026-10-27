@@ -9,7 +9,7 @@ from loguru import logger
 
 from app.config import config
 from app.models.schema import MaterialInfo, VideoAspect, VideoConcatMode
-from app.services import material_verification, svg_material
+from app.services import material_verification, stock_thumbnails, svg_material
 from app.services.material_verification import (
     MAX_LETTERBOX_BARS as MAX_LETTERBOX_BARS,
     _ratio_matches as _ratio_matches,
@@ -103,11 +103,9 @@ def search_videos_pexels(
                     best_area = area
                     best_file = video
             if best_file is not None:
-                item = MaterialInfo()
-                item.provider = "pexels"
-                item.url = best_file["link"]
-                item.duration = duration
-                video_items.append(item)
+                video_items.append(
+                    stock_thumbnails.item("pexels", best_file["link"], duration, v.get("image"))
+                )
         return video_items
     except Exception as e:
         logger.error(f"search videos failed: {str(e)}")
@@ -176,11 +174,9 @@ def search_videos_pixabay(
                     best_area = area
                     best_file = video
             if best_file is not None:
-                item = MaterialInfo()
-                item.provider = "pixabay"
-                item.url = best_file["url"]
-                item.duration = duration
-                video_items.append(item)
+                video_items.append(
+                    stock_thumbnails.item("pixabay", best_file["url"], duration, best_file.get("thumbnail"))
+                )
         return video_items
     except Exception as e:
         logger.error(f"search videos failed: {str(e)}")
@@ -263,11 +259,11 @@ def search_videos_coverr(
             if not video_id or not mp4_download_url:
                 continue
 
-            item = MaterialInfo()
-            item.provider = "coverr"
-            item.url = mp4_download_url
-            item.duration = duration
-            video_items.append(item)
+            video_items.append(
+                stock_thumbnails.item(
+                    "coverr", mp4_download_url, duration, v.get("poster") or v.get("thumbnail")
+                )
+            )
         return video_items
     except Exception as e:
         logger.error(f"search videos failed: {str(e)}")

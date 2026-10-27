@@ -33,9 +33,12 @@ import math
 import os
 import subprocess
 import tempfile
+from urllib.parse import urlparse
 from typing import Callable, List, Optional, Sequence
 
 from loguru import logger
+
+from app.utils import ssrf
 
 
 class VerificationUnavailable(Exception):
@@ -63,6 +66,18 @@ _DEFAULT_IMAGE_SIZE = 224
 # cover a model dir without that config file.
 _DEFAULT_MAX_TEXT_LENGTH = 64
 _DEFAULT_PAD_ID = 1
+
+
+# A preview image is scored as one frame. Providers serve them as small
+# jpg/png/webp files, so anything bigger than this is not a preview.
+MAX_PREVIEW_BYTES = 2 * 1024 * 1024
+_PREVIEW_TIMEOUT_SECONDS = 10
+_IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".webp")
+
+
+def is_image_ref(ref: str) -> bool:
+    """True when `ref` (a local path or URL) names an image by its path suffix."""
+    return os.path.splitext(urlparse(ref).path)[1].lower() in _IMAGE_SUFFIXES
 
 
 def _sigmoid(value: float) -> float:
@@ -165,6 +180,11 @@ class SiglipScorer:
         self._session: Optional[object] = None
         self._tokenizer: Optional[object] = None
         self._mean, self._std, self._size = self._load_preprocessor()
+
+    def warm(self) -> None:
+        """Open the ONNX session and tokenizer once, before any parallel score()."""
+        self._session_or_raise()
+        self._tokenizer_or_raise()
 
     @staticmethod
     def _default_session_factory(model_path: str) -> object:
@@ -341,23 +361,46 @@ class SiglipScorer:
             )
         return path
 
+    def _local_preview_path(self, ref: str, tmp_dir: str) -> str:
+        """A local file for a preview image: the file itself, or a guarded download."""
+        if os.path.isfile(ref):
+            return ref
+        try:
+            return ssrf.download_public_file(
+                ref,
+                os.path.join(tmp_dir, "preview"),
+                what="stock preview",
+                max_bytes=MAX_PREVIEW_BYTES,
+                allowed_content_types=("image/",),
+                timeout=_PREVIEW_TIMEOUT_SECONDS,
+            )
+        except Exception as exc:  # noqa: BLE001 - the URL is third-party data, keep it out of the message
+            raise VerificationUnavailable(
+                f"stock preview could not be downloaded ({type(exc).__name__})"
+            ) from None
+
+    def _frames_for(self, candidate_url: str, tmp_dir: str) -> List[str]:
+        if is_image_ref(candidate_url):
+            return [self._local_preview_path(candidate_url, tmp_dir)]
+        video_path = self._local_video_path(candidate_url, tmp_dir)
+        times = _sample_frame_times(_probe_duration_seconds(video_path))
+        return self._frame_sampler(video_path, times, tmp_dir)
+
     def score(self, candidate_url: str, phrase: str) -> float:
-        """Best frame score for a candidate clip, or VerificationUnavailable."""
+        """Best frame score for a candidate clip or preview image, or VerificationUnavailable."""
         session = self._session_or_raise()
         tokenizer = self._tokenizer_or_raise()
         token_ids = self._encode_text(tokenizer, phrase)
         with tempfile.TemporaryDirectory() as tmp_dir:
-            video_path = self._local_video_path(candidate_url, tmp_dir)
-            times = _sample_frame_times(_probe_duration_seconds(video_path))
-            frames = self._frame_sampler(video_path, times, tmp_dir)
+            frames = self._frames_for(candidate_url, tmp_dir)
             if not frames:
                 raise VerificationUnavailable("no frames could be sampled")
             scores: List[float] = []
             for frame_path in frames:
                 try:
                     scores.append(self._score_frame(session, token_ids, frame_path))
-                except (ValueError, RuntimeError) as exc:
-                    logger.warning(f"siglip frame scoring failed: {exc}")
+                except (ValueError, RuntimeError, OSError) as exc:
+                    logger.warning(f"siglip frame scoring failed: {type(exc).__name__}")
             if not scores:
                 raise VerificationUnavailable("no frame scored successfully")
             return max(scores)

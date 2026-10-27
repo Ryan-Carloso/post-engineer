@@ -54,7 +54,7 @@ class TestTaskService(unittest.TestCase):
             result = tm.generate_script("task-id", params)
 
         self.assertEqual(result, "生成的文案")
-        angle.assert_called_once_with(video_subject="咖啡", language="zh-CN", niche="")
+        angle.assert_called_once_with(video_subject="咖啡", language="zh-CN", niche="", facts=[])
         generate.assert_called_once_with(
             video_subject="咖啡",
             language="zh-CN",
@@ -63,6 +63,7 @@ class TestTaskService(unittest.TestCase):
             custom_system_prompt="Only write short narration.",
             angle="Coffee angle",
             cta="",
+            facts=[],
         )
 
     def test_generate_final_videos_does_not_rerecord_old_bgm(self):

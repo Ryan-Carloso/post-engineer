@@ -376,7 +376,7 @@ class TestDownloadVideosUserIdThreading(unittest.TestCase):
             provider="pexels", url="https://v.example/x.mp4", duration=3
         )
         decision = material.material_verification.SegmentDecision(
-            tier="stock_verified", phrase="x"
+            tier="stock_verified", phrase="x", stock_url="https://v.example/x.mp4"
         )
 
         def fake_search(search_term, minimum_duration, video_aspect):

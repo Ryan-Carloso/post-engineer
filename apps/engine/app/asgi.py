@@ -456,3 +456,14 @@ def startup_event():
         reconcile_pending_registrations()
     except Exception as exc:  # noqa: BLE001 - startup continues regardless
         logger.warning(f"cloned voice pending reconcile failed: {exc}")
+    # Optional [search] fact lookup: enabled=true with no provider key is a
+    # configuration error that must fail the boot (no silent env fallback),
+    # not skip facts per video at runtime.
+    from app.services import web_search_facts
+
+    web_search_facts.validate_config()
+    # Visual verifier model: fetched into the persisted storage volume when
+    # [app] material_verification_enabled is on; a failure never stops the boot.
+    from app.services import siglip_model
+
+    siglip_model.warm()

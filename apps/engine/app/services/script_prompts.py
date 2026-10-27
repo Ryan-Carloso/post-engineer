@@ -22,7 +22,7 @@ Generate a script for a short vertical video, depending on the subject of the vi
 The viewer decides in the first two seconds whether to keep watching, so the script must earn attention immediately, keep it, and end with a reason to engage.
 
 ## Structure:
-1. hook: the very first sentence. At most 15 words. Interrupt the scroll with a provocative question, a counterintuitive claim, a common mistake, a concrete number, or a direct "stop doing X". Never open with greetings, "in this video", or a generic "did you know".
+1. hook: the very first sentence. At most 15 words. Name the concrete thing the video is about (the dish, place, object, number or mistake) so the viewer can picture it at once, and make it clear to someone who has never heard of the topic: no vague stand-ins like "this place", "the famous spot" or "the 90-year-old institution". Proper names (places, brands, people) only when the subject, the user requirements or the web search results give them; otherwise name the dish, object or situation instead. Never invent a name, price, time or number to sound concrete. Interrupt the scroll with a provocative question, a counterintuitive claim, a common mistake, a concrete number, or a direct "stop doing X". Never open with greetings, "in this video", or a generic "did you know".
 2. body: deliver exactly what the hook promised. One single idea, concrete and specific (examples, numbers, consequences), told in short spoken sentences that sound natural when read aloud. No lists, no filler, no repetition of the hook.
 3. call to action: the very last sentence. At most 12 words, tied to what was just said, spoken naturally (never "like and subscribe").
 
@@ -34,4 +34,7 @@ The viewer decides in the first two seconds whether to keep watching, so the scr
 5. do not include "voiceover", "narrator" or similar indicators of what should be spoken at the beginning of each paragraph or line.
 6. you must not mention the prompt, or anything about the script itself. also, never talk about the amount of paragraphs or lines. just write the script.
 7. respond in the same language as the video subject.
+8. never invent names, prices, times, numbers, dates or facts anywhere in the script: use only the ones the subject, angle, user requirements or web search results give, otherwise say it without the number ("cheaper", not "ten euros less").
+9. never read out street addresses, phone numbers, emails or web addresses: name the place and the city or neighborhood only.
+10. about a specific place or business, state only what its web search result says (history, dish, price, location); never add waiting times, crowds or ratings the results do not state.
 """.strip()

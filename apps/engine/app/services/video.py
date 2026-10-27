@@ -1,4 +1,3 @@
-import itertools
 import io
 import os
 import random
@@ -29,7 +28,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from app.config import config
 from app.models import const
-from app.services import image_material
+from app.services import image_material, video_loop
 from app.services.material import MAX_LETTERBOX_BARS
 from app.models.schema import (
     MaterialInfo,
@@ -1506,11 +1505,10 @@ def combine_videos(
             f"({required_video_duration:.2f}s), looping clips to match audio length."
         )
         base_clips = processed_clips.copy()
-        for clip in itertools.cycle(base_clips):
-            if video_duration >= required_video_duration:
-                break
-            processed_clips.append(clip)
-            video_duration += clip.duration
+        video_duration = video_loop.extend(
+            processed_clips, base_clips, video_duration, required_video_duration,
+            output_dir, video_width, video_height, fps, threads,
+        )
         logger.info(
             f"video duration: {video_duration:.2f}s, audio duration: {audio_duration:.2f}s, "
             f"required duration: {required_video_duration:.2f}s, "

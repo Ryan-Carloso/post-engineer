@@ -276,7 +276,9 @@ class TestFallbackSummary(unittest.TestCase):
             SegmentDecision(tier="dropped", phrase="c"),
         ]
         summary = summarize_decisions(decisions)
-        self.assertEqual(summary, {"stock_verified": 1, "dropped": 2})
+        self.assertEqual(
+            summary, {"stock_verified": 1, "stock_unverified": 0, "dropped": 2}
+        )
 
     def test_summary_event_carries_counts_and_task_id_only(self):
         decisions = [SegmentDecision(tier="dropped", phrase="Waterfront")]
@@ -384,6 +386,8 @@ class TestApplyVerification(unittest.TestCase):
         self.assertEqual(
             [d.tier for d in decisions], ["stock_verified", "dropped", "dropped"]
         )
+        # other.mp4 scores 0.18, below min_score 0.33: a runner-up that is
+        # a different scene never follows the verified pick.
         self.assertEqual(
             [(i.provider, i.url) for i in items],
             [("pexels", "https://example.com/verified.mp4")],
