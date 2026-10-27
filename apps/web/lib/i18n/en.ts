@@ -380,6 +380,7 @@ export const enDictionary: Dictionary = {
     toolDescUpdatePersona: 'Update an existing persona',
     toolDescGetTokenBalance: 'Check token balance',
     toolDescGeneratePersonaVideos: 'Generate and schedule 1-10 persona videos in one operation',
+    toolDescGeneratePersonaVideo: 'Generate and schedule one persona video from a script',
     toolDescGetVideoStatus: 'Check video status',
     toolDescGetVideoTaskProgress: 'Poll per-video progress (%, stage)',
     toolDescListPersonaImages: "List a persona's image library",

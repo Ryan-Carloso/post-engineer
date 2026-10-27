@@ -814,6 +814,45 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(400);
       expect(json.field).toBe('options.scriptPrompts');
     });
+
+    const segmentsHook =
+      'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.';
+    const segmentsBody =
+      'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
+    const segmentsCta = 'Save this video before your next trip to Porto.';
+    const validSegments = [
+      { kind: 'hook', text: segmentsHook },
+      { kind: 'body', text: segmentsBody },
+      { kind: 'cta', text: segmentsCta },
+    ];
+
+    it('rejects invalid segments before any charge', async () => {
+      const bad = [
+        { kind: 'body', text: segmentsBody },
+        { kind: 'hook', text: segmentsHook },
+        { kind: 'cta', text: segmentsCta },
+      ];
+      const res = await post(baseBody({ topics: ['Porto trip'], options: { segments: bad } }));
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(String(json.field)).toContain('segments');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it('rejects segments with more than one topic (one call is one video)', async () => {
+      const res = await post(baseBody({ options: { segments: validSegments } }));
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(String(json.field)).toContain('segments');
+    });
+
+    it('forwards the joined segments script to the engine for a valid segments request', async () => {
+      const res = await post(baseBody({ topics: ['Porto trip'], options: { segments: validSegments } }));
+      expect(res.status).toBe(200);
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+      expect(payload.video_script).toBe(`${segmentsHook}\n\n${segmentsBody}\n\n${segmentsCta}`);
+    });
   });
 
   describe('authorization', () => {

@@ -380,6 +380,7 @@ export const ptDictionary = {
     toolDescUpdatePersona: 'Atualize uma persona existente',
     toolDescGetTokenBalance: 'Consulte o saldo de tokens',
     toolDescGeneratePersonaVideos: 'Gerar e agendar de 1 a 10 vídeos de persona em uma operação',
+    toolDescGeneratePersonaVideo: 'Gerar e agendar um vídeo de persona a partir de um roteiro',
     toolDescGetVideoStatus: 'Confira o status do vídeo',
     toolDescGetVideoTaskProgress: 'Acompanhe o progresso por vídeo (%, etapa)',
     toolDescListPersonaImages: 'Liste a biblioteca de imagens da persona',

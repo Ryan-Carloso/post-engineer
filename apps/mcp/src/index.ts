@@ -87,17 +87,12 @@ import {
   CancelVideoTaskShape,
   handleCancelVideoTask,
 } from './video-task-tools.js';
+import { GeneratePersonaVideoShape, handleGeneratePersonaVideo } from './tools-single-video.js';
 import { trackEvent } from './analytics.js';
 
-//---------------
-// Track every tool invocation as a PostHog analytics event.
-// The wrapper never throws and never blocks the tool.
-//---------------
+// Track every tool invocation as a PostHog analytics event (never throws, never blocks).
 
-function withTracking<TArgs extends Record<string, unknown>, TResult>(
-  toolName: string,
-  handler: (args: TArgs) => Promise<TResult>,
-): (args: TArgs) => Promise<TResult> {
+function withTracking<TArgs extends Record<string, unknown>, TResult>(toolName: string, handler: (args: TArgs) => Promise<TResult>): (args: TArgs) => Promise<TResult> {
   return async (args: TArgs): Promise<TResult> => {
     trackEvent('mcp_tool_called', { toolName });
     return handler(args);
@@ -400,6 +395,13 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
     withTracking('generate_persona_videos', async (args) => {
       return handleGeneratePersonaVideos(apiClient, args);
     })
+  );
+
+  server.tool(
+    'generate_persona_video',
+    'Generate and schedule ONE persona video from a complete script. Product rule: generation is always tied to publishing — one call generates the video AND schedules its automatic publish; there is no orphan generation. Send the full script as segments (first hook, then body, last CTA; 60-200 words total, body at least 30, CTA 5-20, hook 15-40 words ending with terminal punctuation) — no LLM expands it. title is the single topic for this video. Pass providers plus per-provider account IDs (see list_social_accounts), startAt (ISO datetime, wall-clock in timezone when naive), times (HH:MM, 24h), and timezone. Set mode to \'asap\' to publish the video the moment its generation finishes instead of scheduling it — startAt and times must NOT be set then. The slot must be 3h-30d ahead. idempotencyKey is generated automatically; reuse it to retry without generating twice (replayed: true). Poll the slot\'s taskId with get_video_task_progress.',
+    GeneratePersonaVideoShape,
+    withTracking('generate_persona_video', async (args) => handleGeneratePersonaVideo(apiClient, args)),
   );
 
   server.tool(

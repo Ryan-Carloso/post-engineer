@@ -26,13 +26,14 @@ import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from '@/lib/language-g
 import {
   distributeSlots,
   SlotDistributionError,
-  MAX_POST_TOPICS,
   type DistributedSlot,
 } from '@/lib/schedule/slot-distribution';
 import { validateScheduleWindow } from '@/lib/schedule-window';
 import { isValidTimezone } from '@/lib/timezone';
 import { computeVideoTokens, toFiniteNumber } from '@/lib/tokens';
 import { resolvePublishingAccounts, signedUrl } from './persona-prep';
+import { validateTopics } from './topics-validation';
+import { validateSegmentsRequest } from './segments-validation';
 import {
   MAX_TOPIC_CHARS,
   persistVoiceSwap,
@@ -64,7 +65,6 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 
 // Shared with the /posts/new form so the UI cap and the API cap can't drift.
 const ROUTE = 'POST /api/videos/generate-and-schedule';
-const MAX_TOPICS = MAX_POST_TOPICS;
 const MAX_SCRIPT_PROMPT_CHARS = 2000;
 // Mirrors the engine's PersonaParams caps (apps/engine/app/models/schema.py):
 // rejecting at the same boundary here is what turns an opaque engine
@@ -103,6 +103,18 @@ const OptionsSchema = z
     imageId: z.string().optional(),
     scriptPrompt: z.string().optional(),
     scriptPrompts: z.array(z.string()).optional(),
+    // Segments contract (MCP first, Phase 1): one call = one video. The
+    // joined script is spoken verbatim; no LLM expands it.
+    segments: z
+      .array(
+        z.object({
+          kind: z.enum(['hook', 'body', 'cta']),
+          text: z.string(),
+          media: z.object({ mediaId: z.string().optional(), url: z.string().optional() }).optional(),
+          terms: z.array(z.string()).optional(),
+        }),
+      )
+      .optional(),
     webhookUrl: z.string().optional(),
     voiceId: z.string().optional(),
     // The rest of a persona's editorial definition, for a post created
@@ -171,33 +183,6 @@ interface ValidatedInput {
   paragraphNumber?: number;
   language?: string;
   niche?: string;
-}
-
-function validateTopics(rawTopics: string[]): string[] | NextResponse {
-  if (rawTopics.length === 0) {
-    return validationFailed(ERROR_CODES.TOPICS_REQUIRED, formatErrorMessage(ERROR_CODES.TOPICS_REQUIRED), 'topics');
-  }
-  if (rawTopics.length > MAX_TOPICS) {
-    return validationFailed(
-      ERROR_CODES.TOPICS_LIMIT_EXCEEDED,
-      formatErrorMessage(ERROR_CODES.TOPICS_LIMIT_EXCEEDED),
-      'topics',
-    );
-  }
-  const topics = rawTopics.map((t) => t.trim());
-  for (let i = 0; i < topics.length; i += 1) {
-    if (topics[i].length === 0) {
-      return validationFailed(ERROR_CODES.VALIDATION_FAILED, `Topic ${i + 1} is empty.`, `topics.${i}`);
-    }
-    if (topics[i].length > MAX_TOPIC_CHARS) {
-      return validationFailed(
-        ERROR_CODES.VALIDATION_FAILED,
-        `Topic ${i + 1} must be at most ${MAX_TOPIC_CHARS} characters.`,
-        `topics.${i}`,
-      );
-    }
-  }
-  return topics;
 }
 
 function validateProviders(rawProviders: string[]): Provider[] | NextResponse {
@@ -569,6 +554,9 @@ async function postHandler(request: Request): Promise<NextResponse> {
   const personaId = parsed.data.personaId?.trim() || null;
   const topics = validateTopics(parsed.data.topics);
   if (topics instanceof NextResponse) return topics;
+  // Segments validation runs here, before auth and before any charge.
+  const segmentsScript = validateSegmentsRequest(options?.segments, topics.length);
+  if (segmentsScript instanceof NextResponse) return segmentsScript;
   const providers = validateProviders(publishing.providers);
   if (providers instanceof NextResponse) return providers;
   const validatedOptions = validateOptions(options ?? {}, topics.length);
@@ -1115,6 +1103,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       };
       const payload = buildJobPayload(jobPersona, {
         video_subject: topic,
+        video_script: segmentsScript,
         video_script_prompt: validatedOptions.scriptPrompts?.[i] ?? validatedOptions.scriptPrompt,
         webhook_url: validatedOptions.webhookUrl,
         // generation_id: web-side correlation id for PostHog event joins;
