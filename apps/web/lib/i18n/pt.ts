@@ -727,7 +727,6 @@ export const ptDictionary = {
     support: 'Suporte',
     rights: '© {year} Post Engineer. Todos os direitos reservados.',
   },
-
   // Legal pages
   legal: {
     privacyTitle: 'Política de Privacidade',

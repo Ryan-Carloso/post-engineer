@@ -723,7 +723,6 @@ export const enDictionary: Dictionary = {
     support: 'Support',
     rights: '© {year} Post Engineer. All rights reserved.',
   },
-
   // Legal pages
   legal: {
     privacyTitle: 'Privacy Policy',
