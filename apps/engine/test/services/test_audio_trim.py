@@ -294,6 +294,38 @@ def test_a_task_dir_symlink_to_shared_audio_is_replaced_not_written_through(tmp_
     assert shared.read_bytes() == b"x"
 
 
+def test_a_realpath_failure_returns_the_original_audio(tmp_path):
+    # Degrade, don't fail: a realpath OSError (vanished path mid-flight)
+    # must return the original path, as the docstring promises.
+    shared_dir = tmp_path / "shared"
+    task_dir = tmp_path / "task"
+    shared_dir.mkdir()
+    task_dir.mkdir()
+    shared = shared_dir / "voice.mp3"
+    shared.write_bytes(b"x")
+    with patch.object(audio_trim.os.path, "realpath", side_effect=OSError("vanished")):
+        assert audio_trim.task_local_copy(str(shared), str(task_dir)) == str(shared)
+    assert not (task_dir / "voice.mp3").exists()
+    assert shared.read_bytes() == b"x"
+
+
+def test_a_copy_failure_returns_the_original_audio(tmp_path):
+    # Degrade, don't fail: when the copy into the task dir fails, the
+    # task keeps the original path (previous behavior) instead of
+    # failing on the trim step, and the shared file stays untouched.
+    shared_dir = tmp_path / "shared"
+    task_dir = tmp_path / "task"
+    shared_dir.mkdir()
+    task_dir.mkdir()
+    shared = shared_dir / "voice.mp3"
+    shared.write_bytes(b"x")
+    with patch.object(audio_trim.shutil, "copyfile", side_effect=OSError("read-only task dir")) as copy:
+        assert audio_trim.task_local_copy(str(shared), str(task_dir)) == str(shared)
+    copy.assert_called_once()
+    assert not (task_dir / "voice.mp3").exists()
+    assert shared.read_bytes() == b"x"
+
+
 def test_media_duration_probes_any_media_file():
     # place_photos reads clip lengths through it to find the slot of a photo.
     with patch.object(audio_trim, "_duration", return_value=4.5) as probe:

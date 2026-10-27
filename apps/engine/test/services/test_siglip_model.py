@@ -104,6 +104,26 @@ def test_a_file_with_the_wrong_hash_is_never_kept(tmp_path, files):
     assert not (tmp_path / "tokenizer.json.part").exists()
 
 
+def test_a_failed_part_cleanup_is_swallowed(tmp_path, files, monkeypatch):
+    # The finally-block cleanup must never mask the download failure: if
+    # removing the .part file raises, the original VerificationUnavailable
+    # still surfaces and the .part file is simply left behind.
+    calls = []
+
+    def boom(path):
+        calls.append(path)
+        raise OSError("read-only model volume")
+
+    monkeypatch.setattr(os, "remove", boom)
+    model_path = str(tmp_path / "siglip" / siglip_model.MODEL_FILE)
+    with pytest.raises(VerificationUnavailable):
+        siglip_model.ensure_model(model_path, fetch=_Fetcher(files, corrupt={siglip_model.MODEL_FILE}))
+    part_path = tmp_path / "siglip" / (siglip_model.MODEL_FILE + ".part")
+    assert calls == [str(part_path)]
+    assert part_path.exists()
+    assert not (tmp_path / "siglip" / siglip_model.MODEL_FILE).exists()
+
+
 def test_a_failing_download_is_reported_as_unavailable_without_leaking_the_path(tmp_path, files):
     def boom(url, dest_path):
         raise OSError(f"disk full writing {dest_path}")
