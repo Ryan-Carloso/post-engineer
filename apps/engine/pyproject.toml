@@ -170,6 +170,8 @@ only_mutate = []
 #   and backend tests (test/services/test_local_tts_*.py) import them.
 # - scripts/changed_functions.py: test/scripts/test_changed_functions.py
 #   imports it; without the copy test collection errors and every shard fails.
+# - scripts/audit_secrets.py: same failure class as changed_functions.py —
+#   test/scripts/test_audit_secrets.py imports it.
 also_copy = [
     "config.example.toml",
     "cli.py",
@@ -182,6 +184,7 @@ also_copy = [
     "local_tts/routing.py",
     "local_tts/backends.py",
     "scripts/changed_functions.py",
+    "scripts/audit_secrets.py",
 ]
 # Test exclusions for mutmut runs (these still run in the main engine CI job):
 # - test_mypy_config.py pins the CI workflow file layout (.github/workflows/),
