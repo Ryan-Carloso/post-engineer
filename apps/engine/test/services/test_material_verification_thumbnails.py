@@ -51,8 +51,8 @@ def test_only_the_first_candidates_of_a_segment_are_scored():
         return 0.5
 
     mv._score_candidates(_stock(30), "a cat", scorer)
-    assert mv.MAX_SCORED_PER_SEGMENT == 8
-    assert sorted(seen) == sorted(f"https://i/{n}.jpg" for n in range(8))
+    assert mv.MAX_SCORED_PER_SEGMENT == 12
+    assert sorted(seen) == sorted(f"https://i/{n}.jpg" for n in range(12))
 
 
 def test_results_are_ranked_by_score_whatever_the_thread_order():

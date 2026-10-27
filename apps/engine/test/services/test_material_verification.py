@@ -386,6 +386,8 @@ class TestApplyVerification(unittest.TestCase):
         self.assertEqual(
             [d.tier for d in decisions], ["stock_verified", "dropped", "dropped"]
         )
+        # other.mp4 scores 0.18, below min_score 0.33: a runner-up that is
+        # a different scene never follows the verified pick.
         self.assertEqual(
             [(i.provider, i.url) for i in items],
             [("pexels", "https://example.com/verified.mp4")],
