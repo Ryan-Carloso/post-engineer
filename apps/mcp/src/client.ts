@@ -61,29 +61,10 @@ export const MAX_LIBRARY_IMAGES = 10;
 export const MAX_LIBRARY_TAG_LENGTH = 100;
 export const MAX_LIBRARY_DESCRIPTION_LENGTH = 500;
 
-/**
- * Shared size guard for both image-read call sites (the stat pre-check and
- * the post-read check) so the limit and the message text can't drift apart.
- * Throws the typed ImageTooLargeError carrying the full path.
- */
-export function assertImageSize(sizeBytes: number, path: string): void {
-  if (sizeBytes > MAX_LIBRARY_IMAGE_BYTES) {
-    throw new ImageTooLargeError(path, sizeBytes);
-  }
-}
-
-function mimeTypeForImagePath(path: string): string {
-  const extension = extname(path).toLowerCase();
-  // No special hidden-file check needed: Node's extname('.PNG') is ''
-  // (a leading dot with no other dots is not an extension), so dotfiles
-  // fall through to the unsupported-extension rejection below.
-  if (extension === '.png') return 'image/png';
-  if (extension === '.webp') return 'image/webp';
-  if (extension === '.jpg' || extension === '.jpeg') return 'image/jpeg';
-  throw new Error(
-    `Unsupported image extension "${extension || '(none)'}": use JPG/JPEG, PNG, or WebP.`,
-  );
-}
+// Re-exported from image-guards.ts so existing import sites
+// (`../client.js`) keep working after the extraction.
+export { assertImageSize } from './image-guards.js';
+import { assertImageSize, mimeTypeForImagePath } from './image-guards.js';
 
 async function imageFormFile(path: string): Promise<Blob> {
   // Validate before uploading: the API rejects the file anyway, so an
@@ -659,6 +640,21 @@ export class PostEngineerClient {
       `/api/account?${params.toString()}`,
       { method: 'DELETE', headers: this.getHeaders() },
       'disconnect account'
+    );
+  }
+
+  async validateScript(segments: unknown): Promise<unknown> {
+    // Mechanical validation only: the web route debits no tokens,
+    // schedules nothing and calls no engine — it re-runs the same
+    // mechanical validation the generate route runs.
+    return this.request(
+      '/api/videos/validate-script',
+      {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ segments }),
+      },
+      'validate script'
     );
   }
 

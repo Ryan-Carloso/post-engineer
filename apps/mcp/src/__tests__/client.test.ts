@@ -686,6 +686,23 @@ describe('generate and schedule videos client', () => {
     expect(result).toEqual({ success: true });
   });
 
+  it('posts segments to the validate-script endpoint and returns its payload', async () => {
+    const segments = [{ kind: 'hook', text: 'Hook text here.' }];
+    const result = await client.validateScript(segments);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/videos/validate-script`,
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'Content-Type': 'application/json',
+        }),
+      })
+    );
+    expect(lastRequestBody().segments).toEqual(segments);
+    expect(result).toEqual({ success: true });
+  });
+
   it('nests each provider account array under publishing.accounts', async () => {
     await client.generatePersonaVideos({
       ...baseInput,

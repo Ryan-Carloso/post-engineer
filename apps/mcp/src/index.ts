@@ -87,7 +87,7 @@ import {
   CancelVideoTaskShape,
   handleCancelVideoTask,
 } from './video-task-tools.js';
-import { GeneratePersonaVideoShape, handleGeneratePersonaVideo } from './tools-single-video.js';
+import { GeneratePersonaVideoShape, ValidateScriptShape, ValidateScriptDescription, handleGeneratePersonaVideo, handleValidateScript } from './tools-single-video.js';
 import { trackEvent } from './analytics.js';
 
 // Track every tool invocation as a PostHog analytics event (never throws, never blocks).
@@ -403,6 +403,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
     GeneratePersonaVideoShape,
     withTracking('generate_persona_video', async (args) => handleGeneratePersonaVideo(apiClient, args)),
   );
+  server.tool('validate_script', ValidateScriptDescription, ValidateScriptShape, withTracking('validate_script', async (args) => handleValidateScript(apiClient, args)));
 
   server.tool(
     'get_video_status',

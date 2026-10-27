@@ -2,11 +2,14 @@
 // validate_script. The batch tool generate_persona_videos is NOT removed
 // here; it is deprecated later, after the singular tool has proven itself.
 // Validation runs mechanically before the client call, so a rejected script
-// never reaches the web route and never debits tokens. Measured hook
-// duration is a documented Phase 1 gap: no hook-only TTS endpoint exists
-// yet, so validate_script reports the 8-12s window and the hook word count
-// and states that the measured duration is pending that endpoint — it does
-// not invent a duration and does not call Modal.
+// never reaches the web route and never debits tokens. validate_script
+// then calls POST /api/videos/validate-script, which re-runs the same
+// mechanical validation server-side without debiting tokens, scheduling,
+// or calling the engine or Modal. Measured hook duration is a documented
+// Phase 1 gap: no hook-only TTS endpoint exists yet, so validate_script
+// reports the 8-12s window and the hook word count and states that the
+// measured duration is pending that endpoint — it does not invent a
+// duration and does not call Modal.
 import { z } from 'zod';
 import type { PostEngineerClient } from './client.js';
 import { getErrorMessage } from './errors.js';
@@ -20,7 +23,7 @@ import {
 } from './script-segments.js';
 import { GeneratePersonaVideoSchema, ValidateScriptSchema } from './single-video-shape.js';
 
-export { GeneratePersonaVideoShape } from './single-video-shape.js';
+export { GeneratePersonaVideoShape, ValidateScriptShape } from './single-video-shape.js';
 
 type GeneratePersonaVideoArgs = z.infer<typeof GeneratePersonaVideoSchema>;
 type ValidateScriptArgs = z.infer<typeof ValidateScriptSchema>;
@@ -29,22 +32,68 @@ function errorResponse(message: string): McpToolResponse {
   return { content: [{ type: 'text', text: message }], isError: true };
 }
 
-export async function handleValidateScript(args: ValidateScriptArgs): Promise<McpToolResponse> {
+type ValidatedScriptPayload = {
+  segmentCount: number;
+  totalWords: number;
+  hookWords: number;
+  bodyWords: number;
+  ctaWords: number;
+};
+
+function narrowValidateScriptPayload(result: unknown): ValidatedScriptPayload | string | null {
+  if (typeof result !== 'object' || result === null) return null;
+  const record = result as Record<string, unknown>;
+  if (record.success !== true) {
+    return typeof record.error === 'string' && record.error.length > 0
+      ? record.error
+      : 'The web validation endpoint rejected the script.';
+  }
+  const numbers = ['segmentCount', 'totalWords', 'hookWords', 'bodyWords', 'ctaWords'];
+  for (const key of numbers) {
+    if (typeof record[key] !== 'number') return null;
+  }
+  if (record.measured !== 'pending' || record.measuredDurationSeconds !== null) return null;
+  return {
+    segmentCount: record.segmentCount as number,
+    totalWords: record.totalWords as number,
+    hookWords: record.hookWords as number,
+    bodyWords: record.bodyWords as number,
+    ctaWords: record.ctaWords as number,
+  };
+}
+
+export async function handleValidateScript(
+  client: PostEngineerClient,
+  args: ValidateScriptArgs,
+): Promise<McpToolResponse> {
+  // Mechanical pre-check first: a rejected script never reaches the web
+  // route and never debits tokens.
   const result = validateSegments(args.segments);
   if (!result.ok) {
     return errorResponse(
       `Script validation failed: ${result.error.field}: ${result.error.rule} Fix: ${result.error.fix}`,
     );
   }
-  const value = result.value;
+  let payload: ValidatedScriptPayload | string | null;
+  try {
+    payload = narrowValidateScriptPayload(await client.validateScript(args.segments));
+  } catch (error) {
+    return errorResponse(`Error validating the script: ${getErrorMessage(error)}`);
+  }
+  if (typeof payload === 'string') {
+    return errorResponse(`Script validation failed: ${payload}`);
+  }
+  if (payload === null) {
+    return errorResponse('Script validation failed: the web validation endpoint returned an unexpected response.');
+  }
   return {
     content: [
       {
         type: 'text',
         text: [
-          `Script valid: ${value.segmentCount} segment(s), ${value.totalWords} words total, hook ${value.hookWords} words, body ${value.bodyWords} words, CTA ${value.ctaWords} words.`,
+          `Script valid: ${payload.segmentCount} segment(s), ${payload.totalWords} words total, hook ${payload.hookWords} words, body ${payload.bodyWords} words, CTA ${payload.ctaWords} words.`,
           `Hook window: ${HOOK_MIN_SECONDS}-${HOOK_MAX_SECONDS} seconds spoken (target 20-30 words).`,
-          'Measured duration: pending — no hook-only TTS endpoint exists yet, so the measured hook duration cannot be checked in this phase; the hook word guard (15-40 words) already ran above and the web route re-validates before any token debit.',
+          'Measured duration: pending — no hook-only TTS endpoint exists yet, so the measured hook duration cannot be checked in this phase; the hook word guard (15-40 words) already ran above.',
         ].join('\n'),
       },
     ],
@@ -131,13 +180,11 @@ function narrowScheduledVideos(result: unknown): {
   };
 }
 
-// NOTE: validate_script is intentionally NOT registered in index.ts yet.
-// The parity gate requires every registered tool to map to a web endpoint
-// or a webless declaration in the parity test, and Phase 1 must not edit
-// the parity test to force a pass. validate_script has no endpoint until
-// the hook-only TTS endpoint lands, so its handler stays implemented and
-// tested here and registers in that later change. generate_persona_video
-// IS registered in index.ts (direct server.tool call, which the parity
-// graph discovers) and maps to POST /api/videos/generate-and-schedule.
+// NOTE: validate_script IS registered in index.ts (direct server.tool
+// call, which the parity graph discovers) and maps to POST
+// /api/videos/validate-script, which it really calls through the client
+// after the local mechanical pre-check. generate_persona_video IS
+// registered the same way and maps to POST
+// /api/videos/generate-and-schedule.
 export const ValidateScriptDescription =
   'Validate a segments script mechanically, without spending tokens: hook first, CTA last, exactly one of each, no placeholders/links/markdown/emoji/stage directions, hook terminal punctuation, word limits (total 60-200, body at least 30, CTA 5-20, hook 15-40 words before TTS). Returns the word counts and the hook window (8-12 seconds spoken). Measured hook duration is pending a hook-only TTS endpoint and is reported as pending, never invented.';

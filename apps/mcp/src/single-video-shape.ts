@@ -1,7 +1,7 @@
 // Shapes for the singular MCP-first tools (Phase 1): generate_persona_video
 // and validate_script. Kept in a new module so tools.ts stays under the
-// file-size ratchet; index.ts registers both tools through
-// registerSingleVideoTools in tools-single-video.ts.
+// file-size ratchet; index.ts registers both tools with direct server.tool
+// calls using the handlers in tools-single-video.ts.
 import { z } from 'zod';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
 import { GeneratePersonaVideosOptionsShape } from './schedule-shapes.js';

@@ -381,6 +381,7 @@ export const enDictionary: Dictionary = {
     toolDescGetTokenBalance: 'Check token balance',
     toolDescGeneratePersonaVideos: 'Generate and schedule 1-10 persona videos in one operation',
     toolDescGeneratePersonaVideo: 'Generate and schedule one persona video from a script',
+    toolDescValidateScript: 'Validate a script mechanically, without spending tokens',
     toolDescGetVideoStatus: 'Check video status',
     toolDescGetVideoTaskProgress: 'Poll per-video progress (%, stage)',
     toolDescListPersonaImages: "List a persona's image library",
@@ -399,7 +400,6 @@ export const enDictionary: Dictionary = {
     toolDescDeletePersona: 'Delete a persona (destructive)',
     toolDescDisconnectAccount: 'Disconnect a social account',
   },
-
   // App API Key
   persona: {
     title: 'Create persona',

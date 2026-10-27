@@ -30,6 +30,18 @@ function mockClient() {
       slots: [{ slotId: 's1', slotAt: '2026-10-30T18:00:00Z', topic: 'Porto trip', taskId: 'task-1', status: 'scheduled' }],
       replayed: false,
     }),
+    validateScript: vi.fn().mockResolvedValue({
+      success: true,
+      segmentCount: 3,
+      totalWords: 75,
+      hookWords: 24,
+      bodyWords: 42,
+      ctaWords: 9,
+      hookWindowSeconds: { min: 8, max: 12 },
+      measuredDurationSeconds: null,
+      measured: 'pending',
+      measuredReason: 'No hook-only TTS endpoint exists yet.',
+    }),
   } as unknown as PostEngineerClient;
 }
 
@@ -71,6 +83,7 @@ describe('generate_persona_video tool', () => {
       title: 'Porto trip',
       providers: ['youtube'],
       mode: 'asap',
+      timezone: 'Europe/Lisbon',
     });
     expect(response.isError).toBe(true);
     expect(vi.mocked(client.generatePersonaVideos)).not.toHaveBeenCalled();
@@ -80,7 +93,7 @@ describe('generate_persona_video tool', () => {
 
 describe('validate_script tool', () => {
   it('accepts a valid script and reports the hook word count and the 8-12s window', async () => {
-    const response = await handleValidateScript({ segments });
+    const response = await handleValidateScript(mockClient(), { segments });
     expect(response.isError).toBeUndefined();
     const text = textOf(response);
     expect(text).toContain('8');
@@ -88,8 +101,21 @@ describe('validate_script tool', () => {
     expect(text).toContain('hook');
   });
 
-  it('rejects a hook outside the 15-40 word guard without measuring TTS', async () => {
-    const response = await handleValidateScript({
+  it('calls the web validate-script endpoint once with the segments and reports its counts', async () => {
+    const client = mockClient();
+    const response = await handleValidateScript(client, { segments });
+    expect(response.isError).toBeUndefined();
+    expect(vi.mocked(client.validateScript)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(client.validateScript)).toHaveBeenCalledWith(segments);
+    const text = textOf(response);
+    expect(text).toContain('3 segment(s)');
+    expect(text).toContain('75 words total');
+    expect(text).toContain('pending');
+  });
+
+  it('rejects a hook outside the 15-40 word guard without calling the endpoint or measuring TTS', async () => {
+    const client = mockClient();
+    const response = await handleValidateScript(client, {
       segments: [
         { kind: 'hook' as const, text: 'Short hook here today.' },
         { kind: 'body' as const, text: body },
@@ -97,11 +123,20 @@ describe('validate_script tool', () => {
       ],
     });
     expect(response.isError).toBe(true);
+    expect(vi.mocked(client.validateScript)).not.toHaveBeenCalled();
     expect(textOf(response)).toContain('hook');
   });
 
   it('states that measured duration is pending the hook-only TTS endpoint', async () => {
-    const response = await handleValidateScript({ segments });
+    const response = await handleValidateScript(mockClient(), { segments });
     expect(textOf(response)).toMatch(/measured duration/i);
+  });
+
+  it('returns an error when the web endpoint rejects the script', async () => {
+    const client = mockClient();
+    vi.mocked(client.validateScript).mockResolvedValue({ success: false, error: 'Script rejected.' });
+    const response = await handleValidateScript(client, { segments });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('Script rejected');
   });
 });
