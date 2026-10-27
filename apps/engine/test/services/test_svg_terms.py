@@ -79,6 +79,14 @@ def test_user_terms_are_kept_and_still_get_the_fallback():
     assert terms == ["hen", "waiter", "francesinha spots in porto"]
 
 
+def test_llm_reply_with_commentary_brackets_still_yields_the_array():
+    params = _params()
+    response = 'Sure [as asked]: ["hen | chicken"] Hope this helps!'
+    with patch.object(svg_terms.llm, "_generate_response_with_fallback", return_value=response):
+        terms = svg_terms.resolve_svg_terms(params, "script")
+    assert terms[0] == "hen | chicken"
+
+
 def test_unparseable_llm_reply_retries_then_leaves_only_the_fallback():
     params = _params()
     with patch.object(

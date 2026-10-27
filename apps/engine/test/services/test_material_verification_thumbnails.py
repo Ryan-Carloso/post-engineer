@@ -1,6 +1,7 @@
 """Verification scores the preview image, a few candidates per segment, in parallel."""
 
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
 from app.models.schema import MaterialInfo
@@ -81,6 +82,30 @@ def test_a_failing_candidate_does_not_stop_the_others():
 
     scored, failed = mv._score_candidates(_stock(3), "a cat", scorer)
     assert len(scored) == 2 and failed is True
+
+
+def test_the_default_scorer_is_initialized_before_the_worker_pool():
+    order = []
+    real_pool = ThreadPoolExecutor
+
+    class Fake:
+        def __init__(self, path):
+            order.append("init")
+
+        def score(self, target, phrase):
+            return 0.5
+
+    def pool(*args, **kwargs):
+        order.append("pool")
+        return real_pool(*args, **kwargs)
+
+    mv._shared_scorers.clear()
+    with patch.object(mv, "SiglipScorer", Fake), patch.object(mv.siglip_model, "ensure_model"), patch.dict(
+        mv.config.app, {"material_verification_model_path": "/m/model_q4.onnx"}
+    ), patch.object(mv, "ThreadPoolExecutor", pool):
+        mv._score_candidates(_stock(2), "one", None)
+    assert order[0] == "init"
+    assert "pool" in order
 
 
 def test_the_default_scorer_is_shared_between_segments():

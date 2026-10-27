@@ -197,7 +197,15 @@ def _score_candidates(
     scored, by their preview image when they have one. Returns
     (scored, failed).
     """
-    active_scorer = scorer if scorer is not None else OnnxClipScorer().score
+    if scorer is None:
+        model_path = str(config.app.get("material_verification_model_path", "")).strip()
+        try:
+            _shared_scorer(model_path)
+        except VerificationUnavailable:
+            return [], True
+        active_scorer = OnnxClipScorer().score
+    else:
+        active_scorer = scorer
     stock = [c for c in candidates if c.provider not in ("svg", "neutral")]
 
     def attempt(candidate: MaterialInfo) -> tuple[Optional[float], bool]:

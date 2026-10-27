@@ -69,6 +69,13 @@ def _corpus(sources: Sequence[str]) -> tuple[set[str], set[str]]:
     text = _fold(" ".join(str(source) for source in sources if source))
     words = set(_ALNUM.findall(text))
     numbers = {_digits_only(match) for match in _DIGITS.findall(text)}
+    for word in list(words):
+        if word in _NUMBER_WORDS:
+            numbers.add(str(_NUMBER_WORDS[word]))
+    for digits in list(numbers):
+        for name, value in _NUMBER_WORDS.items():
+            if str(value) == digits:
+                words.add(name)
     return words, numbers
 
 
@@ -163,6 +170,8 @@ def enforce(script: str, sources: Sequence[str], regenerate: Callable[[str], str
     best, best_flagged = script, flagged
     try:
         rewrite = (regenerate(_NOTE.format(items=", ".join(flagged[:MAX_LISTED]))) or "").strip()
+        if rewrite.startswith("Error:") or "Error: " in rewrite:
+            raise ValueError("provider error rewrite")
     except Exception as exc:  # noqa: BLE001 - a quality pass never fails the script
         logger.warning(f"script rewrite for unsupported claims failed: {scrub_error_text(str(exc))}")
         rewrite = ""

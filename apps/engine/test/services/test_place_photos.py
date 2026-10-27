@@ -10,6 +10,7 @@ and every failure leaves the drawing in place: a photo never fails a video.
 import io
 import ipaddress
 import os
+import subprocess
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -357,6 +358,14 @@ def test_two_photos_never_take_the_same_slot():
 def test_an_unreadable_clip_counts_as_a_full_clip():
     clips = ["a.mp4", "b.mp4", "c.mp4", "d.mp4"]
     durations = {"a.mp4": 5.0, "b.mp4": RuntimeError("ffprobe failed"), "c.mp4": 5.0, "d.mp4": 5.0}
+    out, _ = _splice(clips, [PHOTO], durations=durations)
+    assert out == ["a.mp4", "b.mp4", "photo.mp4", "d.mp4"]
+
+
+def test_an_ffprobe_failure_does_not_fail_the_video():
+    clips = ["a.mp4", "b.mp4", "c.mp4", "d.mp4"]
+    failed = subprocess.CalledProcessError(1, "ffprobe")
+    durations = {"a.mp4": 5.0, "b.mp4": failed, "c.mp4": 5.0, "d.mp4": 5.0}
     out, _ = _splice(clips, [PHOTO], durations=durations)
     assert out == ["a.mp4", "b.mp4", "photo.mp4", "d.mp4"]
 

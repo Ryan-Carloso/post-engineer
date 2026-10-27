@@ -82,6 +82,22 @@ def test_a_failing_or_empty_rewrite_keeps_the_original_and_never_raises():
     assert enforce(original, SOURCES, MagicMock(return_value="  ")) == original
 
 
+def test_a_provider_error_rewrite_is_rejected_and_keeps_the_original():
+    original = "Go to Casa Bill."
+    assert (
+        enforce(original, SOURCES, MagicMock(return_value="Error: all providers down"))
+        == original
+    )
+
+
+def test_digit_claim_matches_a_spelled_source_number():
+    assert unsupported_claims("Pay 11 euros today.", ["eleven euros at the door"]) == []
+
+
+def test_spelled_claim_matches_a_digit_source_number():
+    assert unsupported_claims("Pay eleven euros today.", ["11 euros at the door"]) == []
+
+
 def test_leftover_claims_are_reported_once_by_count_only():
     with patch.object(script_claims, "track_event") as track:
         enforce("Go to Casa Bill.", SOURCES, MagicMock(return_value="Go to Casa Bill."))

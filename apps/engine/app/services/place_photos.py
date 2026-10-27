@@ -18,6 +18,7 @@ risk by switching the feature on.
 import contextlib
 import os
 import re
+import subprocess
 from collections.abc import Sequence
 from typing import Optional
 from urllib.parse import urlparse
@@ -240,7 +241,7 @@ def _probed_seconds(clip: str, clip_seconds: float) -> float:
     """
     try:
         return min(audio_trim.media_duration(clip), clip_seconds)
-    except (OSError, ValueError, RuntimeError):
+    except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return clip_seconds
 
 

@@ -12,7 +12,6 @@ Lives in its own module because task.py and llm.py are grandfathered over
 the file-size cap.
 """
 
-import json
 import math
 import re
 
@@ -21,6 +20,7 @@ from loguru import logger
 from app.models.schema import VideoParams
 from app.services import llm, svg_pick, voice
 from app.services.analytics import track_event
+from app.services.json_reply import first_json_array
 
 SEPARATOR = "|"
 MAX_ALTERNATIVES = 3
@@ -78,14 +78,7 @@ def _generate(video_subject: str, video_script: str) -> list[str]:
     prompt = _prompt(video_subject, video_script, TERM_AMOUNT)
     for attempt in range(MAX_ATTEMPTS):
         response = llm._generate_response_with_fallback(prompt)
-        try:
-            terms = json.loads(llm._strip_code_fence(response))
-        except ValueError:
-            match = re.search(r"\[.*]", response, re.DOTALL)
-            try:
-                terms = json.loads(match.group()) if match else None
-            except ValueError:
-                terms = None
+        terms = first_json_array(llm._strip_code_fence(response))
         if isinstance(terms, list) and terms and all(isinstance(t, str) for t in terms):
             return [term for term in terms if parse_alternatives(term)]
         logger.warning(f"svg terms reply was not a list of strings (attempt {attempt + 1})")
