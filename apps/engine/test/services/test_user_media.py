@@ -199,7 +199,6 @@ def test_one_bad_url_costs_only_that_segment(tmp_path, monkeypatch):
     good = tmp_path / "good.jpg"
     good.write_bytes(_jpeg())
     monkeypatch.setattr(user_media, "_temp_assets_dir", lambda: str(tmp_path))
-    monkeypatch.setattr(user_media, "_temp_assets_dir", lambda: str(tmp_path))
 
     def fake_download(url, dest_path, session=None):
         if "bad" in url:
