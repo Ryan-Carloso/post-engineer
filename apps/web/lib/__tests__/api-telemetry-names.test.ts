@@ -41,6 +41,15 @@ describe('api-telemetry-names', () => {
     expect(rejectionEventName('GET /api/not-a-real-route')).toBeUndefined();
   });
 
+  it('maps the segment media routes to their semantic 2xx event names', () => {
+    expect(successEventName('POST /api/media/check')).toBe(
+      'segment_media_checked',
+    );
+    expect(successEventName('POST /api/media/upload')).toBe(
+      'segment_media_uploaded',
+    );
+  });
+
   it('matches labels exactly, including [id]-style path segments', () => {
     expect(successEventName('GET /api/persona/video-status/[taskId]')).toBe(
       'video_status_fetched',
