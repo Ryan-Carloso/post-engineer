@@ -297,7 +297,7 @@ def _validate_webhook_url(value: Optional[str]) -> Optional[str]:
 
 
 class SegmentMedia(BaseModel):
-    """Phase 1: media reference shape only (upload_media is Phase 2)."""
+    """Media reference shape for a segment's photo (upload_media uploads it, check_media verifies it)."""
 
     # Unknown keys are forbidden, not stripped: the unknown-field guard in
     # validate_segments runs on model_dump output, so extra='ignore' would

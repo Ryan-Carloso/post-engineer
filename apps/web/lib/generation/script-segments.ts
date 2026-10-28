@@ -309,5 +309,13 @@ export function joinSegments(input: unknown): string {
   if (!result.ok) {
     throw new Error(`${result.error.field}: ${result.error.rule} Fix: ${result.error.fix}`);
   }
-  return [result.value.hookText, ...result.value.bodyTexts, result.value.ctaText].join('\n\n');
+  // The engine's segments_to_script strips each text before joining, and
+  // TaskVideoRequest rejects a supplied script that differs from that
+  // join — so a padded segment must join stripped here, or the
+  // generation fails validation on a script the caller never mistyped.
+  return [
+    result.value.hookText.trim(),
+    ...result.value.bodyTexts.map((text) => text.trim()),
+    result.value.ctaText.trim(),
+  ].join('\n\n');
 }

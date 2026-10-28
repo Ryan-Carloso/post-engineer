@@ -20,6 +20,15 @@ describe('validateSegments (MCP copy)', () => {
     expect(joinSegments(segments)).toBe(`${hook}\n\n${body}\n\n${cta}`);
   });
 
+  it('strips padding before joining, matching the engine join the TaskVideoRequest validator compares against', () => {
+    const padded = [
+      { kind: 'hook', text: `  ${hook}  ` },
+      { kind: 'body', text: `  ${body} ` },
+      { kind: 'cta', text: `${cta}   ` },
+    ];
+    expect(joinSegments(padded)).toBe(`${hook}\n\n${body}\n\n${cta}`);
+  });
+
   it('rejects too many terms on a media-less segment, like the engine does', () => {
     const result = validateSegments([
       { kind: 'hook', text: hook },
