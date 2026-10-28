@@ -9,6 +9,7 @@ import {
   isCountedFile,
   isExcludedFile,
   parseArgs,
+  renameNewPath,
   resolveLimit,
 } from './check.mjs';
 
@@ -69,6 +70,23 @@ describe('countAddedLines', () => {
     assert.equal(renamed.total, 12);
     const pure = countAddedLines('0\t0\tapps/web/lib/new.ts\n');
     assert.equal(pure.total, 0);
+  });
+
+  it('resolves real numstat rename notation to the head path', () => {
+    assert.equal(renameNewPath('apps/web/lib/foo.{js => ts}'), 'apps/web/lib/foo.ts');
+    assert.equal(renameNewPath('apps/web/lib/old.ts => apps/web/lib/new.ts'), 'apps/web/lib/new.ts');
+    assert.equal(renameNewPath('apps/web/lib/{ => __tests__}/a.ts'), 'apps/web/lib/__tests__/a.ts');
+    assert.equal(renameNewPath('apps/web/lib/plain.ts'), 'apps/web/lib/plain.ts');
+  });
+
+  it('counts extension-changing renames and excludes renames into test dirs', () => {
+    const changed = countAddedLines('12\t3\tapps/web/lib/foo.{js => ts}\n');
+    assert.equal(changed.total, 12);
+    assert.equal(changed.files[0].path, 'apps/web/lib/foo.ts');
+    const intoTests = countAddedLines('12\t3\tapps/web/lib/{ => __tests__}/a.ts\n');
+    assert.equal(intoTests.total, 0);
+    const pureRename = countAddedLines('0\t0\tapps/web/lib/foo.{js => ts}\n');
+    assert.equal(pureRename.total, 0);
   });
 
   it('returns total 0 for empty numstat', () => {
