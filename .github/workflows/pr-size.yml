@@ -30,7 +30,7 @@ on:
     types: [opened, synchronize, reopened]
 
 jobs:
-  check:
+  pr-size:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
