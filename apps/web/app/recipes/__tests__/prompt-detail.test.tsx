@@ -133,7 +133,7 @@ describe('prompt detail page', () => {
 
   it('never names an internal style skill in user-facing copy', () => {
     const { container } = render(<PromptDetail prompt={prompt} />);
+    // The substring check covers any hyphenated internal skill name too.
     expect(container.textContent?.toLowerCase()).not.toContain('adhd');
-    expect(container.textContent).not.toContain('i-have-adhd');
   });
 });
