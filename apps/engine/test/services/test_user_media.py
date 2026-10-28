@@ -101,9 +101,9 @@ def test_zero_token_segment_inherits_the_previous_boundary_instead_of_crashing()
     assert intervals == [(0.0, 2.0), (2.0, 2.0), (2.0, 3.0)]
 
 
-def test_contraction_mismatch_falls_back_to_proportional_timing_and_says_so():
-    # Whisper splits "don't" into one word; the segment text tokenises
-    # into two ("don", "t"), so the exact walk cannot match.
+def test_word_list_shorter_than_segments_falls_back_to_proportional_timing():
+    # The word file covers only the hook: the flattened token lists differ
+    # in length, so the exact walk cannot match and the fallback runs.
     words = [("I", 0.0, 0.3), ("don't", 0.3, 0.8), ("know", 0.8, 1.2)]
     segments = [
         {"kind": "hook", "text": "I don't know."},

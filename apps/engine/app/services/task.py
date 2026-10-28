@@ -1454,7 +1454,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             task_id, params, downloaded_videos, subtitle_path, audio_duration,
             lipsync_active=persona_lipsync_active(params),
         )
-        if media_warnings:
+        if media_warnings or getattr(params, "segments", None):
             _update_task(task_id, media_warnings=media_warnings)
 
         if stop_at == "materials":
