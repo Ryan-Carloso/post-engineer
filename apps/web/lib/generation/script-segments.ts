@@ -1,4 +1,10 @@
-// Mechanical validation for the segments script contract (MCP first, Phase 1).
+// Shared segments validation: single source of truth for the web app and
+// the MCP server, for the segments script contract (MCP first, Phase 1).
+// DO NOT EDIT this copy directly in apps/web or apps/mcp: the files at
+// apps/web/lib/generation/script-segments.ts and
+// apps/mcp/src/script-segments.ts are generated copies of this file.
+// Edit here, then run `node scripts/sync-script-segments.mjs` from the
+// repo root (both apps also run it from their prebuild/pretest scripts).
 // Mirrors apps/engine/app/services/script_segments.py: same limits,
 // same accepted inputs, same field/rule/fix shape, with one documented
 // exception in normalize() below (Python casefold vs JS toLowerCase).
