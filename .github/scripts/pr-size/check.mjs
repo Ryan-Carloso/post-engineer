@@ -69,7 +69,7 @@ export function unquotePath(p) {
     const c = inner[i];
     if (c === '\\' && i + 1 < inner.length) {
       const next = inner[i + 1];
-      if (next >= '0' && next <= '7' && i + 3 < inner.length + 1 && inner[i + 2] >= '0' && inner[i + 2] <= '7' && inner[i + 3] >= '0' && inner[i + 3] <= '7') {
+      if (next >= '0' && next <= '7' && i + 3 < inner.length && inner[i + 2] >= '0' && inner[i + 2] <= '7' && inner[i + 3] >= '0' && inner[i + 3] <= '7') {
         bytes.push(parseInt(inner.slice(i + 1, i + 4), 8));
         i += 3;
         continue;

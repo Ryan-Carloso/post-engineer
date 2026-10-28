@@ -14,6 +14,7 @@ import {
   parseArgs,
   renameNewPath,
   resolveLimit,
+  unquotePath,
 } from './check.mjs';
 
 describe('isCountedFile', () => {
@@ -106,6 +107,14 @@ describe('countAddedLines', () => {
     const { files, total } = countAddedLines('8\t0\t"apps/web/lib/caf\\303\\251.ts"\n');
     assert.equal(total, 8);
     assert.equal(files[0].path, 'apps/web/lib/café.ts');
+  });
+
+  it('parses a trailing 3-digit octal escape and leaves a short trailing escape literal', () => {
+    // Boundary pin for the octal guard: the third octal digit may be the
+    // last char of the quoted string, but a 2-digit tail is not an octal.
+    assert.equal(unquotePath('"a\\303\\251"'), 'aé');
+    assert.equal(unquotePath('"a\\303\\251.ts"'), 'aé.ts');
+    assert.equal(unquotePath('"a\\30"'), 'a\\30');
   });
 
   it('counts raw UTF-8 paths', () => {
