@@ -45,7 +45,7 @@ mechanically, and only then generates.
   has not passed `validate_script`.
 - Media rights are the user's responsibility. Prefer a source with a direct
   image URL and a usable licence. Many sites block hotlinking; a blocked
-  photo is skipped, it never kills the video (see step 5).
+  photo is skipped, it never kills the video (see step 4).
 - Generation is always tied to publishing. There is no orphan video and no
   separate schedule step: one `generate_persona_video` call generates and
   publishes at its slot (`mode: 'scheduled'` with `startAt` + `times`, or
