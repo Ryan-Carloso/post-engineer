@@ -31,10 +31,10 @@ import {
 import { validateScheduleWindow } from '@/lib/schedule-window';
 import { isValidTimezone } from '@/lib/timezone';
 import { computeVideoTokens, toFiniteNumber } from '@/lib/tokens';
+import { buildSlotRows } from './slot-rows';
 import { resolvePublishingAccounts, signedUrl } from './persona-prep';
 import { validateTopics } from './topics-validation';
 import { validateSegmentsRequest } from './segments-validation';
-import { buildSlotRows } from './slot-rows';
 import {
   MAX_TOPIC_CHARS,
   persistVoiceSwap,
@@ -1110,9 +1110,9 @@ async function postHandler(request: Request): Promise<NextResponse> {
         video_script: segmentsScript,
         video_script_prompt: validatedOptions.scriptPrompts?.[i] ?? validatedOptions.scriptPrompt,
         webhook_url: validatedOptions.webhookUrl,
-        // generation_id/slot_id: PostHog correlation id; slot_id lets boot orphan triage requeue on restart.
+        // generation_id: web-side correlation id for PostHog event joins;
+        // slot_id: lets boot orphan triage requeue (not fail) on engine restart.
         generation_id: slotGenerationId,
-        segments: options?.segments, // Segment media rides to the engine here, next to the joined script.
         slot_id: slot.id,
         // The per-post "no face" choice reaches the engine as lipsync: the
         // engine's persona_lipsync_active also returns false when no visual is
@@ -1120,6 +1120,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         lipsync: !prep.faceless,
         // The material choice rides the payload under its snake_case name on every post, face or not.
         faceless_material: validatedOptions.facelessMaterial,
+        segments: options?.segments, // Segment media rides to the engine here, next to the joined script.
       });
       if (!hasNonEmptyString(payload.video_subject)) {
         throw new SlotDispatchError('empty_subject', 'Video subject is empty.');

@@ -54,20 +54,6 @@ describe('buildJobPayload — request allowlist', () => {
     expect(payload).not.toHaveProperty('junk_field');
   });
 
-  it('forwards segments next to the joined script so the engine can render per-segment media', () => {
-    const segments = [
-      { kind: 'hook', text: 'Welcome to Porto.', media: { mediaId: 'aabbccddeeff00112233445566778899.png' } },
-      { kind: 'body', text: 'Where the river meets the sea.' },
-      { kind: 'cta', text: 'Visit Porto soon.' },
-    ];
-    const payload = buildJobPayload(persona(), {
-      video_subject: 'Porto trip',
-      video_script: 'Welcome to Porto.\n\nWhere the river meets the sea.\n\nVisit Porto soon.',
-      segments,
-    });
-    expect(payload.segments).toEqual(segments);
-  });
-
   it('forwards video_script so a segments request takes the supplied-script engine path', () => {
     const payload = buildJobPayload(persona(), {
       video_subject: 'Porto trip',
@@ -94,6 +80,20 @@ describe('buildJobPayload — request allowlist', () => {
     });
     expect(payload.faceless_material).toBe('svg');
     expect(payload).not.toHaveProperty('lipsync');
+  });
+
+  it('forwards segments next to the joined script so the engine can render per-segment media', () => {
+    const segments = [
+      { kind: 'hook', text: 'Welcome to Porto.', media: { mediaId: 'aabbccddeeff00112233445566778899.png' } },
+      { kind: 'body', text: 'Where the river meets the sea.' },
+      { kind: 'cta', text: 'Visit Porto soon.' },
+    ];
+    const payload = buildJobPayload(persona(), {
+      video_subject: 'Porto trip',
+      video_script: 'Welcome to Porto.\n\nWhere the river meets the sea.\n\nVisit Porto soon.',
+      segments,
+    });
+    expect(payload.segments).toEqual(segments);
   });
 
   it('warns once with the dropped key names, capped at ten', () => {

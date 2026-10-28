@@ -194,6 +194,7 @@ export const ptDictionary = {
   publishing: {
     mustSelectAccount: 'Selecione pelo menos uma conta para publicar.',
   },
+
   // Accounts
   accounts: {
     title: 'Contas',
@@ -291,6 +292,7 @@ export const ptDictionary = {
     agreePrefix: 'Ao continuar, você concorda com os nossos',
     agreeAnd: 'e',
   },
+
   // OAuth
   oauth: {
     startFailed: 'Não foi possível iniciar o OAuth.',

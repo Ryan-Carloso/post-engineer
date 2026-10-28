@@ -163,6 +163,49 @@ def test_emoji_is_400():
     assert exc_info.value.field == "segments.1.text"
 
 
+@pytest.mark.parametrize(
+    "emoji",
+    [
+        "\U0001f600",  # emoticons, inside 1F300-1FAFF
+        "\U0001f300",  # start of 1F300-1FAFF
+        "\U0001faff",  # end of 1F300-1FAFF
+        "\U00002600",  # start of 2600-27BF
+        "\U000027bf",  # end of 2600-27BF
+        "\U0001f000",  # start of 1F000-1F2FF
+        "\U0001f2ff",  # end of 1F000-1F2FF
+        "\ufe0f",  # variation selector
+    ],
+)
+def test_emoji_rejected_across_all_ranges(emoji):
+    segments = [
+        {"kind": "hook", "text": _hook()},
+        {"kind": "body", "text": _body() + " " + emoji},
+        {"kind": "cta", "text": _cta()},
+    ]
+    with pytest.raises(SegmentValidationError) as exc_info:
+        script_segments.validate_segments(segments)
+    assert exc_info.value.field == "segments.1.text"
+    assert "emoji" in str(exc_info.value).lower()
+
+
+@pytest.mark.parametrize(
+    "char",
+    [
+        "\u25ff",  # just below 2600
+        "\u27c0",  # just above 27BF
+        "\u1eff",  # just below 1F000
+        "\U0001fb00",  # just above 1FAFF
+    ],
+)
+def test_boundary_chars_outside_emoji_ranges_pass(char):
+    segments = [
+        {"kind": "hook", "text": _hook()},
+        {"kind": "body", "text": _body() + " " + char},
+        {"kind": "cta", "text": _cta()},
+    ]
+    script_segments.validate_segments(segments)
+
+
 def test_stage_direction_is_400():
     segments = [
         {"kind": "hook", "text": _hook()},
@@ -297,6 +340,39 @@ def test_media_with_neither_id_nor_url_is_400():
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments)
     assert exc_info.value.field == "segments.1.media"
+
+
+def test_media_with_unknown_key_is_400():
+    segments = [
+        {"kind": "hook", "text": _hook()},
+        {"kind": "body", "text": _body(), "media": {"mediaId": "abc", "alt": "kitchen"}},
+        {"kind": "cta", "text": _cta()},
+    ]
+    with pytest.raises(SegmentValidationError) as exc_info:
+        script_segments.validate_segments(segments)
+    assert exc_info.value.field == "segments.1.media"
+
+
+def test_media_shape_error_precedes_media_cap():
+    # Pins the documented rule order: the media shape loop runs before
+    # the media cap, so a shape violation in an over-cap request fires
+    # first instead of the cap error.
+    segments = [{"kind": "hook", "text": _hook()}]
+    for i in range(7):
+        media = {"url": f"https://example.com/{i}.jpg"}
+        if i == 1:
+            media = {"mediaId": "abc", "alt": "kitchen"}
+        segments.append(
+            {
+                "kind": "body",
+                "text": " ".join(["body"] * 12) + f" number {i}.",
+                "media": media,
+            }
+        )
+    segments.append({"kind": "cta", "text": _cta()})
+    with pytest.raises(SegmentValidationError) as exc_info:
+        script_segments.validate_segments(segments)
+    assert exc_info.value.field == "segments.2.media"
 
 
 def test_valid_media_shape_passes():

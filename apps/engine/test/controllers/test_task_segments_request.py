@@ -79,6 +79,21 @@ def test_empty_segments_list_is_rejected():
         TaskVideoRequest(video_subject="Porto", segments=[])
 
 
+def test_segments_joining_beyond_video_script_cap_is_rejected():
+    # One very long token keeps every word count in range while the
+    # joined script passes the 20000-character video_script cap: the
+    # cap must apply to the joined value, not only to a directly
+    # supplied video_script.
+    long_body = "x" * 20001 + " " + " ".join(["word"] * 29) + "."
+    segments = [
+        {"kind": "hook", "text": HOOK},
+        {"kind": "body", "text": long_body},
+        {"kind": "cta", "text": CTA},
+    ]
+    with pytest.raises(ValidationError, match="video_script"):
+        TaskVideoRequest(video_subject="Porto", segments=segments)
+
+
 def test_media_shape_only_in_phase_one():
     segments = valid_segments()
     segments[1]["media"] = {"mediaId": "abc", "url": "https://example.com/x.jpg"}

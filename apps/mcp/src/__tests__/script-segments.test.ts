@@ -55,6 +55,50 @@ describe('validateSegments (MCP copy)', () => {
     expect(result.error.field).toBe('segments.1');
   });
 
+  it('rejects media with an unknown key, like the generation route does', () => {
+    const result = validateSegments([
+      { kind: 'hook', text: hook },
+      { kind: 'body', text: body, media: { mediaId: 'abc', alt: 'kitchen' } },
+      { kind: 'cta', text: cta },
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.field).toBe('segments.1.media');
+  });
+
+  it('does not treat double-space or underscore differences as repeats, like the engine does', () => {
+    const baseBody =
+      'The hello_world kitchen in Porto serves fresh fish with local bread and sweet dessert after lunch today while guests enjoy stories music and warm light before they walk home happy tonight.';
+    const doubleSpaced = validateSegments([
+      { kind: 'hook', text: hook },
+      { kind: 'body', text: baseBody },
+      { kind: 'body', text: baseBody.replace(/ /g, '  ') },
+      { kind: 'cta', text: cta },
+    ]);
+    expect(doubleSpaced.ok).toBe(true);
+    const underscore = validateSegments([
+      { kind: 'hook', text: hook },
+      { kind: 'body', text: baseBody },
+      { kind: 'body', text: baseBody.replace('hello_world', 'helloworld') },
+      { kind: 'cta', text: cta },
+    ]);
+    expect(underscore.ok).toBe(true);
+  });
+
+  it('still treats case and punctuation only differences as repeats', () => {
+    const baseBody =
+      'The hello_world kitchen in Porto serves fresh fish with local bread and sweet dessert after lunch today while guests enjoy stories music and warm light before they walk home happy tonight.';
+    const result = validateSegments([
+      { kind: 'hook', text: hook },
+      { kind: 'body', text: baseBody },
+      { kind: 'body', text: baseBody.toUpperCase().replace(/\.$/, '!') },
+      { kind: 'cta', text: cta },
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.field).toBe('segments.2.text');
+  });
+
   it('mirrors the engine media shape: blank values count as present, null is skipped', () => {
     const blankUrl = validateSegments([
       { kind: 'hook', text: hook },

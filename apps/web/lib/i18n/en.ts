@@ -193,6 +193,7 @@ export const enDictionary: Dictionary = {
   publishing: {
     mustSelectAccount: 'Select at least one account to publish to.',
   },
+
   accounts: {
     title: 'Accounts',
     subtitle: 'Connect and manage your publishing accounts.',
@@ -265,6 +266,7 @@ export const enDictionary: Dictionary = {
     view: '{count} view',
     video: '{count} video',
   },
+
   // Login
   login: {
     title: 'Welcome back',

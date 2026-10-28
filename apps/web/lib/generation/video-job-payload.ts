@@ -41,11 +41,6 @@ const REQUEST_FORWARD_FIELDS: ReadonlyArray<string> = [
   // the supplied script); a segments request joins its segments into this
   // field so the engine takes the supplied-script path, never the LLM one.
   'video_script',
-  // segments is a first-class engine field (TaskVideoRequest carries it):
-  // the segment list rides alongside the joined script so the engine can
-  // render per-segment media; the engine rejects a script that differs
-  // from the joined segments, so the two can never drift apart.
-  'segments',
   'video_quality',
   'paragraph_number',
   // webhook_url is a first-class engine field (TaskVideoRequest validates it
@@ -64,6 +59,10 @@ const REQUEST_FORWARD_FIELDS: ReadonlyArray<string> = [
   // it as the per-post material choice, face or not); without it a
   // post's svg choice would be dropped here and silently render broll.
   'faceless_material',
+  // segments is a first-class engine field (TaskVideoRequest carries it):
+  // without it a segments request would render stock for every segment
+  // and drop every user photo with no warning.
+  'segments',
 ];
 
 export interface JobPersona {

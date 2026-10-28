@@ -861,6 +861,20 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
     });
 
+    it('rejects an unknown media key at parse time instead of stripping it', async () => {
+      const withAlt = [
+        { kind: 'hook', text: segmentsHook },
+        { kind: 'body', text: segmentsBody, media: { mediaId: 'abc', alt: 'kitchen' } },
+        { kind: 'cta', text: segmentsCta },
+      ];
+      const res = await post(baseBody({ topics: ['Porto trip'], options: { segments: withAlt } }));
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(String(json.field)).toContain('segments');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
     it('forwards the joined segments script to the engine for a valid segments request', async () => {
       const res = await post(baseBody({ topics: ['Porto trip'], options: { segments: validSegments } }));
       expect(res.status).toBe(200);
