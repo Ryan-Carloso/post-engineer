@@ -57,6 +57,43 @@ export function isCountedFile(p) {
 }
 
 /**
+ * Undo git's C-quoting of a numstat path (default core.quotePath=true
+ * quotes non-ASCII/control bytes, e.g. "apps/web/lib/caf\303\251.ts").
+ * Without this, the quoted path's extension reads as `ts"` and the file
+ * silently contributes 0 lines. The CLI also disables quoting, so this
+ * is defense in depth for numstat text fed in from elsewhere.
+ */
+export function unquotePath(p) {
+  if (p.length < 2 || !p.startsWith('"') || !p.endsWith('"')) return p;
+  const inner = p.slice(1, -1);
+  const bytes = [];
+  for (let i = 0; i < inner.length; i++) {
+    const c = inner[i];
+    if (c === '\\' && i + 1 < inner.length) {
+      const next = inner[i + 1];
+      if (next >= '0' && next <= '7' && i + 3 < inner.length + 1 && inner[i + 2] >= '0' && inner[i + 2] <= '7' && inner[i + 3] >= '0' && inner[i + 3] <= '7') {
+        bytes.push(parseInt(inner.slice(i + 1, i + 4), 8));
+        i += 3;
+        continue;
+      }
+      if (next === '"' || next === '\\') {
+        bytes.push(next.charCodeAt(0));
+        i += 1;
+        continue;
+      }
+    }
+    const code = c.charCodeAt(0);
+    if (code < 128) bytes.push(code);
+    else {
+      // Non-ASCII char already decoded: re-encode as UTF-8 bytes.
+      const encoded = new TextEncoder().encode(c);
+      for (const b of encoded) bytes.push(b);
+    }
+  }
+  return new TextDecoder('utf-8').decode(new Uint8Array(bytes));
+}
+
+/**
  * Count added production lines from `git diff --numstat` output.
  * Returns { files: [{ added, path }], total }. Binary rows ("-") and
  * non-counted files contribute nothing; a pure rename (0 added) counts 0.
@@ -70,7 +107,7 @@ export function countAddedLines(numstatText) {
     const secondTab = line.indexOf('\t', firstTab + 1);
     if (firstTab === -1 || secondTab === -1) continue;
     const addedRaw = line.slice(0, firstTab);
-    const path = line.slice(secondTab + 1);
+    const path = unquotePath(line.slice(secondTab + 1));
     if (addedRaw === '-') continue;
     const added = Number(addedRaw);
     if (!Number.isFinite(added)) continue;
@@ -119,7 +156,9 @@ function main() {
     process.exit(2);
   }
   const mergeBase = execFileSync('git', ['merge-base', base, head], { encoding: 'utf8' }).trim();
-  const numstat = execFileSync('git', ['diff', '--numstat', mergeBase, head], { encoding: 'utf8' });
+  // Disable path quoting so non-ASCII paths arrive as raw UTF-8 and are
+  // counted; countAddedLines also unquotes as defense in depth.
+  const numstat = execFileSync('git', ['-c', 'core.quotePath=false', 'diff', '--numstat', mergeBase, head], { encoding: 'utf8' });
   const { files, total } = countAddedLines(numstat);
   for (const f of files) console.log(`${f.added} ${f.path}`);
   console.log(`Total added production lines (tests/docs/deletions excluded): ${total}`);
