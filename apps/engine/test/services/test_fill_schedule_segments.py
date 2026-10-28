@@ -1,9 +1,8 @@
 """The batch pipeline forwards the slot's segments.
 
 scheduled_posts.segments (migration 030) is written by the web and must
-reach the engine request on the batch path too, or a requeued slot
-(engine restart mid-generation) regenerates from the topic alone: the
-script differs and every user photo disappears with no warning.
+reach the engine request on the batch path too. A slot without segments
+has no script: it fails with a segments error instead of dispatching.
 """
 
 import sys
@@ -36,7 +35,7 @@ def _slot(**extra):
     slot = {
         "id": "slot-1",
         "slot_at": "2026-09-08T09:00:00+00:00",
-        "topic": "Batch topic one",
+        "title": "Batch title one",
         "schedules": {
             "id": "sched-1",
             "user_id": "user-1",
@@ -113,6 +112,15 @@ class BatchDispatchSegmentsTests(unittest.TestCase):
             "Follow for more Porto walks every week.",
         )
 
-    def test_slot_without_segments_dispatches_without_them(self):
-        request = self._dispatched_request(_slot(faceless=True))
-        self.assertIsNone(request.segments)
+    def test_slot_without_segments_fails_without_dispatch(self):
+        store = _Store(_slot(faceless=True))
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=MagicMock(), publish_video=MagicMock()
+        )
+        scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
+        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        self.assertEqual(enqueued, 0)
+        dispatch.assert_not_called()
+        self.assertEqual(store.updates[0][1]["status"], "failed")
+        self.assertIn("segments", store.updates[0][1]["error"])
