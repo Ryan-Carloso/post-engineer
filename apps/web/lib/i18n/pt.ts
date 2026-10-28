@@ -727,6 +727,15 @@ export const ptDictionary = {
     support: 'Suporte',
     rights: '© {year} Post Engineer. Todos os direitos reservados.',
   },
+  // Recipes list page — initial version, user will improve later
+  recipes: {
+    title: 'Receitas',
+    subtitle: 'Receitas prontas para copiar para o MCP do Post Engineer.',
+    dailyNewsTitle: 'Notícias do dia viram vídeo',
+    dailyNewsObjective:
+      'Transformar uma notícia do dia em um vídeo de persona, validado antes de gastar qualquer token.',
+    viewRecipe: 'Ver receita',
+  },
   // Legal pages
   legal: {
     privacyTitle: 'Política de Privacidade',

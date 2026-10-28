@@ -108,7 +108,7 @@ export async function middleware(request: NextRequest) {
   // Public pages. .well-known (OAuth discovery/JWKS) and oauth/* handle
   // their own session: authorize/consent redirect to /login with `next`,
   // and token/register are public by spec.
-  const publicPaths = ['/landing', '/login', '/privacy', '/terms'];
+  const publicPaths = ['/landing', '/login', '/privacy', '/terms', '/recipes'];
 
   // No user on a protected page → /landing. A transient getUser failure
   // is not "logged out": the cookie is still there, and following the
@@ -146,8 +146,8 @@ export const config = {
      * - common public/ file extensions (logo.png, voice-samples, etc.)
      * - api/ (API routes)
      * - auth/ (auth callback)
-     * - login, landing, privacy, terms (public pages)
+     * - login, landing, privacy, terms, recipes (public pages)
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpe?g|gif|webp|svg|ico|txt|mp3|woff2?|ttf)$|api/|auth/|.well-known/|oauth/|login|landing|privacy|terms).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpe?g|gif|webp|svg|ico|txt|mp3|woff2?|ttf)$|api/|auth/|.well-known/|oauth/|login|landing|privacy|terms|recipes).*)',
   ],
 }

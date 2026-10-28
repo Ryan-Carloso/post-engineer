@@ -723,6 +723,15 @@ export const enDictionary: Dictionary = {
     support: 'Support',
     rights: '© {year} Post Engineer. All rights reserved.',
   },
+  // Recipes list page — initial version, user will improve later
+  recipes: {
+    title: 'Recipes',
+    subtitle: 'Copy-ready recipes for the Post Engineer MCP server.',
+    dailyNewsTitle: 'Daily news becomes a video',
+    dailyNewsObjective:
+      'Turn one news story of the day into one persona video, validated before any token is spent.',
+    viewRecipe: 'View recipe',
+  },
   // Legal pages
   legal: {
     privacyTitle: 'Privacy Policy',

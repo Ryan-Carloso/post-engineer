@@ -68,6 +68,14 @@ describe('middleware auth redirect', () => {
     expect(warnCalls()).toHaveLength(0);
   });
 
+  it('does not redirect unauthenticated requests for the public /recipes page', async () => {
+    getUser.mockResolvedValue({ data: { user: null }, error: null });
+
+    const response = await middleware(requestFor('/recipes'));
+
+    expect(response.headers.get('location')).toBeNull();
+  });
+
   it('redirects to /landing when getUser returns no user and no error', async () => {
     getUser.mockResolvedValue({ data: { user: null }, error: null });
 

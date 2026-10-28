@@ -238,10 +238,15 @@ prove: a real published video. That needs a user-approved generation run
 with a real story, a real persona, and real accounts, and is tracked as a
 follow-up, not claimed here.
 
+## Discovery
+
+This recipe is listed on the web recipes page at `/recipes` (title + one-line
+objective, linking to this doc) and in the MCP README Links section and the
+UI copy prompt. The page is an initial version, intentionally minimal, and
+the user will improve it later.
+
 ## What this recipe is not
 
-- Not a web page listing recipes. The web recipes list comes only after
-  2-3 recipes exist and are proven end to end.
 - Not the weekly routine recipe (recipe 2). That is a separate recipe file
   in a later PR.
 - Not a news aggregator, not a fact-checker, and not a licence grant. The
