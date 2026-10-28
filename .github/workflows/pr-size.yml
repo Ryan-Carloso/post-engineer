@@ -22,8 +22,9 @@ name: pr-size
 # rename/move). Labels are maintainer-applied, so this is not a bypass
 # any author can self-apply silently in the PR body.
 #
-# Dependency-free: git diff --numstat against the merge-base with main,
-# no node/python toolchain setup.
+# Implementation: .github/scripts/pr-size/check.mjs (Node stdlib only),
+# unit-tested by .github/scripts/pr-size/check.test.mjs, mirroring the
+# file-size workflow's pattern.
 
 on:
   pull_request:
@@ -40,45 +41,18 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 pinned 2026-09-25
+        with:
+          node-version: '22'
+
+      - name: Unit tests (pr-size counter)
+        run: node --test .github/scripts/pr-size/*.test.mjs
+
       - name: Check PR size
         env:
           PR_LABELS: ${{ toJson(github.event.pull_request.labels) }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
-          merge_base="$(git merge-base "$PR_BASE_SHA" HEAD)"
-          echo "Merge-base with main: $merge_base"
-          git diff --numstat "$merge_base" HEAD > /tmp/pr-size-numstat.txt
-          awk '
-            BEGIN { FS = "\t"; total = 0 }
-            {
-              added = $1; path = $3
-              if (added == "-") next
-              # Excluded: docs, lockfiles, generated/snapshot files.
-              if (path ~ /(^|\/)docs\//) next
-              if (path ~ /\.md$/) next
-              if (path ~ /(^|\/)README(\.|$)/) next
-              if (path ~ /(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|[^\/]*\.lock)$/) next
-              if (path ~ /(^|\/)__snapshots__\// || path ~ /\.snap$/) next
-              # Excluded: test files.
-              if (path ~ /(^|\/)(__tests__|test|tests)\//) next
-              if (path ~ /(^|\/)[^\/]*\.(test|spec)\.[^\/]+$/) next
-              if (path ~ /(^|\/)(test_[^\/]*|[^\/]*_test)\.py$/) next
-              # Counted: production code extensions only.
-              if (path !~ /\.(ts|tsx|py|js|mjs|cjs|sql)$/) next
-              printf "%s %s\n", added, path
-              total += added
-            }
-            END { printf "TOTAL %d\n", total }
-          ' /tmp/pr-size-numstat.txt | tee /tmp/pr-size-counted.txt
-          total="$(awk '/^TOTAL / { print $2 }' /tmp/pr-size-counted.txt)"
-          echo "Total added production lines (tests/docs/deletions excluded): $total"
-          if echo "$PR_LABELS" | grep -q '"name":"size-limit-exempt"'; then
-            echo "PR carries the size-limit-exempt label: limit not enforced on this PR."
-            exit 0
-          fi
-          if [ "$total" -gt 800 ]; then
-            echo "::error::PR adds $total production lines, over the 800-line limit (deletions, tests, and docs excluded). Split the PR by complete layer, or justify it in the PR body, or ask a maintainer for the size-limit-exempt label."
-            exit 1
-          fi
-          echo "PR size within the 800-line limit."
+          node .github/scripts/pr-size/check.mjs \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.sha }}"
