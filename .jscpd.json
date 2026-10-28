@@ -1,0 +1,33 @@
+{
+    "format": [
+        "typescript",
+        "javascript",
+        "python"
+    ],
+    "ignore": [
+        "**/node_modules/**",
+        "**/dist/**",
+        "**/__tests__/**",
+        "**/test/**",
+        "**/*.test.*",
+        "**/*.spec.*",
+        "**/*.md",
+        "docs/**",
+        "**/*.lock",
+        "**/*.snap",
+        "**/*.snap.*",
+        "apps/web/lib/generation/script-segments.ts",
+        "apps/mcp/src/script-segments.ts"
+    ],
+    "minLines": 50,
+    "minTokens": 100,
+    "path": [
+        "apps/web",
+        "apps/mcp",
+        "apps/engine"
+    ],
+    "reporters": [
+        "consoleFull"
+    ],
+    "threshold": 0
+}

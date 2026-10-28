@@ -1,0 +1,68 @@
+name: duplication
+
+# Report-only copy-paste detection with jscpd (no server, no token).
+#
+# What it does: scans production code only (TypeScript, TSX, JavaScript,
+# Python under apps/web, apps/mcp, apps/engine) for duplicated blocks of at
+# least 50 lines / 100 tokens, and prints the result in the job log.
+#
+# What it does NOT do: this job is intentionally NOT a required status
+# check and must NOT block merge. jscpd exits non-zero when it finds any
+# clone (threshold 0 in .jscpd.json), so the run step neutralizes the exit
+# code with `|| true` and always succeeds — the report is the output.
+# A failing threshold is a follow-up decision, once a baseline is known.
+#
+# Baseline measured on main (d6c2687a, 2026-10-28, jscpd 5.4.2):
+#   with the allowlist below: 0 clones, 0.00% duplicated lines
+#     (284 files, 63,649 lines analyzed)
+#   without the allowlist: 1 clone, 0.10% duplicated lines (62 lines) —
+#     exactly the known mirrored pair below. No other large block found.
+#
+# Allowlist (in .jscpd.json, with the reason here because JSON has no
+# comments): apps/web/lib/generation/script-segments.ts and
+# apps/mcp/src/script-segments.ts are mirrored BY DESIGN for parity — the
+# published MCP package cannot import from the web app, so the same
+# mechanical validation lives in both places. A separate shared-validation
+# PR is in progress to remove this duplication; this workflow must not
+# fail on it and must not try to fix it. When that PR merges, remove both
+# entries from .jscpd.json in the same change.
+#
+# Excluded by design: test files, docs, generated files, lockfiles and
+# snapshots — only production code counts.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  duplication:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 pinned 2026-09-25
+        with:
+          node-version: '22'
+
+      - name: Run jscpd (report-only, never fails the job)
+        run: |
+          set -uo pipefail
+          echo "jscpd config: .jscpd.json (min 50 lines / 100 tokens, production code only)"
+          echo "REPORT-ONLY: this job never blocks merge, even when clones are found."
+          npx --yes jscpd@5.4.2 --config .jscpd.json || true
+          echo "Duplication report finished (see the jscpd table above)."
+
+      - name: Summarize
+        run: |
+          {
+            echo "## Duplication report (report-only, not blocking)"
+            echo ""
+            echo "Tool: jscpd 5.4.2, config \`.jscpd.json\`, min 50 lines / 100 tokens."
+            echo "Scope: production TypeScript / TSX / JavaScript / Python under apps/web, apps/mcp, apps/engine."
+            echo "Excluded: tests, docs, generated files, lockfiles, snapshots."
+            echo "Allowlisted by design: the mirrored script-segments pair (web vs MCP) — see the workflow header."
+            echo "Baseline on main (d6c2687a): 0 clones / 0.00% with the allowlist; 1 clone / 0.10% without it."
+            echo "A failing threshold is a follow-up decision once this baseline is confirmed in CI."
+          } >> "$GITHUB_STEP_SUMMARY"
