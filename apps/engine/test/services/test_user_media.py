@@ -318,6 +318,30 @@ def test_splice_skips_a_second_segment_on_an_already_used_clip(tmp_path):
     assert render_mock.call_count == 1
 
 
+def test_splice_reports_a_segment_whose_interval_overlaps_no_clip(tmp_path):
+    clips = ["a.mp4", "b.mp4", "c.mp4"]
+    # Interval 10-12 sits past the 0-6 clip timeline: the photo is kept
+    # out, and that must be a task warning, not just a log line.
+    prepared = [user_media.SegmentMedia(index=1, still_path="/t/still.jpg", start=10.0, end=12.0)]
+    with patch.object(
+        user_media.image_material, "render_image_file_to_mp4", return_value="rendered.mp4"
+    ), patch.object(user_media, "_clip_durations", return_value=[2.0, 2.0, 2.0]):
+        result, skipped = user_media.splice_segment_media(clips, prepared, 2)
+    assert result == clips
+    assert skipped == ["segment 1 media skipped: interval overlaps no clip"]
+
+
+def test_splice_reports_a_failed_render(tmp_path):
+    clips = ["a.mp4", "b.mp4", "c.mp4"]
+    prepared = [user_media.SegmentMedia(index=0, still_path="/t/still.jpg", start=0.0, end=2.0)]
+    with patch.object(
+        user_media.image_material, "render_image_file_to_mp4", return_value=None
+    ), patch.object(user_media, "_clip_durations", return_value=[2.0, 2.0, 2.0]):
+        result, skipped = user_media.splice_segment_media(clips, prepared, 2)
+    assert result == clips
+    assert skipped == ["segment 0 media skipped: photo clip failed to render"]
+
+
 def test_splice_picks_the_clip_with_max_interval_overlap(tmp_path):
     clips = ["a.mp4", "b.mp4", "c.mp4"]
     # Interval 3-7 overlaps clip 1 (2-4) by 1s and clip 2 (4-6) by 2s:
@@ -491,6 +515,35 @@ def test_apply_segment_media_wires_segments_through_clips_and_warnings(tmp_path,
     assert warnings == []
     assert clips[0] == "rendered.mp4"
     assert clips[1:] == ["b.mp4", "c.mp4", "d.mp4"]
+
+
+def test_apply_segment_media_surfaces_a_failed_render_as_a_warning(tmp_path, monkeypatch):
+    monkeypatch.setattr(user_media, "_temp_assets_dir", lambda: str(tmp_path))
+    asset = tmp_path / "aabbccddeeff00112233445566778899.jpg"
+    asset.write_bytes(_jpeg())
+    from types import SimpleNamespace as _NS
+
+    params = _NS(
+        video_subject="Porto trip",
+        video_aspect="9:16",
+        faceless_material="broll",
+        video_clip_duration=2,
+        segments=[
+            {"kind": "hook", "text": "Welcome to Porto.", "media": {"mediaId": asset.name}},
+            {"kind": "body", "text": "Where the river meets the sea."},
+            {"kind": "cta", "text": "Visit Porto soon."},
+        ],
+    )
+    subtitle = _write_words(tmp_path, WORDS)
+    with patch.object(
+        user_media.image_material, "render_image_file_to_mp4", return_value=None
+    ), patch.object(user_media, "_clip_durations", return_value=[2.0, 2.0, 2.0, 2.0]):
+        clips, warnings = user_media.apply_segment_media(
+            "task-1", params, ["a.mp4", "b.mp4", "c.mp4", "d.mp4"],
+            subtitle, 6.3, lipsync_active=False,
+        )
+    assert clips == ["a.mp4", "b.mp4", "c.mp4", "d.mp4"]
+    assert warnings == ["segment 0 media skipped: photo clip failed to render"]
 
 
 def test_apply_segment_media_without_segments_changes_nothing(tmp_path):

@@ -311,7 +311,8 @@ def splice_segment_media(
     """`clips` with each segment's photo clip replacing its max-overlap clip.
 
     Returns (clips, skipped warnings). A segment whose interval overlaps
-    no clip, or whose still fails to render, keeps the original clip.
+    no clip, or whose still fails to render, keeps the original clip
+    and is reported in the warnings — never just a log line.
     A segment whose best clip is already used by an earlier segment's
     photo is skipped with a warning instead of overwriting that photo
     with no trace: two short adjacent segments can both overlap the
@@ -338,6 +339,7 @@ def splice_segment_media(
                 best_index = index
         if best_index is None:
             logger.warning("segment media interval overlaps no clip; keeping the original clip")
+            skipped.append(f"segment {media.index} media skipped: interval overlaps no clip")
             continue
         if best_index in used:
             logger.warning(
@@ -355,6 +357,7 @@ def splice_segment_media(
             used.add(best_index)
         else:
             logger.warning("segment media clip failed to render; keeping the original clip")
+            skipped.append(f"segment {media.index} media skipped: photo clip failed to render")
     return result, skipped
 
 
