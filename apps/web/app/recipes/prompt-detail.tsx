@@ -14,8 +14,9 @@ import CopyPromptBlock from './copy-prompt-block';
 // lead for quick understanding, the full text follows for whoever
 // wants to read everything. GitHub is only a small secondary link
 // at the bottom, never the main action. The steps use short
-// sentences and state first; no internal tool name is exposed
-// in any user-facing copy here.
+// sentences and state first; no internal style-skill name appears
+// in user-facing copy here — MCP tool names are public and
+// expected inside the copy-ready prompt.
 //---------------
 
 export default function PromptDetail({ prompt }: { prompt: PromptEntry }) {

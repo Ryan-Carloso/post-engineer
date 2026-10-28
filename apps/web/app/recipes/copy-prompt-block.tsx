@@ -19,9 +19,22 @@ export default function CopyPromptBlock({ prompt }: { prompt: string }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
-    void navigator.clipboard.writeText(prompt);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+    // Outside a secure context navigator.clipboard has no writeText;
+    // in that case keep the "Copy this prompt" label instead of
+    // claiming a copy that never happened.
+    if (typeof navigator.clipboard?.writeText !== 'function') {
+      return;
+    }
+    navigator.clipboard
+      .writeText(prompt)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2500);
+      })
+      .catch(() => {
+        // Keep the "Copy this prompt" label — the copy did not happen,
+        // so the user must not paste an empty clipboard into their agent.
+      });
   };
 
   return (

@@ -118,6 +118,38 @@ describe('prompt detail page', () => {
     expect(screen.getByText(/Validation is free/)).toBeInTheDocument();
   });
 
+  it('shows Copied only after the clipboard write resolves', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(window.navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
+    render(<PromptDetail prompt={prompt} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Copy this prompt' }));
+    expect(
+      await screen.findByRole('button', { name: 'Copied!' }),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps the Copy label when the clipboard write rejects', async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error('denied'));
+    Object.defineProperty(window.navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
+    render(<PromptDetail prompt={prompt} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Copy this prompt' }));
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+    // Let the rejection handler run before asserting the label is unchanged.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(
+      screen.getByRole('button', { name: 'Copy this prompt' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Copied!' }),
+    ).not.toBeInTheDocument();
+  });
+
   it('keeps GitHub as a small secondary link at the bottom, not the main action', () => {
     render(<PromptDetail prompt={prompt} />);
     const links = screen.getAllByRole('link');

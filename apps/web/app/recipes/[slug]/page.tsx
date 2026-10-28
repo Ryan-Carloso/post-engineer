@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useI18n } from '@/lib/i18n/provider';
 import SiteFooter from '@/components/site-footer';
@@ -29,12 +30,12 @@ export default function PromptDetailPage() {
         ) : (
           <div>
             <p className="leading-relaxed text-[#414d63]">{t('recipes.notFound')}</p>
-            <a
+            <Link
               href="/recipes"
               className="mt-4 inline-block font-medium text-[#ff544c] hover:underline"
             >
               ← {t('recipes.backToPrompts')}
-            </a>
+            </Link>
           </div>
         )}
       </main>
