@@ -1,8 +1,10 @@
 // Mechanical validation for the segments script contract (MCP first, Phase 1).
-// Mirrors apps/engine/app/services/script_segments.py exactly: same limits,
-// same accepted inputs, same field/rule/fix shape. No LLM, no network, no TTS:
-// the hook word guard runs here; measured TTS duration is checked by the
-// engine when a hook-only TTS endpoint exists (Phase 1 gap, see validate_script).
+// Mirrors apps/engine/app/services/script_segments.py: same limits,
+// same accepted inputs, same field/rule/fix shape, with one documented
+// exception in normalize() below (Python casefold vs JS toLowerCase).
+// No LLM, no network, no TTS: the hook word guard runs here; measured TTS
+// duration is checked by the engine when a hook-only TTS endpoint exists
+// (Phase 1 gap, see validate_script).
 
 export const MAX_SEGMENTS = 12;
 export const MAX_MEDIAS = 6;
@@ -91,11 +93,14 @@ function hasForbiddenContent(text: string): boolean {
 }
 
 function normalize(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  // Mirrors the engine _normalized: strip punctuation, keep letters,
+  // numbers, underscores and whitespace runs exactly as written (no
+  // collapsing), then trim. JS \w is ASCII-only, so the class spells out
+  // Unicode letters/numbers plus '_' to match Python's Unicode \w.
+  // One remaining difference: Python casefold vs JS toLowerCase differ
+  // on a few characters (for example ß), so this is a near mirror, not
+  // byte-identical, for those edge cases.
+  return text.toLowerCase().replace(/[^\p{L}\p{N}_\s]/gu, '').trim();
 }
 
 export function validateSegments(input: unknown): SegmentsResult {
@@ -256,6 +261,19 @@ export function validateSegments(input: unknown): SegmentsResult {
     if (media === undefined || media === null) continue;
     if (typeof media !== 'object') {
       return fail(`segments.${i}.media`, 'Media must be an object.', 'Send media as { mediaId } or { url }.');
+    }
+    // Unknown media keys are rejected, not stripped: the generation
+    // route's strict media shape rejects them, so this validator must
+    // too, or validate-script accepts what generation rejects.
+    const unknownMedia = Object.keys(media)
+      .filter((key) => key !== 'mediaId' && key !== 'url')
+      .sort();
+    if (unknownMedia.length > 0) {
+      return fail(
+        `segments.${i}.media`,
+        `media has unknown field ${unknownMedia[0]}`,
+        'Remove unknown fields from the media.',
+      );
     }
     const mediaIdPresent = media.mediaId !== undefined && media.mediaId !== null;
     const urlPresent = media.url !== undefined && media.url !== null;

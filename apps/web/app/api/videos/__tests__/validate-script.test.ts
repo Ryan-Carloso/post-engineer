@@ -84,6 +84,19 @@ describe('POST /api/videos/validate-script', () => {
     expect(payload.field as string).toContain('segments');
   });
 
+  it('rejects media with an unknown key, like the generation route does', async () => {
+    const withAlt = [
+      { kind: 'hook', text: hook },
+      { kind: 'body', text: body, media: { mediaId: 'abc', alt: 'kitchen' } },
+      { kind: 'cta', text: cta },
+    ];
+    const response = await POST(authRequest({ segments: withAlt }));
+    expect(response.status).toBe(400);
+    const payload = (await response.json()) as Record<string, unknown>;
+    expect(payload.success).toBe(false);
+    expect(payload.field).toBe('segments.1.media');
+  });
+
   it('rejects unauthenticated callers before validating', async () => {
     vi.mocked(requireSupabaseSession).mockResolvedValueOnce({
       auth: null,

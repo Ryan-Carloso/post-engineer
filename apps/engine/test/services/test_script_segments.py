@@ -342,6 +342,17 @@ def test_media_with_neither_id_nor_url_is_400():
     assert exc_info.value.field == "segments.1.media"
 
 
+def test_media_with_unknown_key_is_400():
+    segments = [
+        {"kind": "hook", "text": _hook()},
+        {"kind": "body", "text": _body(), "media": {"mediaId": "abc", "alt": "kitchen"}},
+        {"kind": "cta", "text": _cta()},
+    ]
+    with pytest.raises(SegmentValidationError) as exc_info:
+        script_segments.validate_segments(segments)
+    assert exc_info.value.field == "segments.1.media"
+
+
 def test_valid_media_shape_passes():
     segments = [
         {"kind": "hook", "text": _hook()},

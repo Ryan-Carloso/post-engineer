@@ -126,6 +126,17 @@ def _check_media(media: Any, field: str) -> int:
         raise SegmentValidationError(
             field, "Media must be an object.", "Send media as { mediaId } or { url }."
         )
+    # Unknown media keys are rejected, not stripped, matching the
+    # SegmentMedia extra="forbid" shape on the request path and the TS
+    # validators: otherwise validate_segments accepts what the request
+    # parsers reject.
+    unknown = sorted(set(media) - {"mediaId", "url"})
+    if unknown:
+        raise SegmentValidationError(
+            field,
+            f"Media has unknown field {unknown[0]}.",
+            "Remove unknown fields from the media.",
+        )
     media_id = media.get("mediaId")
     url = media.get("url")
     if media_id is not None and url is not None:
