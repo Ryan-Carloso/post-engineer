@@ -12,6 +12,7 @@ import { findRepoRoot } from '@/test/repo-root';
 const root = findRepoRoot(import.meta.url);
 const migration = readFileSync(join(root, 'supabase/migrations/029_scheduled-posts-material.sql'), 'utf8');
 const route = readFileSync(join(root, 'apps/web/app/api/videos/generate-and-schedule/route.ts'), 'utf8');
+const slotRows = readFileSync(join(root, 'apps/web/app/api/videos/generate-and-schedule/slot-rows.ts'), 'utf8');
 
 describe('scheduled_posts.faceless_material', () => {
   it('is added to scheduled_posts with a broll default', () => {
@@ -25,6 +26,7 @@ describe('scheduled_posts.faceless_material', () => {
   });
 
   it('is written on every slot insert', () => {
-    expect(route).toContain('faceless_material: validatedOptions.facelessMaterial,');
+    expect(slotRows).toContain('faceless_material: input.facelessMaterial,');
+    expect(route).toContain('buildSlotRows({');
   });
 });

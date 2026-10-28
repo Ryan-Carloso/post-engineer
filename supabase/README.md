@@ -35,6 +35,7 @@ the order — you never need to guess or read docs to know what comes next:
 | 027 | `migrations/027_internal-scheduler.sql` | In-app scheduler replaces the pg_cron/pg_net HTTP triggers: unschedules `post-metrics-hourly`/`billing-reconcile-daily` and drops `schedule_post_metrics()`/`schedule_billing_reconcile()` (both guarded), adds `scheduler_leases` + `try_acquire_scheduler_lease()` (service-role only) — the web app (`apps/web/lib/scheduler-jobs.ts`) runs the jobs in-process, one run per tick across replicas |
 | 028 | `migrations/028_publish_retry_backoff.sql` | Publish retry backoff: `scheduled_posts.publish_not_before`, skipped by `ready_due_slots` until the delay elapses |
 | 029 | `migrations/029_scheduled-posts-material.sql` | Per-post video material (`scheduled_posts.faceless_material`, `'broll'` or `'svg'`, default `'broll'`), forwarded by the engine batch pipeline |
+| 030 | `migrations/030_scheduled-posts-segments.sql` | Per-post script segments (`scheduled_posts.segments`, nullable jsonb), forwarded by the engine batch pipeline so a requeued slot keeps its script and user photos |
 
 ## How to apply
 

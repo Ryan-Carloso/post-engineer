@@ -35,6 +35,8 @@ from app.services import (
 from app.services import state as sm
 from app.services import persona_image
 from app.services import task_webhook
+from app.services import user_media
+from app.services.lipsync_active import persona_lipsync_active  # noqa: F401 - re-exported for existing callers
 from app.services.pipeline_stage import PhaseTracker
 from app.services.intro_cost import IntroCostReport, completion_cost_kwargs, cost_event_props
 from app.services.persona_hook import (
@@ -428,19 +430,6 @@ def _fail_task(
         # The alert never went out (network blip, webhook misconfigured):
         # release the reservation so a later failure notice re-alerts.
         _release_failure_alert(task_id)
-
-
-def persona_lipsync_active(params: VideoParams) -> bool:
-    """True when the job should generate the persona's lip-sync intro.
-
-    Requires a persona with a visual identity (photo_url OR avatar_url) AND
-    lipsync_enabled; otherwise the voice only is used, with no face filter
-    on the material (exclude_faces=False in get_video_materials).
-    """
-    persona = params.persona
-    if persona is None or not bool(params.lipsync_enabled):
-        return False
-    return persona.photo_url is not None or persona.avatar_url is not None
 
 
 # Product-fixed persona pacing ("always this way"): the face-fill outro
@@ -1400,13 +1389,13 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             _complete_task(task_id, params, subtitle_path=subtitle_path)
             return {"subtitle_path": subtitle_path}
 
-        # The video is cut to the audio file's length: drop the dead air after the
-        # last spoken word (Whisper word times; Chatterbox ends with a silent tail).
-        trimmed_seconds = audio_trim.trim_after_last_word(
-            audio_file, subtitle.file_to_words(subtitle_path)
-        )
-        if trimmed_seconds is not None:
-            audio_duration = math.ceil(trimmed_seconds)
+        task_local = audio_trim.task_local_copy(audio_file, utils.task_dir(task_id))
+        if task_local is not None:  # None: copy failed; skip the trim, never cut shared
+            audio_file = task_local
+            trimmed_seconds = audio_trim.trim_after_last_word(
+                audio_file, subtitle.file_to_words(subtitle_path))
+            if trimmed_seconds is not None:
+                audio_duration = math.ceil(trimmed_seconds)
 
         # 4b. Persona hook guard: the lip-sync intro needs the hook to end
         # between 3 and 6 seconds. Validate now — before the expensive
@@ -1456,6 +1445,17 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             _fail_task(task_id, "failed to download videos", params, stage="download")
             cleanup_task_intermediates(task_id, ())
             return
+
+        # Segment media (Phase 2, faceless first): each segment's photo
+        # replaces the clip overlapping its spoken interval. Skips are
+        # stored on the task so the status endpoint surfaces them — a bad
+        # URL costs only that photo, never the video.
+        downloaded_videos, media_warnings = user_media.apply_segment_media(
+            task_id, params, downloaded_videos, subtitle_path, audio_duration,
+            lipsync_active=persona_lipsync_active(params),
+        )
+        if media_warnings or getattr(params, "segments", None):
+            _update_task(task_id, media_warnings=media_warnings)
 
         if stop_at == "materials":
             _complete_task(task_id, params, materials=downloaded_videos)

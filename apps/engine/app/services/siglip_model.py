@@ -110,7 +110,10 @@ def _fetch_one(spec: ModelFile, model_dir: str, fetch: Callable[[str, str], None
         ) from None
     finally:
         if os.path.exists(part_path):
-            os.remove(part_path)
+            try:
+                os.remove(part_path)
+            except OSError:
+                pass
 
 
 def ensure_model(model_path: str, fetch: Optional[Callable[[str, str], None]] = None) -> None:
@@ -128,10 +131,17 @@ def ensure_model(model_path: str, fetch: Optional[Callable[[str, str], None]] = 
         return
     model_dir = os.path.dirname(os.path.abspath(model_path))
     with _lock:
-        missing = [s for s in FILES if not _present(s, os.path.join(model_dir, s.name))]
-        if not missing:
-            return
-        os.makedirs(model_dir, exist_ok=True)
+        try:
+            missing = [s for s in FILES if not _present(s, os.path.join(model_dir, s.name))]
+            if not missing:
+                return
+            os.makedirs(model_dir, exist_ok=True)
+        except OSError as exc:
+            # A read-only or vanished model directory is a missing model,
+            # not a boot/task failure: the verifier fails closed downstream.
+            raise VerificationUnavailable(
+                f"could not prepare the model directory ({type(exc).__name__})"
+            ) from None
         for spec in missing:
             logger.info(f"siglip model: downloading {spec.name}")
             _fetch_one(spec, model_dir, fetch or _download)
@@ -152,3 +162,8 @@ def warm() -> None:
         ensure_model(str(config.app.get("material_verification_model_path", "")).strip())
     except VerificationUnavailable as exc:
         logger.error(f"siglip model unavailable at boot: {exc}")
+    except OSError as exc:
+        # Belt and braces: no disk error from model preparation may stop
+        # the boot, whatever ensure_model converts and whatever it does not.
+        # Log the type only: an OS message can echo a local path.
+        logger.error(f"siglip model unavailable at boot: {type(exc).__name__}")

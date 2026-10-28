@@ -175,10 +175,14 @@ export async function uploadEngineTempAsset(
     return undefined;
   }
 
+  // The engine answers in the BaseResponse envelope { status, body } —
+  // the payload is `body`, never `data` (same extraction as
+  // extractTaskId below). Reading `data` resolved nothing, so every
+  // temp-asset upload silently returned undefined.
   if (typeof body !== 'object' || body === null) return undefined;
-  const data = (body as { data?: unknown }).data;
-  if (typeof data !== 'object' || data === null) return undefined;
-  const url = (data as { url?: unknown }).url;
+  const payload = (body as { body?: unknown }).body;
+  if (typeof payload !== 'object' || payload === null) return undefined;
+  const url = (payload as { url?: unknown }).url;
   return typeof url === 'string' ? url : undefined;
 }
 
