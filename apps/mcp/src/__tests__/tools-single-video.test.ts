@@ -52,7 +52,6 @@ describe('generate_persona_video tool', () => {
       personaId: 'persona-1',
       segments,
       title: 'Porto trip',
-      caption: 'Porto trip caption',
       language: 'en-US',
       providers: ['youtube'],
       youtubeAccountIds: ['acct-1'],
@@ -66,8 +65,25 @@ describe('generate_persona_video tool', () => {
     expect(generate).toHaveBeenCalledTimes(1);
     const input = generate.mock.calls[0][0];
     expect(input.topics).toEqual(['Porto trip']);
-    expect(input.options).toMatchObject({ segments });
+    expect(input.options).toMatchObject({ segments, language: 'en-US' });
     expect(textOf(response)).toContain('Porto trip');
+  });
+
+  it('lets options.language win over the top-level language', async () => {
+    const client = mockClient();
+    const response = await handleGeneratePersonaVideo(client, {
+      personaId: 'persona-1',
+      segments,
+      title: 'Porto trip',
+      language: 'en-US',
+      options: { language: 'en-GB' },
+      providers: ['youtube'],
+      mode: 'asap',
+      timezone: 'Europe/Lisbon',
+    });
+    expect(response.isError).toBeUndefined();
+    const input = vi.mocked(client.generatePersonaVideos).mock.calls[0][0];
+    expect(input.options).toMatchObject({ language: 'en-GB' });
   });
 
   it('fails fast on invalid segments without calling the client (no token debit)', async () => {

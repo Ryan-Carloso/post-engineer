@@ -2,7 +2,7 @@
 // This is an MCP-side copy of apps/web/lib/generation/script-segments.ts
 // (which mirrors apps/engine/app/services/script_segments.py): the published
 // MCP package cannot import from apps/web, so the rules live here too.
-// Keep the limits, check order and field names in sync across all three;
+// Keep the limits, accepted inputs and field names in sync across all three;
 // the tools-single-video tests pin the same fixtures as the web tests.
 export const MAX_SEGMENTS = 12;
 export const MAX_MEDIAS = 6;
@@ -101,6 +101,26 @@ export function validateSegments(input: unknown): SegmentsResult {
     ) {
       return fail(`segments.${i}.text`, 'each segment needs a kind (hook, body or cta) and non-empty text', 'Fill in the missing segment text.');
     }
+    // The engine rejects unknown segment keys and checks terms for every
+    // segment: these checks must not hide behind the media loop below,
+    // or a media-less segment with 11 terms (or an unknown key) passes
+    // here while the engine rejects it.
+    const unknown = Object.keys(segment)
+      .filter((key) => key !== 'kind' && key !== 'text' && key !== 'media' && key !== 'terms')
+      .sort();
+    if (unknown.length > 0) {
+      return fail(`segments.${i}`, `segment has unknown field ${unknown[0]}`, 'Remove unknown fields from the segment.');
+    }
+    const terms = segment.terms;
+    if (terms !== undefined) {
+      if (
+        !Array.isArray(terms) ||
+        terms.some((term) => typeof term !== 'string' || term.trim().length === 0) ||
+        terms.length > MAX_TERMS_PER_SEGMENT
+      ) {
+        return fail(`segments.${i}.terms`, `terms must be non-empty strings, at most ${MAX_TERMS_PER_SEGMENT} per segment`, 'Fix the terms list for this segment.');
+      }
+    }
   }
   const hooks = segments.filter((segment) => segment.kind === 'hook');
   const ctas = segments.filter((segment) => segment.kind === 'cta');
@@ -166,16 +186,6 @@ export function validateSegments(input: unknown): SegmentsResult {
       return fail(`segments.${i}.media`, 'media needs exactly one of mediaId or url', 'Send either a mediaId or a url for this segment, not both and not neither.');
     }
     mediaCount += 1;
-    const terms = segments[i].terms;
-    if (terms !== undefined) {
-      if (
-        !Array.isArray(terms) ||
-        terms.some((term) => typeof term !== 'string' || term.trim().length === 0) ||
-        terms.length > MAX_TERMS_PER_SEGMENT
-      ) {
-        return fail(`segments.${i}.terms`, `terms must be non-empty strings, at most ${MAX_TERMS_PER_SEGMENT} per segment`, 'Fix the terms list for this segment.');
-      }
-    }
   }
   if (mediaCount > MAX_MEDIAS) {
     return fail('segments', `at most ${MAX_MEDIAS} medias are allowed per video`, 'Remove medias until at most six remain.');

@@ -119,6 +119,10 @@ export async function handleGeneratePersonaVideo(
       throw new Error(`${result.error.field}: ${result.error.rule} Fix: ${result.error.fix}`);
     }
     const script = joinSegments(args.segments);
+    // The shape advertises a top-level language, but the web route only
+    // reads options.language: forward it there unless options already
+    // sets one, or the top-level value is silently dropped.
+    const language = args.options?.language ?? args.language;
     const narrowed = narrowScheduledVideos(
       await client.generatePersonaVideos({
         personaId: args.personaId,
@@ -135,6 +139,7 @@ export async function handleGeneratePersonaVideo(
         options: {
           ...args.options,
           segments: args.segments,
+          ...(language === undefined ? {} : { language }),
         },
         idempotencyKey: args.idempotencyKey,
       }),

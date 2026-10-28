@@ -28,7 +28,6 @@ export const GeneratePersonaVideoShape = {
     .max(12, 'At most 12 segments per video')
     .describe('The complete script as segments: first hook, then body segments, last CTA. Total 60-200 words, body at least 30, CTA 5-20, hook 15-40 words before TTS. The hook must end with terminal punctuation. No LLM expands this script.'),
   title: z.string().min(1, 'title must be a non-empty string').describe('Video title; also the single topic sent to the web route (one call is one video).'),
-  caption: z.string().optional().describe('Caption for the published post. Not spoken, so it may carry hashtags and links.'),
   language: z
     .string()
     .min(1)

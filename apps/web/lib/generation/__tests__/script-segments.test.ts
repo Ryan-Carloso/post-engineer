@@ -171,4 +171,30 @@ describe('validateSegments', () => {
     if (!result.ok) return;
     expect(result.value.mediaCount).toBe(2);
   });
+
+  it('rejects too many terms on a media-less segment, like the engine does', () => {
+    const result = validateSegments([
+      { kind: 'hook', text: hook },
+      {
+        kind: 'body',
+        text: body,
+        terms: ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven'],
+      },
+      { kind: 'cta', text: cta },
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.field).toBe('segments.1.terms');
+  });
+
+  it('rejects a segment with an unknown key, like the engine does', () => {
+    const result = validateSegments([
+      { kind: 'hook', text: hook },
+      { kind: 'body', text: body, voice: 'narrator' },
+      { kind: 'cta', text: cta },
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.field).toBe('segments.1');
+  });
 });
