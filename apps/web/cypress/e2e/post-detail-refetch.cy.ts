@@ -22,7 +22,7 @@ function slotDetailPayload(status: 'generating' | 'ready') {
       scheduleId: SCHEDULE_ID,
       slotAt: '2030-06-01T10:00:00.000Z',
       status,
-      topic: 'E2E caption for the refetch spec',
+      title: 'E2E caption for the refetch spec',
       error: null,
       publishedAt: null,
       taskId: 'task-e2e-refetch',

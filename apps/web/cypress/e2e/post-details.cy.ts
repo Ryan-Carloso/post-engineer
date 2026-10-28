@@ -18,7 +18,7 @@ function slotDetailPayload() {
       scheduleId: POST_DETAIL_SCHEDULE_ID,
       slotAt: '2030-06-01T10:00:00.000Z',
       status: 'awaiting',
-      topic: 'E2E caption for the post details page',
+      title: 'E2E caption for the post details page',
       error: null,
       publishedAt: null,
       taskId: null,
@@ -166,7 +166,7 @@ describe('Post details page', () => {
   it('shows the caption and saves an edited caption', () => {
     cy.intercept('PATCH', '/api/schedule/slots/*', {
       success: true,
-      topic: 'Updated E2E caption',
+      title: 'Updated E2E caption',
     }).as('updateCaption');
 
     cy.contains('E2E caption for the post details page').should('be.visible');
@@ -176,7 +176,7 @@ describe('Post details page', () => {
     cy.contains('button', /Salvar|Save/).click();
 
     cy.wait('@updateCaption').its('request.body').should('deep.equal', {
-      topic: 'Updated E2E caption',
+      title: 'Updated E2E caption',
     });
     // The editor closes on success.
     cy.get('textarea').should('not.exist');
