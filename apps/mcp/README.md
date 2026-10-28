@@ -151,3 +151,4 @@ Passing a `recordId` fails fast with an error naming the right field.
 
 - Platform: https://post-engineer.com/
 - API keys: https://post-engineer.com/api-keys
+- Recipes: [docs/recipes/daily-news.md](../../docs/recipes/daily-news.md) (daily news becomes a video)
