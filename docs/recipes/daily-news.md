@@ -205,9 +205,11 @@ Segments (hook 23 words, body 46 words, CTA 19 words, total 88 words,
 }
 ```
 
-`validate_script` on exactly these segments returns `ok` with
-`totalWords: 88`, `bodyWords: 46`, `hookWords: 23`, `ctaWords: 19`,
-`segmentCount: 4`, `mediaCount: 0`. The `generate_persona_video` call then
+`validate_script` on exactly these segments reports `Script valid:
+4 segment(s), 88 words total, hook 23 words, body 46 words, CTA 19
+words.` (The web validation endpoint also returns `mediaCount: 0`;
+the `validate_script` tool does not surface it.) The
+`generate_persona_video` call then
 uses these segments unchanged, plus `title`, `language: "en"`,
 `providers`, account IDs, and `mode` as in step 5.
 
