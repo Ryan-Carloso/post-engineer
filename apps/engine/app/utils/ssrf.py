@@ -109,12 +109,11 @@ def download_public_file(
     response = None
     try:
         for _ in range(MAX_REDIRECTS + 1):
-            # codeql[py/request-forgery]: false positive — every URL reaching
-            # this request passed assert_public_url (http(s) scheme, DNS
-            # resolution, all resolved IPs global, fail closed) on this hop,
-            # and redirects are followed manually with the same check per
-            # hop (see assert_public_url above).
-            response = http.get(
+            # False positive note: every URL reaching this request passed
+            # assert_public_url (http(s) scheme, DNS resolution, all
+            # resolved IPs global, fail closed) on this hop, and redirects
+            # are followed manually with the same check per hop.
+            response = http.get(  # codeql[py/request-forgery]: guarded, see assert_public_url
                 current_url,
                 stream=True,
                 timeout=timeout,
