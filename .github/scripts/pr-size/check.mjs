@@ -94,6 +94,25 @@ export function unquotePath(p) {
 }
 
 /**
+ * Resolve a numstat rename to the path as it exists at head. Git prints
+ * renames in abbreviated notation, e.g. `dir/{old => new}.ts` or
+ * `old => new`; classifying the raw string would misread its extension
+ * (e.g. `ts}`) and miss test-dir renames, silently dropping added lines.
+ */
+export function renameNewPath(p) {
+  const at = p.indexOf(' => ');
+  if (at === -1) return p;
+  const left = p.slice(0, at);
+  const right = p.slice(at + 4);
+  const open = left.lastIndexOf('{');
+  const close = right.indexOf('}');
+  const prefix = open === -1 ? '' : left.slice(0, open);
+  const suffix = close === -1 ? '' : right.slice(close + 1);
+  const name = open === -1 ? right : right.slice(0, close);
+  return `${prefix}${name}${suffix}`;
+}
+
+/**
  * Count added production lines from `git diff --numstat` output.
  * Returns { files: [{ added, path }], total }. Binary rows ("-") and
  * non-counted files contribute nothing; a pure rename (0 added) counts 0.
@@ -107,7 +126,7 @@ export function countAddedLines(numstatText) {
     const secondTab = line.indexOf('\t', firstTab + 1);
     if (firstTab === -1 || secondTab === -1) continue;
     const addedRaw = line.slice(0, firstTab);
-    const path = unquotePath(line.slice(secondTab + 1));
+    const path = renameNewPath(unquotePath(line.slice(secondTab + 1)));
     if (addedRaw === '-') continue;
     const added = Number(addedRaw);
     if (!Number.isFinite(added)) continue;
